@@ -1,0 +1,4 @@
+---
+description: "Make the `path_policy_engine_executable` session scoped and synchronous."
+change-type: patch
+destination-branches: [master]

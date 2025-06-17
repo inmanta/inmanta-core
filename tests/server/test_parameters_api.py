@@ -18,6 +18,7 @@ Contact: code@inmanta.com
 
 import datetime
 import json
+import logging
 import uuid
 from operator import itemgetter
 from typing import Optional
@@ -306,6 +307,7 @@ async def test_dont_renew_old_facts(server, client, environment, clienthelper, c
         ],
         version_info={},
         compiler_version=get_compiler_version(),
+        module_version_info={},
     )
     assert result.code == 200
 
@@ -320,6 +322,7 @@ async def test_dont_renew_old_facts(server, client, environment, clienthelper, c
 
     # Make sure it's time to renew param1
     time_machine.move_to(destination=datetime.timedelta(server_fact_renew_time + 1))
+    caplog.set_level(logging.DEBUG)
     caplog.clear()
     await parameter_slice.renew_facts()
     # No model version has been released yet.
@@ -343,6 +346,7 @@ async def test_dont_renew_old_facts(server, client, environment, clienthelper, c
         unknowns=[],
         version_info={},
         compiler_version=get_compiler_version(),
+        module_version_info={},
     )
     assert result.code == 200
     result = await client.release_version(tid=environment, id=version)

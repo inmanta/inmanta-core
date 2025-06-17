@@ -24,6 +24,27 @@ from typing import Optional
 
 from inmanta.stable_api import stable_api
 
+# This query assumes that the resource_persistent_state table is present in the query as rps.
+# It returns the status of the resource in the "status" field.
+SQL_RESOURCE_STATUS_SELECTOR: typing.LiteralString = """
+(
+    CASE
+        WHEN rps.is_orphan
+            THEN 'orphaned'
+        WHEN rps.is_deploying
+            THEN 'deploying'
+        WHEN rps.is_undefined
+            THEN 'undefined'
+        WHEN rps.blocked = 'BLOCKED'
+            THEN 'skipped_for_undefined'
+        WHEN rps.current_intent_attribute_hash <> rps.last_deployed_attribute_hash
+            THEN 'available'
+        ELSE
+            rps.last_non_deploying_status::text
+    END
+)
+"""
+
 
 class ResourceState(str, Enum):
     unavailable = "unavailable"  # This state is set by the agent when no handler is available for the resource
@@ -240,6 +261,8 @@ LOG_LEVEL_AS_INTEGER: abc.Mapping[LogLevel, int] = {
 INTEGER_AS_LOG_LEVEL: abc.Mapping[int, LogLevel] = {value: log_level for log_level, value in LOG_LEVEL_AS_INTEGER.items()}
 
 INMANTA_URN = "urn:inmanta:"
+INMANTA_IS_ADMIN_URN = f"{INMANTA_URN}is_admin"
+INMANTA_ROLES_URN = f"{INMANTA_URN}roles"
 
 
 class Compilestate(str, Enum):
@@ -280,6 +303,10 @@ SHUTDOWN_GRACE_IOLOOP = 10
 SHUTDOWN_GRACE_HARD = 15
 # Time we give the executor to shutdown gracefully, before we execute sys.exit(3)
 EXECUTOR_GRACE_HARD = 3
+# Time we give the policy engine to shutdown gracefully (in seconds).
+POLICY_ENGINE_GRACE_HARD = 3
+# Time we give the policy engine to startup (in seconds).
+POLICY_ENGINE_STARTUP_TIMEOUT = 10
 
 # Hard shutdown exit code
 EXIT_HARD = 3
@@ -410,3 +437,51 @@ ALL_LOG_CONTEXT_VARS = [LOG_CONTEXT_VAR_ENVIRONMENT]
 
 # Logger namespace
 LOGGER_NAME_EXECUTOR = "inmanta.executor"
+
+
+class AuthorizationLabel(str, Enum):
+    AGENT_READ = "agent.read"
+    AGENT_WRITE = "agent.write"
+    AUTH_ADMIN = "auth.admin"
+    AUTH_CHANGE_PASSWORD = "auth.change-password"
+    COMPILEREPORT_READ = "compilereport.read"
+    COMPILER_EXECUTE = "compiler.execute"
+    COMPILER_STATUS_READ = "compiler.status.read"
+    DEPLOY = "deploy"
+    DESIRED_STATE_READ = "desired-state.read"
+    DESIRED_STATE_WRITE = "desired-state.write"
+    DISCOVERED_RESOURCES_READ = "discovered_resources.read"
+    DOCS_READ = "docs.read"
+    DRYRUN_READ = "dryrun.read"
+    DRYRUN_WRITE = "dryrun.write"
+    AGENT_PAUSE_RESUME = "agent.pause-resume"
+    ENVIRONMENT_HALT_RESUME = "environment.halt-resume"
+    ENVIRONMENT_READ = "environment.read"
+    ENVIRONMENT_CREATE = "environment.create"
+    ENVIRONMENT_MODIFY = "environment.modify"
+    ENVIRONMENT_DELETE = "environment.delete"
+    ENVIRONMENT_CLEAR = "environment.clear"
+    ENVIRONMENT_SETTINGS_READ = "environment.settings.read"
+    ENVIRONMENT_SETTINGS_WRITE = "environment.settings.write"
+    FACT_READ = "fact.read"
+    FACT_WRITE = "fact.write"
+    FILES_READ = "files.read"
+    FILES_WRITE = "files.write"
+    GRAPHQL_READ = "graphql.read"
+    METRICS_READ = "metrics.read"
+    NOTIFICATION_READ = "notification.read"
+    NOTIFICATION_WRITE = "notification.write"
+    PARAMETER_READ = "parameter.read"
+    PARAMETER_WRITE = "parameter.write"
+    PIP_CONFIG_READ = "pip_config.read"
+    PROJECT_READ = "project.read"
+    PROJECT_CREATE = "project.create"
+    PROJECT_MODIFY = "project.modify"
+    PROJECT_DELETE = "project.delete"
+    RESOURCES_READ = "resources.read"
+    STATUS_READ = "status.read"
+    TOKEN = "token"
+    ROLES_READ = "roles.read"
+    ROLES_WRITE = "roles.write"
+    ROLE_ASSIGNMENT_READ = "role_assignment.read"
+    ROLE_ASSIGNMENT_WRITE = "role_assignment.write"

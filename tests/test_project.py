@@ -79,7 +79,7 @@ async def test_project_api_v1(client):
     assert len(result.result["projects"]) == 0
 
     # get non existing environment
-    response = await client.get_environment(uuid.uuid4())
+    response = await client.environment_get(uuid.uuid4())
     assert response.code == 404
 
 
@@ -356,12 +356,12 @@ async def test_env_api(client):
     assert result.result["environment"]["id"] == env_id
     assert result.result["environment"]["name"] == "dev2"
 
-    result = await client.get_environment(id=env_id)
+    result = await client.environment_get(id=env_id)
     assert result.code == 200
-    assert "environment" in result.result
-    assert result.result["environment"]["id"] == env_id
-    assert result.result["environment"]["project"] == project_id
-    assert result.result["environment"]["name"] == "dev2"
+    assert "data" in result.result
+    assert result.result["data"]["id"] == env_id
+    assert result.result["data"]["project_id"] == project_id
+    assert result.result["data"]["name"] == "dev2"
 
     project_result = await client.get_project(id=project_id)
     assert project_result.code == 200

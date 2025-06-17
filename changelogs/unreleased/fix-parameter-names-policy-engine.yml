@@ -1,0 +1,4 @@
+---
+description: "Fix bug where the names of the parameters of a method call were provided as defined in the @handle instead of the @method definition."
+change-type: patch
+destination-branches: [master]

@@ -32,8 +32,6 @@ class handle:
     Decorator for subclasses of an endpoint to handle protocol methods
 
     :param method: A subclass of method that defines the method
-    :param api_version: When specific this handler is only associated with a method of the specific api version. If the
-                        version is not defined, the handler is not associated with a rest endpoint.
     :param kwargs: Map arguments in the message from one name to an other
     """
 
@@ -148,6 +146,7 @@ def typedmethod(
     strict_typing: bool = True,
     enforce_auth: bool = True,
     varkw: bool = False,
+    token_param: str | None = None,
 ) -> Callable[..., Callable]:
     """
     Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
@@ -179,6 +178,7 @@ def typedmethod(
                          enforced, even if auth is enabled.
     :param varkw: If true, additional arguments are allowed and will be dispatched to the handler. The handler is
                   responsible for the validation.
+    :param token_param: Use the authentication token in this parameter instead of using the Authorization header.
     """
 
     def wrapper(func: MethodT) -> MethodT:
@@ -204,6 +204,7 @@ def typedmethod(
                 strict_typing=strict_typing,
                 enforce_auth=enforce_auth,
                 varkw=varkw,
+                token_param=token_param,
             )
             common.MethodProperties.register_method(properties)
         return func

@@ -16,12 +16,14 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import abc
+import copy
 import inspect
 import json
 import logging
 import uuid
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, cast, get_type_hints  # noqa: F401
+from typing import Any, Dict, List, Optional, Tuple, Type, cast, get_type_hints  # noqa: F401
 
 import pydantic
 import typing_inspect
@@ -29,7 +31,8 @@ from tornado import escape
 
 from inmanta import const, tracing, util
 from inmanta.data.model import BaseModel
-from inmanta.protocol import auth, common, exceptions
+from inmanta.protocol import common, exceptions
+from inmanta.protocol.auth import auth, providers
 from inmanta.protocol.common import ReturnValue
 from inmanta.server import config as server_config
 from inmanta.types import Apireturn, JsonType
@@ -54,7 +57,10 @@ class CallArguments:
     """
 
     def __init__(
-        self, config: common.UrlMethod, message: dict[str, Optional[object]], request_headers: Mapping[str, str]
+        self,
+        config: common.UrlMethod,
+        message: dict[str, Optional[object]],
+        request_headers: Mapping[str, str],
     ) -> None:
         """
         :param config: The method configuration that contains the metadata and functions to call
@@ -69,6 +75,7 @@ class CallArguments:
         self._argspec: inspect.FullArgSpec = inspect.getfullargspec(self._properties.function)
 
         self._call_args: JsonType = {}
+        self._method_call_args: JsonType = {}
         self._headers: dict[str, str] = {}
         self._metadata: dict[str, object] = {}
         self._auth_token: Optional[auth.claim_type] = None
@@ -77,11 +84,36 @@ class CallArguments:
         self._processed: bool = False
 
     @property
+    def method_properties(self) -> common.MethodProperties:
+        return self._properties
+
+    @property
+    def config(self) -> common.UrlMethod:
+        return self._config
+
+    @property
+    def auth_token(self) -> auth.claim_type | None:
+        return self._auth_token
+
+    @property
     def call_args(self) -> dict[str, object]:
+        """
+        The arguments formatted according to the signature of the @handle method of the API endpoint.
+        """
         if not self._processed:
             raise Exception("Process call first before accessing property")
 
         return self._call_args
+
+    @property
+    def method_call_args(self) -> dict[str, object]:
+        """
+        The call arguments formatted according to the signature of the @method method of the API endpoint.
+        """
+        if not self._processed:
+            raise Exception("Process call first before accessing property")
+
+        return self._method_call_args
 
     @property
     def auth_username(self) -> Optional[str]:
@@ -268,12 +300,6 @@ class CallArguments:
         # validate types
         call_args = self._properties.validate_arguments(call_args)
 
-        for arg, value in call_args.items():
-            # run getters
-            value = await self._run_getters(arg, value)
-
-            self._call_args[arg] = value
-
         # discard session handling data
         if self._properties.agent_server and "sid" in all_fields:
             all_fields.remove("sid")
@@ -281,12 +307,20 @@ class CallArguments:
         if self._properties.varkw:
             # add all other arguments to the call args as well
             for field in all_fields:
-                self._call_args[field] = self._message[field]
+                call_args[field] = self._message[field]
 
         if len(all_fields) > 0 and self._argspec.varkw is None:
             raise exceptions.BadRequest(
                 "request contains fields %s that are not declared in method and no kwargs argument is provided." % all_fields
             )
+
+        self._method_call_args = copy.deepcopy(call_args)
+
+        for arg, value in call_args.items():
+            # run getters
+            value = await self._run_getters(arg, value)
+
+            self._call_args[arg] = value
 
         # rename arguments if the handler requests this
         if hasattr(self._config.handler, "__protocol_mapping__"):
@@ -494,6 +528,26 @@ class CallArguments:
 
         :return: A mapping of claims
         """
+        token: str | None = None
+
+        # Try to get token from parameters if token_param set in method properties.
+        token_param = self._properties.token_param
+        if token_param is not None and self._message.get(token_param):
+            token = self._message[token_param]
+
+        # Try to get token from header
+        if token is None:
+            token = self._get_auth_token_from_header()
+
+        if token is None:
+            return None
+
+        self._auth_token, cfg = auth.decode_token(token)
+
+        if cfg.jwt_username_claim in self._auth_token:
+            self._auth_username = str(self._auth_token[cfg.jwt_username_claim])
+
+    def _get_auth_token_from_header(self) -> str | None:
         header_value: Optional[str] = None
 
         if additional_header := server_config.server_additional_auth_header.get():
@@ -513,13 +567,7 @@ class CallArguments:
 
             header_value = parts[1]
 
-        if header_value is None:
-            return None
-
-        self._auth_token, cfg = auth.decode_token(header_value)
-
-        if cfg.jwt_username_claim in self._auth_token:
-            self._auth_username = str(self._auth_token[cfg.jwt_username_claim])
+        return header_value
 
     def authenticate(self, auth_enabled: bool) -> None:
         """Fetch any identity information and authenticate. This will also load this authentication
@@ -536,45 +584,18 @@ class CallArguments:
             # We only need a valid token when the endpoint enforces authentication
             raise exceptions.UnauthorizedException()
 
-    def authorize_request(self, auth_enabled: bool) -> None:
-        """Authorize a request based on the given data
-
-        :param auth_enabled: is authentication enabled?
+    def is_service_request(self) -> bool:
         """
-        if not auth_enabled:
-            return
-
-        if self._auth_token is None:
-            if self._config.properties.enforce_auth:
-                # We only need a valid token when the endpoint enforces authentication and auth is enabled
-                raise exceptions.UnauthorizedException()
-            return None
-
-        # Enforce environment restrictions
-        env_key: str = const.INMANTA_URN + "env"
-        if env_key in self._auth_token:
-            if env_key not in self.metadata:
-                raise exceptions.Forbidden("The authorization token is scoped to a specific environment.")
-
-            if self.metadata[env_key] != "all" and self._auth_token[env_key] != self.metadata[env_key]:
-                raise exceptions.Forbidden("The authorization token is not valid for the requested environment.")
-
-        # Enforce client_types restrictions
-        ok: bool = False
+        Return True iff this is a machine-to-machine request.
+        """
         ct_key: str = const.INMANTA_URN + "ct"
-        for ct in self._auth_token[ct_key]:
-            if ct in self._config.properties.client_types:
-                ok = True
-
-        if not ok:
-            raise exceptions.Forbidden(
-                "The authorization token does not have a valid client type for this call."
-                + f" ({self._auth_token[ct_key]} provided, {self._config.properties.client_types} expected"
-            )
+        assert self._auth_token is not None
+        client_types_token = self._auth_token[ct_key]
+        return any(ct in {const.ClientType.agent.value, const.ClientType.compiler.value} for ct in client_types_token)
 
 
 # Shared
-class RESTBase(util.TaskHandler[None]):
+class RESTBase(util.TaskHandler[None], abc.ABC):
     """
     Base class for REST based client and servers
     """
@@ -598,6 +619,12 @@ class RESTBase(util.TaskHandler[None]):
     def validate_sid(self, sid: uuid.UUID) -> bool:
         raise NotImplementedError()
 
+    def is_auth_enabled(self) -> bool:
+        """
+        Return True iff authentication is enabled.
+        """
+        raise NotImplementedError()
+
     async def _execute_call(
         self,
         config: common.UrlMethod,
@@ -619,9 +646,12 @@ class RESTBase(util.TaskHandler[None]):
             # Authorization might need data from the request but we do not want to process it before we are sure the call
             # is authenticated.
             arguments = CallArguments(config, message, request_headers)
-            arguments.authenticate(server_config.server_enable_auth.get())
+            is_auth_enabled: bool = self.is_auth_enabled()
+            arguments.authenticate(auth_enabled=is_auth_enabled)
             await arguments.process()
-            arguments.authorize_request(server_config.server_enable_auth.get())
+            authorization_provider = self.get_authorization_provider()
+            if authorization_provider:
+                await authorization_provider.authorize_request(arguments)
 
             LOGGER.debug(
                 "Calling method %s(%s) user=%s",
@@ -645,3 +675,10 @@ class RESTBase(util.TaskHandler[None]):
         except Exception as e:
             LOGGER.exception("An exception occurred during the request.")
             raise exceptions.ServerError(str(e.args))
+
+    @abc.abstractmethod
+    def get_authorization_provider(self) -> providers.AuthorizationProvider | None:
+        """
+        Returns the authorization provider or None if we are not running on the server.
+        """
+        raise NotImplementedError()

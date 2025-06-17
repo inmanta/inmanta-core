@@ -1007,22 +1007,54 @@ import custom_mod_two
         autostd=False,
     )
 
-    capsys.readouterr()
-    ModuleTool().list()
-    std_version = distribution("inmanta_module_std").version
-    out, err = capsys.readouterr()
-    assert (
-        out.strip()
-        == f"""
+    def _validate_moduletool_list_output(
+        output: str, line_custom_mod_one: str, line_custom_mod_two: str, std_version: str
+    ) -> None:
+        table_lines = [line.strip() for line in output.strip().split("\n")]
+        assert "\n".join(table_lines[0:6]) == (
+            f"""
 +----------------+------+----------+----------------+----------------+---------+
 |      Name      | Type | Editable |   Installed    |  Expected in   | Matches |
 |                |      |          |    version     |    project     |         |
 +================+======+==========+================+================+=========+
-| custom_mod_one | v2   | no       | 1.0.0          | >0,<999,~=1.0  | yes     |
-| custom_mod_two | v2   | yes      | 1.0.0          | *              | yes     |
-| std            | v2   | no       | {std_version:<7}        | *              | yes     |
-+----------------+------+----------+----------------+----------------+---------+
-    """.strip()
+{line_custom_mod_one}
+{line_custom_mod_two}
+""".strip()
+        )
+        rows_std_pkg = table_lines[6:-1]
+        regex = (
+            r"\|(?P<name>[^|]+)\|(?P<type>[^|]+)\|(?P<editable>[^|]+)"
+            r"\|(?P<installed_version>[^|]+)\|(?P<expected_project>[^|]+)\|(?P<matched>[^|]+)\|"
+        )
+        match = re.match(regex, rows_std_pkg[0])
+        assert match.group("name").strip() == "std"
+        assert match.group("type").strip() == "v2"
+        assert match.group("editable").strip() == "no"
+        assert match.group("expected_project").strip() == "*"
+        assert match.group("matched").strip() == "yes"
+        # The row for the std module might be split across two rows if the version number is too long.
+        # In that case the version number is spread across the two lines.
+        if len(rows_std_pkg) == 1:
+            assert match.group("installed_version").strip() == std_version
+        elif len(rows_std_pkg) == 2:
+            match_second_line = re.match(regex, rows_std_pkg[1])
+            assert match_second_line.group("name").strip() == ""
+            assert (
+                match.group("installed_version").strip() + match_second_line.group("installed_version").strip() == std_version
+            )
+        else:
+            raise Exception(f"Invalid table content:\n{out}")
+        assert table_lines[-1] == "+----------------+------+----------+----------------+----------------+---------+"
+
+    capsys.readouterr()
+    ModuleTool().list()
+    std_version = distribution("inmanta_module_std").version
+    out, err = capsys.readouterr()
+    _validate_moduletool_list_output(
+        output=out,
+        line_custom_mod_one="| custom_mod_one | v2   | no       | 1.0.0          | >0,<999,~=1.0  | yes     |",
+        line_custom_mod_two="| custom_mod_two | v2   | yes      | 1.0.0          | *              | yes     |",
+        std_version=std_version,
     )
 
     # install incompatible version for custom_mod_one
@@ -1037,18 +1069,11 @@ import custom_mod_two
     capsys.readouterr()
     ModuleTool().list()
     out, err = capsys.readouterr()
-    assert (
-        out.strip()
-        == f"""
-+----------------+------+----------+----------------+----------------+---------+
-|      Name      | Type | Editable |   Installed    |  Expected in   | Matches |
-|                |      |          |    version     |    project     |         |
-+================+======+==========+================+================+=========+
-| custom_mod_one | v2   | no       | 2.0.0          | >0,<999,~=1.0  | no      |
-| custom_mod_two | v2   | yes      | 1.0.0          | *              | yes     |
-| std            | v2   | no       | {std_version:<7}        | *              | yes     |
-+----------------+------+----------+----------------+----------------+---------+
-    """.strip()
+    _validate_moduletool_list_output(
+        output=out,
+        line_custom_mod_one="| custom_mod_one | v2   | no       | 2.0.0          | >0,<999,~=1.0  | no      |",
+        line_custom_mod_two="| custom_mod_two | v2   | yes      | 1.0.0          | *              | yes     |",
+        std_version=std_version,
     )
 
 

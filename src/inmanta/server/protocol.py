@@ -18,6 +18,7 @@ Contact: code@inmanta.com
 
 import asyncio
 import importlib.metadata
+import itertools
 import logging
 import re
 import socket
@@ -33,7 +34,7 @@ from tornado import gen, queues, routing, web
 import inmanta.protocol.endpoints
 from inmanta import tracing
 from inmanta.data.model import ExtensionStatus, ReportedStatus, SliceStatus
-from inmanta.protocol import Client, Result, TypedClient, common, endpoints, handle, methods
+from inmanta.protocol import Client, Result, TypedClient, common, endpoints, handle, methods, methods_v2
 from inmanta.protocol.exceptions import ShutdownInProgress
 from inmanta.protocol.rest import server
 from inmanta.server import SLICE_SESSION_MANAGER, SLICE_TRANSPORT
@@ -164,6 +165,22 @@ class Server(endpoints.Endpoint):
         self._slice_sequence = self._order_slices()
         return self._slice_sequence
 
+    def _validate(self) -> None:
+        """
+        Validate whether the server is in a consistent state.
+        Raises an exception if an inconsistency is found.
+        """
+        for method_name, properties_list in common.MethodProperties.methods.items():
+            for properties in properties_list:
+                # All endpoints used by end-users must have an @auth annotation.
+                has_auth_annotation = properties.authorization_metadata is not None
+                if (
+                    properties.is_external_interface()
+                    and not has_auth_annotation
+                    and not properties.function == methods_v2.login
+                ):
+                    raise Exception(f"API endpoint {method_name} is missing an @auth annotation.")
+
     async def start(self) -> None:
         """
         Start the transport.
@@ -175,6 +192,7 @@ class Server(endpoints.Endpoint):
         if self.running:
             return
         LOGGER.debug("Starting Server Rest Endpoint")
+        self._validate()
         self.running = True
 
         for my_slice in self._get_slice_sequence():
@@ -208,13 +226,29 @@ class Server(endpoints.Endpoint):
 
         order = list(reversed(self._get_slice_sequence()))
 
-        for endpoint in order:
-            LOGGER.debug("Pre Stopping %s", endpoint.name)
-            await endpoint.prestop()
+        pre_stop_exceptions: dict[str, Exception] = {}
+        stop_exceptions: dict[str, Exception] = {}
 
         for endpoint in order:
-            LOGGER.debug("Stopping %s", endpoint.name)
-            await endpoint.stop()
+            try:
+                LOGGER.debug("Pre Stopping %s", endpoint.name)
+                await endpoint.prestop()
+            except Exception as e:
+                pre_stop_exceptions[endpoint.name] = e
+
+        for endpoint in order:
+            try:
+                LOGGER.debug("Stopping %s", endpoint.name)
+                await endpoint.stop()
+            except Exception as e:
+                stop_exceptions[endpoint.name] = e
+
+        if pre_stop_exceptions or stop_exceptions:
+            raise BaseExceptionGroup(
+                "Uncaught exception occurred during the following slice(s) shutdown %s."
+                % str(set(pre_stop_exceptions.keys()).union(set(stop_exceptions.keys()))),
+                [exc for exc in itertools.chain(pre_stop_exceptions.values(), stop_exceptions.values())],
+            )
 
 
 class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler[Result | None]):

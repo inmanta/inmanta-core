@@ -28,6 +28,7 @@ import os.path
 import uuid
 from dataclasses import dataclass, field
 from functools import partial
+from pathlib import Path
 
 import psutil
 import pytest
@@ -138,7 +139,13 @@ async def setup_environment_with_agent(client, project_name):
     ]
 
     result = await client.put_version(
-        tid=env_id, version=version, resources=resources, unknowns=[], version_info={}, compiler_version=get_compiler_version()
+        tid=env_id,
+        version=version,
+        resources=resources,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+        module_version_info={},
     )
     assert result.code == 200
 
@@ -257,6 +264,12 @@ async def test_auto_deploy_no_splay(server, client, clienthelper: ClientHelper, 
         await asyncio.sleep(0.1)
 
     assert len(result.result["agents"]) == 1
+
+    async def one_agent_created() -> bool:
+        result = await client.list_agents(tid=environment)
+        return len(result.result["agents"]) == 1
+
+    await retry_limited(one_agent_created, 1)
 
 
 async def test_deploy_no_code(resource_container, client, clienthelper, environment):
@@ -838,23 +851,37 @@ async def test_agent_paused_scheduler_server_restart(
     auto_start_agent: bool,
     async_finalizer,
     monkeypatch,
+    tmp_path,
 ):
     """
     Verify that the new scheduler does not alter the state of agent after a restart:
         - The agent is deploying something that takes a lot of time
-        - The agent is paused
+        - agent1 is paused
         - The server (and thus the scheduler) is (are) restarted
-        - The agent should remain paused (the Scheduler shouldn't do anything after the restart)
-    """
+        - The agents' paused status should remain untouched (the Scheduler shouldn't do anything after the restart)
 
-    async def return_none(*args, **kwargs):
-        return None
 
-    # Make sure that the resource goes into the unavailable state on deployment.
-    get_version_old = data.Code.get_version
-    monkeypatch.setattr(data.Code, "get_version", return_none)
 
+            Timeline:             t0              t1              t2              t3                t4                 t5              t6
+       Resource
+    agent1_file_1        set file_1 FAIL       deploying     unavailable     Pause agent1   set file_1 SUCCESS    Restart Server    unavailable
+    agent1_file_2        set file_2 SUCCESS    deploying     deployed        Pause agent1                         Restart Server    deployed
+    agent2_file_1        set file_1 FAIL       deploying     unavailable                    set file_1 SUCCESS    Restart Server    deployed
+
+    """  # noqa: E501
     current_pid = os.getpid()
+
+    control_failure_file_1 = tmp_path / "control_file_1.json"
+    control_failure_file_2 = tmp_path / "control_file_2.json"
+
+    def set_resource_deployable_state(fail_deploy: bool, control_file: Path) -> None:
+        content = {"fail_deploy": fail_deploy}
+        json_content = json.dumps(content)
+        with open(control_file, "w") as json_file:
+            json_file.write(json_content)
+
+    set_resource_deployable_state(fail_deploy=True, control_file=control_failure_file_1)
+    set_resource_deployable_state(fail_deploy=False, control_file=control_failure_file_2)
 
     # First, configure everything
     config.Config.set("config", "environment", environment)
@@ -863,29 +890,34 @@ async def test_agent_paused_scheduler_server_restart(
     assert len(agentmanager.sessions) == 1
 
     snippetcompiler.setup_for_snippet(
-        """
-import std::testing
-std::testing::NullResource(name="test", agentname="agent1", value="test")
-        """,
+        f"""
+import minimaldeployfailuremodule
+
+agent1_file_1 = minimaldeployfailuremodule::FailBasedOnFileContent(name="test_fail_1", agent="agent1", control_failure_file="{control_failure_file_1}")
+agent1_file_2 = minimaldeployfailuremodule::FailBasedOnFileContent(name="test_fail_2", agent="agent1", control_failure_file="{control_failure_file_2}")
+agent2_file_1 = minimaldeployfailuremodule::FailBasedOnFileContent(name="test_fail_3", agent="agent2", control_failure_file="{control_failure_file_1}")
+    """,  # noqa: E501
         ministd=True,
         index_url="https://pypi.org/simple",
     )
 
-    # Now, let's deploy a resource
+    # Now, let's deploy resources
     version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
     result = await client.release_version(environment, version, push=False)
     assert result.code == 200
 
-    # Wait for this resource to enter the unavailable state
-    await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.unavailable)
-
+    # Wait for the following resource state:
+    # agent1_file_1, agent2_file_1 -> unavailable
+    # agent1_file_2 -> deployed
+    await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=2, state=const.ResourceState.unavailable)
+    await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.deployed)
     # Executors are reporting to be deploying before deploying the first executor, we need to wait for them to be sure that
     # something is moving
     await wait_for_consistent_children(
         current_pid=current_pid,
         should_scheduler_be_defined=True,
-        should_fork_server_be_defined=False,
-        nb_executor_to_be_defined=0,
+        should_fork_server_be_defined=True,
+        nb_executor_to_be_defined=1,
     )
 
     result = await client.agent_action(tid=environment, name="agent1", action=AgentAction.pause.value)
@@ -904,29 +936,33 @@ std::testing::NullResource(name="test", agentname="agent1", value="test")
         nb_executor_to_be_defined=0,
     )
 
-    # Make sure the resource can get out of the unavailable state.
-    monkeypatch.setattr(data.Code, "get_version", get_version_old)
+    set_resource_deployable_state(fail_deploy=False, control_file=control_failure_file_1)
 
     # Let's restart the server
     await ibl.start()
 
-    # Everything should be consistent in DB: the agent should still be paused
-    await assert_is_paused(client, environment, {"agent1": True})
+    # Everything should be consistent in DB: the agents' paused status should remain untouched
+    await assert_is_paused(client, environment, {"agent1": True, "agent2": False})
 
     # Wait for the scheduler to start
     await wait_for_consistent_children(
         current_pid=current_pid,
         should_scheduler_be_defined=True,
-        should_fork_server_be_defined=False,
-        nb_executor_to_be_defined=0,
+        should_fork_server_be_defined=True,
+        nb_executor_to_be_defined=1,
     )
-
+    await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.unavailable)
+    await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=2, state=const.ResourceState.deployed)
     # Assert that the resource is not being deployed and remains in the unavailable state.
+    # Wait for the following resource state:
+    # agent1_file_1 -> unavailable
+    # agent1_file_2, agent2_file_1 -> deployed
     result = await client.resource_list(environment, deploy_summary=True)
     assert result.code == 200
     summary = result.result["metadata"]["deploy_summary"]
-    assert summary["total"] == 1, f"Unexpected summary: {summary}"
+    assert summary["total"] == 3, f"Unexpected summary: {summary}"
     assert summary["by_state"]["unavailable"] == 1, f"Unexpected summary: {summary}"
+    assert summary["by_state"]["deployed"] == 2, f"Unexpected summary: {summary}"
 
 
 @pytest.mark.slowtest
@@ -1124,7 +1160,7 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent3", pat
     result = await client.release_version(environment, version, push=False)
     assert result.code == 200
 
-    # Wait for one resource to be deploying
+    # Wait for the resources to be deploying
     await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=3, state=const.ResourceState.deploying)
 
     result = await client.list_versions(tid=environment)
@@ -1286,6 +1322,8 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep", agent="agent1", path
         should_fork_server_be_defined=True,
         nb_executor_to_be_defined=1,
     )
+    result = await client.get_agents(environment)
+    assert result.code == 200
 
     # Retrieve the current processes, we should have more processes than `start_state_children`
     children_after_deployment = construct_scheduler_children(current_pid)
@@ -1332,15 +1370,207 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep", agent="agent1", path
     }
     assert actual_data[0] == expected_data
 
-    await client.all_agents_action(tid=environment, action=AgentAction.pause.value)
-
+    # We pause the executor so it doesn't try to deploy the resource
+    await client.agent_action(tid=environment, name="agent1", action=AgentAction.pause.value)
+    # Let's restart everything and check that the resource is considered as available
     snippetcompiler.setup_for_snippet(model, ministd=True, index_url="https://pypi.org/simple")
     version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
     result = await client.release_version(environment, version, push=False)
     assert result.code == 200
 
-    # Let's restart everything and check that the resource is considered as available
-    result = await client.resource_list(environment, deploy_summary=True)
+    async def wait_for_available() -> bool:
+        """
+        Wait for the scheduler to set the resource to available
+        """
+        result = await client.resource_list(environment, deploy_summary=True)
+        assert result.code == 200
+        summary = result.result["metadata"]["deploy_summary"]
+        return summary["by_state"]["available"] == 1
+
+    # Wait for the scheduler to be up and set the status to available
+    await retry_limited(wait_for_available, timeout=5)
+
+
+async def test_rps_state_deploying(
+    snippetcompiler,
+    server,
+    ensure_resource_tracker_is_started,
+    client,
+    clienthelper,
+    environment,
+    async_finalizer,
+    tmp_path,
+):
+    """
+    Verify that the is_deploying flag is correctly set when deploying starts and finishes
+    """
+
+    file_to_remove = tmp_path / "file"
+    file_to_remove.touch()
+
+    config.Config.set("config", "environment", environment)
+
+    model = f"""
+import minimalwaitingmodule
+minimalwaitingmodule::WaitForFileRemoval(name="test_sleep", agent="agent1", path="{file_to_remove}")
+"""
+    snippetcompiler.setup_for_snippet(model, ministd=True, index_url="https://pypi.org/simple")
+
+    # Deploy a resource
+    version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
+    result = await client.release_version(environment, version)
     assert result.code == 200
-    summary = result.result["metadata"]["deploy_summary"]
-    assert summary["by_state"]["available"] == 1, f"Unexpected summary: {summary}"
+
+    # Wait for this resource to be deploying
+    await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.deploying)
+
+    # Assert that rps is correct
+    rps = await data.ResourcePersistentState.get_one(environment=environment)
+    assert rps
+    assert rps.is_deploying
+
+    # Finish deploying
+    file_to_remove.unlink()
+    await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.deployed)
+
+    # Assert that rps gets updated
+    rps = await data.ResourcePersistentState.get_one(environment=environment)
+    assert rps
+    assert rps.is_deploying is False
+
+
+@pytest.mark.slowtest
+@pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
+async def test_code_install_success_code_load_error_for_provider(
+    snippetcompiler,
+    server,
+    ensure_resource_tracker_is_started,
+    client,
+    clienthelper,
+    environment,
+    auto_start_agent: bool,
+    async_finalizer,
+    monkeypatch,
+    tmp_path,
+):
+    """
+    Make sure that code installation errors only affect deployment of resources that
+    rely on this code for their deployment.
+
+    e.g. in the following scenario, check
+    that agent_1 can still deploy resources of type SuccessResource, even if an error occurred
+    during the import of code necessary to deploy resources of type CodeInstallErrorResource:
+
+
+    This test uses these two modules:
+        - minimalinstallfailuremodule  ->  handler code for resource of type CodeInstallErrorResource
+        - successhandlermodule  ->  handler code for resource of type SuccessResource
+
+    Set up 1 agent that install both modules
+
+    Deploy 2 resources: 1 SuccessResource and 1 CodeInstallErrorResource
+
+    Check that the agent can still deploy the SuccessResource even if a code loading failure
+    occurred when installing the code necessary to deploy the CodeInstallErrorResource.
+
+    """  # noqa: E501
+
+    # First, configure everything
+    config.Config.set("config", "environment", environment)
+    # Make sure the session with the Scheduler is there
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    assert len(agentmanager.sessions) == 1
+
+    snippetcompiler.setup_for_snippet(
+        """
+    import minimalinstallfailuremodule
+    import successhandlermodule
+
+    r_1 = minimalinstallfailuremodule::CodeInstallErrorResource(name="test_failure", agent="agent_1")
+    r_2 = successhandlermodule::SuccessResource(name="test_success", agent="agent_1")
+        """,  # noqa: E501
+        ministd=True,
+        index_url="https://pypi.org/simple",
+    )
+
+    # Now, let's deploy resources
+    version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
+    result = await client.release_version(environment, version, push=False)
+    assert result.code == 200
+
+    await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.unavailable)
+    await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.deployed)
+
+
+@pytest.mark.slowtest
+@pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
+async def test_code_install_success_code_load_error_for_reference(
+    snippetcompiler,
+    server,
+    ensure_resource_tracker_is_started,
+    client,
+    clienthelper,
+    environment,
+    auto_start_agent: bool,
+    async_finalizer,
+    monkeypatch,
+    tmp_path,
+):
+    """
+    Make sure that code installation errors only affect deployment of resources that
+    rely on this code for their deployment.
+
+    e.g. in the following scenario, check
+    that agent_1 can still deploy resource r1, even if an error occurred
+    during the import of code necessary to resolve the reference for resource r2
+
+
+    This test uses these two modules:
+        - minimalinstallfailuremodule  ->  reference code for MyRef
+        - successhandlermodule  ->  handler code for resource of type SuccessResource
+
+    Set up 1 agent that install both modules
+
+    Deploy 2 SuccessResource resources: 1 uses references and 1 does not.
+
+    Check that the agent can still deploy the SuccessResource without references
+    even if a code loading failure occurred when installing the code necessary to
+    deploy the other resource that uses references.
+
+    """  # noqa: E501
+
+    # First, configure everything
+    config.Config.set("config", "environment", environment)
+    # Make sure the session with the Scheduler is there
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    assert len(agentmanager.sessions) == 1
+
+    snippetcompiler.setup_for_snippet(
+        """
+    import minimalinstallfailuremodule
+    import successhandlermodule
+
+    r_1 = successhandlermodule::SuccessResourceWithReference(
+        name="test_success",
+        agent="agent_1",
+        my_attr="plain_string"
+     )
+
+    ref = minimalinstallfailuremodule::create_my_ref("base_str")
+    r_2 = successhandlermodule::SuccessResourceWithReference(
+        name="test_failure",
+        agent="agent_1",
+        my_attr=ref
+     )
+        """,  # noqa: E501
+        ministd=True,
+        index_url="https://pypi.org/simple",
+    )
+
+    # Now, let's deploy resources
+    version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
+    result = await client.release_version(environment, version, push=False)
+    assert result.code == 200
+
+    await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.deployed)
+    await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.unavailable)

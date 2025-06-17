@@ -28,6 +28,7 @@ from tornado.httpclient import AsyncHTTPClient, HTTPError, HTTPRequest, HTTPResp
 from inmanta import config as inmanta_config
 from inmanta import tracing
 from inmanta.protocol import common
+from inmanta.protocol.auth import providers
 from inmanta.protocol.rest import RESTBase
 
 if TYPE_CHECKING:
@@ -56,6 +57,10 @@ class RESTClient(RESTBase):
     @property
     def endpoint(self) -> "Endpoint":
         return self.__end_point
+
+    def is_auth_enabled(self) -> bool:
+        # Auth cannot be enabled on the client-side.
+        return False
 
     @property
     def id(self) -> str:
@@ -177,3 +182,7 @@ class RESTClient(RESTBase):
         else:
             # Any other content-type will leave the encoding unchanged
             return common.Result(code=response.code, result=response.body)
+
+    def get_authorization_provider(self) -> providers.AuthorizationProvider | None:
+        # We are not running on the server, so there is no authorization provider.
+        return None

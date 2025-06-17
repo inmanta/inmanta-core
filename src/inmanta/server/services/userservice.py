@@ -17,6 +17,8 @@ Contact: code@inmanta.com
 """
 
 import logging
+import uuid
+from collections.abc import Mapping
 
 import asyncpg
 
@@ -25,7 +27,8 @@ import nacl.pwhash
 from inmanta import const, data, protocol
 from inmanta.const import MIN_PASSWORD_LENGTH
 from inmanta.data import AuthMethod, model
-from inmanta.protocol import auth, common, exceptions
+from inmanta.protocol import common, exceptions
+from inmanta.protocol.auth import auth
 from inmanta.server import SLICE_DATABASE, SLICE_TRANSPORT, SLICE_USER
 from inmanta.server import config as server_config
 from inmanta.server import protocol as server_protocol
@@ -109,15 +112,21 @@ class UserService(server_protocol.ServerSlice):
     async def login(self, username: str, password: str) -> common.ReturnValue[model.LoginReturn]:
         verify_authentication_enabled()
         # check if the user exists
+        invalid_username_password_msg = "Invalid username or password"
         user = await data.User.get_one(username=username)
         if not user or not user.password_hash:
-            raise exceptions.UnauthorizedException()
+            raise exceptions.UnauthorizedException(message=invalid_username_password_msg, no_prefix=True)
         try:
             nacl.pwhash.verify(user.password_hash.encode(), password.encode())
         except nacl.exceptions.InvalidkeyError:
-            raise exceptions.UnauthorizedException()
+            raise exceptions.UnauthorizedException(message=invalid_username_password_msg, no_prefix=True)
 
-        token = auth.encode_token([str(const.ClientType.api.value)], expire=None, custom_claims={"sub": username})
+        role_assignments: list[model.RoleAssignment] = await data.Role.get_roles_for_user(username)
+        custom_claims: Mapping[str, str | list[str] | Mapping[str, str]] = {
+            "sub": username,
+            const.INMANTA_ROLES_URN: {str(r.environment): r.name for r in role_assignments},
+        }
+        token = auth.encode_token([str(const.ClientType.api.value)], expire=None, custom_claims=custom_claims)
         return common.ReturnValue(
             status_code=200,
             headers={"Authorization": f"Bearer {token}"},
@@ -132,3 +141,44 @@ class UserService(server_protocol.ServerSlice):
         if context.auth_username:
             return model.CurrentUser(username=context.auth_username)
         raise exceptions.NotFound("No current user found, probably an API token is used.")
+
+    @protocol.handle(protocol.methods_v2.list_roles)
+    async def list_roles(self) -> list[str]:
+        return [r.name for r in await data.Role.get_list(order_by_column="name")]
+
+    @protocol.handle(protocol.methods_v2.create_role)
+    async def create_role(self, name: str) -> None:
+        try:
+            await data.Role(id=uuid.uuid4(), name=name).insert()
+        except asyncpg.UniqueViolationError:
+            raise exceptions.BadRequest(f"Role {name} already exists.")
+
+    @protocol.handle(protocol.methods_v2.delete_role)
+    async def delete_role(self, name: str) -> None:
+        try:
+            await data.Role.delete_role(name=name)
+        except data.RoleStillAssignedException:
+            raise exceptions.BadRequest(f"Role {name} cannot be delete because it's still assigned to a user.")
+        except KeyError:
+            raise exceptions.BadRequest(f"Role {name} doesn't exist.")
+
+    @protocol.handle(protocol.methods_v2.list_roles_for_user)
+    async def list_roles_for_user(self, username: str) -> list[model.RoleAssignment]:
+        return await data.Role.get_roles_for_user(username)
+
+    @protocol.handle(protocol.methods_v2.assign_role)
+    async def assign_role(self, username: str, environment: uuid.UUID, role: str) -> None:
+        try:
+            await data.Role.assign_role_to_user(username, model.RoleAssignment(environment=environment, name=role))
+        except data.CannotAssignRoleException:
+            raise exceptions.BadRequest(
+                f"Cannot assign role {role} to user {username}."
+                f" Role {role}, environment {environment} or user {username} doesn't exist."
+            )
+
+    @protocol.handle(protocol.methods_v2.unassign_role)
+    async def unassign_role(self, username: str, environment: uuid.UUID, role: str) -> None:
+        try:
+            await data.Role.unassign_role_from_user(username, model.RoleAssignment(environment=environment, name=role))
+        except KeyError:
+            raise exceptions.BadRequest(f"Role {role} (environment={environment}) is not assigned to user {username}")
