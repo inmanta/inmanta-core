@@ -33,7 +33,7 @@ from pydantic import ValidationError
 import inmanta
 import inmanta.resources
 from inmanta import util
-from inmanta.types import ResourceIdStr, StrictJson, JsonType
+from inmanta.types import JsonType, ResourceIdStr, StrictJson
 from inmanta.util import dict_path
 
 ReferenceType = typing.Annotated[str, pydantic.StringConstraints(pattern="^([a-z0-9_]+::)+[A-Z][A-z0-9_-]*$")]
