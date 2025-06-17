@@ -28,7 +28,6 @@ import inmanta.util
 from inmanta import const, references
 from inmanta.ast import CompilerException, ExplicitPluginException, ExternalException, RuntimeException
 from inmanta.execute import proxy, util
-from inmanta.references import PrimitiveTypes, Reference, ReferenceModel
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, ResourceIdStr, ResourceVersionIdStr
 from inmanta.util import dict_path
@@ -199,8 +198,8 @@ RESERVED_FOR_RESOURCE = {"id", "version", "model", "requires", "unknowns", "set_
 class ReferenceSubCollector:
 
     def __init__(self) -> None:
-        self.references: dict[uuid.UUID, ReferenceModel] = {}
-        self.replacements: dict[str, ReferenceModel] = {}
+        self.references: dict[uuid.UUID, references.ReferenceModel] = {}
+        self.replacements: dict[str, references.ReferenceModel] = {}
 
     def collect_reference(self, value: object) -> None:
         """Add a value reference and recursively add any other references."""
@@ -213,7 +212,7 @@ class ReferenceSubCollector:
                 for k, v in value.items():
                     self.collect_reference(v)
 
-            case Reference():
+            case references.Reference():
                 ref = value.serialize()
                 self.references[ref.id] = ref
                 for arg in value.arguments.values():
@@ -222,7 +221,7 @@ class ReferenceSubCollector:
             case _:
                 pass
 
-    def add_reference(self, path: str, reference: "Reference[PrimitiveTypes]") -> None:
+    def add_reference(self, path: str, reference: "references.Reference[PrimitiveTypes]") -> None:
         """Add a new attribute map to a value reference that we found at the given path.
 
         :param path: The path where the value needs to be inserted

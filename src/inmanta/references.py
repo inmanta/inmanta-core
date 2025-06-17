@@ -31,6 +31,7 @@ import typing_inspect
 from pydantic import ValidationError
 
 import inmanta
+import inmanta.resources
 from inmanta import util
 from inmanta.types import JsonType, ResourceIdStr, StrictJson
 from inmanta.util import dict_path
@@ -579,7 +580,3 @@ def is_reference_of(instance: typing.Optional[object], type_class: type[object])
         return False
 
     return instance.get_reference_type() == type_class
-
-
-# Prevent import loops
-import inmanta.resources
