@@ -19,6 +19,7 @@ Contact: code@inmanta.com
 import logging
 import uuid
 from collections.abc import Mapping
+from collections import defaultdict
 
 import asyncpg
 
@@ -122,9 +123,13 @@ class UserService(server_protocol.ServerSlice):
             raise exceptions.UnauthorizedException(message=invalid_username_password_msg, no_prefix=True)
 
         role_assignments: list[model.RoleAssignment] = await data.Role.get_roles_for_user(username)
-        custom_claims: Mapping[str, str | bool | list[str] | Mapping[str, str]] = {
+        env_to_roles_dct = defaultdict(list)
+        for assignment in role_assignments:
+            env_to_roles_dct[str(assignment.environment)].append(assignment.name)
+
+        custom_claims: Mapping[str, str | list[str] | Mapping[str, str]] = {
             "sub": username,
-            const.INMANTA_ROLES_URN: {str(r.environment): r.name for r in role_assignments},
+            const.INMANTA_ROLES_URN: env_to_roles_dct,
             const.INMANTA_IS_ADMIN_URN: user.is_admin,
         }
         token = auth.encode_token([str(const.ClientType.api.value)], expire=None, custom_claims=custom_claims)
