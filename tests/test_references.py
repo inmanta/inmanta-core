@@ -396,7 +396,6 @@ def test_ref_serialization():
     round_trip_ref(TestReference({"a": "A"}))
 
     # Only clean json is allowed
-    tr = TestReference({"a": "A"})
-    baddy = TestReference({"a": tr})
+    baddy = TestReference({"a": object()})
     with pytest.raises(ValueError):
         baddy.serialize()
