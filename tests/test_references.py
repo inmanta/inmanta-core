@@ -214,7 +214,6 @@ async def test_deploy_end_to_end(
     assert [msg for msg in result.result["data"] if "Observed value: {'inner.something': 'testx'}" in msg["msg"]]
 
 
-# TODO: critical review of this test's contents. Should inheritance-based tests be moved? Should dataclass-based tests be moved?
 def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
     """
     Verify the validation of references in plugins, both on the boundary, and on access through a proxy.
@@ -322,6 +321,14 @@ def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", module
         run_snippet(
             "refs::plugins::read_entity_list_head(refs::ListContainer(value=[refs::create_string_reference('hello'), 'Hello']))"
         )
+    ## inside list attribute but allowed
+    run_snippet(
+        """\
+        refs::plugins::read_entity_list_value_or_ref(
+            refs::ListContainer(value=['Hello', refs::create_string_reference('hello')])
+        )
+        """
+    )
     ### inside dict attribute
     with raises_wrapped(
         UndeclaredReference, match="Encountered undeclared reference .* Encountered at instance\.value\['mykey'\]"
@@ -343,6 +350,14 @@ def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", module
             )
             """
         )
+    ## inside dict attribute but allowed
+    run_snippet(
+        """\
+        refs::plugins::read_entity_dict_value_or_ref(
+            refs::DictContainer(value={'Hello': 'World!', 'mykey': refs::create_string_reference('hello')})
+        )
+        """
+    )
     ## reference, plugin explicitly allows it
     run_snippet("refs::plugins::read_entity_ref_value(refs::dc::AllRefsDataclass(maybe_ref_value=refs::create_string_reference('hello')))")
     ## reference access for list of entities
@@ -452,7 +467,6 @@ def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", module
         "refs::plugins::returns_entity_ref_list(refs::ListContainer(value=['Hello', refs::create_string_reference('hello')]))"
     )
 
-    # TODO: allow_reference_values() test on list access and iteration
     # TODO: verify that allow_reference_values() only allows it on that level, not nested
 
 

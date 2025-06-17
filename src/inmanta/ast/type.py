@@ -509,7 +509,6 @@ class NullableType(Type):
         return isinstance(other, Null) or other.issubtype(self.element_type)
 
 
-# TODO: add test case that uses "any" instead of object => expectation is that it's fine because it inherits Type's validate
 class Any(Type):
     """
     this type represents the any type, similar to Python's

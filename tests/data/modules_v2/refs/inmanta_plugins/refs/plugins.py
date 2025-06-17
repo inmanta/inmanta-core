@@ -178,15 +178,21 @@ def read_list_entity_ref_value(instances: Sequence[Entity]) -> None:
         plugins.allow_reference_values(instance).maybe_ref_value
 
 
-# TODO: add a test case
-# TODO: same with dict
-# TODO: same with allow_reference_values()
 @plugin
 def read_entity_list_value(instance: ListContainer) -> None:
     for x in instance.value:
         assert isinstance(x, str), type(x)
     for i in range(len(instance.value)):
         assert isinstance(instance.value[i], str), type(instance.value[i])
+
+
+@plugin
+def read_entity_list_value_or_ref(instance: ListContainer) -> None:
+    with_refs = plugins.allow_reference_values(instance.value)
+    for x in with_refs:
+        ...
+    for i in range(len(instance.value)):
+        with_refs[i]
 
 
 @plugin
@@ -200,6 +206,15 @@ def read_entity_dict_value(instance: DictContainer) -> None:
         assert isinstance(v, str), type(v)
     for k in instance.value.keys():
         assert isinstance(instance.value[k], str), type(instance.value[k])
+
+
+@plugin
+def read_entity_dict_value_or_ref(instance: DictContainer) -> None:
+    with_refs = plugins.allow_reference_values(instance.value)
+    for v in with_refs.values():
+        ...
+    for k in instance.value.keys():
+        with_refs[k]
 
 
 @plugin

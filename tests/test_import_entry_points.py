@@ -159,6 +159,3 @@ def test_import_agent(import_entry_point: Callable[[str], Optional[int]]) -> Non
 @pytest.mark.slowtest
 def test_import_references(import_entry_point: Callable[[str], Optional[int]]) -> None:
     assert import_entry_point("inmanta.references") == 0
-
-
-# TODO: add references
