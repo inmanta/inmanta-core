@@ -340,7 +340,7 @@ def heartbeat_reply(sid: uuid.UUID, reply_id: uuid.UUID, data: dict):
 # Upload, retrieve and check for file. A file is identified by a hash of its content.
 
 
-@auth(auth_label=const.AuthorizationLabel.FILES_WRITE, read_only=False)
+@auth(auth_label=const.AuthorizationLabel.FILE_WRITE, read_only=False)
 @method(
     path="/file/<id>",
     operation="PUT",
@@ -358,7 +358,7 @@ def upload_file(id: str, content: str):
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.FILES_READ, read_only=True)
+@auth(auth_label=const.AuthorizationLabel.FILE_READ, read_only=True)
 @method(
     path="/file/<id>",
     operation="HEAD",
@@ -375,7 +375,7 @@ def stat_file(id: str):
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.FILES_READ, read_only=True)
+@auth(auth_label=const.AuthorizationLabel.FILE_READ, read_only=True)
 @method(
     path="/file/<id>",
     operation="GET",
@@ -392,7 +392,7 @@ def get_file(id: str):
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.FILES_READ, read_only=True)
+@auth(auth_label=const.AuthorizationLabel.FILE_READ, read_only=True)
 @method(
     path="/file",
     api=True,
@@ -411,7 +411,7 @@ def stat_files(files: list):
 # Manage resources on the server
 
 
-@auth(auth_label=const.AuthorizationLabel.RESOURCES_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.AuthorizationLabel.RESOURCE_READ, read_only=True, environment_param="tid")
 @method(
     path="/resource/<id>",
     operation="GET",
@@ -829,7 +829,7 @@ def get_parameter(tid: uuid.UUID, agent: str, resource: dict):
 # Generate download the diff of two hashes
 
 
-@auth(auth_label=const.AuthorizationLabel.FILES_READ, read_only=True)
+@auth(auth_label=const.AuthorizationLabel.FILE_READ, read_only=True)
 @method(path="/filediff", client_types=[const.ClientType.api])
 def diff(file_id_1: str, file_id_2: str):
     """

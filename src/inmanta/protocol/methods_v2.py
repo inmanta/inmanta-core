@@ -594,7 +594,7 @@ def get_compile_data(id: uuid.UUID) -> Optional[model.CompileData]:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.RESOURCES_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.AuthorizationLabel.RESOURCE_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/resource_actions", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
@@ -641,7 +641,7 @@ def get_resource_actions(
 
 
 # No pagination support is provided for this endpoint because there is no elegant way to page the output of this endpoint.
-@auth(auth_label=const.AuthorizationLabel.RESOURCES_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.AuthorizationLabel.RESOURCE_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/resource/<rvid>/events",
     operation="GET",
@@ -697,7 +697,7 @@ def resource_did_dependency_change(
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.RESOURCES_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.AuthorizationLabel.RESOURCE_READ, read_only=True, environment_param="tid")
 @typedmethod(path="/resource", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2)
 def resource_list(
     tid: uuid.UUID,
@@ -758,7 +758,7 @@ def resource_list(
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.RESOURCES_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.AuthorizationLabel.RESOURCE_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/resource/<rid>", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
@@ -773,7 +773,7 @@ def resource_details(tid: uuid.UUID, rid: inmanta.types.ResourceIdStr) -> model.
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.RESOURCES_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.AuthorizationLabel.RESOURCE_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/resource/<rid>/history", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
@@ -810,7 +810,7 @@ def resource_history(
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.RESOURCES_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.AuthorizationLabel.RESOURCE_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/resource/<rid>/logs", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
@@ -1032,7 +1032,7 @@ def promote_desired_state_version(
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.RESOURCES_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.AuthorizationLabel.RESOURCE_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/desiredstate/<version>",
     operation="GET",
@@ -1111,7 +1111,7 @@ def get_diff_of_versions(
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.RESOURCES_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.AuthorizationLabel.RESOURCE_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/desiredstate/<version>/resource/<rid>",
     operation="GET",
