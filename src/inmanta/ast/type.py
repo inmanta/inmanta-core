@@ -844,7 +844,7 @@ class List(Type):
         return "list"
 
     def type_string_internal(self) -> str:
-        return "List"
+        return "list"
 
     def get_location(self) -> None | Location:
         return None
