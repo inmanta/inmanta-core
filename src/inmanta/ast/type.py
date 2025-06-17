@@ -138,6 +138,12 @@ class Type(Locatable):
         """
         return self
 
+    def supports_references(self) -> bool:
+        """
+        Returns True iff this type accepts any sort of reference value.
+        """
+        return self.get_no_reference() is not self
+
     def with_base_type(self, base_type: "Type") -> "Type":
         """
         Returns the type formed by replacing this type's base type with the supplied type.
@@ -215,11 +221,8 @@ class Type(Locatable):
         return hash(type(self))
 
 
-# TODO: docstring. Make proper Type ABC, with implementations for common methods?
-class SupportsReferenceType: ...
-
-
-class ReferenceType(Type, SupportsReferenceType):
+# TODO: test case with `int | str | Reference[int]` type
+class ReferenceType(Type):
     """
     The type of a reference to something of type element_type
 
@@ -231,7 +234,7 @@ class ReferenceType(Type, SupportsReferenceType):
         :param element_type: the type we refer to
         """
         super().__init__()
-        assert not isinstance(element_type, SupportsReferenceType)
+        assert not element_type.supports_references()
         self.element_type = element_type
         self.is_dataclass = False
         if element_type.is_entity():
@@ -301,7 +304,7 @@ class ReferenceType(Type, SupportsReferenceType):
         return self.element_type.issupertype(other.element_type)
 
 
-class OrReferenceType(Type, SupportsReferenceType):
+class OrReferenceType(Type):
     """
     This class represents the shorthand for Reference[T] | T
 
@@ -378,7 +381,7 @@ class OrReferenceType(Type, SupportsReferenceType):
         return False
 
     def issupertype(self, other: "Type") -> bool:
-        if not isinstance(other, SupportsReferenceType):
+        if not isinstance(other, (ReferenceType, OrReferenceType)):
             return self.element_type.issupertype(other)
         return self.element_type.issupertype(other.element_type)
 

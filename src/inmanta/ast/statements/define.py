@@ -46,7 +46,7 @@ from inmanta.ast.attribute import Attribute, RelationAttribute
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.entity import Entity, Implement, Implementation
 from inmanta.ast.statements import BiStatement, ExpressionStatement, Literal, Statement, TypeDefinitionStatement
-from inmanta.ast.type import TYPES, ConstraintType, NullableType, OrReferenceType, SupportsReferenceType, Type, TypedList
+from inmanta.ast.type import TYPES, ConstraintType, NullableType, OrReferenceType, Type, TypedList
 from inmanta.execute.runtime import ExecutionUnit, QueueScheduler, Resolver, ResultVariable
 from inmanta.plugins import Plugin
 
@@ -477,8 +477,8 @@ class DefineTypeConstraint(TypeDefinitionStatement):
         Evaluate this statement.
         """
         basetype = self.namespace.get_type(self.basetype)
+        assert not basetype.supports_references()
         self.anchors.append(TypeAnchor(self.basetype, basetype))
-        assert not isinstance(basetype, SupportsReferenceType)
         constraint_type = self.type
 
         constraint_type.comment = self.comment
