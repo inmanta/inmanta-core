@@ -279,8 +279,7 @@ class DynamicProxy:
         value_context: ProxyContext = context.nested(relative_path=relative_path)
 
         if isinstance(value, references.Reference) and not context.should_allow_references():
-            # TODO: string format accepts reference. Should also raise this exception. Already done?
-            # TODO: see if we can use traceback.extract_stack() here to add a location to any exceptions, try-except style
+            # TODO: see if we can use traceback.extract_stack() here to add a location to any exceptions
 
             # Non-dataclass entities can not be explicit about reference support.
             # The Python domain is a black box. We don't want to transparently pass unexpected values in there.
