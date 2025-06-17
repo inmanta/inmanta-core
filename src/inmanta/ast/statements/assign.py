@@ -17,6 +17,7 @@ Contact: code@inmanta.com
 """
 
 # pylint: disable-msg=W0613
+import builtins
 import typing
 from collections import abc
 from itertools import chain
@@ -254,7 +255,7 @@ class SetAttribute(AssignStatement, Resumer):
         instance = self.instance.execute(requires, resolver, queue)
         if not isinstance(instance, Instance):
             raise TypingException(
-                self, f"The object at {self.instance} is not an Entity but a {type(instance)} with value {instance}"
+                self, f"The object at {self.instance} is not an Entity but a {builtins.type(instance)} with value {instance}"
             )
         var = instance.get_attribute(self.attribute_name)
         if self.list_only and not var.is_multi():
