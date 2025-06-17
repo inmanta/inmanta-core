@@ -637,6 +637,7 @@ class ModuleSource(Generic[TModule]):
         return module_name
 
 
+# TODO: are these classes still used? Probably, at least by pytest-inmanta etc. Consider which methods / args can be removed.
 @stable_api
 class ModuleV2Source(ModuleSource["ModuleV2"]):
     def __init__(self, urls: Sequence[str] = []) -> None:
@@ -1969,7 +1970,6 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             loader.unload_inmanta_plugins()
         loader.PluginModuleFinder.reset()
 
-    # TODO: logging modules before and after should remain
     # TODO: name update_dependencies implies only dependencies, not modules
     def install_modules(self, *, bypass_module_cache: bool = False, update_dependencies: bool = False) -> None:
         """
@@ -1984,6 +1984,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         # install all dependencies
         dependencies: Sequence[inmanta.util.CanonicalRequirement] = self.get_all_python_requirements_as_list()
         if len(dependencies) > 0:
+            modules_pre = self.module_source.take_v2_modules_snapshot(header="Module versions before installation:")
             constraints: Sequence[inmanta.util.CanonicalRequirement] = [
                 InmantaModuleRequirement(inmanta.util.parse_requirement(requirement=spec)).get_python_package_requirement()
                 for spec in self._metadata.requires
@@ -2001,6 +2002,9 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
                     upgrade=update_dependencies,
                     upgrade_strategy=env.PipUpgradeStrategy.EAGER,
                 )
+            self.module_source.log_snapshot_difference_v2_modules(
+                modules_pre, header="Successfully installed modules for project"
+            )
 
         self.load_module_recursive(bypass_module_cache=bypass_module_cache)
 
