@@ -17,7 +17,7 @@ Contact: code@inmanta.com
 """
 
 import dataclasses
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from copy import copy
 from dataclasses import is_dataclass
 from typing import TYPE_CHECKING, Callable, Optional, Self, Union
@@ -358,7 +358,7 @@ class SequenceProxy(DynamicProxy, JSONSerializable):
         return self._return_value(instance[key], relative_path=f"[{key!r}]")
 
     def __iter__(self):
-        return (self._return_value(v, relative_path=f"[{i}]") for i, v in enumerate(self._get_instance()))
+        return IteratorProxy(iter(self._get_instance()), context=self._get_context(), sequence=True)
 
     def __len__(self) -> int:
         return len(self._get_instance())
@@ -380,8 +380,7 @@ class DictProxy(DynamicProxy, Mapping, JSONSerializable):
         return self._return_value(instance[key], relative_path=f"[{key!r}]")
 
     def __iter__(self):
-        # keys are always strings => relative_path doesn't matter that much. Pointing to the mapping itself seems appropriate.
-        return (self._return_value(v, relative_path="") for v in self._get_instance())
+        return IteratorProxy(iter(self._get_instance()), context=self._get_context(), sequence=False)
 
     def __len__(self) -> int:
         return len(self._get_instance())
@@ -389,6 +388,38 @@ class DictProxy(DynamicProxy, Mapping, JSONSerializable):
     def json_serialization_step(self) -> dict[str, PrimitiveTypes]:
         # Ensure proper unwrapping by using __getitem__
         return {k: v for k, v in self.items()}
+
+
+# TODO: reintroduce this for Jinja
+class IteratorProxy(DynamicProxy, Iterator):
+    """
+    Proxy an iterator call.
+
+    A custom proxy allows us to continue iteration after exceptions are raised and caught by the caller, i.e. special exception
+    types like UnknownException.
+    """
+
+    def __init__(self, iterator: Iterator, *, context: Optional[ProxyContext] = None, sequence: bool = False) -> None:
+        """
+        :param sequence: True iff the given iterator represents a sequence, i.e. the index is meaningful for error reporting.
+        """
+        DynamicProxy.__init__(self, enumerate(iterator), context=context)
+        object.__setattr__(self, "__sequence", sequence)
+
+    def _is_sequence(self) -> bool:
+        return object.__getattribute__(self, "__sequence")
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        enumerator = self._get_instance()
+        i, v = next(enumerator)
+        return self._return_value(
+            v,
+            # if it's not a sequence, pointing to the object itself is the best we can do
+            relative_path=f"[{i}]" if self._is_sequence() else ""
+        )
 
 
 class CallProxy(DynamicProxy):
