@@ -152,7 +152,11 @@ async def test_deploy_end_to_end(
                value=refs::create_string_reference(name="testx"),
            )
 
-
+           refs::DeepResource(
+               name="test4",
+               agentname="test",
+               value=refs::create_DictRef(value = refs::create_string_reference(name="TESTX")),
+           )
            """,
         install_v2_modules=[env.LocalPackagePath(path=refs_module)],
     )
@@ -184,6 +188,14 @@ async def test_deploy_end_to_end(
     result = await client.resource_logs(environment, "refs::DeepResource[test,name=test3]")
     assert result.code == 200
     assert [msg for msg in result.result["data"] if "Observed value: {'inner.something': 'testx'}" in msg["msg"]]
+
+    result = await client.resource_details(environment, "refs::DeepResource[test,name=test4]")
+    assert result.code == 200
+    details = ReleasedResourceDetails(**result.result["data"])
+    assert details.status == ReleasedResourceState.deployed
+    result = await client.resource_logs(environment, "refs::DeepResource[test,name=test4]")
+    assert result.code == 200
+    assert [msg for msg in result.result["data"] if "Observed value: {'inner.something': 'TESTX'}" in msg["msg"]]
 
 
 def test_reference_cycle(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:

@@ -169,6 +169,26 @@ class ReferenceArgument(Argument):
         return resource.get_reference_value(self.id, logger)
 
 
+class MutatedJsonArgument(Argument):
+    """Json-like argument to a reference"""
+
+    type: typing.Literal["mjson"] = "mjson"
+    value: StrictJson
+    references: dict[str, ReferenceArgument]
+
+    def get_arg_value(
+        self,
+        resource: "inmanta.resources.Resource",
+        logger: "handler.LoggerABC",
+    ) -> object:
+        start_value = self.value
+        for destination, value in self.references.items():
+            value = value.get_arg_value(resource, logger)
+            dict_path_expr = dict_path.to_path(destination)
+            dict_path_expr.set_element(start_value, value)
+        return start_value
+
+
 class GetArgument(Argument):
     """Get a value from the resource body as value"""
 
@@ -219,7 +239,13 @@ class ResourceArgument(Argument):
 
 
 ArgumentTypes = typing.Annotated[
-    LiteralArgument | ReferenceArgument | GetArgument | PythonTypeArgument | ResourceArgument | JsonArgument,
+    LiteralArgument
+    | ReferenceArgument
+    | GetArgument
+    | PythonTypeArgument
+    | ResourceArgument
+    | JsonArgument
+    | MutatedJsonArgument,
     pydantic.Field(discriminator="type"),
 ]
 """ A list of all specific types of arguments. Pydantic uses this to instantiate the correct argument class
@@ -307,8 +333,25 @@ class ReferenceLike:
                 case str() | int() | float() | bool() | None:
                     arguments.append(LiteralArgument(name=name, value=value))
                 case dict() | list():
+                    # TODO
+                    from inmanta.resources import ReferenceSubCollector, collect_references
+
+                    collector = ReferenceSubCollector()
+                    cleaned_value = collect_references(collector, value, "")
                     try:
-                        arguments.append(JsonArgument(name=name, value=value))
+                        if collector.references:
+                            arguments.append(
+                                MutatedJsonArgument(
+                                    name=name,
+                                    value=cleaned_value,
+                                    references={
+                                        path: ReferenceArgument(name=path, id=model.id)
+                                        for path, model in collector.replacements.items()
+                                    },
+                                )
+                            )
+                        else:
+                            arguments.append(JsonArgument(name=name, value=value))
                     except ValidationError:
                         raise ValueError(f"The {name} attribute of {self} is not json serializable: {value}")
                 case Reference():
