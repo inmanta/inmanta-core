@@ -180,7 +180,7 @@ def list_environments():
 # environments.
 
 
-@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_SETTINGS_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_SETTING_READ, read_only=True, environment_param="tid")
 @method(
     path="/environment_settings",
     operation="GET",
@@ -197,7 +197,7 @@ def list_settings(tid: uuid.UUID):
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_SETTINGS_WRITE, read_only=False, environment_param="tid")
+@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_SETTING_WRITE, read_only=False, environment_param="tid")
 @method(
     path="/environment_settings/<id>",
     operation="POST",
@@ -216,7 +216,7 @@ def set_setting(tid: uuid.UUID, id: str, value: Union[PrimitiveTypes, JsonType])
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_SETTINGS_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_SETTING_READ, read_only=True, environment_param="tid")
 @method(
     path="/environment_settings/<id>",
     operation="GET",
@@ -234,7 +234,7 @@ def get_setting(tid: uuid.UUID, id: str):
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_SETTINGS_WRITE, read_only=False, environment_param="tid")
+@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_SETTING_WRITE, read_only=False, environment_param="tid")
 @method(
     path="/environment_settings/<id>",
     operation="DELETE",

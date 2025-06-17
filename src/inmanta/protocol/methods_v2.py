@@ -319,7 +319,7 @@ def environment_create_token(tid: uuid.UUID, client_types: list[str], idempotent
 
 # Method for listing/getting/setting/removing settings of an environment. This API is also used by agents to configure
 # environments.
-@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_SETTINGS_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_SETTING_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/environment_settings",
     operation="GET",
@@ -337,7 +337,7 @@ def environment_settings_list(tid: uuid.UUID) -> model.EnvironmentSettingsRepons
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_SETTINGS_WRITE, read_only=False, environment_param="tid")
+@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_SETTING_WRITE, read_only=False, environment_param="tid")
 @typedmethod(
     path="/environment_settings/<id>",
     operation="POST",
@@ -358,7 +358,7 @@ def environment_settings_set(tid: uuid.UUID, id: str, value: model.EnvSettingTyp
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_SETTINGS_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_SETTING_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/environment_settings/<id>",
     operation="GET",
@@ -378,7 +378,7 @@ def environment_setting_get(tid: uuid.UUID, id: str) -> model.EnvironmentSetting
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_SETTINGS_WRITE, read_only=False, environment_param="tid")
+@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_SETTING_WRITE, read_only=False, environment_param="tid")
 @typedmethod(
     path="/environment_settings/<id>",
     operation="DELETE",
