@@ -397,7 +397,7 @@ MODULE_CHANGELOG_FILE = "CHANGELOG.md"
 DATETIME_MIN_UTC = datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
 
 MODULE_PKG_NAME_PREFIX = "inmanta-module-"
-STD_PACKAGE = f"{MODULE_PKG_NAME_PREFIX}-std"
+STD_PACKAGE = f"{MODULE_PKG_NAME_PREFIX}std"
 
 TRACEPARENT = "traceparent"
 
