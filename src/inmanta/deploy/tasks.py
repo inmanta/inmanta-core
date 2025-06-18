@@ -29,7 +29,7 @@ import pyformance
 
 from inmanta import data, resources
 from inmanta.agent import executor
-from inmanta.agent.executor import DeployReport
+from inmanta.agent.executor import DeployReport, FailedInmantaModules
 from inmanta.data.model import AttributeStateChange
 from inmanta.deploy import scheduler, state
 from inmanta.types import ResourceIdStr
@@ -332,16 +332,22 @@ class RefreshFact(Task):
 
 
 class ModuleLoadingException(Exception):
+    """
+    This exception is raised when some Inmanta modules couldn't be loaded on a given agent.
+    """
 
-    def __init__(self, agent_name: str, failed_modules: Mapping[str, Mapping[str, Exception]]) -> None:
-        self.msg = ("The following modules cannot be loaded: %s." % ", ".join([e for e in failed_modules.keys()]),)
+    def __init__(self, agent_name: str, failed_modules: FailedInmantaModules) -> None:
+        """
+        :param agent_name: Name of the agent for which module loading was unsuccessful
+        :param failed_modules: Data for all module loading errors as a nested map of
+            inmanta module name -> python module name -> Exception.
+        """
         self.failed_modules = failed_modules
         self.agent_name = agent_name
-        super().__init__(self.msg)
 
     def create_log_line_for_failed_modules(self, level: int = logging.ERROR, *, verbose_message: bool = False) -> data.LogLine:
         """
-        Helper method to cleanly display module loading errors in the web console.
+        Helper method to convert this Exception into a LogLine.
         """
         formatted_module_loading_errors = ""
 
