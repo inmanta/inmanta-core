@@ -353,7 +353,7 @@ def upload_file(id: str, content: str):
     """
     Upload a new file
 
-    :param id: The id of the file
+    :param id: The sha1 hash of the content of the file.
     :param content: The base64 encoded content of the file
     """
 

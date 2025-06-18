@@ -29,6 +29,12 @@ allow if {
     endpoint_data.environment_param == null
 }
 
+# Any authenticated user can use the file storage.
+allow if {
+    input.request.endpoint_id == "PUT /api/v1/file/<id>"
+}
+
+
 ### Role: read-only ###
 
 # Users with the read-only role can execute all read-only endpoints on that environment.
