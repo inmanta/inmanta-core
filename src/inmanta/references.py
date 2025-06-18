@@ -170,7 +170,14 @@ class ReferenceArgument(Argument):
 
 
 class MutatedJsonArgument(Argument):
-    """Json-like argument to a reference"""
+    """
+    Json-like argument to a reference that contains reference in the json structure
+
+    It is stored as
+    1. a json value with all reference replaced by None
+    2. a mapping of dictpaths to references. Each dict path indicates where the reference should be inserted
+
+    """
 
     type: typing.Literal["mjson"] = "mjson"
     value: StrictJson
@@ -327,6 +334,12 @@ class ReferenceLike:
 
     def serialize_arguments(self) -> Tuple[uuid.UUID, list[ArgumentTypes]]:
         """Serialize the arguments to this class"""
+
+        # The handling of references here is a but subtle:
+        # We replace every reference with a ReferenceArgument that refers to the reference by id
+        # The reference itself is not handled here but in inmanta.resources.ReferenceSubCollector.collect_reference
+        # There, the raw, unserialized tree of arguments is iterated over as well to collect the references themselves
+        # The caches on the Reference prevent this from being too inefficient by serializing only once
         arguments: list[ArgumentTypes] = []
         for name, value in self.arguments.items():
             match value:
@@ -334,6 +347,9 @@ class ReferenceLike:
                     arguments.append(LiteralArgument(name=name, value=value))
                 case dict() | list():
                     collector = inmanta.resources.ReferenceSubCollector()
+                    # The collector here is purely to collect the path/reference pairs
+                    # The set of reference it collects will be discarded
+                    # The root ReferenceCollector will traverse past this point as well to collect the actual reference
                     cleaned_value = inmanta.resources.collect_references(collector, value, "")
                     try:
                         if collector.references:
