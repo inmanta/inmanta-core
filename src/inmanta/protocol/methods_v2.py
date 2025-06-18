@@ -1776,10 +1776,13 @@ def graphql_schema() -> dict[str, Any]:
     """
     pass
 
+
 @typedmethod(path="/health", operation="GET", client_types=[ClientType.api], enforce_auth=False, api_version=2)
 def health() -> ReturnValue[None]:
     """
     Returns a 200 response code if the server is healthy
     or a 500 if the server is not healthy.
+
+    In contrast to the 'GET /api/v1/serverstatus' endpoint, this endpoint does not require authentication.
     """
     pass
