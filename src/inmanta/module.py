@@ -2103,7 +2103,6 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             return self.modules[module_name]
         return self.load_module(module_name, allow_v1=allow_v1)
 
-    # TODO: check if this can be simplified now
     def load_module_recursive(self, *, bypass_module_cache: bool = False) -> list[tuple[str, list[Statement], BasicBlock]]:
         """
         Loads this project's modules and submodules by recursively following import statements starting from the project's main
@@ -2122,74 +2121,17 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         # All imports of the entire project
         all_imports: set[DefineImport] = set(imports)
 
-        v2_modules: set[str] = set()
-        """
-        Set of modules that should be loaded as a V2 module.
-        """
-        set_up: set[str] = set()
-        """
-        Set of top level modules that have been set up (setup_module()).
-        """
         done: dict[str, dict[str, DefineImport]] = defaultdict(dict)
         """
         Submodules, grouped by top level that have been fully loaded: AST has been loaded into ast_by_top_level_mod and its
         imports have been added to the queue (load_sub_module()).
         """
 
-        def require_v2(module_name: str) -> None:
-            """
-            Ensure that the module with the given name gets loaded as a V2 module in a next iteration.
-            """
-            if module_name in v2_modules:
-                # already v2
-                return
-            v2_modules.add(module_name)
-            if module_name in set_up:
-                set_up.remove(module_name)
-            if module_name in done:
-                # some submodules already loaded as v1 => reload
-                add_imports_to_be_loaded(done[module_name].values())
-                del done[module_name]
-                if module_name in ast_by_top_level_mod:
-                    del ast_by_top_level_mod[module_name]
-
-        def load_module_v2_requirements(module_like: ModuleLike) -> None:
-            """
-            Loads all v2 modules explicitly required by the supplied module like instance, installing them if install=True. If
-            any of these requirements have already been loaded as v1, queues them for reload.
-            """
-            for requirement in module_like.get_module_v2_requirements():
-                # load module
-                self.get_module(
-                    requirement.name,
-                    allow_v1=False,
-                    bypass_module_cache=bypass_module_cache,
-                )
-                # queue AST reload
-                require_v2(requirement.name)
-
-        def setup_module(module: Module) -> None:
-            """
-            Sets up a top level module, making sure all its v2 requirements are loaded correctly. V2 modules do not support
-            import-based installation because of security reasons (it would mean we implicitly trust any `inmanta-module-x`
-            package for the module we're trying to load). As a result we need to make sure all required v2 modules are present
-            in a set up stage.
-            """
-            if module.name in set_up:
-                # already set up
-                return
-            if isinstance(module, ModuleV2):
-                # register it as a v2 module so that any subsequent require_v2 calls
-                require_v2(module.name)
-            load_module_v2_requirements(module)
-            set_up.add(module.name)
-
         def load_sub_module(module: Module, imp: DefineImport) -> None:
             """
             Loads a submodule's AST and processes its imports. Enforces dependency generation directionality (v1 can depend on
             v2 but not the other way around). If any modules have already been loaded with an incompatible generation, queues
             them for reload.
-            Does not install any v2 modules.
             """
             parts: list[str] = imp.name.split("::")
             for i in range(1, len(parts) + 1):
@@ -2204,23 +2146,14 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
                 # get imports and add to list
                 subs_imports: list[DefineImport] = module.get_imports(subs)
                 add_imports_to_be_loaded(subs_imports)
-                if isinstance(module, ModuleV2):
-                    # A V2 module can only depend on V2 modules. Ensure that all dependencies
-                    # of this module will be loaded as a V2 module.
-                    for dep_module_name in (subs_imp.name.split("::")[0] for subs_imp in subs_imports):
-                        require_v2(dep_module_name)
 
         def add_imports_to_be_loaded(new_imports: Iterable[DefineImport]) -> None:
             imports.extend(new_imports)
             all_imports.update(new_imports)
 
-        # load this project's v2 requirements
-        load_module_v2_requirements(self)
-
         # Loop over imports. For each import:
-        # 1. Load the top level module. For v1, install if install=True, for v2 import-based installation is disabled for
-        #   security reasons. v2 modules installation is done in step 2.
-        # 2. Set up top level module if it has not been set up yet, loading v2 requirements and installing them if install=True.
+        # 1. Load the top level module.
+        # 2. Set up top level module if it has not been set up yet, loading v2 requirements.
         # 3. Load AST for imported submodule and its parent modules, queueing any transitive imports.
         while len(imports) > 0:
             imp: DefineImport = imports.pop()
@@ -2235,21 +2168,13 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
                 # get module
                 module: Module = self.get_module(
                     module_name,
-                    allow_v1=module_name not in v2_modules,
+                    # we never install on-the-fly anymore, so we can simplify by relaxing the allow-v1 constraint
+                    allow_v1=True,
                     bypass_module_cache=bypass_module_cache,
                 )
-                setup_module(module)
                 load_sub_module(module, imp)
             except (InvalidModuleException, ModuleNotFoundException) as e:
                 raise ModuleLoadingException(ns, imp, e)
-
-        # Remove modules from self.modules that were not part of an import statement.
-        # This happens when a module or a project defines a V2 module requirement in
-        # its dependencies, but the requirement is never imported anywhere.
-        loaded_modules: set[str] = set(self.modules.keys())
-        imported_modules: set[str] = {i.name.split("::")[0] for i in all_imports}
-        for module_to_unload in loaded_modules - imported_modules:
-            self.invalidate_state(module_to_unload)
 
         return list(chain.from_iterable(ast_by_top_level_mod.values()))
 
