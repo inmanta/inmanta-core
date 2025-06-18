@@ -410,7 +410,7 @@ class ModuleTool(ModuleLikeTool):
         add = subparser.add_parser(
             "add",
             help=add_help_msg,
-            description=f"{add_help_msg} When executed on a project, the module is installed as well."
+            description=f"{add_help_msg} When executed on a project, the module is installed as well.",
             parents=parent_parsers,
         )
         add.add_argument(
