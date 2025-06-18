@@ -500,7 +500,7 @@ class Pip(PipCommandBuilder):
             pass
         else:
             # All others need an index
-            assert_pip_has_source(config, " ".join(install_args))
+            assert_pip_has_source(config, "'" + " ".join(install_args) + "'")
         index_args: list[str] = []
         if config.index_url:
             index_args.append("--index-url")

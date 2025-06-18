@@ -61,7 +61,6 @@ from inmanta.ast import CompilerException, LocatableString, Location, Namespace,
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements import BiStatement, DefinitionStatement, DynamicStatement, Statement
 from inmanta.ast.statements.define import DefineImport
-from inmanta.env import assert_pip_has_source
 from inmanta.file_parser import PreservativeYamlParser, RequirementsTxtParser
 from inmanta.parser import plyInmantaParser
 from inmanta.parser.plyInmantaParser import cache_manager
@@ -83,8 +82,7 @@ TProject = TypeVar("TProject", bound="Project")
 TInmantaModuleRequirement = TypeVar("TInmantaModuleRequirement", bound="InmantaModuleRequirement")
 
 
-# TODO: review new code
-# TODO: review changes to tests
+# TODO: review new code (already reviewed removed code)
 
 
 @stable_api
@@ -187,7 +185,7 @@ class InvalidModuleException(CompilerExceptionWithExtendedTrace):
 
 class ModuleNotFoundException(CompilerExceptionWithExtendedTrace):
     """
-    This exception is raised if a module is not found in any of the repositories.
+    This exception is raised if a module is not found in the project's venv.
     """
 
 
@@ -2110,6 +2108,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             return self.modules[module_name]
         return self.load_module(module_name, allow_v1=allow_v1)
 
+    # TODO: check if this can be simplified now
     def load_module_recursive(
         self, *, bypass_module_cache: bool = False
     ) -> list[tuple[str, list[Statement], BasicBlock]]:
@@ -2288,10 +2287,6 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             if module is None and allow_v1:
                 module = self.module_source_v1.get_module(self, module_reqs)
         except InvalidModuleException:
-            raise
-        except env.ConflictingRequirements:
-            raise
-        except env.PackageNotFound:
             raise
         except Exception as e:
             raise InvalidModuleException(f"Could not load module {module_name}") from e
