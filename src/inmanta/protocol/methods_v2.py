@@ -1732,7 +1732,7 @@ def discovered_resources_get_batch(
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.GRAPHQL_READ, read_only=False)
+@auth(auth_label=const.AuthorizationLabel.GRAPHQL_READ, read_only=True)
 @typedmethod(
     path="/graphql",
     operation="POST",
@@ -1745,7 +1745,7 @@ def graphql(query: str) -> Any:  # Actual return type: strawberry.types.executio
     GraphQL endpoint for Inmanta.
     Supports paging, filtering and sorting on certain attributes.
 
-    To check which queries are enabled, use the /graphql/introspection endpoint
+    To check which queries are enabled, use the 'GET /api/v2/graphql/schema' endpoint.
     """
     pass
 
@@ -1761,6 +1761,6 @@ def graphql(query: str) -> Any:  # Actual return type: strawberry.types.executio
 def graphql_schema() -> dict[str, Any]:
     """
     Endpoint to retrieve schema details for the GraphQL endpoint.
-    To actually execute a query, use /graphql
+    To actually execute a query, use 'POST /api/v2/graphql'
     """
     pass
