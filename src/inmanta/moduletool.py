@@ -100,21 +100,14 @@ def add_deps_check_arguments(parser: argparse.ArgumentParser) -> None:
         dest="no_strict_deps_check",
         action="store_true",
         default=False,
-        help=(
-            "[Deprecated] When this option is enabled, only version conflicts in the direct dependencies will result in an"
-            " error. All other version conflicts will result in a warning. This option is mutually exclusive with the "
-            r"\--strict-deps-check option."
-        ),
+        help="[Deprecated] This flag is ignored. It will be removed in a future version.",
     )
     parser.add_argument(
         "--strict-deps-check",
         dest="strict_deps_check",
         action="store_true",
         default=False,
-        help=(
-            "[Deprecated] When this option is enabled, a version conflict in any (transitive) dependency will results in an"
-            r" error. This option is mutually exclusive with the \--no-strict-deps-check option."
-        ),
+        help="[Deprecated] This flag is ignored. It will be removed in a future version.",
     )
 
 
@@ -417,16 +410,22 @@ class ModuleTool(ModuleLikeTool):
         add = subparser.add_parser(
             "add",
             help=add_help_msg,
-            description=f"{add_help_msg} When executed on a project, the module is installed as well. "
-            r"Either \--v1 or \--v2 has to be set.",
+            description=f"{add_help_msg} When executed on a project, the module is installed as well."
             parents=parent_parsers,
         )
         add.add_argument(
             "module_req",
             help="The name of the module, optionally with a version constraint.",
         )
-        add.add_argument("--v1", dest="v1", help="Add the given module as a v1 module", action="store_true")
-        add.add_argument("--v2", dest="v2", help="Add the given module as a V2 module", action="store_true")
+        add.add_argument(
+            "--v2",
+            dest="v2",
+            help=(
+                "Add the given module as a V2 module. This is currently the only supported module version."
+                " This flag is kept for backwards compatibility."
+            ),
+            action="store_true",
+        )
         add.add_argument(
             "--override",
             dest="override",
@@ -655,7 +654,7 @@ When a development release is done using the \--dev option, this command:
                 module_like.install_modules()
             except ModuleNotFoundException:
                 raise CLIException(
-                    f"Failed to install {module_requirement} as a {'v1' if v1 else 'v2'} module.",
+                    f"Failed to install {module_requirement}.",
                     exitcode=1,
                 )
             else:

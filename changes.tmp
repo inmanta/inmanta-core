@@ -1,0 +1,4 @@
+- install modules in bulk
+- dropped support for installing v1 modules and associated cli options
+- dropped strict_deps_check cli option and project option
+- dropped expensive venv check on every compile

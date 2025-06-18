@@ -83,6 +83,10 @@ TProject = TypeVar("TProject", bound="Project")
 TInmantaModuleRequirement = TypeVar("TInmantaModuleRequirement", bound="InmantaModuleRequirement")
 
 
+# TODO: review new code
+# TODO: review changes to tests
+
+
 @stable_api
 class InmantaModuleRequirement:
     """
@@ -1496,12 +1500,6 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
         should freeze lists. The following syntax should be used to specify a rule
         `<first-type>.<relation-name> before <then-type>.<relation-name>`. With this rule in
         place, the compiler will first freeze `first-type.relation-name` and only then `then-type.relation-name`.
-    :param strict_deps_check: [Deprecated] Determines whether the compiler or inmanta tools that install/update module dependencies,
-        should check the virtual environment for version conflicts in a strict way or not.
-        A strict check means that all transitive dependencies will be checked for version conflicts and that any violation will
-        result in an error.
-        When a non-strict check is done, only version conflicts in a direct dependency will result in an error.
-        All other violations will only result in a warning message.
     :param agent_install_dependency_modules: [DEPRECATED] If true, when a module declares Python dependencies on
         other (v2) modules, the agent will install these dependency modules with pip. This option should only be enabled
         if the agent is configured with the appropriate pip related environment variables. The option allows to an extent
@@ -1538,7 +1536,6 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
     relation_precedence_policy: list[
         Annotated[str, StringConstraints(strip_whitespace=True, pattern=_re_relation_precedence_rule, min_length=1)]
     ] = []
-    strict_deps_check: bool = True
     agent_install_dependency_modules: bool = True
     pip: ProjectPipConfig = ProjectPipConfig()
 
@@ -1830,6 +1827,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         main_file: str = "main.cf",
         venv_path: Optional[Union[str, "env.VirtualEnv"]] = None,
         attach_cf_cache: bool = True,
+        # deprecated (ignored) since 2025, kept for backwards compatibility
         strict_deps_check: Optional[bool] = None,
     ) -> None:
         """
