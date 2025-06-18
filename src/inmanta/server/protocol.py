@@ -177,7 +177,7 @@ class Server(endpoints.Endpoint):
                 if (
                     properties.is_external_interface()
                     and not has_auth_annotation
-                    and not properties.function == methods_v2.login
+                    and properties.function not in {methods_v2.login, methods_v2.health}
                 ):
                     raise Exception(f"API endpoint {method_name} is missing an @auth annotation.")
 
