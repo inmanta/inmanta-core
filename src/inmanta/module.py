@@ -546,9 +546,7 @@ class ModuleSource(Generic[TModule]):
         path: Optional[str] = self.path_for(module_name)
         return self.from_path(project, module_name, path) if path is not None else None
 
-    def get_module(
-        self, project: "Project", module_spec: list[InmantaModuleRequirement]
-    ) -> Optional[TModule]:
+    def get_module(self, project: "Project", module_spec: list[InmantaModuleRequirement]) -> Optional[TModule]:
         """
         Returns the appropriate module instance for a given module spec.
 
@@ -2111,9 +2109,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         return self.load_module(module_name, allow_v1=allow_v1)
 
     # TODO: check if this can be simplified now
-    def load_module_recursive(
-        self, *, bypass_module_cache: bool = False
-    ) -> list[tuple[str, list[Statement], BasicBlock]]:
+    def load_module_recursive(self, *, bypass_module_cache: bool = False) -> list[tuple[str, list[Statement], BasicBlock]]:
         """
         Loads this project's modules and submodules by recursively following import statements starting from the project's main
         file.
@@ -2382,10 +2378,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         Get the requires for this project
         """
         # filter on import stmt
-        reqs = [
-            InmantaModuleRequirement(inmanta.util.parse_requirement(requirement=spec))
-            for spec in self._metadata.requires
-        ]
+        reqs = [InmantaModuleRequirement(inmanta.util.parse_requirement(requirement=spec)) for spec in self._metadata.requires]
         return [*reqs, *self.get_module_v2_requirements()]
 
     def collect_requirements(self) -> "Dict[str, List[InmantaModuleRequirement]]":
