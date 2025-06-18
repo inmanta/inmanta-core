@@ -28,7 +28,7 @@ import pytest
 
 import inmanta.server.services.environmentlistener
 from inmanta.data import model
-from inmanta.module import ModuleNotFoundException, Project
+from inmanta.module import ModuleLoadingException, Project
 from inmanta.server import SLICE_ENVIRONMENT
 from inmanta.server.services import environmentservice
 from utils import log_contains
@@ -538,7 +538,7 @@ def test_project_load_install(snippetcompiler_clean, local_module_package_index:
     if install:
         project.load(install=True)
     else:
-        with pytest.raises(ModuleNotFoundException, match="Could not find module minimalv2module"):
+        with pytest.raises(ModuleLoadingException, match="Failed to load module minimalv2module"):
             project.load()
         # make sure project load works after installing modules
         project.install_modules()
