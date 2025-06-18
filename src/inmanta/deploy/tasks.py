@@ -170,7 +170,9 @@ class Deploy(Task):
                     log_line_for_resource_log.write_to_logger_for_resource(agent, executor_resource_details.rvid, exc_info=True)
 
                     log_line_for_web_console = e.create_log_line_for_failed_modules(verbose_message=False)
-                    deploy_report = DeployReport.undeployable(executor_resource_details.rvid, action_id, log_line_for_web_console)
+                    deploy_report = DeployReport.undeployable(
+                        executor_resource_details.rvid, action_id, log_line_for_web_console
+                    )
                     return
 
                 except Exception as e:
