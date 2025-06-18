@@ -2427,8 +2427,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         return out
 
     def get_all_python_requirements_as_list(self) -> list[str]:
-        # TODO: use const
-        auto: Sequence[str] = ["inmanta-module-std"] if self.autostd else []
+        auto: Sequence[str] = [const.STD_PACKAGE] if self.autostd else []
         return [*self._get_requirements_txt_as_list(), *auto]
 
     def module_v2_source_configured(self) -> bool:
