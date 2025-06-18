@@ -19,7 +19,6 @@ Contact: code@inmanta.com
 import logging
 import os
 import py_compile
-import re
 import shutil
 import sys
 from collections import abc
@@ -31,7 +30,6 @@ import pytest
 
 import inmanta.util
 from inmanta import compiler, const, env, loader, plugins, resources
-from inmanta.ast import CompilerException
 from inmanta.const import CF_CACHE_DIR
 from inmanta.data.model import PipConfig
 from inmanta.env import ConflictingRequirements, LocalPackagePath, PackageNotFound
@@ -275,7 +273,6 @@ def test_load_module_module_not_found(snippetcompiler_clean) -> None:
     """
     Assert behavior when a module is not found as a V1 or a V2 module.
     """
-    module_name = "non_existing_module"
     snippetcompiler_clean.modules_dir = None
     project: Project = snippetcompiler_clean.setup_for_snippet(
         snippet="",
@@ -285,7 +282,7 @@ def test_load_module_module_not_found(snippetcompiler_clean) -> None:
     )
     with pytest.raises(
         PackageNotFound,
-        match=f"Packages inmanta-module-non-existing-module were not found in the given indexes",
+        match="Packages inmanta-module-non-existing-module were not found in the given indexes",
     ):
         project.install_modules()
 

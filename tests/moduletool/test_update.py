@@ -23,16 +23,14 @@ import pytest
 
 import inmanta.util
 from inmanta import env
-from inmanta.config import Config
 from inmanta.data.model import PipConfig
 from inmanta.env import LocalPackagePath
-from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleV1, ModuleV2Source
+from inmanta.module import InmantaModuleRequirement, ModuleV2Source
 from inmanta.moduletool import ProjectTool
 from inmanta.parser import ParserException
-from moduletool.common import add_file, clone_repo
 from packaging.requirements import Requirement
 from packaging.version import Version
-from utils import PipIndex, create_python_package, module_from_template, v1_module_from_template
+from utils import PipIndex, create_python_package, module_from_template
 
 
 @pytest.mark.parametrize("corrupt_module", [False, True])

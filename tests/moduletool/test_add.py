@@ -16,7 +16,6 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import logging
 import os
 import shutil
 from typing import Optional
@@ -27,7 +26,7 @@ import pytest
 import inmanta.util
 from inmanta import env
 from inmanta.command import CLIException
-from inmanta.module import ModuleV1, ModuleV1Metadata, ModuleV2, ModuleV2Source, Project, ProjectMetadata
+from inmanta.module import ModuleV1, ModuleV2, ModuleV2Source, Project, ProjectMetadata
 from inmanta.moduletool import ModuleTool
 from packaging.version import Version
 from utils import PipIndex, module_from_template

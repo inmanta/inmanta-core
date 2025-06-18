@@ -35,7 +35,7 @@ import tempfile
 import zipfile
 from argparse import ArgumentParser, RawTextHelpFormatter
 from collections import abc
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from configparser import ConfigParser
 from functools import total_ordering
 from re import Pattern
@@ -53,10 +53,9 @@ import inmanta.warnings
 import packaging.requirements
 import toml
 from build.env import DefaultIsolatedEnv
-from inmanta import const, env
-from inmanta.ast import CompilerException
+from inmanta import const
 from inmanta.command import CLIException, ShowUsageException
-from inmanta.const import CF_CACHE_DIR, MAX_UPDATE_ATTEMPT
+from inmanta.const import CF_CACHE_DIR
 from inmanta.module import (
     DummyProject,
     FreezeOperator,

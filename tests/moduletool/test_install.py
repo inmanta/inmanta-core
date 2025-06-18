@@ -20,7 +20,6 @@ import logging
 import os
 import re
 import shutil
-import subprocess
 from collections.abc import Iterator
 from datetime import datetime
 from importlib.abc import Loader
@@ -30,19 +29,15 @@ from typing import Optional
 
 import py
 import pytest
-import yaml
 
 import inmanta.util
 from inmanta import compiler, const, env, loader, module
-from inmanta.ast import CompilerException
 from inmanta.command import CLIException
-from inmanta.config import Config
 from inmanta.env import CommandRunner, ConflictingRequirements, PackageNotFound, PipConfig
-from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleLoadingException
-from inmanta.moduletool import DummyProject, ModuleConverter, ModuleTool, ProjectTool
-from moduletool.common import BadModProvider, install_project
+from inmanta.module import InmantaModuleRequirement, InstallMode
+from inmanta.moduletool import ModuleTool, ProjectTool
 from packaging import version
-from utils import LogSequence, PipIndex, log_contains, module_from_template
+from utils import PipIndex, log_contains, module_from_template
 
 LOGGER = logging.getLogger(__name__)
 

@@ -37,10 +37,9 @@ from importlib.abc import Loader
 from importlib.machinery import ModuleSpec
 from importlib.metadata import Distribution, distribution, distributions
 from itertools import chain
-from re import Pattern
 from subprocess import CalledProcessError
 from textwrap import indent
-from typing import Callable, NamedTuple, Optional, Tuple, TypeVar
+from typing import Callable, Optional, Tuple, TypeVar
 
 import inmanta.util
 import packaging.requirements

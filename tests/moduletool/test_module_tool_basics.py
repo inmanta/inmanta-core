@@ -27,7 +27,6 @@ from typing import Optional
 
 import py
 import pytest
-import yaml
 
 from inmanta import module
 from inmanta.module import (
@@ -36,13 +35,10 @@ from inmanta.module import (
     InvalidModuleException,
     ModuleDeprecationWarning,
     ModuleV2Metadata,
-    Project,
 )
 from inmanta.moduletool import ModuleTool
-from inmanta.parser import ParserException
-from moduletool.common import add_file, commitmodule, install_project, make_module_simple, makeproject
+from moduletool.common import add_file, make_module_simple
 from packaging import version
-from test_app_cli import app
 
 
 @pytest.fixture
