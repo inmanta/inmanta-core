@@ -831,7 +831,7 @@ import sys
 
     def install_for_config(
         self,
-        requirements: list[inmanta.util.CanonicalRequirement],
+        requirements: Sequence[inmanta.util.CanonicalRequirement],
         config: PipConfig,
         upgrade: bool = False,
         constraint_files: Optional[list[str]] = None,
@@ -1144,7 +1144,7 @@ class ActiveEnv(PythonEnvironment):
 
     def install_for_config(
         self,
-        requirements: list[inmanta.util.CanonicalRequirement],
+        requirements: Sequence[inmanta.util.CanonicalRequirement],
         config: PipConfig,
         upgrade: bool = False,
         constraint_files: Optional[list[str]] = None,
@@ -1340,7 +1340,7 @@ class VirtualEnv(ActiveEnv):
 
     def install_for_config(
         self,
-        requirements: list[inmanta.util.CanonicalRequirement],
+        requirements: Sequence[inmanta.util.CanonicalRequirement],
         config: PipConfig,
         upgrade: bool = False,
         constraint_files: Optional[list[str]] = None,

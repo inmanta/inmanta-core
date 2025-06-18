@@ -1969,7 +1969,9 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             self.use_virtual_env()
 
         # install all dependencies
-        dependencies: Sequence[inmanta.util.CanonicalRequirement] = self.get_all_python_requirements_as_list()
+        dependencies: Sequence[inmanta.util.CanonicalRequirement] = [
+            inmanta.util.parse_requirement(req) for req in self.get_all_python_requirements_as_list()
+        ]
         if len(dependencies) > 0:
             modules_pre = self.module_source.take_v2_modules_snapshot(header="Module versions before installation:")
             constraints: Sequence[inmanta.util.CanonicalRequirement] = [
