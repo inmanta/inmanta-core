@@ -82,9 +82,6 @@ TProject = TypeVar("TProject", bound="Project")
 TInmantaModuleRequirement = TypeVar("TInmantaModuleRequirement", bound="InmantaModuleRequirement")
 
 
-# TODO: review new code (already reviewed removed code)
-
-
 @stable_api
 class InmantaModuleRequirement:
     """
@@ -1823,7 +1820,6 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         main_file: str = "main.cf",
         venv_path: Optional[Union[str, "env.VirtualEnv"]] = None,
         attach_cf_cache: bool = True,
-        # deprecated (ignored) since 2025, kept for backwards compatibility
         strict_deps_check: Optional[bool] = None,
     ) -> None:
         """
@@ -1842,8 +1838,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         :param path: The directory where the project is located
         :param venv_path: Path to the directory that will contain the Python virtualenv.
                           This can be an existing or a non-existing directory.
-        :param strict_deps_check: [Deprecated] Overrides the strict_deps_check configuration option from the project.yml file if
-                                    the provided value is different from None.
+        :param strict_deps_check: [Deprecated] ignored. Kept for backwards compatibility.
         """
         if not os.path.exists(path):
             raise ProjectNotFoundException(f"Directory {path} doesn't exist")
@@ -2373,6 +2368,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
     def get_module_requirements(self) -> list[str]:
         return [*self.metadata.requires, *(str(req) for req in self.get_module_v2_requirements())]
 
+    # TODO: what is this used for? Is this correct?
     def requires(self) -> "List[InmantaModuleRequirement]":
         """
         Get the requires for this project
