@@ -201,7 +201,7 @@ class Deploy(Task):
                     )
 
                     failed_modules_warning_log_line.write_to_logger_for_resource(
-                        agent, executor_resource_details.rvid, exc_info=True
+                        agent, executor_resource_details.rvid, exc_info=False
                     )
 
                 assert reason is not None  # Should always be set for deploy
@@ -357,6 +357,7 @@ class ModuleLoadingException(Exception):
             self.agent_name,
             ", ".join(self.failed_modules.keys()),
         )
+
         if verbose_message:
             message += f"\n{formatted_module_loading_errors}"
         return data.LogLine.log(

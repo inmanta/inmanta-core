@@ -1130,4 +1130,4 @@ class ModuleImportException(Exception):
         self.tb = "".join(traceback.format_tb(base_exp.__traceback__))
 
     def __str__(self) -> str:
-        return self.message + self.tb
+        return self.message + self.tb + "\n"
