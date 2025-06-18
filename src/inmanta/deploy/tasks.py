@@ -166,24 +166,23 @@ class Deploy(Task):
                         version=version,
                     )
                 except ModuleLoadingException as e:
-                    log_line = e.create_log_line_for_failed_modules(verbose_message=False)
-                    log_line.write_to_logger_for_resource(agent, executor_resource_details.rvid, exc_info=True)
-                    deploy_report = DeployReport.undeployable(executor_resource_details.rvid, action_id, log_line)
+                    log_line_for_resource_log = e.create_log_line_for_failed_modules(verbose_message=True)
+                    log_line_for_resource_log.write_to_logger_for_resource(agent, executor_resource_details.rvid, exc_info=True)
+
+                    log_line_for_web_console = e.create_log_line_for_failed_modules(verbose_message=False)
+                    deploy_report = DeployReport.undeployable(executor_resource_details.rvid, action_id, log_line_for_web_console)
                     return
 
                 except Exception as e:
                     log_line = data.LogLine.log(
                         logging.ERROR,
-                        "All resources of type `%(res_type)s` failed to install handler code dependencies:",
+                        "All resources of type `%(res_type)s` failed to install handler code "
+                        "dependencies: `%(error)s`\n%(traceback)s",
                         res_type=executor_resource_details.id.entity_type,
-                        agent=agent,
-                        error=[
-                            single_line
-                            for iterator in [multi_line.splitlines() for multi_line in traceback.format_exception(e)]
-                            for single_line in iterator
-                            if single_line
-                        ],
+                        error=str(e),
+                        traceback="".join(traceback.format_tb(e.__traceback__)),
                     )
+
                     # Not attached to ctx, needs to be flushed to logger explicitly
                     log_line.write_to_logger_for_resource(agent, executor_resource_details.rvid, exc_info=True)
                     deploy_report = DeployReport.undeployable(executor_resource_details.rvid, action_id, log_line)
