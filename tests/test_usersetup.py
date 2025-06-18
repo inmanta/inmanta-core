@@ -100,6 +100,7 @@ async def test_user_setup(
     users = await data.User.get_list(connection=postgresql_client)
     assert len(users) == 1
     assert users[0].username == "new_user"
+    assert users[0].is_admin
 
 
 async def test_user_setup_empty_username(
