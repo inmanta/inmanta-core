@@ -344,12 +344,11 @@ class ModuleLoadingException(Exception):
         self.failed_modules = failed_modules
         self.agent_name = agent_name
 
-    def create_log_line_for_failed_modules(self, level: int = logging.ERROR, *, verbose_message: bool = False) -> data.LogLine:
+    def _format_module_loading_errors(self) -> str:
         """
-        Helper method to convert this Exception into a LogLine.
+        Helper method to display module loading failures.
         """
         formatted_module_loading_errors = ""
-
         N_FAILURES = sum(len(v) for v in self.failed_modules.values())
         failure_index = 1
 
@@ -359,10 +358,25 @@ class ModuleLoadingException(Exception):
                 formatted_module_loading_errors += f"In module {python_module}:\n"
                 formatted_module_loading_errors += str(exception)
                 failure_index += 1
+
+        return formatted_module_loading_errors
+
+    def create_log_line_for_failed_modules(self, level: int = logging.ERROR, *, verbose_message: bool = False) -> data.LogLine:
+        """
+        Helper method to convert this Exception into a LogLine.
+
+        :param level: The log level for the resulting LogLine
+        :param verbose_message: Whether to include the full formatted error output in the LogLine message.
+            When displayed on the webconsole, the full formatted error output will be displayed in its own section
+            regardless of this flag's value.
+
+        """
         message = "Agent %s failed loading the following modules: %s." % (
             self.agent_name,
             ", ".join(self.failed_modules.keys()),
         )
+
+        formatted_module_loading_errors = self._format_module_loading_errors()
 
         if verbose_message:
             message += f"\n{formatted_module_loading_errors}"
