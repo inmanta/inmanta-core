@@ -351,7 +351,7 @@ class ModuleLoadingException(Exception):
             for python_module, exception in failed_modules_data.items():
                 formatted_module_loading_errors += f"Error {failure_index}/{N_FAILURES}:\n"
                 formatted_module_loading_errors += f"In module {python_module}:\n"
-                formatted_module_loading_errors += exception.get_message()
+                formatted_module_loading_errors += str(exception)
                 failure_index += 1
         message = "Agent %s failed loading the following modules: %s." % (
             self.agent_name,

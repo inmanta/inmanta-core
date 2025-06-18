@@ -72,6 +72,7 @@ import os
 import pathlib
 import socket
 import threading
+import traceback
 import typing
 import uuid
 from asyncio import Future, transports
@@ -97,7 +98,7 @@ import inmanta.types
 import inmanta.util
 from inmanta import const, tracing
 from inmanta.agent import executor, resourcepool
-from inmanta.agent.executor import DeployReport, FailedInmantaModules, GetFactReport, ModuleImportException
+from inmanta.agent.executor import DeployReport, FailedInmantaModules, GetFactReport
 from inmanta.agent.resourcepool import PoolManager, PoolMember
 from inmanta.const import LOGGER_NAME_EXECUTOR
 from inmanta.protocol.ipc_light import (
@@ -1120,3 +1121,13 @@ class MPManager(
         children = list(self.agent_map[agent_name])
         await asyncio.gather(*(child.request_shutdown() for child in children))
         return children
+
+
+class ModuleImportException(Exception):
+
+    def __init__(self, base_exp: Exception, mod_name: str):
+        self.message = f"Failed to import module source {mod_name}:\n{str(base_exp)}.\n"
+        self.tb = "".join(traceback.format_tb(base_exp.__traceback__))
+
+    def __str__(self) -> str:
+        return self.message + self.tb
