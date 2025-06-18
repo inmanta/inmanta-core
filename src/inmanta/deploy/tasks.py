@@ -22,7 +22,6 @@ import datetime
 import logging
 import traceback
 import uuid
-from collections.abc import Mapping
 from dataclasses import dataclass
 
 import pyformance
