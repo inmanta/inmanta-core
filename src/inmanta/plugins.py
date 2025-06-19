@@ -1120,12 +1120,11 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         cls.deprecated = True
         cls.replaced_by = replaced_by
 
-    # TODO: no longer in use?
     def __call__(self, *args: object, **kwargs: object) -> object:
         """
         The function call itself
 
-        As a call, for backward compact
+        As a call, for backward compat. Used by the Jinja template proxy.
         """
         if self.deprecated:
             msg: str = f"Plugin '{self.get_full_name()}' is deprecated."

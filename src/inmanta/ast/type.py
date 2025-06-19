@@ -1289,7 +1289,6 @@ class Union(Type):
                         # Default conversion
                         return DynamicProxy.return_value(instance)
             except (UnsetException, MultiUnsetException):
-                # TODO: test case with `MyDataclass | int` that gets a `MyDataclass` waiting for a value below an `if`
                 # let these exceptions with special meaning through
                 raise
             except RuntimeException:
