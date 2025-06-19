@@ -171,7 +171,7 @@ class ReferenceArgument(Argument):
 
 class MutatedJsonArgument(Argument):
     """
-    Json-like argument to a reference that contains reference in the json structure
+    Json-like argument that contains another reference in the json structure
 
     It is stored as
     1. a json value with all reference replaced by None
