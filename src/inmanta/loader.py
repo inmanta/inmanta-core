@@ -34,7 +34,7 @@ from itertools import chain
 from typing import TYPE_CHECKING, Optional
 
 from inmanta import const, module
-from inmanta.data.model import AgentName, InmantaModule, InmantaModuleName, InmantaModuleVersion, ModuleSource
+from inmanta.data.model import InmantaModule, ModuleSource
 from inmanta.stable_api import stable_api
 from inmanta.util import hash_file_streaming
 
@@ -80,10 +80,10 @@ class CodeManager:
         # To which python module do these python files belong
         self.__file_info: dict[str, ModuleSource] = {}
 
-        self._types_to_agent: dict[str, set[AgentName]] = defaultdict(set)
+        self._types_to_agent: dict[str, set[str]] = defaultdict(set)
 
         # Map of [inmanta_module_name, inmanta module]
-        self.module_version_info: dict[InmantaModuleName, "InmantaModule"] = {}
+        self.module_version_info: dict[str, "InmantaModule"] = {}
 
     def build_agent_map(self, resources: dict["Id", "Resource"]) -> None:
         """
@@ -118,10 +118,10 @@ class CodeManager:
 
         self._register_inmanta_module(module_name, loaded_modules[module_name])
 
-        registered_agents: set[AgentName] = self._types_to_agent.get(type_name, set())
+        registered_agents: set[str] = self._types_to_agent.get(type_name, set())
         self._update_agents_for_module(module_name, registered_agents)
 
-    def _register_inmanta_module(self, inmanta_module_name: InmantaModuleName, module: "module.Module") -> None:
+    def _register_inmanta_module(self, inmanta_module_name: str, module: "module.Module") -> None:
         if inmanta_module_name in self.module_version_info:
             # This module was already registered
             return
@@ -145,11 +145,11 @@ class CodeManager:
             for_agents=[],
         )
 
-    def _update_agents_for_module(self, inmanta_module_name: InmantaModuleName, registered_agents: set[AgentName]) -> None:
+    def _update_agents_for_module(self, inmanta_module_name: str, registered_agents: set[str]) -> None:
         """
         Helper method to add the given agents to the list of registered agents for the given Inmanta module.
         """
-        old_set: set[AgentName] = set(self.module_version_info[inmanta_module_name].for_agents)
+        old_set: set[str] = set(self.module_version_info[inmanta_module_name].for_agents)
         self.module_version_info[inmanta_module_name].for_agents = list(old_set.union(registered_agents))
 
     def get_object_source(self, instance: object) -> Optional[str]:
@@ -163,12 +163,12 @@ class CodeManager:
         """Return the hashes of all source files"""
         return (info.metadata.hash_value for info in self.__file_info.values())
 
-    def get_module_version_info(self) -> dict[InmantaModuleName, "InmantaModule"]:
+    def get_module_version_info(self) -> dict[str, "InmantaModule"]:
         """Return all module version info"""
         return self.module_version_info
 
     @staticmethod
-    def get_inmanta_module_requirements(module_name: InmantaModuleName) -> set[str]:
+    def get_inmanta_module_requirements(module_name: str) -> set[str]:
         """Get the list of python requirements associated with this inmanta module"""
         project: module.Project = module.Project.get()
         mod: module.Module = project.modules[module_name]
@@ -179,7 +179,7 @@ class CodeManager:
         return set(_requires)
 
     @staticmethod
-    def get_module_version(requirements: set[str], module_sources: Sequence["ModuleSourceMetadata"]) -> InmantaModuleVersion:
+    def get_module_version(requirements: set[str], module_sources: Sequence["ModuleSourceMetadata"]) -> str:
         module_version_hash = hashlib.new("sha1")
 
         for module_source in sorted(module_sources, key=lambda f: f.hash_value):
