@@ -110,6 +110,18 @@ else:
 end
 dataclasses::is_odd_string(hs.thestring)
 
+# a dataclass instance that is still wating for its values when the plugin is called
+lazy_vm = dataclasses::Virtualmachine()
+dataclasses::dc_union(lazy_vm)
+if true: if true:
+    # nest the assignments to make sure the plugin is called before this is executed
+    lazy_vm.name = "lazy_vm"
+    lazy_vm.os = {}
+    lazy_vm.ram = null
+    lazy_vm.cpus = {}
+    lazy_vm.disk = []
+    lazy_vm.slots = null
+end end
 """,
         ministd=True,
     )

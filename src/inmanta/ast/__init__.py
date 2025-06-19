@@ -28,6 +28,7 @@ from inmanta.types import DataclassProtocol
 from inmanta.warnings import InmantaWarning
 
 if TYPE_CHECKING:
+    from inmanta import references
     from inmanta.ast.attribute import Attribute  # noqa: F401
     from inmanta.ast.entity import Entity
     from inmanta.ast.statements import Statement  # noqa: F401
@@ -1084,12 +1085,26 @@ class UnknownException(Exception):
         self.unknown = unknown
 
 
+
 class AttributeNotFound(NotFoundException, AttributeError):
     """
     Exception used for backwards compatibility with try-except blocks around some_proxy.some_attr.
     This previously raised `NotFoundException` which is currently deprecated in this context.
     Its new behavior is to raise an AttributeError for compatibility with Python's builtin `hasattr`.
     """
+
+
+# custom class to enable clean wrapping on the plugin boundary
+class UndeclaredReference(RuntimeException):
+    """
+    Undeclared reference encountered during plugin execution.
+    """
+
+    def __init__(
+        self, *, stmt: Optional[Locatable] = None, reference: "references.Reference[references.RefValue]", message: str
+    ) -> None:
+        RuntimeException.__init__(self, stmt, message)
+        self.reference: references.Reference[RefValue] = reference
 
 
 @stable_api

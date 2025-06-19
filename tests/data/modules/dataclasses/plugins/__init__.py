@@ -101,3 +101,11 @@ def is_odd_string(thing: "string") -> None:
 def return_any() -> "any":
     out = Virtualmachine(name="Test", os={"X": "x"}, ram=5, cpus={"s": 5}, disk=[15], slots=None)
     return out
+
+
+@plugin
+def dc_union(value: int | Virtualmachine) -> None:
+    """
+    A plugin that takes a union with a dataclass. Could just as well (more realistic) be a union between two dataclasses.
+    """
+    ...

@@ -1,15 +1,15 @@
 import os
-import dataclasses
+from typing import Annotated, Any
 
+import inmanta.plugins
 from inmanta.agent.handler import LoggerABC, provider, CRUDHandler, HandlerContext
 from inmanta.references import reference, Reference, is_reference_of
-from inmanta.plugins import plugin
+from inmanta.plugins import plugin, ModelType
 from inmanta.resources import resource, ManagedResource, PurgeableResource
 
 
 @reference("refs::Bool")
 class BoolReference(Reference[bool]):
-    """A reference to fetch environment variables"""
 
     def __init__(self, name: str | Reference[str]) -> None:
         """
@@ -24,6 +24,24 @@ class BoolReference(Reference[bool]):
 
     def __str__(self) -> str:
         return f"BoolReference {self.name}"
+
+
+@reference("refs::Int")
+class IntReference(Reference[int]):
+
+    def __init__(self, name: str | Reference[str]) -> None:
+        """
+        :param name: The name of the environment variable.
+        """
+        super().__init__()
+        self.name = name
+
+    def resolve(self, logger: LoggerABC) -> bool:
+        """Resolve the reference"""
+        return os.getenv(self.resolve_other(self.name, logger)) == "true"
+
+    def __str__(self) -> str:
+        return f"IntReference {self.name}"
 
 
 @reference("refs::String")
@@ -51,6 +69,11 @@ def create_bool_reference(name: Reference[str] | str) -> Reference[bool]:
 
 
 @plugin
+def create_int_reference(name: Reference[str] | str) -> Reference[int]:
+    return IntReference(name=name)
+
+
+@plugin
 def create_string_reference(name: Reference[str] | str) -> Reference[str]:
     return StringReference(name=name)
 
@@ -67,35 +90,6 @@ def create_bool_reference_cycle(name: str) -> Reference[bool]:
     ref_cycle.name = ref_cycle
 
     return BoolReference(name=ref_cycle)
-
-
-@dataclasses.dataclass(frozen=True)
-class Test:
-    value: str | Reference[str]
-
-
-@reference("refs::TestReference")
-class TestReference(Reference[Test]):
-    """A reference that returns a dataclass"""
-
-    def __init__(self, value: str | Reference[str]) -> None:
-        """
-        :param value: The value
-        """
-        super().__init__()
-        self.value = value
-
-    def resolve(self, logger: LoggerABC) -> Test:
-        """Resolve test references"""
-        return Test(value=self.resolve_other(self.value, logger))
-
-    def __str__(self):
-        return f"TestReference {self.value}"
-
-
-@plugin
-def create_test(value: str | Reference[str]) -> TestReference:
-    return TestReference(value=value)
 
 
 @resource("refs::NullResource", agent="agentname", id_attribute="name")
@@ -142,8 +136,16 @@ class Deep(ManagedResource, PurgeableResource):
     fields = ("name", "agentname", "value")
 
     @classmethod
-    def get_value(cls, _, resource) -> dict[str, object]:
+    def get_value(cls, _, resource) -> dict[str, object | Reference[object]]:
         # use a . to ensure proper escaping
+        return {"inner.something": inmanta.plugins.allow_reference_values(resource).value}
+
+
+@resource("refs::DeepResourceNoReferences", agent="agentname", id_attribute="name")
+class DeepNoReferences(Deep):
+    @classmethod
+    def get_value(cls, _, resource) -> dict[str, object | Reference[object]]:
+        # same as Deep.get_value but don't declare that references are allowed => test should fail
         return {"inner.something": resource.value}
 
 

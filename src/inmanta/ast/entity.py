@@ -19,9 +19,12 @@ Contact: code@inmanta.com
 import dataclasses
 import importlib
 import inspect
+import logging
 import typing
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple, Union  # noqa: F401
 
+import inmanta.ast.attribute
 from inmanta import plugins
 from inmanta.ast import (
     CompilerException,
@@ -36,6 +39,7 @@ from inmanta.ast import (
     NotFoundException,
     RuntimeException,
     TypingException,
+    UndeclaredReference,
     WithComment,
 )
 from inmanta.ast.statements.generator import SubConstructor
@@ -43,11 +47,8 @@ from inmanta.ast.type import Any as inm_Any
 from inmanta.ast.type import Float, NamedType, NullableType, Type
 from inmanta.execute.runtime import Instance, QueueScheduler, Resolver, ResultVariable, dataflow
 from inmanta.execute.util import AnyType, NoneValue
-from inmanta.references import AttributeReference, PrimitiveTypes, Reference
+from inmanta.references import AttributeReference, PrimitiveTypes, Reference, RefValue
 from inmanta.types import DataclassProtocol
-
-# pylint: disable-msg=R0902,R0904
-
 
 if TYPE_CHECKING:
     from inmanta.ast.blocks import BasicBlock
@@ -57,7 +58,8 @@ if TYPE_CHECKING:
     from inmanta.ast.statements.define import DefineAttribute, DefineImport, DefineIndex  # noqa: F401
     from inmanta.execute.runtime import ExecutionContext  # noqa: F401
 
-import inmanta.ast.attribute
+
+LOGGER = logging.getLogger(__name__)
 
 
 class Entity(NamedType, WithComment):
@@ -101,6 +103,7 @@ class Entity(NamedType, WithComment):
         self.normalized = False
 
         self._paired_dataclass: type[DataclassProtocol] | None = None
+        self._paired_dataclass_field_types: Mapping[str, Type] = {}
         # Entities can be paired up to python dataclasses
         # If such a sibling exists, the type is kept here
         # Every instance of such entity can cary the associated python object in a slot called `DATACLASS_SELF_FIELD`
@@ -336,6 +339,9 @@ class Entity(NamedType, WithComment):
         """
         return (not strict and superclass_candidate == self) or self.is_parent(superclass_candidate)
 
+    def issubtype(self, other: "Type") -> bool:
+        return isinstance(other, inm_Any) or isinstance(other, Entity) and self.is_subclass(other, strict=False)
+
     def issupertype(self, other: "Type") -> bool:
         if not isinstance(other, Entity):
             raise NotImplementedError()
@@ -354,6 +360,15 @@ class Entity(NamedType, WithComment):
         value_definition = value.type
         if not (value_definition is self or value_definition.is_subclass(self)):
             raise RuntimeException(None, f"Invalid class type for {value}, should be {self}")
+
+        # Note on references:
+        #
+        # References to dataclasses are a special case in the sense that they are represented as plain instances in the DSL.
+        # Their attributes get additional runtime validation on the boundary (see to_python()), so we can simply let them
+        # pass validation here.
+        #
+        # Even non-reference instances may contain reference attributes so they get additional runtime validation
+        # on plugin attribute access (see DynamicProxy.__getattr__). So these can be accepted here as well.
 
         return True
 
@@ -647,6 +662,8 @@ class Entity(NamedType, WithComment):
                     # Type correspondence
                     try:
                         dsl_type = plugins.to_dsl_type(dc_types[rel_or_attr_name], self.location, self.namespace)
+                        # TODO: what is the memory impact of this?!
+                        self._paired_dataclass_field_types[rel_or_attr_name] = dsl_type
                         if not inm_type.corresponds_to(dsl_type):
                             failures.append(
                                 f"The attribute {rel_or_attr_name} does not have the same type as "
@@ -724,21 +741,39 @@ class Entity(NamedType, WithComment):
 
         assert isinstance(instance, Instance)
 
-        dataclass_self = instance.dataclass_self
-        if dataclass_self is not None:
-            return dataclass_self
-        else:
+        if instance.type is not self:
+            # allow inheritance: delegate to child type
+            return instance.type.to_python(instance)
+
+        def create():
+            # Convert values
+            # All values are primitive, so this is trivial
+            kwargs = {k: v.get_value() for k, v in instance.slots.items() if k not in ["self", "requires", "provides"]}
+            for k, v in kwargs.items():
+                assert k in self._paired_dataclass_field_types
+                # dynamic validation, mostly in case of references, because they are allowed in the model while they have to be
+                # declared (potentially nested) in the Python domain.
+                self._paired_dataclass_field_types[k].validate(v)
+            return self._paired_dataclass(**kwargs)
+
+        if instance.dataclass_self is None:
             # Handle unsets
             unset = [v for k, v in instance.slots.items() if k not in ["self", "requires", "provides"] if not v.is_ready()]
             if unset:
                 raise MultiUnsetException("Unset values when converting instance to dataclass", unset)
 
-            # Convert values
-            # All values are primitive, so this is trivial
-            kwargs = {k: v.get_value() for k, v in instance.slots.items() if k not in ["self", "requires", "provides"]}
-            out = self._paired_dataclass(**kwargs)
-            instance.dataclass_self = out
-            return out
+            instance.dataclass_self = create()
+
+        if isinstance(instance.dataclass_self, Reference):
+            LOGGER.debug(
+                "Coercing dataclass reference `%s` to a dataclass with reference attributes to satisfy plugin type constraints",
+                instance.dataclass_self,
+            )
+            # coerce if the dataclass definition is reference-compatible. Do not overwrite dataclass_self
+            return create()
+        else:
+            # or simply return the linked dataclass instance
+            return instance.dataclass_self
 
     def from_python(self, value: object, resolver: Resolver, queue: QueueScheduler, location: Location) -> Instance:
         """

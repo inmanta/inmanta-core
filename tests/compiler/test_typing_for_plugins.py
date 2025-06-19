@@ -201,7 +201,12 @@ def test_type_utility_methods() -> None:
     check_type([TypedList(primitive) for primitive in primitives], True, False)
     check_type([TypedDict(primitive) for primitive in primitives], False, False)
     check_type([Null()], False, False)
-    check_type([inm_type.ReferenceType(Bool()), inm_type.OrReferenceType(Bool())], True, True)
+    check_type([inm_type.ReferenceType(Bool()), inm_type.OrReferenceType(Bool())], True, False)
+    dataclass_ref = inm_type.ReferenceType(Bool())
+    dataclass_ref.is_dataclass = True  # mock a dataclass reference
+    dataclass_ref_union = inm_type.OrReferenceType(Bool())
+    dataclass_ref_union.reference_type.is_dataclass = True  # mock a dataclass reference union
+    check_type([dataclass_ref, dataclass_ref_union], True, True)  # not real dataclasses => still attr type
     check_type(
         [
             inm_type.Number(),
