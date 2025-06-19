@@ -13,7 +13,7 @@
 - Fixed error reporting where Reference[object] was printed as Reference[None]
 - during type validation: point out references, instead of simple "has incompatible type", for primitives but also list[str] etc
 - validation error: correctly report expected type for unions of type and reference
+- Fixed bug where compiler would crash on a plugin accepting unions with a dataclass under certain circumstances (int | MyDc would crash instead of rescheduling if a dc instance is passed that is still waiting for a value)
 
 
 - TODO: follow-up: std plugin annotations
-- TODO: I added "fix breaking bug on unions involving a dataclass" at some point. What's that about. Add test if still relevant
