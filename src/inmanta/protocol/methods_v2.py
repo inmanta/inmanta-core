@@ -1618,3 +1618,14 @@ def discovered_resources_get_batch(
     :raise NotFound: This exception is raised when the referenced environment is not found
     :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid
     """
+
+
+@typedmethod(path="/health", operation="GET", client_types=[ClientType.api], enforce_auth=False, api_version=2)
+def health() -> ReturnValue[None]:
+    """
+    Returns a 200 response code if the server is healthy
+    or a 500 if the server is not healthy.
+
+    In contrast to the 'GET /api/v1/serverstatus' endpoint, this endpoint does not require authentication.
+    """
+    pass
