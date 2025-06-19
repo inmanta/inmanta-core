@@ -239,7 +239,7 @@ class ReferenceCollector:
         )
 
 
-def collect_references(value_reference_collector: ReferenceCollector | None, value: object, path: str) -> object:
+def collect_references(value_reference_collector: ReferenceCollector, value: object, path: str) -> object:
     """Collect value references. This method also ensures that there are no values in the resources that are not serializable.
     This includes:
         - Unknowns
@@ -265,24 +265,12 @@ def collect_references(value_reference_collector: ReferenceCollector | None, val
             }
 
         case references.Reference():
-            if value_reference_collector is None:
-                # TODO: update message, or change signature so value_reference_collector is never None and handle in obj_to_id
-                #       => the latter is probably cleanest
-                raise inmanta.ast.UndeclaredReference(
-                    reference=value, message=f"{repr(value)} in resource is not JSON serializable at path {path}"
-                )
             value_reference_collector.add_reference(path, value)
             return None
 
         case proxy.DynamicProxy():
             inner_value = proxy.DynamicProxy.unwrap(value)
             if isinstance(inner_value, references.Reference):
-                if value_reference_collector is None:
-                    # TODO: update message, or change signature so value_reference_collector is never None and handle in obj_to_id
-                    #       => the latter is probably cleanest
-                    raise inmanta.ast.UndeclaredReference(
-                        reference=inner_value, message=f"{repr(value)} in resource is not JSON serializable at path {path}"
-                    )
                 value_reference_collector.add_reference(path, inner_value)
                 return None
             else:
@@ -414,10 +402,8 @@ class Resource(metaclass=ResourceMeta):
                     % (model_object, agent_attribute, el)
                 )
 
-        try:
-            attribute_value = cls.map_field(None, entity_name, attribute_name, model_object)
-        # TODO: make this an isinstance instead if reference_collector is None implies no references are checked
-        except inmanta.ast.UndeclaredReference:
+        attribute_value = cls.map_field(None, entity_name, attribute_name, model_object)
+        if isinstance(attribute_value, references.Reference):
             raise ResourceException(
                 "Encountered reference in resource's id attribute. Id attribute values can not be references."
                 f" Encountered at attribute {attribute_name!r} of resource instance {model_object}"
@@ -441,6 +427,12 @@ class Resource(metaclass=ResourceMeta):
         model_object: "proxy.DynamicProxy",
         reference_collector: Optional[ReferenceCollector] = None,
     ) -> object:
+        """
+        Map a field name to its value.
+
+        :param reference_collector: Collector for references. If None, references may be returned, even if they can not
+            be serialized later on. The caller is responsible for validating appropriately.
+        """
         try:
             if hasattr(cls, "get_" + field_name):
                 mthd = getattr(cls, "get_" + field_name)
@@ -456,12 +448,10 @@ class Resource(metaclass=ResourceMeta):
             # - Unknowns
             # - DynamicProxys to entities
             # - References if we don't have a reference_collector
-            value = collect_references(reference_collector, value, field_name)
+            if reference_collector is not None:
+                value = collect_references(reference_collector, value, field_name)
 
             return value
-        # TODO: temporary hack. Should not be required anymore
-        except inmanta.ast.UndeclaredReference:
-            raise
         except IgnoreResourceException:
             raise  # will be handled in _load_resources of export.py
         except inmanta.ast.UnknownException as e:
