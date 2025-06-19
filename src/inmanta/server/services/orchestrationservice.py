@@ -680,6 +680,13 @@ class OrchestrationService(protocol.ServerSlice):
         """
         Make sure that modules used in this partial version are either new modules, or that the version
         being used is the same as the registered version for the base compile.
+
+
+        :param modules_version_in_current_export: Inmanta modules used to deploy resources in
+            the current export.
+        :param registered_modules_version: All Inmanta module versions used in the base compile.
+        :raises BadRequest: Some module version in the current export differs from its
+            registered counterpart.
         """
 
         for inmanta_module_name, module_data in modules_version_in_current_export.items():
@@ -740,52 +747,42 @@ class OrchestrationService(protocol.ServerSlice):
         :param connection: DB connection expected to be managed by the caller method.
         """
 
-        modules_to_register: dict[InmantaModuleName, InmantaModuleDTO] = {}
-        agent_modules: dict[InmantaModuleName, set[AgentName]] = {}
-        modules_version: dict[InmantaModuleName, InmantaModuleVersion] = {}
+        modules_to_register: dict[InmantaModuleName, InmantaModuleDTO] = {
+            module_name: inmanta_module
+            for module_name, inmanta_module in module_version_info.items()
+            if inmanta_module.for_agents
+        }
+        module_usage_info: dict[InmantaModuleName, tuple[InmantaModuleVersion, set[AgentName]]] = {}
 
         if partial_base_version is not None:
-            agent_modules, modules_version = await AgentModules.get_registered_modules_data(
+            module_usage_info = await AgentModules.get_registered_modules_data(
                 model_version=partial_base_version, environment=environment, connection=connection
             )
-
-            modules_to_register = {
-                module_name: inmanta_module
-                for module_name, inmanta_module in module_version_info.items()
-                if inmanta_module.for_agents
-            }
 
             if not allow_handler_code_update:
                 await self._check_version_info(
                     modules_version_in_current_export=modules_to_register,
-                    registered_modules_version=modules_version,
+                    registered_modules_version={
+                        module_name: module_data[0] for module_name, module_data in module_usage_info.items()
+                    },
                 )
 
-            await InmantaModule.register_modules(environment=environment, modules=modules_to_register, connection=connection)
+        for module_name, module in modules_to_register.items():
+            current_module_version = module.version
+            current_module_agent_set = set(module.for_agents)
 
-            for module_name, module in modules_to_register.items():
-                # Make sure we register new agents using existing modules
-                agent_modules[module_name].update(module.for_agents)
-                # Make sure
-                #   - we register new modules
-                #   - we overwrite module version for updated modules (i.e. when allow_handler_code_update is True)
-                modules_version[module_name] = module.version
-        else:
-            for module_name, inmanta_module in module_version_info.items():
-                if not inmanta_module.for_agents:
-                    # No agent is using this module in this version
-                    continue
-                modules_to_register[module_name] = inmanta_module
+            if module_name in module_usage_info:
+                # This module was previously known: make sure we register agents
+                # that were already using it before in this model version
+                current_module_agent_set.update(module_usage_info[module_name][1])
 
-                agent_modules[module_name] = set(inmanta_module.for_agents)
-                modules_version[module_name] = inmanta_module.version
+            module_usage_info[module_name] = (current_module_version, current_module_agent_set)
 
-            await InmantaModule.register_modules(environment=environment, modules=modules_to_register, connection=connection)
+        await InmantaModule.register_modules(environment=environment, modules=modules_to_register, connection=connection)
         await AgentModules.register_modules_for_agents(
             model_version=version,
             environment=environment,
-            module_to_agents_map=agent_modules,
-            module_to_version_map=modules_version,
+            module_usage_info=module_usage_info,
             connection=connection,
         )
 

@@ -14,7 +14,6 @@ Contact: code@inmanta.com
 
 import datetime
 import uuid
-from collections import defaultdict
 from typing import Any, List, Optional
 
 import asyncpg
@@ -71,7 +70,17 @@ class InmantaModule(Base):
         cls, environment: uuid.UUID, modules: dict[InmantaModuleName, InmantaModuleDTO], connection: asyncpg.Connection
     ) -> None:
         """
-        Register Inmanta modules.
+        This is the first phase of code registration:
+        For all provided modules, this method will write to the database:
+            - the version being registered for this module. (This is a hash derived from
+                the content of the files in this module and from its requirements)
+            - which files belong to this module for this version.
+
+        Any attempt to register a module or file again is silently ignored.
+
+        The second phase takes place in the AgentModules.register_modules_for_agents method
+        where we register which agents require which module version for a given model
+        version.
 
         :param environment: The environment for which to register inmanta modules.
         :param modules: Map of module name to inmanta module data.
@@ -221,7 +230,7 @@ class AgentModules(Base):
     @classmethod
     async def get_registered_modules_data(
         cls, model_version: int, environment: uuid.UUID, connection: asyncpg.Connection
-    ) -> tuple[dict[InmantaModuleName, set[AgentName]], dict[InmantaModuleName, InmantaModuleVersion]]:
+    ) -> dict[InmantaModuleName, tuple[InmantaModuleVersion, set[AgentName]]]:
         """
         Retrieve all registered modules for a given model version.
         Return agents registered per module name and module version per module name.
@@ -233,9 +242,9 @@ class AgentModules(Base):
         :param model_version: The model version for which to retrieve registered module data.
         :param environment: The environment for which to retrieve registered module data.
         :param connection: The asyncpg connection to use.
-        :return: A tuple of:
-            - the set of agents registered per module for all modules in this model version.
-            - dict of module name -> module version for all modules in this model version.
+        :return: A dict with keys module name and values a tuple of:
+            - the version for this module in this model version.
+            - the set of agents registered for this module in this model version.
         """
         query = f"""
             SELECT
@@ -251,47 +260,51 @@ class AgentModules(Base):
          """
         async with connection.transaction():
             values = [model_version, environment]
-            agent_modules: dict[InmantaModuleName, set[AgentName]] = defaultdict(set)
-            modules_version: dict[InmantaModuleName, InmantaModuleVersion] = {}
+            module_usage_info: dict[InmantaModuleName, tuple[InmantaModuleVersion, set[AgentName]]] = {}
 
             async for record in connection.cursor(query, *values):
-                if record["inmanta_module_name"] in modules_version:
-                    if record["inmanta_module_version"] != modules_version[str(record["inmanta_module_name"])]:
+                if record["inmanta_module_name"] in module_usage_info:
+                    if record["inmanta_module_version"] != module_usage_info[str(record["inmanta_module_name"])][0]:
                         # Should never happen
                         raise Exception(
                             f"Inconsistent database state for model version {model_version}. A single version is expected "
                             f"per inmanta module. At least the two following versions are registered for module "
                             f"{record["inmanta_module_name"]}: [{record["inmanta_module_version"]}, "
-                            f"{modules_version[str(record["inmanta_module_name"])]}]"
+                            f"{module_usage_info[str(record["inmanta_module_name"])][0]}]"
                         )
+                    else:
+                        module_usage_info[str(record["inmanta_module_name"])][1].add(str(record["agent_name"]))
+                else:
+                    module_usage_info[str(record["inmanta_module_name"])] = (
+                        str(record["inmanta_module_version"]),
+                        {str(record["agent_name"])},
+                    )
 
-                modules_version[str(record["inmanta_module_name"])] = str(record["inmanta_module_version"])
-
-                agent_modules[str(record["inmanta_module_name"])].add(str(record["agent_name"]))
-
-            return agent_modules, modules_version
+            return module_usage_info
 
     @classmethod
     async def register_modules_for_agents(
         cls,
         model_version: int,
         environment: uuid.UUID,
-        module_to_agents_map: dict[InmantaModuleName, set[AgentName]],
-        module_to_version_map: dict[InmantaModuleName, InmantaModuleVersion],
+        module_usage_info: dict[InmantaModuleName, tuple[InmantaModuleVersion, set[AgentName]]],
         connection: asyncpg.Connection,
     ) -> None:
         """
+        This is phase 2 of code registration. This method is expected to be called after the
+        InmantaModule.register_modules method that takes care of phase 1.
+
         For a given model version, register which agents use which modules.
 
         This method is meant to be used in a context where we want to use an already open
         asyncpg connection.
 
         :param model_version: The model version for which to register modules per agent.
-        :param module_to_agents_map: Maps inmanta module names to the set of agents using this module in this model version.
-        :param module_to_version_map: Maps inmanta module names to their respective versions.
+        :param module_usage_info: Maps inmanta module names to a tuple of:
+            -   The version to register for this module
+            -   The set of agents using this module in this model version.
         :param environment: The environment for which to register modules per agent.
         :param connection: The asyncpg connection to use.
-        :return:
         """
         query = f"""
             INSERT INTO {AgentModules.__tablename__}(
@@ -311,8 +324,8 @@ class AgentModules(Base):
         """
         async with connection.transaction():
             values = []
-            for inmanta_module_name, inmanta_module_version in module_to_version_map.items():
-                for agent_name in module_to_agents_map[inmanta_module_name]:
+            for inmanta_module_name, (inmanta_module_version, agents_to_register) in module_usage_info.items():
+                for agent_name in agents_to_register:
                     values.append(
                         (
                             model_version,
