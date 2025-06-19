@@ -124,8 +124,6 @@ def test_references_in_model(
 
     # validate that our UUID is stable
     assert_id(serialized["references"], "refs::Bool", "0d3b10e5-3f6c-32ae-8662-02e5d46a59c7")
-    # TODO: add other reference types?
-    # TODO: why did the untouched ones fail??
     assert_id(serialized["references"], "refs::dc::AllRefsDataclassReference", "1102e0ce-2f03-31a5-ac3e-ef1a6609daaf")
     assert_id(serialized["references"], "core::AttributeReference", "8eafdfaf-9734-3d72-85dd-423df232c28e")
     assert_id(serialized["references"], "refs::String", "a8ed8c4f-204a-3f7e-a630-e21cb20e9209")
@@ -140,6 +138,34 @@ def test_references_in_model(
         resource.get_reference_value(UUID("1102e0ce-2f03-31a5-ac3e-ef1a6609daaf"), PythonLogger(logging.getLogger("test.refs")))
 
     log_contains(caplog, "test.refs", DEBUG, "Using cached value for reference AllRefsDataclassReference CWD")
+
+
+def test_undeclared_reference_in_map(
+    snippetcompiler: "SnippetCompilationTest",
+    modules_v2_dir: str,
+    caplog,
+) -> None:
+    """
+    Verify that a custom field map method requires explicit reference declaration so we don't leak references
+    unexpectedly.
+    """
+    refs_module = os.path.join(modules_v2_dir, "refs")
+
+    snippetcompiler.setup_for_snippet(
+        snippet="""
+        import std::testing
+        import refs
+
+        refs::DeepResourceNoReferences(
+           name="test",
+           agentname="test",
+           value=refs::create_string_reference(name="test"),
+       )
+        """,
+        install_v2_modules=[env.LocalPackagePath(path=refs_module)],
+    )
+    with pytest.raises(UndeclaredReference):
+        snippetcompiler.do_export()
 
 
 async def test_deploy_end_to_end(
@@ -553,31 +579,34 @@ def test_references_in_expression(snippetcompiler: "SnippetCompilationTest", mod
         snippetcompiler.do_export()
 
 
-def test_references_in_resource_id(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
+@pytest.mark.parametrize("agent", [True, False])
+def test_references_in_resource_id(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str, agent: bool) -> None:
     """Test that references are rejected in the resource id value"""
     refs_module = os.path.join(modules_v2_dir, "refs")
 
+    attr_assignments: str = (
+        "name='res1', agentname=ref"
+        if agent
+        else "name=ref, agentname='agent1'"
+    )
     snippetcompiler.setup_for_snippet(
-        snippet="""
+        snippet=f"""
         import refs
         import refs::dc
-        value = refs::create_string_reference(name="CWD")
+        ref = refs::create_string_reference(name="CWD")
 
-        refs::NullResource(name=value,agentname=value)
+        refs::NullResource({attr_assignments})
         """,
         install_v2_modules=[env.LocalPackagePath(path=refs_module)],
         autostd=True,
     )
 
-    # TODO: when do we expect this error vs UndeclaredReference? The latter seems useful for custom handler implementations
-    #       =>
-    #       1 for non-id values, UndeclaredReference
-    #       2 for non-id values, user can use with_references()
-    #       3 for id values, provide the more to-the-point error message. Definitely relevant for 2 with id value.
-    #           But does 1 or 3 get preference?
     with pytest.raises(
-        RuntimeException,
-        match=r"Failed to get attribute 'name' for export on 'refs::NullResource'",
+        resources.ResourceException,
+        match=(
+            f"Encountered reference in resource's {'agent' if agent else 'id'} attribute.*"
+            f" Encountered at attribute '{'agent' if agent else ''}name'"
+        ),
     ):
         snippetcompiler.do_export()
 

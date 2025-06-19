@@ -22,6 +22,10 @@ end
 
 implement DeepResource using std::none
 
+entity DeepResourceNoReferences extends DeepResource:
+end
+implement DeepResourceNoReferences using std::none
+
 
 entity NormalEntity:
     string non_ref_value

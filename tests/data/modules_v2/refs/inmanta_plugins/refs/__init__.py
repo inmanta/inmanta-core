@@ -1,6 +1,7 @@
 import os
 from typing import Annotated, Any
 
+import inmanta.plugins
 from inmanta.agent.handler import LoggerABC, provider, CRUDHandler, HandlerContext
 from inmanta.references import reference, Reference, is_reference_of
 from inmanta.plugins import plugin, ModelType
@@ -135,8 +136,16 @@ class Deep(ManagedResource, PurgeableResource):
     fields = ("name", "agentname", "value")
 
     @classmethod
-    def get_value(cls, _, resource) -> dict[str, object]:
+    def get_value(cls, _, resource) -> dict[str, object | Reference[object]]:
         # use a . to ensure proper escaping
+        return {"inner.something": inmanta.plugins.allow_reference_values(resource).value}
+
+
+@resource("refs::DeepResourceNoReferences", agent="agentname", id_attribute="name")
+class DeepNoReferences(Deep):
+    @classmethod
+    def get_value(cls, _, resource) -> dict[str, object | Reference[object]]:
+        # same as Deep.get_value but don't declare that references are allowed => test should fail
         return {"inner.something": resource.value}
 
 

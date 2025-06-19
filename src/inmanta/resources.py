@@ -251,6 +251,7 @@ def collect_references(value_reference_collector: ReferenceCollector | None, val
     :param path: The current path we are working on in the tree
     """
     match value:
+        # TODO: add a test where this raises UndeclaredReference + fix by setting validated instead of allow_references() higher up
         case list() | proxy.SequenceProxy():
             return [
                 collect_references(value_reference_collector, value, f"{path}[{index}]")
@@ -265,7 +266,11 @@ def collect_references(value_reference_collector: ReferenceCollector | None, val
 
         case references.Reference():
             if value_reference_collector is None:
-                raise TypeError(f"{repr(value)} in resource is not JSON serializable at path {path}")
+                # TODO: update message, or change signature so value_reference_collector is never None and handle in obj_to_id
+                #       => the latter is probably cleanest
+                raise inmanta.ast.UndeclaredReference(
+                    reference=value, message=f"{repr(value)} in resource is not JSON serializable at path {path}"
+                )
             value_reference_collector.add_reference(path, value)
             return None
 
@@ -273,7 +278,11 @@ def collect_references(value_reference_collector: ReferenceCollector | None, val
             inner_value = proxy.DynamicProxy.unwrap(value)
             if isinstance(inner_value, references.Reference):
                 if value_reference_collector is None:
-                    raise TypeError(f"{repr(value)} in resource is not JSON serializable at path {path}")
+                    # TODO: update message, or change signature so value_reference_collector is never None and handle in obj_to_id
+                    #       => the latter is probably cleanest
+                    raise inmanta.ast.UndeclaredReference(
+                        reference=inner_value, message=f"{repr(value)} in resource is not JSON serializable at path {path}"
+                    )
                 value_reference_collector.add_reference(path, inner_value)
                 return None
             else:
@@ -381,7 +390,7 @@ class Resource(metaclass=ResourceMeta):
         # first get the agent attribute
         path_elements: list[str] = agent_attribute.split(".")
         agent_value = model_object
-        for el in path_elements:
+        for i, el in enumerate(path_elements):
             try:
                 # TODO cleanup this hack
                 if isinstance(agent_value, list):
@@ -393,14 +402,26 @@ class Resource(metaclass=ResourceMeta):
                 raise e
             except inmanta.ast.UnknownException as e:
                 raise e
+            except inmanta.ast.UndeclaredReference as e:
+                current_path: str = ".".join(path_elements[:i+1])
+                raise ResourceException(
+                    "Encountered reference in resource's agent attribute. Agent attribute values can not be references."
+                    f" Encountered at attribute {current_path!r} of resource instance {model_object}"
+                )
             except Exception:
                 raise Exception(
                     "Unable to get the name of agent %s belongs to. In path %s, '%s' does not exist"
                     % (model_object, agent_attribute, el)
                 )
 
-        attribute_value = cls.map_field(None, entity_name, attribute_name, model_object)
-        # TODO: what about references? What about nested references? Call map_field in strict mode? Already done via None arg
+        try:
+            attribute_value = cls.map_field(None, entity_name, attribute_name, model_object)
+        # TODO: make this an isinstance instead if reference_collector is None implies no references are checked
+        except inmanta.ast.UndeclaredReference:
+            raise ResourceException(
+                "Encountered reference in resource's id attribute. Id attribute values can not be references."
+                f" Encountered at attribute {attribute_name!r} of resource instance {model_object}"
+            )
         if isinstance(attribute_value, util.Unknown):
             raise inmanta.ast.UnknownException(attribute_value)
         if not isinstance(agent_value, str):
@@ -426,11 +447,10 @@ class Resource(metaclass=ResourceMeta):
                 value = mthd(exporter, model_object)
             elif hasattr(cls, "map") and field_name in cls.map:
                 value = cls.map[field_name](exporter, model_object)
+            elif isinstance(model_object, proxy.DynamicProxy):
+                value = getattr(model_object._allow_references(), field_name)
             else:
-                try:
-                    value = getattr(model_object, field_name)
-                except inmanta.ast.UndeclaredReference as e:
-                    value = e.reference
+                value = getattr(model_object, field_name)
 
             # walk the entire model to find any value references. Additionally we also want to make sure we raise exceptions on:
             # - Unknowns
@@ -439,6 +459,9 @@ class Resource(metaclass=ResourceMeta):
             value = collect_references(reference_collector, value, field_name)
 
             return value
+        # TODO: temporary hack. Should not be required anymore
+        except inmanta.ast.UndeclaredReference:
+            raise
         except IgnoreResourceException:
             raise  # will be handled in _load_resources of export.py
         except inmanta.ast.UnknownException as e:
