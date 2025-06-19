@@ -557,7 +557,6 @@ def is_reference(value: object) -> Optional[Reference]:
     domain as a reference to a dataclass instance (and converted on the boundary).
     """
     return (
-        # TODO: test cases for each of these
         value
         if isinstance(value, Reference)
         else value.is_reference()

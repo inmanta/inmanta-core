@@ -209,6 +209,19 @@ def read_entity_list_value_or_ref(instance: ListContainer) -> None:
 
 
 @plugin
+def read_entity_list_value_allow_references_single_level(instance: ListContainer) -> None:
+    """
+    Sets allow_reference_values() on the instance level.
+    Test should assert that this does not allow references on the level below it
+    """
+    with_refs = plugins.allow_reference_values(instance)
+    for x in with_refs.value:
+        assert isinstance(x, str), type(x)
+    for i in range(len(instance.value)):
+        assert isinstance(with_refs.value[i], str), type(with_refs.value[i])
+
+
+@plugin
 def read_entity_list_head(instance: ListContainer) -> None:
     assert isinstance(instance.value[0], str), type(instance.value[0])
 
@@ -253,3 +266,8 @@ def returns_entity_list(instance: ListContainer) -> list[str]:
 @plugin
 def returns_entity_ref_list(instance: ListContainer) -> list[str | Reference[str]]:
     return instance.value
+
+
+@plugin
+def allow_references_on_non_proxy() -> None:
+    plugins.allow_reference_values([])

@@ -1370,8 +1370,7 @@ def allow_reference_values[T](instance: T) -> T:  # T not bound to DynamicProxy 
             if isinstance(instance, (list, dict))
             else ""
         )
-        # TODO: test case
-        raise ValueError(
+        raise PluginException(
             f"allow_reference_values() should only be called on inmanta instances, lists or dicts. {extra}"
             f" Got `{instance}` of type `{type(instance).__name__}`"
         )

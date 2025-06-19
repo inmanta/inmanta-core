@@ -32,6 +32,7 @@ from inmanta import env, references, resources, util
 from inmanta.agent.handler import PythonLogger
 from inmanta.ast import (
     ExternalException,
+    PluginException,
     PluginTypeException,
     RuntimeException,
     TypingException,
@@ -348,6 +349,15 @@ def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", module
         )
         """
     )
+    ## inside list attribute: allowed on instance level but not on nested list level
+    with raises_wrapped(UndeclaredReference, match="Encountered undeclared reference .* Encountered at instance\.value\[1\]"):
+        run_snippet(
+            """\
+            refs::plugins::read_entity_list_value_allow_references_single_level(
+                refs::ListContainer(value=['Hello', refs::create_string_reference('hello')])
+            )
+            """
+        )
     ### inside dict attribute
     with raises_wrapped(
         UndeclaredReference, match="Encountered undeclared reference .* Encountered at instance\.value\['mykey'\]"
@@ -486,7 +496,12 @@ def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", module
         "refs::plugins::returns_entity_ref_list(refs::ListContainer(value=['Hello', refs::create_string_reference('hello')]))"
     )
 
-    # TODO: verify that allow_reference_values() only allows it on that level, not nested
+    # Scenario: allow_reference_values() called on non-proxy list (e.g. list inside dataclass)
+    with pytest.raises(
+        ExternalException,
+        match="should only be called on inmanta instances, lists or dicts. Python lists and dicts do not need this wrapper",
+    ):
+        run_snippet("refs::plugins::allow_references_on_non_proxy()")
 
 
 def test_reference_cycle(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
