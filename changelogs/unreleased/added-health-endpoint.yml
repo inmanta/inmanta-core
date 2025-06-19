@@ -1,0 +1,6 @@
+---
+description: "Added the 'GET /api/v2/health' endpoint."
+change-type: patch
+destination-branches: [iso8]
+sections:
+  minor-improvement: "{{description}}"

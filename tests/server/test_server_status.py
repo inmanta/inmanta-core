@@ -74,6 +74,9 @@ async def test_server_status_timeout(server, client, monkeypatch):
     assert result.code == 200
     assert result.result["data"]["status"] == ReportedStatus.OK
 
+    result = await client.health()
+    assert result.code == 200
+
     monkeypatch.setattr(CompilerService, "GET_SLICE_STATUS_TIMEOUT", 0.1)
 
     async def hang(self):
@@ -92,6 +95,9 @@ async def test_server_status_timeout(server, client, monkeypatch):
             compiler_slice = slice
     assert compiler_slice
     assert "error" in compiler_slice["status"]
+
+    result = await client.health()
+    assert result.code == 500
 
 
 @pytest.mark.parametrize("auto_start_agent", [True])
