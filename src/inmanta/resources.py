@@ -196,6 +196,11 @@ RESERVED_FOR_RESOURCE = {"id", "version", "model", "requires", "unknowns", "set_
 
 
 class ReferenceSubCollector:
+    """
+    A collector for references that:
+    1. keeps track of all references it has seen
+    2. keeps track of the paths at which these references have been seen
+    """
 
     def __init__(self) -> None:
         self.references: dict[uuid.UUID, references.ReferenceModel] = {}
