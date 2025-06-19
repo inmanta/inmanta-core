@@ -233,11 +233,11 @@ class AgentModules(Base):
     ) -> dict[InmantaModuleName, tuple[InmantaModuleVersion, set[AgentName]]]:
         """
         Retrieve all registered modules for a given model version.
-        Return agents registered per module name and module version per module name.
+        For each module, return the registered version as well as the set of agents registered
+        for using it.
 
         This method is meant to be used in a context where we want to use an already open
         asyncpg connection.
-
 
         :param model_version: The model version for which to retrieve registered module data.
         :param environment: The environment for which to retrieve registered module data.

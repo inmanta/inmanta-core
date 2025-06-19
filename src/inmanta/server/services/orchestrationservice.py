@@ -723,15 +723,11 @@ class OrchestrationService(protocol.ServerSlice):
         Use the `module_version_info` dict to populate the relevant tables
         AgentModules, InmantaModule and ModuleFiles.
 
-
         The `module_version_info` map contains inmanta modules used by resources that are
         being exported in this version.
-        Modules passed in the `module_version_info` argument that are not used by agents in
-        this version will not be uploaded.
 
-
-        This means that for partial compile, this method has to make sure that:
-            - the version of these modules is the same as the one used in the base version.
+        For partial compiles, this method makes sure that:
+            - the version of modules in this partial export is the same as the one used in the base version.
                 (this check can be exceptionally bypassed with the allow_handler_code_update flag)
             - all other inmanta modules registered in the base version are registered again
               for this version. (e.g. to be able to repair an existing resource that wasn't
