@@ -335,7 +335,7 @@ class ReferenceLike:
     def serialize_arguments(self) -> Tuple[uuid.UUID, list[ArgumentTypes]]:
         """Serialize the arguments to this class"""
 
-        # The handling of references here is a but subtle:
+        # The handling of references here is a bit subtle:
         # We replace every reference with a ReferenceArgument that refers to the reference by id
         # The reference itself is not handled here but in inmanta.resources.ReferenceSubCollector.collect_reference
         # There, the raw, unserialized tree of arguments is iterated over as well to collect the references themselves
