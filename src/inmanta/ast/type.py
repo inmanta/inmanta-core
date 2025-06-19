@@ -213,7 +213,6 @@ class Type(Locatable):
         return hash(type(self))
 
 
-# TODO: test case with `int | str | Reference[int]` type
 class ReferenceType(Type):
     """
     The type of a reference to something of type element_type
@@ -338,7 +337,7 @@ class OrReferenceType(Type):
         return self.element_type.type_string()
 
     def type_string_internal(self) -> str:
-        element = self.element_type.type_string()
+        element = self.element_type.type_string_internal()
         return f"Reference[{element}] | {element}"
 
     def as_python_type_string(self) -> "str | None":

@@ -259,9 +259,28 @@ def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", module
     # Scenario: plugin argument annotated as `str | Reference[str]`
     run_snippet(snippet="refs::plugins::takes_str_ref('hello')")
     run_snippet(snippet="refs::plugins::takes_str_ref(refs::create_string_reference('name'))")
-    with pytest.raises(PluginTypeException, match=re.escape("Expected type: Reference[string]")):
+    with pytest.raises(PluginTypeException, match=re.escape("Expected type: Reference[string] | string")):
         # takes a str ref, not a bool ref
         run_snippet(snippet="refs::plugins::takes_str_ref(refs::create_bool_reference('name'))")
+    # Scenario: plugin argument annotated with complex union including Reference[str | None]
+    run_snippet(snippet="refs::plugins::takes_complex_union_or_ref('Hello World!')")
+    run_snippet(snippet="refs::plugins::takes_complex_union_or_ref(42)")
+    run_snippet(snippet="refs::plugins::takes_complex_union_or_ref(null)")
+    run_snippet(snippet="refs::plugins::takes_complex_union_or_ref(refs::create_string_reference('Hello'))")
+    with pytest.raises(PluginTypeException, match=re.escape("Expected type: Union[int,string,Reference[string?]]?")):
+        run_snippet(snippet="refs::plugins::takes_complex_union_or_ref([1])")
+    with pytest.raises(PluginTypeException, match=re.escape("Expected type: Union[int,string,Reference[string?]]?")):
+        # takes a string reference, not a bool reference
+        run_snippet(snippet="refs::plugins::takes_complex_union_or_ref(refs::create_bool_reference('Hello'))")
+    # Scenario: plugin argument annotated with Reference[bool] | Reference[str]
+    run_snippet(snippet="refs::plugins::takes_union_of_refs(refs::create_string_reference('Hello'))")
+    run_snippet(snippet="refs::plugins::takes_union_of_refs(refs::create_bool_reference('Hello'))")
+    with pytest.raises(PluginTypeException, match=re.escape("Expected type: Union[Reference[bool],Reference[string]]")):
+        run_snippet(snippet="refs::plugins::takes_union_of_refs(refs::create_int_reference('Hello'))")
+    with pytest.raises(PluginTypeException, match=re.escape("Expected type: Union[Reference[bool],Reference[string]]")):
+        run_snippet(snippet="refs::plugins::takes_union_of_refs('Hello World!')")
+    with pytest.raises(PluginTypeException, match=re.escape("Expected type: Union[Reference[bool],Reference[string]]")):
+        run_snippet(snippet="refs::plugins::takes_union_of_refs(true)")
     # Scenario: plugin argument annotated as `Sequence[object]`
     run_snippet(snippet="refs::plugins::iterates_obj_list(['h', 'e'])")
     run_snippet(snippet="refs::plugins::iterates_obj_list(['h', 1])")

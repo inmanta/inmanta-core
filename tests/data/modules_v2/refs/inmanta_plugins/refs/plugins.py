@@ -51,6 +51,19 @@ def takes_str_ref(v: str | Reference[str]) -> None:
 
 
 @plugin
+def takes_complex_union_or_ref(v: int | str | None | Reference[str | None]) -> None:
+    """
+    Takes a complex union that allows references, but not to the exact same types.
+    """
+    ...
+
+
+@plugin
+def takes_union_of_refs(v: Reference[bool] | Reference[str]) -> None:
+    ...
+
+
+@plugin
 def iterates_obj_list(l: Sequence[object]) -> None:
     for x in l:
         ...

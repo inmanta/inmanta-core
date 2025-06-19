@@ -9,7 +9,6 @@ from inmanta.resources import resource, ManagedResource, PurgeableResource
 
 @reference("refs::Bool")
 class BoolReference(Reference[bool]):
-    """A reference to fetch environment variables"""
 
     def __init__(self, name: str | Reference[str]) -> None:
         """
@@ -24,6 +23,24 @@ class BoolReference(Reference[bool]):
 
     def __str__(self) -> str:
         return f"BoolReference {self.name}"
+
+
+@reference("refs::Int")
+class IntReference(Reference[int]):
+
+    def __init__(self, name: str | Reference[str]) -> None:
+        """
+        :param name: The name of the environment variable.
+        """
+        super().__init__()
+        self.name = name
+
+    def resolve(self, logger: LoggerABC) -> bool:
+        """Resolve the reference"""
+        return os.getenv(self.resolve_other(self.name, logger)) == "true"
+
+    def __str__(self) -> str:
+        return f"IntReference {self.name}"
 
 
 @reference("refs::String")
@@ -48,6 +65,11 @@ class StringReference(Reference[str]):
 @plugin
 def create_bool_reference(name: Reference[str] | str) -> Reference[bool]:
     return BoolReference(name=name)
+
+
+@plugin
+def create_int_reference(name: Reference[str] | str) -> Reference[int]:
+    return IntReference(name=name)
 
 
 @plugin
