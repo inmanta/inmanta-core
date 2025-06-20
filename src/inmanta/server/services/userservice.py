@@ -125,7 +125,7 @@ class UserService(server_protocol.ServerSlice):
         role_assignments: list[model.RoleAssignment] = await data.Role.get_roles_for_user(username)
         env_to_roles_dct: dict[str, list[str]] = defaultdict(list)
         for assignment in role_assignments:
-            env_to_roles_dct[str(assignment.environment)].append(assignment.name)
+            env_to_roles_dct[str(assignment.environment)].append(assignment.role)
 
         custom_claims: Mapping[str, str | bool | Mapping[str, list[str]]] = {
             "sub": username,
@@ -175,7 +175,7 @@ class UserService(server_protocol.ServerSlice):
     @protocol.handle(protocol.methods_v2.assign_role)
     async def assign_role(self, username: str, environment: uuid.UUID, role: str) -> None:
         try:
-            await data.Role.assign_role_to_user(username, model.RoleAssignment(environment=environment, name=role))
+            await data.Role.assign_role_to_user(username, model.RoleAssignment(environment=environment, role=role))
         except data.CannotAssignRoleException:
             raise exceptions.BadRequest(
                 f"Cannot assign role {role} to user {username}."
@@ -185,7 +185,7 @@ class UserService(server_protocol.ServerSlice):
     @protocol.handle(protocol.methods_v2.unassign_role)
     async def unassign_role(self, username: str, environment: uuid.UUID, role: str) -> None:
         try:
-            await data.Role.unassign_role_from_user(username, model.RoleAssignment(environment=environment, name=role))
+            await data.Role.unassign_role_from_user(username, model.RoleAssignment(environment=environment, role=role))
         except KeyError:
             raise exceptions.BadRequest(f"Role {role} (environment={environment}) is not assigned to user {username}")
 
