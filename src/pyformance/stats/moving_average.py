@@ -1,6 +1,8 @@
 import math
 import time
 
+from pyformance import Clock
+
 
 class ExpWeightedMovingAvg(object):
     """
@@ -10,7 +12,7 @@ class ExpWeightedMovingAvg(object):
     INTERVAL = 5.0  # seconds
     SECONDS_PER_MINUTE = 60.0
 
-    def __init__(self, period: int, interval: float = INTERVAL, clock=time.time) -> None:
+    def __init__(self, period: int, interval: float = INTERVAL, clock: Clock=time) -> None:
         """
         Create a new EWMA with a specific smoothing constant.
 
@@ -23,11 +25,11 @@ class ExpWeightedMovingAvg(object):
         self.clock = clock
         self.uncounted = 0.0
         self.interval = interval
-        self.rate = -1
+        self.rate: float = -1.0
         self.period = period * ExpWeightedMovingAvg.SECONDS_PER_MINUTE
         self.last_tick = self.clock.time()
 
-    def get_rate(self) -> int:
+    def get_rate(self) -> float:
         if self.clock.time() - self.last_tick >= self.interval:
             self.tick()
         if self.rate >= 0:

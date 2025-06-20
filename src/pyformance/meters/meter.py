@@ -1,6 +1,7 @@
 import time
 from threading import Lock
 
+from .. import Clock
 from ..stats.moving_average import ExpWeightedMovingAvg
 
 
@@ -10,7 +11,7 @@ class Meter(object):
     exponentially-weighted moving average throughputs.
     """
 
-    def __init__(self, clock=time) -> None:
+    def __init__(self, clock: Clock=time) -> None:
         super(Meter, self).__init__()
         self.lock = Lock()
         self.clock = clock
@@ -51,5 +52,5 @@ class Meter(object):
     def get_mean_rate(self) -> float:
         if self.counter == 0:
             return 0
-        elapsed = self.clock.time() - self.start_time
+        elapsed: float = self.clock.time() - self.start_time
         return self.counter / elapsed

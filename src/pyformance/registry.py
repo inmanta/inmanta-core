@@ -4,6 +4,7 @@ import sys
 import time
 from typing import Optional
 
+from . import Clock
 from .meters import CallbackGauge, Counter, Gauge, Histogram, Meter, SimpleGauge, Timer
 
 
@@ -15,7 +16,7 @@ class MetricsRegistry(object):
     L{MetricsRegistry} to manage all of its metrics tools.
     """
 
-    def __init__(self, clock=time) -> None:
+    def __init__(self, clock: Clock=time) -> None:
         """
         Creates a new L{MetricsRegistry} instance.
         """

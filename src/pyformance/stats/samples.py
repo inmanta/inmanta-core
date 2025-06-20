@@ -4,12 +4,25 @@ import random
 import time
 
 from .snapshot import Snapshot
+from .. import Clock
 
 DEFAULT_SIZE = 1028
 DEFAULT_ALPHA = 0.015
 
+# TODO: do I ABC this, may cpst us a few % performance??
+class Sample:
+    def clear(self) -> None:
+        raise NotImplementedError()
 
-class ExpDecayingSample(object):
+    def update(self, value: float) -> None:
+        raise NotImplementedError()
+
+    def get_snapshot(self) -> Snapshot:
+        raise NotImplementedError()
+
+
+
+class ExpDecayingSample(Sample):
     """
     An exponentially-decaying random sample of longs. Uses Cormode et al's
     forward-decaying priority reservoir sampling method to produce a
@@ -24,7 +37,7 @@ class ExpDecayingSample(object):
 
     RESCALE_THREASHOLD = 3600.0  # 1 hour
 
-    def __init__(self, size: int = DEFAULT_SIZE, alpha: float = DEFAULT_ALPHA, clock=time) -> None:
+    def __init__(self, size: int = DEFAULT_SIZE, alpha: float = DEFAULT_ALPHA, clock: Clock=time) -> None:
         """
         Creates a new L{ExponentiallyDecayingSample}.
 
@@ -108,14 +121,14 @@ class ExpDecayingSample(object):
         return Snapshot(self.values.values())
 
 
-class SlidingTimeWindowSample(object):
+class SlidingTimeWindowSample(Sample):
     """
     A sample of measurements made in a sliding time window.
     """
 
     DEFAULT_WINDOW = 300
 
-    def __init__(self, window: int = DEFAULT_WINDOW, clock=time) -> None:
+    def __init__(self, window: int = DEFAULT_WINDOW, clock: Clock=time) -> None:
         """Creates a SlidingTimeWindowSample.
 
         :param window: the length of the time window in seconds
@@ -127,7 +140,7 @@ class SlidingTimeWindowSample(object):
         self.clear()
 
     def clear(self) -> None:
-        self.values = []
+        self.values: list[tuple[float, float]] = []
 
     def _trim(self) -> None:
         deadline = self.clock.time() - self.window

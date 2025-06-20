@@ -1,3 +1,10 @@
+from typing import Protocol
+
+class Clock(Protocol):
+
+    def time(self) -> float:
+        ...
+
 from .registry import (
     MetricsRegistry,
     clear,
@@ -14,3 +21,6 @@ from .registry import (
     time_calls,
     timer,
 )
+
+
+

@@ -1,7 +1,7 @@
 from typing import Callable, Union
 
 
-class Gauge[T: Union[int, float]](object):
+class Gauge[T: Union[int, float]]:
     """
     A base class for reading of a particular.
 

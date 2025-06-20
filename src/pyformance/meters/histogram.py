@@ -3,8 +3,9 @@ import time
 from threading import Lock
 from typing import Callable
 
-from ..stats import Snapshot
-from ..stats.samples import DEFAULT_ALPHA, DEFAULT_SIZE, ExpDecayingSample
+from .. import Clock
+from ..stats.snapshot import Snapshot
+from ..stats.samples import DEFAULT_ALPHA, DEFAULT_SIZE, ExpDecayingSample, Sample
 
 
 class Histogram(object):
@@ -17,9 +18,10 @@ class Histogram(object):
     min: float
     sum: float
     var: tuple[float, float]
+    sample: Sample
 
     def __init__(
-        self, size: int = DEFAULT_SIZE, alpha: float = DEFAULT_ALPHA, clock = time, sample=None
+        self, size: int = DEFAULT_SIZE, alpha: float = DEFAULT_ALPHA, clock: Clock = time, sample: Sample | None =None
     ) -> None:
         """
         Creates a new instance of a L{Histogram}.
