@@ -1,3 +1,3 @@
-from .moving_average import ExpWeightedMovingAvg
-from .samples import ExpDecayingSample
-from .snapshot import Snapshot
+from .moving_average import ExpWeightedMovingAvg  # noqa F401
+from .samples import ExpDecayingSample  # noqa F401
+from .snapshot import Snapshot  # noqa F401

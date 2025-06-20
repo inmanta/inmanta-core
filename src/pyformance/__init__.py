@@ -31,17 +31,17 @@ class Clock(Protocol):
     def time(self) -> float: ...
 
 
-from .registry import MetricsRegistry as MetricsRegistry
-from .registry import clear as clear
-from .registry import count_calls as count_calls
-from .registry import counter as counter
-from .registry import dump_metrics as dump_metrics
-from .registry import gauge as gauge
-from .registry import global_registry as global_registry
-from .registry import hist_calls as hist_calls
-from .registry import histogram as histogram
-from .registry import meter as meter
-from .registry import meter_calls as meter_calls
-from .registry import set_global_registry as set_global_registry
-from .registry import time_calls as time_calls
-from .registry import timer as timer
+from .registry import MetricsRegistry as MetricsRegistry  # noqa F401
+from .registry import clear as clear  # noqa F401
+from .registry import count_calls as count_calls  # noqa F401
+from .registry import counter as counter  # noqa F401
+from .registry import dump_metrics as dump_metrics  # noqa F401
+from .registry import gauge as gauge  # noqa F401
+from .registry import global_registry as global_registry  # noqa F401
+from .registry import hist_calls as hist_calls  # noqa F401
+from .registry import histogram as histogram  # noqa F401
+from .registry import meter as meter  # noqa F401
+from .registry import meter_calls as meter_calls  # noqa F401
+from .registry import set_global_registry as set_global_registry  # noqa F401
+from .registry import time_calls as time_calls  # noqa F401
+from .registry import timer as timer  # noqa F401

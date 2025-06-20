@@ -1,7 +1,6 @@
 import math
 import time
 from threading import Lock
-from typing import Callable
 
 from .. import Clock
 from ..stats.samples import DEFAULT_ALPHA, DEFAULT_SIZE, ExpDecayingSample, Sample

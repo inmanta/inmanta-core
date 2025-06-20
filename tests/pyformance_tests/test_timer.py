@@ -1,7 +1,5 @@
 from pyformance.meters import Timer
 
-from tests import TimedTestCase
-
 
 def test__start_stop_clear(clock):
     timer = Timer(clock=clock)

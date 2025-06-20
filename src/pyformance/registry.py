@@ -1,8 +1,7 @@
 import functools
 import re
-import sys
 import time
-from typing import Any, Callable, Mapping, Optional, Union
+from typing import Callable, Mapping, Optional, Union
 
 from . import Clock
 from .meters import CallbackGauge, Counter, Gauge, Histogram, Meter, SimpleGauge, Timer, any_meter

@@ -1,8 +1,6 @@
 from pyformance.stats.moving_average import ExpWeightedMovingAvg
 from pytest import approx
 
-from tests import TimedTestCase
-
 
 def test_one_minute_EWMA_five_sec_tick(clock):
     ewma = ExpWeightedMovingAvg(1, clock=clock)
