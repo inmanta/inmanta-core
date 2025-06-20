@@ -82,7 +82,9 @@ class MetricsRegistry:
             self._histograms[key] = Histogram(clock=self._clock)
         return self._histograms[key]
 
-    def gauge[T: float | int](self, key: str, gauge: Gauge[T] | Callable[[], T] | None = None, default: float = float("nan")) -> AnyGauge:
+    def gauge[T: float | int](
+        self, key: str, gauge: Gauge[T] | Callable[[], T] | None = None, default: float = float("nan")
+    ) -> AnyGauge:
         out: AnyGauge
         if key not in self._gauges:
             if gauge is None:
@@ -272,7 +274,9 @@ class RegexRegistry(MetricsRegistry):
     def counter(self, key: str) -> Counter:
         return super(RegexRegistry, self).counter(self._get_key(key))
 
-    def gauge[T: float | int](self, key: str, gauge: Gauge[T] | Callable[[], T] | None = None, default: float = float("nan")) -> AnyGauge:
+    def gauge[T: float | int](
+        self, key: str, gauge: Gauge[T] | Callable[[], T] | None = None, default: float = float("nan")
+    ) -> AnyGauge:
         return super(RegexRegistry, self).gauge(self._get_key(key), gauge, default)
 
     def meter(self, key: str) -> Meter:
