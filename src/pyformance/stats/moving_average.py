@@ -12,7 +12,7 @@ class ExpWeightedMovingAvg(object):
     INTERVAL = 5.0  # seconds
     SECONDS_PER_MINUTE = 60.0
 
-    def __init__(self, period: int, interval: float = INTERVAL, clock: Clock=time) -> None:
+    def __init__(self, period: int, interval: float = INTERVAL, clock: Clock = time) -> None:
         """
         Create a new EWMA with a specific smoothing constant.
 

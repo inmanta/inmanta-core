@@ -3,11 +3,12 @@ import time
 from types import TracebackType
 from typing import Optional, Type
 
+import pyformance
 from pyformance.meters.histogram import Histogram
 from pyformance.stats.samples import DEFAULT_ALPHA, DEFAULT_SIZE, Sample
-from .meter import Meter
-import pyformance
+
 from .. import Clock
+from .meter import Meter
 
 
 class TimerSink(abc.ABC):
@@ -15,6 +16,7 @@ class TimerSink(abc.ABC):
     @abc.abstractmethod
     def add(self, value: float) -> None:
         pass
+
 
 class Timer(object):
     """
@@ -27,9 +29,9 @@ class Timer(object):
         self,
         size: int = DEFAULT_SIZE,
         alpha: float = DEFAULT_ALPHA,
-        clock: Clock=time,
-        sink: TimerSink | None =None,
-        sample: Sample | None=None,
+        clock: Clock = time,
+        sink: TimerSink | None = None,
+        sample: Sample | None = None,
     ) -> None:
         super(Timer, self).__init__()
         self.meter = Meter(clock=clock)
@@ -52,7 +54,7 @@ class Timer(object):
         "get min from snapshot of internal histogram"
         return self.get_snapshot().get_min()
 
-    def get_mean(self) -> float :
+    def get_mean(self) -> float:
         "get mean from snapshot of internal histogram"
         return self.get_snapshot().get_mean()
 

@@ -2,13 +2,17 @@ import functools
 import re
 import sys
 import time
-from typing import Optional
+from typing import Any, Callable, Mapping, Optional, Union
 
 from . import Clock
-from .meters import CallbackGauge, Counter, Gauge, Histogram, Meter, SimpleGauge, Timer
+from .meters import CallbackGauge, Counter, Gauge, Histogram, Meter, SimpleGauge, Timer, any_meter
+from .meters.gauge import AnyGuage
+from .meters.timer import TimerSink
+
+type serialized_meter = Mapping[str, str | int | float]
 
 
-class MetricsRegistry(object):
+class MetricsRegistry:
     """
     A single interface used to gather metrics on a service. It keeps track of
     all the relevant Counters, Meters, Histograms, and Timers. It does not have
@@ -16,18 +20,18 @@ class MetricsRegistry(object):
     L{MetricsRegistry} to manage all of its metrics tools.
     """
 
-    def __init__(self, clock: Clock=time) -> None:
+    def __init__(self, clock: Clock = time) -> None:
         """
         Creates a new L{MetricsRegistry} instance.
         """
-        self._timers = {}
-        self._meters = {}
-        self._counters = {}
-        self._histograms = {}
-        self._gauges = {}
+        self._timers: dict[str, Timer] = {}
+        self._meters: dict[str, Meter] = {}
+        self._counters: dict[str, Counter] = {}
+        self._histograms: dict[str, Histogram] = {}
+        self._gauges: dict[str, Gauge[Union[int, float]]] = {}
         self._clock = clock
 
-    def add(self, key, metric):
+    def add(self, key: str, metric: any_meter) -> None:
         """
         Use this method to manually add custom metric instances to the registry
         which are not created with their constructor's default arguments,
@@ -52,7 +56,7 @@ class MetricsRegistry(object):
                 return
         raise TypeError("Invalid class. Could not register metric %r" % key)
 
-    def counter(self, key):
+    def counter(self, key: str) -> Counter:
         """
         Gets a counter based on a key, creates a new one if it does not exist.
 
@@ -65,7 +69,7 @@ class MetricsRegistry(object):
             self._counters[key] = Counter()
         return self._counters[key]
 
-    def histogram(self, key):
+    def histogram(self, key: str) -> Histogram:
         """
         Gets a histogram based on a key, creates a new one if it does not exist.
 
@@ -78,7 +82,7 @@ class MetricsRegistry(object):
             self._histograms[key] = Histogram(clock=self._clock)
         return self._histograms[key]
 
-    def gauge(self, key, gauge=None, default=float("nan")):
+    def gauge[T: float | int](self, key: str, gauge: Gauge[T] | None = None, default: T = float("nan")) -> AnyGuage:
         if key not in self._gauges:
             if gauge is None:
                 gauge = SimpleGauge(default)  # raise TypeError("gauge required for registering")
@@ -89,7 +93,7 @@ class MetricsRegistry(object):
             self._gauges[key] = gauge
         return self._gauges[key]
 
-    def meter(self, key):
+    def meter(self, key: str) -> Meter:
         """
         Gets a meter based on a key, creates a new one if it does not exist.
 
@@ -102,10 +106,10 @@ class MetricsRegistry(object):
             self._meters[key] = Meter(clock=self._clock)
         return self._meters[key]
 
-    def create_sink(self):
+    def create_sink(self) -> TimerSink | None:
         return None
 
-    def timer(self, key):
+    def timer(self, key: str) -> Timer:
         """
         Gets a timer based on a key, creates a new one if it does not exist.
 
@@ -125,19 +129,19 @@ class MetricsRegistry(object):
         self._timers.clear()
         self._histograms.clear()
 
-    def _get_counter_metrics(self, key):
+    def _get_counter_metrics(self, key: str) -> serialized_meter:
         if key in self._counters:
             counter = self._counters[key]
             return {"count": counter.get_count()}
         return {}
 
-    def _get_gauge_metrics(self, key):
+    def _get_gauge_metrics(self, key: str) -> serialized_meter:
         if key in self._gauges:
             gauge = self._gauges[key]
             return {"value": gauge.get_value()}
         return {}
 
-    def _get_histogram_metrics(self, key):
+    def _get_histogram_metrics(self, key: str) -> serialized_meter:
         if key in self._histograms:
             histogram = self._histograms[key]
             snapshot = histogram.get_snapshot()
@@ -155,7 +159,7 @@ class MetricsRegistry(object):
             return res
         return {}
 
-    def _get_meter_metrics(self, key):
+    def _get_meter_metrics(self, key: str) -> serialized_meter:
         if key in self._meters:
             meter = self._meters[key]
             res = {
@@ -168,7 +172,7 @@ class MetricsRegistry(object):
             return res
         return {}
 
-    def _get_timer_metrics(self, key):
+    def _get_timer_metrics(self, key: str) -> serialized_meter:
         if key in self._timers:
             timer = self._timers[key]
             snapshot = timer.get_snapshot()
@@ -192,7 +196,7 @@ class MetricsRegistry(object):
             return res
         return {}
 
-    def get_metrics(self, key):
+    def get_metrics(self, key: str) -> serialized_meter:
         """
         Gets all the metrics for a specified key.
 
@@ -201,7 +205,8 @@ class MetricsRegistry(object):
 
         :return: C{dict}
         """
-        metrics = {}
+        metrics: dict[str, str | int | float] = {}
+        getter: Callable[[str], serialized_meter]
         for getter in (
             self._get_counter_metrics,
             self._get_histogram_metrics,
@@ -212,13 +217,13 @@ class MetricsRegistry(object):
             metrics.update(getter(key))
         return metrics
 
-    def dump_metrics(self):
+    def dump_metrics(self) -> Mapping[str, serialized_meter]:
         """
         Formats all of the metrics and returns them as a dict.
 
         :return: C{list} of C{dict} of metrics
         """
-        metrics = {}
+        metrics: dict[str, serialized_meter] = {}
         for metric_type in (
             self._counters,
             self._histograms,
@@ -243,81 +248,79 @@ class RegexRegistry(MetricsRegistry):
         /api/users/2/edit -> users/edit
     """
 
-    def __init__(self, pattern: Optional[str] = None, clock=time) -> None:
+    def __init__(self, pattern: Optional[str] = None, clock: Clock = time) -> None:
         super(RegexRegistry, self).__init__(clock)
         if pattern is not None:
             self.pattern = re.compile(pattern)
         else:
             self.pattern = re.compile("^$")
 
-    def _get_key(self, key):
+    def _get_key(self, key: str) -> str:
         matches = self.pattern.finditer(key)
         key = "/".join((v for match in matches for v in match.groups() if v))
         return key
 
-    def timer(self, key):
+    def timer(self, key: str) -> Timer:
         return super(RegexRegistry, self).timer(self._get_key(key))
 
-    def histogram(self, key):
+    def histogram(self, key: str) -> Histogram:
         return super(RegexRegistry, self).histogram(self._get_key(key))
 
-    def counter(self, key):
+    def counter(self, key: str) -> Counter:
         return super(RegexRegistry, self).counter(self._get_key(key))
 
-    def gauge(self, key, gauge=None, default=float("nan")):
+    def gauge[T: float | int](self, key: str, gauge: Gauge[T] | None = None, default: T = float("nan")) -> AnyGuage:
         return super(RegexRegistry, self).gauge(self._get_key(key), gauge, default)
 
-    def meter(self, key):
+    def meter(self, key: str) -> Meter:
         return super(RegexRegistry, self).meter(self._get_key(key))
 
 
 _global_registry = MetricsRegistry()
 
 
-def global_registry():
+def global_registry() -> MetricsRegistry:
     return _global_registry
 
 
-def set_global_registry(registry) -> None:
+def set_global_registry(registry: MetricsRegistry) -> None:
     global _global_registry
     _global_registry = registry
 
 
-def counter(key):
+def counter(key: str) -> Counter:
     return _global_registry.counter(key)
 
 
-def histogram(key):
+def histogram(key: str) -> Histogram:
     return _global_registry.histogram(key)
 
 
-def meter(key):
+def meter(key: str) -> Meter:
     return _global_registry.meter(key)
 
 
-def timer(key):
+def timer(key: str) -> Timer:
     return _global_registry.timer(key)
 
 
-def gauge(key, gauge=None):
+def gauge(key: str, gauge: AnyGuage | None = None) -> AnyGuage:
     return _global_registry.gauge(key, gauge)
 
 
-def dump_metrics():
+def dump_metrics() -> Mapping[str, serialized_meter]:
     return _global_registry.dump_metrics()
 
 
-def clear():
+def clear() -> None:
     return _global_registry.clear()
 
 
-def get_qualname(obj):
-    if sys.version_info[0] > 2:
-        return obj.__qualname__
-    return obj.__name__
+def get_qualname[**P, R](obj: Callable[P, R]) -> str:
+    return obj.__qualname__
 
 
-def count_calls(fn):
+def count_calls[**P, R](fn: Callable[P, R]) -> Callable[P, R]:
     """
     Decorator to track the number of times a function is called.
 
@@ -329,14 +332,14 @@ def count_calls(fn):
     """
 
     @functools.wraps(fn)
-    def wrapper(*args, **kwargs):
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
         counter("%s_calls" % get_qualname(fn)).inc()
         return fn(*args, **kwargs)
 
     return wrapper
 
 
-def meter_calls(fn):
+def meter_calls[**P, R](fn: Callable[P, R]) -> Callable[P, R]:
     """
     Decorator to the rate at which a function is called.
 
@@ -348,14 +351,14 @@ def meter_calls(fn):
     """
 
     @functools.wraps(fn)
-    def wrapper(*args, **kwargs):
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
         meter("%s_calls" % get_qualname(fn)).mark()
         return fn(*args, **kwargs)
 
     return wrapper
 
 
-def hist_calls(fn):
+def hist_calls[**P, R](fn: Callable[P, R]) -> Callable[P, R]:
     """
     Decorator to check the distribution of return values of a function.
 
@@ -367,17 +370,17 @@ def hist_calls(fn):
     """
 
     @functools.wraps(fn)
-    def wrapper(*args, **kwargs):
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
         _histogram = histogram("%s_calls" % get_qualname(fn))
         rtn = fn(*args, **kwargs)
-        if type(rtn) in (int, float):
-            _histogram.update(rtn)
+        if isinstance(rtn, (int, float)):
+            _histogram.add(rtn)
         return rtn
 
     return wrapper
 
 
-def time_calls(fn):
+def time_calls[**P, R](fn: Callable[P, R]) -> Callable[P, R]:
     """
     Decorator to time the execution of the function.
 
@@ -389,7 +392,7 @@ def time_calls(fn):
     """
 
     @functools.wraps(fn)
-    def wrapper(*args, **kwargs):
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
         _timer = timer("%s_calls" % get_qualname(fn))
         with _timer.time(fn=get_qualname(fn)):
             return fn(*args, **kwargs)

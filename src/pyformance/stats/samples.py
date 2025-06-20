@@ -3,11 +3,12 @@ import math
 import random
 import time
 
-from .snapshot import Snapshot
 from .. import Clock
+from .snapshot import Snapshot
 
 DEFAULT_SIZE = 1028
 DEFAULT_ALPHA = 0.015
+
 
 # TODO: do I ABC this, may cpst us a few % performance??
 class Sample:
@@ -19,7 +20,6 @@ class Sample:
 
     def get_snapshot(self) -> Snapshot:
         raise NotImplementedError()
-
 
 
 class ExpDecayingSample(Sample):
@@ -37,7 +37,7 @@ class ExpDecayingSample(Sample):
 
     RESCALE_THREASHOLD = 3600.0  # 1 hour
 
-    def __init__(self, size: int = DEFAULT_SIZE, alpha: float = DEFAULT_ALPHA, clock: Clock=time) -> None:
+    def __init__(self, size: int = DEFAULT_SIZE, alpha: float = DEFAULT_ALPHA, clock: Clock = time) -> None:
         """
         Creates a new L{ExponentiallyDecayingSample}.
 
@@ -128,7 +128,7 @@ class SlidingTimeWindowSample(Sample):
 
     DEFAULT_WINDOW = 300
 
-    def __init__(self, window: int = DEFAULT_WINDOW, clock: Clock=time) -> None:
+    def __init__(self, window: int = DEFAULT_WINDOW, clock: Clock = time) -> None:
         """Creates a SlidingTimeWindowSample.
 
         :param window: the length of the time window in seconds

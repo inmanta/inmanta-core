@@ -55,3 +55,6 @@ class SimpleGauge[T: Union[int, float]](Gauge[T]):
         "setter changes current value"
         # XXX: add locking?
         self._value = value
+
+
+type AnyGuage = Gauge[float | int]

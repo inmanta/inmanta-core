@@ -11,7 +11,7 @@ class Meter(object):
     exponentially-weighted moving average throughputs.
     """
 
-    def __init__(self, clock: Clock=time) -> None:
+    def __init__(self, clock: Clock = time) -> None:
         super(Meter, self).__init__()
         self.lock = Lock()
         self.clock = clock

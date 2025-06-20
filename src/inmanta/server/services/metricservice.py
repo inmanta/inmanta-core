@@ -79,7 +79,7 @@ class MetricsService(protocol.ServerSlice):
         gauge("self.spec.cpu", CPUMicroBenchMark())
 
 
-class CachingCallbackGuage(Gauge):
+class CachingCallbackGuage(Gauge[int]):
     """
     A gauge that calculates a value on the fly and holds it for a specific time interval.
 
