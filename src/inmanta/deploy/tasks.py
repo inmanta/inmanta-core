@@ -31,7 +31,7 @@ from inmanta.agent import executor
 from inmanta.agent.executor import DeployReport, FailedInmantaModules
 from inmanta.data.model import AttributeStateChange
 from inmanta.deploy import scheduler, state
-from inmanta.types import ResourceIdStr
+from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 
 LOGGER = logging.getLogger(__name__)
 
@@ -146,6 +146,7 @@ class Deploy(Task):
             # We collect state here to report back in the finally block.
             # This try-finally block ensures we report at the end of the task.
             deploy_report: DeployReport
+            module_loading_warning: data.LogLine | None = None
 
             try:
                 # Dependencies are always set when calling deploy_start
@@ -165,10 +166,8 @@ class Deploy(Task):
                         version=version,
                     )
                 except ModuleLoadingException as e:
-                    log_line_for_resource_log = e.create_log_line_for_failed_modules(verbose_message=True)
-                    log_line_for_resource_log.write_to_logger_for_resource(agent, executor_resource_details.rvid, exc_info=True)
-
-                    log_line_for_web_console = e.create_log_line_for_failed_modules(verbose_message=False)
+                    e.log_to_resource_action_log(agent=agent, rid=executor_resource_details.rvid, include_exception_info=True)
+                    log_line_for_web_console = e.create_log_line_for_failed_modules(level=logging.ERROR, verbose_message=False)
                     deploy_report = DeployReport.undeployable(
                         executor_resource_details.rvid, action_id, log_line_for_web_console
                     )
@@ -196,12 +195,11 @@ class Deploy(Task):
                     # We don't raise it since the executor was successfully created for this resource
                     # but we want to log a warning  because not all handler code was successfully loaded.
                     exception = ModuleLoadingException(agent_name=agent, failed_modules=my_executor.failed_modules)
-                    failed_modules_warning_log_line = exception.create_log_line_for_failed_modules(
-                        level=logging.WARNING, verbose_message=True
+                    exception.log_to_resource_action_log(
+                        agent=agent, rid=executor_resource_details.rvid, include_exception_info=False
                     )
-
-                    failed_modules_warning_log_line.write_to_logger_for_resource(
-                        agent, executor_resource_details.rvid, exc_info=False
+                    module_loading_warning = exception.create_log_line_for_failed_modules(
+                        level=logging.WARNING, verbose_message=False
                     )
 
                 assert reason is not None  # Should always be set for deploy
@@ -232,6 +230,8 @@ class Deploy(Task):
             finally:
                 # We signaled start, so we signal end
                 try:
+                    if module_loading_warning:
+                        deploy_report.messages.append(module_loading_warning)
                     await task_manager.deploy_done(deploy_intent, deploy_report)
                 except Exception:
                     LOGGER.error(
@@ -386,3 +386,10 @@ class ModuleLoadingException(Exception):
             timestamp=None,
             errors=formatted_module_loading_errors,
         )
+
+    def log_to_resource_action_log(self, agent: str, rid: ResourceVersionIdStr, *, include_exception_info: bool) -> None:
+        """
+        Helper method to log module loading failures to the resource action log.
+        """
+        log_line = self.create_log_line_for_failed_modules(verbose_message=True)
+        log_line.write_to_logger_for_resource(agent=agent, resource_version_string=rid, exc_info=include_exception_info)
