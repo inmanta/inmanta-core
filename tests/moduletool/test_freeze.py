@@ -30,6 +30,8 @@ from inmanta.moduletool import ModuleTool
 from moduletool.common import install_project
 from test_app_cli import app
 
+# TODO: this whole module. Do we still care about freezing v1 modules? Depends which branch this goes into?
+
 
 @pytest.mark.slowtest
 def test_freeze_basic(git_modules_dir: str, modules_repo: str, tmpdir):
