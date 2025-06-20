@@ -237,7 +237,7 @@ class ReferenceSubCollector:
 
 
 class ReferenceCollector(ReferenceSubCollector):
-    """Collect and organize all references and mutators"""
+    """Collect and organize all references and mutators for a specific resource"""
 
     def __init__(self, resource: "Resource") -> None:
         super().__init__()
