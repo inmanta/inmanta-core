@@ -314,7 +314,7 @@ async def test_deploy_no_code(resource_container, client, clienthelper, environm
         return (
             log_line["action"] == "deploy"
             and log_line["status"] == "unavailable"
-            and ("failed to load handler code" in log_line["messages"][-1]["msg"])
+            and ("failed to install handler code dependencies" in log_line["messages"][-1]["msg"])
         )
 
     await retry_limited(log_any, 1)

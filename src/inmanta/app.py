@@ -142,6 +142,7 @@ def start_scheduler(options: argparse.Namespace) -> None:
         AsyncHTTPClient.configure(None, max_clients=max_clients)
 
     tracing.configure_logfire("scheduler")
+    logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
 
     util.ensure_event_loop()
     a = agent_new.Agent()
