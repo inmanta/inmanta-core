@@ -1112,8 +1112,6 @@ src/inmanta/warnings.py:0: error: Function is missing a type annotation for one 
 src/inmanta/warnings.py:0: error: Name "logger" already defined on line 0  [no-redef]
 src/inmanta/warnings.py:0: error: Name "text" already defined on line 0  [no-redef]
 src/inmanta/warnings.py:0: error: Unused "type: ignore" comment  [unused-ignore]
-src/pyformance/registry.py:0: error: Incompatible default for argument "default" (default has type "float", argument has type "T")  [assignment]
-src/pyformance/registry.py:0: error: Incompatible default for argument "default" (default has type "float", argument has type "T")  [assignment]
 src/pyformance/registry.py:0: error: Incompatible types in assignment (expression has type "Histogram | Meter | Gauge[int | float] | Timer | Counter", target has type "Counter")  [assignment]
 src/pyformance/registry.py:0: error: Incompatible types in assignment (expression has type "Histogram | Meter | Gauge[int | float] | Timer | Counter", target has type "Gauge[int | float]")  [assignment]
 src/pyformance/registry.py:0: error: Incompatible types in assignment (expression has type "Histogram | Meter | Gauge[int | float] | Timer | Counter", target has type "Histogram")  [assignment]

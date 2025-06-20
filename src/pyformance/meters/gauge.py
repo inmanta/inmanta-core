@@ -57,4 +57,4 @@ class SimpleGauge[T: Union[int, float]](Gauge[T]):
         self._value = value
 
 
-type AnyGuage = Gauge[float | int]
+type AnyGauge = Gauge[float | int]

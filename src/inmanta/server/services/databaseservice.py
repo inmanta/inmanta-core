@@ -22,7 +22,7 @@ from typing import Mapping, Optional
 import asyncpg
 from pyformance import gauge, global_registry
 from pyformance.meters import CallbackGauge
-from pyformance.meters.gauge import AnyGuage
+from pyformance.meters.gauge import AnyGauge
 
 from inmanta.data import start_engine, stop_engine
 from inmanta.data.model import DataBaseReport, ReportedStatus
@@ -119,7 +119,7 @@ class DatabaseMonitor:
             return 0
         return self._pool.get_max_size() - self._pool.get_size() + self._pool.get_idle_size()
 
-    def _add_gauge(self, name: str, the_gauge: AnyGuage) -> None:
+    def _add_gauge(self, name: str, the_gauge: AnyGauge) -> None:
         """Helper to register gauges and keep track of registrations"""
         gauge(name, the_gauge)
         self.registered_gauges.append(name)

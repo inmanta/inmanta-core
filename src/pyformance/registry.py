@@ -6,7 +6,7 @@ from typing import Any, Callable, Mapping, Optional, Union
 
 from . import Clock
 from .meters import CallbackGauge, Counter, Gauge, Histogram, Meter, SimpleGauge, Timer, any_meter
-from .meters.gauge import AnyGuage
+from .meters.gauge import AnyGauge
 from .meters.timer import TimerSink
 
 type serialized_meter = Mapping[str, str | int | float]
@@ -82,15 +82,18 @@ class MetricsRegistry:
             self._histograms[key] = Histogram(clock=self._clock)
         return self._histograms[key]
 
-    def gauge[T: float | int](self, key: str, gauge: Gauge[T] | None = None, default: T = float("nan")) -> AnyGuage:
+    def gauge[T: float | int](self, key: str, gauge: Gauge[T] | Callable[[], T] | None = None, default: float = float("nan")) -> AnyGauge:
+        out: AnyGauge
         if key not in self._gauges:
             if gauge is None:
-                gauge = SimpleGauge(default)  # raise TypeError("gauge required for registering")
+                out = SimpleGauge(default)  # raise TypeError("gauge required for registering")
             elif not isinstance(gauge, Gauge):
                 if not callable(gauge):
                     raise TypeError("gauge getter not callable")
-                gauge = CallbackGauge(gauge)
-            self._gauges[key] = gauge
+                out = CallbackGauge(gauge)
+            else:
+                out = gauge
+            self._gauges[key] = out
         return self._gauges[key]
 
     def meter(self, key: str) -> Meter:
@@ -269,7 +272,7 @@ class RegexRegistry(MetricsRegistry):
     def counter(self, key: str) -> Counter:
         return super(RegexRegistry, self).counter(self._get_key(key))
 
-    def gauge[T: float | int](self, key: str, gauge: Gauge[T] | None = None, default: T = float("nan")) -> AnyGuage:
+    def gauge[T: float | int](self, key: str, gauge: Gauge[T] | Callable[[], T] | None = None, default: float = float("nan")) -> AnyGauge:
         return super(RegexRegistry, self).gauge(self._get_key(key), gauge, default)
 
     def meter(self, key: str) -> Meter:
@@ -304,7 +307,7 @@ def timer(key: str) -> Timer:
     return _global_registry.timer(key)
 
 
-def gauge(key: str, gauge: AnyGuage | None = None) -> AnyGuage:
+def gauge(key: str, gauge: AnyGauge | None = None) -> AnyGauge:
     return _global_registry.gauge(key, gauge)
 
 
