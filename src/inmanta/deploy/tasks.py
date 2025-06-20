@@ -371,7 +371,7 @@ class ModuleLoadingException(Exception):
             regardless of this flag's value.
 
         """
-        message = "Agent %s failed loading the following modules: %s." % (
+        message = "Agent %s failed to load the following modules: %s." % (
             self.agent_name,
             ", ".join(self.failed_modules.keys()),
         )
