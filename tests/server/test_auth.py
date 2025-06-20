@@ -679,7 +679,7 @@ async def test_role_assignment(server: protocol.Server, client) -> None:
     async def verify_role_assignment(username: str, expected_assignments: list[RoleAssignment]) -> None:
         result = await admin_client.list_roles_for_user(username=username)
         assert result.code == 200
-        actual_assignments = [RoleAssignment(environment=r["environment"], name=r["name"]) for r in result.result["data"]]
+        actual_assignments = [RoleAssignment(environment=r["environment"], role=r["role"]) for r in result.result["data"]]
         assert actual_assignments == expected_assignments
 
     # Verify initial state
@@ -715,11 +715,11 @@ async def test_role_assignment(server: protocol.Server, client) -> None:
 
     # Verify role assignment
     expected_role_assignments_username1 = [
-        RoleAssignment(environment=env1_id, name="a_role"),
-        RoleAssignment(environment=env2_id, name="a_role"),
+        RoleAssignment(environment=env1_id, role="a_role"),
+        RoleAssignment(environment=env2_id, role="a_role"),
     ]
     await verify_role_assignment(username=username1, expected_assignments=expected_role_assignments_username1)
-    expected_role_assignments_username2 = [RoleAssignment(environment=env1_id, name="a_role")]
+    expected_role_assignments_username2 = [RoleAssignment(environment=env1_id, role="a_role")]
     await verify_role_assignment(username=username2, expected_assignments=expected_role_assignments_username2)
 
     user1_client = await create_client_for_user(client, username=username1, password=password)
@@ -738,7 +738,7 @@ async def test_role_assignment(server: protocol.Server, client) -> None:
     assert result.code == 200
 
     # Verify role assignment
-    expected_role_assignments_username1 = [RoleAssignment(environment=env1_id, name="a_role")]
+    expected_role_assignments_username1 = [RoleAssignment(environment=env1_id, role="a_role")]
     await verify_role_assignment(username=username1, expected_assignments=expected_role_assignments_username1)
     expected_role_assignments_username2 = []
     await verify_role_assignment(username=username2, expected_assignments=expected_role_assignments_username2)
