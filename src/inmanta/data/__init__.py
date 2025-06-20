@@ -6343,7 +6343,7 @@ class Role(BaseDocument):
             )
         """
         try:
-            await cls._execute_query(assign_role_query, username, role_assignment.environment, role_assignment.name)
+            await cls._execute_query(assign_role_query, username, role_assignment.environment, role_assignment.role)
         except (asyncpg.NotNullViolationError, asyncpg.ForeignKeyViolationError):
             raise CannotAssignRoleException()
 
@@ -6359,7 +6359,7 @@ class Role(BaseDocument):
                   AND role_id=(SELECT id FROM {cls.table_name()} WHERE name=$3)
             RETURNING *
         """
-        result = await cls._fetchrow(unassign_role_query, username, role_assignment.environment, role_assignment.name)
+        result = await cls._fetchrow(unassign_role_query, username, role_assignment.environment, role_assignment.role)
         if result is None:
             raise KeyError()
 
@@ -6373,7 +6373,7 @@ class Role(BaseDocument):
             WHERE u.username=$1
             ORDER BY ras.environment, rol.name
         """
-        return [m.RoleAssignment(environment=r["environment"], name=r["name"]) for r in await cls._fetch_query(query, username)]
+        return [m.RoleAssignment(environment=r["environment"], role=r["name"]) for r in await cls._fetch_query(query, username)]
 
     @classmethod
     async def ensure_roles(cls, roles: Sequence[str]) -> None:
