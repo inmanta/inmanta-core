@@ -1,6 +1,7 @@
 import math
 import time
 from threading import Lock
+from typing import Callable
 
 from ..stats import Snapshot
 from ..stats.samples import DEFAULT_ALPHA, DEFAULT_SIZE, ExpDecayingSample
@@ -11,13 +12,15 @@ class Histogram(object):
     A metric which calculates the distribution of a value.
     """
 
-    counter: float # Would be expected to be int?
+    counter: float  # Would be expected to be int?
     max: float
     min: float
     sum: float
     var: tuple[float, float]
 
-    def __init__(self, size: int = DEFAULT_SIZE, alpha: float = DEFAULT_ALPHA, clock=time, sample=None):
+    def __init__(
+        self, size: int = DEFAULT_SIZE, alpha: float = DEFAULT_ALPHA, clock = time, sample=None
+    ) -> None:
         """
         Creates a new instance of a L{Histogram}.
         """

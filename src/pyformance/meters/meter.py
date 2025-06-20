@@ -38,7 +38,7 @@ class Meter(object):
         self.m5rate.tick()
         self.m15rate.tick()
 
-    def mark(self, value: float=1)->None:
+    def mark(self, value: float = 1) -> None:
         with self.lock:
             self.counter += value
             self.m1rate.add(value)

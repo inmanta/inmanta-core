@@ -2,6 +2,7 @@ import functools
 import re
 import sys
 import time
+from typing import Optional
 
 from .meters import CallbackGauge, Counter, Gauge, Histogram, Meter, SimpleGauge, Timer
 
@@ -14,7 +15,7 @@ class MetricsRegistry(object):
     L{MetricsRegistry} to manage all of its metrics tools.
     """
 
-    def __init__(self, clock=time):
+    def __init__(self, clock=time) -> None:
         """
         Creates a new L{MetricsRegistry} instance.
         """
@@ -116,7 +117,7 @@ class MetricsRegistry(object):
             self._timers[key] = Timer(clock=self._clock, sink=self.create_sink())
         return self._timers[key]
 
-    def clear(self):
+    def clear(self) -> None:
         self._meters.clear()
         self._counters.clear()
         self._gauges.clear()
@@ -231,7 +232,7 @@ class MetricsRegistry(object):
 
 
 class RegexRegistry(MetricsRegistry):
-    """
+    r"""
     A single interface used to gather metrics on a service. This class uses a regex to combine
     measures that match a pattern. For example, if you have a REST API, instead of defining
     a timer for each method, you can use a regex to capture all API calls and group them.
@@ -241,7 +242,7 @@ class RegexRegistry(MetricsRegistry):
         /api/users/2/edit -> users/edit
     """
 
-    def __init__(self, pattern=None, clock=time):
+    def __init__(self, pattern: Optional[str] = None, clock=time) -> None:
         super(RegexRegistry, self).__init__(clock)
         if pattern is not None:
             self.pattern = re.compile(pattern)
@@ -276,7 +277,7 @@ def global_registry():
     return _global_registry
 
 
-def set_global_registry(registry):
+def set_global_registry(registry) -> None:
     global _global_registry
     _global_registry = registry
 

@@ -1,7 +1,10 @@
 import time
+from types import TracebackType
+from typing import Optional, Type
 
 from .histogram import DEFAULT_ALPHA, DEFAULT_SIZE, Histogram
 from .meter import Meter
+
 
 class Timer(object):
     """
@@ -12,12 +15,12 @@ class Timer(object):
 
     def __init__(
         self,
-        size: int=DEFAULT_SIZE,
-        alpha=DEFAULT_ALPHA,
+        size: int = DEFAULT_SIZE,
+        alpha: float = DEFAULT_ALPHA,
         clock=time,
         sink=None,
         sample=None,
-    ):
+    ) -> None:
         super(Timer, self).__init__()
         self.meter = Meter(clock=clock)
         self.hist = Histogram(size=size, alpha=alpha, clock=clock, sample=sample)
@@ -71,7 +74,7 @@ class Timer(object):
         "get 15 rate from internal meter"
         return self.meter.get_fifteen_minute_rate()
 
-    def _update(self, seconds):
+    def _update(self, seconds) -> None:
         if seconds >= 0:
             self.hist.add(seconds)
             self.meter.mark()
@@ -86,14 +89,14 @@ class Timer(object):
         """
         return TimerContext(self, self.meter.clock, *args, **kwargs)
 
-    def clear(self):
+    def clear(self) -> None:
         "clear internal histogram and meter"
         self.hist.clear()
         self.meter.clear()
 
 
 class TimerContext(object):
-    def __init__(self, timer, clock, *args, **kwargs):
+    def __init__(self, timer, clock, *args, **kwargs) -> None:
         super(TimerContext, self).__init__()
         self.clock = clock
         self.timer = timer
@@ -106,8 +109,8 @@ class TimerContext(object):
         self.timer._update(elapsed)
         return elapsed
 
-    def __enter__(self):
+    def __enter__(self) -> None:
         pass
 
-    def __exit__(self, t, v, tb):
+    def __exit__(self, t: Optional[Type[BaseException]], v: Optional[BaseException], tb: Optional[TracebackType]) -> None:
         self.stop()
