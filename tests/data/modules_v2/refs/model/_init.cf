@@ -40,3 +40,10 @@ entity DictContainer:
     dict value
 end
 implement DictContainer using std::none
+
+
+entity DictResource extends DictContainer, std::ManagedResource, std::PurgeableResource:
+    string name = "null"
+    string agentname = "internal"
+end
+implement DictResource using std::none

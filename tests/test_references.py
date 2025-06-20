@@ -180,35 +180,40 @@ async def test_deploy_end_to_end(
     refs_module = os.path.join(modules_v2_dir, "refs")
     snippetcompiler.setup_for_snippet(
         snippet="""
-           import refs
-           import refs::dc
-           import std::testing
+            import refs
+            import refs::dc
+            import std::testing
 
-           test_ref = refs::create_bad_reference(name=refs::create_string_reference(name="CWD"))
+            test_ref = refs::create_bad_reference(name=refs::create_string_reference(name="CWD"))
 
-           # bad ref will fail
-           std::testing::NullResource(
-               name="test",
-               agentname="test",
-               fail=refs::create_bool_reference(name=test_ref),
-           )
+            # bad ref will fail
+            std::testing::NullResource(
+                name="test",
+                agentname="test",
+                fail=refs::create_bool_reference(name=test_ref),
+            )
 
             # good ref will work
             std::testing::NullResource(
-               name="test2",
-               agentname="test",
-               fail=refs::create_bool_reference(name="testx"),
-           )
+                name="test2",
+                agentname="test",
+                fail=refs::create_bool_reference(name="testx"),
+            )
 
-           # Deeper mutator should also work
+            # Deeper mutator should also work
             refs::DeepResource(
-               name="test3",
-               agentname="test",
-               value=refs::create_string_reference(name="testx"),
-           )
+                name="test3",
+                agentname="test",
+                value=refs::create_string_reference(name="testx"),
+            )
 
-
-           """,
+            # and a dict of references
+            refs::DictResource(
+                name="test4",
+                agentname="test",
+                value={"Hello": refs::create_string_reference(name="World!")},
+            )
+            """,
         install_v2_modules=[env.LocalPackagePath(path=refs_module)],
     )
 
@@ -239,6 +244,14 @@ async def test_deploy_end_to_end(
     result = await client.resource_logs(environment, "refs::DeepResource[test,name=test3]")
     assert result.code == 200
     assert [msg for msg in result.result["data"] if "Observed value: {'inner.something': 'testx'}" in msg["msg"]]
+
+    result = await client.resource_details(environment, "refs::DictResource[test,name=test4]")
+    assert result.code == 200
+    details = ReleasedResourceDetails(**result.result["data"])
+    assert details.status == ReleasedResourceState.deployed
+    result = await client.resource_logs(environment, "refs::DictResource[test,name=test4]")
+    assert result.code == 200
+    assert [msg for msg in result.result["data"] if "Observed value: {'Hello': 'World!'}" in msg["msg"]]
 
 
 def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:

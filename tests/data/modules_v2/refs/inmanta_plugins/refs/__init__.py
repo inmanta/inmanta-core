@@ -36,7 +36,7 @@ class IntReference(Reference[int]):
         super().__init__()
         self.name = name
 
-    def resolve(self, logger: LoggerABC) -> bool:
+    def resolve(self, logger: LoggerABC) -> int:
         """Resolve the reference"""
         return os.getenv(self.resolve_other(self.name, logger)) == "true"
 
@@ -149,19 +149,33 @@ class DeepNoReferences(Deep):
         return {"inner.something": resource.value}
 
 
-@provider("refs::DeepResource", name="null")
-class NullProvider(CRUDHandler[Deep]):
+@resource("refs::DictResource", agent="agentname", id_attribute="name")
+class DictResource(ManagedResource, PurgeableResource):
+    fields = ("name", "agentname", "value")
+
+
+class NullProvider[R: NullResource](CRUDHandler[R]):
     """Does nothing at all"""
 
-    def read_resource(self, ctx: HandlerContext, resource: Deep) -> None:
+    def read_resource(self, ctx: HandlerContext, resource: R) -> None:
         ctx.debug("Observed value: %(value)s", value=resource.value)
         return
 
-    def create_resource(self, ctx: HandlerContext, resource: Deep) -> None:
+    def create_resource(self, ctx: HandlerContext, resource: R) -> None:
         ctx.set_created()
 
-    def delete_resource(self, ctx: HandlerContext, resource: Deep) -> None:
+    def delete_resource(self, ctx: HandlerContext, resource: R) -> None:
         ctx.set_purged()
 
-    def update_resource(self, ctx: HandlerContext, changes: dict, resource: Deep) -> None:
+    def update_resource(self, ctx: HandlerContext, changes: dict, resource: R) -> None:
         ctx.set_updated()
+
+
+@provider("refs::DeepResource", name="null")
+class DeepProvider(NullProvider[Deep]):
+    ...
+
+
+@provider("refs::DictResource", name="null")
+class DictProvider(NullProvider[DictResource]):
+    ...

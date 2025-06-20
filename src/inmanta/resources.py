@@ -44,9 +44,6 @@ class ResourceException(Exception):
     pass
 
 
-T = TypeVar("T", bound="Resource")
-
-
 @stable_api
 class resource:  # noqa: N801
     """
@@ -71,7 +68,7 @@ class resource:  # noqa: N801
         self._cls_name = name
         self._options = {"agent": agent, "name": id_attribute}
 
-    def __call__(self, cls: type[T]) -> type[T]:
+    def __call__[R: Resource](self, cls: type[R]) -> type[R]:
         """
         The wrapping
         """
@@ -250,33 +247,31 @@ def collect_references(value_reference_collector: ReferenceCollector, value: obj
     :param value: The value to recursively find value references on
     :param path: The current path we are working on in the tree
     """
+    def allow_references[T](v: T) -> T:
+        if isinstance(v, proxy.DynamicProxy):
+            # fails on stable mypy, but runs fine on master
+            return v._allow_references()
+        return v
+
     match value:
-        # TODO: add a test where this raises UndeclaredReference + fix by setting validated instead of allow_references() higher up
         case list() | proxy.SequenceProxy():
             return [
                 collect_references(value_reference_collector, value, f"{path}[{index}]")
-                for index, value in enumerate(cast(typing.Iterable[object], value))
+                for index, value in enumerate(allow_references(value))
             ]
 
         case dict() | proxy.DictProxy():
             return {
                 key: collect_references(value_reference_collector, value, f"{path}.{dict_path.NormalValue(key).escape()}")
-                for key, value in value.items()
+                for key, value in allow_references(value).items()
             }
 
         case references.Reference():
             value_reference_collector.add_reference(path, value)
             return None
 
-        case proxy.DynamicProxy():
-            inner_value = proxy.DynamicProxy.unwrap(value)
-            if isinstance(inner_value, references.Reference):
-                value_reference_collector.add_reference(path, inner_value)
-                return None
-            else:
-                raise TypeError(f"{repr(value)} in resource is not JSON serializable at path {path}")
-        case util.Unknown():
-            raise TypeError(f"{repr(value)} in resource is not JSON serializable at path {path}")
+        case proxy.DynamicProxy() | util.Unknown():
+            raise TypeError(f"{value!r} in resource is not JSON serializable at path {path}")
 
         case _:
             return value
@@ -648,7 +643,7 @@ class Resource(metaclass=ResourceMeta):
     def __repr__(self) -> str:
         return str(self)
 
-    def clone(self: T, **kwargs: Any) -> T:
+    def clone[R: Resource](self: R, **kwargs: Any) -> R:
         """
         Create a clone of this resource. The given kwargs can be used to override attributes.
 

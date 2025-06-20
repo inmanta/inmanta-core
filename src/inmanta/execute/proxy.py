@@ -129,14 +129,14 @@ class DynamicProxy:
     def _get_context(self) -> ProxyContext:
         return object.__getattribute__(self, "__context")
 
-    def _allow_references[P: DynamicProxy](self: P) -> P:
+    def _allow_references(self: Self) -> Self:
         """
         Returns a copy of this proxy object that allows access to its elements even if they are references.
 
         Allows references for a single object, not nested.
         """
         # don't just call constructor for backwards compatibility: some children outside of core might not have context arg
-        new: P = copy(self)
+        new: Self = copy(self)
         object.__setattr__(new, "__context", dataclasses.replace(self._get_context(), allow_reference_values=True))
         return new
 
