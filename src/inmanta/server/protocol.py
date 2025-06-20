@@ -402,12 +402,23 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler[Result | No
         if start:
             self._handlers.append((r"/", web.RedirectHandler, {"url": location[1:]}))
 
-    def add_static_content(self, path: str, content: str, content_type: str = "application/javascript") -> None:
+    def add_static_content(
+        self,
+        path: str,
+        content: str,
+        content_type: str = "application/javascript",
+        set_no_cache_header: bool = False,
+    ) -> None:
         self._handlers.append(
             routing.Rule(
                 routing.PathMatches(r"%s(.*)" % path),
                 server.StaticContentHandler,
-                {"transport": self, "content": content, "content_type": content_type},
+                {
+                    "transport": self,
+                    "content": content,
+                    "content_type": content_type,
+                    "set_no_cache_header": set_no_cache_header,
+                },
             )
         )
 
