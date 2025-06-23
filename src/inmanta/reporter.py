@@ -26,7 +26,7 @@ from asyncio import Task
 from typing import Optional
 from urllib.parse import quote
 
-from pyformance import MetricsRegistry, global_registry
+# from pyformance import MetricsRegistry, global_registry
 from tornado.httpclient import AsyncHTTPClient, HTTPError, HTTPRequest
 
 LOGGER = logging.getLogger(__name__)
@@ -40,124 +40,128 @@ DEFAULT_INFLUX_PROTOCOL = "http"
 
 
 class AsyncReporter:
-    def __init__(self, registry: Optional[MetricsRegistry] = None, reporting_interval: int = 30) -> None:
-        self.registry = registry or global_registry()
-        self.reporting_interval = reporting_interval
-        self._stopped = False
-        self._handle: Optional[Task[None]] = None
+    pass
+# class AsyncReporter:
+#     def __init__(self, registry: Optional[MetricsRegistry] = None, reporting_interval: int = 30) -> None:
+#         self.registry = registry or global_registry()
+#         self.reporting_interval = reporting_interval
+#         self._stopped = False
+#         self._handle: Optional[Task[None]] = None
+#
+#     def start(self) -> bool:
+#         """
+#         Starts the reporter loop. Expects to be called in a context with a running event loop.
+#         """
+#         if self._stopped:
+#             return False
+#         self._handle = asyncio.get_running_loop().create_task(self._loop())
+#         return True
+#
+#     def stop(self) -> None:
+#         self._stopped = True
+#         if self._handle is not None:
+#             self._handle.cancel()
+#
+#     async def _loop(self) -> None:
+#         loop = asyncio.get_running_loop()
+#         next_loop_time = loop.time()
+#         while not self._stopped:
+#             try:
+#                 await self.report_now(self.registry)
+#             except Exception:
+#                 LOGGER.warning("Could not send metrics report", exc_info=True)
+#             next_loop_time += self.reporting_interval
+#             wait = max(0, next_loop_time - loop.time())
+#             await asyncio.sleep(wait)
+#
+#     async def report_now(self, registry: Optional[MetricsRegistry] = None, timestamp: Optional[float] = None) -> None:
+#         raise NotImplementedError(self.report_now)
 
-    def start(self) -> bool:
-        """
-        Starts the reporter loop. Expects to be called in a context with a running event loop.
-        """
-        if self._stopped:
-            return False
-        self._handle = asyncio.get_running_loop().create_task(self._loop())
-        return True
 
-    def stop(self) -> None:
-        self._stopped = True
-        if self._handle is not None:
-            self._handle.cancel()
-
-    async def _loop(self) -> None:
-        loop = asyncio.get_running_loop()
-        next_loop_time = loop.time()
-        while not self._stopped:
-            try:
-                await self.report_now(self.registry)
-            except Exception:
-                LOGGER.warning("Could not send metrics report", exc_info=True)
-            next_loop_time += self.reporting_interval
-            wait = max(0, next_loop_time - loop.time())
-            await asyncio.sleep(wait)
-
-    async def report_now(self, registry: Optional[MetricsRegistry] = None, timestamp: Optional[float] = None) -> None:
-        raise NotImplementedError(self.report_now)
-
-
-class InfluxReporter(AsyncReporter):
-    """
-    InfluxDB reporter using native http api
-    (based on https://influxdb.com/docs/v1.1/guides/writing_data.html)
-
-    If metric name end with `,a=b` these will append as tags `a=b`
-    """
-
-    def __init__(
-        self,
-        registry: Optional[MetricsRegistry] = None,
-        reporting_interval: int = 5,
-        database: str = DEFAULT_INFLUX_DATABASE,
-        server: str = DEFAULT_INFLUX_SERVER,
-        username: Optional[str] = DEFAULT_INFLUX_USERNAME,
-        password: Optional[str] = DEFAULT_INFLUX_PASSWORD,
-        port: int = DEFAULT_INFLUX_PORT,
-        protocol: str = DEFAULT_INFLUX_PROTOCOL,
-        autocreate_database: bool = False,
-        tags: dict[str, str] = {},
-    ) -> None:
-        super().__init__(registry, reporting_interval)
-        self.database = database
-        self.username = username
-        self.password = password
-        self.port = port
-        self.protocol = protocol
-        self.server = server
-        self.autocreate_database = autocreate_database
-        self._did_create_database = False
-        self.tags = tags
-        self.key = "metrics"
-        if self.tags:
-            tagstring = ",".join(f"{key}={value}" for key, value in self.tags.items())
-            self.key = f"{self.key},{tagstring}"
-        self.key = "%s,key=" % self.key
-
-        if not self.server:
-            raise Exception("Unable to start the metrics reporter without a server. Empty string given.")
-
-    async def _create_database(self, http_client: AsyncHTTPClient) -> None:
-        url = f"{self.protocol}://{self.server}:{self.port}/query"
-        q = quote("CREATE DATABASE %s" % self.database)
-        request = HTTPRequest(url + "?q=" + q)
-        if self.username and self.password:
-            auth = _encode_username(self.username, self.password)
-            request.headers.add("Authorization", "Basic %s" % auth.decode("utf-8"))
-        try:
-            response = await http_client.fetch(request)
-            response.rethrow()
-            # Only set if we actually were able to get a successful response
-            self._did_create_database = True
-        except Exception:
-            LOGGER.warning(
-                "Failed to connect to or create the influx database %s on %s", self.database, self.server, exc_info=True
-            )
-
-    async def report_now(self, registry: Optional[MetricsRegistry] = None, timestamp: Optional[float] = None) -> None:
-        http_client = AsyncHTTPClient()
-
-        if self.autocreate_database and not self._did_create_database:
-            await self._create_database(http_client)
-        timestamp = timestamp or int(round(time.time()))
-        metrics = (registry or self.registry).dump_metrics()
-        post_data = []
-        for key, metric_values in metrics.items():
-            table = self.key + key
-            values = ",".join(["{}={}".format(k, v if type(v) is not str else f'"{v}"') for (k, v) in metric_values.items()])
-            line = f"{table} {values} {timestamp}"
-            post_data.append(line)
-        post_data_all = "\n".join(post_data)
-        path = "/write?db=%s&precision=s" % self.database
-        url = f"{self.protocol}://{self.server}:{self.port}{path}"
-        request = HTTPRequest(url, method="POST", body=post_data_all.encode("utf-8"))
-        if self.username and self.password:
-            auth = _encode_username(self.username, self.password)
-            request.headers.add("Authorization", "Basic %s" % auth.decode("utf-8"))
-        try:
-            response = await http_client.fetch(request)
-            response.rethrow()
-        except HTTPError:
-            LOGGER.warning("Cannot write to %s", self.server, exc_info=True)
+class InfluxReporter():
+    pass
+# class InfluxReporter(AsyncReporter):
+#     """
+#     InfluxDB reporter using native http api
+#     (based on https://influxdb.com/docs/v1.1/guides/writing_data.html)
+#
+#     If metric name end with `,a=b` these will append as tags `a=b`
+#     """
+#
+#     def __init__(
+#         self,
+#         registry: Optional[MetricsRegistry] = None,
+#         reporting_interval: int = 5,
+#         database: str = DEFAULT_INFLUX_DATABASE,
+#         server: str = DEFAULT_INFLUX_SERVER,
+#         username: Optional[str] = DEFAULT_INFLUX_USERNAME,
+#         password: Optional[str] = DEFAULT_INFLUX_PASSWORD,
+#         port: int = DEFAULT_INFLUX_PORT,
+#         protocol: str = DEFAULT_INFLUX_PROTOCOL,
+#         autocreate_database: bool = False,
+#         tags: dict[str, str] = {},
+#     ) -> None:
+#         super().__init__(registry, reporting_interval)
+#         self.database = database
+#         self.username = username
+#         self.password = password
+#         self.port = port
+#         self.protocol = protocol
+#         self.server = server
+#         self.autocreate_database = autocreate_database
+#         self._did_create_database = False
+#         self.tags = tags
+#         self.key = "metrics"
+#         if self.tags:
+#             tagstring = ",".join(f"{key}={value}" for key, value in self.tags.items())
+#             self.key = f"{self.key},{tagstring}"
+#         self.key = "%s,key=" % self.key
+#
+#         if not self.server:
+#             raise Exception("Unable to start the metrics reporter without a server. Empty string given.")
+#
+#     async def _create_database(self, http_client: AsyncHTTPClient) -> None:
+#         url = f"{self.protocol}://{self.server}:{self.port}/query"
+#         q = quote("CREATE DATABASE %s" % self.database)
+#         request = HTTPRequest(url + "?q=" + q)
+#         if self.username and self.password:
+#             auth = _encode_username(self.username, self.password)
+#             request.headers.add("Authorization", "Basic %s" % auth.decode("utf-8"))
+#         try:
+#             response = await http_client.fetch(request)
+#             response.rethrow()
+#             # Only set if we actually were able to get a successful response
+#             self._did_create_database = True
+#         except Exception:
+#             LOGGER.warning(
+#                 "Failed to connect to or create the influx database %s on %s", self.database, self.server, exc_info=True
+#             )
+#
+#     async def report_now(self, registry: Optional[MetricsRegistry] = None, timestamp: Optional[float] = None) -> None:
+#         http_client = AsyncHTTPClient()
+#
+#         if self.autocreate_database and not self._did_create_database:
+#             await self._create_database(http_client)
+#         timestamp = timestamp or int(round(time.time()))
+#         metrics = (registry or self.registry).dump_metrics()
+#         post_data = []
+#         for key, metric_values in metrics.items():
+#             table = self.key + key
+#             values = ",".join(["{}={}".format(k, v if type(v) is not str else f'"{v}"') for (k, v) in metric_values.items()])
+#             line = f"{table} {values} {timestamp}"
+#             post_data.append(line)
+#         post_data_all = "\n".join(post_data)
+#         path = "/write?db=%s&precision=s" % self.database
+#         url = f"{self.protocol}://{self.server}:{self.port}{path}"
+#         request = HTTPRequest(url, method="POST", body=post_data_all.encode("utf-8"))
+#         if self.username and self.password:
+#             auth = _encode_username(self.username, self.password)
+#             request.headers.add("Authorization", "Basic %s" % auth.decode("utf-8"))
+#         try:
+#             response = await http_client.fetch(request)
+#             response.rethrow()
+#         except HTTPError:
+#             LOGGER.warning("Cannot write to %s", self.server, exc_info=True)
 
 
 def _encode_username(username: str, password: str) -> bytes:

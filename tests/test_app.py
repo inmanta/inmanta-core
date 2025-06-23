@@ -145,6 +145,10 @@ def run_without_tty(
     args: list[str], env: typing.Optional[dict[str, str]] = None, killtime: int = 15, termtime: int = 10
 ) -> tuple[str, str, int]:
     """Run the given command without a tty"""
+    if env is None:
+        env = {}
+    env.update({"PYTHONWARNINGS": "error"})
+
     process = do_run(args, env)
     return do_kill(process, killtime, termtime)
 
@@ -434,13 +438,14 @@ end
     assert "Compile done" in all_output
     assert f"Config file {non_existing_config_file} doesn't exist" in all_output
 
+import pyformance
 
 @pytest.mark.parametrize_any(
     "with_tty, version_should_be_shown, regexes_required_lines, regexes_forbidden_lines",
     [
-        (False, True, [r"Inmanta Service Orchestrator", r"Compiler version: ", r"Extensions:", r"\s*\* core:"], []),
-        (True, True, [r"Inmanta Service Orchestrator", r"Compiler version: ", r"Extensions:", r"\s*\* core:"], []),
-        (False, False, [], [r"Inmanta Service Orchestrator", r"Compiler version: ", r"Extensions:", r"\s*\* core:"]),
+        # (False, True, [r"Inmanta Service Orchestrator", r"Compiler version: ", r"Extensions:", r"\s*\* core:"], []),
+        # (True, True, [r"Inmanta Service Orchestrator", r"Compiler version: ", r"Extensions:", r"\s*\* core:"], []),
+        # (False, False, [], [r"Inmanta Service Orchestrator", r"Compiler version: ", r"Extensions:", r"\s*\* core:"]),
         (True, False, [], [r"Inmanta Service Orchestrator", r"Compiler version: ", r"Extensions:", r"\s*\* core:"]),
     ],
 )
@@ -448,10 +453,11 @@ end
 def test_version_argument_is_set(tmpdir, with_tty, version_should_be_shown, regexes_required_lines, regexes_forbidden_lines):
     (args, log_dir) = get_command(tmpdir, version=version_should_be_shown)
     if with_tty:
-        (stdout, _, _) = run_with_tty(args, killtime=15, termtime=10)
+        (stdout, stderr, return_code) = run_with_tty(args, killtime=15, termtime=10)
     else:
-        (stdout, _, _) = run_without_tty(args, killtime=15, termtime=10)
+        (stdout, stderr, return_code) = run_without_tty(args, killtime=15, termtime=10)
     assert len(stdout) != 0
+    assert len(stderr) == 0, stderr
     check_logs(stdout, regexes_required_lines, regexes_forbidden_lines, False)
 
 

@@ -20,8 +20,8 @@ import logging
 from typing import Mapping, Optional
 
 import asyncpg
-from pyformance import gauge, global_registry
-from pyformance.meters import CallbackGauge
+# from pyformance import gauge, global_registry
+# from pyformance.meters import CallbackGauge
 
 from inmanta.data import start_engine, stop_engine
 from inmanta.data.model import DataBaseReport, ReportedStatus
@@ -118,46 +118,48 @@ class DatabaseMonitor:
             return 0
         return self._pool.get_max_size() - self._pool.get_size() + self._pool.get_idle_size()
 
-    def _add_gauge(self, name: str, the_gauge: CallbackGauge) -> None:
+    def _add_gauge(self, name: str, the_gauge: "CallbackGauge") -> None:
         """Helper to register gauges and keep track of registrations"""
-        gauge(name, the_gauge)
-        self.registered_gauges.append(name)
+        # gauge(name, the_gauge)
+        # self.registered_gauges.append(name)
+        return
 
     def start_monitor(self) -> None:
         """Attach to monitoring system"""
+        return
 
-        self._add_gauge(
-            "db.connected",
-            CallbackGauge(callback=lambda: 1 if (self._pool is not None and not self._pool.is_closing()) else 0),
-        )
-        self._add_gauge(
-            "db.max_pool", CallbackGauge(callback=lambda: self._pool.get_max_size() if self._pool is not None else 0)
-        )
-        self._add_gauge(
-            "db.open_connections",
-            CallbackGauge(callback=lambda: self._pool.get_size() if self._pool is not None else 0),
-        )
-        self._add_gauge(
-            "db.free_connections",
-            CallbackGauge(callback=lambda: self._pool.get_idle_size() if self._pool is not None else 0),
-        )
-        self._add_gauge(
-            "db.free_pool",
-            CallbackGauge(callback=self.get_pool_free),
-        )
-        self._add_gauge(
-            "db.pool_exhaustion_count",
-            CallbackGauge(callback=lambda: self._exhausted_pool_events_count),
-        )
-        self._add_gauge(
-            "db.pool_exhaustion_time",
-            CallbackGauge(callback=lambda: self._exhausted_pool_events_count * self._db_exhaustion_check_interval),
-        )
+        # self._add_gauge(
+        #     "db.connected",
+        #     CallbackGauge(callback=lambda: 1 if (self._pool is not None and not self._pool.is_closing()) else 0),
+        # )
+        # self._add_gauge(
+        #     "db.max_pool", CallbackGauge(callback=lambda: self._pool.get_max_size() if self._pool is not None else 0)
+        # )
+        # self._add_gauge(
+        #     "db.open_connections",
+        #     CallbackGauge(callback=lambda: self._pool.get_size() if self._pool is not None else 0),
+        # )
+        # self._add_gauge(
+        #     "db.free_connections",
+        #     CallbackGauge(callback=lambda: self._pool.get_idle_size() if self._pool is not None else 0),
+        # )
+        # self._add_gauge(
+        #     "db.free_pool",
+        #     CallbackGauge(callback=self.get_pool_free),
+        # )
+        # self._add_gauge(
+        #     "db.pool_exhaustion_count",
+        #     CallbackGauge(callback=lambda: self._exhausted_pool_events_count),
+        # )
+        # self._add_gauge(
+        #     "db.pool_exhaustion_time",
+        #     CallbackGauge(callback=lambda: self._exhausted_pool_events_count * self._db_exhaustion_check_interval),
+        # )
 
     def stop_monitor(self) -> None:
         """Disconnect form pyformance"""
-        for key in self.registered_gauges:
-            global_registry()._gauges.pop(key, None)
+        # for key in self.registered_gauges:
+        #     global_registry()._gauges.pop(key, None)
 
         self.registered_gauges.clear()
 
