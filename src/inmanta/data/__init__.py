@@ -6334,6 +6334,7 @@ class User(BaseDocument):
     username: str
     password_hash: str
     auth_method: AuthMethod
+    is_admin: bool = False
 
     @classmethod
     def table_name(cls) -> str:
@@ -6343,7 +6344,113 @@ class User(BaseDocument):
         return "inmanta_user"
 
     def to_dao(self) -> m.User:
-        return m.User(username=self.username, auth_method=self.auth_method)
+        return m.User(username=self.username, auth_method=self.auth_method, is_admin=self.is_admin)
+
+    @classmethod
+    async def set_is_admin(cls, username: str, is_admin: bool) -> None:
+        query = f"UPDATE {cls.table_name()} SET is_admin=$1 WHERE username=$2 RETURNING 1"
+        result = await cls._fetch_query(query, is_admin, username)
+        if not result:
+            # No user exists with the given username
+            raise KeyError()
+
+
+class RoleStillAssignedException(Exception):
+    """
+    The role is still assigned to a user.
+    """
+
+
+class CannotAssignRoleException(Exception):
+    """
+    Role cannot be assigned to user.
+    """
+
+
+class Role(BaseDocument):
+
+    __primary_key__ = ("id", "name")
+
+    id: uuid.UUID
+    name: str
+
+    @classmethod
+    async def assign_role_to_user(cls, username: str, role_assignment: m.RoleAssignment) -> None:
+        """
+        Assign the given role to the given user.
+        """
+        assign_role_query = f"""
+            INSERT INTO public.role_assignment(user_id, environment, role_id)
+            VALUES(
+                (SELECT id FROM {User.table_name()} WHERE username=$1),
+                $2,
+                (SELECT id FROM {cls.table_name()} WHERE name=$3)
+            )
+        """
+        try:
+            await cls._execute_query(assign_role_query, username, role_assignment.environment, role_assignment.role)
+        except (asyncpg.NotNullViolationError, asyncpg.ForeignKeyViolationError):
+            raise CannotAssignRoleException()
+
+    @classmethod
+    async def unassign_role_from_user(cls, username: str, role_assignment: m.RoleAssignment) -> None:
+        """
+        Unassign the given role from the given user.
+        """
+        unassign_role_query = f"""
+            DELETE FROM public.role_assignment
+            WHERE user_id=(SELECT id FROM {User.table_name()} WHERE username=$1)
+                  AND environment=$2
+                  AND role_id=(SELECT id FROM {cls.table_name()} WHERE name=$3)
+            RETURNING *
+        """
+        result = await cls._fetchrow(unassign_role_query, username, role_assignment.environment, role_assignment.role)
+        if result is None:
+            raise KeyError()
+
+    @classmethod
+    async def get_roles_for_user(cls, username: str) -> list[m.RoleAssignment]:
+        query = f"""
+            SELECT ras.environment, rol.name
+            FROM {User.table_name()} AS u
+                INNER JOIN public.role_assignment AS ras ON u.id=ras.user_id
+                INNER JOIN {cls.table_name()} AS rol ON ras.role_id=rol.id
+            WHERE u.username=$1
+            ORDER BY ras.environment, rol.name
+        """
+        return [m.RoleAssignment(environment=r["environment"], role=r["name"]) for r in await cls._fetch_query(query, username)]
+
+    @classmethod
+    async def ensure_roles(cls, roles: Sequence[str]) -> None:
+        """
+        Insert the given roles into the role table if they don't exist yet.
+        """
+        values_str = ",\n".join(f"(${1 + (i * 2)}, ${2 + (i * 2)})" for i in range(len(roles)))
+        query = f"""
+            INSERT INTO {cls.table_name()}(id, name)
+            VALUES {values_str}
+            ON CONFLICT DO NOTHING
+        """
+        value_pairs = [(uuid.uuid4(), role) for role in roles]
+        values = list(itertools.chain.from_iterable(value_pairs))
+        await cls._execute_query(query, *values)
+
+    @classmethod
+    async def delete_role(cls, name: str) -> None:
+        query = f"""
+           DELETE FROM {cls.table_name()} AS rol
+           WHERE name=$1
+           returning *
+        """
+        try:
+            result = await cls._fetchrow(query, name)
+        except asyncpg.ForeignKeyViolationError:
+            # Role is still assigned to a certain user
+            raise RoleStillAssignedException()
+        else:
+            if result is None:
+                # Role doesn't exist
+                raise KeyError()
 
 
 class DiscoveredResource(BaseDocument):
@@ -6460,6 +6567,7 @@ _classes = [
     DiscoveredResource,
     File,
     Scheduler,
+    Role,
 ]
 
 PACKAGE_WITH_UPDATE_FILES = inmanta.db.versions

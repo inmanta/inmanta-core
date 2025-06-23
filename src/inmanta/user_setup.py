@@ -54,7 +54,7 @@ def validate_server_setup() -> None:
     config.Config.load_config(config_dir="/etc/inmanta/inmanta.d")
 
     value = click.confirm(
-        "This command should be execute locally on the orchestrator you want to configure. Are you "
+        "This command should be executed locally on the orchestrator you want to configure. Are you "
         "running this command locally?"
     )
     if value:
@@ -139,11 +139,7 @@ async def do_user_setup() -> None:
         pw_hash = nacl.pwhash.str(password.encode())
 
         # insert the user
-        user = data.User(
-            username=username,
-            password_hash=pw_hash.decode(),
-            auth_method=AuthMethod.database,
-        )
+        user = data.User(username=username, password_hash=pw_hash.decode(), auth_method=AuthMethod.database, is_admin=True)
         await user.insert()
 
         click.echo(f"{'User %s: ' % username : <50}{click.style('created', fg='green')}")

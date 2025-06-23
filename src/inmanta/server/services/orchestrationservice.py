@@ -20,14 +20,13 @@ import datetime
 import logging
 import uuid
 from collections import abc, defaultdict
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Literal, Optional, cast
 
 import asyncpg
 import asyncpg.connection
 import asyncpg.exceptions
 import pydantic
-from asyncpg import Connection
 
 import inmanta.exceptions
 import inmanta.util
@@ -35,9 +34,17 @@ from inmanta import const, data, tracing
 from inmanta.const import ResourceState
 from inmanta.data import APILIMIT, AVAILABLE_VERSIONS_TO_KEEP, InvalidSort, ResourcePersistentState, RowLockMode
 from inmanta.data.dataview import DesiredStateVersionView
-from inmanta.data.model import DesiredStateVersion
+from inmanta.data.model import AgentName, DesiredStateVersion
 from inmanta.data.model import InmantaModule as InmantaModuleDTO
-from inmanta.data.model import PipConfig, PromoteTriggerMethod, ResourceDiff, ResourceMinimal, SchedulerStatusReport
+from inmanta.data.model import (
+    InmantaModuleName,
+    InmantaModuleVersion,
+    PipConfig,
+    PromoteTriggerMethod,
+    ResourceDiff,
+    ResourceMinimal,
+    SchedulerStatusReport,
+)
 from inmanta.data.sqlalchemy import AgentModules, InmantaModule
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
@@ -64,6 +71,12 @@ PLOGGER = logging.getLogger("performance")
 
 PERFORM_CLEANUP: bool = True
 # Kill switch for cleanup, for use when working with historical data
+
+
+def get_printable_name_for_resource_set(native: str | None) -> str:
+    if native is None:
+        return "<SHARED>"
+    return native
 
 
 class CrossResourceSetDependencyError(Exception):
@@ -167,6 +180,7 @@ class PartialUpdateMerger:
         self.rids_in_partial_compile = rids_in_partial_compile
         self.updated_resource_sets = updated_resource_sets
         self.deleted_resource_sets = deleted_resource_sets
+        self.modified_resource_sets = updated_resource_sets | deleted_resource_sets
         self.updated_and_shared_resources_old = updated_and_shared_resources_old
         self.non_shared_resources_in_partial_update_old: abc.Mapping[ResourceIdStr, data.Resource] = {
             rid: r for rid, r in self.updated_and_shared_resources_old.items() if r.resource_set is not None
@@ -236,7 +250,9 @@ class PartialUpdateMerger:
         shared_resources = {r.resource_id: r for r in updated_and_shared_resources if r.resource_set is None}
         updated_resources = {r.resource_id: r for r in updated_and_shared_resources if r.resource_set is not None}
         shared_resources_merged = {r.resource_id: r for r in self._merge_shared_resources(shared_resources)}
-        result = {**updated_resources, **shared_resources_merged}
+        # Updated go last, so that in case of overlap, we get the updated one
+        # Validation on move is done later
+        result = {**shared_resources_merged, **updated_resources}
         self._validate_constraints(result)
         return result
 
@@ -252,10 +268,18 @@ class PartialUpdateMerger:
                 continue
             matching_resource_old_model = self.updated_and_shared_resources_old[res.resource_id]
 
-            if res.resource_set != matching_resource_old_model.resource_set:
+            if (
+                res.resource_set != matching_resource_old_model.resource_set
+                and matching_resource_old_model.resource_set not in self.modified_resource_sets
+            ):
+                # We can't move resource
+                # Unless between resource sets we are updating
+                # Shared set is never in modified_resource_sets, so no escape from there
                 raise BadRequest(
-                    f"A partial compile cannot migrate resources: trying to move {res.resource_id} from resource set"
-                    f" {matching_resource_old_model.resource_set} to {res.resource_set}."
+                    "A partial compile only migrate resources between resource set that are pushed together:"
+                    f" trying to move {res.resource_id} from resource set "
+                    f"{get_printable_name_for_resource_set(matching_resource_old_model.resource_set)} "
+                    f"to {get_printable_name_for_resource_set(res.resource_set)}."
                 )
 
             if res.resource_set is None and res.attribute_hash != matching_resource_old_model.attribute_hash:
@@ -650,68 +674,112 @@ class OrchestrationService(protocol.ServerSlice):
 
     async def _check_version_info(
         self,
-        partial_base_version: int,
-        environment: uuid.UUID,
-        module_version_info: dict[str, InmantaModuleDTO],
-        connection: Connection,
-    ) -> dict[tuple[str, str], list[str]]:
+        modules_version_in_current_export: Mapping[InmantaModuleName, InmantaModuleDTO],
+        registered_modules_version: Mapping[InmantaModuleName, InmantaModuleVersion],
+    ) -> None:
         """
-        Make sure that all code used in this partial version was
-        already registered in the base version.
+        Make sure that modules used in this partial version are either new modules, or that the version
+        being used is the same as the registered version for the base compile.
 
-        Retrieve which inmanta modules (name, version) were registered for all agents
-        for the given base model version.
 
-        Make sure that the same module versions are used in this partial version.
+        :param modules_version_in_current_export: Inmanta modules used to deploy resources in
+            the current export.
+        :param registered_modules_version: All Inmanta module versions used in the base compile.
+        :raises BadRequest: Some module version in the current export differs from its
+            registered counterpart.
         """
 
-        # Map of (inmanta_module_name, inmanta_module_version) to list[agent_names]
-        base_version_data: dict[tuple[str, str], list[str]] = await AgentModules.get_agents_per_module(
-            model_version=partial_base_version, environment=environment, connection=connection
-        )
-        # for inmanta_module_name, module_data in module_version_info.items():
-        #     module_version = module_data.version
-        #     if (inmanta_module_name, module_version) not in base_version_data:
-        #         raise BadRequest(
-        #             "Cannot perform partial export because of version mismatch for module %s." % inmanta_module_name
-        #         )
-        return base_version_data
+        for inmanta_module_name, module_data in modules_version_in_current_export.items():
+
+            if inmanta_module_name not in registered_modules_version:
+                # This didn't exist in the previous version: nothing
+                # to check, we always allow new modules registration.
+                continue
+
+            registered_version = registered_modules_version[inmanta_module_name]
+            module_version = module_data.version
+            if registered_version != module_version:
+                raise BadRequest(
+                    f"Cannot perform partial export because the source code for module {inmanta_module_name} in this "
+                    "partial version is different from the currently registered source code. Consider running a full "
+                    "export instead. Alternatively, if you are sure the new code is compatible and want to forcefully "
+                    "update, you can bypass this version check with the `--allow-handler-code-update` CLI option."
+                )
 
     async def _register_agent_code(
         self,
         partial_base_version: int | None,
         version: int,
         environment: uuid.UUID,
-        module_version_info: dict[str, InmantaModuleDTO],
+        module_version_info: Mapping[InmantaModuleName, InmantaModuleDTO],
+        *,
+        allow_handler_code_update: bool = False,
         connection: asyncpg.connection.Connection,
     ) -> None:
         """
         Helper method for the _put_version method.
 
-        Register the relevant inmanta modules for all agents that need them.
+        Register the relevant inmanta modules for all agents that need them for this version.
         Use the `module_version_info` dict to populate the relevant tables
         AgentModules, InmantaModule and ModuleFiles.
+
+        The `module_version_info` map contains inmanta modules used by resources that are
+        being exported in this version.
+
+        For partial compiles, this method makes sure that:
+            - the version of modules in this partial export is the same as the one used in the base version.
+                (this check can be exceptionally bypassed with the allow_handler_code_update flag)
+            - all other inmanta modules registered in the base version are registered again
+              for this version. (e.g. to be able to repair an existing resource that wasn't
+              exported in this partial compile)
 
         :param partial_base_version: In case of a partial compile, base version it is based on.
         :param version: Configuration model version.
         :param environment: Environment this compile belongs to.
-        :param module_version_info: Inmanta module information to register for this version.
+        :param module_version_info: Inmanta module information about inmanta modules that are used by
+            resources exported in this version.
+        :param allow_handler_code_update: In case of a partial compile, this flag will disable the check
+            for source code consistency between the base version and the current partial version.
         :param connection: DB connection expected to be managed by the caller method.
         """
-        base_version_info: dict[tuple[str, str], list[str]] = {}
+
+        modules_to_register: dict[InmantaModuleName, InmantaModuleDTO] = {
+            module_name: inmanta_module
+            for module_name, inmanta_module in module_version_info.items()
+            if inmanta_module.for_agents
+        }
+        module_usage_info: dict[InmantaModuleName, tuple[InmantaModuleVersion, set[AgentName]]] = {}
+
         if partial_base_version is not None:
-            base_version_info = await self._check_version_info(
-                partial_base_version, environment, module_version_info, connection
+            module_usage_info = await AgentModules.get_registered_modules_data(
+                model_version=partial_base_version, environment=environment, connection=connection
             )
-        await InmantaModule.register_modules(
-            environment=environment, module_version_info=module_version_info, connection=connection
-        )
+
+            if not allow_handler_code_update:
+                await self._check_version_info(
+                    modules_version_in_current_export=modules_to_register,
+                    registered_modules_version={
+                        module_name: module_data[0] for module_name, module_data in module_usage_info.items()
+                    },
+                )
+
+        for module_name, module in modules_to_register.items():
+            current_module_version = module.version
+            current_module_agent_set = set(module.for_agents)
+
+            if module_name in module_usage_info:
+                # This module was previously known: make sure we register agents
+                # that were already using it before in this model version
+                current_module_agent_set.update(module_usage_info[module_name][1])
+
+            module_usage_info[module_name] = (current_module_version, current_module_agent_set)
+
+        await InmantaModule.register_modules(environment=environment, modules=modules_to_register, connection=connection)
         await AgentModules.register_modules_for_agents(
             model_version=version,
             environment=environment,
-            module_version_info=module_version_info,
+            module_usage_info=module_usage_info,
             connection=connection,
-            base_version_info=base_version_info,
         )
 
     async def _put_version(
@@ -727,7 +795,8 @@ class OrchestrationService(protocol.ServerSlice):
         pip_config: Optional[PipConfig] = None,
         *,
         connection: asyncpg.connection.Connection,
-        module_version_info: dict[str, InmantaModuleDTO],
+        module_version_info: Mapping[InmantaModuleName, InmantaModuleDTO],
+        allow_handler_code_update: bool = False,
     ) -> None:
         """
         :param rid_to_resource: This parameter should contain all the resources when a full compile is done.
@@ -736,12 +805,16 @@ class OrchestrationService(protocol.ServerSlice):
         :param unknowns: This parameter should contain all the unknowns for all the resources in the new version of the model.
                          Also the unknowns for resources that are not present in rid_to_resource.
         :param partial_base_version: When a partial compile is done, this parameter contains the version of the
-                                     configurationmodel this partial compile was based on. Otherwise this parameter should be
+                                     configurationmodel this partial compile was based on. Otherwise, this parameter should be
                                      None.
         :param removed_resource_sets: When a partial compile is done, this parameter should indicate the names of the resource
                                       sets that are removed by the partial compile. When no resource sets are removed by
                                       a partial compile or when a full compile is done, this parameter can be set to None.
-        :param module_version_info: Mapping of (module name, module version) to module DTO.
+        :param module_version_info: Mapping of module name to in-memory representation of a module. This represents all inmanta
+            modules that might be used during deployment of resources in the current [partial] version.
+        :param allow_handler_code_update: During partial compiles (i.e. partial_base_version is not None), a check is performed
+            to make sure the source code of modules in this partial version is identical to the source code in the base
+            version. Set this parameter to True to bypass this check.
 
         Pre-conditions:
             * The requires and provides relationships of the resources in rid_to_resource must be set correctly. For a
@@ -863,7 +936,8 @@ class OrchestrationService(protocol.ServerSlice):
                             "a full compile is necessary for this process:\n"
                         )
                         msg += "\n".join(
-                            f"    {rid} moved from {rids_unchanged_resource_sets[rid]} to {resource_sets[rid]}"
+                            f"    {rid} moved from {get_printable_name_for_resource_set(rids_unchanged_resource_sets[rid])} "
+                            f"to {get_printable_name_for_resource_set(resource_sets.get(rid))}"
                             for rid in resources_that_moved_resource_sets
                         )
 
@@ -881,7 +955,14 @@ class OrchestrationService(protocol.ServerSlice):
             for agent in all_agents:
                 await self.agentmanager_service.ensure_agent_registered(env, agent, connection=connection)
 
-            await self._register_agent_code(partial_base_version, version, env.id, module_version_info, connection)
+            await self._register_agent_code(
+                partial_base_version,
+                version,
+                env.id,
+                module_version_info,
+                allow_handler_code_update=allow_handler_code_update,
+                connection=connection,
+            )
 
             # Don't log ResourceActions without resource_version_ids, because
             # no API call exists to retrieve them.
@@ -954,7 +1035,7 @@ class OrchestrationService(protocol.ServerSlice):
         resource_state: dict[ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]],
         unknowns: list[dict[str, PrimitiveTypes]],
         version_info: JsonType,
-        module_version_info: dict[str, InmantaModuleDTO],
+        module_version_info: Mapping[InmantaModuleName, InmantaModuleDTO],
         compiler_version: Optional[str] = None,
         resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
         pip_config: Optional[PipConfig] = None,
@@ -1016,6 +1097,7 @@ class OrchestrationService(protocol.ServerSlice):
         removed_resource_sets: Optional[list[str]] = None,
         pip_config: Optional[PipConfig] = None,
         module_version_info: dict[str, InmantaModuleDTO] | None = None,
+        allow_handler_code_update: bool = False,
     ) -> ReturnValue[int]:
         """
         :param unknowns: dict with the following structure
@@ -1129,6 +1211,7 @@ class OrchestrationService(protocol.ServerSlice):
                     pip_config=pip_config,
                     connection=con,
                     module_version_info=module_version_info or {},
+                    allow_handler_code_update=allow_handler_code_update,
                 )
 
             returnvalue: ReturnValue[int] = ReturnValue[int](200, response=version)

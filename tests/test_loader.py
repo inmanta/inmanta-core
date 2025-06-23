@@ -35,7 +35,7 @@ import utils
 from inmanta import const, env, loader, moduletool
 from inmanta.data.model import ModuleSourceMetadata
 from inmanta.env import PipConfig
-from inmanta.loader import ModuleSource
+from inmanta.loader import ModuleSource, SourceNotFoundException
 from inmanta.module import Project
 
 
@@ -75,12 +75,27 @@ def test_code_manager(tmpdir: py.path.local, deactive_venv, install_all_dependen
 
     project.load_module("single_plugin_file", allow_v1=True)
     project.load_module("multiple_plugin_files", allow_v1=True)
+
+    # non_imported_plugin_file was not loaded in the project
+    # we check that a warning is produced when we attempt to register
+    # some of its code
+
     import inmanta_plugins.multiple_plugin_files.handlers as multi
+    import inmanta_plugins.non_imported_plugin_file as non_imported
     import inmanta_plugins.single_plugin_file as single
 
     mgr = loader.CodeManager()
     mgr.register_code("std::testing::NullResource", single.MyHandler)
     mgr.register_code("multiple_plugin_files::NullResourceBis", multi.MyHandler)
+
+    with pytest.raises(SourceNotFoundException) as excinfo:
+        mgr.register_code("non_imported_plugin_file::NullResourceBis", non_imported.MyHandler)
+
+    exception_message = (
+        "Module non_imported_plugin_file is imported in plugin code but not in model code. "
+        "Either remove the unused import, or make sure to import the module in model code."
+    )
+    assert exception_message in str(excinfo.value)
 
     module_version_info = mgr.get_module_version_info()
     assert "multiple_plugin_files" in module_version_info.keys()

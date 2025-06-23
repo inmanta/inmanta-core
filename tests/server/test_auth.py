@@ -19,6 +19,7 @@ Contact: code@inmanta.com
 import os
 import uuid
 from dataclasses import dataclass
+from functools import partial
 from typing import Mapping
 
 import pytest
@@ -26,26 +27,21 @@ import pytest
 import nacl.pwhash
 import utils
 from inmanta import config, const, data
-from inmanta.data.model import AuthMethod
+from inmanta.data.model import AuthMethod, RoleAssignment
 from inmanta.protocol import common, rest
-from inmanta.protocol.auth import decorators, policy_engine, providers
+from inmanta.protocol.auth import auth, decorators, policy_engine, providers
 from inmanta.protocol.decorators import handle, method, typedmethod
 from inmanta.server import config as server_config
 from inmanta.server import protocol
-
-
-@pytest.fixture
-def authorization_provider() -> str:
-    """
-    A fixture that represents the authorization provider that will be configured
-    by the server_with_test_slice fixture.
-    """
-    return server_config.AuthorizationProviderName.policy_engine.value
+from inmanta.server.bootloader import InmantaBootloader
 
 
 @pytest.fixture
 async def server_with_test_slice(
-    tmpdir, access_policy: str, path_policy_engine_executable: str, authorization_provider: str
+    tmpdir,
+    access_policy: str,
+    path_policy_engine_executable: str,
+    authorization_provider: server_config.AuthorizationProviderName,
 ) -> protocol.Server:
     """
     A fixture that returns a server with authentication and authorization enabled
@@ -72,7 +68,7 @@ async def server_with_test_slice(
     config.state_dir.set(str(tmpdir))
 
     # Configure authorization
-    config.Config.set("server", "authorization-provider", authorization_provider)
+    config.Config.set("server", "authorization-provider", authorization_provider.value)
     os.mkdir(os.path.join(tmpdir, "policy_engine"))
     access_policy_file = os.path.join(tmpdir, "policy_engine", "policy.rego")
     with open(access_policy_file, "w") as fh:
@@ -152,6 +148,17 @@ async def server_with_test_slice(
     await rs.stop()
 
 
+async def create_client_for_user(client, username: str, password: str) -> protocol.Client:
+    """
+    Create a client for the given user that uses a token containing the roles
+    the user has at the moment this method is called.
+    """
+    result = await client.login(username=username, password=password)
+    assert result.code == 200
+    config.Config.set("client_rest_transport", "token", result.result["data"]["token"])
+    return protocol.Client("client")
+
+
 @pytest.mark.parametrize(
     "access_policy",
     [
@@ -178,7 +185,7 @@ async def server_with_test_slice(
         # they have the read-write role on that environment.
         allow if {
             request_environment != null
-            input.token["urn:inmanta:roles"][request_environment] == "read-write"
+            "read-write" in input.token["urn:inmanta:roles"][request_environment]
         }
 
         # Users with the user role in a given environment can execute API endpoints
@@ -186,7 +193,7 @@ async def server_with_test_slice(
         allow if {
             endpoint_data.auth_label == "user"
             request_environment != null
-            input.token["urn:inmanta:roles"][request_environment] == "user"
+            "user" in input.token["urn:inmanta:roles"][request_environment]
         }
 
         # Users marked as is-admin can execute any API endpoint.
@@ -202,7 +209,7 @@ async def test_policy_evaluation(server_with_test_slice: protocol.Server) -> Non
     """
     env_id = "11111111-1111-1111-1111-111111111111"
 
-    client = utils.get_auth_client(env_to_role_dct={env_id: "read-only"}, is_admin=False)
+    client = utils.get_auth_client(env_to_role_dct={env_id: ["read-only"]}, is_admin=False)
     result = await client.read_only_method()
     assert result.code == 200
     result = await client.environment_scoped_method(env_id)
@@ -212,7 +219,7 @@ async def test_policy_evaluation(server_with_test_slice: protocol.Server) -> Non
     result = await client.admin_only_method()
     assert result.code == 403
 
-    client = utils.get_auth_client(env_to_role_dct={env_id: "read-write"}, is_admin=False)
+    client = utils.get_auth_client(env_to_role_dct={env_id: ["read-write"]}, is_admin=False)
     result = await client.read_only_method()
     assert result.code == 200
     result = await client.environment_scoped_method(env_id)
@@ -222,7 +229,7 @@ async def test_policy_evaluation(server_with_test_slice: protocol.Server) -> Non
     result = await client.admin_only_method()
     assert result.code == 403
 
-    client = utils.get_auth_client(env_to_role_dct={env_id: "user"}, is_admin=False)
+    client = utils.get_auth_client(env_to_role_dct={env_id: ["user"]}, is_admin=False)
     result = await client.read_only_method()
     assert result.code == 200
     result = await client.environment_scoped_method(env_id)
@@ -279,13 +286,13 @@ async def test_fallback_to_legacy_provider(server_with_test_slice: protocol.Serv
     "authorization_provider, return_code",
     [
         # policy_engine provider -> enforce_auth=False is ignored
-        (server_config.AuthorizationProviderName.policy_engine.value, 401),
+        (server_config.AuthorizationProviderName.policy_engine, 401),
         # legacy provider -> enforce_auth=False is taken into account
-        (server_config.AuthorizationProviderName.legacy.value, 200),
+        (server_config.AuthorizationProviderName.legacy, 200),
     ],
 )
 async def test_enforce_auth_method_property(
-    server_with_test_slice: protocol.Server, authorization_provider: str, return_code: int
+    server_with_test_slice: protocol.Server, authorization_provider: server_config.AuthorizationProviderName, return_code: int
 ) -> None:
     """
     Ensure that the enforce_auth method property is taken into account by the legacy authorization provider,
@@ -310,21 +317,23 @@ async def test_enforce_auth_method_property(
 )
 @pytest.mark.parametrize(
     "authorization_provider",
-    [a.value for a in server_config.AuthorizationProviderName],
+    [a for a in server_config.AuthorizationProviderName],
 )
-async def test_authorization_providers(server_with_test_slice: protocol.Server, authorization_provider: str) -> None:
+async def test_authorization_providers(
+    server_with_test_slice: protocol.Server, authorization_provider: server_config.AuthorizationProviderName
+) -> None:
     """
     Verify the behavior of the different authorization providers.
     """
     client = utils.get_auth_client(env_to_role_dct={}, is_admin=False, client_types=[const.ClientType.api])
     result = await client.read_only_method()
-    match server_config.AuthorizationProviderName(authorization_provider):
+    match server_config.AuthorizationProviderName(authorization_provider.value):
         case server_config.AuthorizationProviderName.legacy:
             assert result.code == 200
         case server_config.AuthorizationProviderName.policy_engine:
             assert result.code == 403
         case _:
-            raise Exception(f"Unknown authorization_provider: {authorization_provider}")
+            raise Exception(f"Unknown authorization_provider: {authorization_provider.value}")
 
 
 async def test_input_for_policy_engine(server_with_test_slice: protocol.Server, monkeypatch) -> None:
@@ -349,7 +358,7 @@ async def test_input_for_policy_engine(server_with_test_slice: protocol.Server, 
     monkeypatch.setattr(policy_engine.PolicyEngine, "does_satisfy_access_policy", save_input_data)
 
     env_id = "11111111-1111-1111-1111-111111111111"
-    client = utils.get_auth_client(env_to_role_dct={env_id: "read-write"}, is_admin=False)
+    client = utils.get_auth_client(env_to_role_dct={env_id: ["read-write"]}, is_admin=False)
     result = await client.environment_scoped_method(env_id)
     assert result.code == 200
     assert input_policy_engine is not None
@@ -365,7 +374,7 @@ async def test_input_for_policy_engine(server_with_test_slice: protocol.Server, 
     assert "token" in input_policy_engine["input"]
     token = input_policy_engine["input"]["token"]
     assert token["urn:inmanta:ct"] == ["api"]
-    assert token[const.INMANTA_ROLES_URN] == {env_id: "read-write"}
+    assert token[const.INMANTA_ROLES_URN] == {env_id: ["read-write"]}
     assert token[const.INMANTA_IS_ADMIN_URN] is False
 
     client = utils.get_auth_client(env_to_role_dct={}, is_admin=True)
@@ -593,7 +602,7 @@ async def test_get_input_for_policy_engine(capture_input_for_policy_engine: Capt
     Verify that the input, provided to the policy engine, looks as expected.
     """
     env_id = str(uuid.uuid4())
-    client = utils.get_auth_client(env_to_role_dct={env_id: "test"}, is_admin=False, client_types=[const.ClientType.api])
+    client = utils.get_auth_client(env_to_role_dct={env_id: ["test"]}, is_admin=False, client_types=[const.ClientType.api])
 
     arg1 = uuid.uuid4()
     arg2 = "test"
@@ -604,5 +613,408 @@ async def test_get_input_for_policy_engine(capture_input_for_policy_engine: Capt
     assert pe_input["input"]["request"]["endpoint_id"] == "GET /api/v1/method-with-call-context"
     assert pe_input["input"]["request"]["parameters"] == {"arg1": arg1, "arg2": arg2}
     assert pe_input["input"]["token"]["urn:inmanta:ct"] == ["api"]
-    assert pe_input["input"]["token"][const.INMANTA_ROLES_URN] == {env_id: "test"}
+    assert pe_input["input"]["token"][const.INMANTA_ROLES_URN] == {env_id: ["test"]}
     assert pe_input["input"]["token"][const.INMANTA_IS_ADMIN_URN] is False
+
+
+@pytest.mark.parametrize(
+    "access_policy",
+    [
+        """
+        package policy
+
+        # Write the information about the endpoint into a variable
+        # to make the policy easier to read.
+        endpoint_data := data.endpoints[input.request.endpoint_id]
+
+        # The environment used in the request
+        request_environment := input.request.parameters[endpoint_data.environment_param] if {
+            endpoint_data.environment_param != null
+        } else := null
+
+        default allow := false
+
+        # Allow access if the user has the role a_role.
+        allow if {
+            "a_role" in input.token["urn:inmanta:roles"][request_environment]
+        }
+
+        # Allow access to admin user.
+        allow if {
+            input.token["urn:inmanta:is_admin"]
+        }
+        """
+    ],
+)
+@pytest.mark.parametrize("authentication_method", [AuthMethod.database])
+@pytest.mark.parametrize("enable_auth", [True])
+async def test_role_assignment(server: protocol.Server, client) -> None:
+    """
+    Verify that roles set for a user can be used in the access policy.
+    """
+    env1_id = uuid.UUID("11111111-1111-1111-1111-111111111111")
+    env2_id = uuid.UUID("22222222-2222-2222-2222-222222222222")
+    # Create client with admin privileges, that can update role assignment.
+    admin_client = utils.get_auth_client(env_to_role_dct={}, is_admin=True)
+
+    result = await admin_client.project_create(name="proj")
+    assert result.code == 200
+    project_id = result.result["data"]["id"]
+    for env_id in [env1_id, env2_id]:
+        result = await admin_client.environment_create(project_id=project_id, name=f"env-{env_id}", environment_id=env_id)
+        assert result.code == 200
+
+    # Create users
+    username1 = "user1"
+    username2 = "user2"
+    password = "password"
+    for username in [username1, username2]:
+        user = data.User(
+            username=username,
+            password_hash=nacl.pwhash.str(password.encode()).decode(),
+            auth_method=AuthMethod.database,
+        )
+        await user.insert()
+
+    async def verify_role_assignment(username: str, expected_assignments: list[RoleAssignment]) -> None:
+        result = await admin_client.list_roles_for_user(username=username)
+        assert result.code == 200
+        actual_assignments = [RoleAssignment(environment=r["environment"], role=r["role"]) for r in result.result["data"]]
+        assert actual_assignments == expected_assignments
+
+    # Verify initial state
+    for username in [username1, username2]:
+        result = await admin_client.list_roles_for_user(username=username)
+        assert result.code == 200
+        assert not result.result["data"]
+
+        client_for_user = await create_client_for_user(client, username, password)
+        for env_id in [env1_id, env2_id]:
+            result = await client_for_user.environment_get(env_id)
+            assert result.code == 403
+
+    result = await admin_client.list_roles()
+    assert result.code == 200
+    assert not result.result["data"]
+
+    # Create role
+    result = await admin_client.create_role(name="a_role")
+    assert result.code == 200
+
+    result = await admin_client.list_roles()
+    assert result.code == 200
+    assert result.result["data"] == ["a_role"]
+
+    # Assign roles
+    result = await admin_client.assign_role(username=username1, environment=env1_id, role="a_role")
+    assert result.code == 200
+    result = await admin_client.assign_role(username=username1, environment=env2_id, role="a_role")
+    assert result.code == 200
+    result = await admin_client.assign_role(username=username2, environment=env1_id, role="a_role")
+    assert result.code == 200
+
+    # Verify role assignment
+    expected_role_assignments_username1 = [
+        RoleAssignment(environment=env1_id, role="a_role"),
+        RoleAssignment(environment=env2_id, role="a_role"),
+    ]
+    await verify_role_assignment(username=username1, expected_assignments=expected_role_assignments_username1)
+    expected_role_assignments_username2 = [RoleAssignment(environment=env1_id, role="a_role")]
+    await verify_role_assignment(username=username2, expected_assignments=expected_role_assignments_username2)
+
+    user1_client = await create_client_for_user(client, username=username1, password=password)
+    for env_id in [env1_id, env2_id]:
+        result = await user1_client.list_notifications(tid=env_id)
+        assert result.code == 200
+    user2_client = await create_client_for_user(client, username=username2, password=password)
+    for env_id in [env1_id, env2_id]:
+        result = await user2_client.list_notifications(tid=env_id)
+        assert result.code == (200 if env_id == env1_id else 403)
+
+    # Unassign role
+    result = await admin_client.unassign_role(username=username1, environment=env2_id, role="a_role")
+    assert result.code == 200
+    result = await admin_client.unassign_role(username=username2, environment=env1_id, role="a_role")
+    assert result.code == 200
+
+    # Verify role assignment
+    expected_role_assignments_username1 = [RoleAssignment(environment=env1_id, role="a_role")]
+    await verify_role_assignment(username=username1, expected_assignments=expected_role_assignments_username1)
+    expected_role_assignments_username2 = []
+    await verify_role_assignment(username=username2, expected_assignments=expected_role_assignments_username2)
+
+    result = await admin_client.list_roles()
+    assert result.code == 200
+    assert result.result["data"] == ["a_role"]
+
+    user1_client = await create_client_for_user(client, username=username1, password=password)
+    for env_id in [env1_id, env2_id]:
+        result = await user1_client.list_notifications(tid=env_id)
+        assert result.code == (200 if env_id == env1_id else 403)
+    user2_client = await create_client_for_user(client, username=username2, password=password)
+    for env_id in [env1_id, env2_id]:
+        result = await user2_client.list_notifications(tid=env_id)
+        assert result.code == 403
+
+    # Remove last role assignment for role a_role
+    result = await admin_client.unassign_role(username=username1, environment=env1_id, role="a_role")
+    assert result.code == 200
+    # Remove role a_role
+    result = await admin_client.delete_role(name="a_role")
+    assert result.code == 200
+
+    result = await admin_client.list_roles()
+    assert result.code == 200
+    assert not result.result["data"]
+
+
+@pytest.mark.parametrize("authentication_method", [AuthMethod.database])
+@pytest.mark.parametrize("enable_auth", [True])
+async def test_multiple_roles_assigned(server: protocol.Server, client) -> None:
+    """
+    Verify that all roles are correctly set into the token.
+    """
+    env_id = uuid.UUID("11111111-1111-1111-1111-111111111111")
+    # Create client with admin privileges, that can update role assignment.
+    admin_client = utils.get_auth_client(env_to_role_dct={}, is_admin=True)
+
+    result = await admin_client.project_create(name="proj")
+    assert result.code == 200
+    project_id = result.result["data"]["id"]
+    result = await admin_client.environment_create(project_id=project_id, name="env", environment_id=env_id)
+    assert result.code == 200
+
+    # Create users
+    username = "username"
+    password = "password"
+    user = data.User(
+        username=username,
+        password_hash=nacl.pwhash.str(password.encode()).decode(),
+        auth_method=AuthMethod.database,
+    )
+    await user.insert()
+
+    result = await admin_client.create_role(name="role1")
+    assert result.code == 200
+    result = await admin_client.create_role(name="role2")
+    assert result.code == 200
+
+    result = await admin_client.assign_role(username=username, environment=env_id, role="role1")
+    assert result.code == 200
+    result = await admin_client.assign_role(username=username, environment=env_id, role="role2")
+    assert result.code == 200
+
+    result = await client.login(username=username, password=password)
+    assert result.code == 200
+    token = result.result["data"]["token"]
+    claims, _ = auth.decode_token(token)
+    assert set(claims[const.INMANTA_ROLES_URN][str(env_id)]) == {"role1", "role2"}
+    assert not claims[const.INMANTA_IS_ADMIN_URN]
+
+
+@pytest.mark.parametrize("enable_auth", [True])
+async def test_roles_failure_scenarios(server: protocol.Server, client, environment) -> None:
+    """
+    Test the failure scenario's when manipulating roles and role assignments.
+    """
+    result = await client.add_user(username="user", password="useruser")
+    assert result.code == 200
+
+    # Create role that already exists
+    result = await client.create_role(name="role")
+    assert result.code == 200
+    result = await client.create_role(name="role")
+    assert result.code == 400
+    assert "Role role already exists." in result.result["message"]
+
+    # Delete non-existing role
+    result = await client.delete_role(name="missing")
+    assert result.code == 400
+    assert "Role missing doesn't exist" in result.result["message"]
+
+    # Delete role still assigned to user
+    result = await client.assign_role(username="user", environment=environment, role="role")
+    assert result.code == 200
+    result = await client.delete_role(name="role")
+    assert result.code == 400
+    assert "Role role cannot be delete because it's still assigned to a user." in result.result["message"]
+
+    # Assign role: user doens't exist
+    result = await client.assign_role(username="missing", environment=environment, role="role")
+    assert result.code == 400
+    assert (
+        "Cannot assign role role to user missing."
+        f" Role role, environment {environment} or user missing doesn't exist." in result.result["message"]
+    )
+
+    # Assign role: role doesn't exist
+    result = await client.assign_role(username="user", environment=environment, role="missing")
+    assert result.code == 400
+    assert (
+        "Cannot assign role missing to user user."
+        f" Role missing, environment {environment} or user user doesn't exist." in result.result["message"]
+    )
+
+    # Assign role: environment doesn't exist
+    id_non_existing_env = uuid.uuid4()
+    result = await client.assign_role(username="user", environment=id_non_existing_env, role="role")
+    assert result.code == 400
+    assert (
+        "Cannot assign role role to user user."
+        f" Role role, environment {id_non_existing_env} or user user doesn't exist." in result.result["message"]
+    )
+
+    # Unassign role: user doesn't exist
+    result = await client.unassign_role(username="missing", environment=environment, role="role")
+    assert result.code == 400
+    assert f"Role role (environment={environment}) is not assigned to user missing" in result.result["message"]
+
+    # Unassign role: role doesn't exist
+    result = await client.unassign_role(username="user", environment=environment, role="missing")
+    assert result.code == 400
+    assert f"Role missing (environment={environment}) is not assigned to user user" in result.result["message"]
+
+    # Unassign role: environment doesn't exist
+    result = await client.unassign_role(username="user", environment=id_non_existing_env, role="role")
+    assert result.code == 400
+    assert f"Role role (environment={id_non_existing_env}) is not assigned to user user" in result.result["message"]
+
+
+@pytest.mark.parametrize(
+    "access_policy",
+    [
+        """
+        package policy
+
+        roles := ["role_a", "role_b"]
+
+        default allow := true
+        """
+    ],
+)
+@pytest.mark.parametrize("authentication_method", [AuthMethod.database])
+@pytest.mark.parametrize("enable_auth", [True])
+async def test_synchronization_roles_with_db(server: protocol.Server, client, async_finalizer) -> None:
+    """
+    Verify that the roles defined in the access policy are correctly synchronized into the database.
+    """
+    result = await client.list_roles()
+    assert result.code == 200
+    assert result.result["data"] == ["role_a", "role_b"]
+
+    # Ensure that updates to the roles list are correctly reflected into the database.
+    await server.stop()
+    policy_file = policy_engine.policy_file.get()
+    with open(policy_file, "w") as fh:
+        fh.write(
+            """
+        package policy
+
+        roles := ["role_a", "role_c"]
+
+        default allow := true
+        """
+        )
+    ibl = InmantaBootloader(configure_logging=False)
+    async_finalizer.add(partial(ibl.stop, timeout=20))
+    await ibl.start()
+
+    result = await client.list_roles()
+    assert result.code == 200
+    assert result.result["data"] == ["role_a", "role_b", "role_c"]
+
+    # Ensure that the absence of the roles list doesn't update anything in the database.
+    await ibl.stop()
+    with open(policy_file, "w") as fh:
+        fh.write(
+            """
+        package policy
+
+        default allow := true
+        """
+        )
+    ibl = InmantaBootloader(configure_logging=False)
+    async_finalizer.add(partial(ibl.stop, timeout=20))
+    await ibl.start()
+
+    result = await client.list_roles()
+    assert result.code == 200
+    assert result.result["data"] == ["role_a", "role_b", "role_c"]
+
+
+@pytest.mark.parametrize(
+    "access_policy",
+    [
+        """
+        package policy
+
+        default allow := false
+
+        # Users marked as is-admin can execute any API endpoint.
+        allow if {
+            input.token["urn:inmanta:is_admin"]
+        }
+        """.strip()
+    ],
+)
+@pytest.mark.parametrize("authentication_method", [AuthMethod.database])
+@pytest.mark.parametrize("enable_auth", [True])
+async def test_is_admin_role(server: protocol.Server, client: protocol.Client) -> None:
+    admin_user = "admin"
+    regular_user = "user"
+    for username in [admin_user, regular_user]:
+        user = data.User(
+            username=username,
+            password_hash=nacl.pwhash.str(username.encode()).decode(),
+            auth_method=AuthMethod.database,
+            is_admin=(username == "admin"),
+        )
+        await user.insert()
+
+    admin_client = await create_client_for_user(client, username=admin_user, password=admin_user)
+
+    user_client = await create_client_for_user(client, username=regular_user, password=regular_user)
+    result = await user_client.environment_list()
+    assert result.code == 403
+
+    result = await admin_client.set_is_admin(username=regular_user, is_admin=True)
+    assert result.code == 200
+
+    user_client = await create_client_for_user(client, username=regular_user, password=regular_user)
+    result = await user_client.environment_list()
+    assert result.code == 200
+
+    result = await admin_client.set_is_admin(username=regular_user, is_admin=False)
+    assert result.code == 200
+
+    user_client = await create_client_for_user(client, username=regular_user, password=regular_user)
+    result = await user_client.environment_list()
+    assert result.code == 403
+
+    result = await admin_client.set_is_admin(username="non_existing_user", is_admin=True)
+    assert result.code == 400
+
+
+@pytest.mark.parametrize("authentication_method", [AuthMethod.database])
+@pytest.mark.parametrize("enable_auth", [True])
+async def test_login_failed(server, client) -> None:
+    """
+    Ensure that a meaningful error message is returned when incorrect
+    credentials are provided to the login endpoint.
+    """
+    user = data.User(
+        username="admin",
+        password_hash=nacl.pwhash.str("admin".encode()).decode(),
+        auth_method=AuthMethod.database,
+    )
+    await user.insert()
+
+    # Invalid username
+    result = await client.login(username="test", password="test")
+    assert result.code == 401
+    assert "Invalid username or password" == result.result["message"]
+
+    # Invalid password
+    result = await client.login(username="admin", password="test")
+    assert result.code == 401
+    assert "Invalid username or password" == result.result["message"]

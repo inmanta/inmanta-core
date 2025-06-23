@@ -29,20 +29,16 @@ from inmanta.protocol import endpoints
 from inmanta.server.config import AuthorizationProviderName
 
 
-def read_file(file_name: str) -> str:
-    """
-    Returns the config of the given file.
-    """
-    with open(file_name, "r") as fh:
-        return fh.read()
-
-
 @pytest.mark.parametrize("enable_auth", [True])
 @pytest.mark.parametrize("authentication_method", [AuthMethod.database])
 @pytest.mark.parametrize("authorization_provider", [AuthorizationProviderName.policy_engine])
 @pytest.mark.parametrize(
     "access_policy",
-    [read_file(os.path.join(os.path.dirname(__file__), "..", "src", "inmanta", "protocol", "auth", "default_policy.rego"))],
+    [
+        utils.read_file(
+            os.path.join(os.path.dirname(__file__), "..", "src", "inmanta", "protocol", "auth", "default_policy.rego")
+        )
+    ],
 )
 @pytest.mark.parametrize(
     "role,is_admin,expected_response_codes",
@@ -57,6 +53,11 @@ async def test_default_policy(server, client, role: str | None, is_admin: bool, 
     """
     Test the behavior of the default policy.
     """
+    # Verify default roles, defined in the policy, are synchronized to the database.
+    result = await client.list_roles()
+    assert result.code == 200
+    assert result.result["data"] == sorted(["read-only", "noc", "operator", "environment-admin", "environment-expert-admin"])
+
     # Create a user
     user = data.User(
         username="user",
@@ -130,7 +131,11 @@ async def test_default_policy(server, client, role: str | None, is_admin: bool, 
 @pytest.mark.parametrize("authorization_provider", [AuthorizationProviderName.policy_engine])
 @pytest.mark.parametrize(
     "access_policy",
-    [read_file(os.path.join(os.path.dirname(__file__), "..", "src", "inmanta", "protocol", "auth", "default_policy.rego"))],
+    [
+        utils.read_file(
+            os.path.join(os.path.dirname(__file__), "..", "src", "inmanta", "protocol", "auth", "default_policy.rego")
+        )
+    ],
 )
 async def test_default_policy_change_password(server, client) -> None:
     """
@@ -179,7 +184,11 @@ async def test_default_policy_change_password(server, client) -> None:
 @pytest.mark.parametrize("authorization_provider", [AuthorizationProviderName.policy_engine])
 @pytest.mark.parametrize(
     "access_policy",
-    [read_file(os.path.join(os.path.dirname(__file__), "..", "src", "inmanta", "protocol", "auth", "default_policy.rego"))],
+    [
+        utils.read_file(
+            os.path.join(os.path.dirname(__file__), "..", "src", "inmanta", "protocol", "auth", "default_policy.rego")
+        )
+    ],
 )
 async def test_default_policy_create_token(server) -> None:
     """
@@ -236,7 +245,11 @@ async def test_default_policy_create_token(server) -> None:
 @pytest.mark.parametrize("authorization_provider", [AuthorizationProviderName.policy_engine])
 @pytest.mark.parametrize(
     "access_policy",
-    [read_file(os.path.join(os.path.dirname(__file__), "..", "src", "inmanta", "protocol", "auth", "default_policy.rego"))],
+    [
+        utils.read_file(
+            os.path.join(os.path.dirname(__file__), "..", "src", "inmanta", "protocol", "auth", "default_policy.rego")
+        )
+    ],
 )
 async def test_default_policy_unauthorized_user(server, client) -> None:
     """
@@ -247,3 +260,23 @@ async def test_default_policy_unauthorized_user(server, client) -> None:
 
     result = await unauthorized_client.environment_list()
     assert result.code == 401
+
+
+@pytest.mark.parametrize("enable_auth", [True])
+@pytest.mark.parametrize("authentication_method", [AuthMethod.database])
+@pytest.mark.parametrize("authorization_provider", [AuthorizationProviderName.policy_engine])
+@pytest.mark.parametrize(
+    "access_policy",
+    [
+        utils.read_file(
+            os.path.join(os.path.dirname(__file__), "..", "src", "inmanta", "protocol", "auth", "default_policy.rego")
+        )
+    ],
+)
+async def test_roles_in_default_policy(server) -> None:
+    """
+    Verify that the labels, used in the default policy, map to the labels defined in the AuthorizationLabel enum.
+    """
+    await utils.verify_authorization_labels_in_default_policy(
+        const.AuthorizationLabel, exclude_prefixes={"lsm.", "support.", "license.", "ui."}
+    )

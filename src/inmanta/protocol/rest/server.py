@@ -220,13 +220,22 @@ class RESTHandler(tornado.web.RequestHandler):
 
 
 class StaticContentHandler(tornado.web.RequestHandler):
-    def initialize(self, transport: "RESTServer", content: str, content_type: str) -> None:
+    def initialize(
+        self,
+        transport: "RESTServer",
+        content: str,
+        content_type: str,
+        set_no_cache_header: bool = False,
+    ) -> None:
         self._transport = transport
         self._content = content
         self._content_type = content_type
+        self._set_no_cache_header = set_no_cache_header
 
     def get(self, *args: list[str], **kwargs: dict[str, str]) -> None:
         self.set_header("Content-Type", self._content_type)
+        if self._set_no_cache_header:
+            self.set_header("Cache-Control", "no-cache")
         self.write(self._content)
         self.set_status(200)
 
@@ -292,13 +301,12 @@ class RESTServer(RESTBase):
         global_url_map: dict[str, dict[str, common.UrlMethod]] = self.get_global_url_map(targets)
 
         rules: list[routing.Rule] = []
-        rules.extend(additional_rules)
 
         for url, handler_config in global_url_map.items():
             rules.append(routing.Rule(routing.PathMatches(url), RESTHandler, {"transport": self, "config": handler_config}))
             LOGGER.debug("Registering handler(s) for url %s and methods %s", url, ", ".join(handler_config.keys()))
 
-        application = web.Application(rules, compress_response=True)
+        application = web.Application(handlers=[*additional_rules, *rules], compress_response=True)
 
         crt = inmanta_config.Config.get("server", "ssl_cert_file", None)
         key = inmanta_config.Config.get("server", "ssl_key_file", None)

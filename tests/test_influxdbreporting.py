@@ -97,7 +97,7 @@ class MockReporter(AsyncReporter):
 
 
 @pytest.fixture
-def influxdb(event_loop, free_socket):
+def influxdb(free_socket):
     ifl = InfluxdbMock(free_socket())
     yield ifl
     ifl.server.stop()
