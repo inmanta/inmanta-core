@@ -736,7 +736,9 @@ async def test_role_assignment(server: protocol.Server, client) -> None:
     await verify_role_assignment(username=username1, expected_assignments=expected_role_assignments_username1)
     expected_role_assignments_username2 = [RoleAssignment(environment=env1_id, role="a_role")]
     await verify_role_assignment(username=username2, expected_assignments=expected_role_assignments_username2)
-    await verify_roles_on_list_user(expected_assignments={username1: expected_role_assignments_username1, username2: expected_role_assignments_username2})
+    await verify_roles_on_list_user(
+        expected_assignments={username1: expected_role_assignments_username1, username2: expected_role_assignments_username2}
+    )
 
     user1_client = await create_client_for_user(client, username=username1, password=password)
     for env_id in [env1_id, env2_id]:
@@ -758,7 +760,9 @@ async def test_role_assignment(server: protocol.Server, client) -> None:
     await verify_role_assignment(username=username1, expected_assignments=expected_role_assignments_username1)
     expected_role_assignments_username2 = []
     await verify_role_assignment(username=username2, expected_assignments=expected_role_assignments_username2)
-    await verify_roles_on_list_user(expected_assignments={username1: expected_role_assignments_username1, username2: expected_role_assignments_username2})
+    await verify_roles_on_list_user(
+        expected_assignments={username1: expected_role_assignments_username1, username2: expected_role_assignments_username2}
+    )
 
     result = await admin_client.list_roles()
     assert result.code == 200
@@ -832,8 +836,13 @@ async def test_multiple_roles_assigned(server: protocol.Server, client) -> None:
     result = await admin_client.list_users()
     assert result.code == 200
     assert len(result.result["data"]) == 1
-    actual_role_assignments = [RoleAssignment(environment=r["environment"], role=r["role"]) for r in result.result["data"][0]["roles"]]
-    expected_role_assignments = [RoleAssignment(environment=env_id, role="role1"), RoleAssignment(environment=env_id, role="role2")]
+    actual_role_assignments = [
+        RoleAssignment(environment=r["environment"], role=r["role"]) for r in result.result["data"][0]["roles"]
+    ]
+    expected_role_assignments = [
+        RoleAssignment(environment=env_id, role="role1"),
+        RoleAssignment(environment=env_id, role="role2"),
+    ]
     assert actual_role_assignments == expected_role_assignments
 
 
