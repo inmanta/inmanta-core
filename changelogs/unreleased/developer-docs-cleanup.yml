@@ -1,0 +1,5 @@
+description: Remove v1 module from getting started documentation
+change-type: minor
+destination-branches: [master, iso8]
+sections:
+  minor-improvement: "{{description}}"
