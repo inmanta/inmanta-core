@@ -22,8 +22,9 @@ This code was originally developed by Omer Gertel, as a python port of the core 
 It was vendored into the inmanta source tree as the original was no longer maintained.
 """
 
-from inmanta.vendor.pyformance.meters.meter import Meter
 from pytest import approx
+
+from inmanta.vendor.pyformance.meters.meter import Meter
 
 
 def test__one_minute_rate(clock):

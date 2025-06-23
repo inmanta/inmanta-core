@@ -20,13 +20,12 @@ import logging
 from time import perf_counter, time
 from typing import Mapping, Optional
 
-from inmanta.vendor.pyformance import gauge
-from inmanta.vendor.pyformance.meters.gauge import Gauge
-
 from inmanta.reporter import InfluxReporter
 from inmanta.server import SLICE_METRICS
 from inmanta.server import config as opt
 from inmanta.server import protocol
+from inmanta.vendor.pyformance import gauge
+from inmanta.vendor.pyformance.meters.gauge import Gauge
 
 LOGGER = logging.getLogger(__name__)
 

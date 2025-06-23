@@ -22,8 +22,9 @@ This code was originally developed by Omer Gertel, as a python port of the core 
 It was vendored into the inmanta source tree as the original was no longer maintained.
 """
 
-from inmanta.vendor.pyformance.meters.histogram import Histogram
 from pytest import approx
+
+from inmanta.vendor.pyformance.meters.histogram import Histogram
 
 
 def test__a_sample_of_100_from_1000():

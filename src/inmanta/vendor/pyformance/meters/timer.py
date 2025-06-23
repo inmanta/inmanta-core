@@ -27,13 +27,12 @@ import time
 from types import TracebackType
 from typing import Optional, Type
 
-
-
 from .. import Clock
-from .meter import Meter
-from .histogram import Histogram
-from ..stats.snapshot import Snapshot
 from ..stats.samples import DEFAULT_ALPHA, DEFAULT_SIZE, Sample
+from ..stats.snapshot import Snapshot
+from .histogram import Histogram
+from .meter import Meter
+
 
 class TimerSink(abc.ABC):
 

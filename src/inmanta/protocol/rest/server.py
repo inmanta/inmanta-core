@@ -27,7 +27,6 @@ from json import JSONDecodeError
 from typing import Optional, Union
 
 import tornado
-from inmanta.vendor.pyformance import timer
 from tornado import httpserver, iostream, routing, web
 
 import inmanta.protocol.endpoints
@@ -39,6 +38,7 @@ from inmanta.protocol.rest import RESTBase
 from inmanta.server import config as server_config
 from inmanta.server.config import server_access_control_allow_origin, server_enable_auth, server_tz_aware_timestamps
 from inmanta.types import ReturnTypes
+from inmanta.vendor.pyformance import timer
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 

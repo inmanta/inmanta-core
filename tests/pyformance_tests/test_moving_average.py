@@ -22,8 +22,9 @@ This code was originally developed by Omer Gertel, as a python port of the core 
 It was vendored into the inmanta source tree as the original was no longer maintained.
 """
 
-from inmanta.vendor.pyformance.stats.moving_average import ExpWeightedMovingAvg
 from pytest import approx
+
+from inmanta.vendor.pyformance.stats.moving_average import ExpWeightedMovingAvg
 
 
 def test_one_minute_EWMA_five_sec_tick(clock):

@@ -20,8 +20,6 @@ import logging
 from typing import Mapping, Optional
 
 import asyncpg
-from inmanta.vendor.pyformance import gauge, global_registry
-from inmanta.vendor.pyformance.meters.gauge import AnyGauge, CallbackGauge
 
 from inmanta.data import start_engine, stop_engine
 from inmanta.data.model import DataBaseReport, ReportedStatus
@@ -30,6 +28,8 @@ from inmanta.server import config as opt
 from inmanta.server import protocol
 from inmanta.types import ArgumentTypes
 from inmanta.util import IntervalSchedule, Scheduler
+from inmanta.vendor.pyformance import gauge, global_registry
+from inmanta.vendor.pyformance.meters.gauge import AnyGauge, CallbackGauge
 
 LOGGER = logging.getLogger(__name__)
 
