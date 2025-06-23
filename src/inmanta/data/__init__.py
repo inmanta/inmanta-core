@@ -4985,29 +4985,51 @@ class Resource(BaseDocument):
         cls,
         environment: uuid.UUID,
         *,
-        since: int,
+        since: Optional[int],
         projection: Optional[Collection[typing.LiteralString]],
         connection: Optional[Connection] = None,
     ) -> list[tuple[int, list[dict[str, object]]]]:
         """
         Returns all released model versions with associated resources since (excluding) the given model version.
         Returns resources as raw dicts with the requested fields
+        :param since: The boundary version (excluding). If None, returns only the latest released version.
         """
+
+        boundary_query: typing.LiteralString = (
+            "SELECT $2::int AS version"
+            if since is not None
+            else f""" \
+                            SELECT MAX(version) AS version
+                            FROM {ConfigurationModel.table_name()}
+                            WHERE released=TRUE AND environment=$1
+                            """
+        )
+
         resource_columns: typing.LiteralString = ", ".join(f"r.{c}" for c in projection) if projection is not None else "r.*"
         query: typing.LiteralString = f"""
+            WITH boundary AS (
+                {boundary_query}
+            )
             SELECT m.version, {resource_columns}
             FROM {ConfigurationModel.table_name()} as m
             LEFT JOIN {cls.table_name()} as r
-                ON m.environment = r.environment AND m.version = r.model
-            WHERE m.environment = $1 AND m.version > $2 AND m.released=true
+                ON m.environment=r.environment AND m.version=r.model
+            WHERE m.environment=$1
+                AND m.version > (SELECT version FROM boundary) - 1
+                AND m.released is TRUE
             ORDER BY m.version ASC
         """
+        query_values = [cls._get_value(environment), since] if since is not None else [cls._get_value(environment)]
         resource_records = await cls._fetch_query(
             query,
-            cls._get_value(environment),
-            cls._get_value(since),
+            *query_values,
             connection=connection,
         )
+        query_latest_model = f"""
+                   SELECT max(version)
+                   FROM {ConfigurationModel.table_name()}
+                   WHERE environment=$1 AND released
+               """
         result: list[tuple[int, list[dict[str, object]]]] = []
         for version, raw_resources in itertools.groupby(resource_records, key=lambda r: r["version"]):
             parsed_resources: list[dict[str, object]] = []
@@ -5021,51 +5043,6 @@ class Resource(BaseDocument):
                 parsed_resources.append(resource)
             result.append((version, parsed_resources))
         return result
-
-    @classmethod
-    async def get_resources_latest_version_raw(
-        cls,
-        environment: uuid.UUID,
-        *,
-        projection: Optional[Collection[typing.LiteralString]],
-        connection: Optional[Connection] = None,
-    ) -> list[tuple[int, list[dict[str, object]]]]:
-        """
-        Returns a tuple with the latest released version and a list of resources.
-        These resources are returned as raw dicts with the requested fields
-        """
-        resource_columns: typing.LiteralString = ", ".join(f"r.{c}" for c in projection) if projection is not None else "r.*"
-        query_latest = f"""
-        WITH latest_released_version AS (
-            SELECT MAX(version) AS version
-            FROM public.configurationmodel
-            WHERE released IS TRUE
-              AND environment=$1
-        )
-        SELECT lrv.version, {resource_columns}
-        FROM {ConfigurationModel.table_name()} AS m
-        JOIN latest_released_version lrv
-            ON m.version=lrv.version
-        LEFT JOIN {cls.table_name()} AS r
-            ON m.environment=r.environment AND m.version=r.model
-        WHERE m.environment=$1
-        """
-        resource_records = await cls._fetch_query(
-            query_latest,
-            cls._get_value(environment),
-            connection=connection,
-        )
-        if len(resource_records) == 0:
-            return []
-        parsed_resources: list[dict[str, object]] = []
-        for raw_resource in resource_records:
-            if raw_resource["resource_id"] is None:
-                # left join produced no resources special case for empty model
-                continue
-            resource: dict[str, object] = dict(raw_resource)
-            parsed_resources.append(resource)
-
-        return [(typing.cast(int, resource_records[0]["version"]), parsed_resources)]
 
     @classmethod
     async def get_resources_for_version_raw_with_persistent_state(

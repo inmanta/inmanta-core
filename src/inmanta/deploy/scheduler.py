@@ -686,13 +686,7 @@ class ResourceScheduler(TaskManager):
             resources_by_version: Sequence[tuple[int, Sequence[Mapping[str, object]]]] = (
                 await data.Resource.get_resources_since_version_raw(
                     self.environment,
-                    since=self._state.version,
-                    projection=ResourceRecord.__required_keys__,
-                    connection=con,
-                )
-                if self._state.version > 0
-                else await data.Resource.get_resources_latest_version_raw(
-                    self.environment,
+                    since=self._state.version if self._state.version > 0 else None,
                     projection=ResourceRecord.__required_keys__,
                     connection=con,
                 )
