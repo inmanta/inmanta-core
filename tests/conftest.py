@@ -570,7 +570,6 @@ def clean_reset_session():
 
 def reset_all_objects():
     resources.resource.reset()
-    asyncio.set_child_watcher(None)
     reset_metrics()
     # No dynamic loading of commands at the moment, so no need to reset/reload
     # command.Commander.reset()
