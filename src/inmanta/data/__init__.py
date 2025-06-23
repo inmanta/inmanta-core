@@ -6323,22 +6323,22 @@ class User(BaseDocument):
                 LEFT JOIN {Role.table_name()} AS r ON r.id=role_a.role_id
             ORDER BY u.username ASC, role_a.environment ASC, r.name ASC
         """
-        result = {}
         async with cls.get_connection() as con:
             records = await con.fetch(query)
-            for (username, auth_method, is_admin), elem_iterator in itertools.groupby(
-                records, lambda r: (r["username"], r["auth_method"], r["is_admin"])
-            ):
-                result[username] = m.UserWithRoles(
-                    username=username,
-                    auth_method=auth_method,
-                    is_admin=is_admin,
-                    roles=[
-                        m.RoleAssignment(environment=elem["role_environment"], role=elem["role_name"])
-                        for elem in elem_iterator
-                        if elem["role_environment"] is not None and elem["role_name"] is not None
-                    ],
-                )
+        result = {}
+        for username, group_elem_iterator in itertools.groupby(records, lambda r: r["username"]):
+            records_for_group = list(group_elem_iterator)
+            roles = [
+                m.RoleAssignment(environment=record["role_environment"], role=record["role_name"])
+                for record in records_for_group
+                if record["role_environment"] is not None and record["role_name"] is not None
+            ]
+            result[username] = m.UserWithRoles(
+                username=records_for_group[0]["username"],
+                auth_method=records_for_group[0]["auth_method"],
+                is_admin=records_for_group[0]["is_admin"],
+                roles=roles,
+            )
         return list(result.values())
 
 
