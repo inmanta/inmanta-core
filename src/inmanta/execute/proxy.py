@@ -121,7 +121,7 @@ class DynamicProxy:
         :param context: The context this object lives in.
         """
         object.__setattr__(self, "__instance", instance)
-        object.__setattr__(self, "__context", context if context is not None else ProxyContext())
+        object.__setattr__(self, "__context", context if context is not None else ProxyContext(path=f"<{instance}>"))
 
     def _get_instance(self) -> "Instance":
         return object.__getattribute__(self, "__instance")
