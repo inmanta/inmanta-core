@@ -6325,20 +6325,20 @@ class User(BaseDocument):
         """
         result = {}
         async with cls.get_connection() as con:
-            async with con.transaction():
-                async for record in con.cursor(query):
-                    if record["username"] not in result:
-                        result[record["username"]] = m.UserWithRoles(
-                            username=record["username"],
-                            auth_method=record["auth_method"],
-                            is_admin=record["is_admin"],
-                            roles=[],
-                        )
-                    if record["role_environment"] is not None and record["role_name"] is not None:
-                        user_with_roles = result[record["username"]]
-                        user_with_roles.roles.append(
-                            m.RoleAssignment(environment=record["role_environment"], role=record["role_name"])
-                        )
+            records = await con.fetch(query)
+            for (username, auth_method, is_admin), elem_iterator in itertools.groupby(
+                records, lambda r: (r["username"], r["auth_method"], r["is_admin"])
+            ):
+                result[username] = m.UserWithRoles(
+                    username=username,
+                    auth_method=auth_method,
+                    is_admin=is_admin,
+                    roles=[
+                        m.RoleAssignment(environment=elem["role_environment"], role=elem["role_name"])
+                        for elem in elem_iterator
+                        if elem["role_environment"] is not None and elem["role_name"] is not None
+                    ],
+                )
         return list(result.values())
 
 
