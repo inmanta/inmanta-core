@@ -773,20 +773,6 @@ class AuthMethod(str, Enum):
     oidc = "oidc"
 
 
-class User(BaseModel):
-    """A user"""
-
-    username: str
-    auth_method: AuthMethod
-    is_admin: bool
-
-
-class CurrentUser(BaseModel):
-    """Information about the current logged in user"""
-
-    username: str
-
-
 class RoleAssignment(BaseModel):
     """
     :param environment: The environment scope of the role.
@@ -795,6 +781,24 @@ class RoleAssignment(BaseModel):
 
     environment: uuid.UUID
     role: str
+
+
+class User(BaseModel):
+    """A user"""
+
+    username: str
+    auth_method: AuthMethod
+    is_admin: bool
+
+
+class UserWithRoles(User):
+    roles: list[RoleAssignment]
+
+
+class CurrentUser(BaseModel):
+    """Information about the current logged in user"""
+
+    username: str
 
 
 class LoginReturn(BaseModel):

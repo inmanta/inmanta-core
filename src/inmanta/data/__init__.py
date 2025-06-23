@@ -6309,6 +6309,38 @@ class User(BaseDocument):
             # No user exists with the given username
             raise KeyError()
 
+    @classmethod
+    async def list_users_with_roles(cls) -> list[m.UserWithRoles]:
+        query = f"""
+            SELECT
+                u.username,
+                u.auth_method,
+                u.is_admin,
+                role_a.environment AS role_environment,
+                r.name AS role_name
+            FROM {cls.table_name()} AS u
+                LEFT JOIN role_assignment AS role_a ON role_a.user_id=u.id
+                LEFT JOIN {Role.table_name()} AS r ON r.id=role_a.role_id
+            ORDER BY u.username ASC, role_a.environment ASC, r.name ASC
+        """
+        async with cls.get_connection() as con:
+            records = await con.fetch(query)
+        result = {}
+        for username, group_elem_iterator in itertools.groupby(records, lambda r: r["username"]):
+            records_for_group = list(group_elem_iterator)
+            roles = [
+                m.RoleAssignment(environment=record["role_environment"], role=record["role_name"])
+                for record in records_for_group
+                if record["role_environment"] is not None and record["role_name"] is not None
+            ]
+            result[username] = m.UserWithRoles(
+                username=records_for_group[0]["username"],
+                auth_method=records_for_group[0]["auth_method"],
+                is_admin=records_for_group[0]["is_admin"],
+                roles=roles,
+            )
+        return list(result.values())
+
 
 class RoleStillAssignedException(Exception):
     """

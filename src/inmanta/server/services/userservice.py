@@ -58,8 +58,8 @@ class UserService(server_protocol.ServerSlice):
         return [SLICE_TRANSPORT]
 
     @protocol.handle(protocol.methods_v2.list_users)
-    async def list_users(self) -> list[model.User]:
-        return [user.to_dao() for user in await data.User.get_list(order_by_column="username", order="ASC")]
+    async def list_users(self) -> list[model.UserWithRoles]:
+        return await data.User.list_users_with_roles()
 
     @protocol.handle(protocol.methods_v2.add_user)
     async def add_user(self, username: str, password: str) -> model.User:
