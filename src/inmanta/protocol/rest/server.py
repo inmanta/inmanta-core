@@ -17,7 +17,6 @@ Contact: code@inmanta.com
 """
 
 import asyncio
-import contextlib
 import logging
 import ssl
 import uuid
@@ -28,7 +27,7 @@ from json import JSONDecodeError
 from typing import Optional, Union
 
 import tornado
-# from pyformance import timer
+from pyformance import timer
 from tornado import httpserver, iostream, routing, web
 
 import inmanta.protocol.endpoints
@@ -116,8 +115,7 @@ class RESTHandler(tornado.web.RequestHandler):
             {const.TRACEPARENT: self.request.headers[const.TRACEPARENT]} if const.TRACEPARENT in self.request.headers else {}
         ):
             with tracing.span("rpc." + call_config.method_name, _tags=["rpc-call"]):
-                # with timer("rpc." + call_config.method_name).time():
-                with contextlib.nullcontext():
+                with timer("rpc." + call_config.method_name).time():
                     self._transport.start_request()
                     try:
                         message = self._transport._decode(self.request.body)

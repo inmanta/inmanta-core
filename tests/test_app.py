@@ -142,21 +142,29 @@ def do_kill(process: subprocess.Popen, killtime: int = 3, termtime: int = 2) -> 
 
 
 def run_without_tty(
-    args: list[str], env: typing.Optional[dict[str, str]] = None, killtime: int = 15, termtime: int = 10
+    args: list[str],
+    env: typing.Optional[dict[str, str]] = None,
+    killtime: int = 15,
+    termtime: int = 10,
+    *,
+    treat_warnings_as_errors: bool = False,
 ) -> tuple[str, str, int]:
     """Run the given command without a tty"""
-    if env is None:
-        env = {}
-    env.update({"PYTHONWARNINGS": "error"})
+    if treat_warnings_as_errors:
+        if env is None:
+            env = {}
+        env.update({"PYTHONWARNINGS": "error"})
 
     process = do_run(args, env)
     return do_kill(process, killtime, termtime)
 
 
-def run_with_tty(args, killtime=4, termtime=3):
+def run_with_tty(args, killtime=4, termtime=3, *, treat_warnings_as_errors: bool = False):
     """Could not get code for actual tty to run stable in docker, so we are faking it"""
     env = {const.ENVIRON_FORCE_TTY: "true"}
-    return run_without_tty(args, env=env, killtime=killtime, termtime=termtime)
+    return run_without_tty(
+        args, env=env, killtime=killtime, termtime=termtime, treat_warnings_as_errors=treat_warnings_as_errors
+    )
 
 
 def is_colorama_package_available():
@@ -248,6 +256,35 @@ def test_log_file_set(tmpdir, log_level, with_tty, regexes_required_lines, regex
     check_logs(log_lines, regexes_required_lines, regexes_forbidden_lines, timed=False)
     # Check if the message appears in the logs, it is not a full line match so timing is not relevant
     check_logs(stdout, [], regexes_required_lines, timed=False)
+
+
+@pytest.mark.parametrize_any(
+    "with_tty, regexes_required_lines, regexes_forbidden_lines",
+    [
+        (False, [r"Inmanta Service Orchestrator", r"Compiler version: ", r"Extensions:", r"\s*\* core:"], [DEBUG_MSG]),
+        (True, [r"Inmanta Service Orchestrator", r"Compiler version: ", r"Extensions:", r"\s*\* core:"], [DEBUG_MSG]),
+    ],
+)
+@pytest.mark.timeout(60)
+def test_version_command(tmpdir, with_tty, regexes_required_lines, regexes_forbidden_lines):
+    if is_colorama_package_available() and with_tty:
+        pytest.skip("Colorama is present")
+
+    (args, log_dir) = get_command(tmpdir, command="--version")
+    if with_tty:
+        (stdout, stderr, return_code) = run_with_tty(args, treat_warnings_as_errors=True)
+    else:
+        (stdout, stderr, return_code) = run_without_tty(args, treat_warnings_as_errors=True)
+
+    if return_code != 0 or stderr:
+        e = Exception("Unexpected error occured while running 'inmanta --version'")
+        if stderr:
+            e.add_note("\n".join(stderr))
+        if stdout:
+            e.add_note("\n".join(stdout))
+        raise e
+    # Check if the message appears in the logs, it is not a full line match so timing is not relevant
+    check_logs(stdout, regexes_required_lines, regexes_forbidden_lines, timed=False)
 
 
 @pytest.mark.parametrize_any(
@@ -438,14 +475,13 @@ end
     assert "Compile done" in all_output
     assert f"Config file {non_existing_config_file} doesn't exist" in all_output
 
-import pyformance
 
 @pytest.mark.parametrize_any(
     "with_tty, version_should_be_shown, regexes_required_lines, regexes_forbidden_lines",
     [
-        # (False, True, [r"Inmanta Service Orchestrator", r"Compiler version: ", r"Extensions:", r"\s*\* core:"], []),
-        # (True, True, [r"Inmanta Service Orchestrator", r"Compiler version: ", r"Extensions:", r"\s*\* core:"], []),
-        # (False, False, [], [r"Inmanta Service Orchestrator", r"Compiler version: ", r"Extensions:", r"\s*\* core:"]),
+        (False, True, [r"Inmanta Service Orchestrator", r"Compiler version: ", r"Extensions:", r"\s*\* core:"], []),
+        (True, True, [r"Inmanta Service Orchestrator", r"Compiler version: ", r"Extensions:", r"\s*\* core:"], []),
+        (False, False, [], [r"Inmanta Service Orchestrator", r"Compiler version: ", r"Extensions:", r"\s*\* core:"]),
         (True, False, [], [r"Inmanta Service Orchestrator", r"Compiler version: ", r"Extensions:", r"\s*\* core:"]),
     ],
 )

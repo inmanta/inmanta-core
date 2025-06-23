@@ -17,7 +17,6 @@ Contact: code@inmanta.com
 """
 
 import abc
-import contextlib
 import dataclasses
 import datetime
 import logging
@@ -25,7 +24,7 @@ import traceback
 import uuid
 from dataclasses import dataclass
 
-# import pyformance
+import pyformance
 
 from inmanta import data, resources
 from inmanta.agent import executor
@@ -126,8 +125,7 @@ class PoisonPill(Task):
 
 class Deploy(Task):
     async def execute(self, task_manager: "scheduler.TaskManager", agent: str, reason: str | None = None) -> None:
-        # with pyformance.timer("internal.deploy").time():
-        with contextlib.nullcontext():
+        with pyformance.timer("internal.deploy").time():
             # Make id's
             gid = uuid.uuid4()
             action_id = uuid.uuid4()  # can this be gid ?
