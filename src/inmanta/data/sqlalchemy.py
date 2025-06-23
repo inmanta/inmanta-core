@@ -425,7 +425,6 @@ class Environment(Base):
     resource_persistent_state: Mapped[List["ResourcePersistentState"]] = relationship(
         "ResourcePersistentState", back_populates="environment_"
     )
-    # unknownparameter: Mapped[List["UnknownParameter"]] = relationship("UnknownParameter", back_populates="environment_")
     unknownparameter: Mapped[List["UnknownParameter"]] = relationship("UnknownParameter", viewonly=True)
     agent: Mapped[List["Agent"]] = relationship("Agent", back_populates="environment_")
 
@@ -894,7 +893,6 @@ class UnknownParameter(Base):
     resolved: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text("false"))
 
     configurationmodel: Mapped["ConfigurationModel"] = relationship("ConfigurationModel", back_populates="unknownparameter")
-    # environment_: Mapped["Environment"] = relationship("Environment", back_populates="unknownparameter")
     environment_: Mapped["Environment"] = relationship("Environment", viewonly=True)
 
 
