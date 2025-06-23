@@ -6309,6 +6309,38 @@ class User(BaseDocument):
             # No user exists with the given username
             raise KeyError()
 
+    @classmethod
+    async def list_users_with_roles(cls) -> list[m.UserWithRoles]:
+        query = f"""
+            SELECT
+                u.username,
+                u.auth_method,
+                u.is_admin,
+                role_a.environment AS role_environment,
+                r.name AS role_name
+            FROM {cls.table_name()} AS u
+                LEFT JOIN role_assignment AS role_a ON role_a.user_id=u.id
+                LEFT JOIN {Role.table_name()} AS r ON r.id=role_a.role_id
+            ORDER BY u.username ASC, role_a.environment ASC
+        """
+        result = {}
+        async with cls.get_connection() as con:
+            async with con.transaction():
+                async for record in con.cursor(query):
+                    if record["username"] not in result:
+                        result[record["username"]] = m.UserWithRoles(
+                            username=record["username"],
+                            auth_method=record["auth_method"],
+                            is_admin=record["is_admin"],
+                            roles=[],
+                        )
+                    user_with_roles = result[record["username"]]
+                    if record["role_environment"] is not None and record["role_name"] is not None:
+                        user_with_roles.roles.append(
+                            m.RoleAssignment(environment=record["role_environment"], role=record["role_name"])
+                        )
+        return list(result.values())
+
 
 class RoleStillAssignedException(Exception):
     """

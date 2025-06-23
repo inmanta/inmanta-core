@@ -1516,7 +1516,7 @@ def login(username: str, password: str) -> ReturnValue[model.LoginReturn]:
 
 @auth(auth_label=const.AuthorizationLabel.USER_READ, read_only=True)
 @typedmethod(path="/user", operation="GET", client_types=[ClientType.api], api_version=2)
-def list_users() -> list[model.User]:
+def list_users() -> list[model.UserWithRoles]:
     """List all users
 
     :return: A list of all users"""
