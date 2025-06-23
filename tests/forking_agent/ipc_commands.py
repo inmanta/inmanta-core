@@ -16,7 +16,7 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-## This is a separate file to cause the remote side to not load too much code
+# This is a separate file to cause the remote side to not load too much code
 
 import logging
 

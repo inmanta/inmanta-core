@@ -21,7 +21,6 @@ import base64
 import logging
 import sys
 import uuid
-import warnings
 
 import psutil
 import pytest
@@ -34,6 +33,7 @@ import inmanta.loader
 import inmanta.protocol.ipc_light
 import inmanta.util
 import utils
+from forking_agent.ipc_commands import Echo, GetConfig, GetName, TestLoader
 from inmanta.agent import executor
 from inmanta.agent.executor import ExecutorBlueprint
 from inmanta.agent.forking_executor import MPManager
@@ -42,7 +42,6 @@ from inmanta.data.model import ModuleSourceMetadata
 from inmanta.protocol.ipc_light import ConnectionLost
 from utils import NOISY_LOGGERS, log_contains, retry_limited
 
-from forking_agent.ipc_commands import Echo, TestLoader, GetConfig, GetName
 
 @pytest.fixture
 def set_custom_executor_policy(server_config):
