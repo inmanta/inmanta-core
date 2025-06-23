@@ -541,6 +541,8 @@ class MaybeReference(typing.Protocol):
     DSL value that may represent a reference in the Python domain, while having a different value in the DSL domain.
     """
 
+    __slots__ = ()
+
     def is_reference(self) -> Optional[Reference]:
         """
         If this DSL value represents a reference value, returns the associated reference object. Otherwise returns None.
