@@ -60,16 +60,6 @@ async def test_agent_disconnect(
     utils.log_index(caplog, "inmanta.scheduler", logging.WARNING, "Connection to server lost, stopping scheduler")
 
 
-@pytest.fixture(scope="function")
-async def set_reset_state_to_false_after_execution(client, environment):
-    """
-    Sets data.RESET_DEPLOY_PROGRESS_ON_START back to False because the agent_factory teardown
-    asserts that the state is correct on restart and this setting breaks that assertion
-    """
-    yield
-    await client.set_setting(environment, data.RESET_DEPLOY_PROGRESS_ON_START, False)
-
-
 @pytest.mark.parametrize("reset_state", (True, False))
 async def test_scheduler_initialization(
     agent,
@@ -78,7 +68,6 @@ async def test_scheduler_initialization(
     server,
     client,
     environment,
-    set_reset_state_to_false_after_execution,
     reset_state: bool,
 ) -> None:
     """
