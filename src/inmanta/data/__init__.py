@@ -6321,7 +6321,7 @@ class User(BaseDocument):
             FROM {cls.table_name()} AS u
                 LEFT JOIN role_assignment AS role_a ON role_a.user_id=u.id
                 LEFT JOIN {Role.table_name()} AS r ON r.id=role_a.role_id
-            ORDER BY u.username ASC, role_a.environment ASC
+            ORDER BY u.username ASC, role_a.environment ASC, r.name ASC
         """
         result = {}
         async with cls.get_connection() as con:
@@ -6334,8 +6334,8 @@ class User(BaseDocument):
                             is_admin=record["is_admin"],
                             roles=[],
                         )
-                    user_with_roles = result[record["username"]]
                     if record["role_environment"] is not None and record["role_name"] is not None:
+                        user_with_roles = result[record["username"]]
                         user_with_roles.roles.append(
                             m.RoleAssignment(environment=record["role_environment"], role=record["role_name"])
                         )

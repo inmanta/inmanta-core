@@ -687,7 +687,7 @@ async def test_role_assignment(server: protocol.Server, client) -> None:
         Assert that the role assignments returned by the list_users API endpoint correspond to the
         role assignments given in expected_assignments.
 
-        param expected_assignments: The expected role assignments. Maps the username to the list of role assignments.
+        :param expected_assignments: The expected role assignments. Maps the username to the list of role assignments.
         """
         result = await admin_client.list_users()
         assert result.code == 200
@@ -832,7 +832,7 @@ async def test_multiple_roles_assigned(server: protocol.Server, client) -> None:
     assert set(claims[const.INMANTA_ROLES_URN][str(env_id)]) == {"role1", "role2"}
     assert not claims[const.INMANTA_IS_ADMIN_URN]
 
-    # Verify roles in list_users API endpoint
+    # Verify roles returned by the list_users API endpoint
     result = await admin_client.list_users()
     assert result.code == 200
     assert len(result.result["data"]) == 1
