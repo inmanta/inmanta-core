@@ -25,7 +25,7 @@ It was vendored into the inmanta source tree as the original was no longer maint
 import math
 import time
 
-from pyformance import Clock
+from inmanta.vendor.pyformance import Clock
 
 
 class ExpWeightedMovingAvg(object):

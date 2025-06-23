@@ -21,7 +21,7 @@ import re
 
 import pytest
 import tornado
-from pyformance import gauge, global_registry, timer
+from inmanta.vendor.pyformance import gauge, global_registry, timer
 from tornado.httpserver import HTTPServer
 from tornado.web import url
 

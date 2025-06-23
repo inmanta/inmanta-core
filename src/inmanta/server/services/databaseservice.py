@@ -20,9 +20,8 @@ import logging
 from typing import Mapping, Optional
 
 import asyncpg
-from pyformance import gauge, global_registry
-from pyformance.meters import CallbackGauge
-from pyformance.meters.gauge import AnyGauge
+from inmanta.vendor.pyformance import gauge, global_registry
+from inmanta.vendor.pyformance.meters.gauge import AnyGauge, CallbackGauge
 
 from inmanta.data import start_engine, stop_engine
 from inmanta.data.model import DataBaseReport, ReportedStatus

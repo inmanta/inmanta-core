@@ -27,7 +27,7 @@ from json import JSONDecodeError
 from typing import Optional, Union
 
 import tornado
-from pyformance import timer
+from inmanta.vendor.pyformance import timer
 from tornado import httpserver, iostream, routing, web
 
 import inmanta.protocol.endpoints

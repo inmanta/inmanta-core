@@ -27,13 +27,13 @@ import time
 from types import TracebackType
 from typing import Optional, Type
 
-import pyformance
-from pyformance.meters.histogram import Histogram
-from pyformance.stats.samples import DEFAULT_ALPHA, DEFAULT_SIZE, Sample
+
 
 from .. import Clock
 from .meter import Meter
-
+from .histogram import Histogram
+from ..stats.snapshot import Snapshot
+from ..stats.samples import DEFAULT_ALPHA, DEFAULT_SIZE, Sample
 
 class TimerSink(abc.ABC):
 
@@ -90,7 +90,7 @@ class Timer(object):
         "get var from snapshot of internal histogram"
         return self.get_snapshot().get_var()
 
-    def get_snapshot(self) -> pyformance.stats.snapshot.Snapshot:
+    def get_snapshot(self) -> Snapshot:
         "get snapshot from internal histogram"
         return self.hist.get_snapshot()
 

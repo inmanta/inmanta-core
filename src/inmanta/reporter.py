@@ -26,7 +26,7 @@ from asyncio import Task
 from typing import Optional
 from urllib.parse import quote
 
-from pyformance import MetricsRegistry, global_registry
+from inmanta.vendor.pyformance import MetricsRegistry, global_registry
 from tornado.httpclient import AsyncHTTPClient, HTTPError, HTTPRequest
 
 LOGGER = logging.getLogger(__name__)

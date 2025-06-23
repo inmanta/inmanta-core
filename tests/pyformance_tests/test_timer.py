@@ -22,7 +22,7 @@ This code was originally developed by Omer Gertel, as a python port of the core 
 It was vendored into the inmanta source tree as the original was no longer maintained.
 """
 
-from pyformance.meters import Timer
+from inmanta.vendor.pyformance.meters.timer import Timer
 
 
 def test__start_stop_clear(clock):

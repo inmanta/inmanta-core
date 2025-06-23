@@ -22,7 +22,7 @@ This code was originally developed by Omer Gertel, as a python port of the core 
 It was vendored into the inmanta source tree as the original was no longer maintained.
 """
 
-from pyformance.meters import Histogram
+from inmanta.vendor.pyformance.meters.histogram import Histogram
 from pytest import approx
 
 

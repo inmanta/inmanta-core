@@ -24,7 +24,7 @@ import traceback
 import uuid
 from dataclasses import dataclass
 
-import pyformance
+from inmanta.vendor import pyformance
 
 from inmanta import data, resources
 from inmanta.agent import executor

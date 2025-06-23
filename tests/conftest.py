@@ -29,7 +29,6 @@ from threading import Condition
 from tornado.httpclient import AsyncHTTPClient
 
 import _pytest.logging
-import inmanta
 import inmanta.deploy.state
 import requests
 import toml
@@ -131,11 +130,11 @@ from typing import Any, Callable, Dict, Generic, Optional, Union
 import asyncpg
 import psutil
 import py
-import pyformance
+from inmanta.vendor import pyformance
 import pytest
 from asyncpg.exceptions import DuplicateDatabaseError
 from click import testing
-from pyformance.registry import MetricsRegistry
+from inmanta.vendor.pyformance import MetricsRegistry
 from tornado import netutil
 
 import inmanta

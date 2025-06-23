@@ -22,7 +22,7 @@ This code was originally developed by Omer Gertel, as a python port of the core 
 It was vendored into the inmanta source tree as the original was no longer maintained.
 """
 
-from pyformance.stats.moving_average import ExpWeightedMovingAvg
+from inmanta.vendor.pyformance.stats.moving_average import ExpWeightedMovingAvg
 from pytest import approx
 
 

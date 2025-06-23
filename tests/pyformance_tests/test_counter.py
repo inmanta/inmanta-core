@@ -23,7 +23,7 @@ It was vendored into the inmanta source tree as the original was no longer maint
 """
 
 import pytest
-from pyformance.meters import Counter
+from inmanta.vendor.pyformance.meters.counter import Counter
 
 
 @pytest.fixture
