@@ -687,7 +687,6 @@ class ResourceScheduler(TaskManager):
                 await data.Resource.get_resources_since_version_raw(
                     self.environment,
                     since=self._state.version if self._state.version > 0 else None,
-                    projection=ResourceRecord.__required_keys__,
                     connection=con,
                 )
             )

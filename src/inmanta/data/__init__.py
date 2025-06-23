@@ -4986,7 +4986,6 @@ class Resource(BaseDocument):
         environment: uuid.UUID,
         *,
         since: Optional[int],
-        projection: Optional[Collection[typing.LiteralString]],
         connection: Optional[Connection] = None,
     ) -> list[tuple[int, list[dict[str, object]]]]:
         """
@@ -5005,12 +5004,11 @@ class Resource(BaseDocument):
                             """
         )
 
-        resource_columns: typing.LiteralString = ", ".join(f"r.{c}" for c in projection) if projection is not None else "r.*"
         query: typing.LiteralString = f"""
             WITH boundary AS (
                 {boundary_query}
             )
-            SELECT m.version, {resource_columns}
+            SELECT m.version, r.resource_id, r.attributes, r.attribute_hash, r.is_undefined
             FROM {ConfigurationModel.table_name()} as m
             LEFT JOIN {cls.table_name()} as r
                 ON m.environment=r.environment AND m.version=r.model
@@ -5025,11 +5023,6 @@ class Resource(BaseDocument):
             *query_values,
             connection=connection,
         )
-        query_latest_model = f"""
-                   SELECT max(version)
-                   FROM {ConfigurationModel.table_name()}
-                   WHERE environment=$1 AND released
-               """
         result: list[tuple[int, list[dict[str, object]]]] = []
         for version, raw_resources in itertools.groupby(resource_records, key=lambda r: r["version"]):
             parsed_resources: list[dict[str, object]] = []
@@ -5038,8 +5031,6 @@ class Resource(BaseDocument):
                     # left join produced no resources
                     continue
                 resource: dict[str, object] = dict(raw_resource)
-                if projection is not None:
-                    assert set(projection) <= resource.keys()
                 parsed_resources.append(resource)
             result.append((version, parsed_resources))
         return result
