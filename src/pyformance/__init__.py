@@ -17,8 +17,7 @@ limitations under the License.
 Contact: code@inmanta.com
 
 This code was originally developed by Omer Gertel, as a python port of the core portion of a
-[Java Metrics library by Coda Hale](http://metrics.dropwizard.io/), w
-ith inspiration by [YUNOMI - Y U NO MEASURE IT?](https://github.com/richzeng/yunomi)
+[Java Metrics library by Coda Hale](http://metrics.dropwizard.io/)
 
 It was vendored into the inmanta source tree as the original was no longer maintained.
 """
