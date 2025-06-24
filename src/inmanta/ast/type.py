@@ -66,7 +66,6 @@ class Type(Locatable):
         the Python domain.
         """
         # Special DSL values like references require an explicit annotation so we don't leak them where they aren't expected.
-        # TODO(after-first-review): link ticket to do the same for Unknown
         if isinstance(value, references.Reference):
             raise UnexpectedReference(
                 reference=value,
@@ -172,7 +171,6 @@ class Type(Locatable):
         """
         return False
 
-    # TODO(after-first-review): add `*, path: str`, for instantiating ProxyContext? First get review on ProxyContext
     def to_python(self, instance: object) -> "object":
         """
         Convert an instance of this type to its python form

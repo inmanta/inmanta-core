@@ -59,7 +59,6 @@ class DynamicUnwrapContext:
     type_resolver: TypeResolver
 
 
-# TODO: remember to check std module to ensure Jinja guards references. Add test!
 @dataclasses.dataclass(kw_only=True, frozen=True, slots=True)
 class ProxyContext:
     """
@@ -285,8 +284,6 @@ class DynamicProxy:
         value_context: ProxyContext = context.nested(relative_path=relative_path)
 
         if isinstance(value, references.Reference) and not context.should_allow_references():
-            # TODO: see if we can use traceback.extract_stack() here to add a location to any exceptions
-
             # Non-dataclass entities can not be explicit about reference support.
             # The Python domain is a black box. We don't want to transparently pass unexpected values in there.
             # => don't allow references in attributes. Can be explicitly allowed via allow_reference_attributes() wrapper
@@ -395,7 +392,6 @@ class DictProxy(DynamicProxy, Mapping, JSONSerializable):
         return {k: v for k, v in self.items()}
 
 
-# TODO: reintroduce this for Jinja
 class IteratorProxy(DynamicProxy, Iterator):
     """
     Proxy an iterator call.

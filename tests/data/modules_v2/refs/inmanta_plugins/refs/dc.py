@@ -53,7 +53,6 @@ class AllRefsDataclassReferenceABC[D: AllRefsDataclass](Reference[D]):
 
 
 @reference("refs::dc::AllRefsDataclassReference")
-# TODO: fix bug that requires direct Reference inheritance due to __orig_bases__ check
 class AllRefsDataclassReference(AllRefsDataclassReferenceABC[AllRefsDataclass], Reference[AllRefsDataclass]):
     def __init__(self, maybe_ref_value: str | Reference[str]) -> None:
         super().__init__(maybe_ref_value, dc_type=AllRefsDataclass)
