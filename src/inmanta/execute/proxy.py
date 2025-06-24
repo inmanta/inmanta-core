@@ -223,7 +223,7 @@ class DynamicProxy:
         value: object,
         *,
         context: Optional[ProxyContext] = None,  # optional for backwards compatibility
-    ) -> Union[None, str, tuple[object, ...], int, float, bool, "DynamicProxy", references.Reference]:
+    ) -> Union[None, str, tuple[object, ...], int, float, bool, "DynamicProxy", "references.Reference"]:
         """
         Converts a value from the internal domain to the plugin domain.
 
