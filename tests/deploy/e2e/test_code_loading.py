@@ -443,7 +443,7 @@ async def test_logging_on_code_loading_failure_missing_code(server, client, envi
     result = await client.get_resource_actions(tid=environment, resource_type="test::Test", agent="agent", log_severity="ERROR")
     assert result.code == 200
     assert any(
-        "All resources of type `test::Test` failed to load handler code or install handler code dependencies" in log_line["msg"]
+        "All resources of type `test::Test` failed to install handler code dependencies" in log_line["msg"]
         for resource_action in result.result["data"]
         for log_line in resource_action["messages"]
     )
@@ -515,12 +515,7 @@ async def test_logging_on_code_loading_error(server, client, environment, client
 
     await wait_until_deployment_finishes(client, environment, version=version, timeout=10)
 
-    resourceAAA_failure_message = (
-        "All resources of type `test::ResourceAAA` failed to load handler code or install handler code dependencies: "
-    )
-    resourceBBB_failure_message = (
-        "All resources of type `test::ResourceBBB` failed to load handler code or install handler code dependencies: "
-    )
+    expected_error_message = "Agent agent1 failed to load the following modules: test."
 
     def check_for_message(data, must_be_present: str) -> None:
         """
@@ -540,13 +535,13 @@ async def test_logging_on_code_loading_error(server, client, environment, client
         tid=environment, resource_type="test::ResourceAAA", agent="agent1", log_severity="ERROR"
     )
     assert result.code == 200
-    check_for_message(data=result.result["data"], must_be_present=resourceAAA_failure_message)
+    check_for_message(data=result.result["data"], must_be_present=expected_error_message)
 
     result = await client.get_resource_actions(
         tid=environment, resource_type="test::ResourceBBB", agent="agent1", log_severity="ERROR"
     )
     assert result.code == 200
-    check_for_message(data=result.result["data"], must_be_present=resourceBBB_failure_message)
+    check_for_message(data=result.result["data"], must_be_present=expected_error_message)
 
 
 @pytest.mark.parametrize("auto_start_agent", [True])
