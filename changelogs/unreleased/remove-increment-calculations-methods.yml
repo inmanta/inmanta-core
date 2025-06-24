@@ -1,0 +1,3 @@
+description: Remove methods that calculate the increment
+change-type: patch
+destination-branches: [master]
