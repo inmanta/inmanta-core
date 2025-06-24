@@ -72,14 +72,6 @@ def iterates_obj_list(l: Sequence[object]) -> None:
 
 
 @plugin
-def iterates_obj_list(l: Sequence[object]) -> None:
-    for x in l:
-        ...
-    for i in range(len(l)):
-        l[i]
-
-
-@plugin
 def iterates_str_list(l: Sequence[str]) -> None:
     for x in l:
         assert isinstance(x, str), type(x)
