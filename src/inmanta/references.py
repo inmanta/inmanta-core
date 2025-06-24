@@ -539,6 +539,9 @@ class ReplaceValue(Mutator):
 class MaybeReference(typing.Protocol):
     """
     DSL value that may represent a reference in the Python domain, while having a different value in the DSL domain.
+
+    This includes DSL dataclass instances with reference attributes, if they were initially constructed in the Python
+    domain as a reference to a dataclass instance (and converted on the boundary).
     """
 
     __slots__ = ()

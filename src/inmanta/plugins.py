@@ -45,7 +45,7 @@ from inmanta.ast import (
     RuntimeException,
     TypeNotFoundException,
     TypingException,
-    UndeclaredReference,
+    UnexpectedReference,
     UnsetException,
     WithComment,
 )
@@ -1005,7 +1005,6 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
 
         def reference_exception_msg(value: object, arg: PluginArgument) -> PluginTypeException:
             contains: str = "is" if isinstance(value, Reference) else "contains"
-            # TODO: "contains an undeclared reference"?
             return (
                 f"Value {value!r} for argument {arg.arg_name} of plugin {self.get_full_name()} {contains} a reference."
                 " To allow references, use `| Reference[...]` in your type annotation."
@@ -1029,7 +1028,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                     )
                 except (UnsetException, MultiUnsetException):
                     raise
-                except UndeclaredReference as e:
+                except UnexpectedReference as e:
                     raise PluginTypeException(
                         stmt=None,
                         msg=reference_exception_msg(value, arg),

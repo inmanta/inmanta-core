@@ -37,7 +37,7 @@ from inmanta.ast import (
     RuntimeException,
     TypeAnchor,
     TypingException,
-    UndeclaredReference,
+    UnexpectedReference,
     type,
 )
 from inmanta.ast.attribute import RelationAttribute
@@ -587,7 +587,7 @@ class FormattedString(ReferenceStatement):
             return Unknown(self)
         reference: Optional[references.Reference] = references.is_reference(value)
         if reference is not None:
-            raise UndeclaredReference(
+            raise UnexpectedReference(
                 stmt=self,
                 reference=reference,
                 message=(

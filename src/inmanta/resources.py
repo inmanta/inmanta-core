@@ -385,7 +385,7 @@ class Resource(metaclass=ResourceMeta):
                 raise e
             except inmanta.ast.UnknownException as e:
                 raise e
-            except inmanta.ast.UndeclaredReference as e:
+            except inmanta.ast.UnexpectedReference as e:
                 current_path: str = ".".join(path_elements[:i+1])
                 raise ResourceException(
                     "Encountered reference in resource's agent attribute. Agent attribute values can not be references."

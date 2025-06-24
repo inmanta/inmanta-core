@@ -38,7 +38,7 @@ from inmanta.ast import (
     NotFoundException,
     RuntimeException,
     TypingException,
-    UndeclaredReference,
+    UnexpectedReference,
     UnsetException,
 )
 from inmanta.execute.proxy import DynamicProxy
@@ -68,7 +68,7 @@ class Type(Locatable):
         # Special DSL values like references require an explicit annotation so we don't leak them where they aren't expected.
         # TODO(after-first-review): link ticket to do the same for Unknown
         if isinstance(value, references.Reference):
-            raise UndeclaredReference(
+            raise UnexpectedReference(
                 reference=value,
                 # keep message generic, since this method is used for many types' super() call.
                 message=(
@@ -518,8 +518,8 @@ class Any(Type):
     def validate(self, value: Optional[object]) -> bool:
         try:
             return super().validate(value)
-        except UndeclaredReference as e:
-            raise UndeclaredReference(
+        except UnexpectedReference as e:
+            raise UnexpectedReference(
                 reference=e.reference,
                 # custom error message for the "object" / "any" type
                 message=(

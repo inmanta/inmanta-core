@@ -36,7 +36,7 @@ from inmanta.ast import (
     PluginTypeException,
     RuntimeException,
     TypingException,
-    UndeclaredReference,
+    UnexpectedReference,
     WrappingRuntimeException,
 )
 from inmanta.data.model import ReleasedResourceDetails, ReleasedResourceState
@@ -164,7 +164,7 @@ def test_undeclared_reference_in_map(
         """,
         install_v2_modules=[env.LocalPackagePath(path=refs_module)],
     )
-    with pytest.raises(UndeclaredReference):
+    with pytest.raises(UnexpectedReference):
         snippetcompiler.do_export()
 
 
@@ -367,16 +367,16 @@ def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", module
     )
     ## reference
     ### in attribute
-    with raises_wrapped(UndeclaredReference, match="Encountered undeclared reference .* Encountered at instance.maybe_ref_value"):
+    with raises_wrapped(UnexpectedReference, match="Encountered unexpected reference .* Encountered at instance.maybe_ref_value"):
         run_snippet("refs::plugins::read_entity_value(refs::dc::AllRefsDataclass(maybe_ref_value=refs::create_string_reference('hello')))")
     ### inside list attribute
-    with raises_wrapped(UndeclaredReference, match="Encountered undeclared reference .* Encountered at instance\.value\[1\]"):
+    with raises_wrapped(UnexpectedReference, match="Encountered unexpected reference .* Encountered at instance\.value\[1\]"):
         run_snippet(
             """\
             refs::plugins::read_entity_list_value(refs::ListContainer(value=['Hello', refs::create_string_reference('hello')]))
             """
         )
-    with raises_wrapped(UndeclaredReference, match="Encountered undeclared reference .* Encountered at instance\.value\[0\]"):
+    with raises_wrapped(UnexpectedReference, match="Encountered unexpected reference .* Encountered at instance\.value\[0\]"):
         run_snippet(
             "refs::plugins::read_entity_list_head(refs::ListContainer(value=[refs::create_string_reference('hello'), 'Hello']))"
         )
@@ -389,7 +389,7 @@ def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", module
         """
     )
     ## inside list attribute: allowed on instance level but not on nested list level
-    with raises_wrapped(UndeclaredReference, match="Encountered undeclared reference .* Encountered at instance\.value\[1\]"):
+    with raises_wrapped(UnexpectedReference, match="Encountered unexpected reference .* Encountered at instance\.value\[1\]"):
         run_snippet(
             """\
             refs::plugins::read_entity_list_value_allow_references_single_level(
@@ -399,7 +399,7 @@ def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", module
         )
     ### inside dict attribute
     with raises_wrapped(
-        UndeclaredReference, match="Encountered undeclared reference .* Encountered at instance\.value\['mykey'\]"
+        UnexpectedReference, match="Encountered unexpected reference .* Encountered at instance\.value\['mykey'\]"
     ):
         run_snippet(
             """\
@@ -409,7 +409,7 @@ def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", module
             """
         )
     with raises_wrapped(
-        UndeclaredReference, match="Encountered undeclared reference .* Encountered at instance\.value\['mykey'\]"
+        UnexpectedReference, match="Encountered unexpected reference .* Encountered at instance\.value\['mykey'\]"
     ):
         run_snippet(
             """\
@@ -441,7 +441,7 @@ def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", module
         """
     )
     ### reference
-    with raises_wrapped(UndeclaredReference, match="Encountered undeclared reference .* Encountered at instances\[1\]\.maybe_ref_value"):
+    with raises_wrapped(UnexpectedReference, match="Encountered unexpected reference .* Encountered at instances\[1\]\.maybe_ref_value"):
         run_snippet(
             """\
             refs::plugins::read_list_entity_value(
@@ -779,8 +779,8 @@ def test_references_string_format(snippetcompiler: "SnippetCompilationTest", mod
         snippetcompiler.do_export()
 
     # f-string format
-    with pytest.raises(UndeclaredReference, match="Encountered reference in string format for variable `ref`"):
+    with pytest.raises(UnexpectedReference, match="Encountered reference in string format for variable `ref`"):
         run_snippet("ref = refs::create_string_reference('Hello') f'Hello {ref}'")
     # old-style string format
-    with pytest.raises(UndeclaredReference, match="Encountered reference in string format for variable `{{ref}}`"):
+    with pytest.raises(UnexpectedReference, match="Encountered reference in string format for variable `{{ref}}`"):
         run_snippet("ref = refs::create_string_reference('Hello') 'Hello {{ref}}'")

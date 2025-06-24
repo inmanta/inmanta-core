@@ -1095,9 +1095,9 @@ class AttributeNotFound(NotFoundException, AttributeError):
 
 
 # custom class to enable clean wrapping on the plugin boundary
-class UndeclaredReference(RuntimeException):
+class UnexpectedReference(RuntimeException):
     """
-    Undeclared reference encountered during plugin execution.
+    Unexpected (undeclared) reference encountered during compiler or plugin execution.
     """
 
     def __init__(

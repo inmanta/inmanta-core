@@ -29,7 +29,7 @@ from inmanta.ast import (
     Location,
     NotFoundException,
     RuntimeException,
-    UndeclaredReference,
+    UnexpectedReference,
     UnknownException,
 )
 from inmanta.ast import UnsetException  # noqa F401
@@ -290,10 +290,10 @@ class DynamicProxy:
             # Non-dataclass entities can not be explicit about reference support.
             # The Python domain is a black box. We don't want to transparently pass unexpected values in there.
             # => don't allow references in attributes. Can be explicitly allowed via allow_reference_attributes() wrapper
-            raise UndeclaredReference(
+            raise UnexpectedReference(
                 reference=value,
                 message=(
-                    "Encountered undeclared reference value during plugin execution. Plugins are only allowed to access"
+                    "Encountered unexpected reference value during plugin execution. Plugins are only allowed to access"
                     " reference values when declared explicitly. Either use a dataclass entity that supports references (e.g."
                     " `int | Reference[int]` attribute annotation), or explicitly allow references on attribute access with the"
                     " `inmanta.plugins.allow_reference_values()` wrapper."

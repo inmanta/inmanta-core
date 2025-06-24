@@ -39,7 +39,7 @@ from inmanta.ast import (
     NotFoundException,
     RuntimeException,
     TypingException,
-    UndeclaredReference,
+    UnexpectedReference,
     WithComment,
 )
 from inmanta.ast.statements.generator import SubConstructor
