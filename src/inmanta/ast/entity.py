@@ -39,7 +39,6 @@ from inmanta.ast import (
     NotFoundException,
     RuntimeException,
     TypingException,
-    UnexpectedReference,
     WithComment,
 )
 from inmanta.ast.statements.generator import SubConstructor
@@ -47,13 +46,13 @@ from inmanta.ast.type import Any as inm_Any
 from inmanta.ast.type import Float, NamedType, NullableType, Type
 from inmanta.execute.runtime import Instance, QueueScheduler, Resolver, ResultVariable, dataflow
 from inmanta.execute.util import AnyType, NoneValue
-from inmanta.references import AttributeReference, PrimitiveTypes, Reference, RefValue
+from inmanta.references import AttributeReference, PrimitiveTypes, Reference
 from inmanta.types import DataclassProtocol
 
 if TYPE_CHECKING:
-    from inmanta.ast.blocks import BasicBlock
     from inmanta.ast import Namespaced
     from inmanta.ast.attribute import Attribute, RelationAttribute  # noqa: F401
+    from inmanta.ast.blocks import BasicBlock
     from inmanta.ast.statements import ExpressionStatement, Statement  # noqa: F401
     from inmanta.ast.statements.define import DefineAttribute, DefineImport, DefineIndex  # noqa: F401
     from inmanta.execute.runtime import ExecutionContext  # noqa: F401

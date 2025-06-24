@@ -17,22 +17,15 @@ Contact: code@inmanta.com
 """
 
 import dataclasses
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from copy import copy
 from dataclasses import is_dataclass
 from typing import TYPE_CHECKING, Callable, Optional, Self, Union
 
 # Keep UnsetException, UnknownException and AttributeNotFound in place for backward compat with <iso8
 from inmanta import references
-from inmanta.ast import (
-    AttributeNotFound,
-    Location,
-    NotFoundException,
-    RuntimeException,
-    UnexpectedReference,
-    UnknownException,
-)
 from inmanta.ast import UnsetException  # noqa F401
+from inmanta.ast import AttributeNotFound, Location, NotFoundException, RuntimeException, UnexpectedReference, UnknownException
 from inmanta.execute.util import NoneValue, Unknown
 from inmanta.stable_api import stable_api
 from inmanta.types import PrimitiveTypes
@@ -78,6 +71,7 @@ class ProxyContext:
     :param path: The path, within the plugin's argument namespace, where this object lives. Should be compatible with
         composition at the tail, e.g. `list_arg[0].attr`.
     """
+
     path: str
     validated: bool = True
     allow_reference_values: Optional[bool] = None
@@ -91,7 +85,8 @@ class ProxyContext:
         return dataclasses.replace(
             self,
             path=self.path + relative_path,
-            # we're proxying elements one level deeper than the current context => reset allow_reference_values to default behavior
+            # we're proxying elements one level deeper than the current context
+            # => reset allow_reference_values to default behavior
             allow_reference_values=None,
         )
 
@@ -419,7 +414,7 @@ class IteratorProxy(DynamicProxy, Iterator):
         return self._return_value(
             v,
             # if it's not a sequence, pointing to the object itself is the best we can do
-            relative_path=f"[{i}]" if self._is_sequence() else ""
+            relative_path=f"[{i}]" if self._is_sequence() else "",
         )
 
 

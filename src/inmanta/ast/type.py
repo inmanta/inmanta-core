@@ -21,7 +21,6 @@ import copy
 import dataclasses
 import functools
 import numbers
-import typing
 from collections import defaultdict, deque
 from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Optional
@@ -308,7 +307,6 @@ class OrReferenceType(Type):
 
     def validate(self, value: Optional[object]) -> bool:
         # We validate that the value is either a reference of the base type or the base type
-        reference_type_exception: RuntimeException
         if references.is_reference(value):
             # Validate that we are the reference
             return self.reference_type.validate(value)
@@ -1345,7 +1343,9 @@ class Literal(Union):
     """
 
     def __init__(self) -> None:
-        Union.__init__(self, [NullableType(Float()), Number(), Bool(), String(), TypedList(self), TypedDict(self), ReferenceType(self)])
+        Union.__init__(
+            self, [NullableType(Float()), Number(), Bool(), String(), TypedList(self), TypedDict(self), ReferenceType(self)]
+        )
 
     def type_string_internal(self) -> str:
         return "Literal"

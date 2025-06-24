@@ -21,7 +21,7 @@ import re
 import typing
 import uuid
 from collections.abc import Iterable, Iterator, Sequence
-from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar, Union, cast
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union, cast
 
 import inmanta.ast
 import inmanta.util
@@ -236,7 +236,8 @@ class ReferenceCollector:
         )
 
     def collect_references(self, value: object, path: str) -> object:
-        """Collect value references. This method also ensures that there are no values in the resources that are not serializable.
+        """
+        Collect value references. This method also ensures that there are no values in the resources that are not serializable.
         This includes:
             - Unknowns
             - DynamicProxy
@@ -245,6 +246,7 @@ class ReferenceCollector:
         :param value: The value to recursively find value references on
         :param path: The current path we are working on in the tree
         """
+
         def allow_references[T](v: T) -> T:
             if isinstance(v, proxy.DynamicProxy):
                 # fails on stable mypy, but runs fine on master
@@ -254,8 +256,7 @@ class ReferenceCollector:
         match value:
             case list() | proxy.SequenceProxy():
                 return [
-                    self.collect_references(value, f"{path}[{index}]")
-                    for index, value in enumerate(allow_references(value))
+                    self.collect_references(value, f"{path}[{index}]") for index, value in enumerate(allow_references(value))
                 ]
 
             case dict() | proxy.DictProxy():
@@ -383,8 +384,8 @@ class Resource(metaclass=ResourceMeta):
                 raise e
             except inmanta.ast.UnknownException as e:
                 raise e
-            except inmanta.ast.UnexpectedReference as e:
-                current_path: str = ".".join(path_elements[:i+1])
+            except inmanta.ast.UnexpectedReference:
+                current_path: str = ".".join(path_elements[: i + 1])
                 raise ResourceException(
                     "Encountered reference in resource's agent attribute. Agent attribute values can not be references."
                     f" Encountered at attribute {current_path!r} of resource instance {model_object}"

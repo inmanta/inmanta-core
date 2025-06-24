@@ -23,7 +23,7 @@ import os
 import re
 import typing
 from logging import DEBUG
-from typing import Optional, Iterator
+from typing import Iterator, Optional
 from uuid import UUID
 
 import pytest
@@ -32,7 +32,6 @@ from inmanta import env, references, resources, util
 from inmanta.agent.handler import PythonLogger
 from inmanta.ast import (
     ExternalException,
-    PluginException,
     PluginTypeException,
     RuntimeException,
     TypingException,
@@ -272,7 +271,9 @@ def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", module
         Wrapper around snippetcompiler.setup_for_snippet + runs compile and export.
         Passes appropriate options and prepends snippet with refs import.
         """
-        snippetcompiler.setup_for_snippet(f"import refs import refs::dc import refs::plugins\n{snippet}", install_project=False, autostd=True)
+        snippetcompiler.setup_for_snippet(
+            f"import refs import refs::dc import refs::plugins\n{snippet}", install_project=False, autostd=True
+        )
         snippetcompiler.do_export()
 
     # Primitives
@@ -350,7 +351,9 @@ def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", module
     # Scenario: plugin annotated as `Entity`
     ## Entity annotation
     ### dataclasses allowed
-    run_snippet("refs::plugins::takes_entity(refs::dc::AllRefsDataclass(maybe_ref_value=refs::create_string_reference('hello')))")
+    run_snippet(
+        "refs::plugins::takes_entity(refs::dc::AllRefsDataclass(maybe_ref_value=refs::create_string_reference('hello')))"
+    )
     run_snippet("refs::plugins::takes_entity(refs::dc::NoRefsDataclass())")
     ### references allowed, as long as no reference attribute is accessed
     run_snippet("refs::plugins::takes_entity(refs::dc::create_all_refs_dataclass_reference('hello'))")
@@ -360,15 +363,21 @@ def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", module
     ## no reference
     run_snippet("refs::plugins::read_entity_value(refs::dc::AllRefsDataclass(maybe_ref_value='Hello World!'))")
     run_snippet("refs::plugins::read_entity_list_value(refs::ListContainer(value=['Hello', 'World!']))")
-    run_snippet("refs::plugins::read_entity_list_head(refs::ListContainer(value=['Hello', refs::create_string_reference('hello')]))")
+    run_snippet(
+        "refs::plugins::read_entity_list_head(refs::ListContainer(value=['Hello', refs::create_string_reference('hello')]))"
+    )
     run_snippet("refs::plugins::read_entity_dict_value(refs::DictContainer(value={'Hello': 'World!', 'mykey': '42'}))")
     run_snippet(
         "refs::plugins::read_entity_dict_mykey(refs::DictContainer(value={'Hello': refs::create_string_reference('hello'), 'mykey': '42'}))"
     )
     ## reference
     ### in attribute
-    with raises_wrapped(UnexpectedReference, match="Encountered unexpected reference .* Encountered at instance.maybe_ref_value"):
-        run_snippet("refs::plugins::read_entity_value(refs::dc::AllRefsDataclass(maybe_ref_value=refs::create_string_reference('hello')))")
+    with raises_wrapped(
+        UnexpectedReference, match="Encountered unexpected reference .* Encountered at instance.maybe_ref_value"
+    ):
+        run_snippet(
+            "refs::plugins::read_entity_value(refs::dc::AllRefsDataclass(maybe_ref_value=refs::create_string_reference('hello')))"
+        )
     ### inside list attribute
     with raises_wrapped(UnexpectedReference, match="Encountered unexpected reference .* Encountered at instance\.value\[1\]"):
         run_snippet(
@@ -427,7 +436,9 @@ def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", module
         """
     )
     ## reference, plugin explicitly allows it
-    run_snippet("refs::plugins::read_entity_ref_value(refs::dc::AllRefsDataclass(maybe_ref_value=refs::create_string_reference('hello')))")
+    run_snippet(
+        "refs::plugins::read_entity_ref_value(refs::dc::AllRefsDataclass(maybe_ref_value=refs::create_string_reference('hello')))"
+    )
     ## reference access for list of entities
     ### no reference
     run_snippet(
@@ -441,7 +452,9 @@ def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", module
         """
     )
     ### reference
-    with raises_wrapped(UnexpectedReference, match="Encountered unexpected reference .* Encountered at instances\[1\]\.maybe_ref_value"):
+    with raises_wrapped(
+        UnexpectedReference, match="Encountered unexpected reference .* Encountered at instances\[1\]\.maybe_ref_value"
+    ):
         run_snippet(
             """\
             refs::plugins::read_list_entity_value(
@@ -468,9 +481,13 @@ def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", module
     ## dataclass type that does not support reference attrs
     ### plain dataclass
     run_snippet("refs::plugins::takes_no_refs_dataclass(refs::dc::NoRefsDataclass())")
-    run_snippet("refs::plugins::takes_mixed_refs_dataclass(refs::dc::MixedRefsDataclass(maybe_ref_value=refs::create_string_reference('hello')))")
+    run_snippet(
+        "refs::plugins::takes_mixed_refs_dataclass(refs::dc::MixedRefsDataclass(maybe_ref_value=refs::create_string_reference('hello')))"
+    )
     ### basic inheritance
-    run_snippet("refs::plugins::takes_no_refs_dataclass(refs::dc::MixedRefsDataclass(maybe_ref_value=refs::create_string_reference('hello')))")
+    run_snippet(
+        "refs::plugins::takes_no_refs_dataclass(refs::dc::MixedRefsDataclass(maybe_ref_value=refs::create_string_reference('hello')))"
+    )
     ### basic inheritance the wrong direction
     with pytest.raises(PluginTypeException, match=re.escape("Expected type: refs::dc::MixedRefsDataclass")):
         run_snippet("refs::plugins::takes_mixed_refs_dataclass(refs::dc::NoRefsDataclass())")
@@ -482,7 +499,9 @@ def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", module
         run_snippet("refs::plugins::takes_mixed_refs_dataclass(refs::dc::create_mixed_refs_dataclass_reference('hello'))")
     #### dataclass containing undeclared reference
     with pytest.raises(PluginTypeException, match="contains a reference"):
-        run_snippet("refs::plugins::takes_no_refs_dataclass(refs::dc::NoRefsDataclass(non_ref_value=refs::create_string_reference('hello')))")
+        run_snippet(
+            "refs::plugins::takes_no_refs_dataclass(refs::dc::NoRefsDataclass(non_ref_value=refs::create_string_reference('hello')))"
+        )
     ## dataclass type that supports reference attrs -> references are coerced
     ### references are coerced to dataclass of references
     run_snippet("refs::plugins::takes_all_refs_dataclass(refs::dc::create_all_refs_dataclass_reference('hello'))")
@@ -510,11 +529,13 @@ def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", module
     run_snippet("refs::plugins::takes_no_refs_dataclass_or_ref(refs::dc::create_mixed_refs_dataclass_reference('hello'))")
     ### not allowed because AllRefsDataclass is no child of NoRefsDataclass
     with pytest.raises(
-        PluginTypeException, match=re.escape("Expected type: Reference[refs::dc::MixedRefsDataclass] | refs::dc::MixedRefsDataclass")
+        PluginTypeException,
+        match=re.escape("Expected type: Reference[refs::dc::MixedRefsDataclass] | refs::dc::MixedRefsDataclass"),
     ):
         run_snippet("refs::plugins::takes_mixed_refs_dataclass_or_ref(refs::dc::AllRefsDataclass(maybe_ref_value='hello'))")
     with pytest.raises(
-        PluginTypeException, match=re.escape("Expected type: Reference[refs::dc::MixedRefsDataclass] | refs::dc::MixedRefsDataclass")
+        PluginTypeException,
+        match=re.escape("Expected type: Reference[refs::dc::MixedRefsDataclass] | refs::dc::MixedRefsDataclass"),
     ):
         run_snippet("refs::plugins::takes_mixed_refs_dataclass_or_ref(refs::dc::create_all_refs_dataclass_reference('hello'))")
 
@@ -531,7 +552,9 @@ def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", module
     run_snippet("refs::plugins::returns_entity_list(refs::ListContainer(value=['Hello', 'World!']))")
     ## error on return validation if attribute has references
     with pytest.raises(PluginTypeException, match="Return value .* has incompatible type\..*Expected type: string\[\]"):
-        run_snippet("refs::plugins::returns_entity_list(refs::ListContainer(value=['Hello', refs::create_string_reference('hello')]))")
+        run_snippet(
+            "refs::plugins::returns_entity_list(refs::ListContainer(value=['Hello', refs::create_string_reference('hello')]))"
+        )
     ## allowed if plugin annotates reference in return type
     run_snippet(
         "refs::plugins::returns_entity_ref_list(refs::ListContainer(value=['Hello', refs::create_string_reference('hello')]))"
@@ -599,11 +622,7 @@ def test_references_in_resource_id(snippetcompiler: "SnippetCompilationTest", mo
     """Test that references are rejected in the resource id value"""
     refs_module = os.path.join(modules_v2_dir, "refs")
 
-    attr_assignments: str = (
-        "name='res1', agentname=ref"
-        if agent
-        else "name=ref, agentname='agent1'"
-    )
+    attr_assignments: str = "name='res1', agentname=ref" if agent else "name=ref, agentname='agent1'"
     snippetcompiler.setup_for_snippet(
         snippet=f"""
         import refs

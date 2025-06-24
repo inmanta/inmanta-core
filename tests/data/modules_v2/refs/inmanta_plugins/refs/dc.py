@@ -5,8 +5,7 @@ from inmanta.references import reference, Reference
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
-class DataclassABC:
-    ...
+class DataclassABC: ...
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
@@ -20,8 +19,7 @@ class AllRefsDataclass(DataclassABC):
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
-class MixedRefsDataclass(AllRefsDataclass, NoRefsDataclass):
-    ...
+class MixedRefsDataclass(AllRefsDataclass, NoRefsDataclass): ...
 
 
 @reference("refs::dc::NoRefsDataclassReference")
@@ -68,9 +66,11 @@ class MixedRefsDataclassReference(AllRefsDataclassReferenceABC[MixedRefsDataclas
 def create_no_refs_dataclass_reference() -> NoRefsDataclassReference:
     return NoRefsDataclassReference()
 
+
 @plugin
 def create_all_refs_dataclass_reference(maybe_ref_value: str | Reference[str]) -> AllRefsDataclassReference:
     return AllRefsDataclassReference(maybe_ref_value)
+
 
 @plugin
 def create_mixed_refs_dataclass_reference(maybe_ref_value: str | Reference[str]) -> MixedRefsDataclassReference:

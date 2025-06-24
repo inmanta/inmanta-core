@@ -16,7 +16,6 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import inmanta.resources
 import abc
 import builtins
 import collections
@@ -25,14 +24,14 @@ import hashlib
 import json
 import typing
 import uuid
-from typing import Literal, Tuple
+from typing import Literal, Optional, Tuple
 
 import pydantic
 import typing_inspect
 from pydantic import ValidationError
-from typing import Optional
 
 import inmanta
+import inmanta.resources
 from inmanta import util
 from inmanta.types import ResourceIdStr, StrictJson
 from inmanta.util import dict_path
@@ -561,13 +560,7 @@ def is_reference(value: object) -> Optional[Reference]:
     This includes DSL dataclass instances with reference attributes, if they were initially constructed in the Python
     domain as a reference to a dataclass instance (and converted on the boundary).
     """
-    return (
-        value
-        if isinstance(value, Reference)
-        else value.is_reference()
-        if isinstance(value, MaybeReference)
-        else None
-    )
+    return value if isinstance(value, Reference) else value.is_reference() if isinstance(value, MaybeReference) else None
 
 
 def is_reference_of(instance: typing.Optional[object], type_class: type[object]) -> bool:

@@ -20,8 +20,7 @@ type DictContainer = Annotated[Container[Mapping[str, object]], ModelType["refs:
 
 
 @plugin
-def takes_obj(v: object) -> None:
-    ...
+def takes_obj(v: object) -> None: ...
 
 
 @plugin
@@ -31,8 +30,7 @@ def iterates_obj(v: object) -> None:
 
 
 @plugin
-def takes_obj_ref(v: object | Reference[object]) -> None:
-    ...
+def takes_obj_ref(v: object | Reference[object]) -> None: ...
 
 
 @plugin
@@ -41,13 +39,11 @@ def takes_obj_ref_only(v: Reference[object]) -> None:
 
 
 @plugin
-def takes_str(v: str) -> None:
-    ...
+def takes_str(v: str) -> None: ...
 
 
 @plugin
-def takes_str_ref(v: str | Reference[str]) -> None:
-    ...
+def takes_str_ref(v: str | Reference[str]) -> None: ...
 
 
 @plugin
@@ -59,8 +55,7 @@ def takes_complex_union_or_ref(v: int | str | None | Reference[str | None]) -> N
 
 
 @plugin
-def takes_union_of_refs(v: Reference[bool] | Reference[str]) -> None:
-    ...
+def takes_union_of_refs(v: Reference[bool] | Reference[str]) -> None: ...
 
 
 @plugin
@@ -93,6 +88,7 @@ def iterates_object_dict(l: Mapping[str, object]) -> None:
         ...
     for k in l.keys():
         l[k]
+
 
 @plugin
 def iterates_object_ref_dict(l: Mapping[str, object | Reference[object]]) -> None:

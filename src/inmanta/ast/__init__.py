@@ -1085,7 +1085,6 @@ class UnknownException(Exception):
         self.unknown = unknown
 
 
-
 class AttributeNotFound(NotFoundException, AttributeError):
     """
     Exception used for backwards compatibility with try-except blocks around some_proxy.some_attr.
@@ -1104,7 +1103,7 @@ class UnexpectedReference(RuntimeException):
         self, *, stmt: Optional[Locatable] = None, reference: "references.Reference[references.RefValue]", message: str
     ) -> None:
         RuntimeException.__init__(self, stmt, message)
-        self.reference: references.Reference[RefValue] = reference
+        self.reference: references.Reference[references.RefValue] = reference
 
 
 @stable_api

@@ -25,7 +25,7 @@ from string import Formatter
 from typing import TYPE_CHECKING, Optional, TypeVar
 
 import inmanta.execute.dataflow as dataflow
-from inmanta import ast, references
+from inmanta import references
 from inmanta.ast import (
     AttributeException,
     DuplicateException,
@@ -38,7 +38,6 @@ from inmanta.ast import (
     TypeAnchor,
     TypingException,
     UnexpectedReference,
-    type,
 )
 from inmanta.ast.attribute import RelationAttribute
 from inmanta.ast.statements import (
@@ -590,9 +589,7 @@ class FormattedString(ReferenceStatement):
             raise UnexpectedReference(
                 stmt=self,
                 reference=reference,
-                message=(
-                    f"Encountered reference in string format for variable `{name}`. This is not supported."
-                )
+                message=(f"Encountered reference in string format for variable `{name}`. This is not supported."),
             )
         if isinstance(value, float) and (value - int(value)) == 0:
             return int(value)
