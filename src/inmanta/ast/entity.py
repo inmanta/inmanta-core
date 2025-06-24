@@ -21,7 +21,6 @@ import importlib
 import inspect
 import logging
 import typing
-from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple, Union  # noqa: F401
 
 import inmanta.ast.attribute
