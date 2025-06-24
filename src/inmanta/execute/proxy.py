@@ -120,8 +120,11 @@ class DynamicProxy:
         :param instance: The object to proxy.
         :param context: The context this object lives in.
         """
+        # str() is expensive. And also not helpful for e.g. dicts.
+        # => Fall back to object.__repr__ for externally created objects (internal calls should all pass a context)
+        context = context if context is not None else ProxyContext(path=object.__repr__(instance))
         object.__setattr__(self, "__instance", instance)
-        object.__setattr__(self, "__context", context if context is not None else ProxyContext(path=f"<{instance}>"))
+        object.__setattr__(self, "__context", context)
 
     def _get_instance(self) -> "Instance":
         return object.__getattribute__(self, "__instance")
@@ -233,7 +236,6 @@ class DynamicProxy:
         :param context: The context in which the given object lives. If None, assumes that the value has already passed
             validation. When None, the object's string representation, rather than its name is used for error reporting.
         """
-        context = context if context is not None else ProxyContext(path=f"<{value}>")
 
         if value is None:
             return None
@@ -254,6 +256,10 @@ class DynamicProxy:
         if isinstance(value, DynamicProxy):
             return value
 
+        # str() is expensive. And also not helpful for e.g. dicts.
+        # => Fall back to object.__repr__ for externally created objects (internal calls should all pass a context)
+        context = context if context is not None else ProxyContext(path=object.__repr__(value))
+
         if isinstance(value, dict):
             return DictProxy(value, context=context)
 
@@ -267,7 +273,7 @@ class DynamicProxy:
             value,
             # DSL instances are a black box as far as boundary validation is concerned
             # => from here on out, consider the object not validated
-            context=dataclasses.replace(context, validated=False)
+            context=dataclasses.replace(context, validated=False),
         )
 
     def _return_value(self, value, *, relative_path: str) -> object:

@@ -1125,6 +1125,8 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         The function call itself
 
         As a call, for backward compat. Used by the Jinja template proxy.
+
+        The arguments should already have been passed through `check_args()`
         """
         if self.deprecated:
             msg: str = f"Plugin '{self.get_full_name()}' is deprecated."
@@ -1141,6 +1143,8 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 # If false, DynamicProxy.return_value wil raise an exception
                 return arg
             else:
+                # call return_value again, just in case. No proxy context needed, because it should really
+                # have passed here already
                 return DynamicProxy.return_value(arg)
 
         new_args = [new_arg(arg) for arg in args]
