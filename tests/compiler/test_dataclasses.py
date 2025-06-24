@@ -110,7 +110,7 @@ else:
 end
 dataclasses::is_odd_string(hs.thestring)
 
-# a dataclass instance that is still wating for its values when the plugin is called
+# a dataclass instance that is still waiting for its values when the plugin is called
 lazy_vm = dataclasses::Virtualmachine()
 dataclasses::dc_union(lazy_vm)
 if true: if true:
