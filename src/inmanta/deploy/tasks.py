@@ -29,7 +29,7 @@ import pyformance
 
 from inmanta import data, resources
 from inmanta.agent import executor
-from inmanta.agent.executor import DeployReport, FailedInmantaModules
+from inmanta.agent.executor import DeployReport, FailedResources
 from inmanta.data.model import AttributeStateChange
 from inmanta.deploy import scheduler, state
 from inmanta.types import ResourceIdStr, ResourceType, ResourceVersionIdStr
@@ -361,7 +361,7 @@ class ModuleLoadingException(Exception):
     This exception is raised when some Inmanta modules couldn't be loaded on a given agent.
     """
 
-    def __init__(self, agent_name: str, failed_modules: FailedInmantaModules) -> None:
+    def __init__(self, agent_name: str, failed_modules: FailedResources) -> None:
         """
         :param agent_name: Name of the agent for which module loading was unsuccessful
         :param failed_modules: Data for all module loading errors as a nested map of
