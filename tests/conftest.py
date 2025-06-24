@@ -952,7 +952,7 @@ DISABLE_STATE_CHECK = False
 
 
 @pytest.fixture(scope="function")
-async def agent_factory(server, monkeypatch) -> AsyncIterator[Callable[[uuid.UUID], Awaitable[Agent]]]:
+async def agent_factory(server, client, monkeypatch) -> AsyncIterator[Callable[[uuid.UUID], Awaitable[Agent]]]:
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     agents: list[Agent] = []
 
@@ -997,6 +997,11 @@ async def agent_factory(server, monkeypatch) -> AsyncIterator[Callable[[uuid.UUI
     global DISABLE_STATE_CHECK
     try:
         if not DISABLE_STATE_CHECK:
+            # Set data.RESET_DEPLOY_PROGRESS_ON_START back to False in all of the environments of the created agents
+            # Because this teardown asserts that the state is correct on restart and this setting breaks that assertion
+            all_environments = {agent.environment for agent in agents}
+            for environment in all_environments:
+                await client.set_setting(environment, data.RESET_DEPLOY_PROGRESS_ON_START, False)
             for agent in agents:
                 await agent.stop_working()
                 the_state = copy.deepcopy(dict(agent.scheduler._state.resource_state))

@@ -4985,27 +4985,42 @@ class Resource(BaseDocument):
         cls,
         environment: uuid.UUID,
         *,
-        since: int,
-        projection: Optional[Collection[typing.LiteralString]],
+        since: Optional[int],
         connection: Optional[Connection] = None,
     ) -> list[tuple[int, list[dict[str, object]]]]:
         """
         Returns all released model versions with associated resources since (excluding) the given model version.
         Returns resources as raw dicts with the requested fields
+        :param since: The boundary version (excluding). If None, returns only the latest released version.
         """
-        resource_columns: typing.LiteralString = ", ".join(f"r.{c}" for c in projection) if projection is not None else "r.*"
+
+        boundary_query: typing.LiteralString = (
+            "SELECT $2::int AS version"
+            if since is not None
+            else f""" \
+                            SELECT MAX(version) AS version
+                            FROM {ConfigurationModel.table_name()}
+                            WHERE released=TRUE AND environment=$1
+                            """
+        )
+
         query: typing.LiteralString = f"""
-            SELECT m.version, {resource_columns}
+            WITH boundary AS (
+                {boundary_query}
+            )
+            SELECT m.version, r.resource_id, r.attributes, r.attribute_hash, r.is_undefined
             FROM {ConfigurationModel.table_name()} as m
             LEFT JOIN {cls.table_name()} as r
-                ON m.environment = r.environment AND m.version = r.model
-            WHERE m.environment = $1 AND m.version > $2 AND m.released=true
+                ON m.environment=r.environment AND m.version=r.model
+            WHERE m.environment=$1
+                AND m.version > (SELECT version FROM boundary) - 1
+                AND m.released is TRUE
             ORDER BY m.version ASC
         """
+        query_values = [cls._get_value(environment), since] if since is not None else [cls._get_value(environment)]
         resource_records = await cls._fetch_query(
             query,
-            cls._get_value(environment),
-            cls._get_value(since),
+            *query_values,
             connection=connection,
         )
         result: list[tuple[int, list[dict[str, object]]]] = []
@@ -5016,8 +5031,6 @@ class Resource(BaseDocument):
                     # left join produced no resources
                     continue
                 resource: dict[str, object] = dict(raw_resource)
-                if projection is not None:
-                    assert set(projection) <= resource.keys()
                 parsed_resources.append(resource)
             result.append((version, parsed_resources))
         return result
