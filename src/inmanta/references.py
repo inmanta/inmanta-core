@@ -545,15 +545,14 @@ class MaybeReference(typing.Protocol):
 
     __slots__ = ()
 
-    def is_reference(self) -> Optional[Reference[RefValue]]:
+    def unwrap_reference(self) -> Optional[Reference[RefValue]]:
         """
         If this DSL value represents a reference value, returns the associated reference object. Otherwise returns None.
         """
         ...
 
 
-# TODO: rename as suggested in review
-def is_reference(value: object) -> Optional[Reference[RefValue]]:
+def unwrap_reference(value: object) -> Optional[Reference[RefValue]]:
     """
     Iff the given value is a reference or a DSL value that represents a reference, returns the associated reference.
     Otherwise returns None.
@@ -561,7 +560,7 @@ def is_reference(value: object) -> Optional[Reference[RefValue]]:
     This includes DSL dataclass instances with reference attributes, if they were initially constructed in the Python
     domain as a reference to a dataclass instance (and converted on the boundary).
     """
-    return value if isinstance(value, Reference) else value.is_reference() if isinstance(value, MaybeReference) else None
+    return value if isinstance(value, Reference) else value.unwrap_reference() if isinstance(value, MaybeReference) else None
 
 
 def is_reference_of(instance: typing.Optional[object], type_class: type[object]) -> bool:

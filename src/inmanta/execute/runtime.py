@@ -1276,7 +1276,7 @@ class Instance(ExecutionContext, references.MaybeReference):
     def get_type(self) -> "Entity":
         return self.type
 
-    def is_reference(self) -> Optional[references.Reference[references.RefValue]]:
+    def unwrap_reference(self) -> Optional[references.Reference[references.RefValue]]:
         return (
             self.dataclass_self
             if self.dataclass_self is not None and isinstance(self.dataclass_self, references.Reference)

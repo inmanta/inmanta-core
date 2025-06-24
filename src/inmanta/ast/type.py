@@ -240,7 +240,7 @@ class ReferenceType(Type):
             self.is_dataclass = True
 
     def validate(self, value: Optional[object]) -> bool:
-        ref: Optional[references.Reference[references.RefValue]] = references.is_reference(value)
+        ref: Optional[references.Reference[references.RefValue]] = references.unwrap_reference(value)
         if ref is not None:
             assert ref._model_type is not None
             if ref._model_type.issubtype(self.element_type):
@@ -252,7 +252,7 @@ class ReferenceType(Type):
         return self.is_dataclass
 
     def to_python(self, instance: object) -> object:
-        result: Optional[references.Reference[references.RefValue]] = references.is_reference(instance)
+        result: Optional[references.Reference[references.RefValue]] = references.unwrap_reference(instance)
         # wouldn't have passed validate otherwise
         assert result is not None
         return result
@@ -307,7 +307,7 @@ class OrReferenceType(Type):
 
     def validate(self, value: Optional[object]) -> bool:
         # We validate that the value is either a reference of the base type or the base type
-        if references.is_reference(value):
+        if references.unwrap_reference(value):
             # Validate that we are the reference
             return self.reference_type.validate(value)
         else:
