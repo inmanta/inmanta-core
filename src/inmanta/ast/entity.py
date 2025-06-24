@@ -662,7 +662,6 @@ class Entity(NamedType, WithComment):
                     # Type correspondence
                     try:
                         dsl_type = plugins.to_dsl_type(dc_types[rel_or_attr_name], self.location, self.namespace)
-                        # TODO: what is the memory impact of this?!
                         self._paired_dataclass_field_types[rel_or_attr_name] = dsl_type
                         if not inm_type.corresponds_to(dsl_type):
                             failures.append(
