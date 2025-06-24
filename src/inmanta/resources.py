@@ -235,46 +235,44 @@ class ReferenceCollector:
             ).serialize()
         )
 
+    def collect_references(self, value: object, path: str) -> object:
+        """Collect value references. This method also ensures that there are no values in the resources that are not serializable.
+        This includes:
+            - Unknowns
+            - DynamicProxy
 
-def collect_references(value_reference_collector: ReferenceCollector, value: object, path: str) -> object:
-    """Collect value references. This method also ensures that there are no values in the resources that are not serializable.
-    This includes:
-        - Unknowns
-        - DynamicProxy
 
+        :param value: The value to recursively find value references on
+        :param path: The current path we are working on in the tree
+        """
+        def allow_references[T](v: T) -> T:
+            if isinstance(v, proxy.DynamicProxy):
+                # fails on stable mypy, but runs fine on master
+                return v._allow_references()
+            return v
 
-    :param value_reference_collector: An object that holds all the collected secret references and mappings
-    :param value: The value to recursively find value references on
-    :param path: The current path we are working on in the tree
-    """
-    def allow_references[T](v: T) -> T:
-        if isinstance(v, proxy.DynamicProxy):
-            # fails on stable mypy, but runs fine on master
-            return v._allow_references()
-        return v
+        match value:
+            case list() | proxy.SequenceProxy():
+                return [
+                    self.collect_references(value, f"{path}[{index}]")
+                    for index, value in enumerate(allow_references(value))
+                ]
 
-    match value:
-        case list() | proxy.SequenceProxy():
-            return [
-                collect_references(value_reference_collector, value, f"{path}[{index}]")
-                for index, value in enumerate(allow_references(value))
-            ]
+            case dict() | proxy.DictProxy():
+                return {
+                    key: self.collect_references(value, f"{path}.{dict_path.NormalValue(key).escape()}")
+                    for key, value in allow_references(value).items()
+                }
 
-        case dict() | proxy.DictProxy():
-            return {
-                key: collect_references(value_reference_collector, value, f"{path}.{dict_path.NormalValue(key).escape()}")
-                for key, value in allow_references(value).items()
-            }
+            case references.Reference():
+                self.add_reference(path, value)
+                return None
 
-        case references.Reference():
-            value_reference_collector.add_reference(path, value)
-            return None
+            case proxy.DynamicProxy() | util.Unknown():
+                raise TypeError(f"{value!r} in resource is not JSON serializable at path {path}")
 
-        case proxy.DynamicProxy() | util.Unknown():
-            raise TypeError(f"{value!r} in resource is not JSON serializable at path {path}")
-
-        case _:
-            return value
+            case _:
+                return value
 
 
 @stable_api
@@ -444,7 +442,7 @@ class Resource(metaclass=ResourceMeta):
             # - DynamicProxys to entities
             # - References if we don't have a reference_collector
             if reference_collector is not None:
-                value = collect_references(reference_collector, value, field_name)
+                value = reference_collector.collect_references(value, field_name)
 
             return value
         except IgnoreResourceException:
