@@ -160,17 +160,25 @@ Enable the policy-engine authorization provider
    The location of the policy file can be changed using the :inmanta.config:option:`policy_engine.policy-file` if desired.
 2. Set the :inmanta.config:option:`server.authorization-provider` config option to ``policy-engine``.
 3. If a 3rd party auth broker is used, it must be configured to add the claims to the access token in correspondance to the access policy.
-3. Restart the inmanta server. 
+4. Restart the inmanta server. 
 
 Writing a custom access policy
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-This section provides guidelines 
+This section provides some guidence when writing your own access policy.
+
+
+Troubleshooting: Policy engine fails to start
+"""""""""""""""""""""""""""""""""""""""""""""
 
 .. TODO: Increase log policy engine + try to start server
+
+
+Debugging/Testing an access policy
+""""""""""""""""""""""""""""""""""
+
 .. TODO: Show how to obtain data input
 .. TODO: Reference default testing an debug tools of OPA
-
 
 
 Legacy authorization provider
