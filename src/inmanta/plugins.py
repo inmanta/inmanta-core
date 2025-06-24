@@ -1003,7 +1003,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         converted_args = []
         is_unknown = False
 
-        def reference_exception_msg(value: object, arg: PluginArgument) -> PluginTypeException:
+        def reference_exception_msg(value: object, arg: PluginArgument) -> str:
             contains: str = "is" if isinstance(value, Reference) else "contains"
             return (
                 f"Value {value!r} for argument {arg.arg_name} of plugin {self.get_full_name()} {contains} a reference."

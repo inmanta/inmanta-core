@@ -545,14 +545,15 @@ class MaybeReference(typing.Protocol):
 
     __slots__ = ()
 
-    def is_reference(self) -> Optional[Reference]:
+    def is_reference(self) -> Optional[Reference[RefValue]]:
         """
         If this DSL value represents a reference value, returns the associated reference object. Otherwise returns None.
         """
         ...
 
 
-def is_reference(value: object) -> Optional[Reference]:
+# TODO: rename as suggested in review
+def is_reference(value: object) -> Optional[Reference[RefValue]]:
     """
     Iff the given value is a reference or a DSL value that represents a reference, returns the associated reference.
     Otherwise returns None.

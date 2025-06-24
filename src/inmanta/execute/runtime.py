@@ -1270,12 +1270,13 @@ class Instance(ExecutionContext, references.MaybeReference):
         self.implementations: "set[Implementation]" = set()
 
         self.locations: list[Location] = []
-        self.dataclass_self: object | references.Reference[object] | None = None  # may also be a reference to a dataclass
+        # may also be a reference to a dataclass
+        self.dataclass_self: object | references.Reference[references.RefValue] | None = None
 
     def get_type(self) -> "Entity":
         return self.type
 
-    def is_reference(self) -> Optional[references.Reference]:
+    def is_reference(self) -> Optional[references.Reference[references.RefValue]]:
         return (
             self.dataclass_self
             if self.dataclass_self is not None and isinstance(self.dataclass_self, references.Reference)

@@ -223,7 +223,7 @@ class DynamicProxy:
         value: object,
         *,
         context: Optional[ProxyContext] = None,  # optional for backwards compatibility
-    ) -> Union[None, str, tuple[object, ...], int, float, bool, "DynamicProxy"]:
+    ) -> Union[None, str, tuple[object, ...], int, float, bool, "DynamicProxy", references.Reference]:
         """
         Converts a value from the internal domain to the plugin domain.
 
@@ -270,7 +270,7 @@ class DynamicProxy:
             context=dataclasses.replace(context, validated=False),
         )
 
-    def _return_value(self, value, *, relative_path: str) -> object:
+    def _return_value(self, value: object, *, relative_path: str) -> object:
         """
         Return a value that was accessed through this proxy object. Validates for undeclared references and propagates context
         appropriately.
@@ -344,7 +344,7 @@ class DynamicProxy:
 
 
 class SequenceProxy(DynamicProxy, JSONSerializable):
-    def __init__(self, iterator: Sequence, *, context: Optional[ProxyContext] = None) -> None:
+    def __init__(self, iterator: Sequence[object], *, context: Optional[ProxyContext] = None) -> None:
         DynamicProxy.__init__(self, iterator, context=context)
 
     def __getitem__(self, key: int) -> object:
@@ -365,8 +365,8 @@ class SequenceProxy(DynamicProxy, JSONSerializable):
         return [i for i in self]
 
 
-class DictProxy(DynamicProxy, Mapping, JSONSerializable):
-    def __init__(self, mydict: dict[object, object], *, context: Optional[ProxyContext] = None) -> None:
+class DictProxy(DynamicProxy, Mapping[str, object], JSONSerializable):
+    def __init__(self, mydict: dict[str, object], *, context: Optional[ProxyContext] = None) -> None:
         DynamicProxy.__init__(self, mydict, context=context)
 
     def __getitem__(self, key):
@@ -387,7 +387,7 @@ class DictProxy(DynamicProxy, Mapping, JSONSerializable):
         return {k: v for k, v in self.items()}
 
 
-class IteratorProxy(DynamicProxy, Iterator):
+class IteratorProxy(DynamicProxy, Iterator[object]):
     """
     Proxy an iterator call.
 
@@ -395,7 +395,7 @@ class IteratorProxy(DynamicProxy, Iterator):
     types like UnknownException.
     """
 
-    def __init__(self, iterator: Iterator, *, context: Optional[ProxyContext] = None, sequence: bool = False) -> None:
+    def __init__(self, iterator: Iterator[object], *, context: Optional[ProxyContext] = None, sequence: bool = False) -> None:
         """
         :param sequence: True iff the given iterator represents a sequence, i.e. the index is meaningful for error reporting.
         """
@@ -405,10 +405,10 @@ class IteratorProxy(DynamicProxy, Iterator):
     def _is_sequence(self) -> bool:
         return object.__getattribute__(self, "__sequence")
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[object]:
         return self
 
-    def __next__(self):
+    def __next__(self) -> object:
         enumerator = self._get_instance()
         i, v = next(enumerator)
         return self._return_value(

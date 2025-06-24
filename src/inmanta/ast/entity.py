@@ -102,7 +102,7 @@ class Entity(NamedType, WithComment):
         self.normalized = False
 
         self._paired_dataclass: type[DataclassProtocol] | None = None
-        self._paired_dataclass_field_types: Mapping[str, Type] = {}
+        self._paired_dataclass_field_types: dict[str, Type] = {}
         # Entities can be paired up to python dataclasses
         # If such a sibling exists, the type is kept here
         # Every instance of such entity can cary the associated python object in a slot called `DATACLASS_SELF_FIELD`
@@ -743,7 +743,7 @@ class Entity(NamedType, WithComment):
             # allow inheritance: delegate to child type
             return instance.type.to_python(instance)
 
-        def create():
+        def create() -> object:
             # Convert values
             # All values are primitive, so this is trivial
             kwargs = {k: v.get_value() for k, v in instance.slots.items() if k not in ["self", "requires", "provides"]}
@@ -752,6 +752,7 @@ class Entity(NamedType, WithComment):
                 # dynamic validation, mostly in case of references, because they are allowed in the model while they have to be
                 # declared (potentially nested) in the Python domain.
                 self._paired_dataclass_field_types[k].validate(v)
+            assert self._paired_dataclass is not None
             return self._paired_dataclass(**kwargs)
 
         if instance.dataclass_self is None:
