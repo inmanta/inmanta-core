@@ -33,6 +33,7 @@ import inmanta.loader
 import inmanta.protocol.ipc_light
 import inmanta.util
 import utils
+from forking_agent.ipc_commands import Echo, GetConfig, GetName, TestLoader
 from inmanta.agent import executor
 from inmanta.agent.executor import ExecutorBlueprint
 from inmanta.agent.forking_executor import MPManager
@@ -40,44 +41,6 @@ from inmanta.data import PipConfig
 from inmanta.data.model import ModuleSourceMetadata
 from inmanta.protocol.ipc_light import ConnectionLost
 from utils import NOISY_LOGGERS, log_contains, retry_limited
-
-
-class Echo(inmanta.protocol.ipc_light.IPCMethod[list[str], None]):
-    def __init__(self, args: list[str]) -> None:
-        self.args = args
-
-    async def call(self, ctx) -> list[str]:
-        logging.getLogger(__name__).info("Echo ")
-        return self.args
-
-
-class GetConfig(inmanta.protocol.ipc_light.IPCMethod[str, None]):
-    def __init__(self, section: str, name: str) -> None:
-        self.section = section
-        self.name = name
-
-    async def call(self, ctx) -> str:
-        return inmanta.config.Config.get(self.section, self.name)
-
-
-class GetName(inmanta.protocol.ipc_light.IPCMethod[str, None]):
-    async def call(self, ctx) -> str:
-        return ctx.name
-
-
-class TestLoader(inmanta.protocol.ipc_light.IPCMethod[list[str], None]):
-    """
-    Part of assertions for test_executor_server
-
-    Must be module level to be able to pickle it
-    """
-
-    async def call(self, ctx) -> list[str]:
-        import inmanta_plugins.test.testA
-        import inmanta_plugins.test.testB
-        import lorem  # noqa: F401
-
-        return [inmanta_plugins.test.testA.test(), inmanta_plugins.test.testB.test()]
 
 
 @pytest.fixture
@@ -280,6 +243,7 @@ def test():
 
 
 async def test_executor_server_dirty_shutdown(mpmanager: MPManager, caplog):
+    caplog.clear()
     manager = mpmanager
 
     blueprint = executor.ExecutorBlueprint(

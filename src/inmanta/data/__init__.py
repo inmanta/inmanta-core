@@ -3305,7 +3305,7 @@ class Agent(BaseDocument):
     :param name: The name of this agent
     :param last_failover: Moment at which the primary was last changed
     :param paused: is this agent paused (if so, skip it)
-    :param primary: what is the current active instance (if none, state is down)
+    :param primary: what is the current active instance (if none, state is down). Only relevant for the $__scheduler agent.
     :param unpause_on_resume: whether this agent should be unpaused when resuming from environment-wide halt. Used to
         persist paused state when halting.
     """
@@ -3956,7 +3956,7 @@ class LogLine(DataDocument):
         - msg: the message to write to logs (value type: str)
         - args: the args that can be passed to the logger (value type: list)
         - level: the log level of the message (value type: str, example: "CRITICAL")
-        - kwargs: the key-word args that where used to generated the log (value type: list)
+        - kwargs: the key-word args that were used to generate the log (value type: list)
         - timestamp: the time at which the LogLine was created (value type: datetime.datetime)
     """
 
@@ -4985,27 +4985,42 @@ class Resource(BaseDocument):
         cls,
         environment: uuid.UUID,
         *,
-        since: int,
-        projection: Optional[Collection[typing.LiteralString]],
+        since: Optional[int],
         connection: Optional[Connection] = None,
     ) -> list[tuple[int, list[dict[str, object]]]]:
         """
         Returns all released model versions with associated resources since (excluding) the given model version.
         Returns resources as raw dicts with the requested fields
+        :param since: The boundary version (excluding). If None, returns only the latest released version.
         """
-        resource_columns: typing.LiteralString = ", ".join(f"r.{c}" for c in projection) if projection is not None else "r.*"
+
+        boundary_query: typing.LiteralString = (
+            "SELECT $2::int AS version"
+            if since is not None
+            else f""" \
+                            SELECT MAX(version) AS version
+                            FROM {ConfigurationModel.table_name()}
+                            WHERE released=TRUE AND environment=$1
+                            """
+        )
+
         query: typing.LiteralString = f"""
-            SELECT m.version, {resource_columns}
+            WITH boundary AS (
+                {boundary_query}
+            )
+            SELECT m.version, r.resource_id, r.attributes, r.attribute_hash, r.is_undefined
             FROM {ConfigurationModel.table_name()} as m
             LEFT JOIN {cls.table_name()} as r
-                ON m.environment = r.environment AND m.version = r.model
-            WHERE m.environment = $1 AND m.version > $2 AND m.released=true
+                ON m.environment=r.environment AND m.version=r.model
+            WHERE m.environment=$1
+                AND m.version > (SELECT version FROM boundary) - 1
+                AND m.released is TRUE
             ORDER BY m.version ASC
         """
+        query_values = [cls._get_value(environment), since] if since is not None else [cls._get_value(environment)]
         resource_records = await cls._fetch_query(
             query,
-            cls._get_value(environment),
-            cls._get_value(since),
+            *query_values,
             connection=connection,
         )
         result: list[tuple[int, list[dict[str, object]]]] = []
@@ -5016,8 +5031,6 @@ class Resource(BaseDocument):
                     # left join produced no resources
                     continue
                 resource: dict[str, object] = dict(raw_resource)
-                if projection is not None:
-                    assert set(projection) <= resource.keys()
                 parsed_resources.append(resource)
             result.append((version, parsed_resources))
         return result
@@ -6289,6 +6302,7 @@ class User(BaseDocument):
     username: str
     password_hash: str
     auth_method: AuthMethod
+    is_admin: bool = False
 
     @classmethod
     def table_name(cls) -> str:
@@ -6298,7 +6312,47 @@ class User(BaseDocument):
         return "inmanta_user"
 
     def to_dao(self) -> m.User:
-        return m.User(username=self.username, auth_method=self.auth_method)
+        return m.User(username=self.username, auth_method=self.auth_method, is_admin=self.is_admin)
+
+    @classmethod
+    async def set_is_admin(cls, username: str, is_admin: bool) -> None:
+        query = f"UPDATE {cls.table_name()} SET is_admin=$1 WHERE username=$2 RETURNING 1"
+        result = await cls._fetch_query(query, is_admin, username)
+        if not result:
+            # No user exists with the given username
+            raise KeyError()
+
+    @classmethod
+    async def list_users_with_roles(cls) -> list[m.UserWithRoles]:
+        query = f"""
+            SELECT
+                u.username,
+                u.auth_method,
+                u.is_admin,
+                role_a.environment AS role_environment,
+                r.name AS role_name
+            FROM {cls.table_name()} AS u
+                LEFT JOIN role_assignment AS role_a ON role_a.user_id=u.id
+                LEFT JOIN {Role.table_name()} AS r ON r.id=role_a.role_id
+            ORDER BY u.username ASC, role_a.environment ASC, r.name ASC
+        """
+        async with cls.get_connection() as con:
+            records = await con.fetch(query)
+        result = {}
+        for username, group_elem_iterator in itertools.groupby(records, lambda r: r["username"]):
+            records_for_group = list(group_elem_iterator)
+            roles = [
+                m.RoleAssignment(environment=record["role_environment"], role=record["role_name"])
+                for record in records_for_group
+                if record["role_environment"] is not None and record["role_name"] is not None
+            ]
+            result[username] = m.UserWithRoles(
+                username=records_for_group[0]["username"],
+                auth_method=records_for_group[0]["auth_method"],
+                is_admin=records_for_group[0]["is_admin"],
+                roles=roles,
+            )
+        return list(result.values())
 
 
 class RoleStillAssignedException(Exception):
@@ -6334,7 +6388,7 @@ class Role(BaseDocument):
             )
         """
         try:
-            await cls._execute_query(assign_role_query, username, role_assignment.environment, role_assignment.name)
+            await cls._execute_query(assign_role_query, username, role_assignment.environment, role_assignment.role)
         except (asyncpg.NotNullViolationError, asyncpg.ForeignKeyViolationError):
             raise CannotAssignRoleException()
 
@@ -6350,7 +6404,7 @@ class Role(BaseDocument):
                   AND role_id=(SELECT id FROM {cls.table_name()} WHERE name=$3)
             RETURNING *
         """
-        result = await cls._fetchrow(unassign_role_query, username, role_assignment.environment, role_assignment.name)
+        result = await cls._fetchrow(unassign_role_query, username, role_assignment.environment, role_assignment.role)
         if result is None:
             raise KeyError()
 
@@ -6364,7 +6418,7 @@ class Role(BaseDocument):
             WHERE u.username=$1
             ORDER BY ras.environment, rol.name
         """
-        return [m.RoleAssignment(environment=r["environment"], name=r["name"]) for r in await cls._fetch_query(query, username)]
+        return [m.RoleAssignment(environment=r["environment"], role=r["name"]) for r in await cls._fetch_query(query, username)]
 
     @classmethod
     async def ensure_roles(cls, roles: Sequence[str]) -> None:

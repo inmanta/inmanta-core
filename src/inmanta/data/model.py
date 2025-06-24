@@ -773,27 +773,32 @@ class AuthMethod(str, Enum):
     oidc = "oidc"
 
 
+class RoleAssignment(BaseModel):
+    """
+    :param environment: The environment scope of the role.
+    :param role: The name of the role.
+    """
+
+    environment: uuid.UUID
+    role: str
+
+
 class User(BaseModel):
     """A user"""
 
     username: str
     auth_method: AuthMethod
+    is_admin: bool
+
+
+class UserWithRoles(User):
+    roles: list[RoleAssignment]
 
 
 class CurrentUser(BaseModel):
     """Information about the current logged in user"""
 
     username: str
-
-
-class RoleAssignment(BaseModel):
-    """
-    :param environment: The environment scope of the role.
-    :param name: The name of the role.
-    """
-
-    environment: uuid.UUID
-    name: str
 
 
 class LoginReturn(BaseModel):
@@ -1076,6 +1081,11 @@ class ModuleSource(BaseModel):
         return self.metadata.get_inmanta_module_name()
 
 
+type InmantaModuleName = str
+type InmantaModuleVersion = str
+type AgentName = str
+
+
 class InmantaModule(BaseModel):
     """
     This class represents an Inmanta module during code upload.
@@ -1089,8 +1099,8 @@ class InmantaModule(BaseModel):
         deploy resources.
     """
 
-    name: str
-    version: str
+    name: InmantaModuleName
+    version: InmantaModuleVersion
     files_in_module: list[ModuleSourceMetadata]
     requirements: list[str]
-    for_agents: list[str]
+    for_agents: list[AgentName]

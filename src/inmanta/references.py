@@ -33,7 +33,7 @@ from pydantic import ValidationError
 import inmanta
 import inmanta.resources
 from inmanta import util
-from inmanta.types import ResourceIdStr, StrictJson
+from inmanta.types import JsonType, ResourceIdStr, StrictJson
 from inmanta.util import dict_path
 
 ReferenceType = typing.Annotated[str, pydantic.StringConstraints(pattern="^([a-z0-9_]+::)+[A-Z][A-z0-9_-]*$")]
@@ -169,6 +169,33 @@ class ReferenceArgument(Argument):
         return resource.get_reference_value(self.id, logger)
 
 
+class MutatedJsonArgument(Argument):
+    """
+    Json-like argument that contains another reference in the json structure
+
+    It is stored as
+    1. a json value with all reference replaced by None
+    2. a mapping of dictpaths to references. Each dict path indicates where the reference should be inserted
+
+    """
+
+    type: typing.Literal["mjson"] = "mjson"
+    value: StrictJson
+    references: dict[str, ReferenceArgument]
+
+    def get_arg_value(
+        self,
+        resource: "inmanta.resources.Resource",
+        logger: "handler.LoggerABC",
+    ) -> object:
+        start_value: JsonType = self.value
+        for destination, valueref in self.references.items():
+            value = valueref.get_arg_value(resource, logger)
+            dict_path_expr = dict_path.to_path(destination)
+            dict_path_expr.set_element(start_value, value)
+        return start_value
+
+
 class GetArgument(Argument):
     """Get a value from the resource body as value"""
 
@@ -219,7 +246,13 @@ class ResourceArgument(Argument):
 
 
 ArgumentTypes = typing.Annotated[
-    LiteralArgument | ReferenceArgument | GetArgument | PythonTypeArgument | ResourceArgument | JsonArgument,
+    LiteralArgument
+    | ReferenceArgument
+    | GetArgument
+    | PythonTypeArgument
+    | ResourceArgument
+    | JsonArgument
+    | MutatedJsonArgument,
     pydantic.Field(discriminator="type"),
 ]
 """ A list of all specific types of arguments. Pydantic uses this to instantiate the correct argument class
@@ -301,14 +334,37 @@ class ReferenceLike:
 
     def serialize_arguments(self) -> Tuple[uuid.UUID, list[ArgumentTypes]]:
         """Serialize the arguments to this class"""
+
+        # The handling of references here is a bit subtle:
+        # We replace every reference with a ReferenceArgument that refers to the reference by id
+        # The reference itself is not handled here but in inmanta.resources.ReferenceSubCollector.collect_reference
+        # There, the raw, unserialized tree of arguments is iterated over as well to collect the references themselves
+        # The caches on the Reference prevent this from being too inefficient by serializing only once
         arguments: list[ArgumentTypes] = []
         for name, value in self.arguments.items():
             match value:
                 case str() | int() | float() | bool() | None:
                     arguments.append(LiteralArgument(name=name, value=value))
                 case dict() | list():
+                    collector = inmanta.resources.ReferenceSubCollector()
+                    # The collector here is purely to collect the path/reference pairs
+                    # The set of reference it collects will be discarded
+                    # The root ReferenceCollector will traverse past this point as well to collect the actual reference
+                    cleaned_value = collector.collect_references(value, "")
                     try:
-                        arguments.append(JsonArgument(name=name, value=value))
+                        if collector.references:
+                            arguments.append(
+                                MutatedJsonArgument(
+                                    name=name,
+                                    value=cleaned_value,
+                                    references={
+                                        path: ReferenceArgument(name=path, id=model.id)
+                                        for path, model in collector.replacements.items()
+                                    },
+                                )
+                            )
+                        else:
+                            arguments.append(JsonArgument(name=name, value=value))
                     except ValidationError:
                         raise ValueError(f"The {name} attribute of {self} is not json serializable: {value}")
                 case Reference():

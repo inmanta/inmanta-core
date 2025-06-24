@@ -20,7 +20,7 @@ class BoolReference(Reference[bool]):
 
     def resolve(self, logger: LoggerABC) -> bool:
         """Resolve the reference"""
-        return True
+        return False
 
     def __str__(self) -> str:
         return f"BoolReference {self.name}"
@@ -129,6 +129,30 @@ class BadReference(Reference[str]):
 @plugin
 def create_bad_reference(name: Reference[str] | str) -> Reference[str]:
     return BadReference(name=name)
+
+
+@reference("refs::DictMade")
+class DictMade(Reference[str]):
+    """A dummy reference to a string"""
+
+    def __init__(self, name: dict[str, str | Reference[str]]) -> None:
+        """
+        :param name: The name of the environment variable.
+        """
+        super().__init__()
+        self.name = name
+
+    def resolve(self, logger: LoggerABC) -> str:
+        """Resolve the reference"""
+        return self.resolve_other(self.name["name"], logger)
+
+    def __str__(self) -> str:
+        return f"DictMade"
+
+
+@plugin
+def create_DictRef(value: str | Reference[str]) -> DictMade:
+    return DictMade(name={"name": value})
 
 
 @resource("refs::DeepResource", agent="agentname", id_attribute="name")

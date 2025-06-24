@@ -212,6 +212,13 @@ async def test_deploy_end_to_end(
                 agentname="test",
                 value={"Hello": refs::create_string_reference(name="World!")},
             )
+
+            # and a dict ref
+            refs::DeepResource(
+                name="test4",
+                agentname="test",
+                value=refs::create_DictRef(value = refs::create_string_reference(name="TESTX")),
+            )
             """,
         install_v2_modules=[env.LocalPackagePath(path=refs_module)],
     )
@@ -251,6 +258,14 @@ async def test_deploy_end_to_end(
     result = await client.resource_logs(environment, "refs::DictResource[test,name=test4]")
     assert result.code == 200
     assert [msg for msg in result.result["data"] if "Observed value: {'Hello': 'World!'}" in msg["msg"]]
+
+    result = await client.resource_details(environment, "refs::DeepResource[test,name=test4]")
+    assert result.code == 200
+    details = ReleasedResourceDetails(**result.result["data"])
+    assert details.status == ReleasedResourceState.deployed
+    result = await client.resource_logs(environment, "refs::DeepResource[test,name=test4]")
+    assert result.code == 200
+    assert [msg for msg in result.result["data"] if "Observed value: {'inner.something': 'TESTX'}" in msg["msg"]]
 
 
 def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
@@ -796,8 +811,7 @@ def test_ref_serialization():
     round_trip_ref(TestReference({"a": "A"}))
 
     # Only clean json is allowed
-    tr = TestReference({"a": "A"})
-    baddy = TestReference({"a": tr})
+    baddy = TestReference({"a": object()})
     with pytest.raises(ValueError):
         baddy.serialize()
 

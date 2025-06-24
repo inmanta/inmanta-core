@@ -18,6 +18,7 @@ Contact: code@inmanta.com
 
 import logging
 import uuid
+from collections import defaultdict
 from collections.abc import Mapping
 
 import asyncpg
@@ -57,8 +58,8 @@ class UserService(server_protocol.ServerSlice):
         return [SLICE_TRANSPORT]
 
     @protocol.handle(protocol.methods_v2.list_users)
-    async def list_users(self) -> list[model.User]:
-        return [user.to_dao() for user in await data.User.get_list(order_by_column="username", order="ASC")]
+    async def list_users(self) -> list[model.UserWithRoles]:
+        return await data.User.list_users_with_roles()
 
     @protocol.handle(protocol.methods_v2.add_user)
     async def add_user(self, username: str, password: str) -> model.User:
@@ -112,18 +113,24 @@ class UserService(server_protocol.ServerSlice):
     async def login(self, username: str, password: str) -> common.ReturnValue[model.LoginReturn]:
         verify_authentication_enabled()
         # check if the user exists
+        invalid_username_password_msg = "Invalid username or password"
         user = await data.User.get_one(username=username)
         if not user or not user.password_hash:
-            raise exceptions.UnauthorizedException()
+            raise exceptions.UnauthorizedException(message=invalid_username_password_msg, no_prefix=True)
         try:
             nacl.pwhash.verify(user.password_hash.encode(), password.encode())
         except nacl.exceptions.InvalidkeyError:
-            raise exceptions.UnauthorizedException()
+            raise exceptions.UnauthorizedException(message=invalid_username_password_msg, no_prefix=True)
 
         role_assignments: list[model.RoleAssignment] = await data.Role.get_roles_for_user(username)
-        custom_claims: Mapping[str, str | list[str] | Mapping[str, str]] = {
+        env_to_roles_dct: dict[str, list[str]] = defaultdict(list)
+        for assignment in role_assignments:
+            env_to_roles_dct[str(assignment.environment)].append(assignment.role)
+
+        custom_claims: Mapping[str, str | bool | Mapping[str, list[str]]] = {
             "sub": username,
-            const.INMANTA_ROLES_URN: {str(r.environment): r.name for r in role_assignments},
+            const.INMANTA_ROLES_URN: env_to_roles_dct,
+            const.INMANTA_IS_ADMIN_URN: user.is_admin,
         }
         token = auth.encode_token([str(const.ClientType.api.value)], expire=None, custom_claims=custom_claims)
         return common.ReturnValue(
@@ -168,7 +175,7 @@ class UserService(server_protocol.ServerSlice):
     @protocol.handle(protocol.methods_v2.assign_role)
     async def assign_role(self, username: str, environment: uuid.UUID, role: str) -> None:
         try:
-            await data.Role.assign_role_to_user(username, model.RoleAssignment(environment=environment, name=role))
+            await data.Role.assign_role_to_user(username, model.RoleAssignment(environment=environment, role=role))
         except data.CannotAssignRoleException:
             raise exceptions.BadRequest(
                 f"Cannot assign role {role} to user {username}."
@@ -178,6 +185,13 @@ class UserService(server_protocol.ServerSlice):
     @protocol.handle(protocol.methods_v2.unassign_role)
     async def unassign_role(self, username: str, environment: uuid.UUID, role: str) -> None:
         try:
-            await data.Role.unassign_role_from_user(username, model.RoleAssignment(environment=environment, name=role))
+            await data.Role.unassign_role_from_user(username, model.RoleAssignment(environment=environment, role=role))
         except KeyError:
             raise exceptions.BadRequest(f"Role {role} (environment={environment}) is not assigned to user {username}")
+
+    @protocol.handle(protocol.methods_v2.set_is_admin)
+    async def set_is_admin(self, username: str, is_admin: bool) -> None:
+        try:
+            await data.User.set_is_admin(username=username, is_admin=is_admin)
+        except KeyError:
+            raise exceptions.BadRequest(f"No user exists with username {username}.")

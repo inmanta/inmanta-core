@@ -27,7 +27,6 @@ from json import JSONDecodeError
 from typing import Optional, Union
 
 import tornado
-from pyformance import timer
 from tornado import httpserver, iostream, routing, web
 
 import inmanta.protocol.endpoints
@@ -39,6 +38,7 @@ from inmanta.protocol.rest import RESTBase
 from inmanta.server import config as server_config
 from inmanta.server.config import server_access_control_allow_origin, server_enable_auth, server_tz_aware_timestamps
 from inmanta.types import ReturnTypes
+from inmanta.vendor.pyformance import timer
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 
@@ -220,13 +220,22 @@ class RESTHandler(tornado.web.RequestHandler):
 
 
 class StaticContentHandler(tornado.web.RequestHandler):
-    def initialize(self, transport: "RESTServer", content: str, content_type: str) -> None:
+    def initialize(
+        self,
+        transport: "RESTServer",
+        content: str,
+        content_type: str,
+        set_no_cache_header: bool = False,
+    ) -> None:
         self._transport = transport
         self._content = content
         self._content_type = content_type
+        self._set_no_cache_header = set_no_cache_header
 
     def get(self, *args: list[str], **kwargs: dict[str, str]) -> None:
         self.set_header("Content-Type", self._content_type)
+        if self._set_no_cache_header:
+            self.set_header("Cache-Control", "no-cache")
         self.write(self._content)
         self.set_status(200)
 

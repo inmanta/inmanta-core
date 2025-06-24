@@ -180,7 +180,7 @@ def list_environments():
 # environments.
 
 
-@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_SETTINGS_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_SETTING_READ, read_only=True, environment_param="tid")
 @method(
     path="/environment_settings",
     operation="GET",
@@ -197,7 +197,7 @@ def list_settings(tid: uuid.UUID):
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_SETTINGS_WRITE, read_only=False, environment_param="tid")
+@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_SETTING_WRITE, read_only=False, environment_param="tid")
 @method(
     path="/environment_settings/<id>",
     operation="POST",
@@ -216,7 +216,7 @@ def set_setting(tid: uuid.UUID, id: str, value: Union[PrimitiveTypes, JsonType])
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_SETTINGS_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_SETTING_READ, read_only=True, environment_param="tid")
 @method(
     path="/environment_settings/<id>",
     operation="GET",
@@ -234,7 +234,7 @@ def get_setting(tid: uuid.UUID, id: str):
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_SETTINGS_WRITE, read_only=False, environment_param="tid")
+@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_SETTING_WRITE, read_only=False, environment_param="tid")
 @method(
     path="/environment_settings/<id>",
     operation="DELETE",
@@ -340,7 +340,7 @@ def heartbeat_reply(sid: uuid.UUID, reply_id: uuid.UUID, data: dict):
 # Upload, retrieve and check for file. A file is identified by a hash of its content.
 
 
-@auth(auth_label=const.AuthorizationLabel.FILES_WRITE, read_only=False)
+@auth(auth_label=const.AuthorizationLabel.FILE_WRITE, read_only=False)
 @method(
     path="/file/<id>",
     operation="PUT",
@@ -353,12 +353,12 @@ def upload_file(id: str, content: str):
     """
     Upload a new file
 
-    :param id: The id of the file
+    :param id: The sha1 hash of the content of the file.
     :param content: The base64 encoded content of the file
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.FILES_READ, read_only=True)
+@auth(auth_label=const.AuthorizationLabel.FILE_READ, read_only=True)
 @method(
     path="/file/<id>",
     operation="HEAD",
@@ -375,7 +375,7 @@ def stat_file(id: str):
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.FILES_READ, read_only=True)
+@auth(auth_label=const.AuthorizationLabel.FILE_READ, read_only=True)
 @method(
     path="/file/<id>",
     operation="GET",
@@ -392,7 +392,7 @@ def get_file(id: str):
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.FILES_READ, read_only=True)
+@auth(auth_label=const.AuthorizationLabel.FILE_READ, read_only=True)
 @method(
     path="/file",
     api=True,
@@ -411,7 +411,7 @@ def stat_files(files: list):
 # Manage resources on the server
 
 
-@auth(auth_label=const.AuthorizationLabel.RESOURCES_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.AuthorizationLabel.RESOURCE_READ, read_only=True, environment_param="tid")
 @method(
     path="/resource/<id>",
     operation="GET",
@@ -829,7 +829,7 @@ def get_parameter(tid: uuid.UUID, agent: str, resource: dict):
 # Generate download the diff of two hashes
 
 
-@auth(auth_label=const.AuthorizationLabel.FILES_READ, read_only=True)
+@auth(auth_label=const.AuthorizationLabel.FILE_READ, read_only=True)
 @method(path="/filediff", client_types=[const.ClientType.api])
 def diff(file_id_1: str, file_id_2: str):
     """
@@ -845,7 +845,7 @@ def diff(file_id_1: str, file_id_2: str):
 # Get a list of compile reports
 
 
-@auth(auth_label=const.AuthorizationLabel.COMPILEREPORT_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.AuthorizationLabel.COMPILE_REPORT_READ, read_only=True, environment_param="tid")
 @method(path="/compilereport", operation="GET", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def get_reports(tid: uuid.UUID, start: Optional[str] = None, end: Optional[str] = None, limit: Optional[int] = None):
     """
@@ -862,7 +862,7 @@ def get_reports(tid: uuid.UUID, start: Optional[str] = None, end: Optional[str] 
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.COMPILEREPORT_READ, read_only=True)
+@auth(auth_label=const.AuthorizationLabel.COMPILE_REPORT_READ, read_only=True)
 @method(path="/compilereport/<id>", operation="GET", client_types=[const.ClientType.api])
 def get_report(id: uuid.UUID):
     """
