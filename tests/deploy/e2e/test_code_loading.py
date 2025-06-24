@@ -331,7 +331,7 @@ raise Exception("Fail code loading")
     result = await client.get_resource_actions(tid=environment, resource_type="test::Test", agent="agent", log_severity="ERROR")
     assert result.code == 200
     assert any(
-        "All resources of type `test::Test` failed to load handler code or install handler code dependencies" in log_line["msg"]
+        "All resources of type `test::Test` failed to install handler code dependencies" in log_line["msg"]
         for resource_action in result.result["data"]
         for log_line in resource_action["messages"]
     )

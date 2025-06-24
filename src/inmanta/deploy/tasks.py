@@ -29,10 +29,10 @@ import pyformance
 
 from inmanta import data, resources
 from inmanta.agent import executor
-from inmanta.agent.executor import DeployReport
+from inmanta.agent.executor import DeployReport, FailedInmantaModules
 from inmanta.data.model import AttributeStateChange
 from inmanta.deploy import scheduler, state
-from inmanta.types import ResourceIdStr, ResourceType
+from inmanta.types import ResourceIdStr, ResourceType, ResourceVersionIdStr
 
 LOGGER = logging.getLogger(__name__)
 
@@ -114,6 +114,10 @@ class Task(abc.ABC):
 
         # Bail out if this failed
         if resource_type in failed_resources:
+            raise ModuleLoadingException(
+                agent_name=agent_name,
+                failed_modules=my_executor.failed_modules,
+            )
             raise failed_resources[resource_type]
 
         return my_executor
@@ -158,6 +162,8 @@ class Deploy(Task):
             # We collect state here to report back in the finally block.
             # This try-finally block ensures we report at the end of the task.
             deploy_report: DeployReport
+            module_loading_warning: data.LogLine | None = None
+
             try:
                 # Dependencies are always set when calling deploy_start
                 assert deploy_intent.dependencies is not None
@@ -181,19 +187,44 @@ class Deploy(Task):
                         resource_type=executor_resource_details.id.entity_type,
                         version=version,
                     )
+                except ModuleLoadingException as e:
+                    e.log_resource_action_to_scheduler_log(
+                        agent=agent, rid=executor_resource_details.rvid, include_exception_info=True
+                    )
+                    log_line_for_web_console = e.create_log_line_for_failed_modules(level=logging.ERROR, verbose_message=False)
+                    deploy_report = DeployReport.undeployable(
+                        executor_resource_details.rvid, action_id, log_line_for_web_console
+                    )
+                    return
+
                 except Exception as e:
                     log_line = data.LogLine.log(
                         logging.ERROR,
-                        "All resources of type `%(res_type)s` failed to load handler code or install handler code "
+                        "All resources of type `%(res_type)s` failed to install handler code "
                         "dependencies: `%(error)s`\n%(traceback)s",
                         res_type=executor_resource_details.id.entity_type,
                         error=str(e),
                         traceback="".join(traceback.format_tb(e.__traceback__)),
                     )
+
                     # Not attached to ctx, needs to be flushed to logger explicitly
                     log_line.write_to_logger_for_resource(agent, executor_resource_details.rvid, exc_info=True)
                     deploy_report = DeployReport.undeployable(executor_resource_details.rvid, action_id, log_line)
+
                     return
+
+                if my_executor.failed_modules:
+
+                    # We only create this exception to use its LogLine builder.
+                    # We don't raise it since the executor was successfully created for this resource
+                    # but we want to log a warning  because not all handler code was successfully loaded.
+                    exception = ModuleLoadingException(agent_name=agent, failed_modules=my_executor.failed_modules)
+                    exception.log_resource_action_to_scheduler_log(
+                        agent=agent, rid=executor_resource_details.rvid, include_exception_info=False
+                    )
+                    module_loading_warning = exception.create_log_line_for_failed_modules(
+                        level=logging.WARNING, verbose_message=False
+                    )
 
                 assert reason is not None  # Should always be set for deploy
                 # Deploy
@@ -223,6 +254,8 @@ class Deploy(Task):
             finally:
                 # We signaled start, so we signal end
                 try:
+                    if module_loading_warning:
+                        deploy_report.messages.append(module_loading_warning)
                     await task_manager.deploy_done(deploy_intent, deploy_report)
                 except Exception:
                     LOGGER.error(
@@ -321,3 +354,75 @@ class RefreshFact(Task):
 
         get_fact_report = await my_executor.get_facts(executor_resource_details)
         await task_manager.fact_refresh_done(get_fact_report)
+
+
+class ModuleLoadingException(Exception):
+    """
+    This exception is raised when some Inmanta modules couldn't be loaded on a given agent.
+    """
+
+    def __init__(self, agent_name: str, failed_modules: FailedInmantaModules) -> None:
+        """
+        :param agent_name: Name of the agent for which module loading was unsuccessful
+        :param failed_modules: Data for all module loading errors as a nested map of
+            inmanta module name -> python module name -> Exception.
+        """
+        self.failed_modules = failed_modules
+        self.agent_name = agent_name
+
+    def _format_module_loading_errors(self) -> str:
+        """
+        Helper method to display module loading failures.
+        """
+        formatted_module_loading_errors = ""
+        N_FAILURES = sum(len(v) for v in self.failed_modules.values())
+        failure_index = 1
+
+        for _, failed_modules_data in self.failed_modules.items():
+            for python_module, exception in failed_modules_data.items():
+                formatted_module_loading_errors += f"Error {failure_index}/{N_FAILURES}:\n"
+                formatted_module_loading_errors += f"In module {python_module}:\n"
+                formatted_module_loading_errors += str(exception)
+                failure_index += 1
+
+        return formatted_module_loading_errors
+
+    def create_log_line_for_failed_modules(self, level: int = logging.ERROR, *, verbose_message: bool = False) -> data.LogLine:
+        """
+        Helper method to convert this Exception into a LogLine.
+
+        :param level: The log level for the resulting LogLine
+        :param verbose_message: Whether to include the full formatted error output in the LogLine message.
+            When displayed on the webconsole, the full formatted error output will be displayed in its own section
+            regardless of this flag's value.
+
+        """
+        message = "Agent %s failed to load the following modules: %s." % (
+            self.agent_name,
+            ", ".join(self.failed_modules.keys()),
+        )
+
+        formatted_module_loading_errors = self._format_module_loading_errors()
+
+        if verbose_message:
+            message += f"\n{formatted_module_loading_errors}"
+        return data.LogLine.log(
+            level=level,
+            msg=message,
+            timestamp=None,
+            errors=formatted_module_loading_errors,
+        )
+
+    def log_resource_action_to_scheduler_log(
+        self, agent: str, rid: ResourceVersionIdStr, *, include_exception_info: bool
+    ) -> None:
+        """
+        Helper method to log module loading failures to the scheduler's resource action log.
+
+        This method does not write anything to the 'resourceaction' table, which is what is ultimately displayed in the
+        'Logs' tab of the 'Resource Details' page in the web console. Therefore, the caller is responsible
+        for making sure that the scheduler's resource action log and the web console logs remain somewhat in sync.
+
+        """
+        log_line = self.create_log_line_for_failed_modules(verbose_message=True)
+        log_line.write_to_logger_for_resource(agent=agent, resource_version_string=rid, exc_info=include_exception_info)

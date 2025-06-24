@@ -72,6 +72,7 @@ import os
 import pathlib
 import socket
 import threading
+import traceback
 import typing
 import uuid
 from asyncio import Future, transports
@@ -1144,3 +1145,13 @@ class MPManager(
         children = list(self.agent_map[agent_name])
         await asyncio.gather(*(child.request_shutdown() for child in children))
         return children
+
+
+class ModuleImportException(Exception):
+    def __init__(self, base_exception: Exception, module_name: str):
+        self.message = f"Failed to import module source {module_name}:\n{str(base_exception)}.\n"
+        self.tb = "".join(traceback.format_tb(base_exception.__traceback__))
+        self.__cause__ = base_exception
+
+    def __str__(self) -> str:
+        return self.message + self.tb + "\n"
