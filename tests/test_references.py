@@ -505,8 +505,10 @@ def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", module
     run_snippet("refs::plugins::takes_mixed_refs_dataclass_or_ref(refs::dc::create_mixed_refs_dataclass_reference('hello'))")
     run_snippet("refs::plugins::takes_mixed_refs_dataclass_or_ref(refs::dc::MixedRefsDataclass(maybe_ref_value='hello'))")
     ## rejects other dataclasses / references to other dataclasses, except for inheritance
+    ### allowed because MixedRefsDataclass is a child of NoRefsDataclass
     run_snippet("refs::plugins::takes_no_refs_dataclass_or_ref(refs::dc::MixedRefsDataclass(maybe_ref_value='hello'))")
     run_snippet("refs::plugins::takes_no_refs_dataclass_or_ref(refs::dc::create_mixed_refs_dataclass_reference('hello'))")
+    ### not allowed because AllRefsDataclass is no child of NoRefsDataclass
     with pytest.raises(
         PluginTypeException, match=re.escape("Expected type: Reference[refs::dc::MixedRefsDataclass] | refs::dc::MixedRefsDataclass")
     ):
