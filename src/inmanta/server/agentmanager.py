@@ -274,17 +274,19 @@ class AgentManager(ServerSlice, SessionListener):
 
     async def halt_agents(self, env: data.Environment, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
-        Halts all agents for an environment. Persists prior paused state.
+        Halts all agents for an environment. Persists prior paused state. Also halts the scheduler "agent"
         """
         await data.Agent.persist_on_halt(env.id, connection=connection)
-        await self._pause_agent(env, connection=connection)
+        await self._pause_agent(env, connection=connection)  # excludes scheduler
+        await self._pause_agent(env, endpoint=const.AGENT_SCHEDULER_ID, connection=connection)
 
     async def resume_agents(self, env: data.Environment, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
-        Resumes after halting. Unpauses all agents that had been paused by halting.
+        Resumes after halting. Unpauses all agents that had been paused by halting, then restarts the scheduler.
         """
         to_unpause: list[str] = await data.Agent.persist_on_resume(env.id, connection=connection)
         await asyncio.gather(*[self._unpause_agent(env, agent, connection=connection) for agent in to_unpause])
+        await self._unpause_agent(env, endpoint=const.AGENT_SCHEDULER_ID, connection=connection)
 
     @handle(methods_v2.all_agents_action, env="tid")
     async def all_agents_action(self, env: data.Environment, action: AgentAction) -> None:
@@ -334,6 +336,8 @@ class AgentManager(ServerSlice, SessionListener):
         """
         Helper method to pause / unpause a logical agent by pausing an active agent instance if it exists and notify the
         scheduler that something has changed.
+
+        If no endpoint provided, pauses all logical agents. This does not include the scheduler itself.
         """
         # We need this lock otherwise, we would have transaction conflict in DB
         async with self.session_lock:
@@ -348,6 +352,7 @@ class AgentManager(ServerSlice, SessionListener):
     ) -> None:
         """
         Pause a logical agent by pausing an active agent instance if it exists.
+        If no endpoint provided, pauses all logical agents. This does not include the scheduler itself.
         """
         await self._update_paused_status_agent(env=env, new_paused_status=True, endpoint=endpoint, connection=connection)
 
@@ -356,6 +361,7 @@ class AgentManager(ServerSlice, SessionListener):
     ) -> None:
         """
         Unpause a logical agent by pausing an active agent instance if it exists.
+        If no endpoint provided, pauses all logical agents. This does not include the scheduler itself.
         """
         await self._update_paused_status_agent(env=env, new_paused_status=False, endpoint=endpoint, connection=connection)
 

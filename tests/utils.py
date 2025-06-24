@@ -20,6 +20,7 @@ import asyncio
 import base64
 import configparser
 import datetime
+import enum
 import functools
 import json
 import logging
@@ -40,6 +41,8 @@ from typing import TYPE_CHECKING, Any, Collection, Mapping, Optional, Set, TypeV
 
 import pytest
 import yaml
+from tornado import httpclient
+from tornado.httpclient import HTTPRequest
 
 import build
 import build.env
@@ -1134,7 +1137,7 @@ def validate_version_numbers_migration_scripts(versions_folder: pathlib.Path) ->
 
 
 def get_auth_client(
-    env_to_role_dct: dict[str, str], is_admin: bool, client_types: abc.Sequence[const.ClientType] | None = None
+    env_to_role_dct: dict[str, list[str]], is_admin: bool, client_types: abc.Sequence[const.ClientType] | None = None
 ) -> protocol.Client:
     """
     Returns a client that uses an access token to authenticate to the server.
@@ -1158,3 +1161,66 @@ def get_auth_client(
     )
     config.Config.set("client_rest_transport", "token", token)
     return protocol.Client("client")
+
+
+async def verify_authorization_labels_in_default_policy(
+    enum_with_labels: enum.Enum, include_prefixes: Set[str] | None = None, exclude_prefixes: Set[str] | None = None
+) -> None:
+    """
+    Ensure that authorization labels defined in the access policy map to their corresponding enum and
+    ensure every label only occurs in one set.
+
+    :param enum_with_labels: The enum that has to be used to validate the authorization labels.
+    :param include_prefixes: If provided, only check authorization labels that start with these prefixes.
+    :param exclude_prefixes: If provided, don't check authorization labls that start with these prefixes.
+    """
+    policy_engine_client = httpclient.AsyncHTTPClient()
+
+    async def evaluate_in_policy(query: str):
+        request = HTTPRequest(
+            url=f"http://policy_engine/v1/data/policy/{query}",
+            method="POST",
+            headers={"Content-Type": "application/json"},
+            body="",
+        )
+        response = await policy_engine_client.fetch(request)
+        if response.code != 200:
+            raise Exception(f"Policy evaluation failed: {response.body}")
+        return json.loads(response.body.decode())["result"]
+
+    variables_containing_labels = [
+        "read_only_labels",
+        "noc_specific_labels",
+        "operator_specific_labels",
+        "admin_specific_labels",
+        "expert_admin_specific_labels",
+    ]
+
+    # 1. Fetch labels from the policy
+    # 2. Verify they exist in the enum
+    var_name_to_labels = {
+        var_name: {
+            enum_with_labels(label)
+            for label in await evaluate_in_policy(var_name)
+            if (exclude_prefixes is None or not any(label.startswith(p) for p in exclude_prefixes))
+            and (include_prefixes is None or any(label.startswith(p) for p in include_prefixes))
+        }
+        for var_name in variables_containing_labels
+    }
+
+    # Ensure no label exists in more than one variable
+    for i in range(len(variables_containing_labels) - 1):
+        for j in range(i + 1, len(variables_containing_labels)):
+            var_name_i = variables_containing_labels[i]
+            var_name_j = variables_containing_labels[j]
+            intersection = var_name_to_labels[var_name_i] & var_name_to_labels[var_name_j]
+            if intersection:
+                raise Exception(f"Label(s) {intersection} exist(s) in {var_name_i} and {var_name_j}.")
+
+
+def read_file(file_name: str) -> str:
+    """
+    Returns the content of the given file.
+    """
+    with open(file_name, "r") as fh:
+        return fh.read()

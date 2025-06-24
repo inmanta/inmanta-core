@@ -6289,6 +6289,7 @@ class User(BaseDocument):
     username: str
     password_hash: str
     auth_method: AuthMethod
+    is_admin: bool = False
 
     @classmethod
     def table_name(cls) -> str:
@@ -6298,7 +6299,47 @@ class User(BaseDocument):
         return "inmanta_user"
 
     def to_dao(self) -> m.User:
-        return m.User(username=self.username, auth_method=self.auth_method)
+        return m.User(username=self.username, auth_method=self.auth_method, is_admin=self.is_admin)
+
+    @classmethod
+    async def set_is_admin(cls, username: str, is_admin: bool) -> None:
+        query = f"UPDATE {cls.table_name()} SET is_admin=$1 WHERE username=$2 RETURNING 1"
+        result = await cls._fetch_query(query, is_admin, username)
+        if not result:
+            # No user exists with the given username
+            raise KeyError()
+
+    @classmethod
+    async def list_users_with_roles(cls) -> list[m.UserWithRoles]:
+        query = f"""
+            SELECT
+                u.username,
+                u.auth_method,
+                u.is_admin,
+                role_a.environment AS role_environment,
+                r.name AS role_name
+            FROM {cls.table_name()} AS u
+                LEFT JOIN role_assignment AS role_a ON role_a.user_id=u.id
+                LEFT JOIN {Role.table_name()} AS r ON r.id=role_a.role_id
+            ORDER BY u.username ASC, role_a.environment ASC, r.name ASC
+        """
+        async with cls.get_connection() as con:
+            records = await con.fetch(query)
+        result = {}
+        for username, group_elem_iterator in itertools.groupby(records, lambda r: r["username"]):
+            records_for_group = list(group_elem_iterator)
+            roles = [
+                m.RoleAssignment(environment=record["role_environment"], role=record["role_name"])
+                for record in records_for_group
+                if record["role_environment"] is not None and record["role_name"] is not None
+            ]
+            result[username] = m.UserWithRoles(
+                username=records_for_group[0]["username"],
+                auth_method=records_for_group[0]["auth_method"],
+                is_admin=records_for_group[0]["is_admin"],
+                roles=roles,
+            )
+        return list(result.values())
 
 
 class RoleStillAssignedException(Exception):
@@ -6334,7 +6375,7 @@ class Role(BaseDocument):
             )
         """
         try:
-            await cls._execute_query(assign_role_query, username, role_assignment.environment, role_assignment.name)
+            await cls._execute_query(assign_role_query, username, role_assignment.environment, role_assignment.role)
         except (asyncpg.NotNullViolationError, asyncpg.ForeignKeyViolationError):
             raise CannotAssignRoleException()
 
@@ -6350,7 +6391,7 @@ class Role(BaseDocument):
                   AND role_id=(SELECT id FROM {cls.table_name()} WHERE name=$3)
             RETURNING *
         """
-        result = await cls._fetchrow(unassign_role_query, username, role_assignment.environment, role_assignment.name)
+        result = await cls._fetchrow(unassign_role_query, username, role_assignment.environment, role_assignment.role)
         if result is None:
             raise KeyError()
 
@@ -6364,7 +6405,7 @@ class Role(BaseDocument):
             WHERE u.username=$1
             ORDER BY ras.environment, rol.name
         """
-        return [m.RoleAssignment(environment=r["environment"], name=r["name"]) for r in await cls._fetch_query(query, username)]
+        return [m.RoleAssignment(environment=r["environment"], role=r["name"]) for r in await cls._fetch_query(query, username)]
 
     @classmethod
     async def ensure_roles(cls, roles: Sequence[str]) -> None:

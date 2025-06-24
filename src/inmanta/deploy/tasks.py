@@ -24,14 +24,13 @@ import traceback
 import uuid
 from dataclasses import dataclass
 
-import pyformance
-
 from inmanta import data, resources
 from inmanta.agent import executor
 from inmanta.agent.executor import DeployReport, FailedInmantaModules
 from inmanta.data.model import AttributeStateChange
 from inmanta.deploy import scheduler, state
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
+from inmanta.vendor import pyformance
 
 LOGGER = logging.getLogger(__name__)
 

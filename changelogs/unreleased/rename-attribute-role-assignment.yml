@@ -1,0 +1,4 @@
+---
+description: "Rename 'name' attribute of RoleAssignment to 'role'."
+change-type: patch
+destination-branches: [master]

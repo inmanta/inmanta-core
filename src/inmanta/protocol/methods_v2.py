@@ -52,6 +52,7 @@ def put_partial(
     resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
     removed_resource_sets: Optional[list[str]] = None,
     pip_config: Optional[PipConfig] = None,
+    allow_handler_code_update: bool = False,
     **kwargs: object,  # bypass the type checking for the resources and version_info argument
 ) -> ReturnValue[int]:
     """
@@ -77,6 +78,9 @@ def put_partial(
               * version_info: Model version information
     :param pip_config: Pip config used by this version
     :param module_version_info: Map of (module name, module version) to InmantaModule
+    :param allow_handler_code_update: [Expert] Allow handler code update during partial compile. This is otherwise
+        only allowed for full compiles. Use with extreme caution, and only when confident that all code is compatible
+        with previous versions.
 
     :return: The newly stored version number.
     """
@@ -319,7 +323,7 @@ def environment_create_token(tid: uuid.UUID, client_types: list[str], idempotent
 
 # Method for listing/getting/setting/removing settings of an environment. This API is also used by agents to configure
 # environments.
-@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_SETTINGS_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_SETTING_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/environment_settings",
     operation="GET",
@@ -337,7 +341,7 @@ def environment_settings_list(tid: uuid.UUID) -> model.EnvironmentSettingsRepons
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_SETTINGS_WRITE, read_only=False, environment_param="tid")
+@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_SETTING_WRITE, read_only=False, environment_param="tid")
 @typedmethod(
     path="/environment_settings/<id>",
     operation="POST",
@@ -358,7 +362,7 @@ def environment_settings_set(tid: uuid.UUID, id: str, value: model.EnvSettingTyp
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_SETTINGS_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_SETTING_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/environment_settings/<id>",
     operation="GET",
@@ -378,7 +382,7 @@ def environment_setting_get(tid: uuid.UUID, id: str) -> model.EnvironmentSetting
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_SETTINGS_WRITE, read_only=False, environment_param="tid")
+@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_SETTING_WRITE, read_only=False, environment_param="tid")
 @typedmethod(
     path="/environment_settings/<id>",
     operation="DELETE",
@@ -579,7 +583,7 @@ def get_db_status() -> DataBaseReport:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.COMPILEREPORT_READ, read_only=True)
+@auth(auth_label=const.AuthorizationLabel.COMPILE_REPORT_READ, read_only=True)
 @typedmethod(
     path="/compiledata/<id>",
     operation="GET",
@@ -594,7 +598,7 @@ def get_compile_data(id: uuid.UUID) -> Optional[model.CompileData]:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.RESOURCES_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.AuthorizationLabel.RESOURCE_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/resource_actions", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
@@ -641,7 +645,7 @@ def get_resource_actions(
 
 
 # No pagination support is provided for this endpoint because there is no elegant way to page the output of this endpoint.
-@auth(auth_label=const.AuthorizationLabel.RESOURCES_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.AuthorizationLabel.RESOURCE_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/resource/<rvid>/events",
     operation="GET",
@@ -697,7 +701,7 @@ def resource_did_dependency_change(
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.RESOURCES_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.AuthorizationLabel.RESOURCE_READ, read_only=True, environment_param="tid")
 @typedmethod(path="/resource", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2)
 def resource_list(
     tid: uuid.UUID,
@@ -758,7 +762,7 @@ def resource_list(
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.RESOURCES_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.AuthorizationLabel.RESOURCE_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/resource/<rid>", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
@@ -773,7 +777,7 @@ def resource_details(tid: uuid.UUID, rid: inmanta.types.ResourceIdStr) -> model.
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.RESOURCES_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.AuthorizationLabel.RESOURCE_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/resource/<rid>/history", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
@@ -810,7 +814,7 @@ def resource_history(
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.RESOURCES_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.AuthorizationLabel.RESOURCE_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/resource/<rid>/logs", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
@@ -905,7 +909,7 @@ def get_fact(tid: uuid.UUID, rid: inmanta.types.ResourceIdStr, id: uuid.UUID) ->
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.COMPILEREPORT_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.AuthorizationLabel.COMPILE_REPORT_READ, read_only=True, environment_param="tid")
 @typedmethod(path="/compilereport", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2)
 def get_compile_reports(
     tid: uuid.UUID,
@@ -965,7 +969,7 @@ def get_compile_reports(
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.COMPILEREPORT_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.AuthorizationLabel.COMPILE_REPORT_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/compilereport/<id>", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
@@ -1032,7 +1036,7 @@ def promote_desired_state_version(
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.RESOURCES_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.AuthorizationLabel.RESOURCE_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/desiredstate/<version>",
     operation="GET",
@@ -1111,7 +1115,7 @@ def get_diff_of_versions(
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.RESOURCES_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.AuthorizationLabel.RESOURCE_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/desiredstate/<version>/resource/<rid>",
     operation="GET",
@@ -1510,15 +1514,15 @@ def login(username: str, password: str) -> ReturnValue[model.LoginReturn]:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.METRICS_READ, read_only=True)
+@auth(auth_label=const.AuthorizationLabel.USER_READ, read_only=True)
 @typedmethod(path="/user", operation="GET", client_types=[ClientType.api], api_version=2)
-def list_users() -> list[model.User]:
+def list_users() -> list[model.UserWithRoles]:
     """List all users
 
     :return: A list of all users"""
 
 
-@auth(auth_label=const.AuthorizationLabel.METRICS_READ, read_only=True)
+@auth(auth_label=const.AuthorizationLabel.USER_READ, read_only=True)
 @typedmethod(path="/current_user", operation="GET", client_types=[ClientType.api], api_version=2)
 def get_current_user() -> model.CurrentUser:
     """Get the current logged in user (based on the provided JWT) and server auth settings
@@ -1527,7 +1531,7 @@ def get_current_user() -> model.CurrentUser:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.AUTH_ADMIN, read_only=False)
+@auth(auth_label=const.AuthorizationLabel.USER_WRITE, read_only=False)
 @typedmethod(path="/user/<username>", operation="DELETE", client_types=[ClientType.api], api_version=2)
 def delete_user(username: str) -> None:
     """Delete a user from the system with given username.
@@ -1538,7 +1542,7 @@ def delete_user(username: str) -> None:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.AUTH_ADMIN, read_only=False)
+@auth(auth_label=const.AuthorizationLabel.USER_WRITE, read_only=False)
 @typedmethod(path="/user", operation="POST", client_types=[ClientType.api], api_version=2)
 def add_user(username: str, password: str) -> model.User:
     """Add a new user to the system
@@ -1550,7 +1554,7 @@ def add_user(username: str, password: str) -> model.User:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.AUTH_CHANGE_PASSWORD, read_only=False)
+@auth(auth_label=const.AuthorizationLabel.USER_CHANGE_PASSWORD, read_only=False)
 @typedmethod(path="/user/<username>/password", operation="PATCH", client_types=[ClientType.api], api_version=2)
 def set_password(username: str, password: str) -> None:
     """Change the password of a user
@@ -1562,7 +1566,18 @@ def set_password(username: str, password: str) -> None:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.ROLES_READ, read_only=True)
+@auth(auth_label=const.AuthorizationLabel.ROLE_IS_ADMIN, read_only=False)
+@typedmethod(path="/is_admin", operation="PATCH", client_types=[ClientType.api], api_version=2)
+def set_is_admin(username: str, is_admin: bool) -> None:
+    """
+    Set whether the given user is an admin or not.
+
+    :param username: The username of the user for which the admin status has to be updated.
+    :param is_admin: True iff the given user should be an admin user.
+    """
+
+
+@auth(auth_label=const.AuthorizationLabel.ROLE_READ, read_only=True)
 @typedmethod(path="/role", operation="GET", client_types=[ClientType.api], api_version=2)
 def list_roles() -> list[str]:
     """
@@ -1570,7 +1585,7 @@ def list_roles() -> list[str]:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.ROLES_WRITE, read_only=False)
+@auth(auth_label=const.AuthorizationLabel.ROLE_WRITE, read_only=False)
 @typedmethod(path="/role", operation="POST", client_types=[ClientType.api], api_version=2)
 def create_role(name: str) -> None:
     """
@@ -1580,7 +1595,7 @@ def create_role(name: str) -> None:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.ROLES_WRITE, read_only=False)
+@auth(auth_label=const.AuthorizationLabel.ROLE_WRITE, read_only=False)
 @typedmethod(path="/role", operation="DELETE", client_types=[ClientType.api], api_version=2)
 def delete_role(name: str) -> None:
     """
@@ -1732,7 +1747,7 @@ def discovered_resources_get_batch(
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.GRAPHQL_READ, read_only=False)
+@auth(auth_label=const.AuthorizationLabel.GRAPHQL_READ, read_only=True)
 @typedmethod(
     path="/graphql",
     operation="POST",
@@ -1745,7 +1760,7 @@ def graphql(query: str) -> Any:  # Actual return type: strawberry.types.executio
     GraphQL endpoint for Inmanta.
     Supports paging, filtering and sorting on certain attributes.
 
-    To check which queries are enabled, use the /graphql/introspection endpoint
+    To check which queries are enabled, use the 'GET /api/v2/graphql/schema' endpoint.
     """
     pass
 
@@ -1761,6 +1776,17 @@ def graphql(query: str) -> Any:  # Actual return type: strawberry.types.executio
 def graphql_schema() -> dict[str, Any]:
     """
     Endpoint to retrieve schema details for the GraphQL endpoint.
-    To actually execute a query, use /graphql
+    To actually execute a query, use 'POST /api/v2/graphql'
+    """
+    pass
+
+
+@typedmethod(path="/health", operation="GET", client_types=[ClientType.api], enforce_auth=False, api_version=2)
+def health() -> ReturnValue[None]:
+    """
+    Returns a 200 response code if the server is healthy
+    or a 500 if the server is not healthy.
+
+    In contrast to the 'GET /api/v1/serverstatus' endpoint, this endpoint does not require authentication.
     """
     pass

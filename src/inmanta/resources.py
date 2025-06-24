@@ -195,30 +195,33 @@ class ResourceMeta(type):
 RESERVED_FOR_RESOURCE = {"id", "version", "model", "requires", "unknowns", "set_version", "clone", "is_type", "serialize"}
 
 
-class ReferenceCollector:
-    """Collect and organize all references and mutators"""
+class ReferenceSubCollector:
+    """
+    A collector for references that:
+    1. keeps track of all references it has seen
+    2. keeps track of the paths at which these references have been seen
+    """
 
-    def __init__(self, resource: "Resource") -> None:
+    def __init__(self) -> None:
         self.references: dict[uuid.UUID, references.ReferenceModel] = {}
-        self.mutators: list[references.MutatorModel] = []
-        self.resource = resource
+        self.replacements: dict[str, references.ReferenceModel] = {}
 
-    def _add_reference(self, value: object) -> None:
+    def collect_reference(self, value: object) -> None:
         """Add a value reference and recursively add any other references."""
         match value:
             case list():
                 for v in value:
-                    self._add_reference(v)
+                    self.collect_reference(v)
 
             case dict():
                 for k, v in value.items():
-                    self._add_reference(v)
+                    self.collect_reference(v)
 
             case references.Reference():
                 ref = value.serialize()
                 self.references[ref.id] = ref
                 for arg in value.arguments.values():
-                    self._add_reference(arg)
+                    self.collect_reference(arg)
 
             case _:
                 pass
@@ -229,8 +232,25 @@ class ReferenceCollector:
         :param path: The path where the value needs to be inserted
         :param reference: The attribute reference
         """
-        self._add_reference(reference)
+        self.collect_reference(reference)
+        self.replacements[path] = reference.serialize()
 
+
+class ReferenceCollector(ReferenceSubCollector):
+    """Collect and organize all references and mutators for a specific resource"""
+
+    def __init__(self, resource: "Resource") -> None:
+        super().__init__()
+        self.mutators: list[references.MutatorModel] = []
+        self.resource = resource
+
+    def add_reference(self, path: str, reference: "references.Reference[references.PrimitiveTypes]") -> None:
+        """Add a new attribute map to a value reference that we found at the given path.
+
+        :param path: The path where the value needs to be inserted
+        :param reference: The attribute reference
+        """
+        super().add_reference(path, reference)
         self.mutators.append(
             references.ReplaceValue(
                 resource=self.resource,
@@ -240,7 +260,7 @@ class ReferenceCollector:
         )
 
 
-def collect_references(value_reference_collector: ReferenceCollector | None, value: object, path: str) -> object:
+def collect_references(value_reference_collector: ReferenceSubCollector | None, value: object, path: str) -> object:
     """Collect value references. This method also ensures that there are no values in the resources that are not serializable.
     This includes:
         - Unknowns
