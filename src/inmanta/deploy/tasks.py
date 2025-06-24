@@ -166,7 +166,9 @@ class Deploy(Task):
                         version=version,
                     )
                 except ModuleLoadingException as e:
-                    e.log_to_resource_action_log(agent=agent, rid=executor_resource_details.rvid, include_exception_info=True)
+                    e.log_resource_action_to_scheduler_log(
+                        agent=agent, rid=executor_resource_details.rvid, include_exception_info=True
+                    )
                     log_line_for_web_console = e.create_log_line_for_failed_modules(level=logging.ERROR, verbose_message=False)
                     deploy_report = DeployReport.undeployable(
                         executor_resource_details.rvid, action_id, log_line_for_web_console
@@ -195,7 +197,7 @@ class Deploy(Task):
                     # We don't raise it since the executor was successfully created for this resource
                     # but we want to log a warning  because not all handler code was successfully loaded.
                     exception = ModuleLoadingException(agent_name=agent, failed_modules=my_executor.failed_modules)
-                    exception.log_to_resource_action_log(
+                    exception.log_resource_action_to_scheduler_log(
                         agent=agent, rid=executor_resource_details.rvid, include_exception_info=False
                     )
                     module_loading_warning = exception.create_log_line_for_failed_modules(
@@ -387,9 +389,16 @@ class ModuleLoadingException(Exception):
             errors=formatted_module_loading_errors,
         )
 
-    def log_to_resource_action_log(self, agent: str, rid: ResourceVersionIdStr, *, include_exception_info: bool) -> None:
+    def log_resource_action_to_scheduler_log(
+        self, agent: str, rid: ResourceVersionIdStr, *, include_exception_info: bool
+    ) -> None:
         """
-        Helper method to log module loading failures to the resource action log.
+        Helper method to log module loading failures to the scheduler's resource action log.
+
+        This method does not write anything to the 'resourceaction' table, which is what is ultimately displayed in the
+        'Logs' tab of the 'Resource Details' page in the web console. Therefore, the caller is responsible
+        for making sure that the scheduler's resource action log and the web console logs remain somewhat in sync.
+
         """
         log_line = self.create_log_line_for_failed_modules(verbose_message=True)
         log_line.write_to_logger_for_resource(agent=agent, resource_version_string=rid, exc_info=include_exception_info)
