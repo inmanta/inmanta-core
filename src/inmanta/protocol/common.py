@@ -477,7 +477,7 @@ class MethodProperties:
     def get_open_policy_agent_data(cls) -> dict[str, object]:
         """
         Return the information about the different endpoints that exist
-        in the format used as input to Open Policy Agent.
+        in the format used as data to Open Policy Agent.
         """
         endpoints = {}
         for method_properties_list in cls.methods.values():
@@ -493,6 +493,19 @@ class MethodProperties:
                     "environment_param": auth_metadata.environment_param,
                 }
         return {"endpoints": endpoints}
+
+    @classmethod
+    def get_open_policy_agent_data_as_fomatted_str(cls) -> str:
+        """
+        Return the information about the different endpoints that is provided
+        as data to Open Policy Agent, but in a properly indented string representation.
+        """
+        data = cls.get_open_policy_agent_data()
+        for elem in data["endpoints"].values():
+            # Convert enums to their string representation
+            elem["client_types"] = [e.value for e in elem["client_types"]]
+            elem["auth_label"] = elem["auth_label"].value
+        return json.dumps(data, sort_keys=True, indent=4)
 
     def is_external_interface(self) -> bool:
         """
