@@ -67,13 +67,10 @@ Inmanta expects a token of which it can validate the signature. Inmanta can veri
 HS256 and asymmetric signatures with RSA (RS256). Tokens it signs itself for other processes are always signed using HS256.
 There are no key distribution issues because the server is both the signing and the validating party.
 
-# TODO: Move REST TO AUTHORIZATION SECTION (legacy provider)
-
 
 Setup server auth
 ^^^^^^^^^^^^^^^^^
-The server requests authentication for all API calls (except for the `GET /api/v2/health` endpoint) when :inmanta.config:option:`server.auth` is set to true. When
-authentication is enabled all other components require a valid token.
+The server requests authentication for all API calls (except for the `GET /api/v2/health` endpoint) when :inmanta.config:option:`server.auth` is set to true. In that case all other components require a valid token.
 
 .. warning:: When multiple servers are used in a HA setup, each server requires the same configuration (SSL enabled and
     private keys).
