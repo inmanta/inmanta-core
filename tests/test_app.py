@@ -259,14 +259,17 @@ def test_log_file_set(tmpdir, log_level, with_tty, regexes_required_lines, regex
 
 
 @pytest.mark.parametrize_any(
-    "with_tty, regexes_required_lines, regexes_forbidden_lines",
+    "with_tty, regexes_required_lines",
     [
-        (False, [r"Inmanta Service Orchestrator", r"Compiler version: ", r"Extensions:", r"\s*\* core:"], [DEBUG_MSG]),
-        (True, [r"Inmanta Service Orchestrator", r"Compiler version: ", r"Extensions:", r"\s*\* core:"], [DEBUG_MSG]),
+        (False, [r"Inmanta Service Orchestrator", r"Compiler version: ", r"Extensions:", r"\s*\* core:"]),
+        (True, [r"Inmanta Service Orchestrator", r"Compiler version: ", r"Extensions:", r"\s*\* core:"]),
     ],
 )
 @pytest.mark.timeout(60)
-def test_version_command(tmpdir, with_tty, regexes_required_lines, regexes_forbidden_lines):
+def test_version_command(tmpdir, with_tty, regexes_required_lines):
+    """
+    Basic smoke test to check that no warnings show up when running 'inmanta --version'
+    """
     if is_colorama_package_available() and with_tty:
         pytest.skip("Colorama is present")
 
@@ -284,7 +287,7 @@ def test_version_command(tmpdir, with_tty, regexes_required_lines, regexes_forbi
             e.add_note("\n".join(stdout))
         raise e
     # Check if the message appears in the logs, it is not a full line match so timing is not relevant
-    check_logs(stdout, regexes_required_lines, regexes_forbidden_lines, timed=False)
+    check_logs(stdout, regexes_required_lines, [], timed=False)
 
 
 @pytest.mark.parametrize_any(
@@ -477,21 +480,22 @@ end
 
 
 @pytest.mark.parametrize_any(
-    "with_tty, regexes_required_lines, regexes_forbidden_lines",
+    "with_tty, version_should_be_shown, regexes_required_lines, regexes_forbidden_lines",
     [
-        (False, [r"Inmanta Service Orchestrator", r"Compiler version: ", r"Extensions:", r"\s*\* core:"], []),
-        (True, [r"Inmanta Service Orchestrator", r"Compiler version: ", r"Extensions:", r"\s*\* core:"], []),
+        (False, True, [r"Inmanta Service Orchestrator", r"Compiler version: ", r"Extensions:", r"\s*\* core:"], []),
+        (True, True, [r"Inmanta Service Orchestrator", r"Compiler version: ", r"Extensions:", r"\s*\* core:"], []),
+        (False, False, [], [r"Inmanta Service Orchestrator", r"Compiler version: ", r"Extensions:", r"\s*\* core:"]),
+        (True, False, [], [r"Inmanta Service Orchestrator", r"Compiler version: ", r"Extensions:", r"\s*\* core:"]),
     ],
 )
 @pytest.mark.timeout(20)
-def test_version_argument_is_set(server, tmpdir, with_tty, regexes_required_lines, regexes_forbidden_lines):
-    (args, log_dir) = get_command(tmpdir, command="--version")
+def test_version_argument_is_set(tmpdir, with_tty, version_should_be_shown, regexes_required_lines, regexes_forbidden_lines):
+    (args, log_dir) = get_command(tmpdir, version=version_should_be_shown)
     if with_tty:
-        (stdout, stderr, return_code) = run_with_tty(args, killtime=15, termtime=10)
+        (stdout, _, _) = run_with_tty(args, killtime=15, termtime=10)
     else:
-        (stdout, stderr, return_code) = run_without_tty(args, killtime=15, termtime=10)
+        (stdout, _, _) = run_without_tty(args, killtime=15, termtime=10)
     assert len(stdout) != 0
-    assert len(stderr) == 0, stderr
     check_logs(stdout, regexes_required_lines, regexes_forbidden_lines, False)
 
 

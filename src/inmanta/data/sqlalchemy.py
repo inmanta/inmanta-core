@@ -425,7 +425,8 @@ class Environment(Base):
     resource_persistent_state: Mapped[List["ResourcePersistentState"]] = relationship(
         "ResourcePersistentState", back_populates="environment_"
     )
-    unknownparameter: Mapped[List["UnknownParameter"]] = relationship("UnknownParameter", viewonly=True)
+    unknownparameter: Mapped[List["UnknownParameter"]] = relationship("UnknownParameter", back_populates="environment_")
+    # unknownparameter: Mapped[List["UnknownParameter"]] = relationship("UnknownParameter", viewonly=True)
     agent: Mapped[List["Agent"]] = relationship("Agent", back_populates="environment_")
 
 
