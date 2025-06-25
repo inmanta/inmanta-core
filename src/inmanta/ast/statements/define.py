@@ -46,7 +46,7 @@ from inmanta.ast.attribute import Attribute, RelationAttribute
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.entity import Entity, Implement, Implementation
 from inmanta.ast.statements import BiStatement, ExpressionStatement, Literal, Statement, TypeDefinitionStatement
-from inmanta.ast.type import TYPES, ConstraintType, NullableType, OrReferenceType, ReferenceType, Type, TypedList
+from inmanta.ast.type import TYPES, ConstraintType, NullableType, OrReferenceType, Type, TypedList
 from inmanta.execute.runtime import ExecutionUnit, QueueScheduler, Resolver, ResultVariable
 from inmanta.plugins import Plugin
 
@@ -227,7 +227,6 @@ class DefineEntity(TypeDefinitionStatement):
 
                 entity_type.parent_entities.append(parent_type)
                 parent_type.child_entities.append(entity_type)
-                is_dataclass |= parent_type.get_full_name() == "std::Dataclass"
 
             for parent_type in entity_type.get_all_parent_entities():
                 for attr_name, other_attr in parent_type.attributes.items():
@@ -241,6 +240,7 @@ class DefineEntity(TypeDefinitionStatement):
                             add_attributes[attr_name] = other_attr
                         else:
                             raise DuplicateException(my_attr, other_attr, "Incompatible attributes")
+                is_dataclass |= parent_type.get_full_name() == "std::Dataclass"
 
             if is_dataclass:
                 entity_type.pair_dataclass_stage1()
@@ -477,8 +477,8 @@ class DefineTypeConstraint(TypeDefinitionStatement):
         Evaluate this statement.
         """
         basetype = self.namespace.get_type(self.basetype)
+        assert not basetype.supports_references()
         self.anchors.append(TypeAnchor(self.basetype, basetype))
-        assert not isinstance(basetype, ReferenceType)
         constraint_type = self.type
 
         constraint_type.comment = self.comment

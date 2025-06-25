@@ -24,7 +24,7 @@ import hashlib
 import json
 import typing
 import uuid
-from typing import Literal, Tuple
+from typing import Literal, Optional, Tuple
 
 import pydantic
 import typing_inspect
@@ -350,7 +350,7 @@ class ReferenceLike:
                     # The collector here is purely to collect the path/reference pairs
                     # The set of reference it collects will be discarded
                     # The root ReferenceCollector will traverse past this point as well to collect the actual reference
-                    cleaned_value = inmanta.resources.collect_references(collector, value, "")
+                    cleaned_value = collector.collect_references(value, "")
                     try:
                         if collector.references:
                             arguments.append(
@@ -370,9 +370,9 @@ class ReferenceLike:
                 case Reference():
                     model = value.serialize()
                     arguments.append(ReferenceArgument(name=name, id=model.id))
+
                 case inmanta.resources.Resource() as v:
                     arguments.append(ResourceArgument(name=name, id=v.id.resource_str()))
-
                 case type() if value in [str, float, int, bool]:
                     arguments.append(PythonTypeArgument(name=name, value=value.__name__))
 
@@ -588,6 +588,35 @@ class ReplaceValue(Mutator):
         value = self.resolve_other(self.value, logger)
         dict_path_expr = dict_path.to_path(self.destination)
         dict_path_expr.set_element(self.resource, value)
+
+
+@typing.runtime_checkable
+class MaybeReference(typing.Protocol):
+    """
+    DSL value that may represent a reference in the Python domain, while having a different value in the DSL domain.
+
+    This includes DSL dataclass instances with reference attributes, if they were initially constructed in the Python
+    domain as a reference to a dataclass instance (and converted on the boundary).
+    """
+
+    __slots__ = ()
+
+    def unwrap_reference(self) -> Optional[Reference[RefValue]]:
+        """
+        If this DSL value represents a reference value, returns the associated reference object. Otherwise returns None.
+        """
+        ...
+
+
+def unwrap_reference(value: object) -> Optional[Reference[RefValue]]:
+    """
+    Iff the given value is a reference or a DSL value that represents a reference, returns the associated reference.
+    Otherwise returns None.
+
+    This includes DSL dataclass instances with reference attributes, if they were initially constructed in the Python
+    domain as a reference to a dataclass instance (and converted on the boundary).
+    """
+    return value if isinstance(value, Reference) else value.unwrap_reference() if isinstance(value, MaybeReference) else None
 
 
 def is_reference_of(instance: typing.Optional[object], type_class: type[object]) -> bool:
