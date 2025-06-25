@@ -24,19 +24,20 @@ import hashlib
 import json
 import typing
 import uuid
-from typing import Literal, Tuple
+from typing import Literal, Optional, Tuple
 
 import pydantic
 import typing_inspect
+from pydantic import ValidationError
 
 import inmanta
 import inmanta.resources
 from inmanta import util
-from inmanta.types import ResourceIdStr
+from inmanta.types import JsonType, ResourceIdStr, StrictJson
 from inmanta.util import dict_path
 
 ReferenceType = typing.Annotated[str, pydantic.StringConstraints(pattern="^([a-z0-9_]+::)+[A-Z][A-z0-9_-]*$")]
-PrimitiveTypes = str | float | int | bool
+PrimitiveTypes = str | float | int | bool | None
 
 
 # The name of an attribute on the class where dataclasses store field information. This is an integral part of the
@@ -84,6 +85,24 @@ class ReferenceCycleException(Exception):
         return self.get_message()
 
 
+class MutatorMissingError(TypeError):
+    """
+    Exception raised during reference resolution when the requested mutator
+    cannot be found in the set of registered mutators.
+
+    e.g. when no mutator was registered or in case of code loading failure.
+    """
+
+
+class ReferenceMissingError(TypeError):
+    """
+    Exception raised during reference resolution when the requested reference
+    cannot be found in the set of registered references.
+
+    e.g. when no reference was registered or in case of code loading failure.
+    """
+
+
 class Argument(pydantic.BaseModel):
     """Base class for reference (resolver) arguments"""
 
@@ -122,6 +141,20 @@ class LiteralArgument(Argument):
         return self.value
 
 
+class JsonArgument(Argument):
+    """Json-like argument to a reference"""
+
+    type: typing.Literal["json"] = "json"
+    value: StrictJson
+
+    def get_arg_value(
+        self,
+        resource: "inmanta.resources.Resource",
+        logger: "handler.LoggerABC",
+    ) -> object:
+        return self.value
+
+
 class ReferenceArgument(Argument):
     """Use the value of another reference as an argument for the reference"""
 
@@ -134,6 +167,33 @@ class ReferenceArgument(Argument):
         logger: "handler.LoggerABC",
     ) -> object:
         return resource.get_reference_value(self.id, logger)
+
+
+class MutatedJsonArgument(Argument):
+    """
+    Json-like argument that contains another reference in the json structure
+
+    It is stored as
+    1. a json value with all reference replaced by None
+    2. a mapping of dictpaths to references. Each dict path indicates where the reference should be inserted
+
+    """
+
+    type: typing.Literal["mjson"] = "mjson"
+    value: StrictJson
+    references: dict[str, ReferenceArgument]
+
+    def get_arg_value(
+        self,
+        resource: "inmanta.resources.Resource",
+        logger: "handler.LoggerABC",
+    ) -> object:
+        start_value: JsonType = self.value
+        for destination, valueref in self.references.items():
+            value = valueref.get_arg_value(resource, logger)
+            dict_path_expr = dict_path.to_path(destination)
+            dict_path_expr.set_element(start_value, value)
+        return start_value
 
 
 class GetArgument(Argument):
@@ -186,7 +246,13 @@ class ResourceArgument(Argument):
 
 
 ArgumentTypes = typing.Annotated[
-    LiteralArgument | ReferenceArgument | GetArgument | PythonTypeArgument | ResourceArgument,
+    LiteralArgument
+    | ReferenceArgument
+    | GetArgument
+    | PythonTypeArgument
+    | ResourceArgument
+    | JsonArgument
+    | MutatedJsonArgument,
     pydantic.Field(discriminator="type"),
 ]
 """ A list of all specific types of arguments. Pydantic uses this to instantiate the correct argument class
@@ -268,19 +334,45 @@ class ReferenceLike:
 
     def serialize_arguments(self) -> Tuple[uuid.UUID, list[ArgumentTypes]]:
         """Serialize the arguments to this class"""
+
+        # The handling of references here is a bit subtle:
+        # We replace every reference with a ReferenceArgument that refers to the reference by id
+        # The reference itself is not handled here but in inmanta.resources.ReferenceSubCollector.collect_reference
+        # There, the raw, unserialized tree of arguments is iterated over as well to collect the references themselves
+        # The caches on the Reference prevent this from being too inefficient by serializing only once
         arguments: list[ArgumentTypes] = []
         for name, value in self.arguments.items():
             match value:
-                case str() | int() | float() | bool():
+                case str() | int() | float() | bool() | None:
                     arguments.append(LiteralArgument(name=name, value=value))
-
+                case dict() | list():
+                    collector = inmanta.resources.ReferenceSubCollector()
+                    # The collector here is purely to collect the path/reference pairs
+                    # The set of reference it collects will be discarded
+                    # The root ReferenceCollector will traverse past this point as well to collect the actual reference
+                    cleaned_value = collector.collect_references(value, "")
+                    try:
+                        if collector.references:
+                            arguments.append(
+                                MutatedJsonArgument(
+                                    name=name,
+                                    value=cleaned_value,
+                                    references={
+                                        path: ReferenceArgument(name=path, id=model.id)
+                                        for path, model in collector.replacements.items()
+                                    },
+                                )
+                            )
+                        else:
+                            arguments.append(JsonArgument(name=name, value=value))
+                    except ValidationError:
+                        raise ValueError(f"The {name} attribute of {self} is not json serializable: {value}")
                 case Reference():
                     model = value.serialize()
                     arguments.append(ReferenceArgument(name=name, id=model.id))
 
-                case inmanta.resources.Resource():
-                    arguments.append(ResourceArgument(name=name, id=value.id.resource_str()))
-
+                case inmanta.resources.Resource() as v:
+                    arguments.append(ResourceArgument(name=name, id=v.id.resource_str()))
                 case type() if value in [str, float, int, bool]:
                     arguments.append(PythonTypeArgument(name=name, value=value.__name__))
 
@@ -295,6 +387,14 @@ class ReferenceLike:
     @property
     def arguments(self) -> collections.abc.Mapping[str, object]:
         return {k: v for k, v in self.__dict__.items() if not k.startswith("_")}
+
+    def __eq__(self, other: object) -> bool:
+        if type(self) is not type(other):
+            return False
+
+        assert isinstance(other, ReferenceLike)  # mypy can't figure out the check above
+
+        return self.arguments == other.arguments
 
 
 class Mutator(ReferenceLike):
@@ -395,7 +495,7 @@ class reference:
     def get_class(cls, name: str) -> type[Reference[RefValue]]:
         """Get the reference class registered with the given name"""
         if name not in cls._reference_classes:
-            raise TypeError(f"There is no reference class registered with name {name}")
+            raise ReferenceMissingError(f"There is no reference class registered with name {name}")
 
         return cls._reference_classes[name]
 
@@ -435,7 +535,7 @@ class mutator:
     def get_class(cls, name: str) -> type[Mutator]:
         """Get the mutator class registered with the given name"""
         if name not in cls._mutator_classes:
-            raise TypeError(f"There is no mutator class registered with name {name}")
+            raise MutatorMissingError(f"There is no mutator class registered with name {name}")
 
         return cls._mutator_classes[name]
 
@@ -473,7 +573,7 @@ class ReplaceValue(Mutator):
     """Replace a reference in the provided resource"""
 
     def __init__(self, resource: "inmanta.resources.Resource", value: Reference[PrimitiveTypes], destination: str) -> None:
-        """Change a value in the given resource at the given distination
+        """Change a value in the given resource at the given destination
 
         :param resource: The resource to replace the value in
         :param value: The value to replace in `resource` at `destination`
@@ -488,6 +588,35 @@ class ReplaceValue(Mutator):
         value = self.resolve_other(self.value, logger)
         dict_path_expr = dict_path.to_path(self.destination)
         dict_path_expr.set_element(self.resource, value)
+
+
+@typing.runtime_checkable
+class MaybeReference(typing.Protocol):
+    """
+    DSL value that may represent a reference in the Python domain, while having a different value in the DSL domain.
+
+    This includes DSL dataclass instances with reference attributes, if they were initially constructed in the Python
+    domain as a reference to a dataclass instance (and converted on the boundary).
+    """
+
+    __slots__ = ()
+
+    def unwrap_reference(self) -> Optional[Reference[RefValue]]:
+        """
+        If this DSL value represents a reference value, returns the associated reference object. Otherwise returns None.
+        """
+        ...
+
+
+def unwrap_reference(value: object) -> Optional[Reference[RefValue]]:
+    """
+    Iff the given value is a reference or a DSL value that represents a reference, returns the associated reference.
+    Otherwise returns None.
+
+    This includes DSL dataclass instances with reference attributes, if they were initially constructed in the Python
+    domain as a reference to a dataclass instance (and converted on the boundary).
+    """
+    return value if isinstance(value, Reference) else value.unwrap_reference() if isinstance(value, MaybeReference) else None
 
 
 def is_reference_of(instance: typing.Optional[object], type_class: type[object]) -> bool:

@@ -1,0 +1,4 @@
+description: Add isCompiling option to GraphQL environments query
+issue-nr: 8737
+change-type: minor
+destination-branches: [master]

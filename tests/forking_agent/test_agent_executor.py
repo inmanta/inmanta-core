@@ -21,10 +21,11 @@ import os
 import pathlib
 import subprocess
 import sys
+import uuid
 
 from inmanta import const
 from inmanta.agent import executor, forking_executor
-from inmanta.data.model import PipConfig
+from inmanta.data.model import ModuleSourceMetadata, PipConfig
 from inmanta.loader import ModuleSource
 from inmanta.signals import dump_ioloop_running, dump_threads
 from utils import PipIndex, log_contains, log_doesnt_contain, retry_limited
@@ -32,8 +33,8 @@ from utils import PipIndex, log_contains, log_doesnt_contain, retry_limited
 logger = logging.getLogger(__name__)
 
 
-def code_for(bp: executor.ExecutorBlueprint) -> list[executor.ResourceInstallSpec]:
-    return [executor.ResourceInstallSpec("test::Test", 5, bp)]
+def code_for(bp: executor.ExecutorBlueprint) -> list[executor.ModuleInstallSpec]:
+    return [executor.ModuleInstallSpec("test", "abcdef", bp)]
 
 
 async def test_process_manager(environment, pip_index, mpmanager_light: forking_executor.MPManager) -> None:
@@ -41,6 +42,7 @@ async def test_process_manager(environment, pip_index, mpmanager_light: forking_
     This test verifies the creation and reuse of executors and their underlying environments. It checks whether
     new executors and environments are created as necessary and reused when the conditions are the same.
     """
+    env_id = uuid.UUID(environment)
     # Define requirements and pip configuration
     requirements1 = ("pkg1",)
     requirements2 = ("pkg1", "pkg2")
@@ -52,9 +54,11 @@ async def test_process_manager(environment, pip_index, mpmanager_light: forking_
         sha1sum.update(code)
         hv: str = sha1sum.hexdigest()
         return ModuleSource(
-            name=name,
-            hash_value=hv,
-            is_byte_code=False,
+            metadata=ModuleSourceMetadata(
+                name=name,
+                hash_value=hv,
+                is_byte_code=False,
+            ),
             source=code,
         )
 
@@ -80,19 +84,31 @@ assert inmanta_plugins.sub.a == 1""",
 
     # Define blueprints for executors and environments
     blueprint1 = executor.ExecutorBlueprint(
-        pip_config=pip_config, requirements=requirements1, sources=sources1, python_version=sys.version_info[:2]
+        environment_id=env_id,
+        pip_config=pip_config,
+        requirements=requirements1,
+        sources=sources1,
+        python_version=sys.version_info[:2],
     )
     env_blueprint1 = executor.EnvBlueprint(
-        pip_config=pip_config, requirements=requirements1, python_version=sys.version_info[:2]
+        environment_id=env_id, pip_config=pip_config, requirements=requirements1, python_version=sys.version_info[:2]
     )
     blueprint2 = executor.ExecutorBlueprint(
-        pip_config=pip_config, requirements=requirements1, sources=sources2, python_version=sys.version_info[:2]
+        environment_id=env_id,
+        pip_config=pip_config,
+        requirements=requirements1,
+        sources=sources2,
+        python_version=sys.version_info[:2],
     )
     blueprint3 = executor.ExecutorBlueprint(
-        pip_config=pip_config, requirements=requirements2, sources=sources2, python_version=sys.version_info[:2]
+        environment_id=env_id,
+        pip_config=pip_config,
+        requirements=requirements2,
+        sources=sources2,
+        python_version=sys.version_info[:2],
     )
     env_blueprint2 = executor.EnvBlueprint(
-        pip_config=pip_config, requirements=requirements2, python_version=sys.version_info[:2]
+        environment_id=env_id, pip_config=pip_config, requirements=requirements2, python_version=sys.version_info[:2]
     )
 
     executor_manager = mpmanager_light
@@ -163,6 +179,7 @@ async def test_process_manager_restart(environment, tmpdir, mp_manager_factory, 
     """
     caplog.clear()
 
+    env_id = uuid.UUID(environment)
     # Setup a local pip, a pip config, requirements and sources
     pip_index = PipIndex(artifact_dir=str(tmpdir))
     pip_config = PipConfig(index_url=pip_index.url)
@@ -171,7 +188,11 @@ async def test_process_manager_restart(environment, tmpdir, mp_manager_factory, 
 
     # Create a blueprint with no requirements and no sources
     blueprint1 = executor.ExecutorBlueprint(
-        pip_config=pip_config, requirements=requirements, sources=sources, python_version=sys.version_info[:2]
+        environment_id=env_id,
+        pip_config=pip_config,
+        requirements=requirements,
+        sources=sources,
+        python_version=sys.version_info[:2],
     )
     env_bp_hash1 = blueprint1.to_env_blueprint().blueprint_hash()
 
@@ -238,6 +259,7 @@ async def test_executor_creation_and_reuse(pip_index: PipIndex, mpmanager_light:
     This test verifies the creation and reuse of executors based on their blueprints. It checks whether
     the concurrency aspects and the locking mechanisms work as intended.
     """
+    env_id = uuid.uuid4()
     # Force log level down, this causes more output on the CI when this fails
     caplog.set_level("DEBUG")
 
@@ -254,22 +276,36 @@ def test():
     sha1sum.update(code)
     hv: str = sha1sum.hexdigest()
     module_source1 = ModuleSource(
-        name="inmanta_plugins.test",
-        hash_value=hv,
-        is_byte_code=False,
+        metadata=ModuleSourceMetadata(
+            name="inmanta_plugins.test",
+            hash_value=hv,
+            is_byte_code=False,
+        ),
         source=code,
     )
     sources1 = ()
     sources2 = (module_source1,)
 
     blueprint1 = executor.ExecutorBlueprint(
-        pip_config=pip_config, requirements=requirements1, sources=sources1, python_version=sys.version_info[:2]
+        environment_id=env_id,
+        pip_config=pip_config,
+        requirements=requirements1,
+        sources=sources1,
+        python_version=sys.version_info[:2],
     )
     blueprint2 = executor.ExecutorBlueprint(
-        pip_config=pip_config, requirements=requirements1, sources=sources2, python_version=sys.version_info[:2]
+        environment_id=env_id,
+        pip_config=pip_config,
+        requirements=requirements1,
+        sources=sources2,
+        python_version=sys.version_info[:2],
     )
     blueprint3 = executor.ExecutorBlueprint(
-        pip_config=pip_config, requirements=requirements2, sources=sources2, python_version=sys.version_info[:2]
+        environment_id=env_id,
+        pip_config=pip_config,
+        requirements=requirements2,
+        sources=sources2,
+        python_version=sys.version_info[:2],
     )
 
     logging.info(
@@ -312,6 +348,7 @@ async def test_executor_creation_and_venv_usage(
     This test verifies the creation and reuse of executors based on their blueprints. It checks whether
     the concurrency aspects and the locking mechanisms work as intended.
     """
+    env_id = uuid.uuid4()
     mpmanager_light.process_pool.venv_checkup_interval = 0.1  # Renew the timestamp of the venv status file every 100 ms
     requirements1 = ()
     requirements2 = ("pkg1",)
@@ -327,9 +364,11 @@ def test():
     sha1sum.update(code)
     hv: str = sha1sum.hexdigest()
     module_source1 = ModuleSource(
-        name="inmanta_plugins.test",
-        hash_value=hv,
-        is_byte_code=False,
+        metadata=ModuleSourceMetadata(
+            name="inmanta_plugins.test",
+            hash_value=hv,
+            is_byte_code=False,
+        ),
         source=code,
     )
     sources1 = ()
@@ -339,13 +378,25 @@ def test():
     initial_version: tuple[int, int] = (3, 11)
 
     blueprint1 = executor.ExecutorBlueprint(
-        pip_config=pip_config, requirements=requirements1, sources=sources1, python_version=initial_version
+        environment_id=env_id,
+        pip_config=pip_config,
+        requirements=requirements1,
+        sources=sources1,
+        python_version=initial_version,
     )
     blueprint2 = executor.ExecutorBlueprint(
-        pip_config=pip_config, requirements=requirements2, sources=sources2, python_version=initial_version
+        environment_id=env_id,
+        pip_config=pip_config,
+        requirements=requirements2,
+        sources=sources2,
+        python_version=initial_version,
     )
     blueprint3 = executor.ExecutorBlueprint(
-        pip_config=pip_config, requirements=requirements3, sources=sources3, python_version=initial_version
+        environment_id=env_id,
+        pip_config=pip_config,
+        requirements=requirements3,
+        sources=sources3,
+        python_version=initial_version,
     )
 
     executor_manager = mpmanager_light
@@ -397,7 +448,7 @@ def test():
         assert all(not e.running for e in executors)
 
         def did_executor_server_stop() -> bool:
-            return executor_blueprint in mpmanager_light.process_pool.pool
+            return executor_blueprint not in mpmanager_light.process_pool.pool
 
         # Also wait until the executor server has stopped, because that one refreshes the .inmanta_venv_status file.
         await retry_limited(did_executor_server_stop, timeout=10)
@@ -438,7 +489,7 @@ def test():
     )
     # A new version would run
     blueprint3_updated = executor.ExecutorBlueprint(
-        pip_config=pip_config, requirements=requirements3, sources=sources3, python_version=(3, 12)
+        environment_id=env_id, pip_config=pip_config, requirements=requirements3, sources=sources3, python_version=(3, 12)
     )
     await executor_manager.get_executor("agent3", "local:", code_for(blueprint3_updated))
     venvs = [str(e) for e in venv_dir.iterdir()]

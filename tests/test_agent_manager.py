@@ -29,7 +29,7 @@ from uuid import UUID, uuid4
 import pytest
 from tornado.httpclient import AsyncHTTPClient
 
-from inmanta import config, data
+from inmanta import config, const, data
 from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus
 from inmanta.protocol import Result, handle, typedmethod
@@ -169,19 +169,20 @@ async def test_primary_selection(server, environment):
     await data.Agent(environment=env.id, name="agent3", paused=False).insert()
 
     # one session
-    ts1 = MockSession(uuid4(), env.id, {"agent1", "agent2"}, "ts1")
+    ts1 = MockSession(sid=uuid4(), tid=env.id, endpoint_names={"agent1", "agent2"}, nodename="ts1")
     await am.new_session(ts1, set(ts1.endpoint_names))
     await am._session_listener_actions.join()
     assert len(am.sessions) == 1
 
     # cross talk session
-    ts2 = MockSession(uuid4(), env2.id, {"agent1", "agent2"}, "ts2")
+    ts2 = MockSession(sid=uuid4(), tid=env2.id, endpoint_names={"agent1", "agent2"}, nodename="ts2")
     await am.new_session(ts2, set(ts2.endpoint_names))
     await am._session_listener_actions.join()
     assert len(am.sessions) == 2
 
     ts1.get_client().set_state.assert_called_with("agent2", enabled=True)
     ts1.get_client().reset_mock()
+
     await retry_limited(
         assert_state_agents_retry(env.id, AgentStatus.paused, AgentStatus.up, AgentStatus.down, sid2=ts1.id), 10
     )
@@ -200,7 +201,7 @@ async def test_primary_selection(server, environment):
     )
 
     # second session
-    ts2 = MockSession(uuid4(), env.id, {"agent3", "agent2"}, "ts2")
+    ts2 = MockSession(sid=uuid4(), tid=env.id, endpoint_names={"agent3", "agent2"}, nodename="ts2")
     await am.new_session(ts2, set(ts2.endpoint_names))
     await am._session_listener_actions.join()
     assert len(am.sessions) == 3
@@ -744,7 +745,7 @@ async def test_session_creation_fails(server, environment, async_finalizer, capl
     assert len(session_manager._sessions) == 0
 
     # Remove connectivity to the database
-    await data.stop_engine()
+    await data.disconnect_pool()
 
     caplog.clear()
 
@@ -753,7 +754,7 @@ async def test_session_creation_fails(server, environment, async_finalizer, capl
     await a.start()
     async_finalizer(a.stop)
 
-    # Verify that session creation fails and server state is stays consistent
+    # Verify that session creation fails and server state stays consistent
     await retry_limited(lambda: "Heartbeat failed" in caplog.text, 10)
     assert len(agentmanager.sessions) == 0
     assert len(agentmanager.tid_endpoint_to_session) == 0
@@ -1082,3 +1083,67 @@ async def test_heartbeat_different_session(server_pre_start, async_finalizer, ca
     LOGGER.info("Heartbeat good, unlocking")
     hanglock.set()
     await hangers
+
+
+@pytest.mark.parametrize("halt_environment", (True, False))
+async def test_pause_all_agents_doesnt_pause_environment(server, environment, client, halt_environment: bool) -> None:
+    """
+    Reproduces bug: https://github.com/inmanta/inmanta-core/issues/9081. Additionally verifies that halting the entire
+    environment does halt the scheduler process.
+    """
+    env_id = UUID(environment)
+    env = await data.Environment.get_by_id(env_id)
+    agent_manager = server.get_slice(SLICE_AGENT_MANAGER)
+    autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
+
+    await agent_manager.ensure_agent_registered(env=env, nodename="agent1")
+
+    async def wait_for_state(*, active: bool) -> None:
+        async def session_state():
+            return await agent_manager.are_agents_active(env_id, [const.AGENT_SCHEDULER_ID]) == active
+
+        await retry_limited(lambda: len(autostarted_agent_manager._agent_procs) == (1 if active else 0), timeout=2)
+        await retry_limited(session_state, timeout=2)
+
+    await wait_for_state(active=True)
+
+    agents = await data.Agent.get_list()
+    assert len(agents) == 2
+    agent_dct = {agent.name: agent for agent in agents}
+    assert not agent_dct[const.AGENT_SCHEDULER_ID].paused
+    assert not agent_dct["agent1"].paused
+
+    await wait_for_state(active=True)
+    # pause agents / halt environment
+    result = (
+        await client.halt_environment(environment)
+        if halt_environment
+        else await client.all_agents_action(environment, AgentAction.pause.value)
+    )
+    assert result.code == 200
+    # scheduler should be down only if the environment was halted
+    await wait_for_state(active=not halt_environment)
+
+    agents = await data.Agent.get_list()
+    assert len(agents) == 2
+    agent_dct = {agent.name: agent for agent in agents}
+    assert agent_dct[const.AGENT_SCHEDULER_ID].paused == halt_environment
+    assert agent_dct["agent1"].paused
+
+    # scheduler still down (if it was down before)
+    await wait_for_state(active=not halt_environment)
+    # unpause agents / resume environment
+    result = (
+        await client.resume_environment(environment)
+        if halt_environment
+        else await client.all_agents_action(environment, AgentAction.unpause.value)
+    )
+    assert result.code == 200
+    # scheduler should be up again if it was halted before
+    await wait_for_state(active=True)
+
+    agents = await data.Agent.get_list()
+    assert len(agents) == 2
+    agent_dct = {agent.name: agent for agent in agents}
+    assert not agent_dct[const.AGENT_SCHEDULER_ID].paused
+    assert not agent_dct["agent1"].paused

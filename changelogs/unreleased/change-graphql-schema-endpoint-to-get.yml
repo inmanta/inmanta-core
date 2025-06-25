@@ -1,0 +1,4 @@
+---
+description: "Change GraphQL schema endpoint to GET instead of POST"
+change-type: patch
+destination-branches: [master]

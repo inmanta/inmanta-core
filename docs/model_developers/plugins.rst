@@ -3,14 +3,116 @@
 Developing Plugins
 *********************
 
-
-Adding new plugins
-========================
-
 Plugins provide :ref:`functions<lang-plugins>` that can be called from the :term:`DSL`. This is the
 primary mechanism to interface Python code with the orchestration model at compile time. For example,
 this mechanism is also used for std::template and std::file. In addition to this, Inmanta also registers all
 plugins with the template engine (Jinja2) to use as filters.
+
+A simple plugin that accepts no arguments, prints out ``Hello world!`` and returns no value requires
+the following code:
+
+.. code-block:: python
+
+    from inmanta.plugins import plugin
+
+    @plugin
+    def hello() -> None:
+        print("Hello world!")
+
+
+If the code above is placed in the plugins directory of the example module
+(``inmanta_plugins/example/__init__.py``) the plugin can be invoked from the orchestration model as
+follows:
+
+.. code-block:: inmanta
+
+    import example
+
+    example::hello()
+
+
+.. note::
+
+    A module's Python code lives in the ``inmanta_plugins.<module_name>`` namespace.
+
+
+A more complex plugin accepts arguments and returns a value. Compared to what `python supports as
+function arguments <https://docs.python.org/3/glossary.html#term-parameter>`_, only positional-only
+arguments are not supported.
+The following example creates a plugin that converts a string to uppercase:
+
+.. code-block:: python
+
+    from inmanta.plugins import plugin
+
+    @plugin
+    def upper(value: str) -> str:
+        return value.upper()
+
+
+This plugin can be tested with:
+
+.. code-block:: inmanta
+
+    import example
+
+    std::print(example::upper("hello world"))
+
+
+If your plugin requires external libraries, add them as dependencies of the module. For more details on how to add dependencies
+see :ref:`moddev-module`.
+
+
+Passing entities into plugins
+=============================
+
+Entities can also be passed into plugins.
+The python code of the plugin can navigate relations throughout the
+orchestration model to access attributes of other entities.
+
+This example searches for a specific subnet entity fo a specific IP in a list of subnet entities.
+
+.. code-block:: python
+
+    @plugin
+    def find_subnet_for(
+        the_ip: "std::ipv4_address",
+        subnets: "Subnet[]",
+    ) -> "Subnet":
+        """find a network containing the ip"""
+        ip = IPAddress(the_ip)
+        for subnet in subnets:
+            if ip in IPNetwork(subnet.ip_subnet):
+                return subnet
+        raise NoSubnetFoundForIpException(the_ip)
+
+When passing entities into a plugin:
+
+1. the actual python type of the object will be :py:class:`inmanta.execute.proxy.DynamicProxy`
+2. the entities can not be modified
+3. when traversing a relation or accessing an attribute, that has no value yet, we will raise an :py:class:`inmanta.ast.UnsetException`. The plugin will be re-executed when the value is known. This means that this exception must never be blocked and that code executing before the last attribute or relation access can be executed multiple times.
+
+
+
+Raising Exception
+====================
+
+A base exception for plugins is provided in :py:class:`inmanta.plugins.PluginException`. Exceptions raised
+from a plugin should be of a subtype of this base exception.
+
+.. code-block:: python
+    :linenos:
+
+    from inmanta.plugins import plugin, PluginException
+
+    @plugin
+    def raise_exception(message: "string") -> None:
+        raise PluginException(message)
+
+
+
+Adding new plugins
+========================
 
 A plugin is a python function, registered with the platform with the :func:`~inmanta.plugins.plugin`
 decorator. This plugin accepts arguments when called from the DSL and can return a value. Both the
@@ -99,8 +201,8 @@ as an argument to this plugin, but for IDE and static typing purposes it will be
 Type hinting using Inmanta DSL types
 ------------------------------------
 
-Alternatively, the Inmanta :term:`DSL` type annotations can be provided as a string (Python3 style argument annotation).
-
+Alternatively, the Inmanta :term:`DSL` type annotations can be provided as a string (Python3 style argument annotation)
+that refers to Inmanta primitive types or to entities.
 
 .. code-block:: python
     :linenos:
@@ -113,36 +215,8 @@ Alternatively, the Inmanta :term:`DSL` type annotations can be provided as a str
 
 
 
-Through the arguments of the function, the Python code in the plugin can navigate the orchestration
-model. The compiler takes care of scheduling the execution at the correct point in the model
-evaluation.
-
-.. note::
-
-    A module's Python code lives in the ``inmanta_plugins.<module_name>`` namespace.
-
-A simple plugin that accepts no arguments, prints out "Hello world!" and returns no value requires
-the following code:
-
-.. code-block:: python
-    :linenos:
-
-    from inmanta.plugins import plugin
-
-    @plugin
-    def hello() -> None:
-        print("Hello world!")
-
-
-If the code above is placed in the plugins directory of the example module
-(``examples/plugins/__init__.py``) the plugin can be invoked from the orchestration model as
-follows:
-
-.. code-block:: inmanta
-
-    import example
-
-    example::hello()
+Renaming plugins
+================
 
 The plugin decorator accepts an argument name. This can be used to change the name of the plugin in
 the DSL. This can be used to create plugins that use python reserved names such as ``print`` for example:
@@ -160,51 +234,8 @@ the DSL. This can be used to create plugins that use python reserved names such 
         print("inmanta")
 
 
-A more complex plugin accepts arguments and returns a value. Compared to what `python supports as
-function arguments <https://docs.python.org/3/glossary.html#term-parameter>`_, only positional-only
-arguments are not supported.
-The following example creates a plugin that converts a string to uppercase:
-
-.. code-block:: python
-    :linenos:
-
-    from inmanta.plugins import plugin
-
-    @plugin
-    def upper(value: "string") -> "string":
-        return value.upper()
 
 
-This plugin can be tested with:
-
-.. code-block:: inmanta
-
-    import example
-
-    std::print(example::upper("hello world"))
-
-
-Argument type annotations are strings that refer to Inmanta primitive types or to entities. If an
-entity is passed to a plugin, the python code of the plugin can navigate relations throughout the
-orchestration model to access attributes of other entities.
-
-A base exception for plugins is provided in ``inmanta.plugins.PluginException``. Exceptions raised
-from a plugin should be of a subtype of this base exception.
-
-.. code-block:: python
-    :linenos:
-
-    from inmanta.plugins import plugin, PluginException
-
-    @plugin
-    def raise_exception(message: "string") -> None:
-        raise PluginException(message)
-
-If your plugin requires external libraries, add them as dependencies of the module. For more details on how to add dependencies
-see :ref:`moddev-module`.
-
-.. todo:: context
-.. todo:: new statements
 
 
 Dataclasses
@@ -225,7 +256,7 @@ When used in a plugin, it is a normal python object, when used in the model, it 
 When using dataclasses, the object can be passed around freely into and out of plugins.
 
 However, some restrictions apply:
-The python class is expect to be:
+The python class is expected to be:
 
 * a frozen dataclass
 * with the same name
@@ -233,7 +264,7 @@ The python class is expect to be:
 * in the corresponding submodule
 * with the exact same fields
 
-The Inmanta entity is expect to:
+The Inmanta entity is expected to:
 
 * have no relations
 * have no indexes
@@ -292,28 +323,4 @@ Should the replace_by argument be omitted, the warning would look like this:
 .. code-block::
 
     Plugin 'printf' in module 'inmanta_plugins.<module_name>' is deprecated.
-
-If you want your module to stay compatible with older versions of inmanta you will also need to add a little piece of code that changes how
-:func:`~inmanta.plugins.deprecated` is imported as it does not exist in all versions.
-
-The previous example would then look like this. For older inmanta versions, replace the decorator with a no-op.
-
-.. code-block:: python
-    :linenos:
-
-    from inmanta.plugins import plugin
-
-    try:
-        from inmanta.plugins import deprecated
-    except ImportError:
-        deprecated = lambda function=None, **kwargs: function if function is not None else deprecated
-
-
-    @deprecated(replaced_by="my_new_plugin")
-    @plugin
-    def printf() -> None:
-        """
-            Prints inmanta
-        """
-        print("inmanta")
 

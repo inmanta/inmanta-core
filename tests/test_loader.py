@@ -20,7 +20,6 @@ import hashlib
 import importlib.abc
 import importlib.machinery
 import importlib.util
-import inspect
 import os
 import shutil
 import sys
@@ -34,8 +33,9 @@ from pytest import fixture
 
 import utils
 from inmanta import const, env, loader, moduletool
+from inmanta.data.model import ModuleSourceMetadata
 from inmanta.env import PipConfig
-from inmanta.loader import ModuleSource, SourceInfo
+from inmanta.loader import ModuleSource, SourceNotFoundException
 from inmanta.module import Project
 
 
@@ -44,58 +44,66 @@ def get_module_source(module: str, code: str) -> ModuleSource:
     sha1sum = hashlib.new("sha1")
     sha1sum.update(data)
     hv: str = sha1sum.hexdigest()
-    return ModuleSource(module, hv, False, data)
+    return ModuleSource(
+        metadata=ModuleSourceMetadata(
+            name=module,
+            hash_value=hv,
+            is_byte_code=False,
+        ),
+        source=data,
+    )
 
 
-def test_code_manager(tmpdir: py.path.local, deactive_venv):
+@pytest.mark.parametrize(
+    "install_all_dependencies,expected_dependencies",
+    [
+        (True, {"inmanta-module-std", "lorem"}),
+        (False, {"lorem"}),
+    ],
+)
+def test_code_manager(tmpdir: py.path.local, deactive_venv, install_all_dependencies, expected_dependencies):
     """Verify the code manager"""
     original_project_dir: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "plugins_project")
     project_dir = os.path.join(tmpdir, "plugins_project")
     shutil.copytree(original_project_dir, project_dir)
     project: Project = Project(project_dir, venv_path=os.path.join(project_dir, ".env"))
+    project._metadata.agent_install_dependency_modules = install_all_dependencies
+
     Project.set(project)
     project.install_modules()
     project.load()
 
     project.load_module("single_plugin_file", allow_v1=True)
     project.load_module("multiple_plugin_files", allow_v1=True)
+
+    # non_imported_plugin_file was not loaded in the project
+    # we check that a warning is produced when we attempt to register
+    # some of its code
+
     import inmanta_plugins.multiple_plugin_files.handlers as multi
+    import inmanta_plugins.non_imported_plugin_file as non_imported
     import inmanta_plugins.single_plugin_file as single
 
     mgr = loader.CodeManager()
     mgr.register_code("std::testing::NullResource", single.MyHandler)
     mgr.register_code("multiple_plugin_files::NullResourceBis", multi.MyHandler)
 
-    def assert_content(source_info: SourceInfo, handler) -> str:
-        filename = inspect.getsourcefile(handler)
-        assert filename is not None
-        content: str
-        with open(filename, "rb") as fd:
-            content = fd.read()
-            assert source_info.content == content
-            assert len(source_info.hash) > 0
-            return content
+    with pytest.raises(SourceNotFoundException) as excinfo:
+        mgr.register_code("non_imported_plugin_file::NullResourceBis", non_imported.MyHandler)
 
-    # get types
-    types = dict(mgr.get_types())
-    assert "std::testing::NullResource" in types
-    assert "multiple_plugin_files::NullResourceBis" in types
-
-    single_type_list: list[SourceInfo] = types["std::testing::NullResource"]
-    multi_type_list: list[SourceInfo] = types["multiple_plugin_files::NullResourceBis"]
-
-    assert len(single_type_list) == 1
-    single_content: str = assert_content(single_type_list[0], single.MyHandler)
-
-    assert len(multi_type_list) == 3
-    multi_content: str = assert_content(
-        next(s for s in multi_type_list if s.module_name == "inmanta_plugins.multiple_plugin_files.handlers"), multi.MyHandler
+    exception_message = (
+        "Module non_imported_plugin_file is imported in plugin code but not in model code. "
+        "Either remove the unused import, or make sure to import the module in model code."
     )
+    assert exception_message in str(excinfo.value)
 
-    # get_file_hashes
-    mgr_contents: set[bytes] = {mgr.get_file_content(hash) for hash in mgr.get_file_hashes()}
-    assert single_content in mgr_contents
-    assert multi_content in mgr_contents
+    module_version_info = mgr.get_module_version_info()
+    assert "multiple_plugin_files" in module_version_info.keys()
+    assert "single_plugin_file" in module_version_info.keys()
+
+    assert set(module_version_info["single_plugin_file"].requirements) == expected_dependencies
+    assert len(module_version_info["single_plugin_file"].files_in_module) == 1
+    assert len(module_version_info["multiple_plugin_files"].files_in_module) == 3
 
     with pytest.raises(KeyError):
         mgr.get_file_content("test")
@@ -103,16 +111,6 @@ def test_code_manager(tmpdir: py.path.local, deactive_venv):
     # register type without source
     with pytest.raises(loader.SourceNotFoundException):
         mgr.register_code("test2", str)
-
-    # verify requirements behavior
-    source_info: SourceInfo = single_type_list[0]
-    # by default also install dependencies on other modules
-    assert source_info.requires == ["inmanta-module-std", "lorem"]
-    project._metadata.agent_install_dependency_modules = False
-    # reset cache
-    source_info._requires = None
-    # when disabled only install non-module dependencies
-    assert source_info.requires == ["lorem"]
 
 
 def test_code_loader(tmp_path, caplog):
@@ -151,17 +149,19 @@ def test():
     assert inmanta_plugins.inmanta_unit_test.test() == 10
     assert any("Deploying code " in message for message in caplog.messages)
     assert any(
-        f"Not deploying code (hv={source_1.hash_value}, module={source_1.name}) because it is already on disk" in message
+        f"Not deploying code (hv={source_1.metadata.hash_value}, module={source_1.metadata.name}) "
+        "because it is already on disk" in message
         for message in caplog.messages
     )
     caplog.clear()
 
     # Load the module to register it in the loader cache
-    cl.load_module(source_1.name, source_1.hash_value)
+    cl.load_module(source_1.metadata.name, source_1.metadata.hash_value)
     # Subsequent deploys of the same module will result in a cache hit
     cl.deploy_version([source_1])
     assert any(
-        f"Not deploying code (hv={source_1.hash_value}, module={source_1.name}) because of cache hit" in message
+        f"Not deploying code (hv={source_1.metadata.hash_value}, module={source_1.metadata.name}) because of cache hit"
+        in message
         for message in caplog.messages
     )
     caplog.clear()
@@ -177,9 +177,9 @@ def test():
     assert any("Deploying code " in message for message in caplog.messages)
 
     with pytest.raises(Exception):
-        cl.load_module(source_2.name, source_2.hash_value)
+        cl.load_module(source_2.metadata.name, source_2.metadata.hash_value)
         assert any(
-            f"The content of module {source_2.name} changed since it was last imported." in message
+            f"The content of module {source_2.metadata.name} changed since it was last imported." in message
             for message in caplog.messages
         )
 

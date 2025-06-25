@@ -34,7 +34,7 @@ class CLI_user_setup:
     async def run(self, run_locally, username, password, *args, **kwargs):
         # set column width very wide so lines are not wrapped
         os.environ["COLUMNS"] = "1000"
-        runner = testing.CliRunner(mix_stderr=False)
+        runner = testing.CliRunner()
 
         def invoke():
             return runner.invoke(cli=cmd, input=f"{run_locally}\n{username}\n{password}")
@@ -100,6 +100,7 @@ async def test_user_setup(
     users = await data.User.get_list(connection=postgresql_client)
     assert len(users) == 1
     assert users[0].username == "new_user"
+    assert users[0].is_admin
 
 
 async def test_user_setup_empty_username(

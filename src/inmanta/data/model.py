@@ -17,6 +17,8 @@ Contact: code@inmanta.com
 """
 
 import datetime
+import functools
+import hashlib
 import json
 import typing
 import urllib
@@ -87,6 +89,19 @@ class ExtensionStatus(BaseModel):
     package: str
 
 
+class ReportedStatus(StrEnum):
+    OK = "OK"
+    Warning = "Warning"
+    Error = "Error"
+
+    def __gt__(self, other: str) -> bool:
+        # Determines the order of severity of the reported status
+        order: list[str] = [ReportedStatus.OK, ReportedStatus.Warning, ReportedStatus.Error]
+        if self not in order or other not in order:
+            raise ValueError
+        return order.index(self) > order.index(other)
+
+
 class SliceStatus(BaseModel):
     """
     Status response for slices loaded in the server
@@ -94,6 +109,8 @@ class SliceStatus(BaseModel):
 
     name: str
     status: Mapping[str, ArgumentTypes | Mapping[str, ArgumentTypes]]
+    reported_status: ReportedStatus
+    message: str | None = None
 
 
 class FeatureStatus(BaseModel):
@@ -118,6 +135,7 @@ class StatusResponse(BaseModel):
     extensions: list[ExtensionStatus]
     slices: list[SliceStatus]
     features: list[FeatureStatus]
+    status: ReportedStatus
 
 
 @stable_api
@@ -139,6 +157,9 @@ class CompileRunBase(BaseModel):
             These env vars can be compacted over multiple compiles.
             If multiple values are compacted, they will be joined using spaces.
     :param environment_variables: environment variables passed to the compiler
+    :param links: An object that contains relevant links to this compile.
+        It is a dictionary where the key is something that identifies one or more links
+        and the value is a list of urls. i.e. {"instances": ["link-1',"link-2"], "compiles": ["link-3"]}
     """
 
     id: uuid.UUID
@@ -161,6 +182,7 @@ class CompileRunBase(BaseModel):
 
     notify_failed_compile: Optional[bool] = None
     failed_compile_message: Optional[str] = None
+    links: dict[str, list[str]] = {}
 
     @pydantic.field_validator("environment_variables", mode="before")
     @classmethod
@@ -339,6 +361,7 @@ class Resource(BaseModel):
     agent: str
     attributes: JsonType
     status: const.ResourceState
+    is_undefined: bool
     resource_set: Optional[str] = None
 
 
@@ -388,8 +411,7 @@ class ResourceDeploySummary(BaseModel):
 class LogLine(BaseModel):
     # Override the setting from the BaseModel class as such that the level field is
     # serialized using the name of the enum instead of its value. This is required
-    # to make sure that data sent to the API endpoints resource_action_update
-    # and send_deploy_done are serialized consistently using the name of the enum.
+    # to make sure that data sent over the API is serialized consistently using the name of the enum.
     model_config: ClassVar[ConfigDict] = ConfigDict(use_enum_values=False)
 
     level: const.LogLevel
@@ -751,11 +773,26 @@ class AuthMethod(str, Enum):
     oidc = "oidc"
 
 
+class RoleAssignment(BaseModel):
+    """
+    :param environment: The environment scope of the role.
+    :param role: The name of the role.
+    """
+
+    environment: uuid.UUID
+    role: str
+
+
 class User(BaseModel):
     """A user"""
 
     username: str
     auth_method: AuthMethod
+    is_admin: bool
+
+
+class UserWithRoles(User):
+    roles: list[RoleAssignment]
 
 
 class CurrentUser(BaseModel):
@@ -868,7 +905,7 @@ class PipConfig(BaseModel):
     """
 
     # Config needs to be in the top-level object, because is also affect serialization/deserialization
-    model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(
+    model_config: ClassVar[ConfigDict] = ConfigDict(
         # use alias generator have `-` in names
         alias_generator=hyphenize,
         # allow use of aliases
@@ -967,3 +1004,103 @@ class DataBaseReport(BaseModel):
             free_connections=self.free_connections + other.free_connections,
             pool_exhaustion_time=self.pool_exhaustion_time + other.pool_exhaustion_time,
         )
+
+
+@functools.total_ordering
+class ModuleSourceMetadata(BaseModel):
+    """
+    This class holds metadata for a given python module. i.e. it doesn't contain
+    the source itself.
+
+    :param name: the fully qualified name of the python module. e.g. inmanta_plugins.model.x
+    :param hash_value: hash of the underlying content
+    :param is_byte_code: is this content python byte code or python source
+
+    """
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
+    name: str
+    hash_value: str
+    is_byte_code: bool
+
+    def __lt__(self, other: object) -> bool | None:
+        if not isinstance(other, ModuleSourceMetadata):
+            return NotImplemented
+        return (self.name, self.hash_value, self.is_byte_code) < (other.name, other.hash_value, other.is_byte_code)
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ModuleSourceMetadata):
+            return False
+        return (self.name, self.hash_value, self.is_byte_code) == (other.name, other.hash_value, other.is_byte_code)
+
+    def get_inmanta_module_name(self) -> str:
+        return self.name.split(".")[1]
+
+
+@functools.total_ordering
+class ModuleSource(BaseModel):
+    """
+    This class represents a python module (file metadata + the source itself)
+    :param source: the content of the file
+    """
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
+    metadata: ModuleSourceMetadata
+    source: bytes
+
+    @classmethod
+    def from_path(cls, absolute_path: str, name: str) -> "ModuleSource":
+        """Get the content of the file"""
+        with open(absolute_path, "rb") as fd:
+            _content = fd.read()
+
+        sha1sum = hashlib.new("sha1")
+        sha1sum.update(_content)
+        _hash = sha1sum.hexdigest()
+
+        return ModuleSource(
+            metadata=ModuleSourceMetadata(
+                name=name,
+                is_byte_code=absolute_path.endswith(".pyc"),
+                hash_value=_hash,
+            ),
+            source=_content,
+        )
+
+    def __lt__(self, other: object) -> bool | None:
+        if not isinstance(other, ModuleSource):
+            return NotImplemented
+        return self.metadata < other.metadata
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ModuleSource):
+            return False
+        return self.metadata == other.metadata
+
+    def get_inmanta_module_name(self) -> str:
+        return self.metadata.get_inmanta_module_name()
+
+
+type InmantaModuleName = str
+type InmantaModuleVersion = str
+type AgentName = str
+
+
+class InmantaModule(BaseModel):
+    """
+    This class represents an Inmanta module during code upload.
+
+    :param name: Name of this inmanta module. e.g. std
+    :param version: Version of this inmanta module. This hash is computed using the hashes of
+        the python files in this module as well as the python requirements of this module.
+    :param files_in_module: The list of python files composing this inmanta module.
+    :param requirements: The list of python requirements this inmanta module requires.
+    :param for_agents: The list of agent names that require to install this inmanta module to
+        deploy resources.
+    """
+
+    name: InmantaModuleName
+    version: InmantaModuleVersion
+    files_in_module: list[ModuleSourceMetadata]
+    requirements: list[str]
+    for_agents: list[AgentName]

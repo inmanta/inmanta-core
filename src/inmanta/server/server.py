@@ -28,7 +28,7 @@ from tornado import routing, web
 
 from inmanta import config, const, data
 from inmanta.const import ApiDocsFormat
-from inmanta.data.model import FeatureStatus, SliceStatus, StatusResponse
+from inmanta.data.model import FeatureStatus, ReportedStatus, StatusResponse
 from inmanta.protocol import exceptions, handle, methods, methods_v2
 from inmanta.protocol.common import HTML_CONTENT_WITH_UTF8_CHARSET, ReturnValue, attach_warnings
 from inmanta.protocol.openapi.converter import OpenApiConverter
@@ -54,9 +54,6 @@ class Server(protocol.ServerSlice):
     _server_storage: dict[str, str]
     compiler: "CompilerService"
     _server: protocol.Server
-
-    # The number of seconds after which the call to the get_status() endpoint of a server slice should time out.
-    GET_SERVER_STATUS_TIMEOUT: int = 1
 
     def __init__(self) -> None:
         super().__init__(name=SLICE_SERVER)
@@ -133,30 +130,7 @@ class Server(protocol.ServerSlice):
                 "Is inmanta installed? Use setuptools install or setuptools dev to install."
             )
 
-        async def collect_for_slice(slice_name: str, slice: protocol.ServerSlice) -> SliceStatus:
-            try:
-                return SliceStatus(
-                    name=slice_name,
-                    status=await asyncio.wait_for(slice.get_status(), self.GET_SERVER_STATUS_TIMEOUT),
-                )
-            except asyncio.TimeoutError:
-                return SliceStatus(
-                    name=slice_name,
-                    status={
-                        "error": f"timeout on data collection for {slice_name}, "
-                        "consult the server log for additional information"
-                    },
-                )
-            except Exception:
-                LOGGER.error(
-                    f"The following error occurred while trying to determine the status of slice {slice_name}",
-                    exc_info=True,
-                )
-                return SliceStatus(name=slice_name, status={"error": "An unexpected error occurred, reported to server log"})
-
-        slices = await asyncio.gather(
-            *(collect_for_slice(slice_name, slice) for slice_name, slice in self._server.get_slices().items())
-        )
+        slices = await asyncio.gather(*(slice.get_slice_status() for slice in self._server.get_slices().values()))
 
         response = StatusResponse(
             product=product_metadata.product,
@@ -169,12 +143,20 @@ class Server(protocol.ServerSlice):
                 FeatureStatus(slice=feature.slice, name=feature.name, value=self.feature_manager.get_value(feature))
                 for feature in self.feature_manager.get_features()
             ],
+            status=max(ReportedStatus(slice.reported_status) for slice in slices),
         )
 
         return response
 
+    @handle(methods_v2.health)
+    async def health(self) -> ReturnValue[None]:
+        status = await self.get_server_status()
+        return ReturnValue(status_code=(200 if status.status == ReportedStatus.OK else 500))
+
     @handle(methods_v2.get_api_docs)
-    async def get_api_docs(self, format: Optional[ApiDocsFormat] = ApiDocsFormat.swagger) -> ReturnValue[Union[OpenAPI, str]]:
+    async def get_api_docs(
+        self, format: Optional[ApiDocsFormat] = ApiDocsFormat.swagger, token: str | None = None
+    ) -> ReturnValue[Union[OpenAPI, str]]:
         url_map = self._server._transport.get_global_url_map(self._server.get_slices().values())
         feature_manager = self.feature_manager
         openapi = OpenApiConverter(url_map, feature_manager)

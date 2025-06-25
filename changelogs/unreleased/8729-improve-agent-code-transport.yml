@@ -2,5 +2,8 @@ description: Rework the code transport between the compiler and the agent.
 issue-nr: 8729
 change-type: minor
 destination-branches: [master]
+<<<<<<< HEAD
 sections:
   upgrade-note: "{{description}}"
+=======
+>>>>>>> master

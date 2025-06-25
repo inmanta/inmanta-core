@@ -20,14 +20,22 @@ import os
 import re
 from collections import abc
 
+<<<<<<< HEAD
 import asyncpg
 import pytest
 
+=======
+import pytest
+
+from inmanta.agent.code_manager import CodeManager
+
+>>>>>>> master
 file_name_regex = re.compile("test_v([0-9]{9})_to_v[0-9]{9}")
 part = file_name_regex.match(__name__)[1]
 
 
 @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), f"dumps/v{part}.sql"))
+<<<<<<< HEAD
 async def test_add_tables_for_agent_code_transport_rework(
     postgresql_client: asyncpg.Connection,
     migrate_db_from: abc.Callable[[], abc.Awaitable[None]],
@@ -42,3 +50,29 @@ async def test_add_tables_for_agent_code_transport_rework(
     assert "module" in await get_tables_in_db()
     assert "files_in_module" in await get_tables_in_db()
     assert "modules_for_agent" in await get_tables_in_db()
+=======
+async def test_add_tables_for_agent_code_transport_rework(migrate_db_from: abc.Callable[[], abc.Awaitable[None]]) -> None:
+
+    await migrate_db_from()
+
+    codemanager = CodeManager()
+    install_spec_1 = await codemanager.get_code(
+        environment="a8317edd-74d8-40fc-8933-9aedb77cfed4",
+        model_version=1,
+        agent_name="internal",
+    )
+    assert len(install_spec_1) == 1
+    assert ["inmanta_plugins.std", "inmanta_plugins.std.resources", "inmanta_plugins.std.types"] == [
+        module.metadata.name for module in install_spec_1[0].blueprint.sources
+    ]
+
+    install_spec_2 = await codemanager.get_code(
+        environment="a8317edd-74d8-40fc-8933-9aedb77cfed4",
+        model_version=1,
+        agent_name="localhost",
+    )
+    assert len(install_spec_2) == 1
+    assert ["inmanta_plugins.fs", "inmanta_plugins.fs.json_file", "inmanta_plugins.fs.resources"] == [
+        module.metadata.name for module in install_spec_2[0].blueprint.sources
+    ]
+>>>>>>> master

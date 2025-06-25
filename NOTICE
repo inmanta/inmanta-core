@@ -1,0 +1,7 @@
+Inmanta Orchestrator
+Copyright 2016 and onwards Inmanta nv
+
+This product contains a modified portion of pyformance, a python port of the core portion of the Java Metrics library by Coda Hale
+It can be obtained at https://github.com/omergertel/pyformance
+Copyright 2014 Omer Gertel, licensed under the Apache License, Version 2.0
+

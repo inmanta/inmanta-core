@@ -16,80 +16,85 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import asyncio
 import datetime
 import enum
 import logging
 import time
 import uuid
 from collections import abc
-from collections.abc import Mapping
 from datetime import UTC
 from typing import Optional, cast
 
 import asyncpg
 import pytest
-from asyncpg import Connection, ForeignKeyViolationError
+from asyncpg import Connection, ForeignKeyViolationError, Pool
 
-import sqlalchemy
 import utils
 from inmanta import const, data, util
 from inmanta.const import AgentStatus, LogLevel
-from inmanta.data import ArgumentCollector, QueryType, get_engine, start_engine, stop_engine
+from inmanta.data import ArgumentCollector, QueryType
 from inmanta.deploy import state
 from inmanta.resources import Id
 from inmanta.types import ResourceVersionIdStr
 
 
-async def test_connect_too_small_connection_pool(sqlalchemy_url_parameters: Mapping[str, str]):
-    """
-    Test sql alchemy engine connection pool saturation
-    """
-    await start_engine(
-        **sqlalchemy_url_parameters,
-        pool_size=1,
-        max_overflow=0,
-        pool_timeout=1,
+async def test_connect_too_small_connection_pool(postgres_db, database_name: str):
+    pool: Pool = await data.connect_pool(
+        postgres_db.host,
+        postgres_db.port,
+        database_name,
+        postgres_db.user,
+        postgres_db.password,
+        create_db_schema=False,
+        connection_pool_min_size=1,
+        connection_pool_max_size=1,
+        connection_timeout=120,
     )
-    engine = get_engine()
-    assert engine is not None
-    connection: Connection = await engine.connect()
-
+    assert pool is not None
+    connection: Connection = await pool.acquire()
     try:
-        with pytest.raises(sqlalchemy.exc.TimeoutError):
-            await engine.connect()
+        with pytest.raises(asyncio.TimeoutError):
+            await pool.acquire(timeout=1.0)
     finally:
         await connection.close()
-        await stop_engine()
+        await data.disconnect_pool()
 
 
-async def test_connect_default_parameters(sql_alchemy_engine):
-    """
-    Basic connectivity test for the sql alchemy engine
-    """
-    assert sql_alchemy_engine is not None
-    async with sql_alchemy_engine.connect() as connection:
-        assert connection is not None
+async def test_connect_default_parameters(postgres_db, database_name: str, create_db_schema: bool = False):
+    pool: Pool = await data.connect_pool(
+        postgres_db.host, postgres_db.port, database_name, postgres_db.user, postgres_db.password, create_db_schema
+    )
+    assert pool is not None
+    try:
+        async with pool.acquire() as connection:
+            assert connection is not None
+    finally:
+        await data.disconnect_pool()
 
 
-async def test_connection_failure(postgres_db, unused_tcp_port_factory, database_name, clean_reset):
+@pytest.mark.parametrize("min_size, max_size", [(-1, 1), (2, 1), (-2, -2)])
+async def test_connect_invalid_parameters(postgres_db, min_size, max_size, database_name: str, create_db_schema: bool = False):
+    with pytest.raises(ValueError):
+        await data.connect_pool(
+            postgres_db.host,
+            postgres_db.port,
+            database_name,
+            postgres_db.user,
+            postgres_db.password,
+            create_db_schema,
+            connection_pool_min_size=min_size,
+            connection_pool_max_size=max_size,
+        )
+
+
+async def test_connection_failure(unused_tcp_port_factory, database_name, clean_reset):
     """
     Basic connectivity test: using an incorrect port raises an error
     """
-    wrong_port = unused_tcp_port_factory()
-
-    await start_engine(
-        database_username=postgres_db.user,
-        database_password=postgres_db.password,
-        database_host=postgres_db.host,
-        database_port=wrong_port,
-        database_name=database_name,
-    )
-    engine = get_engine()
-    with pytest.raises(ConnectionRefusedError):
-        async with engine.connect() as _:
-            pass
-
-    await stop_engine()
+    port = unused_tcp_port_factory()
+    with pytest.raises(OSError):
+        await data.connect_pool("localhost", port, database_name, "testuser", None)
 
 
 async def test_postgres_client(postgresql_client):
@@ -203,17 +208,12 @@ async def test_project_cascade_delete(init_dataclasses_and_load_schema):
             await res1.insert()
             resource_ids.append((res1.environment, res1.resource_version_id))
 
-        code = data.Code(version=version, resource="std::testing::NullResource", environment=env.id)
-        await code.insert()
-
         unknown_parameter = data.UnknownParameter(name="test", environment=env.id, version=version, source="")
         await unknown_parameter.insert()
 
-        return project, env, agent_proc, [agi1, agi2], agent, resource_ids, code, unknown_parameter
+        return project, env, agent_proc, [agi1, agi2], agent, resource_ids, unknown_parameter
 
-    async def assert_project_exists(
-        project, env, agent_proc, agent_instances, agent, resource_ids, code, unknown_parameter, exists
-    ):
+    async def assert_project_exists(project, env, agent_proc, agent_instances, agent, resource_ids, unknown_parameter, exists):
         def func(x):
             if exists:
                 return x is not None
@@ -229,7 +229,6 @@ async def test_project_cascade_delete(init_dataclasses_and_load_schema):
         for environment, resource_version_id in resource_ids:
             id = Id.parse_id(resource_version_id)
             assert func(await data.Resource.get_one(environment=environment, resource_id=id.resource_str(), model=id.version))
-        assert func(await data.Code.get_one(environment=code.environment, resource=code.resource, version=code.version))
         assert func(await data.UnknownParameter.get_by_id(unknown_parameter.id))
 
     # Setup two environments
@@ -329,9 +328,6 @@ async def test_environment_cascade_content_only(init_dataclasses_and_load_schema
     )
     await resource_action.insert()
 
-    code = data.Code(version=version, resource="std::testing::NullResource", environment=env.id)
-    await code.insert()
-
     unknown_parameter = data.UnknownParameter(name="test", environment=env.id, version=version, source="")
     await unknown_parameter.insert()
 
@@ -349,7 +345,6 @@ async def test_environment_cascade_content_only(init_dataclasses_and_load_schema
             await data.Resource.get_one(environment=environment, resource_id=id.resource_str(), model=id.version)
         ) is not None
     assert await data.ResourceAction.get_by_id(resource_action.action_id) is not None
-    assert (await data.Code.get_one(environment=code.environment, resource=code.resource, version=code.version)) is not None
     assert (await data.UnknownParameter.get_by_id(unknown_parameter.id)) is not None
     assert (await env.get(data.AUTO_DEPLOY)) is True
 
@@ -365,7 +360,6 @@ async def test_environment_cascade_content_only(init_dataclasses_and_load_schema
         id = Id.parse_id(resource_version_id)
         assert (await data.Resource.get_one(environment=environment, resource_id=id.resource_str(), model=id.version)) is None
     assert await data.ResourceAction.get_by_id(resource_action.action_id) is None
-    assert (await data.Code.get_one(environment=code.environment, version=code.version)) is None
     assert (await data.UnknownParameter.get_by_id(unknown_parameter.id)) is None
     assert (await env.get(data.AUTO_DEPLOY)) is True
 
@@ -948,9 +942,6 @@ async def test_model_delete_cascade(init_dataclasses_and_load_schema):
     resource = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version, attributes={"name": name})
     await resource.insert()
 
-    code = data.Code(version=version, resource="std::testing::NullResource", environment=env.id)
-    await code.insert()
-
     unknown_parameter = data.UnknownParameter(name="test", environment=env.id, version=version, source="")
     await unknown_parameter.insert()
 
@@ -961,7 +952,6 @@ async def test_model_delete_cascade(init_dataclasses_and_load_schema):
     assert (
         await data.Resource.get_one(environment=resource.environment, resource_id=id.resource_str(), model=id.version)
     ) is None
-    assert (await data.Code.get_one(environment=code.environment, resource=code.resource, version=code.version)) is None
     assert (await data.UnknownParameter.get_by_id(unknown_parameter.id)) is None
 
 
@@ -1529,131 +1519,6 @@ async def test_get_resource_type_count_for_latest_version(init_dataclasses_and_l
     )  # 1 NullResource resource and 1 Dummy resource in model v2
 
 
-async def test_resources_report(init_dataclasses_and_load_schema):
-    project = data.Project(name="test")
-    await project.insert()
-
-    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
-    await env.insert()
-
-    # model 1
-    version = 1
-    cm1 = data.ConfigurationModel(
-        environment=env.id,
-        version=version,
-        date=datetime.datetime.now(),
-        total=1,
-        version_info={},
-        released=True,
-        is_suitable_for_partial_compiles=False,
-    )
-    await cm1.insert()
-
-    res11 = data.Resource.new(
-        environment=env.id,
-        resource_version_id="std::testing::NullResource[agent1,name=file1],v=%s" % version,
-        status=const.ResourceState.deployed,
-        attributes={"name": "file1"},
-    )
-    await res11.insert()
-
-    res12 = data.Resource.new(
-        environment=env.id,
-        resource_version_id="std::testing::NullResource[agent1,name=file2],v=%s" % version,
-        status=const.ResourceState.deployed,
-        attributes={"name": "file2"},
-    )
-    await res12.insert()
-    await data.ResourcePersistentState.populate_for_version(environment=env.id, model_version=version)
-    await res11.update_persistent_state(last_deployed_version=version, last_deploy=datetime.datetime(2018, 7, 14, 12, 30))
-    await res12.update_persistent_state(
-        last_deployed_version=version,
-        last_deploy=datetime.datetime(2018, 7, 14, 12, 30),
-    )
-
-    # model 2
-    version += 1
-    cm2 = data.ConfigurationModel(
-        environment=env.id,
-        version=version,
-        date=datetime.datetime.now(),
-        total=1,
-        version_info={},
-        released=False,
-        is_suitable_for_partial_compiles=False,
-    )
-    await cm2.insert()
-    res21 = data.Resource.new(
-        environment=env.id,
-        resource_version_id="std::testing::NullResource[agent1,name=file1],v=%s" % version,
-        status=const.ResourceState.available,
-        attributes={"name": "file1"},
-    )
-    await res21.insert()
-
-    res22 = data.Resource.new(
-        environment=env.id,
-        resource_version_id="std::testing::NullResource[agent1,name=file3],v=%s" % version,
-        status=const.ResourceState.available,
-        attributes={"name": "file3"},
-    )
-    await res22.insert()
-    await data.ResourcePersistentState.populate_for_version(environment=env.id, model_version=version)
-
-    # model 3
-    version += 1
-    cm3 = data.ConfigurationModel(
-        environment=env.id,
-        version=version,
-        date=datetime.datetime.now(),
-        total=1,
-        version_info={},
-        released=True,
-        is_suitable_for_partial_compiles=False,
-    )
-    await cm3.insert()
-
-    res31 = data.Resource.new(
-        environment=env.id,
-        resource_version_id="std::testing::NullResource[agent1,name=file2],v=%s" % version,
-        status=const.ResourceState.deployed,
-        attributes={"name": "file2"},
-    )
-    await res31.insert()
-    await data.ResourcePersistentState.populate_for_version(environment=env.id, model_version=version)
-    await res31.update_persistent_state(last_deployed_version=version, last_deploy=datetime.datetime(2018, 7, 14, 14, 30))
-
-    report = await data.Resource.get_resources_report(env.id)
-    assert len(report) == 3
-    report_as_map = {x["resource_id"]: x for x in report}
-    for i in range(1, 4):
-        assert f"std::testing::NullResource[agent1,name=file{i}]" in report_as_map
-
-    assert report_as_map["std::testing::NullResource[agent1,name=file1]"]["resource_type"] == "std::testing::NullResource"
-    assert report_as_map["std::testing::NullResource[agent1,name=file1]"]["deployed_version"] == 1
-    assert report_as_map["std::testing::NullResource[agent1,name=file1]"]["latest_version"] == 2
-    assert (
-        report_as_map["std::testing::NullResource[agent1,name=file1]"]["last_deploy"]
-        == datetime.datetime(2018, 7, 14, 12, 30).astimezone()
-    )
-    assert report_as_map["std::testing::NullResource[agent1,name=file1]"]["agent"] == "agent1"
-
-    assert report_as_map["std::testing::NullResource[agent1,name=file2]"]["resource_type"] == "std::testing::NullResource"
-    assert report_as_map["std::testing::NullResource[agent1,name=file2]"]["deployed_version"] == 3
-    assert report_as_map["std::testing::NullResource[agent1,name=file2]"]["latest_version"] == 3
-    assert (
-        report_as_map["std::testing::NullResource[agent1,name=file2]"]["last_deploy"]
-        == datetime.datetime(2018, 7, 14, 14, 30).astimezone()
-    )
-    assert report_as_map["std::testing::NullResource[agent1,name=file2]"]["agent"] == "agent1"
-
-    assert report_as_map["std::testing::NullResource[agent1,name=file3]"]["resource_type"] == "std::testing::NullResource"
-    assert report_as_map["std::testing::NullResource[agent1,name=file3]"]["deployed_version"] is None
-    assert report_as_map["std::testing::NullResource[agent1,name=file3]"]["latest_version"] == 2
-    assert report_as_map["std::testing::NullResource[agent1,name=file3]"]["last_deploy"] is None
-    assert report_as_map["std::testing::NullResource[agent1,name=file3]"]["agent"] == "agent1"
-
-
 async def test_resource_action(init_dataclasses_and_load_schema):
     """
     Test whether the save() method of a ResourceAction writes its changes, logs and fields
@@ -1875,103 +1740,6 @@ async def test_data_document_recursion(init_dataclasses_and_load_schema):
         messages=[data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=2)],
     )
     await ra.insert()
-
-
-async def test_code(init_dataclasses_and_load_schema):
-    project = data.Project(name="test")
-    await project.insert()
-
-    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
-    await env.insert()
-
-    version = int(time.time())
-    cm = data.ConfigurationModel(
-        environment=env.id,
-        version=version,
-        date=datetime.datetime.now(),
-        total=1,
-        version_info={},
-        is_suitable_for_partial_compiles=False,
-    )
-    await cm.insert()
-
-    code1 = data.Code(environment=env.id, resource="std::testing::NullResource", version=version, source_refs={"ref": "ref"})
-    await code1.insert()
-
-    code2 = data.Code(environment=env.id, resource="std::testing::NullResourceBis", version=version, source_refs={})
-    await code2.insert()
-
-    version2 = version + 1
-    cm2 = data.ConfigurationModel(
-        environment=env.id,
-        version=version2,
-        date=datetime.datetime.now(),
-        total=1,
-        version_info={},
-        is_suitable_for_partial_compiles=False,
-    )
-    await cm2.insert()
-
-    code3 = data.Code(environment=env.id, resource="std::testing::NullResourceBis", version=version2, source_refs={})
-    await code3.insert()
-
-    # Test behavior of copy_versions. Create second environment to verify the method is restricted to the first one
-    env2 = data.Environment(name="dev2", project=project.id, repo_url="", repo_branch="")
-    await env2.insert()
-    await data.ConfigurationModel(environment=env2.id, version=code3.version, is_suitable_for_partial_compiles=False).insert()
-    await data.Code(environment=env2.id, resource="std::testing::NullResource", version=code3.version, source_refs={}).insert()
-    await data.Code.copy_versions(env.id, code3.version, code3.version + 1)
-
-    def assert_match_code(code1, code2):
-        assert code1 is not None
-        assert code2 is not None
-        assert code1.environment == code1.environment
-        assert code1.resource == code2.resource
-        assert code1.version == code2.version
-        shared_keys_source_refs = [
-            k for k in code1.source_refs if k in code2.source_refs and code1.source_refs[k] == code2.source_refs[k]
-        ]
-        assert len(shared_keys_source_refs) == len(code1.source_refs.keys())
-
-    code_file = await data.Code.get_version(env.id, version, "std::testing::NullResource")
-    assert_match_code(code_file, code1)
-
-    code_directory = await data.Code.get_version(env.id, version, "std::testing::NullResourceBis")
-    assert_match_code(code_directory, code2)
-
-    code_test = await data.Code.get_version(env.id, version, "std::Test")
-    assert code_test is None
-
-    code_list = await data.Code.get_versions(env.id, version)
-    ids_code_lost = [(c.environment, c.resource, c.version) for c in code_list]
-    assert len(code_list) == 2
-    assert (code1.environment, code1.resource, code1.version) in ids_code_lost
-    assert (code2.environment, code2.resource, code2.version) in ids_code_lost
-    code_list = await data.Code.get_versions(env.id, version + 1)
-    assert len(code_list) == 1
-    code = code_list[0]
-    assert (code.environment, code.resource, code.version) == (code3.environment, code3.resource, code3.version)
-    code_list = await data.Code.get_versions(env.id, version + 2)
-    assert len(code_list) == 1
-    assert (code_list[0].environment, code_list[0].resource, code_list[0].version, code_list[0].source_refs) == (
-        code3.environment,
-        code3.resource,
-        code3.version + 1,
-        code3.source_refs,
-    )
-    code_list = await data.Code.get_versions(env.id, version + 3)
-    assert len(code_list) == 0
-
-    # env2
-    code_list = await data.Code.get_versions(env2.id, code3.version)
-    assert len(code_list) == 1
-    code_list = await data.Code.get_versions(env2.id, code3.version + 1)
-    assert len(code_list) == 0
-
-    # make sure deleting the base code does not delete the copied code
-    await code3.delete()
-    assert len(await data.Code.get_versions(env.id, code3.version)) == 0
-    assert len(await data.Code.get_versions(env.id, code3.version + 1)) == 1
 
 
 @pytest.mark.parametrize("halted", [True, False])
@@ -2254,7 +2022,8 @@ async def test_compile_get_report(init_dataclasses_and_load_schema):
     await report12.insert()
 
     # Compile 2
-    compile2 = data.Compile(environment=env.id)
+    links = {"self": ["link-1"], "instances": ["link-2", "link-3"]}
+    compile2 = data.Compile(environment=env.id, links=links)
     await compile2.insert()
     report21 = data.Report(
         started=datetime.datetime.now(), completed=datetime.datetime.now(), command="cmd", name="test", compile=compile2.id
@@ -2274,6 +2043,8 @@ async def test_compile_get_report(init_dataclasses_and_load_schema):
     report_of_compile = await data.Compile.get_report(compile2.id)
     reports = report_of_compile["reports"]
     assert len(reports) == 1
+    # Assert that links are passed to the CompileReport
+    assert report_of_compile["links"] == links
 
 
 async def test_match_tables_in_db_against_table_definitions_in_orm(
@@ -2284,9 +2055,11 @@ async def test_match_tables_in_db_against_table_definitions_in_orm(
     )
     table_names_in_database = [x["table_name"] for x in table_names]
     table_names_in_classes_list = [x.table_name() for x in data._classes]
-    # Schema management table is not in classes list
-    # Join tables on resource and resource action is not in the classes list
-    assert len(table_names_in_classes_list) + 2 == len(table_names_in_database)
+    # Schema management table and join tables are not in the classes list.
+    join_tables = {"schemamanager", "resourceaction_resource", "role_assignment"}
+    # The following tables are not in the classes list, they are managed via the sqlalchemy ORM.
+    sql_alchemy_tables: set[str] = {"inmanta_module", "module_files", "agent_modules"}
+    assert len(table_names_in_classes_list) + len(join_tables) + len(sql_alchemy_tables) == len(table_names_in_database)
     for item in table_names_in_classes_list:
         # The DB table name for the User class is named inmanta_user
         if item == "user":
@@ -3024,6 +2797,7 @@ async def test_get_current_resource_state(server, environment, client, clienthel
         ],
         resource_state={},
         compiler_version=util.get_compiler_version(),
+        module_version_info={},
     )
     assert result.code == 200, result.result
 
@@ -3059,6 +2833,7 @@ async def test_get_current_resource_state(server, environment, client, clienthel
         ],
         resource_state={"std::testing::NullResource[agent1,name=test1]": const.ResourceState.undefined},
         compiler_version=util.get_compiler_version(),
+        module_version_info={},
     )
     assert result.code == 200, result.result
 

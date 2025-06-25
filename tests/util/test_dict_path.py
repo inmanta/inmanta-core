@@ -30,6 +30,8 @@ from inmanta.util.dict_path import (
     DictPathValue,
     InDict,
     KeyedList,
+    Mapping,
+    MutableMapping,
     NormalValue,
     NullPath,
     NullValue,
@@ -160,7 +162,7 @@ def test_wild_null_path() -> None:
 
 @pytest.mark.parametrize(
     "escaped, unescaped",
-    [(r"a\.b\=\[\\\*", r"a.b=[\*")],
+    [(r"a\.b\=\[\\\*", r"a.b=[\*"), (r"a\.\.\.b", "a...b")],
 )
 def test_escape_and_un_escape(escaped: str, unescaped: str) -> None:
     """
@@ -592,3 +594,9 @@ def test_keyed_list_deprecated_constructor(caplog) -> None:
         assert normal == KeyedList("a", [("key", "value")])
         assert_warning("WildKeyedList", expect_warning=False)
         assert_warning("KeyedList", expect_warning=False)
+
+
+def test_type_check():
+    # Also dicts need to dictpath compatible
+    assert isinstance({}, Mapping)
+    assert isinstance({}, MutableMapping)

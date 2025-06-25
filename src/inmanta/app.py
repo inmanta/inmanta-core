@@ -66,7 +66,7 @@ from inmanta.export import cfg_env
 from inmanta.logging import InmantaLoggerConfig, _is_on_tty
 from inmanta.server import config as opt
 from inmanta.server.bootloader import InmantaBootloader
-from inmanta.server.services.databaseservice import initialize_sql_alchemy_engine
+from inmanta.server.services.databaseservice import initialize_database_connection_pool
 from inmanta.server.services.metricservice import MetricsService
 from inmanta.signals import safe_shutdown, setup_signal_handlers
 from inmanta.util import get_compiler_version
@@ -148,7 +148,7 @@ def start_scheduler(options: argparse.Namespace) -> None:
 
     async def start() -> None:
 
-        await initialize_sql_alchemy_engine(
+        await initialize_database_connection_pool(
             database_host=opt.db_host.get(),
             database_port=opt.db_port.get(),
             database_name=opt.db_name.get(),
@@ -159,7 +159,6 @@ def start_scheduler(options: argparse.Namespace) -> None:
             connection_pool_max_size=agent_config.scheduler_db_connection_pool_max_size.get(),
             connection_timeout=agent_config.scheduler_db_connection_timeout.get(),
         )
-
         # also report metrics if this is relevant
         metrics_reporter = MetricsService(
             extra_tags={"component": "scheduler", "environment": str(agent_config.environment.get())}
@@ -458,10 +457,21 @@ def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Se
         "--partial",
         dest="partial_compile",
         help=(
-            "Execute a partial export. Does not upload new Python code to the server: it is assumed to be unchanged since the"
-            " last full export. Multiple partial exports for disjunct resource sets may be performed concurrently but not"
-            " concurrent with a full export. When used in combination with the ``--json`` option, 0 is used as a placeholder "
-            "for the model version."
+            "Execute a partial export. All code used in this partial version will be checked against the code used in the"
+            " base version to make sure it remained unchanged. Multiple partial exports for disjunct resource sets may be"
+            " performed concurrently but not concurrent with a full export. When used in combination with the"
+            " ``--json`` option, 0 is used as a placeholder for the model version."
+        ),
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
+        "--allow-handler-code-update",
+        dest="allow_handler_code_update",
+        help=(
+            "[Expert] Allow handler code update during partial compile. This is otherwise only allowed for full compiles. "
+            "Use with extreme caution, and only when confident that all code is compatible with previous versions. "
+            "This option will be ignored if it is not set along with the --partial option."
         ),
         action="store_true",
         default=False,
@@ -589,6 +599,7 @@ def export(options: argparse.Namespace) -> None:
                 export_plugin=options.export_plugin,
                 partial_compile=options.partial_compile,
                 resource_sets_to_remove=list(resource_sets_to_remove),
+                allow_handler_code_update=options.allow_handler_code_update,
             )
 
         if not summary_reporter.is_failure() and options.deploy:

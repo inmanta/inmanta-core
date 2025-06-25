@@ -1,0 +1,8 @@
+---
+description: "The scheduler and the compiler no longer connect to the server using the `server.bind-address` instead they always use localhost."
+issue-nr: 8752
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso8]
+sections:
+  minor-improvement: "{{description}}"

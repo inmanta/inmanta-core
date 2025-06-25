@@ -1,0 +1,5 @@
+description: stop scheduler on environment halt
+change-type: patch
+destination-branches:
+  - iso8
+  - master

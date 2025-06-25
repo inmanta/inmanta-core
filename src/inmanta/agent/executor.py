@@ -42,16 +42,16 @@ from inmanta.agent import resourcepool
 from inmanta.agent.handler import HandlerContext
 from inmanta.const import Change
 from inmanta.data import LogLine
-from inmanta.data.model import AttributeStateChange, PipConfig
+from inmanta.data.model import AttributeStateChange, ModuleSource, PipConfig
 from inmanta.env import PythonEnvironment
-from inmanta.loader import ModuleSource
 from inmanta.resources import Id
-from inmanta.types import JsonType, ResourceIdStr, ResourceType, ResourceVersionIdStr
+from inmanta.types import JsonType, ResourceIdStr, ResourceVersionIdStr
 
 LOGGER = logging.getLogger(__name__)
 
 
-FailedResources: typing.TypeAlias = dict[ResourceType, Exception]
+FailedModules: typing.TypeAlias = dict[str, Exception]
+FailedInmantaModules: typing.TypeAlias = dict[str, FailedModules]
 
 
 class AgentInstance(abc.ABC):
@@ -106,6 +106,7 @@ class ResourceDetails:
 class EnvBlueprint:
     """Represents a blueprint for creating virtual environments with specific pip configurations and requirements."""
 
+    environment_id: uuid.UUID
     pip_config: PipConfig
     requirements: Sequence[str]
     _hash_cache: Optional[str] = dataclasses.field(default=None, init=False, repr=False)
@@ -124,6 +125,7 @@ class EnvBlueprint:
         """
         if self._hash_cache is None:
             blueprint_dict: Dict[str, Any] = {
+                "environment_id": str(self.environment_id),
                 "pip_config": self.pip_config.model_dump(),
                 "requirements": self.requirements,
                 "python_version": self.python_version,
@@ -140,7 +142,8 @@ class EnvBlueprint:
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, EnvBlueprint):
             return False
-        return (self.pip_config, set(self.requirements), self.python_version) == (
+        return (self.environment_id, self.pip_config, set(self.requirements), self.python_version) == (
+            other.environment_id,
             other.pip_config,
             set(other.requirements),
             other.python_version,
@@ -151,7 +154,10 @@ class EnvBlueprint:
 
     def __str__(self) -> str:
         req = ",".join(str(req) for req in self.requirements)
-        return f"EnvBlueprint(requirements=[{str(req)}], pip={self.pip_config}, python_version={self.python_version}]"
+        return (
+            f"EnvBlueprint(environment_id={self.environment_id}, requirements=[{str(req)}],"
+            f" pip={self.pip_config}, python_version={self.python_version})"
+        )
 
 
 @dataclasses.dataclass
@@ -167,15 +173,17 @@ class ExecutorBlueprint(EnvBlueprint):
         self.sources = sorted(set(self.sources))
 
     @classmethod
-    def from_specs(cls, code: typing.Collection["ResourceInstallSpec"]) -> "ExecutorBlueprint":
+    def from_specs(cls, code: typing.Collection["ModuleInstallSpec"]) -> "ExecutorBlueprint":
         """
         Create a single ExecutorBlueprint by combining the blueprint(s) of several
-        ResourceInstallSpec by merging respectively their module sources and their
+        ModuleInstallSpec by merging respectively their module sources and their
         requirements and making sure they all share the same pip config.
         """
 
         if not code:
             raise ValueError("from_specs expects at least one resource install spec")
+        env_ids = {cd.blueprint.environment_id for cd in code}
+        assert len(env_ids) == 1
         sources = list({source for cd in code for source in cd.blueprint.sources})
         requirements = list({req for cd in code for req in cd.blueprint.requirements})
         pip_configs = [cd.blueprint.pip_config for cd in code]
@@ -193,6 +201,7 @@ class ExecutorBlueprint(EnvBlueprint):
                 python_version == base_python_version
             ), f"One agent is using multiple python versions: {base_python_version} {python_version}"
         return ExecutorBlueprint(
+            environment_id=env_ids.pop(),
             pip_config=base_pip,
             sources=sources,
             requirements=requirements,
@@ -208,10 +217,13 @@ class ExecutorBlueprint(EnvBlueprint):
         """
         if self._hash_cache is None:
             blueprint_dict = {
+                "environment_id": str(self.environment_id),
                 "pip_config": self.pip_config.model_dump(),
                 "requirements": self.requirements,
                 # Use the hash values and name to create a stable identity
-                "sources": [[source.hash_value, source.name, source.is_byte_code] for source in self.sources],
+                "sources": [
+                    [source.metadata.hash_value, source.metadata.name, source.metadata.is_byte_code] for source in self.sources
+                ],
                 "python_version": self.python_version,
             }
 
@@ -227,12 +239,18 @@ class ExecutorBlueprint(EnvBlueprint):
         """
         Converts this ExecutorBlueprint instance into an EnvBlueprint instance.
         """
-        return EnvBlueprint(pip_config=self.pip_config, requirements=self.requirements, python_version=self.python_version)
+        return EnvBlueprint(
+            environment_id=self.environment_id,
+            pip_config=self.pip_config,
+            requirements=self.requirements,
+            python_version=self.python_version,
+        )
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, ExecutorBlueprint):
             return False
-        return (self.pip_config, self.requirements, self.sources, self.python_version) == (
+        return (self.environment_id, self.pip_config, self.requirements, self.sources, self.python_version) == (
+            other.environment_id,
             other.pip_config,
             other.requirements,
             other.sources,
@@ -270,18 +288,18 @@ class ExecutorId:
 
 
 @dataclass(frozen=True)
-class ResourceInstallSpec:
+class ModuleInstallSpec:
     """
-    This class encapsulates the requirements for a specific resource type for a specific model version.
+    This class encapsulates the requirements for a specific (module_name, module_version).
 
-    :ivar resource_type: fully qualified name for this resource type e.g. std::testing::NullResource
-    :ivar model_version: the version of the model to use
-    :ivar blueprint: the associate install blueprint
+    :ivar module_name: fully qualified name for this module
+    :ivar module_version: the version of the module to use
+    :ivar blueprint: the associated install blueprint
 
     """
 
-    resource_type: ResourceType
-    model_version: int
+    module_name: str
+    module_version: str
     blueprint: ExecutorBlueprint
 
 
@@ -547,7 +565,8 @@ class Executor(abc.ABC):
     :param storage: File system path to where the executor's resources are stored.
     """
 
-    failed_resources: FailedResources
+    # Maps inmanta module names to the map of their python modules that failed during installation.
+    failed_modules: FailedInmantaModules
 
     @abc.abstractmethod
     async def execute(
@@ -607,14 +626,14 @@ class ExecutorManager(abc.ABC, typing.Generic[E]):
     """
 
     @abc.abstractmethod
-    async def get_executor(self, agent_name: str, agent_uri: str, code: typing.Collection[ResourceInstallSpec]) -> E:
+    async def get_executor(self, agent_name: str, agent_uri: str, code: typing.Collection[ModuleInstallSpec]) -> E:
         """
         Retrieves an Executor for a given agent with the relevant handler code loaded in its venv.
         If an Executor does not exist for the given configuration, a new one is created.
 
         :param agent_name: The name of the agent for which an Executor is being retrieved or created.
         :param agent_uri: The name of the host on which the agent is running.
-        :param code: Collection of ResourceInstallSpec defining the configuration for the Executor i.e.
+        :param code: Collection of ModuleInstallSpec defining the configuration for the Executor i.e.
             which resource types it can act on and all necessary information to install the relevant
             handler code in its venv. Must have at least one element.
         :return: An Executor instance

@@ -1,0 +1,37 @@
+# std::env returns an unknown if the environment variable is not (yet) set
+my_unknown = std::get_env("THIS_ENV_VAR_DOES_NOT_EXIST")
+
+a = my_unknown  # a is unknown
+b = [1, 2, my_unknown, 3]  # b is a list with 1 unknown element
+c = my_unknown is defined  # we can not know if c is null, so c is also unknown
+d = true or my_unknown  # value of my_unknown is irrelevant -> d is true
+e = my_unknown or true  # lazy boolean operator can not compute result without knowing the value -> e is unknown
+f = (e == my_unknown)  # both e and my_unknown are unknown but they aren't necessarily the same value -> f is unknown
+
+if my_unknown:
+    # this block is never executed
+    std::print("This message is never printed!")
+else:
+    # neither is this one
+    std::print("This message is never printed!")
+end
+
+for x in my_unknown:
+    # neither is this one
+    std::print("This message is never printed!")
+end
+
+for x in [1, 2, my_unknown]:
+    # this block is executed twice: x=1 and x=2
+    std::print(f"This message is printed twice! x={x}")
+end
+
+g = my_unknown ? true : false  # condition is unknown -> neither branch is executed, result is unknown
+
+entity E:
+    int n
+end
+implement E using std::none
+
+h = [E(n=x) for x in [1, 2, my_unknown]]  # the constructor is executed once with n=1 and once with n=2. Unknown is propagated as is -> h = [E(n=1), E(n=2), unknown]
+i = [E(n=x) for x in [1, 2, my_unknown] if not std::is_unknown(x)]  # the unknown is filtered out -> i = [E(n=1), E(n=2)]

@@ -21,13 +21,13 @@ import re
 
 import pytest
 import tornado
-from pyformance import gauge, global_registry, timer
 from tornado.httpserver import HTTPServer
 from tornado.web import url
 
 from inmanta.reporter import AsyncReporter, InfluxReporter
 from inmanta.server.config import influxdb_host, influxdb_interval, influxdb_port
 from inmanta.server.services.metricservice import CPUMicroBenchMark
+from inmanta.vendor.pyformance import gauge, global_registry, timer
 from utils import retry_limited
 
 
@@ -97,7 +97,7 @@ class MockReporter(AsyncReporter):
 
 
 @pytest.fixture
-def influxdb(event_loop, free_socket):
+def influxdb(free_socket):
     ifl = InfluxdbMock(free_socket())
     yield ifl
     ifl.server.stop()

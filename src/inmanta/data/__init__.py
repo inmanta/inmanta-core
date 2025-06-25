@@ -62,22 +62,34 @@ from inmanta.const import (
 from inmanta.data import model as m
 from inmanta.data import schema
 from inmanta.data.model import AuthMethod, BaseModel, PagingBoundaries, PipConfig, api_boundary_datetime_normalizer
+from inmanta.data.sqlalchemy import AgentModules, InmantaModule, ModuleFiles
 from inmanta.deploy import state
 from inmanta.protocol.exceptions import BadRequest, NotFound
+from inmanta.server import config
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.util import parse_timestamp
-from sqlalchemy import URL, AsyncAdaptedQueuePool
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy import URL, AdaptedConnection, NullPool
+from sqlalchemy.dialects import registry
+from sqlalchemy.dialects.postgresql.asyncpg import PGDialect_asyncpg
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import ConnectionPoolEntry
 
 """
 Global reference to the SQL Alchemy engine
 Main APIs to interact with it:
 - start_engine()
-- get_connection_ctx_mgr()
 - stop_engine()
 """
 ENGINE: AsyncEngine | None = None
+
+"""
+Object that creates async sessions.
+Used mainly by our GraphQL implementation via these APIs:
+- get_session_factory()
+- get_session()
+"""
+SESSION_FACTORY: async_sessionmaker[AsyncSession] | None = None
 
 
 LOGGER = logging.getLogger(__name__)
@@ -98,7 +110,6 @@ Locking order rules:
 In general, locks should be acquired consistently with delete cascade lock order, which is top down. Additional lock orderings
 are as follows. This list should be extended when new locks (explicit or implicit) are introduced. The rules below are written
 as `A -> B`, meaning A should be locked before B in any transaction that acquires a lock on both.
-- Code -> ConfigurationModel
 - Agentprocess -> Agentinstance -> Agent
 - ResourcePersistentState -> Scheduler
 """
@@ -1134,16 +1145,10 @@ class Field(Generic[T]):
         if isinstance(value, self.field_type):
             return value
 
-        # asyncpg does not convert a jsonb field to a dict
-        if isinstance(value, str) and self.field_type is dict:
-            return json.loads(value)
         # asyncpg does not convert an enum field to an enum type
         if isinstance(value, str) and issubclass(self.field_type, enum.Enum):
             return self.field_type[value]
         # decode typed json
-        if isinstance(value, str) and issubclass(self.field_type, pydantic.BaseModel):
-            jsv = json.loads(value)
-            return self.field_type(**jsv)
         if isinstance(value, dict) and issubclass(self.field_type, pydantic.BaseModel):
             return self.field_type(**value)
         if self.field_type == pydantic.AnyHttpUrl:
@@ -1210,6 +1215,7 @@ class BaseDocument(metaclass=DocumentMeta):
       strings.
     """
 
+    _connection_pool: Optional[asyncpg.pool.Pool] = None
     _fields_metadata: dict[str, Field]
     __primary_key__: tuple[str, ...]
     __ignore_fields__: tuple[str, ...]
@@ -1230,10 +1236,14 @@ class BaseDocument(metaclass=DocumentMeta):
         wrapped around that connection instance. This allows for transparent usage, regardless of whether a connection has
         already been acquired.
         """
-        if connection is None:
-            return get_connection_ctx_mgr()
+        if connection is not None:
+            return util.nullcontext(connection)
 
-        return util.nullcontext(connection)
+        # Make mypy happy
+
+        assert cls._connection_pool is not None
+
+        return cls._connection_pool.acquire()
 
     @classmethod
     def table_name(cls) -> str:
@@ -1422,6 +1432,18 @@ class BaseDocument(metaclass=DocumentMeta):
         Generate a new ID. Override to use something else than uuid4
         """
         return uuid.uuid4()
+
+    @classmethod
+    def set_connection_pool(cls, pool: asyncpg.pool.Pool) -> None:
+        if cls._connection_pool:
+            raise Exception(f"Connection already set on {cls} ({cls._connection_pool})!")
+        cls._connection_pool = pool
+
+    @classmethod
+    def remove_connection_pool(cls) -> None:
+        if not cls._connection_pool:
+            return
+        cls._connection_pool = None
 
     def __setattr__(self, name: str, value: object) -> None:
         if name[0] == "_":
@@ -2686,7 +2708,11 @@ class Environment(BaseDocument):
             await Compile.delete_all(environment=self.id, connection=con)  # Triggers cascading delete on report table
             await Parameter.delete_all(environment=self.id, connection=con)
             await Notification.delete_all(environment=self.id, connection=con)
-            await Code.delete_all(environment=self.id, connection=con)
+
+            await AgentModules.delete_all(environment=self.id, connection=con)
+            await InmantaModule.delete_all(environment=self.id, connection=con)
+            await ModuleFiles.delete_all(environment=self.id, connection=con)
+
             await DiscoveredResource.delete_all(environment=self.id, connection=con)
             await EnvironmentMetricsGauge.delete_all(environment=self.id, connection=con)
             await EnvironmentMetricsTimer.delete_all(environment=self.id, connection=con)
@@ -3279,7 +3305,7 @@ class Agent(BaseDocument):
     :param name: The name of this agent
     :param last_failover: Moment at which the primary was last changed
     :param paused: is this agent paused (if so, skip it)
-    :param primary: what is the current active instance (if none, state is down)
+    :param primary: what is the current active instance (if none, state is down). Only relevant for the $__scheduler agent.
     :param unpause_on_resume: whether this agent should be unpaused when resuming from environment-wide halt. Used to
         persist paused state when halting.
     """
@@ -3410,8 +3436,8 @@ class Agent(BaseDocument):
         :return A list of agent names that have been paused/unpaused by this method.
         """
         if endpoint is None:
-            query = f"UPDATE {cls.table_name()} SET paused=$1 WHERE environment=$2 RETURNING name"
-            values = [cls._get_value(paused), cls._get_value(env)]
+            query = f"UPDATE {cls.table_name()} SET paused=$1 WHERE environment=$2 AND name!=$3 RETURNING name"
+            values = [cls._get_value(paused), cls._get_value(env), const.AGENT_SCHEDULER_ID]
         else:
             query = f"UPDATE {cls.table_name()} SET paused=$1 WHERE environment=$2 AND name=$3 RETURNING name"
             values = [cls._get_value(paused), cls._get_value(env), cls._get_value(endpoint)]
@@ -3570,6 +3596,9 @@ class Compile(BaseDocument):
         By default, notifications are enabled only for exporting compiles.
     :param failed_compile_message: Optional message to use when a notification for a failed compile is created
     :param soft_delete: Prevents deletion of resources in removed_resource_sets if they are being exported.
+    :param links: An object that contains relevant links to this compile.
+        It is a dictionary where the key is something that identifies one or more links
+        and the value is a list of urls. i.e. {"instances": ["link-1',"link-2"], "compiles": ["link-3"]}
     """
 
     __primary_key__ = ("id",)
@@ -3607,6 +3636,7 @@ class Compile(BaseDocument):
     failed_compile_message: Optional[str] = None
 
     soft_delete: bool = False
+    links: dict[str, list[str]] = {}
 
     @classmethod
     async def get_substitute_by_id(cls, compile_id: uuid.UUID, connection: Optional[Connection] = None) -> Optional["Compile"]:
@@ -3766,6 +3796,7 @@ class Compile(BaseDocument):
                 c.exporter_plugin,
                 c.notify_failed_compile,
                 c.failed_compile_message,
+                c.links,
                 r.id as report_id,
                 r.started report_started,
                 r.completed report_completed,
@@ -3801,6 +3832,7 @@ class Compile(BaseDocument):
                     comp.exporter_plugin,
                     comp.notify_failed_compile,
                     comp.failed_compile_message,
+                    comp.links,
                     rep.id as report_id,
                     rep.started as report_started,
                     rep.completed as report_completed,
@@ -3832,21 +3864,27 @@ class Compile(BaseDocument):
             return None
         requested_compile = records[0]
 
-        # Reports should be included from the substituted compile (as well)
-        reports = [
-            m.CompileRunReport(
-                id=report["report_id"],
-                started=report["report_started"],
-                completed=report["report_completed"],
-                command=report["command"],
-                name=report["name"],
-                errstream=report["errstream"],
-                outstream=report["outstream"],
-                returncode=report["returncode"],
-            )
-            for report in result
-            if report.get("report_id")
-        ]
+        # Concatenate the links of the requested compile and all substitute compiles
+        links: dict[str, set[str]] = defaultdict(set)
+        reports = []
+        for compile in result:
+            # Reports should be included from the substituted compile (as well)
+            if compile.get("report_id"):
+                reports.append(
+                    m.CompileRunReport(
+                        id=compile["report_id"],
+                        started=compile["report_started"],
+                        completed=compile["report_completed"],
+                        command=compile["command"],
+                        name=compile["name"],
+                        errstream=compile["errstream"],
+                        outstream=compile["outstream"],
+                        returncode=compile["returncode"],
+                    )
+                )
+            for name, url in cast(dict[str, list[str]], compile.get("links", {})).items():
+                links[name].add(*url)
+
         return m.CompileDetails(
             id=requested_compile["id"],
             remote_id=requested_compile["remote_id"],
@@ -3869,6 +3907,7 @@ class Compile(BaseDocument):
             failed_compile_message=requested_compile["failed_compile_message"],
             compile_data=requested_compile["compile_data"],
             reports=reports,
+            links={key: sorted(list(links)) for key, links in links.items()},
         )
 
     def to_dto(self) -> m.CompileRun:
@@ -3890,6 +3929,7 @@ class Compile(BaseDocument):
             exporter_plugin=self.exporter_plugin,
             notify_failed_compile=self.notify_failed_compile,
             failed_compile_message=self.failed_compile_message,
+            links=self.links,
         )
 
     def to_dict(self) -> JsonType:
@@ -3916,7 +3956,7 @@ class LogLine(DataDocument):
         - msg: the message to write to logs (value type: str)
         - args: the args that can be passed to the logger (value type: list)
         - level: the log level of the message (value type: str, example: "CRITICAL")
-        - kwargs: the key-word args that where used to generated the log (value type: list)
+        - kwargs: the key-word args that were used to generate the log (value type: list)
         - timestamp: the time at which the LogLine was created (value type: datetime.datetime)
     """
 
@@ -4020,7 +4060,6 @@ class ResourceAction(BaseDocument):
         if self.changes == {}:
             self.changes = None
 
-        # load message json correctly
         if from_postgres and self.messages:
             new_messages = []
             for message in self.messages:
@@ -4450,6 +4489,8 @@ class ResourcePersistentState(BaseDocument):
     is_undefined: bool
     # Written when a new version is processed by the scheduler
     is_orphan: bool
+    # Set to true when a version starts its deployment, set to false when it finishes
+    is_deploying: bool
     # Written at deploy time (except for NEW -> no race condition possible with deploy path)
     last_deploy_result: state.DeployResult
     # Written both when processing a new version and at deploy time. As such, this should be updated
@@ -4461,13 +4502,10 @@ class ResourcePersistentState(BaseDocument):
 
     @classmethod
     async def mark_as_orphan(
-        cls,
-        environment: UUID,
-        resource_ids: Set[ResourceIdStr],
-        connection: Optional[Connection] = None,
+        cls, environment: UUID, resource_ids: Set[ResourceIdStr], connection: Optional[Connection] = None
     ) -> None:
         """
-        Set the is_orphan column to True on all given resources.
+        Set the is_orphan column to True on all given resources
         """
         query = f"""
             UPDATE {cls.table_name()}
@@ -4551,6 +4589,7 @@ class ResourcePersistentState(BaseDocument):
                 current_intent_attribute_hash,
                 is_undefined,
                 is_orphan,
+                is_deploying,
                 last_deploy_result,
                 blocked
             )
@@ -4563,6 +4602,7 @@ class ResourcePersistentState(BaseDocument):
                 r.attribute_hash,
                 r.status = 'undefined'::public.resourcestate,
                 FALSE,
+                FALSE,
                 'NEW',
                 CASE
                     WHEN
@@ -4572,11 +4612,8 @@ class ResourcePersistentState(BaseDocument):
                     ELSE 'NOT_BLOCKED'
                 END
             FROM {Resource.table_name()} AS r
-            WHERE r.environment=$1 AND r.model=$2 AND NOT EXISTS(
-                SELECT *
-                FROM {cls.table_name()} AS rps
-                WHERE rps.environment=r.environment AND rps.resource_id=r.resource_id
-            )
+            WHERE r.environment=$1 AND r.model=$2
+            ON CONFLICT DO NOTHING
             """,
             environment,
             model_version,
@@ -4616,6 +4653,7 @@ class Resource(BaseDocument):
     :param attribute_hash: hash of the attributes, excluding requires, provides and version,
                            used to determine if a resource describes the same state across versions
     :param status: The state of this resource, used e.g. in scheduling
+    :param is_undefined: If the desired state for resource is undefined
     :param resource_set: The resource set this resource belongs to. Used when doing partial compiles.
     """
 
@@ -4635,6 +4673,7 @@ class Resource(BaseDocument):
     attributes: dict[str, object] = {}
     attribute_hash: Optional[str]
     status: const.ResourceState = const.ResourceState.available
+    is_undefined: bool = False
 
     resource_set: Optional[str] = None
 
@@ -4746,58 +4785,21 @@ class Resource(BaseDocument):
         return out
 
     @classmethod
-    async def get_status_for(
-        cls,
-        env: uuid.UUID,
-        model_version: int,
-        rids: list[ResourceIdStr],
-    ) -> dict[ResourceIdStr, ResourceState]:
-        if not rids:
-            return {}
-        query = """
-            SELECT r.resource_id, r.status
-            FROM resource r
-            WHERE r.environment=$1
-                AND r.model=$2
-                AND r.resource_id = ANY($3);
-            """
-        out = await cls.select_query(query, [env, model_version, rids], no_obj=True)
-        return {ResourceIdStr(r["resource_id"]): ResourceState[r["status"]] for r in out}
-
-    @classmethod
-    async def get_resource_states_latest_version(
+    async def get_latest_resource_states(
         cls, env: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None
     ) -> tuple[Optional[int], abc.Mapping[ResourceIdStr, ResourceState]]:
-        query = """
-            WITH latest_released_version AS (
-                SELECT max(version) AS version
-                FROM configurationmodel
-                WHERE environment=$1 AND released
-            )
-            SELECT
+        """
+        Fetches the states of all the resources in the given environment, excluding orphans
+        """
+        query = f"""
+            SELECT DISTINCT ON (r.resource_id)
                 r.model,
                 r.resource_id,
-                (
-                    CASE
-                        -- The resource_persistent_state.last_non_deploying_status column is only populated for
-                        -- actual deployment operations to prevent locking issues. This case-statement calculates
-                        -- the correct state from the combination of the resource table and the
-                        -- resource_persistent_state table.
-                        WHEN r.status::text IN('deploying', 'undefined', 'skipped_for_undefined')
-                            -- The deploying, undefined and skipped_for_undefined states are not tracked in the
-                            -- resource_persistent_state table.
-                            THEN r.status::text
-                        WHEN rps.last_deployed_attribute_hash != r.attribute_hash
-                            -- The hash changed since the last deploy -> new desired state
-                            THEN r.status::text
-                            -- No override required, use last known state from actual deployment
-                            ELSE rps.last_non_deploying_status::text
-                    END
-                ) AS status
-            FROM resource AS r
-                 INNER JOIN resource_persistent_state AS rps ON r.environment=rps.environment AND r.resource_id=rps.resource_id
-                 INNER JOIN configurationmodel AS c ON c.environment=r.environment AND c.version=r.model
-            WHERE r.environment=$1 AND r.model = (SELECT version FROM latest_released_version)
+                {const.SQL_RESOURCE_STATUS_SELECTOR} AS status
+            FROM {Resource.table_name()} AS r
+                INNER JOIN resource_persistent_state AS rps ON rps.environment=r.environment AND r.resource_id=rps.resource_id
+            WHERE r.environment=$1 AND NOT rps.is_orphan
+            ORDER BY r.resource_id, r.model DESC
         """
         results = await cls.select_query(query, [env], no_obj=True, connection=connection)
         if not results:
@@ -4806,56 +4808,22 @@ class Resource(BaseDocument):
 
     @stable_api
     @classmethod
-    async def get_current_resource_state(cls, env: uuid.UUID, rid: ResourceIdStr) -> Optional[ResourceState]:
+    async def get_current_resource_state(cls, env: uuid.UUID, rid: ResourceIdStr) -> Optional[const.ResourceState]:
         """
-        Return the state of the given resource in the latest version of the configuration model
-        or None if the resource is not present in the latest version.
+        Return the current state of the given resource
+        or None if the resource is not present in the latest version (marked as an orphan).
         """
-        query = """
-            WITH latest_released_version AS (
-                SELECT max(version) AS version
-                FROM configurationmodel
-                WHERE environment=$1 AND released
-            )
-            SELECT (
-                CASE
-                    -- The resource_persistent_state.last_non_deploying_status column is only populated for
-                    -- actual deployment operations to prevent locking issues. This case-statement calculates
-                    -- the correct state from the combination of the resource table and the
-                    -- resource_persistent_state table.
-                    WHEN r.status::text IN('deploying', 'undefined', 'skipped_for_undefined')
-                        -- The deploying, undefined and skipped_for_undefined states are not tracked in the
-                        -- resource_persistent_state table.
-                        THEN r.status::text
-                    WHEN rps.last_deployed_attribute_hash != r.attribute_hash
-                        -- The hash changed since the last deploy -> new desired state
-                        THEN r.status::text
-                        -- No override required, use last known state from actual deployment
-                        ELSE rps.last_non_deploying_status::text
-                END
-            ) AS status
-            FROM resource AS r
-                 INNER JOIN resource_persistent_state AS rps ON r.environment=rps.environment AND r.resource_id=rps.resource_id
-                 INNER JOIN configurationmodel AS c ON c.environment=r.environment AND c.version=r.model
-            WHERE r.environment=$1 AND r.model = (SELECT version FROM latest_released_version) AND r.resource_id=$2
+        query = f"""
+            SELECT
+            {const.SQL_RESOURCE_STATUS_SELECTOR} AS status
+            FROM resource_persistent_state AS rps
+            WHERE rps.environment=$1 AND rps.resource_id=$2 AND NOT rps.is_orphan
             """
         results = await cls.select_query(query, [env, rid], no_obj=True)
         if not results:
             return None
         assert len(results) == 1
         return const.ResourceState(results[0]["status"])
-
-    @classmethod
-    async def set_deployed_multi(
-        cls,
-        environment: uuid.UUID,
-        resource_ids: Sequence[ResourceIdStr],
-        version: int,
-        connection: Optional[asyncpg.connection.Connection] = None,
-    ) -> None:
-        query = "UPDATE resource SET status='deployed' WHERE environment=$1 AND model=$2 AND resource_id =ANY($3) "
-        async with cls.get_connection(connection) as connection:
-            await connection.execute(query, environment, version, resource_ids)
 
     @classmethod
     async def reset_resource_state(
@@ -4867,17 +4835,19 @@ class Resource(BaseDocument):
         """
         Update resources on the latest released version of the model stuck in "deploying" state.
         The status will be reset to the latest non deploying status.
+        The is_deploying flag will also be set to "False" on the ResourcePersistentState table.
 
         :param environment: The environment impacted by this
         :param connection: The connection to use
         """
 
-        query = f"""
+        # FIXME: When we remove the status from the Resource table, this can go.
+        update_resource_query = f"""
             UPDATE {Resource.table_name()} r
-            SET status=ps.last_non_deploying_status::TEXT::resourcestate
-            FROM {ResourcePersistentState.table_name()} ps
-            WHERE r.resource_id=ps.resource_id
-                AND r.environment=ps.environment
+            SET status=rps.last_non_deploying_status::TEXT::resourcestate
+            FROM {ResourcePersistentState.table_name()} rps
+            WHERE r.resource_id=rps.resource_id
+                AND r.environment=rps.environment
                 AND r.status='deploying'
                 AND r.environment=$1
                 AND r.model=(
@@ -4889,45 +4859,15 @@ class Resource(BaseDocument):
                     LIMIT 1
                 )
         """
+        update_rps_query = f"""
+            UPDATE {ResourcePersistentState.table_name()} rps
+            SET is_deploying=FALSE
+            WHERE environment=$1
+        """
         values = [cls._get_value(environment)]
         async with cls.get_connection(connection) as connection:
-            await connection.execute(query, *values)
-
-    @classmethod
-    async def get_resource_ids_with_status(
-        cls,
-        environment: uuid.UUID,
-        resource_version_ids: list[ResourceIdStr],
-        version: int,
-        statuses: Sequence[const.ResourceState],
-        lock: Optional[RowLockMode] = None,
-        connection: Optional[asyncpg.connection.Connection] = None,
-    ) -> list[ResourceIdStr]:
-        query = (
-            "SELECT resource_id as resource_id FROM resource WHERE "
-            "environment=$1 AND model=$2 AND status = ANY($3) and resource_id =ANY($4) "
-        )
-        if lock:
-            query += lock.value
-        async with cls.get_connection(connection) as connection:
-            return [
-                ResourceIdStr(cast(str, r["resource_id"]))
-                for r in await connection.fetch(query, environment, version, statuses, resource_version_ids)
-            ]
-
-    @classmethod
-    async def get_undeployable(cls, environment: uuid.UUID, version: int) -> list["Resource"]:
-        """
-        Returns a list of resources with an undeployable state
-        """
-        (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
-        undeployable_states = ", ".join(["$" + str(i + 3) for i in range(len(const.UNDEPLOYABLE_STATES))])
-        values = values + [cls._get_value(s) for s in const.UNDEPLOYABLE_STATES]
-        query = (
-            "SELECT * FROM " + cls.table_name() + " WHERE " + filter_statement + " AND status IN (" + undeployable_states + ")"
-        )
-        resources = await cls.select_query(query, values)
-        return resources
+            await connection.execute(update_rps_query, *values)
+            await connection.execute(update_resource_query, *values)
 
     @classmethod
     async def get_resources_in_latest_version(
@@ -4995,42 +4935,6 @@ class Resource(BaseDocument):
         return result
 
     @classmethod
-    async def get_resources_report(cls, environment: uuid.UUID) -> list[JsonType]:
-        """
-        This method generates a report of all resources in the given environment,
-        with their latest version and when they are last deployed.
-        """
-        query = f"""
-        WITH latest_version_of_each_resource AS (
-            SELECT environment, max(model) AS model, resource_id
-            FROM {Resource.table_name()}
-            WHERE environment=$1
-            GROUP BY (environment, resource_id)
-        )
-        SELECT lver.resource_id, lver.model AS latest_version, rps.last_deployed_version AS deployed_version, rps.last_deploy
-        FROM latest_version_of_each_resource AS lver LEFT JOIN {ResourcePersistentState.table_name()} AS rps
-            ON lver.environment=rps.environment AND lver.resource_id=rps.resource_id
-        """
-        values = [cls._get_value(environment)]
-        result = []
-        async with cls.get_connection() as con:
-            async with con.transaction():
-                async for record in con.cursor(query, *values):
-                    resource_id = record["resource_id"]
-                    parsed_id = resources.Id.parse_id(resource_id)
-                    result.append(
-                        {
-                            "resource_id": resource_id,
-                            "resource_type": parsed_id.entity_type,
-                            "agent": parsed_id.agent_name,
-                            "latest_version": record["latest_version"],
-                            "deployed_version": record["deployed_version"] if "deployed_version" in record else None,
-                            "last_deploy": record["last_deploy"] if "last_deploy" in record else None,
-                        }
-                    )
-        return result
-
-    @classmethod
     async def get_resources_for_version(
         cls,
         environment: uuid.UUID,
@@ -5081,27 +4985,42 @@ class Resource(BaseDocument):
         cls,
         environment: uuid.UUID,
         *,
-        since: int,
-        projection: Optional[Collection[typing.LiteralString]],
+        since: Optional[int],
         connection: Optional[Connection] = None,
     ) -> list[tuple[int, list[dict[str, object]]]]:
         """
         Returns all released model versions with associated resources since (excluding) the given model version.
         Returns resources as raw dicts with the requested fields
+        :param since: The boundary version (excluding). If None, returns only the latest released version.
         """
-        resource_columns: typing.LiteralString = ", ".join(f"r.{c}" for c in projection) if projection is not None else "r.*"
+
+        boundary_query: typing.LiteralString = (
+            "SELECT $2::int AS version"
+            if since is not None
+            else f""" \
+                            SELECT MAX(version) AS version
+                            FROM {ConfigurationModel.table_name()}
+                            WHERE released=TRUE AND environment=$1
+                            """
+        )
+
         query: typing.LiteralString = f"""
-            SELECT m.version, {resource_columns}
+            WITH boundary AS (
+                {boundary_query}
+            )
+            SELECT m.version, r.resource_id, r.attributes, r.attribute_hash, r.is_undefined
             FROM {ConfigurationModel.table_name()} as m
             LEFT JOIN {cls.table_name()} as r
-                ON m.environment = r.environment AND m.version = r.model
-            WHERE m.environment = $1 AND m.version > $2 AND m.released=true
+                ON m.environment=r.environment AND m.version=r.model
+            WHERE m.environment=$1
+                AND m.version > (SELECT version FROM boundary) - 1
+                AND m.released is TRUE
             ORDER BY m.version ASC
         """
+        query_values = [cls._get_value(environment), since] if since is not None else [cls._get_value(environment)]
         resource_records = await cls._fetch_query(
             query,
-            cls._get_value(environment),
-            cls._get_value(since),
+            *query_values,
             connection=connection,
         )
         result: list[tuple[int, list[dict[str, object]]]] = []
@@ -5112,8 +5031,6 @@ class Resource(BaseDocument):
                     # left join produced no resources
                     continue
                 resource: dict[str, object] = dict(raw_resource)
-                if projection is not None:
-                    assert set(projection) <= resource.keys()
                 parsed_resources.append(resource)
             result.append((version, parsed_resources))
         return result
@@ -5149,13 +5066,14 @@ class Resource(BaseDocument):
             json_projection = ""
 
         query = f"""
-        SELECT {collect_projection(projection, 'r')}, {collect_projection(projection_persistent, 'ps')} {json_projection}
-        FROM {cls.table_name()} r JOIN resource_persistent_state ps
-                                    ON r.environment=ps.environment AND r.resource_id = ps.resource_id
+        SELECT {collect_projection(projection, 'r')}, {collect_projection(projection_persistent, 'rps')} {json_projection}
+        FROM {cls.table_name()} r JOIN resource_persistent_state rps
+                                    ON r.environment=rps.environment AND r.resource_id = rps.resource_id
         WHERE r.environment=$1 AND r.model = $2;
         """
         resource_records = await cls._fetch_query(query, environment, version, connection=connection)
-        return [dict(record) for record in resource_records]
+        resources = [dict(record) for record in resource_records]
+        return resources
 
     @classmethod
     async def get_latest_version(cls, environment: uuid.UUID, resource_id: ResourceIdStr) -> Optional["Resource"]:
@@ -5214,7 +5132,6 @@ class Resource(BaseDocument):
         Create a new resource dao instance from this dao instance. Only creates the object without inserting it.
         The new instance will have the given version.
         """
-        new_resource_state = ResourceState.undefined if self.status is ResourceState.undefined else ResourceState.available
         return Resource(
             environment=self.environment,
             model=new_version,
@@ -5224,7 +5141,8 @@ class Resource(BaseDocument):
             agent=self.agent,
             attributes=self.attributes.copy(),
             attribute_hash=self.attribute_hash,
-            status=new_resource_state,
+            status=ResourceState.undefined if self.is_undefined else ResourceState.available,
+            is_undefined=self.is_undefined,
             resource_set=self.resource_set,
             provides=self.provides,
         )
@@ -5233,43 +5151,17 @@ class Resource(BaseDocument):
     async def get_released_resource_details(
         cls, env: uuid.UUID, resource_id: ResourceIdStr
     ) -> Optional[m.ReleasedResourceDetails]:
-        def status_sub_query(resource_table_name: str) -> str:
-            return f"""
-            (CASE
-               -- The resource_persistent_state.last_non_deploying_status column is only populated for
-               -- actual deployment operations to prevent locking issues. This case-statement calculates
-               -- the correct state from the combination of the resource table and the
-               -- resource_persistent_state table.
-               WHEN (SELECT {resource_table_name}.model < MAX(configurationmodel.version)
-                       FROM configurationmodel
-                       WHERE configurationmodel.released=TRUE
-                       AND environment = $1
-                 )
-                 -- Resource is no longer present in latest released configurationmodel
-                 THEN 'orphaned'
-               WHEN {resource_table_name}.status::text IN('deploying', 'undefined', 'skipped_for_undefined')
-                 -- The deploying, undefined and skipped_for_undefined states are not tracked in the
-                 -- resource_persistent_state table.
-                 THEN {resource_table_name}.status::text
-               WHEN ps.last_deployed_attribute_hash != {resource_table_name}.attribute_hash
-                 -- The hash changed since the last deploy -> new desired state
-                 THEN {resource_table_name}.status::text
-                 -- No override required, use last known state from actual deployment
-                 ELSE ps.last_non_deploying_status::text
-             END
-            ) as status
-            """
 
         query = f"""
         SELECT DISTINCT ON (resource_id) first.resource_id, cm.date as first_generated_time,
         first.model as first_model, latest.model AS latest_model, latest.resource_id as latest_resource_id,
-        latest.resource_type, latest.agent, latest.resource_id_value, ps.last_deploy as latest_deploy, latest.attributes,
-        {status_sub_query('latest')}
+        latest.resource_type, latest.agent, latest.resource_id_value, rps.last_deploy as latest_deploy, latest.attributes,
+        {const.SQL_RESOURCE_STATUS_SELECTOR} AS status
         FROM resource first
         INNER JOIN
             /* 'latest' is the latest released version of the resource */
             (SELECT distinct on (resource_id) resource_id, attribute_hash, model, attributes,
-                resource_type, agent, resource_id_value,  resource.status as status
+                resource_type, agent, resource_id_value
                 FROM resource
                 JOIN configurationmodel cm ON resource.model = cm.version AND resource.environment = cm.environment
                 WHERE resource.environment = $1 AND resource_id = $2 AND cm.released = TRUE
@@ -5279,7 +5171,7 @@ class Resource(BaseDocument):
             the 'latest' released version */
         ON first.resource_id = latest.resource_id AND first.attribute_hash = latest.attribute_hash
         INNER JOIN configurationmodel cm ON first.model = cm.version AND first.environment = cm.environment
-        INNER JOIN resource_persistent_state ps on ps.resource_id = first.resource_id AND first.environment = ps.environment
+        INNER JOIN resource_persistent_state rps on rps.resource_id = first.resource_id AND first.environment = rps.environment
         WHERE first.environment = $1 AND first.resource_id = $2 AND cm.released = TRUE
         ORDER BY first.resource_id, first.model asc;
         """
@@ -5301,11 +5193,12 @@ class Resource(BaseDocument):
         # fetch the status of each of the requires. This is not calculated in the database because the lack of joinable
         # fields requires to calculate the status for each resource record, before it is filtered
         status_query = f"""
-        SELECT DISTINCT ON (resource.resource_id) resource.resource_id, {status_sub_query('resource')}
+        SELECT DISTINCT ON (resource.resource_id) resource.resource_id,
+        {const.SQL_RESOURCE_STATUS_SELECTOR} AS status
         FROM resource
         INNER JOIN configurationmodel cm ON resource.model = cm.version AND resource.environment = cm.environment
-        INNER JOIN resource_persistent_state ps
-              ON ps.resource_id = resource.resource_id AND resource.environment = ps.environment
+        INNER JOIN resource_persistent_state rps
+              ON rps.resource_id = resource.resource_id AND resource.environment = rps.environment
         WHERE resource.environment = $1 AND cm.released = TRUE AND resource.resource_id = ANY($2)
         ORDER BY resource.resource_id, model DESC;
         """
@@ -5348,22 +5241,10 @@ class Resource(BaseDocument):
     @classmethod
     async def get_resource_deploy_summary(cls, environment: uuid.UUID) -> m.ResourceDeploySummary:
         inner_query = f"""
-        SELECT r.resource_id as resource_id,
-        (
-            CASE WHEN r.status IN ('deploying', 'undefined', 'skipped_for_undefined')
-                     THEN r.status::text
-                 WHEN rps.last_deployed_attribute_hash != r.attribute_hash
-                     -- The hash changed since the last deploy -> new desired state
-                     THEN r.status::text
-                 ELSE
-                     rps.last_non_deploying_status::text
-            END
-        ) as status
-        FROM {cls.table_name()} as r
-            JOIN resource_persistent_state rps ON r.resource_id = rps.resource_id and r.environment = rps.environment
-                WHERE r.environment=$1 AND r.model=(SELECT MAX(cm.version)
-                                                    FROM public.configurationmodel AS cm
-                                                    WHERE cm.environment=$1 AND cm.released=TRUE)
+        SELECT rps.resource_id as resource_id,
+            {const.SQL_RESOURCE_STATUS_SELECTOR} AS status
+        FROM resource_persistent_state as rps
+        WHERE rps.environment=$1 AND NOT rps.is_orphan
         """
 
         query = f"""
@@ -5402,6 +5283,7 @@ class Resource(BaseDocument):
                 resource_id_value,
                 agent,
                 status,
+                is_undefined,
                 attributes,
                 attribute_hash,
                 resource_set,
@@ -5420,6 +5302,7 @@ class Resource(BaseDocument):
                         ELSE 'available'::resourcestate
                         END
                     ) AS status,
+                    r.is_undefined,
                     r.attributes AS attributes,
                     r.attribute_hash,
                     r.resource_set,
@@ -5522,12 +5405,14 @@ class Resource(BaseDocument):
             agent=self.agent,
             attributes=attributes,
             status=self.status,
+            is_undefined=self.is_undefined,
             resource_id_value=self.resource_id_value,
             resource_set=self.resource_set,
         )
 
     async def update_persistent_state(
         self,
+        is_deploying: bool | None = None,
         last_deploy: datetime.datetime | None = None,
         last_deployed_version: int | None = None,
         last_non_deploying_status: Optional[const.NonDeployingResourceState] = None,
@@ -5542,6 +5427,7 @@ class Resource(BaseDocument):
         args = ArgumentCollector(2)
 
         invalues = {
+            "is_deploying": is_deploying,
             "last_deploy": last_deploy,
             "last_non_deploying_status": last_non_deploying_status,
             "last_success": last_success,
@@ -5928,8 +5814,12 @@ class ConfigurationModel(BaseDocument):
         async with self.get_connection(connection=connection) as con:
             # Delete of compile record triggers cascading delete report table
             await Compile.delete_all(environment=self.environment, version=self.version, connection=con)
-            await Code.delete_all(environment=self.environment, version=self.version, connection=con)
             await DryRun.delete_all(environment=self.environment, model=self.version, connection=con)
+
+            await AgentModules.delete_version(environment=self.environment, model_version=self.version, connection=con)
+            await InmantaModule.delete_version(environment=self.environment, model_version=self.version, connection=con)
+            await ModuleFiles.delete_version(environment=self.environment, model_version=self.version, connection=con)
+
             await UnknownParameter.delete_all(environment=self.environment, version=self.version, connection=con)
             await self._execute_query(
                 "DELETE FROM public.resourceaction_resource WHERE environment=$1 AND resource_version=$2",
@@ -6195,63 +6085,6 @@ class ConfigurationModel(BaseDocument):
         self.total = new_total
 
 
-class Code(BaseDocument):
-    """
-    A code deployment
-
-    :param environment: The environment this code belongs to
-    :param version: The version of configuration model it belongs to
-    :param resource: The resource type this code belongs to
-    :param sources: The source code of plugins (phasing out)  form:
-        {code_hash:(file_name, provider.__module__, source_code, [req])}
-    :param requires: Python requires for the source code above
-    :param source_refs: file hashes refering to files in the file store
-        {code_hash:(file_name, provider.__module__, [req])}
-    """
-
-    __primary_key__ = ("environment", "resource", "version")
-
-    environment: uuid.UUID
-    resource: str
-    version: int
-    source_refs: Optional[dict[str, tuple[str, str, list[str]]]] = None
-
-    @classmethod
-    async def get_version(cls, environment: uuid.UUID, version: int, resource: str) -> Optional["Code"]:
-        codes = await cls.get_list(environment=environment, version=version, resource=resource)
-        if len(codes) == 0:
-            return None
-
-        return codes[0]
-
-    @classmethod
-    async def get_versions(cls, environment: uuid.UUID, version: int) -> list["Code"]:
-        codes = await cls.get_list(environment=environment, version=version)
-        return codes
-
-    @classmethod
-    async def copy_versions(
-        cls,
-        environment: uuid.UUID,
-        old_version: int,
-        new_version: int,
-        *,
-        connection: Optional[asyncpg.connection.Connection] = None,
-    ) -> None:
-        """
-        Copy all code for one model version to another.
-        """
-        query: str = f"""
-            INSERT INTO {cls.table_name()} (environment, resource, version, source_refs)
-            SELECT environment, resource, $1, source_refs
-            FROM {cls.table_name()}
-            WHERE environment=$2 AND version=$3
-        """
-        await cls._execute_query(
-            query, cls._get_value(new_version), cls._get_value(environment), cls._get_value(old_version), connection=connection
-        )
-
-
 class DryRun(BaseDocument):
     """
     A dryrun of a model version
@@ -6469,6 +6302,7 @@ class User(BaseDocument):
     username: str
     password_hash: str
     auth_method: AuthMethod
+    is_admin: bool = False
 
     @classmethod
     def table_name(cls) -> str:
@@ -6478,7 +6312,145 @@ class User(BaseDocument):
         return "inmanta_user"
 
     def to_dao(self) -> m.User:
-        return m.User(username=self.username, auth_method=self.auth_method)
+        return m.User(username=self.username, auth_method=self.auth_method, is_admin=self.is_admin)
+
+    @classmethod
+    async def set_is_admin(cls, username: str, is_admin: bool) -> None:
+        query = f"UPDATE {cls.table_name()} SET is_admin=$1 WHERE username=$2 RETURNING 1"
+        result = await cls._fetch_query(query, is_admin, username)
+        if not result:
+            # No user exists with the given username
+            raise KeyError()
+
+    @classmethod
+    async def list_users_with_roles(cls) -> list[m.UserWithRoles]:
+        query = f"""
+            SELECT
+                u.username,
+                u.auth_method,
+                u.is_admin,
+                role_a.environment AS role_environment,
+                r.name AS role_name
+            FROM {cls.table_name()} AS u
+                LEFT JOIN role_assignment AS role_a ON role_a.user_id=u.id
+                LEFT JOIN {Role.table_name()} AS r ON r.id=role_a.role_id
+            ORDER BY u.username ASC, role_a.environment ASC, r.name ASC
+        """
+        async with cls.get_connection() as con:
+            records = await con.fetch(query)
+        result = {}
+        for username, group_elem_iterator in itertools.groupby(records, lambda r: r["username"]):
+            records_for_group = list(group_elem_iterator)
+            roles = [
+                m.RoleAssignment(environment=record["role_environment"], role=record["role_name"])
+                for record in records_for_group
+                if record["role_environment"] is not None and record["role_name"] is not None
+            ]
+            result[username] = m.UserWithRoles(
+                username=records_for_group[0]["username"],
+                auth_method=records_for_group[0]["auth_method"],
+                is_admin=records_for_group[0]["is_admin"],
+                roles=roles,
+            )
+        return list(result.values())
+
+
+class RoleStillAssignedException(Exception):
+    """
+    The role is still assigned to a user.
+    """
+
+
+class CannotAssignRoleException(Exception):
+    """
+    Role cannot be assigned to user.
+    """
+
+
+class Role(BaseDocument):
+
+    __primary_key__ = ("id", "name")
+
+    id: uuid.UUID
+    name: str
+
+    @classmethod
+    async def assign_role_to_user(cls, username: str, role_assignment: m.RoleAssignment) -> None:
+        """
+        Assign the given role to the given user.
+        """
+        assign_role_query = f"""
+            INSERT INTO public.role_assignment(user_id, environment, role_id)
+            VALUES(
+                (SELECT id FROM {User.table_name()} WHERE username=$1),
+                $2,
+                (SELECT id FROM {cls.table_name()} WHERE name=$3)
+            )
+        """
+        try:
+            await cls._execute_query(assign_role_query, username, role_assignment.environment, role_assignment.role)
+        except (asyncpg.NotNullViolationError, asyncpg.ForeignKeyViolationError):
+            raise CannotAssignRoleException()
+
+    @classmethod
+    async def unassign_role_from_user(cls, username: str, role_assignment: m.RoleAssignment) -> None:
+        """
+        Unassign the given role from the given user.
+        """
+        unassign_role_query = f"""
+            DELETE FROM public.role_assignment
+            WHERE user_id=(SELECT id FROM {User.table_name()} WHERE username=$1)
+                  AND environment=$2
+                  AND role_id=(SELECT id FROM {cls.table_name()} WHERE name=$3)
+            RETURNING *
+        """
+        result = await cls._fetchrow(unassign_role_query, username, role_assignment.environment, role_assignment.role)
+        if result is None:
+            raise KeyError()
+
+    @classmethod
+    async def get_roles_for_user(cls, username: str) -> list[m.RoleAssignment]:
+        query = f"""
+            SELECT ras.environment, rol.name
+            FROM {User.table_name()} AS u
+                INNER JOIN public.role_assignment AS ras ON u.id=ras.user_id
+                INNER JOIN {cls.table_name()} AS rol ON ras.role_id=rol.id
+            WHERE u.username=$1
+            ORDER BY ras.environment, rol.name
+        """
+        return [m.RoleAssignment(environment=r["environment"], role=r["name"]) for r in await cls._fetch_query(query, username)]
+
+    @classmethod
+    async def ensure_roles(cls, roles: Sequence[str]) -> None:
+        """
+        Insert the given roles into the role table if they don't exist yet.
+        """
+        values_str = ",\n".join(f"(${1 + (i * 2)}, ${2 + (i * 2)})" for i in range(len(roles)))
+        query = f"""
+            INSERT INTO {cls.table_name()}(id, name)
+            VALUES {values_str}
+            ON CONFLICT DO NOTHING
+        """
+        value_pairs = [(uuid.uuid4(), role) for role in roles]
+        values = list(itertools.chain.from_iterable(value_pairs))
+        await cls._execute_query(query, *values)
+
+    @classmethod
+    async def delete_role(cls, name: str) -> None:
+        query = f"""
+           DELETE FROM {cls.table_name()} AS rol
+           WHERE name=$1
+           returning *
+        """
+        try:
+            result = await cls._fetchrow(query, name)
+        except asyncpg.ForeignKeyViolationError:
+            # Role is still assigned to a certain user
+            raise RoleStillAssignedException()
+        else:
+            if result is None:
+                # Role doesn't exist
+                raise KeyError()
 
 
 class DiscoveredResource(BaseDocument):
@@ -6584,7 +6556,6 @@ _classes = [
     ResourceAction,
     ResourcePersistentState,
     ConfigurationModel,
-    Code,
     Parameter,
     DryRun,
     Compile,
@@ -6596,14 +6567,129 @@ _classes = [
     DiscoveredResource,
     File,
     Scheduler,
+    Role,
 ]
 
-
 PACKAGE_WITH_UPDATE_FILES = inmanta.db.versions
+
 
 # Name of core schema in the DB schema verions
 # prevent import loop
 CORE_SCHEMA_NAME = schema.CORE_SCHEMA_NAME
+
+
+def set_connection_pool(pool: asyncpg.pool.Pool) -> None:
+    BaseDocument.set_connection_pool(pool)
+
+
+def get_connection_pool() -> asyncpg.pool.Pool:
+    assert BaseDocument._connection_pool is not None
+    return BaseDocument._connection_pool
+
+
+async def connect_pool(
+    host: str,
+    port: int,
+    database: str,
+    username: str,
+    password: str,
+    create_db_schema: bool = True,
+    connection_pool_min_size: int = 10,
+    connection_pool_max_size: int = 10,
+    connection_timeout: float = 60,
+) -> asyncpg.pool.Pool:
+
+    pool = await asyncpg.create_pool(
+        host=host,
+        port=port,
+        database=database,
+        user=username,
+        password=password,
+        min_size=connection_pool_min_size,
+        max_size=connection_pool_max_size,
+        timeout=connection_timeout,
+        init=asyncpg_on_connect,
+    )
+    try:
+        set_connection_pool(pool)
+        if create_db_schema:
+            async with pool.acquire() as con:
+                await schema.DBSchema(CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES, con).ensure_db_schema()
+            # expire connections after db schema migration to ensure cache consistency
+            await pool.expire_connections()
+        return pool
+    except Exception as e:
+        await disconnect_pool()
+        raise e
+
+
+async def disconnect_pool() -> None:
+    LOGGER.debug("Disconnecting connection pool")
+
+    if BaseDocument._connection_pool is None:
+        return
+    try:
+        await asyncio.wait_for(BaseDocument._connection_pool.close(), config.db_connection_timeout.get())
+    except asyncio.TimeoutError:
+        BaseDocument._connection_pool.terminate()
+        LOGGER.exception("A timeout occurred while closing the connection pool to the database")
+        raise
+    finally:
+        BaseDocument.remove_connection_pool()
+
+
+class ExternalInitAsyncPG(PGDialect_asyncpg):
+    """
+    Define our own postgres dialect to use in engine initialization. The parent dialect
+    reconfigures json serialization/deserialization each time a connection is
+    checked out from the pool.
+
+    Overwriting the on_connect method here removes this redundant behaviour. The
+    configuration for json serialization is set once when the asyncpg pool is
+    created
+    """
+
+    def on_connect(self) -> None:
+        return None
+
+
+registry.impls["postgresql.asyncpgnoi"] = lambda: ExternalInitAsyncPG
+
+
+async def asyncpg_on_connect(connection: asyncpg.Connection) -> None:
+    """
+    Helper method to configure json serialization/deserialization when
+    initializing the database connection pool.
+    """
+
+    def _json_decoder(bin_value: bytes) -> object:
+        return json.loads(bin_value.decode())
+
+    await connection.set_type_codec(
+        "json",
+        encoder=str.encode,
+        decoder=_json_decoder,
+        schema="pg_catalog",
+        format="binary",
+    )
+
+    def _jsonb_encoder(str_value: str) -> bytes:
+        # \x01 is the prefix for jsonb used by PostgreSQL.
+        # asyncpg requires it when format='binary'
+        return b"\x01" + str_value.encode()
+
+    def _jsonb_decoder(bin_value: bytes) -> object:
+        # the byte is the \x01 prefix for jsonb used by PostgreSQL.
+        # asyncpg returns it when format='binary'
+        return json.loads(bin_value[1:].decode())
+
+    await connection.set_type_codec(
+        "jsonb",
+        encoder=_jsonb_encoder,
+        decoder=_jsonb_decoder,
+        schema="pg_catalog",
+        format="binary",
+    )
 
 
 async def start_engine(
@@ -6613,17 +6699,44 @@ async def start_engine(
     database_host: str,
     database_port: int,
     database_name: str,
-    pool_size: int = 10,
-    max_overflow: int = 0,
-    pool_timeout: float = 60.0,
-    echo: bool = False,
-) -> None:
+    create_db_schema: bool = False,
+    connection_pool_min_size: int = 10,
+    connection_pool_max_size: int = 10,
+    connection_timeout: float = 60.0,
+) -> asyncpg.pool.Pool:
     """
-    Start the SQL Alchemy engine for this process
+    Start the SQL Alchemy engine for this process.
+
+    We don't delegate pool creation to SQL alchemy (yet?) because at this stage
+    we are still using the low level asyncpg connection object to interact with
+    the DB in most of the code base.
+
+    We create our own asyncpg pool and configure the SQL alchemy engine to use it.
+
+    To this end, we pass the following arguments to `create_async_engine`:
+
+        * async_creator: tell SQL alchemy how it can acquire new DB connections
+            i.e. using pool.acquire()
+
+        * poolclass: use a subclass of NullPool to disable SQL alchemy pool management.
+            The _do_return_conn method will make sure the connection is returned back
+            into the pool.
     """
 
+    pool = await connect_pool(
+        host=database_host,
+        port=database_port,
+        database=database_name,
+        username=database_username,
+        password=database_password,
+        create_db_schema=create_db_schema,
+        connection_pool_min_size=connection_pool_min_size,
+        connection_pool_max_size=connection_pool_max_size,
+        connection_timeout=connection_timeout,
+    )
+
     url_object = URL.create(
-        drivername="postgresql+asyncpg",
+        drivername="postgresql+asyncpgnoi",
         username=database_username,
         password=database_password,
         host=database_host,
@@ -6631,62 +6744,59 @@ async def start_engine(
         database=database_name,
     )
 
+    async def bridge_creator() -> asyncpg.connection.Connection:
+        return await pool.acquire()
+
+    class NullerPool(NullPool):
+        def _do_return_conn(self, record: ConnectionPoolEntry) -> None:
+            assert record.dbapi_connection is not None
+            assert isinstance(record.dbapi_connection, AdaptedConnection)
+            record.dbapi_connection.run_async(pool.release)
+
     global ENGINE
+    global SESSION_FACTORY
 
     if ENGINE is not None:
         raise Exception("Engine already running: cannot call start_engine twice.")
 
     LOGGER.debug("Creating engine...")
     try:
-        ENGINE = create_async_engine(
-            url=url_object,
-            pool_size=pool_size,
-            max_overflow=max_overflow,
-            pool_timeout=pool_timeout,
-            echo=echo,
-            pool_pre_ping=True,
-        )
+        ENGINE = create_async_engine(url=url_object, pool_pre_ping=True, poolclass=NullerPool, async_creator=bridge_creator)
+        SESSION_FACTORY = async_sessionmaker(ENGINE)
     except Exception as e:
         await stop_engine()
         raise e
 
-
-@asynccontextmanager
-async def get_connection_ctx_mgr() -> AsyncIterator[Connection]:
-    """
-    Retrieve an asyncpg connection from the sqlalchemy engine's
-    connection pool. This method is expected to be used as an
-    async context manager.
-    """
-    if ENGINE is None:
-        raise Exception("SQL Alchemy engine was not initialized")
-    async with ENGINE.connect() as connection:
-        connection_fairy = await connection.get_raw_connection()
-
-        # the really-real innermost driver connection is available
-        # from the .driver_connection attribute
-        raw_asyncio_connection = connection_fairy.driver_connection
-        assert isinstance(raw_asyncio_connection, Connection)
-        yield raw_asyncio_connection
+    return pool
 
 
 async def stop_engine() -> None:
     """
-    Stop the sql alchemy engine.
+    Stop the sql alchemy engine and the associated asyncpg connection pool.
     """
+
     global ENGINE
+    global SESSION_FACTORY
     if ENGINE is not None:
         await ENGINE.dispose(close=True)
     ENGINE = None
+    SESSION_FACTORY = None
 
-
-def get_pool() -> AsyncAdaptedQueuePool:
-    pool = get_engine().pool
-    assert pool is not None, "SQL Alchemy engine's pool was not initialized"
-    assert isinstance(pool, AsyncAdaptedQueuePool)
-    return pool
+    await disconnect_pool()
 
 
 def get_engine() -> AsyncEngine:
     assert ENGINE is not None, "SQL Alchemy engine was not initialized"
     return ENGINE
+
+
+def get_session_factory() -> async_sessionmaker[AsyncSession]:
+    assert SESSION_FACTORY is not None, "SQL Alchemy engine and session factory were not initialized"
+    return SESSION_FACTORY
+
+
+@asynccontextmanager
+async def get_session() -> AsyncIterator[AsyncSession]:
+    assert SESSION_FACTORY is not None, "SQL Alchemy engine and session factory were not initialized"
+    async with SESSION_FACTORY() as session:
+        yield session
