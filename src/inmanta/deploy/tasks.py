@@ -213,12 +213,12 @@ class Deploy(Task):
 
                     return
 
-                if my_executor.failed_modules:
+                if my_executor.failed_resources:
 
                     # We only create this exception to use its LogLine builder.
                     # We don't raise it since the executor was successfully created for this resource
                     # but we want to log a warning  because not all handler code was successfully loaded.
-                    exception = ModuleLoadingException(agent_name=agent, failed_modules=my_executor.failed_modules)
+                    exception = ModuleLoadingException(agent_name=agent, failed_modules=my_executor.failed_resources)
                     exception.log_resource_action_to_scheduler_log(
                         agent=agent, rid=executor_resource_details.rvid, include_exception_info=False
                     )
