@@ -28,7 +28,6 @@ from inmanta.agent.executor import (
     DeployReport,
     DryrunReport,
     FailedInmantaModules,
-    FailedResources,
     GetFactReport,
     ResourceDetails,
     ResourceInstallSpec,
