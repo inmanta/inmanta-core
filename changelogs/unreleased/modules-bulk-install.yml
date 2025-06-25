@@ -1,0 +1,7 @@
+description: bulk install v2 modules and drop v1 install
+change-type: minor
+sections:
+  minor-improvement: "Made ``inmanta project`` install faster and more reliable"
+  upgrade-note: Modules required in pytest-inmanta snippets should now be explicitly declared as dev dependencies
+  deprecation-note: "Dropped ``strict_deps_check`` project option and associated CLI options. Strict dependency checking is now no longer required due to more reliable project installation."
+  other-note: Dropped support for deprecated v1 modules
