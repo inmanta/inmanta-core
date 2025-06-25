@@ -951,7 +951,6 @@ async def test_send_in_progress(server, client, environment, agent):
     rvid_r3_v1 = f"{rvid_r3},v={model_version}"
 
     async def make_resource_with_last_non_deploying_status(
-        status: const.ResourceState,
         last_non_deploying_status: const.NonDeployingResourceState,
         resource_version_id: str,
         attributes: dict[str, object],
@@ -959,7 +958,6 @@ async def test_send_in_progress(server, client, environment, agent):
     ) -> None:
         r1 = data.Resource.new(
             environment=env_id,
-            status=status,
             resource_version_id=resource_version_id,
             attributes=attributes,
         )
@@ -968,21 +966,18 @@ async def test_send_in_progress(server, client, environment, agent):
         await r1.update_persistent_state(last_deploy=datetime.now(tz=UTC), last_non_deploying_status=last_non_deploying_status)
 
     await make_resource_with_last_non_deploying_status(
-        status=const.ResourceState.skipped,
         last_non_deploying_status=const.NonDeployingResourceState.skipped,
         resource_version_id=rvid_r1_v1,
         attributes={"purge_on_delete": False, "requires": [rvid_r2, rvid_r3]},
         version=model_version,
     )
     await make_resource_with_last_non_deploying_status(
-        status=const.ResourceState.deployed,
         last_non_deploying_status=const.NonDeployingResourceState.deployed,
         resource_version_id=rvid_r2_v1,
         attributes={"purge_on_delete": False, "requires": []},
         version=model_version,
     )
     await make_resource_with_last_non_deploying_status(
-        status=const.ResourceState.failed,
         last_non_deploying_status=const.NonDeployingResourceState.failed,
         resource_version_id=rvid_r3_v1,
         attributes={"purge_on_delete": False, "requires": []},

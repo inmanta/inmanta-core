@@ -906,7 +906,6 @@ async def test_model_serialization(init_dataclasses_and_load_schema):
         environment=env.id,
         resource_version_id=key + ",v=%d" % version,
         attributes={"name": name},
-        status=const.ResourceState.deployed,
     )
     await resource.insert()
 
@@ -1011,7 +1010,6 @@ async def test_get_latest_resource(init_dataclasses_and_load_schema):
     res11 = data.Resource.new(
         environment=env.id,
         resource_version_id=key + ",v=%d" % version,
-        status=const.ResourceState.deployed,
         attributes={"name": "motd", "purge_on_delete": True, "purged": False},
     )
     await res11.insert()
@@ -1030,13 +1028,13 @@ async def test_get_latest_resource(init_dataclasses_and_load_schema):
     res12 = data.Resource.new(
         environment=env.id,
         resource_version_id=key + ",v=%d" % version,
-        status=const.ResourceState.deployed,
         attributes={"name": "motd", "purge_on_delete": True, "purged": True},
     )
     await res12.insert()
 
     res = await data.Resource.get_latest_version(env.id, key)
     assert res.model == 2
+    await data.ResourcePersistentState.populate_for_version(environment=env.id, model_version=res.model)
 
 
 async def test_order_by_validation(init_dataclasses_and_load_schema):
@@ -1074,7 +1072,6 @@ async def test_get_resources(init_dataclasses_and_load_schema):
         res = data.Resource.new(
             environment=env.id,
             resource_version_id="std::testing::NullResource[agent1,name=file%d],v=%d" % (i, version),
-            status=const.ResourceState.deployed,
             attributes={"name": "motd", "purge_on_delete": True, "purged": False},
         )
         await res.insert()
@@ -1631,7 +1628,6 @@ async def test_resource_action_get_logs(init_dataclasses_and_load_schema):
     res1 = data.Resource.new(
         environment=env.id,
         resource_version_id=rv_id,
-        status=const.ResourceState.deployed,
         attributes={"name": "file2"},
     )
     await res1.insert()
@@ -2197,7 +2193,6 @@ async def test_resources_json(init_dataclasses_and_load_schema):
     res1 = data.Resource.new(
         environment=env.id,
         resource_version_id="std::testing::NullResource[agent1,name=file1],v=%s" % version,
-        status=const.ResourceState.deployed,
         attributes={"attr": [{"a": 1, "b": "c"}]},
     )
     await res1.insert()

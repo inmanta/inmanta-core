@@ -42,9 +42,10 @@ from inmanta import logging as inmanta_logging
 from inmanta import tracing
 from inmanta.agent import config as agent_cfg
 from inmanta.config import Config, config_map_to_str, scheduler_log_config
-from inmanta.const import AGENT_SCHEDULER_ID, UNDEPLOYABLE_NAMES, AgentAction, AgentStatus
+from inmanta.const import AGENT_SCHEDULER_ID, AgentAction, AgentStatus
 from inmanta.data import APILIMIT, Environment, InvalidSort, model
 from inmanta.data.model import DataBaseReport
+from inmanta.deploy import state
 from inmanta.protocol import encode_token, handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound, ShutdownInProgress
@@ -920,7 +921,8 @@ class AgentManager(ServerSlice, SessionListener):
             if res is None:
                 return 404, {"message": "The resource has no recent version."}
 
-            if res.status in UNDEPLOYABLE_NAMES:
+            rps = await data.ResourcePersistentState.get_one(environment=env_id, resource_id=resource_id)
+            if rps.blocked is state.Blocked.BLOCKED:
                 LOGGER.debug(
                     "Ignore fact request for %s, resource is in an undeployable state.",
                     resource_id,

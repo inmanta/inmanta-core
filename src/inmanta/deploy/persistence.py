@@ -165,8 +165,6 @@ class ToDbUpdateManager(StateUpdateManager):
                 except UniqueViolationError:
                     raise ValueError(f"A resource action with id {action_id} already exists.")
 
-                # FIXME: At some point, we will only need this on the RPS table
-                await resource.update_fields(connection=connection, status=const.ResourceState.deploying)
                 await resource.update_persistent_state(
                     is_deploying=True,
                     connection=connection,
@@ -229,7 +227,6 @@ class ToDbUpdateManager(StateUpdateManager):
                     connection=connection,
                     environment=self.environment,
                     resource_id=resource_id_parsed.resource_str(),
-                    model=resource_id_parsed.version,
                     # acquire lock on Resource before read and before lock on ResourceAction to prevent conflicts with
                     # cascading deletes
                     lock=data.RowLockMode.FOR_UPDATE,
@@ -238,7 +235,10 @@ class ToDbUpdateManager(StateUpdateManager):
                     raise ValueError("The resource with the given id does not exist in the given environment.")
 
                 # no escape from terminal
-                if resource.status != status and resource.status in TERMINAL_STATES:
+                resource_status = await data.Resource.get_current_resource_state(
+                    env=self.environment, rid=resource_id_parsed.resource_str()
+                )
+                if resource_status != status and resource_status in TERMINAL_STATES:
                     LOGGER.error("Attempting to set undeployable resource to deployable state")
                     raise AssertionError("Attempting to set undeployable resource to deployable state")
 
@@ -275,11 +275,6 @@ class ToDbUpdateManager(StateUpdateManager):
                 # We are producing an event
                 # use finished time for last_produced_events because it is used for comparison with dependencies' start
                 extra_datetime_fields["last_produced_events"] = finished
-
-                await resource.update_fields(
-                    status=status,
-                    connection=connection,
-                )
 
                 await resource.update_persistent_state(
                     is_deploying=False,
