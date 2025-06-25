@@ -34,7 +34,7 @@ from inmanta.ast.entity import Entity
 from inmanta.config import Option, is_list, is_uuid_opt
 from inmanta.const import ResourceState
 from inmanta.data.model import PipConfig
-from inmanta.execute.proxy import DynamicProxy, ProxyContext
+from inmanta.execute.proxy import DynamicProxy
 from inmanta.execute.runtime import Instance
 from inmanta.module import Project
 from inmanta.resources import Id, IgnoreResourceException, Resource, resource, to_id
@@ -168,9 +168,7 @@ class Exporter:
         proxies: dict[str, Sequence[ProxiedType]] = {}
         for t in types:
             if self.types is not None and t in self.types:
-                proxies[t] = [
-                    DynamicProxy.return_value(i, context=ProxyContext(path=f"<{i}>")) for i in self.types[t].get_all_instances()
-                ]
+                proxies[t] = [DynamicProxy.return_value(i) for i in self.types[t].get_all_instances()]
             else:
                 proxies[t] = []
 
@@ -194,9 +192,7 @@ class Exporter:
             if len(instances) > 0:
                 for instance in instances:
                     try:
-                        res = Resource.create_from_model(
-                            self, resource_type, DynamicProxy.return_value(instance, context=ProxyContext(path=f"<{instance}>"))
-                        )
+                        res = Resource.create_from_model(self, resource_type, DynamicProxy.return_value(instance))
                         resource_mapping[instance] = res
                         self.add_resource(res)
                     except UnknownException:

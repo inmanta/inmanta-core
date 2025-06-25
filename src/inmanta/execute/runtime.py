@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, Deque, Generic, List, Literal, NewType, Option
 
 import inmanta.ast
 import inmanta.ast.attribute  # noqa: F401 (pyflakes does not recognize partially qualified access ast.attribute)
-from inmanta import ast, references
+from inmanta import ast
 from inmanta.ast import (
     AttributeException,
     CompilerException,
@@ -1209,7 +1209,7 @@ class ExecutionContext(Resolver):
 
 
 # also extends locatable
-class Instance(ExecutionContext, references.MaybeReference):
+class Instance(ExecutionContext):
     def set_location(self, location: Location) -> None:
         Locatable.set_location(self, location)
         self.locations.append(location)
@@ -1270,18 +1270,10 @@ class Instance(ExecutionContext, references.MaybeReference):
         self.implementations: "set[Implementation]" = set()
 
         self.locations: list[Location] = []
-        # may also be a reference to a dataclass
-        self.dataclass_self: object | references.Reference[references.RefValue] | None = None
+        self.dataclass_self: object | None = None
 
     def get_type(self) -> "Entity":
         return self.type
-
-    def unwrap_reference(self) -> Optional[references.Reference[references.RefValue]]:
-        return (
-            self.dataclass_self
-            if self.dataclass_self is not None and isinstance(self.dataclass_self, references.Reference)
-            else None
-        )
 
     def set_attribute(self, name: str, value: object, location: Location, recur: bool = True) -> None:
         if name not in self.slots:

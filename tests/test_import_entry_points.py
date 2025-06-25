@@ -151,11 +151,6 @@ def test_import_scheduler(import_entry_point: Callable[[str], Optional[int]]) ->
     assert import_entry_point("inmanta.deploy.state") == 0
 
 
-@pytest.mark.slowtest
-def test_import_agent(import_entry_point: Callable[[str], Optional[int]]) -> None:
+@pytest.mark.slow
+def test_import_aget(import_entry_point: Callable[[str], Optional[int]]) -> None:
     assert import_entry_point("inmanta.agent.agent") == 0
-
-
-@pytest.mark.slowtest
-def test_import_references(import_entry_point: Callable[[str], Optional[int]]) -> None:
-    assert import_entry_point("inmanta.references") == 0

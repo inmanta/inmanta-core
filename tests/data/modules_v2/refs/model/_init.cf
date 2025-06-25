@@ -1,3 +1,11 @@
+
+entity Test extends std::Dataclass:
+    string value
+end
+
+implement Test using std::none
+
+
 entity NullResource extends std::ManagedResource, std::PurgeableResource:
     """
         Copied from std to have no index
@@ -21,29 +29,3 @@ entity DeepResource extends std::ManagedResource, std::PurgeableResource:
 end
 
 implement DeepResource using std::none
-
-entity DeepResourceNoReferences extends DeepResource:
-end
-implement DeepResourceNoReferences using std::none
-
-
-entity NormalEntity:
-    string non_ref_value
-end
-
-
-entity ListContainer:
-    string[] value
-end
-implement ListContainer using std::none
-entity DictContainer:
-    dict value
-end
-implement DictContainer using std::none
-
-
-entity DictResource extends DictContainer, std::ManagedResource, std::PurgeableResource:
-    string name = "null"
-    string agentname = "internal"
-end
-implement DictResource using std::none

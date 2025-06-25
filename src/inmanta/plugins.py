@@ -45,7 +45,6 @@ from inmanta.ast import (
     RuntimeException,
     TypeNotFoundException,
     TypingException,
-    UnexpectedReference,
     UnsetException,
     WithComment,
 )
@@ -53,8 +52,7 @@ from inmanta.ast.type import NamedType
 from inmanta.ast.type import Null as Null  # Moved, part of stable api
 from inmanta.ast.type import ReferenceType
 from inmanta.config import Config
-from inmanta.execute import proxy
-from inmanta.execute.proxy import DynamicProxy
+from inmanta.execute.proxy import DynamicProxy, DynamicUnwrapContext, get_inmanta_type_for_dataclass
 from inmanta.execute.runtime import QueueScheduler, Resolver, ResultVariable
 from inmanta.execute.util import NoneValue, Unknown
 from inmanta.references import Reference
@@ -410,13 +408,13 @@ def to_dsl_type(python_type: type[object], location: Range, resolver: Namespace)
             return inmanta_type.create_union(bases)
 
     if dataclasses.is_dataclass(python_type):
-        entity = proxy.get_inmanta_type_for_dataclass(python_type)
+        entity = get_inmanta_type_for_dataclass(python_type)
         if entity:
             return entity
         raise TypingException(None, f"invalid type {python_type}, this dataclass has no associated inmanta entity")
 
     if dataclasses.is_dataclass(python_type):
-        entity = proxy.get_inmanta_type_for_dataclass(python_type)
+        entity = get_inmanta_type_for_dataclass(python_type)
         if entity:
             return entity
         raise TypingException(None, f"invalid type {python_type}, this dataclass has no associated inmanta entity")
@@ -484,7 +482,7 @@ def to_dsl_type(python_type: type[object], location: Range, resolver: Namespace)
     return inmanta_type.Any()
 
 
-def validate_and_convert_to_python_domain(*, name: str, expected_type: inmanta_type.Type, value: object) -> object:
+def validate_and_convert_to_python_domain(expected_type: inmanta_type.Type, value: object) -> object:
     """
     Given a model domain value and an inmanta type, produce the corresponding python object
 
@@ -500,7 +498,7 @@ def validate_and_convert_to_python_domain(*, name: str, expected_type: inmanta_t
     if expected_type.has_custom_to_python():
         return expected_type.to_python(value)
 
-    return DynamicProxy.return_value(value, context=proxy.ProxyContext(path=name, validated=True))
+    return DynamicProxy.return_value(value)
 
 
 class PluginCallContext:
@@ -1003,17 +1001,10 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         converted_args = []
         is_unknown = False
 
-        def reference_exception_msg(value: object, arg: PluginArgument) -> str:
-            contains: str = "is" if isinstance(value, Reference) else "contains"
-            return (
-                f"Value {value!r} for argument {arg.arg_name} of plugin {self.get_full_name()} {contains} a reference."
-                " To allow references, use `| Reference[...]` in your type annotation."
-            )
-
         # Validate all positional arguments
         for position, value in enumerate(args):
             # (1) Get the corresponding argument, fails if we don't have one
-            arg: PluginArgument = self.get_arg(position)
+            arg = self.get_arg(position)
             result: object
             if isinstance(value, Unknown):
                 result = value
@@ -1021,33 +1012,16 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             else:
                 try:
                     # (4) Validate the input value
-                    result = validate_and_convert_to_python_domain(
-                        name=arg.arg_name,
-                        expected_type=arg.resolved_type,
-                        value=value,
-                    )
+                    result = validate_and_convert_to_python_domain(arg.resolved_type, value)
                 except (UnsetException, MultiUnsetException):
                     raise
-                except UnexpectedReference as e:
-                    raise PluginTypeException(
-                        stmt=None,
-                        msg=reference_exception_msg(value, arg),
-                        cause=e,
-                    )
                 except RuntimeException as e:
-                    # some validators do not recognize references specially. Best-effort to raise tailored error message.
-                    if isinstance(value, Reference) and not arg.resolved_type.supports_references():
-                        raise PluginTypeException(
-                            stmt=None,
-                            msg=reference_exception_msg(value, arg),
-                            cause=e,
-                        )
                     raise PluginTypeException(
                         stmt=None,
                         msg=(
                             f"Value {value!r} for argument {arg.arg_name} of plugin "
                             f"{self.get_full_name()} has incompatible type."
-                            f" Expected type: {arg.resolved_type.type_string_internal()}"
+                            f" Expected type: {arg.resolved_type}"
                         ),
                         cause=e,
                     )
@@ -1057,7 +1031,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         # Validate all kw arguments
         for name, value in kwargs.items():
             # (1) Get the corresponding kwarg, fails if we don't have one
-            kwarg: PluginArgument = self.get_kwarg(name)
+            kwarg = self.get_kwarg(name)
 
             # (3) Make sure that our argument is not provided twice
             if kwarg.arg_position is not None and kwarg.arg_position < len(args):
@@ -1071,11 +1045,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 is_unknown = True
             else:
                 try:
-                    result = validate_and_convert_to_python_domain(
-                        name=kwarg.arg_name,
-                        expected_type=kwarg.resolved_type,
-                        value=value,
-                    )
+                    result = validate_and_convert_to_python_domain(kwarg.resolved_type, value)
                 except (UnsetException, MultiUnsetException):
                     raise
                 except RuntimeException as e:
@@ -1084,7 +1054,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                         msg=(
                             f"Value {value} for argument {kwarg.arg_name} of plugin"
                             f" {self.get_full_name()} has incompatible type."
-                            f" Expected type: {kwarg.resolved_type.type_string_internal()}"
+                            f" Expected type: {kwarg.resolved_type}"
                         ),
                         cause=e,
                     )
@@ -1123,9 +1093,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         """
         The function call itself
 
-        As a call, for backward compat. Used by the Jinja template proxy.
-
-        The arguments should already have been passed through `check_args()`
+        As a call, for backward compact
         """
         if self.deprecated:
             msg: str = f"Plugin '{self.get_full_name()}' is deprecated."
@@ -1142,8 +1110,6 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 # If false, DynamicProxy.return_value wil raise an exception
                 return arg
             else:
-                # call return_value again, just in case. No proxy context needed, because it should really
-                # have passed here already
                 return DynamicProxy.return_value(arg)
 
         new_args = [new_arg(arg) for arg in args]
@@ -1163,7 +1129,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 stmt=None,
                 msg=(
                     f"Return value {value} of plugin {self.get_full_name()} has incompatible type."
-                    f" Expected type: {self.return_type.resolved_type.type_string_internal()}"
+                    f" Expected type: {self.return_type.resolved_type}"
                 ),
                 cause=e,
             )
@@ -1192,7 +1158,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
 
         value = DynamicProxy.unwrap(
             value,
-            dynamic_context=proxy.DynamicUnwrapContext(
+            dynamic_context=DynamicUnwrapContext(
                 resolver=resolver,
                 queue=queue,
                 location=location,
@@ -1211,7 +1177,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 stmt=None,
                 msg=(
                     f"Return value {value} of plugin {self.get_full_name()} has incompatible type."
-                    f" Expected type: {self.return_type.resolved_type.type_string_internal()}"
+                    f" Expected type: {self.return_type.resolved_type}"
                 ),
                 cause=e,
             )
@@ -1349,32 +1315,3 @@ def deprecated(
     if function is not None:
         return inner(function)
     return inner
-
-
-@stable_api
-def allow_reference_values[T](instance: T) -> T:  # T not bound to DynamicProxy because it is not a user-exposed type
-    """
-    For the given DSL instance, or list or dict nested inside an instance, allow accessing undeclared reference values
-    (attributes, list elements or dict values respectively). Reference values are otherwise rejected on access because
-    not all plugins can be assumed to be compatible with them, and may reasonably expect values of the DSL attributes' declared
-    type.
-
-    Does not allow nested access. Each object for which reference elements are expected should be wrapped separately, e.g.
-    `allow_reference_values(my_instance.my_relation).maybe_reference` rather than
-    `allow_reference_values(my_instance).my_relation.maybe_reference`.
-
-    This function is not required for plugin arguments or dataclasses. In those cases, reference support can be declared
-    directly via type annotations (e.g. `int | Reference[int]`), in which case no special access function is required.
-    """
-    if not isinstance(instance, DynamicProxy):
-        extra: str = (
-            # special-case common (assumed) case
-            "Python lists and dicts do not need this wrapper, because they are out of the compiler's control."
-            if isinstance(instance, (list, dict))
-            else ""
-        )
-        raise PluginException(
-            f"allow_reference_values() should only be called on inmanta instances, lists or dicts. {extra}"
-            f" Got `{instance}` of type `{type(instance).__name__}`"
-        )
-    return instance._allow_references()

@@ -25,23 +25,20 @@ from collections import defaultdict, deque
 from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Optional
 
-from inmanta import references
 from inmanta.ast import (
     DuplicateException,
     Locatable,
     LocatableString,
     Location,
-    MultiUnsetException,
     Named,
     Namespace,
     NotFoundException,
     RuntimeException,
     TypingException,
-    UnexpectedReference,
-    UnsetException,
 )
 from inmanta.execute.proxy import DynamicProxy
 from inmanta.execute.util import AnyType, NoneValue, Unknown
+from inmanta.references import Reference
 from inmanta.stable_api import stable_api
 
 if TYPE_CHECKING:
@@ -59,21 +56,7 @@ class Type(Locatable):
         """
         Validate the given value to check if it satisfies the constraints associated with this type. Returns true iff
         validation succeeds, otherwise raises a :py:class:`inmanta.ast.RuntimeException`.
-
-        In advanced cases where this class has a custom `to_python()`, translation-specific validation should be deferred
-        to that stage. Translation-specific means that the value is definitely of this DSL type, but it can not be converted to
-        the Python domain.
         """
-        # Special DSL values like references require an explicit annotation so we don't leak them where they aren't expected.
-        if isinstance(value, references.Reference):
-            raise UnexpectedReference(
-                reference=value,
-                # keep message generic, since this method is used for many types' super() call.
-                message=(
-                    f"References are not allowed for values of type `{self.type_string_internal()}`. To work with references,"
-                    " explicitly declare support with a `... | Reference[...]` annotation."
-                ),
-            )
         return True
 
     def type_string(self) -> Optional[str]:
@@ -128,12 +111,6 @@ class Type(Locatable):
         """
         return self
 
-    def supports_references(self) -> bool:
-        """
-        Returns True iff this type accepts any sort of reference value.
-        """
-        return self.get_no_reference() is not self
-
     def with_base_type(self, base_type: "Type") -> "Type":
         """
         Returns the type formed by replacing this type's base type with the supplied type.
@@ -176,8 +153,6 @@ class Type(Locatable):
 
         should only be called if has_custom_to_python is True
         the instance must be valid according to the validate method
-
-        :raises RuntimeException: If there is a translation error.
         """
         return instance
 
@@ -222,7 +197,7 @@ class ReferenceType(Type):
         :param element_type: the type we refer to
         """
         super().__init__()
-        assert not element_type.supports_references()
+        assert not isinstance(element_type, ReferenceType)
         self.element_type = element_type
         self.is_dataclass = False
         if element_type.is_entity():
@@ -240,25 +215,21 @@ class ReferenceType(Type):
             self.is_dataclass = True
 
     def validate(self, value: Optional[object]) -> bool:
-        ref: Optional[references.Reference[references.RefValue]] = references.unwrap_reference(value)
-        if ref is not None:
-            assert ref._model_type is not None
-            if ref._model_type.issubtype(self.element_type):
+        if self.is_dataclass:
+            return self.element_type.validate(value)
+
+        if isinstance(value, Reference):
+            assert value._model_type is not None
+            if value._model_type.issubtype(self.element_type):
                 return True
 
-        raise TypingException(None, f"Invalid value: {value} is not a subtype of {self}")
+        raise TypingException(None, f"Invalid value {value} is not a subtype of {self.type_string()}")
 
-    def has_custom_to_python(self) -> bool:
-        return self.is_dataclass
-
-    def to_python(self, instance: object) -> object:
-        result: Optional[references.Reference[references.RefValue]] = references.unwrap_reference(instance)
-        # wouldn't have passed validate otherwise
-        assert result is not None
-        return result
+    def type_string(self) -> Optional[str]:
+        return self.element_type.type_string()
 
     def type_string_internal(self) -> str:
-        return f"Reference[{self.element_type.type_string_internal()}]"
+        return f"Reference[{self.element_type.type_string()}]"
 
     def is_attribute_type(self) -> bool:
         return self.element_type.is_attribute_type()
@@ -269,6 +240,9 @@ class ReferenceType(Type):
     def get_no_reference(self) -> "Type":
         return self.element_type
 
+    def with_base_type(self, base_type: "Type") -> "Type":
+        return super().with_base_type(base_type)
+
     def corresponds_to(self, type: "Type") -> bool:
         if builtins.type(type) != builtins.type(self):
             return False
@@ -277,6 +251,14 @@ class ReferenceType(Type):
 
     def as_python_type_string(self) -> "str | None":
         return f"Reference[{self.element_type.as_python_type_string()}]"
+
+    def has_custom_to_python(self) -> bool:
+        return True
+
+    def to_python(self, instance: object) -> "object":
+        if isinstance(instance, Reference):
+            return instance
+        return DynamicProxy.return_value(instance)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, ReferenceType):
@@ -292,7 +274,7 @@ class ReferenceType(Type):
         return self.element_type.issupertype(other.element_type)
 
 
-class OrReferenceType(Type):
+class OrReferenceType(ReferenceType):
     """
     This class represents the shorthand for Reference[T] | T
 
@@ -301,39 +283,22 @@ class OrReferenceType(Type):
     create_unions will compact unions to use this class when relevant
     """
 
-    def __init__(self, element_type: Type) -> None:
-        self.element_type: Type = element_type
-        self.reference_type: ReferenceType = ReferenceType(element_type)
-
     def validate(self, value: Optional[object]) -> bool:
         # We validate that the value is either a reference of the base type or the base type
-        if references.unwrap_reference(value):
-            # Validate that we are the reference
-            return self.reference_type.validate(value)
-        else:
-            # Validate that we are the base type
-            return self.element_type.validate(value)
-
-    def has_custom_to_python(self) -> bool:
-        return self.reference_type.has_custom_to_python() or self.element_type.has_custom_to_python()
-
-    def to_python(self, instance: object) -> object:
         try:
-            self.reference_type.validate(instance)
+            # Validate that we are the reference
+            return super().validate(value)
         except RuntimeException:
-            if self.element_type.has_custom_to_python():
-                return self.element_type.to_python(instance)
-            else:
-                return DynamicProxy.return_value(instance)
-        else:
-            return self.reference_type.to_python(instance)
+            # If not, fine
+            pass
+        # Validate that we are the base type
+        return self.element_type.validate(value)
 
     def type_string(self) -> Optional[str]:
-        # unfortunately, this type is used (by necessity) for attribute types.
         return self.element_type.type_string()
 
     def type_string_internal(self) -> str:
-        element = self.element_type.type_string_internal()
+        element = self.element_type.type_string()
         return f"Reference[{element}] | {element}"
 
     def as_python_type_string(self) -> "str | None":
@@ -345,17 +310,8 @@ class OrReferenceType(Type):
             return False
         return other.element_type == self.element_type
 
-    def __hash__(self) -> int:
-        return hash((type(self), self.element_type))
-
     def is_attribute_type(self) -> bool:
         return self.element_type.is_attribute_type()
-
-    def get_base_type(self) -> "Type":
-        return self.element_type
-
-    def get_no_reference(self) -> "Type":
-        return self.element_type
 
     def corresponds_to(self, type: "Type") -> bool:
         # The model always allow reference, we allow the type in the python domain to be tighter
@@ -368,7 +324,7 @@ class OrReferenceType(Type):
         return False
 
     def issupertype(self, other: "Type") -> bool:
-        if not isinstance(other, (ReferenceType, OrReferenceType)):
+        if not isinstance(other, ReferenceType):
             return self.element_type.issupertype(other)
         return self.element_type.issupertype(other.element_type)
 
@@ -447,7 +403,7 @@ class NullableType(Type):
         return self.element_type.validate(value)
 
     def _wrap_type_string(self, string: str) -> str:
-        return f"({string})?" if " " in string else f"{string}?"
+        return "%s?" % string
 
     def type_string(self) -> Optional[str]:
         base_type_string: Optional[str] = self.element_type.type_string()
@@ -510,21 +466,6 @@ class Any(Type):
 
     the Any class itself is neither the top nor the bottom type in the type hierarchy.
     """
-
-    def validate(self, value: Optional[object]) -> bool:
-        try:
-            return super().validate(value)
-        except UnexpectedReference as e:
-            raise UnexpectedReference(
-                reference=e.reference,
-                # custom error message for the "object" / "any" type
-                message=(
-                    "References are not allowed for values of type `object`. While the `object` Python type is technically"
-                    " compatible with any value, references are considered special DSL values and are therefore guarded so"
-                    " that they don't accidentally show up where they are not expected. To work with references,"
-                    " explicitly declare support with a `object | Reference[object]` annotation."
-                ),
-            )
 
     def corresponds_to(self, type: Type) -> bool:
         return True
@@ -631,7 +572,6 @@ class Number(Primitive):
         Validate the given value to check if it satisfies the constraints
         associated with this type
         """
-        super().validate(value)
         if isinstance(value, AnyType):
             return True
 
@@ -675,7 +615,6 @@ class Float(Primitive):
         Validate the given value to check if it satisfies the constraints
         associated with this type
         """
-        super().validate(value)
         if isinstance(value, AnyType):
             return True
 
@@ -711,7 +650,6 @@ class Integer(Primitive):
         Validate the given value to check if it satisfies the constraints
         associated with this type
         """
-        super().validate(value)
         if isinstance(value, AnyType):
             return True
 
@@ -744,7 +682,6 @@ class Bool(Primitive):
         Validate the given value to check if it satisfies the constraints
         associated with this type
         """
-        super().validate(value)
         if isinstance(value, AnyType):
             return True
         if isinstance(value, bool):
@@ -783,7 +720,6 @@ class String(Primitive):
         Validate the given value to check if it satisfies the constraints
         associated with this type
         """
-        super().validate(value)
         if isinstance(value, AnyType):
             return True
         if not isinstance(value, str):
@@ -838,7 +774,7 @@ class List(Type):
         return "list"
 
     def type_string_internal(self) -> str:
-        return "list"
+        return "List"
 
     def get_location(self) -> None | Location:
         return None
@@ -898,7 +834,7 @@ class TypedList(List):
         return TypedList(base)
 
     def _wrap_type_string(self, string: str) -> str:
-        return f"({string})[]" if " " in string else f"{string}[]"
+        return "%s[]" % string
 
     def type_string(self) -> Optional[str]:
         element_type_string = self.element_type.type_string()
@@ -1284,9 +1220,6 @@ class Union(Type):
                     else:
                         # Default conversion
                         return DynamicProxy.return_value(instance)
-            except (UnsetException, MultiUnsetException):
-                # let these exceptions with special meaning through
-                raise
             except RuntimeException:
                 # Validate fails, up to the next one
                 pass
@@ -1343,9 +1276,7 @@ class Literal(Union):
     """
 
     def __init__(self) -> None:
-        Union.__init__(
-            self, [NullableType(Float()), Number(), Bool(), String(), TypedList(self), TypedDict(self), ReferenceType(self)]
-        )
+        Union.__init__(self, [NullableType(Float()), Number(), Bool(), String(), TypedList(self), TypedDict(self)])
 
     def type_string_internal(self) -> str:
         return "Literal"
