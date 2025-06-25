@@ -330,8 +330,20 @@ raise Exception("Fail code loading")
 
     result = await client.get_resource_actions(tid=environment, resource_type="test::Test", agent="agent", log_severity="ERROR")
     assert result.code == 200
-    assert any(
-        "All resources of type `test::Test` failed to install handler code dependencies" in log_line["msg"]
-        for resource_action in result.result["data"]
-        for log_line in resource_action["messages"]
-    )
+
+    def check_for_message(data, must_be_present: str) -> None:
+        """
+        Helper method to assert the presence of the must_be_present string
+        in the resource action log lines.
+        """
+        must_be_present_flag = False
+        for resource_action in data:
+            for log_line in resource_action["messages"]:
+                if must_be_present in log_line["msg"]:
+                    must_be_present_flag = True
+                    break
+
+        assert must_be_present_flag
+
+    expected_error_message = "Agent agent failed to load the following modules: test."
+    check_for_message(data=result.result["data"], must_be_present=expected_error_message)

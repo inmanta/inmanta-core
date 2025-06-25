@@ -29,7 +29,7 @@ import pyformance
 
 from inmanta import data, resources
 from inmanta.agent import executor
-from inmanta.agent.executor import DeployReport, FailedResources
+from inmanta.agent.executor import DeployReport, FailedInmantaModules
 from inmanta.data.model import AttributeStateChange
 from inmanta.deploy import scheduler, state
 from inmanta.types import ResourceIdStr, ResourceType, ResourceVersionIdStr
@@ -110,15 +110,11 @@ class Task(abc.ABC):
         my_executor: executor.Executor = await task_manager.executor_manager.get_executor(
             agent_name=agent_name, agent_uri="NO_URI", code=code
         )
-        failed_resources = my_executor.failed_resources
-
-        # Bail out if this failed
-        if resource_type in failed_resources:
+        if my_executor.failed_modules:
             raise ModuleLoadingException(
                 agent_name=agent_name,
                 failed_modules=my_executor.failed_modules,
             )
-            raise failed_resources[resource_type]
 
         return my_executor
 
@@ -212,19 +208,6 @@ class Deploy(Task):
                     deploy_report = DeployReport.undeployable(executor_resource_details.rvid, action_id, log_line)
 
                     return
-
-                if my_executor.failed_resources:
-
-                    # We only create this exception to use its LogLine builder.
-                    # We don't raise it since the executor was successfully created for this resource
-                    # but we want to log a warning  because not all handler code was successfully loaded.
-                    exception = ModuleLoadingException(agent_name=agent, failed_modules=my_executor.failed_resources)
-                    exception.log_resource_action_to_scheduler_log(
-                        agent=agent, rid=executor_resource_details.rvid, include_exception_info=False
-                    )
-                    module_loading_warning = exception.create_log_line_for_failed_modules(
-                        level=logging.WARNING, verbose_message=False
-                    )
 
                 assert reason is not None  # Should always be set for deploy
                 # Deploy
@@ -361,7 +344,7 @@ class ModuleLoadingException(Exception):
     This exception is raised when some Inmanta modules couldn't be loaded on a given agent.
     """
 
-    def __init__(self, agent_name: str, failed_modules: FailedResources) -> None:
+    def __init__(self, agent_name: str, failed_modules: FailedInmantaModules) -> None:
         """
         :param agent_name: Name of the agent for which module loading was unsuccessful
         :param failed_modules: Data for all module loading errors as a nested map of

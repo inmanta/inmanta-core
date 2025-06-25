@@ -52,6 +52,8 @@ LOGGER = logging.getLogger(__name__)
 
 
 FailedResources: typing.TypeAlias = dict[ResourceType, Exception]
+FailedModules: typing.TypeAlias = dict[str, Exception]
+FailedInmantaModules: typing.TypeAlias = dict[str, FailedModules]
 
 
 class AgentInstance(abc.ABC):
@@ -564,6 +566,7 @@ class Executor(abc.ABC):
     """
 
     failed_resources: FailedResources
+    failed_modules: FailedInmantaModules
 
     @abc.abstractmethod
     async def execute(
