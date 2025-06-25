@@ -1,15 +1,15 @@
 import os
-from typing import Annotated, Any
+import dataclasses
 
-import inmanta.plugins
 from inmanta.agent.handler import LoggerABC, provider, CRUDHandler, HandlerContext
 from inmanta.references import reference, Reference, is_reference_of
-from inmanta.plugins import plugin, ModelType
+from inmanta.plugins import plugin
 from inmanta.resources import resource, ManagedResource, PurgeableResource
 
 
 @reference("refs::Bool")
 class BoolReference(Reference[bool]):
+    """A reference to fetch environment variables"""
 
     def __init__(self, name: str | Reference[str]) -> None:
         """
@@ -20,28 +20,10 @@ class BoolReference(Reference[bool]):
 
     def resolve(self, logger: LoggerABC) -> bool:
         """Resolve the reference"""
-        return False
+        return os.getenv(self.resolve_other(self.name, logger)) == "true"
 
     def __str__(self) -> str:
         return f"BoolReference {self.name}"
-
-
-@reference("refs::Int")
-class IntReference(Reference[int]):
-
-    def __init__(self, name: str | Reference[str]) -> None:
-        """
-        :param name: The name of the environment variable.
-        """
-        super().__init__()
-        self.name = name
-
-    def resolve(self, logger: LoggerABC) -> int:
-        """Resolve the reference"""
-        return 42
-
-    def __str__(self) -> str:
-        return f"IntReference {self.name}"
 
 
 @reference("refs::String")
@@ -69,11 +51,6 @@ def create_bool_reference(name: Reference[str] | str) -> Reference[bool]:
 
 
 @plugin
-def create_int_reference(name: Reference[str] | str) -> Reference[int]:
-    return IntReference(name=name)
-
-
-@plugin
 def create_string_reference(name: Reference[str] | str) -> Reference[str]:
     return StringReference(name=name)
 
@@ -90,6 +67,35 @@ def create_bool_reference_cycle(name: str) -> Reference[bool]:
     ref_cycle.name = ref_cycle
 
     return BoolReference(name=ref_cycle)
+
+
+@dataclasses.dataclass(frozen=True)
+class Test:
+    value: str | Reference[str]
+
+
+@reference("refs::TestReference")
+class TestReference(Reference[Test]):
+    """A reference that returns a dataclass"""
+
+    def __init__(self, value: str | Reference[str]) -> None:
+        """
+        :param value: The value
+        """
+        super().__init__()
+        self.value = value
+
+    def resolve(self, logger: LoggerABC) -> Test:
+        """Resolve test references"""
+        return Test(value=self.resolve_other(self.value, logger))
+
+    def __str__(self):
+        return f"TestReference {self.value}"
+
+
+@plugin
+def create_test(value: str | Reference[str]) -> TestReference:
+    return TestReference(value=value)
 
 
 @resource("refs::NullResource", agent="agentname", id_attribute="name")
@@ -147,7 +153,7 @@ class DictMade(Reference[str]):
         return self.resolve_other(self.name["name"], logger)
 
     def __str__(self) -> str:
-        return f"DictMade"
+        return f"BadReference"
 
 
 @plugin
@@ -160,44 +166,24 @@ class Deep(ManagedResource, PurgeableResource):
     fields = ("name", "agentname", "value")
 
     @classmethod
-    def get_value(cls, _, resource) -> dict[str, object | Reference[object]]:
+    def get_value(cls, _, resource) -> dict[str, object]:
         # use a . to ensure proper escaping
-        return {"inner.something": inmanta.plugins.allow_reference_values(resource).value}
-
-
-@resource("refs::DeepResourceNoReferences", agent="agentname", id_attribute="name")
-class DeepNoReferences(Deep):
-    @classmethod
-    def get_value(cls, _, resource) -> dict[str, object | Reference[object]]:
-        # same as Deep.get_value but don't declare that references are allowed => test should fail
         return {"inner.something": resource.value}
 
 
-@resource("refs::DictResource", agent="agentname", id_attribute="name")
-class DictResource(ManagedResource, PurgeableResource):
-    fields = ("name", "agentname", "value")
-
-
-class NullProvider[R: NullResource](CRUDHandler[R]):
+@provider("refs::DeepResource", name="null")
+class NullProvider(CRUDHandler[Deep]):
     """Does nothing at all"""
 
-    def read_resource(self, ctx: HandlerContext, resource: R) -> None:
+    def read_resource(self, ctx: HandlerContext, resource: Deep) -> None:
         ctx.debug("Observed value: %(value)s", value=resource.value)
         return
 
-    def create_resource(self, ctx: HandlerContext, resource: R) -> None:
+    def create_resource(self, ctx: HandlerContext, resource: Deep) -> None:
         ctx.set_created()
 
-    def delete_resource(self, ctx: HandlerContext, resource: R) -> None:
+    def delete_resource(self, ctx: HandlerContext, resource: Deep) -> None:
         ctx.set_purged()
 
-    def update_resource(self, ctx: HandlerContext, changes: dict, resource: R) -> None:
+    def update_resource(self, ctx: HandlerContext, changes: dict, resource: Deep) -> None:
         ctx.set_updated()
-
-
-@provider("refs::DeepResource", name="null")
-class DeepProvider(NullProvider[Deep]): ...
-
-
-@provider("refs::DictResource", name="null")
-class DictProvider(NullProvider[DictResource]): ...
