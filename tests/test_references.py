@@ -145,8 +145,7 @@ def test_undeclared_reference_in_map(
     caplog,
 ) -> None:
     """
-    Verify that a custom field map method requires explicit reference declaration so we don't leak references
-    unexpectedly.
+    Verify that a custom field map method transparently allows references.
     """
     refs_module = os.path.join(modules_v2_dir, "refs")
 
@@ -163,8 +162,7 @@ def test_undeclared_reference_in_map(
         """,
         install_v2_modules=[env.LocalPackagePath(path=refs_module)],
     )
-    with pytest.raises(UnexpectedReference):
-        snippetcompiler.do_export()
+    snippetcompiler.do_export()
 
 
 async def test_deploy_end_to_end(

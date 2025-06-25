@@ -17,6 +17,7 @@ Contact: code@inmanta.com
 """
 
 import dataclasses
+import enum
 from collections.abc import Iterator, Mapping, Sequence
 from copy import copy
 from dataclasses import is_dataclass
@@ -52,6 +53,15 @@ class DynamicUnwrapContext:
     type_resolver: TypeResolver
 
 
+class ProxyMode(enum.Enum):
+    """
+    The mode to proxy values for. Export mode is more lax than plugin mode when it comes to references.
+    """
+
+    PLUGIN = enum.auto()
+    EXPORT = enum.auto()
+
+
 @dataclasses.dataclass(kw_only=True, frozen=True, slots=True)
 class ProxyContext:
     """
@@ -73,6 +83,7 @@ class ProxyContext:
     """
 
     path: str
+    mode: ProxyMode = ProxyMode.PLUGIN
     validated: bool = True
     allow_reference_values: Optional[bool] = None
 
@@ -266,8 +277,8 @@ class DynamicProxy:
         return DynamicProxy(
             value,
             # DSL instances are a black box as far as boundary validation is concerned
-            # => from here on out, consider the object not validated
-            context=dataclasses.replace(context, validated=False),
+            # => from here on out, consider the object not validated, except during export
+            context=dataclasses.replace(context, validated=context.mode is ProxyMode.EXPORT),
         )
 
     def _return_value(self, value: object, *, relative_path: str) -> object:
