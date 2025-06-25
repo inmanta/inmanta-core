@@ -1,0 +1,4 @@
+---
+description: "Added `inmanta policy-engine print-endpoint-data` command."
+change-type: minor
+destination-branches: [master]
