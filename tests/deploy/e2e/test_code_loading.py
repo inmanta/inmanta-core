@@ -264,11 +264,14 @@ async def test_agent_code_loading_with_failure(
         code=resource_install_specs_2,
     )
     assert len(failed_to_load) == 2
-    for handler, exception in failed_to_load.items():
-        assert str(exception) == (
-            f"Failed to install handler {handler} version=1: "
-            f"MKPTCH: Unable to load code when agent is started with code loading disabled."
-        )
+    assert str(failed_to_load["test::Test"]["test::Test"]) == (
+        "Failed to install handler test::Test version=1: "
+        "MKPTCH: Unable to load code when agent is started with code loading disabled."
+    )
+    assert str(failed_to_load["test::Test2"]["test::Test2"]) == (
+        "Failed to install handler test::Test2 version=1: "
+        "MKPTCH: Unable to load code when agent is started with code loading disabled."
+    )
 
     monkeypatch.undo()
 
