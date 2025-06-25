@@ -477,17 +477,15 @@ end
 
 
 @pytest.mark.parametrize_any(
-    "with_tty, version_should_be_shown, regexes_required_lines, regexes_forbidden_lines",
+    "with_tty, regexes_required_lines, regexes_forbidden_lines",
     [
-        (False, True, [r"Inmanta Service Orchestrator", r"Compiler version: ", r"Extensions:", r"\s*\* core:"], []),
-        (True, True, [r"Inmanta Service Orchestrator", r"Compiler version: ", r"Extensions:", r"\s*\* core:"], []),
-        (False, False, [], [r"Inmanta Service Orchestrator", r"Compiler version: ", r"Extensions:", r"\s*\* core:"]),
-        (True, False, [], [r"Inmanta Service Orchestrator", r"Compiler version: ", r"Extensions:", r"\s*\* core:"]),
+        (False, [r"Inmanta Service Orchestrator", r"Compiler version: ", r"Extensions:", r"\s*\* core:"], []),
+        (True, [r"Inmanta Service Orchestrator", r"Compiler version: ", r"Extensions:", r"\s*\* core:"], []),
     ],
 )
 @pytest.mark.timeout(20)
-def test_version_argument_is_set(tmpdir, with_tty, version_should_be_shown, regexes_required_lines, regexes_forbidden_lines):
-    (args, log_dir) = get_command(tmpdir, version=version_should_be_shown)
+def test_version_argument_is_set(server, tmpdir, with_tty, regexes_required_lines, regexes_forbidden_lines):
+    (args, log_dir) = get_command(tmpdir, command="--version")
     if with_tty:
         (stdout, stderr, return_code) = run_with_tty(args, killtime=15, termtime=10)
     else:
