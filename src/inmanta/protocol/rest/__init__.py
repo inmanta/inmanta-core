@@ -32,6 +32,7 @@ from inmanta.data.model import BaseModel
 from inmanta.protocol import auth, common, exceptions
 from inmanta.protocol.common import ReturnValue
 from inmanta.server import config as server_config
+from inmanta.stable_api import stable_api
 from inmanta.types import Apireturn, JsonType
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
@@ -503,7 +504,7 @@ class CallArguments:
 
         # Try to get token from header
         if token is None:
-            token = self._get_auth_token_from_header()
+            token = self.get_auth_token_from_header(self._request_headers)
 
         if token is None:
             return None
@@ -513,16 +514,18 @@ class CallArguments:
         if cfg.jwt_username_claim in self._auth_token:
             self._auth_username = str(self._auth_token[cfg.jwt_username_claim])
 
-    def _get_auth_token_from_header(self) -> str | None:
+    @stable_api
+    @classmethod
+    def get_auth_token_from_header(cls, request_headers: Mapping[str, str]) -> str | None:
         header_value: Optional[str] = None
 
         if additional_header := server_config.server_additional_auth_header.get():
-            if additional_header in self._request_headers:
-                header_value = self._request_headers[additional_header]
+            if additional_header in request_headers:
+                header_value = request_headers[additional_header]
 
-        if header_value is None and "Authorization" in self._request_headers:
+        if header_value is None and "Authorization" in request_headers:
             # In Authorization it is parsed as a bearer token
-            parts = self._request_headers["Authorization"].split(" ")
+            parts = request_headers["Authorization"].split(" ")
 
             if len(parts) != 2 or parts[0].lower() != "bearer":
                 logging.getLogger(__name__).warning(
