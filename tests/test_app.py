@@ -266,7 +266,7 @@ def test_log_file_set(tmpdir, log_level, with_tty, regexes_required_lines, regex
     ],
 )
 @pytest.mark.timeout(60)
-def test_version_command(tmpdir, with_tty, regexes_required_lines):
+def test_version_command(tmpdir, with_tty: bool, regexes_required_lines: list[str]):
     """
     Basic smoke test to check that no warnings show up when running 'inmanta --version'
     """
@@ -280,14 +280,14 @@ def test_version_command(tmpdir, with_tty, regexes_required_lines):
         (stdout, stderr, return_code) = run_without_tty(args, treat_warnings_as_errors=True)
 
     if return_code != 0 or stderr:
-        e = Exception("Unexpected error occured while running 'inmanta --version'")
+        e = Exception("An unexpected error occurred or warnings were logged while running 'inmanta --version'")
         if stderr:
             e.add_note("\n".join(stderr))
         if stdout:
             e.add_note("\n".join(stdout))
         raise e
     # Check if the message appears in the logs, it is not a full line match so timing is not relevant
-    check_logs(stdout, regexes_required_lines, [], timed=False)
+    check_logs(stdout, regexes_required_lines, regexes_forbidden_lines=[], timed=False)
 
 
 @pytest.mark.parametrize_any(
