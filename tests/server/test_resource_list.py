@@ -121,14 +121,12 @@ async def test_has_only_one_version_from_resource(server, client):
         environment=env.id,
         resource_version_id=res1_key + ",v=%d" % version,
         attributes={"name": res1_name},
-        status=ResourceState.deploying,
     )
     await res1_v2.insert()
     res2_v2 = data.Resource.new(
         environment=env.id,
         resource_version_id=res2_key + ",v=%d" % version,
         attributes={"name": res2_name},
-        status=ResourceState.deploying,
     )
     await res2_v2.insert()
 
@@ -137,7 +135,6 @@ async def test_has_only_one_version_from_resource(server, client):
         environment=env.id,
         resource_version_id=res1_key + ",v=%d" % version,
         attributes={"name": res1_name},
-        status=ResourceState.deployed,
     )
     await res1_v3.insert()
 
@@ -149,7 +146,6 @@ async def test_has_only_one_version_from_resource(server, client):
         environment=env.id,
         resource_version_id=res1_key + ",v=%d" % version,
         attributes={"name": res1_name, "new_attr": 123, "requires": ["abc"]},
-        status=ResourceState.deployed,
     )
     await res1_v4.insert()
     await res1_v4.update_persistent_state(last_non_deploying_status=ResourceState.deployed)
@@ -200,7 +196,7 @@ async def env_with_resources(server, client):
                 environment=environment,
                 resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),
                 attributes={"path": path, "version": version},
-                status=status,
+                is_undefined=status is ResourceState.undefined,
             )
             await res.insert()
         # Populate RPS
