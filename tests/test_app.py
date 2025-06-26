@@ -103,7 +103,10 @@ def get_command(
 def do_run(args: list[str], env: typing.Optional[dict[str, str]] = None, cwd: typing.Optional[str] = None) -> subprocess.Popen:
     if env is None:
         env = {}
-    LOGGER.info("Running %s with env %s and cwd %s", args, env, cwd)
+    env_display = "parent process env vars"
+    if env:
+        env_display += " and the following extra env vars %s" % env
+    LOGGER.info("Running %s with %s and cwd %s.", args, env_display, cwd)
     baseenv = os.environ.copy()
     baseenv.update(env)
     process = subprocess.Popen(args, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=baseenv)
