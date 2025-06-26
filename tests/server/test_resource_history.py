@@ -66,7 +66,7 @@ class ResourceFactory:
             environment=environment,
             resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),
             attributes={**attributes, **{"name": name}, "version": version},
-            status=status,
+            is_undefined=status is ResourceState.undefined,
         )
         count = next(self.resource_counter)
         self.deploy_times[key][version] = datetime.datetime.strptime(f"2021-07-07T11:{count}:00.0", "%Y-%m-%dT%H:%M:%S.%f")

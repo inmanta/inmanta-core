@@ -125,7 +125,6 @@ async def env_with_resources(server, client):
             environment=environment,
             resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),
             attributes={**attributes, **{"name": name}},
-            status=status,
         )
         await res.insert()
         await data.ResourcePersistentState.populate_for_version(environment=environment, model_version=version)

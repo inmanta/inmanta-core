@@ -819,7 +819,6 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
         res1 = data.Resource.new(
             environment=env.id,
             resource_version_id="std::testing::NullResource[agent1,name=motd],v=%s" % str(i),
-            status=const.ResourceState.deployed,
             attributes={"attr": [{"a": 1, "b": "c"}], "path": "/etc/motd"},
         )
         await res1.insert()
@@ -1028,7 +1027,6 @@ async def test_send_in_progress_action_id_conflict(server, client, environment, 
 
     await data.Resource.new(
         environment=env_id,
-        status=const.ResourceState.skipped,
         resource_version_id=rvid_r1_v1,
         attributes={"purge_on_delete": False, "requires": []},
     ).insert()
@@ -1256,7 +1254,6 @@ async def test_send_deploy_done_error_handling(server, client, environment, agen
     # Create resource
     await data.Resource.new(
         environment=env_id,
-        status=const.ResourceState.available,
         resource_version_id=rvid_r1_v1,
         attributes={"purge_on_delete": False, "requires": []},
     ).insert()

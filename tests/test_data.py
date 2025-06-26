@@ -860,20 +860,11 @@ async def test_model_get_list(init_dataclasses_and_load_schema):
             await cm.insert()
 
             for r in range(3):
-                if r % 2 == 0:
-                    res = data.Resource.new(
-                        environment=env.id,
-                        status=const.ResourceState.deployed,
-                        resource_version_id=f"std::testing::NullResource[agent1,name=file{r}],v={i}",
-                        attributes={"purge_on_delete": False, "name": f"file{r}"},
-                    )
-                else:
-                    res = data.Resource.new(
-                        environment=env.id,
-                        status=const.ResourceState.deploying,
-                        resource_version_id=f"std::testing::NullResource[agent1,name=file{r}],v={i}",
-                        attributes={"purge_on_delete": False, "name": f"file{r}"},
-                    )
+                res = data.Resource.new(
+                    environment=env.id,
+                    resource_version_id=f"std::testing::NullResource[agent1,name=file{r}],v={i}",
+                    attributes={"purge_on_delete": False, "name": f"file{r}"},
+                )
                 await res.insert()
 
     for env in [env1, env2]:
