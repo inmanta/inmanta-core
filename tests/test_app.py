@@ -153,7 +153,7 @@ def run_without_tty(
     if treat_warnings_as_errors:
         if env is None:
             env = {}
-        env.update({"PYTHONWARNINGS": "error"})
+        env["PYTHONWARNINGS"] = "error"
 
     process = do_run(args, env)
     return do_kill(process, killtime, termtime)
