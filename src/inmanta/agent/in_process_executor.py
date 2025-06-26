@@ -28,14 +28,7 @@ import inmanta.protocol
 import inmanta.util
 from inmanta import const, data, env, tracing
 from inmanta.agent import executor, handler
-from inmanta.agent.executor import (
-    DeployReport,
-    DryrunReport,
-    FailedInmantaModules,
-    FailedResources,
-    GetFactReport,
-    ResourceDetails,
-)
+from inmanta.agent.executor import DeployReport, DryrunReport, FailedInmantaModules, GetFactReport, ResourceDetails
 from inmanta.agent.handler import HandlerAPI, SkipResource, SkipResourceForDependencies
 from inmanta.const import NAME_RESOURCE_ACTION_LOGGER, ParameterSource
 from inmanta.data.model import AttributeStateChange
@@ -83,7 +76,6 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
 
         self._stopped = False
 
-        self.failed_resources: FailedResources = dict()
         self.failed_modules: FailedInmantaModules = dict()
 
         self.cache_cleanup_tick_rate = inmanta.agent.config.agent_cache_cleanup_tick_rate.get()

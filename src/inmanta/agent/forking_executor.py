@@ -756,7 +756,6 @@ class MPExecutor(executor.Executor, resourcepool.PoolMember[executor.ExecutorId]
 
         # Set by init and parent class
         self.failed_resource_results: typing.Sequence[inmanta.loader.FailedModuleSource] = process.failed_resource_results
-        self.failed_resources: executor.FailedResources = {}
         self.failed_modules: FailedInmantaModules = process._failed_modules
 
     async def call(self, method: IPCMethod[ExecutorContext, ReturnType]) -> ReturnType:
