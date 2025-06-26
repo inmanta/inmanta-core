@@ -110,11 +110,8 @@ class Task(abc.ABC):
             agent_name=agent_name, agent_uri="NO_URI", code=code
         )
 
-        # Bail out if the current task's resource needs code
-        # that failed to load/install:
-        inmanta_module_name = self.id.get_inmanta_module()
-
-        if inmanta_module_name in my_executor.failed_modules:
+        # Bail out if some code failed to load:
+        if my_executor.failed_modules:
             raise ModuleLoadingException(
                 agent_name=agent_name,
                 failed_modules=my_executor.failed_modules,
