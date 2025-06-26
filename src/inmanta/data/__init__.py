@@ -36,6 +36,7 @@ from itertools import chain
 from re import Pattern
 from typing import Generic, NewType, Optional, TypeVar, Union, cast, overload
 from uuid import UUID
+from weakref import WeakKeyDictionary
 
 import asyncpg
 import dateutil
@@ -62,11 +63,18 @@ from inmanta.server import config
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.util import parse_timestamp
-from sqlalchemy import URL, AdaptedConnection, NullPool
+from sqlalchemy import URL, AdaptedConnection, NullPool, Pool
 from sqlalchemy.dialects import registry
-from sqlalchemy.dialects.postgresql.asyncpg import PGDialect_asyncpg
+from sqlalchemy.dialects.postgresql.asyncpg import AsyncAdapt_asyncpg_connection, PGDialect_asyncpg
+from sqlalchemy.engine.interfaces import Dialect
+from sqlalchemy.event.base import _DispatchCommon
+from sqlalchemy.event.registry import _ListenerFnType
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.pool import ConnectionPoolEntry
+from sqlalchemy.log import _EchoFlagType
+from sqlalchemy.pool import ConnectionPoolEntry, _ConnectionRecord
+from sqlalchemy.pool.base import _ConnDialect, _CreatorFnType, _CreatorWRecFnType, _ResetStyleArgType
+from sqlalchemy.sql._typing import _InfoType
+from sqlalchemy.util import await_only
 
 """
 Global reference to the SQL Alchemy engine
@@ -6536,6 +6544,101 @@ async def start_engine(
         database=database_name,
     )
 
+    class WrappingPoolEntry(_ConnectionRecord):
+
+        def __init__(self, pool: Pool, native_connection: AsyncAdapt_asyncpg_connection) -> None:
+            super().__init__(pool, False)
+            self.dbapi_connection = native_connection
+            self._in_use: bool = False
+            self.fresh = True
+
+        @property
+        def in_use(self) -> bool:
+            return self._in_use
+
+        def close(self) -> None:
+            pass
+
+        def info(self) -> _InfoType:
+            return {}
+
+        def record_info(self) -> Optional[_InfoType]:
+            return {}
+
+        def invalidate(self, e: Optional[BaseException] = None, soft: bool = False) -> None:
+            raise NotImplementedError()
+
+        def get_connection(self) -> AsyncAdapt_asyncpg_connection:
+            return self.dbapi_connection
+
+    class AsyncPgWrappingPool(Pool):
+
+        def __init__(
+            self,
+            creator: Union[_CreatorFnType, _CreatorWRecFnType],
+            recycle: int = -1,
+            echo: _EchoFlagType = None,
+            logging_name: Optional[str] = None,
+            reset_on_return: _ResetStyleArgType = True,
+            events: Optional[list[tuple[_ListenerFnType, str]]] = None,
+            dialect: Optional[Union[_ConnDialect, Dialect]] = None,
+            pre_ping: bool = False,
+            _dispatch: Optional[_DispatchCommon[Pool]] = None,
+        ):
+            super().__init__(None, recycle, echo, logging_name, reset_on_return, events, dialect, pre_ping, _dispatch)
+
+            self.wrapper_cache: dict[Connection, ConnectionPoolEntry] = {}
+
+        def _do_get(self) -> ConnectionPoolEntry:
+            # From Nullpool, calling Pool._create_connection
+            # Calling _ConnectionRecord.__connection
+            # Calling Pool.__connect
+            # calling the creator constructed in engine.create_async_engine
+            # Calling into AsyncAdapt_asyncpg_dbapi.connect
+            connection = await_only(pool.acquire())
+            if connection in self.wrapper_cache:
+                return self.wrapper_cache[connection]
+            db_api = AsyncAdapt_asyncpg_connection(self._dialect.dbapi, connection)
+            wrapped = WrappingPoolEntry(self, db_api)
+            self.wrapper_cache[connection] = wrapped
+            wrapped._in_use = True
+            # TODO: hook up cleanup
+            return wrapped
+
+        async def bridge_creator(self) -> asyncpg.connection.Connection:
+            return await pool.acquire()
+
+        def status(self) -> str:
+            return (
+                "Map pool size: %d "
+                "Current pool size: %d "
+                "Current Checked out "
+                "connections: %d" % (pool.get_max_size(), pool.get_size(), pool.get_size() - pool.get_idle_size())
+            )
+
+        def _do_return_conn(self, record: ConnectionPoolEntry) -> None:
+            assert record.dbapi_connection is not None
+            assert isinstance(record.dbapi_connection, AdaptedConnection)
+            record.dbapi_connection.run_async(pool.release)
+            record._in_use = False
+
+        def recreate(self) -> NullPool:
+            self.logger.info("Pool recreating")
+
+            return self.__class__(
+                self._creator,
+                recycle=self._recycle,
+                echo=self.echo,
+                logging_name=self._orig_logging_name,
+                reset_on_return=self._reset_on_return,
+                pre_ping=self._pre_ping,
+                _dispatch=self.dispatch,
+                dialect=self._dialect,
+            )
+
+        def dispose(self) -> None:
+            pass
+
     async def bridge_creator() -> asyncpg.connection.Connection:
         return await pool.acquire()
 
@@ -6553,7 +6656,7 @@ async def start_engine(
 
     LOGGER.debug("Creating engine...")
     try:
-        ENGINE = create_async_engine(url=url_object, pool_pre_ping=True, poolclass=NullerPool, async_creator=bridge_creator)
+        ENGINE = create_async_engine(url=url_object, pool_pre_ping=True, poolclass=AsyncPgWrappingPool)
         SESSION_FACTORY = async_sessionmaker(ENGINE)
     except Exception as e:
         await stop_engine()
