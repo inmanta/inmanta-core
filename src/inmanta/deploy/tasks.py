@@ -109,7 +109,17 @@ class Task(abc.ABC):
         my_executor: executor.Executor = await task_manager.executor_manager.get_executor(
             agent_name=agent_name, agent_uri="NO_URI", code=code
         )
-        if my_executor.failed_modules:
+        failed_resources = my_executor.failed_resources
+
+        # Bail out if this failed
+        if resource_type in failed_resources:
+            raise failed_resources[resource_type]
+
+        # Bail out if the current task's resource needs code
+        # that failed to load/install:
+        inmanta_module_name = self.id.get_inmanta_module()
+
+        if inmanta_module_name in my_executor.failed_modules:
             raise ModuleLoadingException(
                 agent_name=agent_name,
                 failed_modules=my_executor.failed_modules,
@@ -182,15 +192,6 @@ class Deploy(Task):
                         resource_type=executor_resource_details.id.entity_type,
                         version=version,
                     )
-                except ModuleLoadingException as e:
-                    e.log_resource_action_to_scheduler_log(
-                        agent=agent, rid=executor_resource_details.rvid, include_exception_info=True
-                    )
-                    log_line_for_web_console = e.create_log_line_for_failed_modules(level=logging.ERROR, verbose_message=False)
-                    deploy_report = DeployReport.undeployable(
-                        executor_resource_details.rvid, action_id, log_line_for_web_console
-                    )
-                    return
 
                 except Exception as e:
                     log_line = data.LogLine.log(
@@ -207,6 +208,19 @@ class Deploy(Task):
                     deploy_report = DeployReport.undeployable(executor_resource_details.rvid, action_id, log_line)
 
                     return
+
+                if my_executor.failed_modules:
+
+                    # We only create this exception to use its LogLine builder.
+                    # We don't raise it since the executor was successfully created for this resource
+                    # but we want to log a warning  because not all handler code was successfully loaded.
+                    exception = ModuleLoadingException(agent_name=agent, failed_modules=my_executor.failed_modules)
+                    exception.log_resource_action_to_scheduler_log(
+                        agent=agent, rid=executor_resource_details.rvid, include_exception_info=False
+                    )
+                    module_loading_warning = exception.create_log_line_for_failed_modules(
+                        level=logging.WARNING, verbose_message=False
+                    )
 
                 assert reason is not None  # Should always be set for deploy
                 # Deploy

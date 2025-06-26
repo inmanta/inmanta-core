@@ -425,7 +425,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
         sync_client = inmanta.protocol.SyncClient(client=context.client, ioloop=loop)
         sources = [s.with_client(sync_client) for s in self.sources]
 
-        failed: FailedInmantaModules = defaultdict(dict)
+        failed_modules: FailedInmantaModules = defaultdict(dict)
         in_place: list[inmanta.loader.ModuleSource] = []
         # First put all files on disk
         for module_source in sources:
@@ -435,7 +435,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
             except Exception as e:
                 logger.info("Failed to load sources: %s", module_source, exc_info=True)
                 inmanta_module_name = get_inmanta_module_name(module_source.name)
-                failed[inmanta_module_name][module_source.name] = e
+                failed_modules[inmanta_module_name][module_source.name] = e
 
         # then try to import them
         for module_source in in_place:
@@ -447,9 +447,9 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
             except Exception as e:
                 logger.info("Failed to import source: %s", module_source.name, exc_info=True)
                 inmanta_module_name = get_inmanta_module_name(module_source.name)
-                failed[inmanta_module_name][module_source.name] = ModuleImportException(e, module_source.name)
+                failed_modules[inmanta_module_name][module_source.name] = ModuleImportException(e, module_source.name)
 
-        return failed
+        return failed_modules
 
 
 class InitCommandFor(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
@@ -607,6 +607,7 @@ class MPProcess(PoolManager[executor.ExecutorId, executor.ExecutorId, "MPExecuto
         self.executor_virtual_env = venv
 
         # Set by init, keeps state for the underlying executors
+        self.failed_resource_results: typing.Sequence[inmanta.loader.FailedModuleSource] = list()
         self._failed_modules: FailedInmantaModules
 
         # threadpool for cleanup jobs
@@ -754,6 +755,8 @@ class MPExecutor(executor.Executor, resourcepool.PoolMember[executor.ExecutorId]
         self.stop_task: Awaitable[None]
 
         # Set by init and parent class
+        self.failed_resource_results: typing.Sequence[inmanta.loader.FailedModuleSource] = process.failed_resource_results
+        self.failed_resources: executor.FailedResources = {}
         self.failed_modules: FailedInmantaModules = process._failed_modules
 
     async def call(self, method: IPCMethod[ExecutorContext, ReturnType]) -> ReturnType:

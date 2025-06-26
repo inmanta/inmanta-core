@@ -565,6 +565,7 @@ class Executor(abc.ABC):
     :param storage: File system path to where the executor's resources are stored.
     """
 
+    failed_resources: FailedResources
     failed_modules: FailedInmantaModules
 
     @abc.abstractmethod
