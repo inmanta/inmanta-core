@@ -1,0 +1,4 @@
+---
+description: Added a method to the stable API to extract the authentication token from the request headers.
+change-type: patch
+destination-branches: [master, iso8, iso7]
