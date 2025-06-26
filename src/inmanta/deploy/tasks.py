@@ -109,11 +109,6 @@ class Task(abc.ABC):
         my_executor: executor.Executor = await task_manager.executor_manager.get_executor(
             agent_name=agent_name, agent_uri="NO_URI", code=code
         )
-        failed_resources = my_executor.failed_resources
-
-        # Bail out if this failed
-        if resource_type in failed_resources:
-            raise failed_resources[resource_type]
 
         # Bail out if the current task's resource needs code
         # that failed to load/install:
@@ -192,6 +187,15 @@ class Deploy(Task):
                         resource_type=executor_resource_details.id.entity_type,
                         version=version,
                     )
+                except ModuleLoadingException as e:
+                    e.log_resource_action_to_scheduler_log(
+                        agent=agent, rid=executor_resource_details.rvid, include_exception_info=True
+                    )
+                    log_line_for_web_console = e.create_log_line_for_failed_modules(level=logging.ERROR, verbose_message=False)
+                    deploy_report = DeployReport.undeployable(
+                        executor_resource_details.rvid, action_id, log_line_for_web_console
+                    )
+                    return
 
                 except Exception as e:
                     log_line = data.LogLine.log(
