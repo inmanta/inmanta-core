@@ -1,0 +1,6 @@
+description: Agents will now only attempt to deploy resources if they encountered no errors during code loading.
+issue-nr: 9259
+change-type: minor
+destination-branches: [master]
+sections:
+  upgrade-note: "{{description}}"
