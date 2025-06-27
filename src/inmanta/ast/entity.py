@@ -732,7 +732,7 @@ class Entity(NamedType, WithComment):
     def has_custom_to_python(self) -> bool:
         return self._paired_dataclass is not None
 
-    def to_python(self, instance: object) -> "object":
+    def to_python(self, instance: object, *, path: str) -> object:
         if self._paired_dataclass is None:
             assert False, f"This class {self.get_full_name()} has no associated python type, this conversion is not supported"
 
@@ -740,7 +740,7 @@ class Entity(NamedType, WithComment):
 
         if instance.type is not self:
             # allow inheritance: delegate to child type
-            return instance.type.to_python(instance)
+            return instance.type.to_python(instance, path=path)
 
         def create() -> object:
             # Convert values
@@ -874,7 +874,7 @@ class Implementation(NamedType):
     def corresponds_to(self, type: Type) -> bool:
         raise NotImplementedError("Implementations should not be arguments to plugins, this code is not expected to be called")
 
-    def to_python(self, instance: object) -> "object":
+    def to_python(self, instance: object, *, path: str) -> object:
         raise NotImplementedError("Implementations should not be arguments to plugins, this code is not expected to be called")
 
 
