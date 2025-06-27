@@ -19,21 +19,24 @@ Contact: code@inmanta.com
 import inspect
 from typing import TYPE_CHECKING, Callable
 
+from inmanta import const
+
 if TYPE_CHECKING:
     from inmanta.protocol.common import MethodProperties
 
 
-def auth[F: Callable](auth_label: str, *, read_only: bool, environment_param: str | None = None) -> Callable[[F], F]:
+def auth[F: Callable](
+    auth_label: const.AuthorizationLabel, *, read_only: bool, environment_param: str | None = None
+) -> Callable[[F], F]:
     """
     A decorator used to add authorization-related metadata to an API endpoint.
     This metadata can be used when writing an access policy. The @auth
     decorator always needs to be defined above the @method or @typedmethod
     decorator.
 
-    :param auth_label: The name of an authorization label. The same label can be
-                       applied on different API endpoint to indicate they are
-                       related. This allows creating a taxonomy from the full
-                       list of API endpoints.
+    :param auth_label: A label used to group together endpoints that act on
+                       conceptually related data. This makes it easier to
+                       write a short and well structured access policy.
     :param read_only: True iff the API endpoint performs a read-only operation.
     :param environment_param: The parameter in the API endpoint that indicates
                               the environment on which the endpoint is acting.
@@ -67,7 +70,7 @@ class AuthorizationMetadata:
     def __init__(
         self,
         method_properties: "MethodProperties",
-        auth_label: str,
+        auth_label: const.AuthorizationLabel,
         *,
         read_only: bool,
         environment_param: str | None,

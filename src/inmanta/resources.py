@@ -21,12 +21,11 @@ import re
 import typing
 import uuid
 from collections.abc import Iterable, Iterator, Sequence
-from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar, Union, cast
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union, cast
 
 import inmanta.ast
 import inmanta.util
 from inmanta import const, references
-from inmanta.ast import CompilerException, ExplicitPluginException, ExternalException, RuntimeException
 from inmanta.execute import proxy, util
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, ResourceIdStr, ResourceVersionIdStr
@@ -43,9 +42,6 @@ LOGGER = logging.getLogger(__name__)
 
 class ResourceException(Exception):
     pass
-
-
-T = TypeVar("T", bound="Resource")
 
 
 @stable_api
@@ -72,7 +68,7 @@ class resource:  # noqa: N801
         self._cls_name = name
         self._options = {"agent": agent, "name": id_attribute}
 
-    def __call__(self, cls: type[T]) -> type[T]:
+    def __call__[R: Resource](self, cls: type[R]) -> type[R]:
         """
         The wrapping
         """
@@ -92,7 +88,7 @@ class resource:  # noqa: N801
                 # If a Resource inherits from the resource decorator, the server goes into an infinite recursion.
                 # Here we make sure the user gets a clear error message (https://github.com/inmanta/inmanta-core/issues/8817).
                 fq_name_current_resource = f"{resource.__module__}.{resource.__name__}"
-                raise RuntimeException(
+                raise inmanta.ast.RuntimeException(
                     stmt=None,
                     msg=(
                         f"Resource {fq_name_current_resource} is inheriting from the {fq_name_resource_decorator} decorator."
@@ -235,6 +231,46 @@ class ReferenceSubCollector:
         self.collect_reference(reference)
         self.replacements[path] = reference.serialize()
 
+    def collect_references(self, value: object, path: str) -> object:
+        """
+        Collect value references. This method also ensures that there are no values in the resources that are not serializable.
+        This includes:
+            - Unknowns
+            - DynamicProxy
+
+
+        :param value: The value to recursively find value references on
+        :param path: The current path we are working on in the tree
+        """
+
+        def allow_references[T](v: T) -> T:
+            if isinstance(v, proxy.DynamicProxy):
+                # fails on stable mypy, but runs fine on master
+                return v._allow_references()
+            return v
+
+        match value:
+            case list() | proxy.SequenceProxy():
+                return [
+                    self.collect_references(value, f"{path}[{index}]") for index, value in enumerate(allow_references(value))
+                ]
+
+            case dict() | proxy.DictProxy():
+                return {
+                    key: self.collect_references(value, f"{path}.{dict_path.NormalValue(key).escape()}")
+                    for key, value in allow_references(value).items()
+                }
+
+            case references.Reference():
+                self.add_reference(path, value)
+                return None
+
+            case proxy.DynamicProxy() | util.Unknown():
+                raise TypeError(f"{value!r} in resource is not JSON serializable at path {path}")
+
+            case _:
+                return value
+
 
 class ReferenceCollector(ReferenceSubCollector):
     """Collect and organize all references and mutators for a specific resource"""
@@ -258,52 +294,6 @@ class ReferenceCollector(ReferenceSubCollector):
                 destination=path,
             ).serialize()
         )
-
-
-def collect_references(value_reference_collector: ReferenceSubCollector | None, value: object, path: str) -> object:
-    """Collect value references. This method also ensures that there are no values in the resources that are not serializable.
-    This includes:
-        - Unknowns
-        - DynamicProxy
-
-
-    :param value_reference_collector: An object that holds all the collected secret references and mappings
-    :param value: The value to recursively find value references on
-    :param path: The current path we are working on in the tree
-    """
-    match value:
-        case list() | proxy.SequenceProxy():
-            return [
-                collect_references(value_reference_collector, value, f"{path}[{index}]")
-                for index, value in enumerate(cast(typing.Iterable[object], value))
-            ]
-
-        case dict() | proxy.DictProxy():
-            return {
-                key: collect_references(value_reference_collector, value, f"{path}.{dict_path.NormalValue(key).escape()}")
-                for key, value in value.items()
-            }
-
-        case references.Reference():
-            if value_reference_collector is None:
-                raise TypeError(f"{repr(value)} in resource is not JSON serializable at path {path}")
-            value_reference_collector.add_reference(path, value)
-            return None
-
-        case proxy.DynamicProxy():
-            inner_value = proxy.DynamicProxy.unwrap(value)
-            if isinstance(inner_value, references.Reference):
-                if value_reference_collector is None:
-                    raise TypeError(f"{repr(value)} in resource is not JSON serializable at path {path}")
-                value_reference_collector.add_reference(path, inner_value)
-                return None
-            else:
-                raise TypeError(f"{repr(value)} in resource is not JSON serializable at path {path}")
-        case util.Unknown():
-            raise TypeError(f"{repr(value)} in resource is not JSON serializable at path {path}")
-
-        case _:
-            return value
 
 
 @stable_api
@@ -402,7 +392,7 @@ class Resource(metaclass=ResourceMeta):
         # first get the agent attribute
         path_elements: list[str] = agent_attribute.split(".")
         agent_value = model_object
-        for el in path_elements:
+        for i, el in enumerate(path_elements):
             try:
                 # TODO cleanup this hack
                 if isinstance(agent_value, list):
@@ -410,10 +400,15 @@ class Resource(metaclass=ResourceMeta):
 
                 agent_value = getattr(agent_value, el)
 
-            except inmanta.ast.UnsetException as e:
-                raise e
-            except inmanta.ast.UnknownException as e:
-                raise e
+                if isinstance(agent_value, references.Reference):
+                    current_path: str = ".".join(path_elements[: i + 1])
+                    raise ResourceException(
+                        "Encountered reference in resource's agent attribute. Agent attribute values can not be references."
+                        f" Encountered at attribute {current_path!r} of resource instance {model_object}"
+                    )
+
+            except (ResourceException, inmanta.ast.UnsetException, inmanta.ast.UnknownException):
+                raise
             except Exception:
                 raise Exception(
                     "Unable to get the name of agent %s belongs to. In path %s, '%s' does not exist"
@@ -421,6 +416,11 @@ class Resource(metaclass=ResourceMeta):
                 )
 
         attribute_value = cls.map_field(None, entity_name, attribute_name, model_object)
+        if isinstance(attribute_value, references.Reference):
+            raise ResourceException(
+                "Encountered reference in resource's id attribute. Id attribute values can not be references."
+                f" Encountered at attribute {attribute_name!r} of resource instance {model_object}"
+            )
         if isinstance(attribute_value, util.Unknown):
             raise inmanta.ast.UnknownException(attribute_value)
         if not isinstance(agent_value, str):
@@ -440,12 +440,20 @@ class Resource(metaclass=ResourceMeta):
         model_object: "proxy.DynamicProxy",
         reference_collector: Optional[ReferenceCollector] = None,
     ) -> object:
+        """
+        Map a field name to its value.
+
+        :param reference_collector: Collector for references. If None, references may be returned, even if they can not
+            be serialized later on. The caller is responsible for validating appropriately.
+        """
         try:
             if hasattr(cls, "get_" + field_name):
                 mthd = getattr(cls, "get_" + field_name)
                 value = mthd(exporter, model_object)
             elif hasattr(cls, "map") and field_name in cls.map:
                 value = cls.map[field_name](exporter, model_object)
+            elif isinstance(model_object, proxy.DynamicProxy):
+                value = getattr(model_object._allow_references(), field_name)
             else:
                 value = getattr(model_object, field_name)
 
@@ -453,7 +461,8 @@ class Resource(metaclass=ResourceMeta):
             # - Unknowns
             # - DynamicProxys to entities
             # - References if we don't have a reference_collector
-            value = collect_references(reference_collector, value, field_name)
+            if reference_collector is not None:
+                value = reference_collector.collect_references(value, field_name)
 
             return value
         except IgnoreResourceException:
@@ -461,13 +470,17 @@ class Resource(metaclass=ResourceMeta):
         except inmanta.ast.UnknownException as e:
             return e.unknown
         except inmanta.ast.PluginException as e:
-            raise ExplicitPluginException(None, f"Failed to get attribute '{field_name}' for export on '{entity_name}'", e)
-        except CompilerException:
+            raise inmanta.ast.ExplicitPluginException(
+                None, f"Failed to get attribute '{field_name}' for export on '{entity_name}'", e
+            )
+        except inmanta.ast.CompilerException:
             # Internal exceptions (like UnsetException) should be propagated without being wrapped
             # as they are used later on and wrapping them would break the compiler
             raise
         except Exception as e:
-            raise ExternalException(None, f"Failed to get attribute '{field_name}' for export on '{entity_name}'", e)
+            raise inmanta.ast.ExternalException(
+                None, f"Failed to get attribute '{field_name}' for export on '{entity_name}'", e
+            )
 
     @classmethod
     def create_from_model(cls, exporter: "export.Exporter", entity_name: str, model_object: "proxy.DynamicProxy") -> "Resource":
@@ -648,7 +661,7 @@ class Resource(metaclass=ResourceMeta):
     def __repr__(self) -> str:
         return str(self)
 
-    def clone(self: T, **kwargs: Any) -> T:
+    def clone[R: Resource](self: R, **kwargs: Any) -> R:
         """
         Create a clone of this resource. The given kwargs can be used to override attributes.
 

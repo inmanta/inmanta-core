@@ -1514,7 +1514,7 @@ def login(username: str, password: str) -> ReturnValue[model.LoginReturn]:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.USER_READ, read_only=True)
+@auth(auth_label=const.AuthorizationLabel.ROLE_ASSIGNMENT_READ, read_only=True)
 @typedmethod(path="/user", operation="GET", client_types=[ClientType.api], api_version=2)
 def list_users() -> list[model.UserWithRoles]:
     """List all users
@@ -1574,6 +1574,7 @@ def set_is_admin(username: str, is_admin: bool) -> None:
 
     :param username: The username of the user for which the admin status has to be updated.
     :param is_admin: True iff the given user should be an admin user.
+    :raises BadRequest: Raised when server authentication is not enabled
     """
 
 
@@ -1592,6 +1593,7 @@ def create_role(name: str) -> None:
     Create a new role.
 
     :param name: The name of the role to create.
+    :raises BadRequest: Raised when server authentication is not enabled
     """
 
 
@@ -1602,6 +1604,7 @@ def delete_role(name: str) -> None:
     Delete a role.
 
     :param name: The name of the role to delete.
+    :raises BadRequest: Raised when server authentication is not enabled
     """
 
 
@@ -1624,6 +1627,7 @@ def assign_role(username: str, environment: uuid.UUID, role: str) -> None:
     :param username: The name of the user the role will be assigned to.
     :param environment: The environment scope of the role.
     :param role: The name of the role that should be assigned to the user.
+    :raises BadRequest: Raised when server authentication is not enabled
     """
 
 
@@ -1637,6 +1641,7 @@ def unassign_role(username: str, environment: uuid.UUID, role: str) -> None:
     :param environment: The environment scope of the role.
     :param role: The name of the role that should be unassigned from the user.
     :raise BadRequest: If the user with the given username doesn't have the given role assigned.
+    :raises BadRequest: Raised when server authentication is not enabled
     """
 
 

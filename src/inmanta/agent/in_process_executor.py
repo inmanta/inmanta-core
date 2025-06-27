@@ -429,7 +429,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                             provider: HandlerAPI[Resource],
                             ctx: handler.HandlerContext,
                             resource: Resource,
-                        ) -> dict[str, object]:
+                        ) -> dict[str, str]:
                             resource.resolve_all_references(ctx)
                             return provider.check_facts(ctx, resource)
 

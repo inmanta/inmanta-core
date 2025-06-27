@@ -240,65 +240,6 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
         )
         return [r.to_dto() for r in result]
 
-    async def get_increment(
-        self,
-        env: data.Environment,
-        version: int,
-        connection: Optional[Connection] = None,
-        run_ahead_lock: Optional[asyncio.Event] = None,
-    ) -> tuple[int, abc.Set[ResourceIdStr], abc.Set[ResourceIdStr], abc.Mapping[str, abc.Set[ResourceIdStr]]]:
-        """
-        Get the increment for a given environment and a given version of the model from the _increment_cache if possible.
-        In case of cache miss, the increment calculation is performed behind a lock to make sure it is only done once per
-        version, per environment.
-
-        :param env: The environment to consider.
-        :param version: The version of the model to consider.
-        :param connection: connection to use towards the DB.
-            When the connection is in a transaction, we will always invalidate the cache
-        :param run_ahead_lock: lock used to keep agents hanging while building up the latest version
-        """
-
-        async def _get_cache_entry() -> (
-            Optional[tuple[int, abc.Set[ResourceIdStr], abc.Set[ResourceIdStr], abc.Mapping[str, abc.Set[ResourceIdStr]]]]
-        ):
-            """
-            Returns a tuple (increment, negative_increment, negative_increment_per_agent)
-            if a cache entry exists for the given environment and version
-            or None if no such cache entry exists.
-            """
-            cache_entry = self._increment_cache.get(env.id, None)
-            if cache_entry is None:
-                # No cache entry found
-                return None
-            (version_cache_entry, incr, neg_incr, neg_incr_per_agent, cached_run_ahead_lock) = cache_entry
-            if version_cache_entry >= version:
-                assert not run_ahead_lock  # We only expect a lock if WE are ahead
-                # Cache is ahead or equal
-                if cached_run_ahead_lock is not None:
-                    await cached_run_ahead_lock.wait()
-            elif version_cache_entry != version:
-                # Cache entry exists for another version
-                # Expire
-                return None
-            return version_cache_entry, incr, neg_incr, neg_incr_per_agent
-
-        increment: Optional[
-            tuple[int, abc.Set[ResourceIdStr], abc.Set[ResourceIdStr], abc.Mapping[str, abc.Set[ResourceIdStr]]]
-        ] = await _get_cache_entry()
-        if increment is None or (connection is not None and connection.is_in_transaction()):
-            lock = self._increment_cache_locks[env.id]
-            async with lock:
-                increment = await _get_cache_entry()
-                if increment is None:
-                    positive, negative = await data.ConfigurationModel.get_increment(env.id, version, connection=connection)
-                    negative_per_agent: dict[str, set[ResourceIdStr]] = defaultdict(set)
-                    for rid in negative:
-                        negative_per_agent[Id.parse_id(rid).agent_name].add(rid)
-                    increment = (version, positive, negative, negative_per_agent)
-                    self._increment_cache[env.id] = (version, positive, negative, negative_per_agent, run_ahead_lock)
-        return increment
-
     @handle(methods_v2.get_resource_actions, env="tid")
     async def get_resource_actions(
         self,

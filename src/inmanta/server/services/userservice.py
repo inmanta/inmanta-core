@@ -154,6 +154,7 @@ class UserService(server_protocol.ServerSlice):
 
     @protocol.handle(protocol.methods_v2.create_role)
     async def create_role(self, name: str) -> None:
+        verify_authentication_enabled()
         try:
             await data.Role(id=uuid.uuid4(), name=name).insert()
         except asyncpg.UniqueViolationError:
@@ -161,6 +162,7 @@ class UserService(server_protocol.ServerSlice):
 
     @protocol.handle(protocol.methods_v2.delete_role)
     async def delete_role(self, name: str) -> None:
+        verify_authentication_enabled()
         try:
             await data.Role.delete_role(name=name)
         except data.RoleStillAssignedException:
@@ -174,6 +176,7 @@ class UserService(server_protocol.ServerSlice):
 
     @protocol.handle(protocol.methods_v2.assign_role)
     async def assign_role(self, username: str, environment: uuid.UUID, role: str) -> None:
+        verify_authentication_enabled()
         try:
             await data.Role.assign_role_to_user(username, model.RoleAssignment(environment=environment, role=role))
         except data.CannotAssignRoleException:
@@ -184,6 +187,7 @@ class UserService(server_protocol.ServerSlice):
 
     @protocol.handle(protocol.methods_v2.unassign_role)
     async def unassign_role(self, username: str, environment: uuid.UUID, role: str) -> None:
+        verify_authentication_enabled()
         try:
             await data.Role.unassign_role_from_user(username, model.RoleAssignment(environment=environment, role=role))
         except KeyError:
@@ -191,6 +195,7 @@ class UserService(server_protocol.ServerSlice):
 
     @protocol.handle(protocol.methods_v2.set_is_admin)
     async def set_is_admin(self, username: str, is_admin: bool) -> None:
+        verify_authentication_enabled()
         try:
             await data.User.set_is_admin(username=username, is_admin=is_admin)
         except KeyError:
