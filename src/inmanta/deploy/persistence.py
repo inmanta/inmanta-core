@@ -227,6 +227,7 @@ class ToDbUpdateManager(StateUpdateManager):
                     connection=connection,
                     environment=self.environment,
                     resource_id=resource_id_parsed.resource_str(),
+                    model=resource_id_parsed.version,
                     # acquire lock on Resource before read and before lock on ResourceAction to prevent conflicts with
                     # cascading deletes
                     lock=data.RowLockMode.FOR_UPDATE,

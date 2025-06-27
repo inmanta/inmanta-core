@@ -1166,7 +1166,7 @@ async def test_model_get_resources_for_version(init_dataclasses_and_load_schema)
 
     resources = await data.Resource.get_resources_for_version(env.id, 3)
     assert len(resources) == 4
-    assert sorted([x.resource_version_id for x in resources]) == sorted([d,s,su,u])
+    assert sorted([x.resource_version_id for x in resources]) == sorted([d, s, su, u])
 
 
 async def test_get_resources_in_latest_version(init_dataclasses_and_load_schema):
@@ -1249,7 +1249,7 @@ async def test_model_get_resources_for_version_optional_args(init_dataclasses_an
             environment=env_id,
             resource_version_id=resource_version_id,
             attributes={"name": name, "version": version},
-            is_undefined=is_undefined
+            is_undefined=is_undefined,
         )
         await resource.insert()
 
@@ -2584,7 +2584,8 @@ async def test_get_last_non_deploying_state_for_dependencies(init_dataclasses_an
             environment=env.id, model_version=Id.parse_id(resource_version_id).version
         )
         await r1.update_persistent_state(
-            last_deploy=datetime.datetime.now(tz=UTC), last_non_deploying_status=last_non_deploying_status,
+            last_deploy=datetime.datetime.now(tz=UTC),
+            last_non_deploying_status=last_non_deploying_status,
         )
 
     await make_resource_with_last_non_deploying_status(
