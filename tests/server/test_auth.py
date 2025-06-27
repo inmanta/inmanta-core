@@ -540,25 +540,25 @@ async def test_auth_annotation() -> None:
 
     data: dict[str, object] = common.MethodProperties.get_open_policy_agent_data()
     assert data["endpoints"]["GET /api/v1/test1/<id>"] == {
-        "client_types": [const.ClientType.api],
+        "client_types": ["api"],
         "auth_label": "test",
         "read_only": True,
         "environment_param": "id",
     }
     assert data["endpoints"]["POST /api/v1/test2"] == {
-        "client_types": [const.ClientType.api, const.ClientType.agent],
+        "client_types": ["api", "agent"],
         "auth_label": "test2",
         "read_only": False,
         "environment_param": None,
     }
     assert data["endpoints"]["GET /api/v1/test3/<id>"] == {
-        "client_types": [const.ClientType.api],
+        "client_types": ["api"],
         "auth_label": "test3",
         "read_only": True,
         "environment_param": "id",
     }
     assert data["endpoints"]["POST /api/v1/test4"] == {
-        "client_types": [const.ClientType.api, const.ClientType.agent],
+        "client_types": ["api", "agent"],
         "auth_label": "test4",
         "read_only": False,
         "environment_param": None,
