@@ -33,7 +33,7 @@ Properties API endpoints
 
 Every API endpoint on the server is annotated with the following properties:
 
-* **client_types**: The client types for which the API endpoint is intended (api, agent or compiler). 
+* **client_types**: The client types for which the API endpoint is intended (api, agent or compiler).
 * **auth_label**: API endpoints that manipulate/inspect similar data are grouped together by applying the same label to them. This property indicates the label of the endpoint. The labels can be used to define shorter and better structured access policies.
 * **read_only**: A boolean value that indicates whether the API endpoint is read-only or not.
 * **environment_param**: The parameter in the API request that contains the ID of the environment on which the API call is executed. Or null, if the API endpoint is environment independent.
@@ -42,7 +42,7 @@ All the above-mentioned information is made available in the access policy using
 
 .. code-block:: rego
 
-    {   
+    {
         "endpoints": {
             "GET /api/v1/project/{id}": {
                 "client_types": ["api"],
@@ -52,7 +52,7 @@ All the above-mentioned information is made available in the access policy using
             },
             "POST /lsm/v1/service_inventory/{service_entity}": {
                 "client_types": ["api", "agent"],
-                "auth_label": "instance.write", 
+                "auth_label": "instance.write",
                 "read_only": false,
                 "environment_param": "X-Inmanta-tid",
             },
@@ -107,16 +107,16 @@ An access policy is written in the `Rego query language<https://www.openpolicyag
 
     # Get the metadata for the specific endpoint that is called.
     endpoint_data := data.endpoints[input.request.endpoint_id]
-    
+
     # Don't allow anything that is not explicitly allowed.
     default allow := false
-    
+
     # Give read-only access to users with the read-only role.
     allow if {
         input.token.role == "read-only"
         endpoint_data.read_only == true
     }
-    
+
     # Users with the user role are allowed to call any API endpoint.
     allow if {
         input.token.role == "user"
