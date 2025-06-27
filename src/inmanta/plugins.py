@@ -252,8 +252,8 @@ class UnConvertibleEntity(inmanta_type.Type):
     def has_custom_to_python(self) -> bool:
         return False
 
-    def to_python(self, instance: object) -> "object":
-        return self.base_entity.to_python(instance)
+    def to_python(self, instance: object, *, path: str) -> object:
+        return self.base_entity.to_python(instance, path=path)
 
     def get_location(self) -> Optional[Location]:
         return self.base_entity.get_location()
@@ -500,7 +500,7 @@ def validate_and_convert_to_python_domain(*, name: str, expected_type: inmanta_t
         return None
 
     if expected_type.has_custom_to_python():
-        return expected_type.to_python(value)
+        return expected_type.to_python(value, path=name)
 
     return DynamicProxy.return_value(value, context=proxy.ProxyContext(path=name, validated=True))
 

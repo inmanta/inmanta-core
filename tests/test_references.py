@@ -507,6 +507,27 @@ def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", module
         """
     )
 
+    ## plugin argument annotated with Entity | DC => custom to_python
+    #  -> verify that resulting dynamic proxy has appropriate path context
+    with raises_wrapped(
+        UnexpectedReference, match="Encountered unexpected reference .* Encountered at v.non_ref_value"
+    ):
+        run_snippet(
+            "refs::plugins::takes_union_with_dc(refs::NormalEntity(non_ref_value=refs::create_string_reference('test')))"
+        )
+    with raises_wrapped(
+        UnexpectedReference, match=f"Encountered unexpected reference .* Encountered at v\[0\].non_ref_value"
+    ):
+        run_snippet(
+            "refs::plugins::takes_union_with_dc([refs::NormalEntity(non_ref_value=refs::create_string_reference('test'))])"
+        )
+    with raises_wrapped(
+        UnexpectedReference, match=f"Encountered unexpected reference .* Encountered at v\['x'\].non_ref_value"
+    ):
+        run_snippet(
+            "refs::plugins::takes_union_with_dc({'x': refs::NormalEntity(non_ref_value=refs::create_string_reference('test'))})"
+        )
+
     # Scenario: plugin annotated as <dataclass> gets Reference[<dataclass>]
     ## dataclass type that does not support reference attrs
     ### plain dataclass

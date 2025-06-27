@@ -1,8 +1,8 @@
 from collections.abc import Mapping, Sequence
-from typing import Annotated, Any, Protocol
+from typing import Annotated, Any, Optional, Protocol
 
 from inmanta import plugins
-from inmanta.execute.proxy import DynamicProxy
+from inmanta.execute.proxy import DynamicProxy, SequenceProxy, DictProxy
 from inmanta.plugins import plugin, ModelType
 from inmanta.references import Reference
 from inmanta_plugins.refs import dc
@@ -52,6 +52,22 @@ def takes_complex_union_or_ref(v: int | str | None | Reference[str | None]) -> N
     Takes a complex union that allows references, but not to the exact same types.
     """
     ...
+
+
+@plugin
+def takes_union_with_dc(v: Entity | Sequence[Optional[Entity]] | Mapping[str, Entity] | dc.AllRefsDataclass) -> None:
+    """
+    Takes a union that includes a dataclass (i.e. the union has a custom to_python)
+    """
+    all_values = (
+        v
+        if isinstance(v, SequenceProxy)
+        else v.values()
+        if isinstance(v, DictProxy)
+        else [v]
+    )
+    for x in all_values:
+        x.non_ref_value
 
 
 @plugin
