@@ -365,7 +365,7 @@ class ReferenceLike:
                         else:
                             arguments.append(JsonArgument(name=name, value=value))
                     except ValidationError:
-                        raise ValueError(f"The {name} attribute of {self} is not json serializable: {value}")
+                        raise ValueError(f"The {name} attribute of {self!r} is not json serializable: {value}")
                 case Reference():
                     model = value.serialize()
                     arguments.append(ReferenceArgument(name=name, id=model.id))
@@ -376,7 +376,7 @@ class ReferenceLike:
                     arguments.append(PythonTypeArgument(name=name, value=value.__name__))
 
                 case _:
-                    raise TypeError(f"Unable to serialize argument `{name}` of `{self}` with value {value}")
+                    raise TypeError(f"Unable to serialize argument `{name}` of `{self!r}` with value {value}")
 
         data = json.dumps({"type": self.type, "args": arguments}, default=util.api_boundary_json_encoder, sort_keys=True)
         hasher = hashlib.md5()
