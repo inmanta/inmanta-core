@@ -59,13 +59,7 @@ def takes_union_with_dc(v: Entity | Sequence[Optional[Entity]] | Mapping[str, En
     """
     Takes a union that includes a dataclass (i.e. the union has a custom to_python)
     """
-    all_values = (
-        v
-        if isinstance(v, SequenceProxy)
-        else v.values()
-        if isinstance(v, DictProxy)
-        else [v]
-    )
+    all_values = v if isinstance(v, SequenceProxy) else v.values() if isinstance(v, DictProxy) else [v]
     for x in all_values:
         x.non_ref_value
 

@@ -1230,7 +1230,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
     def corresponds_to(self, type: inmanta_type.Type) -> bool:
         raise NotImplementedError("Plugins should not be arguments to plugins, this code is not expected to be called")
 
-    def to_python(self, instance: object) -> "object":
+    def to_python(self, instance: object, *, path: str) -> object:
         raise NotImplementedError("Plugins should not be arguments to plugins, this code is not expected to be called")
 
 
