@@ -922,6 +922,8 @@ class AgentManager(ServerSlice, SessionListener):
                 return 404, {"message": "The resource has no recent version."}
 
             rps = await data.ResourcePersistentState.get_one(environment=env_id, resource_id=resource_id)
+            if rps is None:
+                raise NotFound(f"Unable to find persistent state for resource {resource_id}")
             if rps.blocked is state.Blocked.BLOCKED:
                 LOGGER.debug(
                     "Ignore fact request for %s, resource is in an undeployable state.",
