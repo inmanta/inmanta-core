@@ -360,7 +360,6 @@ class Resource(BaseModel):
     resource_id_value: str
     agent: str
     attributes: JsonType
-    status: const.ResourceState
     is_undefined: bool
     resource_set: Optional[str] = None
 

@@ -63,7 +63,6 @@ async def env_with_logs(client, server, environment: str):
         res1 = data.Resource.new(
             environment=uuid.UUID(environment),
             resource_version_id=f"{resource_id_a},v={i}",
-            status=const.ResourceState.deployed,
             attributes={"name": "file2"},
         )
         await res1.insert()
@@ -71,7 +70,6 @@ async def env_with_logs(client, server, environment: str):
         res2 = data.Resource.new(
             environment=uuid.UUID(environment),
             resource_version_id=f"std::testing::NullResource[agent1,name=dir2],v={i}",
-            status=const.ResourceState.deployed,
             attributes={"name": "dir2"},
         )
         await res2.insert()
@@ -312,7 +310,6 @@ async def test_log_without_kwargs(server, client, environment: str):
     res1 = data.Resource.new(
         environment=uuid.UUID(environment),
         resource_version_id=f"{resource_id_a},v=1",
-        status=const.ResourceState.deployed,
         attributes={"path": "/etc/file2"},
     )
     await res1.insert()
@@ -320,7 +317,6 @@ async def test_log_without_kwargs(server, client, environment: str):
     res2 = data.Resource.new(
         environment=uuid.UUID(environment),
         resource_version_id="std::testing::NullResource[agent1,name=dir2],v=1",
-        status=const.ResourceState.deployed,
         attributes={"path": "/etc/file2"},
     )
     await res2.insert()
@@ -367,7 +363,6 @@ async def test_log_nested_kwargs(server, client, environment: str):
     res1 = data.Resource.new(
         environment=uuid.UUID(environment),
         resource_version_id=f"{resource_id_a},v=1",
-        status=const.ResourceState.deployed,
         attributes={"name": "file2"},
     )
     await res1.insert()
@@ -375,7 +370,6 @@ async def test_log_nested_kwargs(server, client, environment: str):
     res2 = data.Resource.new(
         environment=uuid.UUID(environment),
         resource_version_id="std::testing::NullResource[agent1,name=dir2],v=1",
-        status=const.ResourceState.deployed,
         attributes={"name": "file2"},
     )
     await res2.insert()
