@@ -326,7 +326,6 @@ class OrReferenceType(Type):
             if self.element_type.has_custom_to_python():
                 return self.element_type.to_python(instance, path=path)
             else:
-                # TODO: tests
                 return DynamicProxy.return_value(instance, context=ProxyContext(path=path))
         else:
             return self.reference_type.to_python(instance, path=path)
@@ -947,7 +946,6 @@ class TypedList(List):
         if not isinstance(instance, Sequence):
             # should not happen, pre-condition
             raise TypeError(f"This method can only be called on iterables, not on {type(instance)}")
-        # TODO: test
         return [self.element_type.to_python(element, path=f"{path}[{i}]") for i, element in enumerate(instance)]
 
     def has_custom_to_python(self) -> bool:
@@ -1108,7 +1106,6 @@ class TypedDict(Dict):
     def to_python(self, instance: object, *, path: str) -> object:
         assert isinstance(instance, dict)
         base = self.element_type
-        # TODO: test
         return {k: base.to_python(v, path=f"{path}[{k}]") for k, v in instance.items()}
 
     def __eq__(self, other: object) -> bool:
