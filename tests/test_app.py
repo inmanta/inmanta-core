@@ -16,6 +16,7 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import json
 import logging
 import os
 import re
@@ -726,3 +727,17 @@ def test_validate_logging_config(tmpdir, monkeypatch):
         )
         assert any(f"{component_name} -- Log line from Inmanta server at level INFO" in line for line in stdout)
         assert returncode == 0
+
+
+def test_print_endpoint_data() -> None:
+    """
+    Test the `inmanta policy-engine print-endpoint-data` command.
+    """
+    args = [sys.executable, "-m", "inmanta.app", "policy-engine", "print-endpoint-data"]
+    (stdout, err, return_code) = run_with_tty(args)
+    assert return_code == 0
+    assert not err, err
+    stdout_str = "\n".join(stdout)
+    parsed_stdout = json.loads(stdout_str)
+    assert isinstance(parsed_stdout, dict), parsed_stdout
+    assert len(parsed_stdout["endpoints"]) > 0

@@ -439,7 +439,7 @@ ALL_LOG_CONTEXT_VARS = [LOG_CONTEXT_VAR_ENVIRONMENT]
 LOGGER_NAME_EXECUTOR = "inmanta.executor"
 
 
-class AuthorizationLabel(str, Enum):
+class AuthorizationLabel(Enum):
     AGENT_READ = "agent.read"
     AGENT_WRITE = "agent.write"
     USER_READ = "user.read"
@@ -487,3 +487,8 @@ class AuthorizationLabel(str, Enum):
     ROLE_ASSIGNMENT_READ = "role-assignment.read"
     ROLE_ASSIGNMENT_WRITE = "role-assignment.write"
     ROLE_IS_ADMIN = "role.is-admin"
+    # These labels should only be used in tests
+    TEST = "test"
+    TEST_2 = "test2"
+    TEST_3 = "test3"
+    TEST_4 = "test4"
