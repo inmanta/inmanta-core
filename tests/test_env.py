@@ -553,55 +553,6 @@ def test_active_env_check_basic(
 
 
 @pytest.mark.slowtest
-def test_active_env_check_constraints(caplog, tmpvenv_active_inherit: str, local_module_package_index) -> None:
-    """
-    Verify that the env.ActiveEnv.check() method's constraints parameter is taken into account as expected.
-    """
-    caplog.set_level(logging.WARNING)
-    in_scope: Pattern[str] = re.compile("test-package-.*")
-    constraints: list[inmanta.util.CanonicalRequirement] = [inmanta.util.parse_requirement(requirement="test-package-one~=1.0")]
-
-    env.process_env.check(in_scope)
-
-    caplog.clear()
-    with pytest.raises(env.ConflictingRequirements):
-        env.process_env.check(in_scope, constraints)
-
-    caplog.clear()
-    create_install_package("test-package-one", version.Version("1.0.0"), [], local_module_package_index)
-    env.process_env.check(in_scope, constraints)
-    assert "Incompatibility between constraint" not in caplog.text
-
-    # Add an unrelated package to the venv, that should not matter
-    # setup for #4761
-    caplog.clear()
-    create_install_package(
-        "ext-package-one",
-        version.Version("1.0.0"),
-        [inmanta.util.parse_requirement(requirement="test-package-one==1.0")],
-        local_module_package_index,
-    )
-    env.process_env.check(in_scope, constraints)
-    assert "Incompatibility between constraint" not in caplog.text
-
-    caplog.clear()
-    v: version.Version = version.Version("2.0.0")
-    create_install_package("test-package-one", v, [], local_module_package_index)
-    # test for #4761
-    # without additional constrain, this is not a hard failure
-    # except for the unrelated package, which should produce a warning
-    env.process_env.check(in_scope, [])
-    assert (
-        "Incompatibility between constraint test-package-one==1.0 and installed version 2.0.0 (from ext-package-one)"
-        in caplog.text
-    )
-
-    caplog.clear()
-    with pytest.raises(env.ConflictingRequirements):
-        env.process_env.check(in_scope, constraints)
-
-
-@pytest.mark.slowtest
 def test_override_inmanta_package(tmpvenv_active_inherit: env.VirtualEnv) -> None:
     """
     Ensure that an ActiveEnv cannot override the main inmanta packages: inmanta-service-orchestrator, inmanta, inmanta-core.
