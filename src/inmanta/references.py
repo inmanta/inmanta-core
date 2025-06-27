@@ -476,7 +476,7 @@ class Reference(ReferenceLike, Generic[T]):
 
     def __str__(self) -> Never:
         raise NotImplementedError(
-            f"{self!r}This is an inmanta reference. Its string conversion is disabled so it can't be accidentally used where a"
+            f"{self!r} This is an inmanta reference. Its string conversion is disabled so it can't be accidentally used where a"
             " concrete value is expected. Use `repr()` if you truly want it as a string."
         )
 
