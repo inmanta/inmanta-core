@@ -307,7 +307,7 @@ class OrReferenceType(Type):
 
     def validate(self, value: Optional[object]) -> bool:
         # We validate that the value is either a reference of the base type or the base type
-        if references.unwrap_reference(value):
+        if references.unwrap_reference(value) is not None:
             # Validate that we are the reference
             return self.reference_type.validate(value)
         else:

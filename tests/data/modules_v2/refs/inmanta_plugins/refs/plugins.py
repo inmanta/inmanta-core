@@ -259,3 +259,21 @@ def returns_entity_ref_list(instance: ListContainer) -> list[str | Reference[str
 @plugin
 def allow_references_on_non_proxy() -> None:
     plugins.allow_reference_values([])
+
+
+@plugin
+def bool_on_reference(v: Reference) -> None:
+    if v:
+        ...
+
+
+@plugin
+def str_on_reference(v: Reference) -> str:
+    # test references all override __str__, defeating the purpose of this test if we call str() directly
+    return Reference.__str__(v)
+
+
+@plugin
+def repr_on_reference(v: Reference) -> str:
+    # test references all override __str__, defeating the purpose of this test if we call str() directly
+    return Reference.__repr__(v)

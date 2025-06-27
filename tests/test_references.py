@@ -52,16 +52,21 @@ if typing.TYPE_CHECKING:
 
 
 @contextlib.contextmanager
-def raises_wrapped(exc_tp: type[RuntimeException], *, match: Optional[str] = None) -> Iterator[None]:
+def raises_wrapped(
+    exc_tp: type[Exception],
+    *,
+    match: Optional[str] = None,
+    outer_exception: type[WrappingRuntimeException | ExternalException] = WrappingRuntimeException,
+) -> Iterator[None]:
     """
     Context manager wrapper around pytest.raises. Expects a WrappingRuntimeException to be raised, and asserts that it wraps
     the provided exception type and that its message matches the provided pattern.
     """
-    with pytest.raises(WrappingRuntimeException) as exc_info:
+    with pytest.raises(outer_exception) as exc_info:
         yield
     assert isinstance(exc_info.value.__cause__, exc_tp)
     if match is not None:
-        msg: str = exc_info.value.__cause__.format()
+        msg: str = str(exc_info.value.__cause__)
         assert re.search(match, msg) is not None, msg
 
 
@@ -599,6 +604,13 @@ def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", module
 
     # Scenario: allow_reference_values() called on non-proxy list (e.g. list inside dataclass). Allowed, does nothing
     run_snippet("refs::plugins::allow_references_on_non_proxy()")
+
+    # Scenario: accidental operators on references
+    with raises_wrapped(NotImplementedError, outer_exception=ExternalException, match="is an inmanta reference, not a boolean"):
+        run_snippet("refs::plugins::bool_on_reference(refs::create_string_reference('hello'))")
+    with raises_wrapped(NotImplementedError, outer_exception=ExternalException, match=r"is an inmanta reference\..* Use `repr\(\)`"):
+        run_snippet("refs::plugins::str_on_reference(refs::create_string_reference('hello'))")
+    run_snippet("refs::plugins::repr_on_reference(refs::create_string_reference('hello'))")
 
 
 def test_reference_cycle(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:

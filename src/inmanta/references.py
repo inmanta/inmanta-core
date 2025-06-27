@@ -25,7 +25,7 @@ import json
 import typing
 import typing_extensions
 import uuid
-from typing import Generic, Literal, Optional, Tuple
+from typing import Generic, Literal, Never, Optional, Tuple
 
 import pydantic
 import typing_inspect
@@ -470,6 +470,15 @@ class Reference(ReferenceLike, Generic[T]):
 
         assert isinstance(self._model, ReferenceModel)
         return self._model
+
+    def __bool__(self) -> Never:
+        raise NotImplementedError(f"{self!r} is an inmanta reference, not a boolean.")
+
+    def __str__(self) -> Never:
+        raise NotImplementedError(
+            f"{self!r}This is an inmanta reference. Its string conversion is disabled so it can't be accidentally used where a"
+            " concrete value is expected. Use `repr()` if you truly want it as a string."
+        )
 
 class reference:
     """This decorator registers a reference under a specific name"""
