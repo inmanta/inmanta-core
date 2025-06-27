@@ -1,0 +1,4 @@
+---
+description: Make sure that call arguments passed into the access policy use the header name, if the argument was set using a header.
+change-type: patch
+destination-branches: [master]
