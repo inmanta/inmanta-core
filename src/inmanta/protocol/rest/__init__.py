@@ -109,7 +109,7 @@ class CallArguments:
     @property
     def policy_engine_call_args(self) -> dict[str, object]:
         """
-        The call arguments formatted according what the policy engine needs as input,
+        The call arguments formatted according to what the policy engine needs as input,
         i.e. the name of every parameter is the name of the parameter or header on the API.
         """
         if not self._processed:
