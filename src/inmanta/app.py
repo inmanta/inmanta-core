@@ -1003,7 +1003,8 @@ def policy_engine_config_parser(parser: ArgumentParser, parent_parsers: abc.Sequ
 
 @command("policy-engine", help_msg="Policy-engine related operations", parser_config=policy_engine_config_parser)
 def policy_engine(options: argparse.Namespace) -> None:
-    print(common.MethodProperties.get_open_policy_agent_data_as_fomatted_str())
+    open_policy_agent_data = common.MethodProperties.get_open_policy_agent_data()
+    print(json.dumps(open_policy_agent_data, indent=4, sort_keys=True))
 
 
 def print_versions_installed_components_and_exit() -> None:

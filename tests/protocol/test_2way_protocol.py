@@ -27,7 +27,7 @@ from tornado.gen import sleep
 
 # Methods need to be defined before the Client class is loaded by Python
 from inmanta import protocol  # NOQA
-from inmanta import data
+from inmanta import const, data
 from inmanta.protocol import method
 from inmanta.protocol.auth.decorators import auth
 from inmanta.protocol.methods import ENV_OPTS
@@ -39,7 +39,7 @@ from utils import configure_auth, retry_limited
 LOGGER = logging.getLogger(__name__)
 
 
-@auth(auth_label="test", read_only=True, environment_param="tid")
+@auth(auth_label=const.AuthorizationLabel.TEST, read_only=True, environment_param="tid")
 @method(path="/status", operation="GET")
 def get_status_x(tid: uuid.UUID):
     pass
