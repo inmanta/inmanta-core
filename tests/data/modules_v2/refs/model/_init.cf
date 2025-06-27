@@ -30,6 +30,7 @@ implement DeepResourceNoReferences using std::none
 entity NormalEntity:
     string non_ref_value
 end
+implement NormalEntity using std::none
 
 
 entity ListContainer:

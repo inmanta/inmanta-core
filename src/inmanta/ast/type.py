@@ -40,7 +40,7 @@ from inmanta.ast import (
     UnexpectedReference,
     UnsetException,
 )
-from inmanta.execute.proxy import DynamicProxy
+from inmanta.execute.proxy import DynamicProxy, ProxyContext
 from inmanta.execute.util import AnyType, NoneValue, Unknown
 from inmanta.stable_api import stable_api
 
@@ -170,12 +170,14 @@ class Type(Locatable):
         """
         return False
 
-    def to_python(self, instance: object) -> "object":
+    def to_python(self, instance: object, *, path: str) -> object:
         """
         Convert an instance of this type to its python form
 
         should only be called if has_custom_to_python is True
         the instance must be valid according to the validate method
+
+        :param path: The path, relative to the plugin's namespace, where this object occurs.
 
         :raises RuntimeException: If there is a translation error.
         """
@@ -251,7 +253,7 @@ class ReferenceType(Type):
     def has_custom_to_python(self) -> bool:
         return self.is_dataclass
 
-    def to_python(self, instance: object) -> object:
+    def to_python(self, instance: object, *, path: str) -> object:
         result: Optional[references.Reference[references.RefValue]] = references.unwrap_reference(instance)
         # wouldn't have passed validate otherwise
         assert result is not None
@@ -307,7 +309,7 @@ class OrReferenceType(Type):
 
     def validate(self, value: Optional[object]) -> bool:
         # We validate that the value is either a reference of the base type or the base type
-        if references.unwrap_reference(value):
+        if references.unwrap_reference(value) is not None:
             # Validate that we are the reference
             return self.reference_type.validate(value)
         else:
@@ -317,16 +319,16 @@ class OrReferenceType(Type):
     def has_custom_to_python(self) -> bool:
         return self.reference_type.has_custom_to_python() or self.element_type.has_custom_to_python()
 
-    def to_python(self, instance: object) -> object:
+    def to_python(self, instance: object, *, path: str) -> object:
         try:
             self.reference_type.validate(instance)
         except RuntimeException:
             if self.element_type.has_custom_to_python():
-                return self.element_type.to_python(instance)
+                return self.element_type.to_python(instance, path=path)
             else:
-                return DynamicProxy.return_value(instance)
+                return DynamicProxy.return_value(instance, context=ProxyContext(path=path))
         else:
-            return self.reference_type.to_python(instance)
+            return self.reference_type.to_python(instance, path=path)
 
     def type_string(self) -> Optional[str]:
         # unfortunately, this type is used (by necessity) for attribute types.
@@ -492,10 +494,10 @@ class NullableType(Type):
     def as_python_type_string(self) -> "str | None":
         return f"{self.element_type.as_python_type_string()} | None"
 
-    def to_python(self, instance: object) -> "object":
+    def to_python(self, instance: object, *, path: str) -> object:
         if isinstance(instance, NoneValue):
             return None
-        return self.element_type.to_python(instance)
+        return self.element_type.to_python(instance, path=path)
 
     def has_custom_to_python(self) -> bool:
         return self.element_type.has_custom_to_python()
@@ -522,7 +524,7 @@ class Any(Type):
                     "References are not allowed for values of type `object`. While the `object` Python type is technically"
                     " compatible with any value, references are considered special DSL values and are therefore guarded so"
                     " that they don't accidentally show up where they are not expected. To work with references,"
-                    " explicitly declare support with a `object | Reference[object]` annotation."
+                    " explicitly declare support with a `object | Reference` annotation."
                 ),
             )
 
@@ -940,11 +942,11 @@ class TypedList(List):
     def as_python_type_string(self) -> "str | None":
         return f"list[{self.element_type.as_python_type_string()}]"
 
-    def to_python(self, instance: object) -> "object":
+    def to_python(self, instance: object, *, path: str) -> object:
         if not isinstance(instance, Sequence):
             # should not happen, pre-condition
             raise TypeError(f"This method can only be called on iterables, not on {type(instance)}")
-        return [self.element_type.to_python(element) for element in instance]
+        return [self.element_type.to_python(element, path=f"{path}[{i}]") for i, element in enumerate(instance)]
 
     def has_custom_to_python(self) -> bool:
         return self.element_type.has_custom_to_python()
@@ -1101,10 +1103,10 @@ class TypedDict(Dict):
     def has_custom_to_python(self) -> bool:
         return self.element_type.has_custom_to_python()
 
-    def to_python(self, instance: object) -> "object":
+    def to_python(self, instance: object, *, path: str) -> object:
         assert isinstance(instance, dict)
         base = self.element_type
-        return {k: base.to_python(v) for k, v in instance.items()}
+        return {k: base.to_python(v, path=f"{path}[{k}]") for k, v in instance.items()}
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, TypedDict):
@@ -1265,7 +1267,7 @@ class Union(Type):
     def has_custom_to_python(self) -> bool:
         return any(tp.has_custom_to_python() for tp in self.types)
 
-    def to_python(self, instance: object) -> "object":
+    def to_python(self, instance: object, *, path: str) -> object:
         """
         Construct a python object for this instance
         """
@@ -1280,10 +1282,10 @@ class Union(Type):
                     # It is of this type, does it require custom conversion?
                     if tp.has_custom_to_python():
                         # Custom conversion
-                        return tp.to_python(instance)
+                        return tp.to_python(instance, path=path)
                     else:
                         # Default conversion
-                        return DynamicProxy.return_value(instance)
+                        return DynamicProxy.return_value(instance, context=ProxyContext(path=path))
             except (UnsetException, MultiUnsetException):
                 # let these exceptions with special meaning through
                 raise
@@ -1474,9 +1476,9 @@ class ConstraintType(NamedType):
         assert self.basetype is not None
         return self.basetype.as_python_type_string()
 
-    def to_python(self, instance: object) -> "object":
+    def to_python(self, instance: object, *, path: str) -> object:
         assert self.basetype is not None
-        return self.basetype.to_python(instance)
+        return self.basetype.to_python(instance, path=path)
 
     def issubtype(self, other: "Type") -> bool:
         assert self.basetype is not None

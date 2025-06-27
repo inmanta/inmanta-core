@@ -24,7 +24,7 @@ import hashlib
 import json
 import typing
 import uuid
-from typing import Literal, Optional, Tuple
+from typing import Generic, Literal, Never, Optional, Tuple
 
 import pydantic
 import typing_inspect
@@ -32,6 +32,7 @@ from pydantic import ValidationError
 
 import inmanta
 import inmanta.resources
+import typing_extensions
 from inmanta import util
 from inmanta.types import JsonType, ResourceIdStr, StrictJson
 from inmanta.util import dict_path
@@ -59,8 +60,6 @@ else:
 
 type RefValue = PrimitiveTypes | DataclassProtocol
 
-T = typing.TypeVar("T", bound=RefValue)
-
 
 class ReferenceCycleException(Exception):
     """Exception raised when a reference refers to itself"""
@@ -69,7 +68,7 @@ class ReferenceCycleException(Exception):
         self.references: list[Reference[RefValue]] = [first_ref]
         self.complete = False
 
-    def add(self, element: "Reference[RefValue]") -> None:
+    def add(self, element: "Reference") -> None:
         """Collect parent entities while traveling up the stack"""
         if self.complete:
             return
@@ -348,7 +347,7 @@ class ReferenceLike:
                         else:
                             arguments.append(JsonArgument(name=name, value=value))
                     except ValidationError:
-                        raise ValueError(f"The {name} attribute of {self} is not json serializable: {value}")
+                        raise ValueError(f"The {name} attribute of {self!r} is not json serializable: {value}")
                 case Reference():
                     model = value.serialize()
                     arguments.append(ReferenceArgument(name=name, id=model.id))
@@ -359,7 +358,7 @@ class ReferenceLike:
                     arguments.append(PythonTypeArgument(name=name, value=value.__name__))
 
                 case _:
-                    raise TypeError(f"Unable to serialize argument `{name}` of `{self}` with value {value}")
+                    raise TypeError(f"Unable to serialize argument `{name}` of `{self!r}` with value {value}")
 
         data = json.dumps({"type": self.type, "args": arguments}, default=util.api_boundary_json_encoder, sort_keys=True)
         hasher = hashlib.md5()
@@ -396,7 +395,10 @@ class Mutator(ReferenceLike):
         return self._model
 
 
-class Reference[T: RefValue](ReferenceLike):
+T = typing_extensions.TypeVar("T", bound=RefValue, covariant=True, default=RefValue)
+
+
+class Reference(ReferenceLike, Generic[T]):
     """Instances of this class can create references to a value and resolve them."""
 
     def __init__(self) -> None:
@@ -451,6 +453,15 @@ class Reference[T: RefValue](ReferenceLike):
         assert isinstance(self._model, ReferenceModel)
         return self._model
 
+    def __bool__(self) -> Never:
+        raise NotImplementedError(f"{self!r} is an inmanta reference, not a boolean.")
+
+    def __str__(self) -> Never:
+        raise NotImplementedError(
+            f"{self!r} This is an inmanta reference. Its string conversion is disabled so it can't be accidentally used where a"
+            " concrete value is expected. Use `repr()` if you truly want it as a string."
+        )
+
 
 class reference:
     """This decorator registers a reference under a specific name"""
@@ -464,7 +475,7 @@ class reference:
         """
         self.name = name
 
-    def __call__[T: Reference[RefValue]](self, cls: type[T]) -> type[T]:
+    def __call__[C: type[Reference]](self, cls: C) -> C:
         """Register a new reference. If we already have it explicitly delete it (reload)"""
         if self.name in type(self)._reference_classes:
             del type(self)._reference_classes[self.name]
@@ -583,14 +594,14 @@ class MaybeReference(typing.Protocol):
 
     __slots__ = ()
 
-    def unwrap_reference(self) -> Optional[Reference[RefValue]]:
+    def unwrap_reference(self) -> Optional[Reference]:
         """
         If this DSL value represents a reference value, returns the associated reference object. Otherwise returns None.
         """
         ...
 
 
-def unwrap_reference(value: object) -> Optional[Reference[RefValue]]:
+def unwrap_reference(value: object) -> Optional[Reference]:
     """
     Iff the given value is a reference or a DSL value that represents a reference, returns the associated reference.
     Otherwise returns None.
