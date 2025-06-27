@@ -23,7 +23,6 @@ import dataclasses
 import hashlib
 import json
 import typing
-import typing_extensions
 import uuid
 from typing import Generic, Literal, Never, Optional, Tuple
 
@@ -33,6 +32,7 @@ from pydantic import ValidationError
 
 import inmanta
 import inmanta.resources
+import typing_extensions
 from inmanta import util
 from inmanta.types import JsonType, ResourceIdStr, StrictJson
 from inmanta.util import dict_path
@@ -479,6 +479,7 @@ class Reference(ReferenceLike, Generic[T]):
             f"{self!r}This is an inmanta reference. Its string conversion is disabled so it can't be accidentally used where a"
             " concrete value is expected. Use `repr()` if you truly want it as a string."
         )
+
 
 class reference:
     """This decorator registers a reference under a specific name"""

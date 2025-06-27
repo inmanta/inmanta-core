@@ -608,7 +608,9 @@ def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", module
     # Scenario: accidental operators on references
     with raises_wrapped(NotImplementedError, outer_exception=ExternalException, match="is an inmanta reference, not a boolean"):
         run_snippet("refs::plugins::bool_on_reference(refs::create_string_reference('hello'))")
-    with raises_wrapped(NotImplementedError, outer_exception=ExternalException, match=r"is an inmanta reference\..* Use `repr\(\)`"):
+    with raises_wrapped(
+        NotImplementedError, outer_exception=ExternalException, match=r"is an inmanta reference\..* Use `repr\(\)`"
+    ):
         run_snippet("refs::plugins::str_on_reference(refs::create_string_reference('hello'))")
     run_snippet("refs::plugins::repr_on_reference(refs::create_string_reference('hello'))")
 
