@@ -477,7 +477,7 @@ class MethodProperties:
     def get_open_policy_agent_data(cls) -> dict[str, object]:
         """
         Return the information about the different endpoints that exist
-        in the format used as input to Open Policy Agent.
+        in the format used as data to Open Policy Agent.
         """
         endpoints = {}
         for method_properties_list in cls.methods.values():
@@ -492,8 +492,8 @@ class MethodProperties:
                     else None
                 )
                 endpoints[endpoint_id] = {
-                    "client_types": method_properties.client_types,
-                    "auth_label": auth_metadata.auth_label,
+                    "client_types": [c.value for c in method_properties.client_types],
+                    "auth_label": auth_metadata.auth_label.value,
                     "read_only": auth_metadata.read_only,
                     "environment_param": environment_param,
                 }

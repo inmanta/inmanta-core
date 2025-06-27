@@ -64,6 +64,7 @@ from inmanta.config import Config, Option
 from inmanta.const import ALL_LOG_CONTEXT_VARS, EXIT_START_FAILED, LOG_CONTEXT_VAR_ENVIRONMENT
 from inmanta.export import cfg_env
 from inmanta.logging import InmantaLoggerConfig, _is_on_tty
+from inmanta.protocol import common
 from inmanta.server import config as opt
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.services.databaseservice import initialize_database_connection_pool
@@ -988,6 +989,22 @@ def default_logging_config(options: argparse.Namespace) -> None:
         # Revert this env var back to its original state
         if original_force_tty is None:
             del os.environ[const.ENVIRON_FORCE_TTY]
+
+
+def policy_engine_config_parser(parser: ArgumentParser, parent_parsers: abc.Sequence[ArgumentParser]) -> None:
+    subparser = parser.add_subparsers(title="subcommand", dest="cmd")
+    subparser.add_parser(
+        "print-endpoint-data",
+        help="Print the authorization-related metadata about the endpoints that is made available"
+        " in the access policy using the 'data' variable.",
+        parents=parent_parsers,
+    )
+
+
+@command("policy-engine", help_msg="Policy-engine related operations", parser_config=policy_engine_config_parser)
+def policy_engine(options: argparse.Namespace) -> None:
+    open_policy_agent_data = common.MethodProperties.get_open_policy_agent_data()
+    print(json.dumps(open_policy_agent_data, indent=4, sort_keys=True))
 
 
 def print_versions_installed_components_and_exit() -> None:

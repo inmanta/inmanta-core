@@ -1,0 +1,6 @@
+description: Updated the return type of HandlerAPI.facts from dict[str, object] to dict[str, str]
+change-type: minor
+destination-branches: [master, iso8]
+sections:
+  bugfix: "{{description}} for consistency with HandlerContext.set_dact"
+

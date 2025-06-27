@@ -999,7 +999,7 @@ async def test_heartbeat_different_session(server_pre_start, async_finalizer, ca
     @typedmethod(
         path="/test",
         operation="GET",
-        client_types=["agent"],
+        client_types=[const.ClientType.agent],
         agent_server=True,
     )
     def test_method(number: int) -> ReturnValue[int]:  # NOQA
