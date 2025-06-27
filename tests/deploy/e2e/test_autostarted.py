@@ -1454,25 +1454,7 @@ async def test_code_install_success_code_load_error_for_provider(
     tmp_path,
 ):
     """
-    Make sure that code installation errors only affect deployment of resources that
-    rely on this code for their deployment.
-
-    e.g. in the following scenario, check
-    that agent_1 can still deploy resources of type SuccessResource, even if an error occurred
-    during the import of code necessary to deploy resources of type CodeInstallErrorResource:
-
-
-    This test uses these two modules:
-        - minimalinstallfailuremodule  ->  handler code for resource of type CodeInstallErrorResource
-        - successhandlermodule  ->  handler code for resource of type SuccessResource
-
-    Set up 1 agent that install both modules
-
-    Deploy 2 resources: 1 SuccessResource and 1 CodeInstallErrorResource
-
-    Check that the agent can still deploy the SuccessResource even if a code loading failure
-    occurred when installing the code necessary to deploy the CodeInstallErrorResource.
-
+    Make sure that if an agent encounters a code loading error, no resource should be deployed.
     """  # noqa: E501
 
     # First, configure everything
@@ -1481,13 +1463,12 @@ async def test_code_install_success_code_load_error_for_provider(
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     assert len(agentmanager.sessions) == 1
 
+    # Baseline: check that agent can successfully deploy resources of type SuccessResource
     snippetcompiler.setup_for_snippet(
         """
-    import minimalinstallfailuremodule
     import successhandlermodule
 
-    r_1 = minimalinstallfailuremodule::CodeInstallErrorResource(name="test_failure", agent="agent_1")
-    r_2 = successhandlermodule::SuccessResource(name="test_success", agent="agent_1")
+    r_0 = successhandlermodule::SuccessResource(name="test_success_r_0", agent="agent_1")
         """,  # noqa: E501
         ministd=True,
         index_url="https://pypi.org/simple",
@@ -1498,8 +1479,27 @@ async def test_code_install_success_code_load_error_for_provider(
     result = await client.release_version(environment, version, push=False)
     assert result.code == 200
 
-    await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.unavailable)
     await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.deployed)
+
+    # Introduce a code loading error (via a trick in minimalinstallfailuremodule) and make sure no resource is deployed.
+    snippetcompiler.setup_for_snippet(
+        """
+    import minimalinstallfailuremodule
+    import successhandlermodule
+
+    r_1 = minimalinstallfailuremodule::CodeInstallErrorResource(name="test_failure_r_1", agent="agent_1")
+    r_2 = successhandlermodule::SuccessResource(name="test_success_r_2", agent="agent_1")
+        """,  # noqa: E501
+        ministd=True,
+        index_url="https://pypi.org/simple",
+    )
+
+    # Now, let's deploy resources
+    version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
+    result = await client.release_version(environment, version, push=False)
+    assert result.code == 200
+
+    await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=2, state=const.ResourceState.unavailable)
 
 
 @pytest.mark.slowtest
@@ -1517,25 +1517,8 @@ async def test_code_install_success_code_load_error_for_reference(
     tmp_path,
 ):
     """
-    Make sure that code installation errors only affect deployment of resources that
-    rely on this code for their deployment.
-
-    e.g. in the following scenario, check
-    that agent_1 can still deploy resource r1, even if an error occurred
-    during the import of code necessary to resolve the reference for resource r2
-
-
-    This test uses these two modules:
-        - minimalinstallfailuremodule  ->  reference code for MyRef
-        - successhandlermodule  ->  handler code for resource of type SuccessResource
-
-    Set up 1 agent that install both modules
-
-    Deploy 2 SuccessResource resources: 1 uses references and 1 does not.
-
-    Check that the agent can still deploy the SuccessResource without references
-    even if a code loading failure occurred when installing the code necessary to
-    deploy the other resource that uses references.
+    Test that the following behavior still holds when using references: when an agent
+     encounters a code loading error, no resource should be deployed.
 
     """  # noqa: E501
 
@@ -1544,21 +1527,21 @@ async def test_code_install_success_code_load_error_for_reference(
     # Make sure the session with the Scheduler is there
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     assert len(agentmanager.sessions) == 1
-
+    # Baseline: check that agent can successfully deploy resources of type SuccessResourceWithReference
     snippetcompiler.setup_for_snippet(
         """
-    import minimalinstallfailuremodule
     import successhandlermodule
 
-    r_1 = successhandlermodule::SuccessResourceWithReference(
-        name="test_success",
+    r_0 = successhandlermodule::SuccessResourceWithReference(
+        name="test_success_r_0",
         agent="agent_1",
         my_attr="plain_string"
      )
 
-    ref = minimalinstallfailuremodule::create_my_ref("base_str")
-    r_2 = successhandlermodule::SuccessResourceWithReference(
-        name="test_failure",
+    ref = successhandlermodule::create_my_ref("base_str")
+
+    r_1 = successhandlermodule::SuccessResourceWithReference(
+        name="test_success_r_1",
         agent="agent_1",
         my_attr=ref
      )
@@ -1572,5 +1555,35 @@ async def test_code_install_success_code_load_error_for_reference(
     result = await client.release_version(environment, version, push=False)
     assert result.code == 200
 
-    await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.deployed)
-    await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.unavailable)
+    await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=2, state=const.ResourceState.deployed)
+
+    # Introduce a code loading error (via a trick in minimalinstallfailuremodule) and make sure no resource is deployed.
+
+    snippetcompiler.setup_for_snippet(
+        """
+    import minimalinstallfailuremodule
+    import successhandlermodule
+
+    r_2 = successhandlermodule::SuccessResourceWithReference(
+        name="test_success_r_2",
+        agent="agent_1",
+        my_attr="plain_string"
+     )
+
+    ref = minimalinstallfailuremodule::create_my_ref("base_str")
+    r_3 = successhandlermodule::SuccessResourceWithReference(
+        name="test_failure_r_3",
+        agent="agent_1",
+        my_attr=ref
+     )
+        """,  # noqa: E501
+        ministd=True,
+        index_url="https://pypi.org/simple",
+    )
+
+    # Now, let's deploy resources
+    version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
+    result = await client.release_version(environment, version, push=False)
+    assert result.code == 200
+
+    await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=2, state=const.ResourceState.unavailable)
