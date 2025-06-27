@@ -264,11 +264,14 @@ async def test_agent_code_loading_with_failure(
         code=resource_install_specs_2,
     )
     assert len(failed_to_load) == 2
-    for handler, exception in failed_to_load.items():
-        assert str(exception) == (
-            f"Failed to install handler {handler} version=1: "
-            f"MKPTCH: Unable to load code when agent is started with code loading disabled."
-        )
+    assert str(failed_to_load["test::Test"]["test::Test"]) == (
+        "Failed to install handler test::Test version=1: "
+        "MKPTCH: Unable to load code when agent is started with code loading disabled."
+    )
+    assert str(failed_to_load["test::Test2"]["test::Test2"]) == (
+        "Failed to install handler test::Test2 version=1: "
+        "MKPTCH: Unable to load code when agent is started with code loading disabled."
+    )
 
     monkeypatch.undo()
 
@@ -330,8 +333,20 @@ raise Exception("Fail code loading")
 
     result = await client.get_resource_actions(tid=environment, resource_type="test::Test", agent="agent", log_severity="ERROR")
     assert result.code == 200
-    assert any(
-        "All resources of type `test::Test` failed to load handler code or install handler code dependencies" in log_line["msg"]
-        for resource_action in result.result["data"]
-        for log_line in resource_action["messages"]
-    )
+
+    def check_for_message(data, must_be_present: str) -> None:
+        """
+        Helper method to assert the presence of the must_be_present string
+        in the resource action log lines.
+        """
+        must_be_present_flag = False
+        for resource_action in data:
+            for log_line in resource_action["messages"]:
+                if must_be_present in log_line["msg"]:
+                    must_be_present_flag = True
+                    break
+
+        assert must_be_present_flag
+
+    expected_error_message = "Agent agent failed to load the following modules: test."
+    check_for_message(data=result.result["data"], must_be_present=expected_error_message)
