@@ -299,10 +299,10 @@ def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", module
     ## -> this is not a strong requirement. The assertion is here simply to ensure the behavior remains stable
     run_snippet(snippet="refs::plugins::takes_obj(['hello', refs::create_string_reference('hello')])")
     run_snippet(snippet="refs::plugins::iterates_obj(['hello', refs::create_string_reference('hello')])")
-    # Scenario: plugin argument annotated as `object | Reference[object]`
+    # Scenario: plugin argument annotated as `object | Reference`
     run_snippet(snippet="refs::plugins::takes_obj_ref('hello')")
     run_snippet(snippet="refs::plugins::takes_obj_ref(refs::create_string_reference('name'))")
-    # Scenario: plugin argument annotated as `Reference[object]`
+    # Scenario: plugin argument annotated as `Reference`
     with pytest.raises(PluginTypeException, match=re.escape("Expected type: Reference[any]")):
         run_snippet(snippet="refs::plugins::takes_obj_ref_only('hello')")
     run_snippet(snippet="refs::plugins::takes_obj_ref_only(refs::create_string_reference('name'))")
@@ -355,7 +355,7 @@ def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", module
     run_snippet(snippet="refs::plugins::iterates_object_dict({'h': 'h', 'e': 'e'})")
     with pytest.raises(PluginTypeException, match="contains a reference"):
         run_snippet(snippet="refs::plugins::iterates_object_dict({'h': 'h', 'e': refs::create_string_reference('name')})")
-    # Scenario: plugin argument annotated as `Mapping[str, object | Reference[object]]`
+    # Scenario: plugin argument annotated as `Mapping[str, object | Reference]`
     run_snippet(snippet="refs::plugins::iterates_object_ref_dict({'h': 'h', 'e': 'e'})")
     run_snippet(snippet="refs::plugins::iterates_object_ref_dict({'h': 'h', 'e': refs::create_string_reference('name')})")
 
@@ -597,12 +597,8 @@ def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", module
         "refs::plugins::returns_entity_ref_list(refs::ListContainer(value=['Hello', refs::create_string_reference('hello')]))"
     )
 
-    # Scenario: allow_reference_values() called on non-proxy list (e.g. list inside dataclass)
-    with pytest.raises(
-        ExternalException,
-        match="should only be called on inmanta instances, lists or dicts. Python lists and dicts do not need this wrapper",
-    ):
-        run_snippet("refs::plugins::allow_references_on_non_proxy()")
+    # Scenario: allow_reference_values() called on non-proxy list (e.g. list inside dataclass). Allowed, does nothing
+    run_snippet("refs::plugins::allow_references_on_non_proxy()")
 
 
 def test_reference_cycle(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:

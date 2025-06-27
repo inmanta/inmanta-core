@@ -522,7 +522,7 @@ class Any(Type):
                     "References are not allowed for values of type `object`. While the `object` Python type is technically"
                     " compatible with any value, references are considered special DSL values and are therefore guarded so"
                     " that they don't accidentally show up where they are not expected. To work with references,"
-                    " explicitly declare support with a `object | Reference[object]` annotation."
+                    " explicitly declare support with a `object | Reference` annotation."
                 ),
             )
 

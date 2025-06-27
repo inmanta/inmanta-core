@@ -30,11 +30,11 @@ def iterates_obj(v: object) -> None:
 
 
 @plugin
-def takes_obj_ref(v: object | Reference[object]) -> None: ...
+def takes_obj_ref(v: object | Reference) -> None: ...
 
 
 @plugin
-def takes_obj_ref_only(v: Reference[object]) -> None:
+def takes_obj_ref_only(v: Reference) -> None:
     assert isinstance(v, Reference)
 
 
@@ -91,7 +91,7 @@ def iterates_object_dict(l: Mapping[str, object]) -> None:
 
 
 @plugin
-def iterates_object_ref_dict(l: Mapping[str, object | Reference[object]]) -> None:
+def iterates_object_ref_dict(l: Mapping[str, object | Reference]) -> None:
     for v in l.values():
         ...
     for k in l.keys():

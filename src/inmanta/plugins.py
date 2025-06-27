@@ -280,6 +280,8 @@ python_to_model = {
     typing.Sequence: inmanta_type.List(),
     Sequence: inmanta_type.List(),
     object: inmanta_type.Any(),
+    # unannotated Reference -> Reference[object]
+    Reference: ReferenceType(inmanta_type.Any()),
 }
 
 
@@ -1365,16 +1367,6 @@ def allow_reference_values[T](instance: T) -> T:  # T not bound to DynamicProxy 
 
     This function is not required for plugin arguments or dataclasses. In those cases, reference support can be declared
     directly via type annotations (e.g. `int | Reference[int]`), in which case no special access function is required.
+    However, when called on such values, the function simply returns the argument unchanged.
     """
-    if not isinstance(instance, DynamicProxy):
-        extra: str = (
-            # special-case common (assumed) case
-            "Python lists and dicts do not need this wrapper, because they are out of the compiler's control."
-            if isinstance(instance, (list, dict))
-            else ""
-        )
-        raise PluginException(
-            f"allow_reference_values() should only be called on inmanta instances, lists or dicts. {extra}"
-            f" Got `{instance}` of type `{type(instance).__name__}`"
-        )
-    return instance._allow_references()
+    return instance._allow_references() if isinstance(instance, DynamicProxy) else instance
