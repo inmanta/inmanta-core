@@ -170,7 +170,7 @@ class DynamicProxy:
                 (key, value) = key_value
                 if not isinstance(key, str):
                     raise RuntimeException(
-                        None, f"dict keys should be strings, got {key} of type {type(key)} with dict value {value}"
+                        None, f"dict keys should be strings, got {key!r} of type {type(key)} with dict value {value!r}"
                     )
                 return (key, cls.unwrap(value, dynamic_context=dynamic_context))
 
@@ -300,7 +300,7 @@ class DynamicProxy:
                     " reference values when declared explicitly. Either use a dataclass entity that supports references (e.g."
                     " `int | Reference[int]` attribute annotation), or explicitly allow references on attribute access with the"
                     " `inmanta.plugins.allow_reference_values()` wrapper."
-                    f" Encountered at {value_context.path} (= `{value}`)."
+                    f" Encountered at {value_context.path} (= `{value!r}`)."
                 ),
             )
 
