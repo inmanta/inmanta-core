@@ -440,6 +440,16 @@ LOGGER_NAME_EXECUTOR = "inmanta.executor"
 
 
 class AuthorizationLabel(Enum):
+    """
+    Base class for AuthorizationLabel enums, so that extensions
+    can create their own AuthorizationLabel enums that are compatible
+    with the API of core.
+    """
+
+    pass
+
+
+class CoreAuthorizationLabel(AuthorizationLabel):
     AGENT_READ = "agent.read"
     AGENT_WRITE = "agent.write"
     USER_READ = "user.read"

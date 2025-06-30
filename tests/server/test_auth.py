@@ -78,27 +78,27 @@ async def server_with_test_slice(
     policy_engine.path_opa_executable.set(path_policy_engine_executable)
 
     # Define the TestSlice and its API endpoints
-    @decorators.auth(auth_label=const.AuthorizationLabel.TEST, read_only=True)
+    @decorators.auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=True)
     @typedmethod(path="/read-only", operation="GET", client_types=[const.ClientType.api, const.ClientType.compiler])
     def read_only_method() -> None:  # NOQA
         pass
 
-    @decorators.auth(auth_label=const.AuthorizationLabel.TEST, read_only=False, environment_param="env")
+    @decorators.auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False, environment_param="env")
     @typedmethod(path="/environment-scoped", operation="POST", client_types=[const.ClientType.api])
     def environment_scoped_method(env: uuid.UUID) -> None:  # NOQA
         pass
 
-    @decorators.auth(auth_label=const.AuthorizationLabel.TEST_2, read_only=False, environment_param="env")
+    @decorators.auth(auth_label=const.CoreAuthorizationLabel.TEST_2, read_only=False, environment_param="env")
     @typedmethod(path="/user-endpoint", operation="POST", client_types=[const.ClientType.api])
     def user_method(env: uuid.UUID) -> None:  # NOQA
         pass
 
-    @decorators.auth(auth_label=const.AuthorizationLabel.TEST_3, read_only=False)
+    @decorators.auth(auth_label=const.CoreAuthorizationLabel.TEST_3, read_only=False)
     @typedmethod(path="/admin-only", operation="POST", client_types=[const.ClientType.api])
     def admin_only_method() -> None:  # NOQA
         pass
 
-    @decorators.auth(auth_label=const.AuthorizationLabel.TEST, read_only=False)
+    @decorators.auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
     @typedmethod(path="/enforce-auth-disabled", operation="GET", client_types=[const.ClientType.api], enforce_auth=False)
     def enforce_auth_disabled_method() -> None:  # NOQA
         pass
@@ -109,7 +109,7 @@ async def server_with_test_slice(
         """
         return val
 
-    @decorators.auth(auth_label=const.AuthorizationLabel.TEST, read_only=False)
+    @decorators.auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
     @typedmethod(
         path="/method-with-call-context",
         operation="GET",
@@ -412,17 +412,17 @@ async def test_policy_engine_data() -> None:
     authorization metadata about the endpoints, is correct.
     """
 
-    @decorators.auth(auth_label=const.AuthorizationLabel.TEST, read_only=True)
+    @decorators.auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=True)
     @typedmethod(path="/read-only", operation="GET", client_types=[const.ClientType.api])
     def test_read_only() -> None:  # NOQA
         pass
 
-    @decorators.auth(auth_label=const.AuthorizationLabel.TEST_2, read_only=False, environment_param="tid")
+    @decorators.auth(auth_label=const.CoreAuthorizationLabel.TEST_2, read_only=False, environment_param="tid")
     @typedmethod(path="/read-write", operation="POST", client_types=[const.ClientType.api, const.ClientType.agent])
     def test_read_write(tid: uuid.UUID) -> None:  # NOQA
         pass
 
-    @decorators.auth(auth_label=const.AuthorizationLabel.TEST_3, read_only=False, environment_param="tid")
+    @decorators.auth(auth_label=const.CoreAuthorizationLabel.TEST_3, read_only=False, environment_param="tid")
     @typedmethod(path="/read-write2/<tid>", operation="POST", client_types=[const.ClientType.api, const.ClientType.agent])
     def test_param(tid: uuid.UUID) -> None:  # NOQA
         pass
@@ -529,22 +529,22 @@ async def test_auth_annotation() -> None:
     Validate whether the logic behind the @auth annotation works correctly.
     """
 
-    @decorators.auth(auth_label=const.AuthorizationLabel.TEST, read_only=True, environment_param="id")
+    @decorators.auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=True, environment_param="id")
     @method(path="/test1/<id>", operation="GET")
     def method_1(id: str) -> None:
         pass
 
-    @decorators.auth(auth_label=const.AuthorizationLabel.TEST_2, read_only=False)
+    @decorators.auth(auth_label=const.CoreAuthorizationLabel.TEST_2, read_only=False)
     @method(path="/test2", operation="POST", client_types=[const.ClientType.api, const.ClientType.agent])
     def method_2(id: str) -> None:
         pass
 
-    @decorators.auth(auth_label=const.AuthorizationLabel.TEST_3, read_only=True, environment_param="id")
+    @decorators.auth(auth_label=const.CoreAuthorizationLabel.TEST_3, read_only=True, environment_param="id")
     @typedmethod(path="/test3/<id>", operation="GET")
     def method_3(id: str) -> None:
         pass
 
-    @decorators.auth(auth_label=const.AuthorizationLabel.TEST_4, read_only=False)
+    @decorators.auth(auth_label=const.CoreAuthorizationLabel.TEST_4, read_only=False)
     @typedmethod(path="/test4", operation="POST", client_types=[const.ClientType.api, const.ClientType.agent])
     def method_4(id: str) -> None:
         pass
