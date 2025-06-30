@@ -212,7 +212,7 @@ if the value that is passed in is a reference. However, for the other direction,
 reference types. Suppose a plugin doesn't declare reference support, it just accepts ``Data``. The compiler recognizes that
 conceptually a reference to a dataclass can be safely represented as a dataclass with references for all its attributes, as
 long as all attributes support references. So in that case, the reference to the dataclass is simply coerced to a dataclass
-with reference attributes. Let's look at an example.
+with reference attributes. Let's look at an example:
 
 .. code-block:: python
 
