@@ -173,12 +173,47 @@ This section provides some guidence on how to test/debug you own access policy.
 Troubleshooting: Policy engine fails to start
 """""""""""""""""""""""""""""""""""""""""""""
 
-When the access policy contains a syntax error, the policy engine will fail to start and as such also the Inmanta server. In that case, the ``server.log`` file will indicate the policy engine failed to start with a reference to the log file of the policy engine.
-
+When the access policy contains a syntax error, the policy engine will fail to start and as such also the Inmanta server. In that case, the ``server.log`` file will indicate the policy engine failed to start with a reference to the log file of the policy engine. The latter log file will contains more information about the specific issue. If required, the log level of the policy engine can be increased using the :inmanta.config:option:`policy_engine.log-level` log file.
 
 
 Debugging/Testing an access policy
 """"""""""""""""""""""""""""""""""
+
+If the access policy doesn't behave as expected, it can be debugged using the Open Policy Agent extension for VSCode. Make sure the project has
+
+
+.. code-block:: rego
+
+    [INFO] Received request.
+      req_path = "/v1/data/policy/allow"
+      req_body = |
+          {
+            "input": {
+              "request": {
+                "endpoint_id": "GET /api/v2/project",
+                "parameters": {
+                  "environment_details": false
+                }
+              },
+              "token": {
+                "iss": "https://77a5e8f227e8:8888/",
+                "aud": [
+                  "https://77a5e8f227e8:8888/"
+                ],
+                "urn:inmanta:ct": [
+                  "api"
+                ],
+                "sub": "admin",
+                "urn:inmanta:roles": {},
+                "urn:inmanta:is_admin": true
+              }
+            }
+          }
+      req_params = {}
+      client_addr = "@"
+      req_id = 7
+      req_method = "POST"
+
 
 .. TODO: Show how to obtain data input
 .. TODO: Reference default testing an debug tools of OPA
