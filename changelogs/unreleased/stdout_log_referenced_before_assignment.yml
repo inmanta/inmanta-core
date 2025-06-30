@@ -1,5 +1,5 @@
 ---
-description: "Fix bug where starting the scheduler can result in an error saying that stdout_log is referenced before assignment. This can cause the compiler service to get stuck or trigger the agent deploy timers at incorrect moments."
+description: "Fix bug where starting the agent can result in an error saying that stdout_log is referenced before assignment. This can cause the compiler service to get stuck or trigger the agent deploy timers at incorrect moments."
 issue-nr: 9275
 issue-repo: inmanta-core
 change-type: patch
