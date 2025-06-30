@@ -1,0 +1,4 @@
+---
+description: Define a base type for all authorization label enums.
+change-type: patch
+destination-branches: [master]
