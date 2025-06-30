@@ -200,7 +200,7 @@ annotations in the Python domain. It is only when (if) a corresponding Python ob
 comes into play.
 
 As a result the behavior of these references in dataclasses is also very similar to that of other plugin parameters. A plugin
-that accepts an dataclass instance will have to convert the model representation to the Python dataclass. If any of the
+that accepts a dataclass instance will have to convert the model representation to the Python dataclass. If any of the
 attributes are a reference, it is allowed only if the corresponding Python attribute is annotated with a ``Reference``
 annotation. In the case of the ``Data`` example above, if ``description`` were a reference in the model instance, it would be
 rejected with a clear error message. ``value`` on the other hand supports references in the Python domain, so if it is a
