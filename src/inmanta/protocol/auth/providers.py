@@ -172,7 +172,7 @@ class PolicyEngineAuthorizationProvider(AuthorizationProvider):
             "input": {
                 "request": {
                     "endpoint_id": f"{method_properties.operation} {method_properties.get_full_path()}",
-                    "parameters": call_arguments.method_call_args,
+                    "parameters": call_arguments.policy_engine_call_args,
                 },
                 "token": call_arguments.auth_token,
             }
