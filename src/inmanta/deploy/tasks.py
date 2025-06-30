@@ -153,6 +153,7 @@ class Deploy(Task):
                         version=version,
                     )
                 except ModuleLoadingException as e:
+                    e.set_agent_name(agent)
                     e.log_resource_action_to_scheduler_log(
                         agent=agent, rid=executor_resource_details.rvid, include_exception_info=True
                     )

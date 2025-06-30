@@ -603,9 +603,6 @@ class MPProcess(PoolManager[executor.ExecutorId, executor.ExecutorId, "MPExecuto
         # Pure for debugging purpose
         self.executor_virtual_env = venv
 
-        # Set by init, keeps state for the underlying executors
-        self._failed_modules: FailedInmantaModules
-
         # threadpool for cleanup jobs
         self.worker_threadpool = worker_threadpool
 
@@ -749,9 +746,6 @@ class MPExecutor(executor.Executor, resourcepool.PoolMember[executor.ExecutorId]
 
         # close_task
         self.stop_task: Awaitable[None]
-
-        # Set by init and parent class
-        self.failed_modules: FailedInmantaModules = process._failed_modules
 
     async def call(self, method: IPCMethod[ExecutorContext, ReturnType]) -> ReturnType:
         try:
@@ -933,12 +927,15 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
                     venv_touch_interval=self.venv_checkup_interval,
                 )
             )
+            if failed_modules:
+                raise ModuleLoadingException(
+                    failed_modules=failed_modules,
+                )
             LOGGER.debug(
                 "Child initialized (pid: %s) for %s",
                 executor.process.pid,
                 self.render_id(blueprint),
             )
-            executor._failed_modules = failed_modules
             return executor
         except Exception:
             # Make sure to cleanup the executor process if its initialization fails.
@@ -1061,16 +1058,8 @@ class MPManager(
         executor_id = executor.ExecutorId(agent_name, agent_uri, blueprint)
 
         # Use pool manager
-        my_executor = await self.get(executor_id)
+        return await self.get(executor_id)
 
-        # FIXME: recovery. If loading failed, we currently never rebuild https://github.com/inmanta/inmanta-core/issues/7695
-        # Bail out if the executor couldn't load all the code
-        if my_executor.failed_modules:
-            raise ModuleLoadingException(
-                agent_name=agent_name,
-                failed_modules=my_executor.failed_modules,
-            )
-        return my_executor
 
     async def create_member(self, executor_id: executor.ExecutorId) -> MPExecutor:
         try:

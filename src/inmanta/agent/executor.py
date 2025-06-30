@@ -565,9 +565,6 @@ class Executor(abc.ABC):
     :param storage: File system path to where the executor's resources are stored.
     """
 
-    # Maps inmanta module names to the map of their python modules that failed during installation.
-    failed_modules: FailedInmantaModules
-
     @abc.abstractmethod
     async def execute(
         self,
@@ -681,13 +678,15 @@ class ModuleLoadingException(Exception):
     This exception is raised when some Inmanta modules couldn't be loaded on a given agent.
     """
 
-    def __init__(self, agent_name: str, failed_modules: FailedInmantaModules) -> None:
+    def __init__(self, failed_modules: FailedInmantaModules) -> None:
         """
         :param agent_name: Name of the agent for which module loading was unsuccessful
         :param failed_modules: Data for all module loading errors as a nested map of
             inmanta module name -> python module name -> Exception.
         """
         self.failed_modules = failed_modules
+
+    def set_agent_name(self, agent_name: str, ):
         self.agent_name = agent_name
 
     def _format_module_loading_errors(self) -> str:

@@ -70,14 +70,6 @@ class WriteBarierExecutor(executor.Executor):
     async def join(self) -> None:
         await self.delegate.join()
 
-    @property
-    def failed_modules(self) -> FailedInmantaModules:
-        return self.delegate.failed_modules
-
-    @failed_modules.setter
-    def failed_modules(self, value: FailedInmantaModules) -> None:
-        self.delegate.failed_modules = value
-
 
 class WriteBarierExecutorManager(executor.ExecutorManager[WriteBarierExecutor]):
     """Executor manager wrapping all executors in a write barier"""
