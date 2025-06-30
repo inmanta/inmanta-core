@@ -28,7 +28,7 @@ import pytest
 from openapi_spec_validator import openapi_v30_spec_validator
 from pydantic.networks import AnyHttpUrl, AnyUrl, PostgresDsn
 
-from inmanta.const import CoreAuthorizationLabel, ClientType, ResourceAction
+from inmanta.const import ClientType, CoreAuthorizationLabel, ResourceAction
 from inmanta.data import model
 from inmanta.data.model import EnvironmentSetting
 from inmanta.protocol import method
