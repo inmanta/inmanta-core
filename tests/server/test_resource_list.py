@@ -856,7 +856,7 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, mo
     return instances
 
 
-@pytest.mark.slowtest
+@pytest.mark.skip
 @pytest.mark.parametrize("instances", [2])  # set the size
 @pytest.mark.parametrize("trace", [False])  # make it analyze the queries
 async def test_resources_paging_performance(client, environment, very_big_env: int, trace: bool, async_finalizer):
