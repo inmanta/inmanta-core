@@ -5,5 +5,5 @@ destination-branches:
   - master
   - iso8
 sections:
-  bugfix: "Compiler: implemented more thorough checks for references passed into plugins, and accessed by traversing the model from plugins, so they don't show up where they may not be expected. For more details, see the documentation."
+  bugfix: "Compiler: implemented more thorough checks for references passed into plugins, and accessed by traversing the model from plugins, so they don't show up where they may not be expected. For more details, see the [documentation](references)."
   minor-improvement: "Compiler: added the ``inmanta.plugins.allow_reference_values`` function to explicitly allow access to reference values by traversing the model from a plugin."
