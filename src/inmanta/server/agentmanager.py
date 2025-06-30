@@ -25,12 +25,12 @@ import time
 import uuid
 from asyncio import queues, subprocess
 from collections.abc import Iterable, Iterator, Mapping, Sequence, Set
+from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from functools import reduce
 from typing import Any, Optional, Union, cast
 from uuid import UUID
-from dataclasses import dataclass
 
 import asyncpg.connection
 
@@ -993,6 +993,7 @@ class AgentManager(ServerSlice, SessionListener):
                 dto.state = report_result
         return dto
 
+
 @dataclass
 class ProcessDetails:
     """
@@ -1014,7 +1015,7 @@ class ProcessDetails:
         """
         Return True iff the process is running.
         """
-        self.process.returncode is None
+        return self.process.returncode is None
 
 
 class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentlistener.EnvironmentListener):
@@ -1203,7 +1204,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
                     return False
 
                 start_new_process: bool
-                if env not in self._agent_procs or not self._agent_procs[env].is_running:
+                if env not in self._agent_procs or not self._agent_procs[env].is_running():
                     # Start new process if none is currently running for this environment.
                     LOGGER.info("%s matches agents managed by server, ensuring they are started.", autostart_scheduler)
                     start_new_process = True
@@ -1267,7 +1268,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         )
 
         LOGGER.debug("Started new agent with PID %s", proc.pid)
-        return ProcessDetails(process=proc, path_std=out, path_stderr=err)
+        return ProcessDetails(process=proc, path_stdout=out, path_stderr=err)
 
     async def _make_agent_config(
         self,
@@ -1446,7 +1447,7 @@ scheduler = {os.path.abspath(scheduler_log_config.get())}
                 LOGGER.warning(
                     "Timeout: agent with PID %s took too long to start: still waiting for agent instances %s."
                     " See log files %s for more information.",
-                    process_details.pid,
+                    proc_details.pid,
                     ",".join(sorted(expected_agents_in_up_state - actual_agents_in_up_state)),
                     ", ".join(log_files),
                 )
@@ -1456,7 +1457,7 @@ scheduler = {os.path.abspath(scheduler_log_config.get())}
                 last_log = now
                 LOGGER.debug(
                     "Waiting for agent with PID %s, waited %d seconds, %d/%d instances up",
-                    process_details.pid,
+                    proc_details.pid,
                     now - started,
                     len(actual_agents_in_up_state),
                     len(expected_agents_in_up_state),
@@ -1477,7 +1478,7 @@ scheduler = {os.path.abspath(scheduler_log_config.get())}
 
         LOGGER.debug(
             "Agent process with PID %s is up for agent instances %s",
-            process_details.pid,
+            proc_details.pid,
             ",".join(sorted(expected_agents_in_up_state)),
         )
 
@@ -1485,10 +1486,10 @@ scheduler = {os.path.abspath(scheduler_log_config.get())}
         self, proc_details: Iterable[ProcessDetails], timeout: float = const.SHUTDOWN_GRACE_HARD
     ) -> None:
         try:
-            unfinished_processes = [p.process for p in process_details if p.process.returncode is None]
+            unfinished_processes = [p.process for p in proc_details if p.is_running()]
             await asyncio.wait_for(asyncio.gather(*[asyncio.shield(proc.wait()) for proc in unfinished_processes]), timeout)
         except asyncio.TimeoutError:
-            LOGGER.warning("Agent processes did not close in time (%s)", procs)
+            LOGGER.warning("Agent processes did not close in time (%s)", [p.process for p in proc_details])
 
     async def environment_action_created(self, env: model.Environment) -> None:
         """
