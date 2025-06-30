@@ -139,7 +139,7 @@ top level. Concretely, this means that an ``object`` annotation would reject ``m
 plugin developer should be aware that references may show up in nested values when working with ``object``-annotated plugins.
 
 The above covers values passed as arguments to a plugin. But there is another way that model values can enter the Python
-domain: to access attributes on a model instance. Model instances are not converted to a native Python value on the plugin
+domain: when accessing attributes on a model instance. Model instances are not converted to a native Python value on the plugin
 boundary, but instead they are represented by a proxy object. When you access an attribute on it, the associated value is
 fetched from the model. For the same reasons as outlined above, references can not be accessed in such a way, unless the plugin
 developer has indicated that references are expected. To this end, the :py:func:`inmanta.plugins.allow_reference_values` method
