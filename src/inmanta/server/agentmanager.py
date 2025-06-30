@@ -1009,7 +1009,7 @@ class ProcessDetails:
         """
         Returns the process id of the process.
         """
-        return self.pid
+        return self.process.pid
 
     def is_running(self) -> bool:
         """
