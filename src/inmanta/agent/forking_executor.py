@@ -98,7 +98,7 @@ import inmanta.types
 import inmanta.util
 from inmanta import const, tracing
 from inmanta.agent import executor, resourcepool
-from inmanta.agent.executor import DeployReport, FailedInmantaModules, GetFactReport
+from inmanta.agent.executor import DeployReport, FailedInmantaModules, GetFactReport, ModuleLoadingException
 from inmanta.agent.resourcepool import PoolManager, PoolMember
 from inmanta.const import LOGGER_NAME_EXECUTOR
 from inmanta.protocol.ipc_light import (
@@ -1052,6 +1052,7 @@ class MPManager(
             which resource types it can act on and all necessary information to install the relevant
             handler code in its venv. Must have at least one element.
         :return: An Executor instance
+        :raise ModuleLoadingException: If the executor couldn't successfully load all plugin code.
         """
         if not code:
             raise ValueError(f"{self.__class__.__name__}.get_executor() expects at least one resource install specification")
@@ -1063,6 +1064,12 @@ class MPManager(
         my_executor = await self.get(executor_id)
 
         # FIXME: recovery. If loading failed, we currently never rebuild https://github.com/inmanta/inmanta-core/issues/7695
+        # Bail out if the executor couldn't load all the code
+        if my_executor.failed_modules:
+            raise ModuleLoadingException(
+                agent_name=agent_name,
+                failed_modules=my_executor.failed_modules,
+            )
         return my_executor
 
     async def create_member(self, executor_id: executor.ExecutorId) -> MPExecutor:
