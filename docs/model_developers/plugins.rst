@@ -234,9 +234,7 @@ the DSL. This can be used to create plugins that use python reserved names such 
         print("inmanta")
 
 
-
-
-
+.. _dataclasses:
 
 Dataclasses
 ========================
