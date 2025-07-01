@@ -203,7 +203,7 @@ When the access policy contains a syntax error, the policy engine will fail to s
 Debugging an access policy
 """"""""""""""""""""""""""
 
-If the access policy doesn't behave as expected, it can be debugged using the `Open Policy Agent extension for VS Code <https://sublime-and-sphinx-guide.readthedocs.io/en/latest/references.html#links-to-external-web-pages>`_. Make sure the project contains the following three files:
+If the access policy doesn't behave as expected, it can be debugged using the `Open Policy Agent extension for VS Code <https://www.openpolicyagent.org/docs/debugging#live-debugging>`_. Make sure the project contains the following three files:
 
 * The policy file: This file needs to be in a directory (package) called *policy*.
 * The data for the policy: This information can be obtained using the ``inmanta policy-engine print-endpoint-data`` command. Put the output in a file called *data.json*.
