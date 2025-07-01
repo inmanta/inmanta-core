@@ -685,12 +685,6 @@ class ModuleLoadingException(Exception):
         """
         self.failed_modules = failed_modules
 
-    def set_agent_name(
-        self,
-        agent_name: str,
-    ) -> None:
-        self._agent_name = agent_name
-
     def _format_module_loading_errors(self) -> str:
         """
         Helper method to display module loading failures.
@@ -708,10 +702,13 @@ class ModuleLoadingException(Exception):
 
         return formatted_module_loading_errors
 
-    def create_log_line_for_failed_modules(self, level: int = logging.ERROR, *, verbose_message: bool = False) -> LogLine:
+    def create_log_line_for_failed_modules(
+        self, agent: str, level: int = logging.ERROR, *, verbose_message: bool = False
+    ) -> LogLine:
         """
         Helper method to convert this Exception into a LogLine.
 
+        :param agent: Name of the agent for which module loading was unsuccessful
         :param level: The log level for the resulting LogLine
         :param verbose_message: Whether to include the full formatted error output in the LogLine message.
             When displayed on the webconsole, the full formatted error output will be displayed in its own section
@@ -719,7 +716,7 @@ class ModuleLoadingException(Exception):
 
         """
         message = "Agent %s failed to load the following modules: %s." % (
-            self._agent_name,
+            agent,
             ", ".join(self.failed_modules.keys()),
         )
 
@@ -734,7 +731,9 @@ class ModuleLoadingException(Exception):
             errors=formatted_module_loading_errors,
         )
 
-    def log_resource_action_to_scheduler_log(self, rid: ResourceVersionIdStr, *, include_exception_info: bool) -> None:
+    def log_resource_action_to_scheduler_log(
+        self, agent: str, rid: ResourceVersionIdStr, *, include_exception_info: bool
+    ) -> None:
         """
         Helper method to log module loading failures to the scheduler's resource action log.
 
@@ -743,7 +742,5 @@ class ModuleLoadingException(Exception):
         for making sure that the scheduler's resource action log and the web console logs remain somewhat in sync.
 
         """
-        log_line = self.create_log_line_for_failed_modules(verbose_message=True)
-        log_line.write_to_logger_for_resource(
-            agent=self._agent_name, resource_version_string=rid, exc_info=include_exception_info
-        )
+        log_line = self.create_log_line_for_failed_modules(agent=agent, verbose_message=True)
+        log_line.write_to_logger_for_resource(agent=agent, resource_version_string=rid, exc_info=include_exception_info)
