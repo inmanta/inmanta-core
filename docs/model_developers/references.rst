@@ -124,24 +124,19 @@ For example, to create a plugin that can concatenate two strings, where either o
    :language: inmanta
 
 
-The requirement for explicit declaration of references exists because it is impossible to pass references around transparently
-in the Python domain (as we do in the model domain). Since the Python domain is so flexible, most of it is out of the compiler's
-control. Therefore, we have to make sure that we only pass in values that the plugin developer might reasonably expect.  e.g.
+References must be declared explicitly to prevent unpleasant surprises.  e.g.
 consider a plugin parameter annotated as ``bool``. A plugin developer would expect that its value would be either ``True`` or
 ``False``, and might use statements such as ``if <value>``. This would not be valid with a reference value. The same goes for
 more complex operations. Therefore, references are only passed into plugins when the plugin developer has explicitly declared
 that they are expected, so that they know to take them into account.
 
-A known limitation of this validation is with parameters annotated as ``object`` or untyped ``list`` / ``dict``. For these
-parameters, we can validate the object itself, and we can go one layer deeper for ``list`` / ``dict``. But below that, the
-compiler can not make any assumptions about the structure of the argument value, so reference validation only applies to that
-top level. Concretely, this means that an ``object`` annotation would reject ``my_reference``, but not ``[my_reference]``. The
-plugin developer should be aware that references may show up in nested values when working with ``object``-annotated plugins.
+For parameters annotated as ``object`` or untyped ``list`` / ``dict``, reference validation only applies to that
+top level. Concretely, this means that an ``object`` annotation would reject ``my_reference``, but not ``[my_reference]``. Plugin developers should be aware that references may show up in nested values when working with ``object``-annotated plugins.
 
 The above covers values passed as arguments to a plugin. But there is another way that model values can enter the Python
 domain: when accessing attributes on a model instance. Model instances are not converted to a native Python value on the plugin
 boundary, but instead they are represented by a proxy object. When you access an attribute on it, the associated value is
-fetched from the model. For the same reasons as outlined above, references can not be accessed in such a way, unless the plugin
+fetched from the model. References can not be accessed in such a way, unless the plugin
 developer has indicated that references are expected. To this end, the :py:func:`inmanta.plugins.allow_reference_values` method
 is provided. The following example demonstrates this.
 
