@@ -184,7 +184,7 @@ Enable the policy-engine authorization provider
 4. Restart the inmanta server to activate the configuration changes.
 
 
-.. _authorization-writing-own-policy
+.. _authorization-writing-own-policy:
 
 Writing a custom access policy
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
