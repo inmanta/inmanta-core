@@ -204,7 +204,7 @@ reference in the model, the conversion to the Python dataclass is allowed.
 Now, let's consider the other aspect: references `to` dataclasses, e.g. ``Reference[Data]``. This too works mostly as you would
 expect. As with other plugin parameter types, a plugin that accepts a reference to a dataclass, will get a reference object
 if the value that is passed in is a reference. However, for the other direction, it is slightly more flexible than for other
-reference types and under specific circumstances a reference may be passed even when it has not been declared. Let's
+reference types: a reference may be coerced to a dataclass if all of the dataclass' attributes support references. Let's
 illustrate this with an example:
 
 .. code-block:: python
@@ -231,16 +231,22 @@ illustrate this with an example:
         ...
 
 
+.. code-block:: inmanta
+
+    process_data(create_simple_data_reference())  # OK: reference is coerced to SimpleData(value=<attribute_reference>)
+    process_data(create_described_data_reference())  # type error: plugin expects DescribedData, not a reference
+
+
 Note how the ``process_data`` plugin doesn't declare reference support. It just accepts either ``SimpleData`` or
 ``DescribedData``, both of which are dataclasses.
 
-Now consider that we'd call ``process_data(create_simple_data_reference())`` from the model. ``process_data`` accepts a
+Now consider the first function call in the model: ``process_data(create_simple_data_reference())``. ``process_data`` accepts a
 dataclass, but we pass in a reference. For any other reference type, the compiler would reject this. But in this case it
 recognizes that conceptually, a reference to a dataclass can also be represented as a dataclass with references as
 attributes. And it turns out that ``SimpleData`` supports references in all its (only) attribute(s). So, the compiler
 coerces the ``Reference[SimpleData]`` to ``SimpleData(value=<attribute_reference>)``.
 
-Finally, let's consider that  we'd call ``process_data(create_described_data_reference())`` from the model. Following the
+Finally, let's consider the second call from the model: ``process_data(create_described_data_reference())``. Following the
 same logic as for ``SimpleData``, this is conceptually the same as
 ``DescribedData(value=<attribute_reference>, description=<attribute_reference_2>)``. But that would make ``description``
 a reference, while its definition says that a string is expected. So we conclude that in this case the reference can not
