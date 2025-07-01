@@ -77,7 +77,7 @@ class ReferenceCycleException(Exception):
         self.references.append(element)
 
     def get_message(self) -> str:
-        trace = " -> ".join([str(x) for x in self.references])
+        trace = " -> ".join([repr(x) for x in self.references])
         return "Reference cycle detected: %s" % (trace)
 
     def __str__(self) -> str:
@@ -434,7 +434,7 @@ class Reference(ReferenceLike, Generic[T]):
             self._reference_value_cached = True
 
         else:
-            logger.debug("Using cached value for reference %(reference)s", reference=str(self))
+            logger.debug("Using cached value for reference %(reference)s", reference=repr(self))
         return self._reference_value
 
     def serialize(self) -> ReferenceModel:
@@ -455,12 +455,6 @@ class Reference(ReferenceLike, Generic[T]):
 
     def __bool__(self) -> Never:
         raise NotImplementedError(f"{self!r} is an inmanta reference, not a boolean.")
-
-    def __str__(self) -> Never:
-        raise NotImplementedError(
-            f"{self!r} This is an inmanta reference. Its string conversion is disabled so it can't be accidentally used where a"
-            " concrete value is expected. Use `repr()` if you truly want it as a string."
-        )
 
 
 class reference:
