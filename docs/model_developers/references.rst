@@ -194,8 +194,8 @@ they have no explicit declaration there. Furthermore, in the model references ar
 annotations in the Python domain. It is only when (if) a corresponding Python object is constructed, that its type validation
 comes into play.
 
-As a result the behavior of these references in dataclasses is also very similar to that of other plugin parameters. A plugin
-that accepts a dataclass instance will have to convert the model representation to the Python dataclass. If any of the
+As a result the behavior of these references in dataclasses is also very similar to that of other plugin parameters. For a
+plugin that accepts a dataclass instance, the compiler has to convert the model representation to the Python dataclass. If any of the
 attributes turns out to be a reference, it will be allowed only if the corresponding Python attribute is annotated with a ``Reference``
 annotation. In the case of the ``Data`` example above, if ``description`` were a reference in the model instance, it would be
 rejected with a clear error message. ``value`` on the other hand supports references in the Python domain, so if it is a
@@ -204,10 +204,8 @@ reference in the model, the conversion to the Python dataclass is allowed.
 Now, let's consider the other aspect: references `to` dataclasses, e.g. ``Reference[Data]``. This too works mostly as you would
 expect. As with other plugin parameter types, a plugin that accepts a reference to a dataclass, will get a reference object
 if the value that is passed in is a reference. However, for the other direction, it is slightly more flexible than for other
-reference types. Suppose a plugin doesn't declare reference support, it just accepts ``Data``. The compiler recognizes that
-conceptually a reference to a dataclass can be safely represented as a dataclass with references for all its attributes, as
-long as all attributes support references. So in that case, the reference to the dataclass is simply coerced to a dataclass
-with reference attributes. Let's look at an example:
+reference types and under specific circumstances a reference may be passed even when it has not been declared. Let's
+illustrate this with an example:
 
 .. code-block:: python
 
@@ -232,16 +230,35 @@ with reference attributes. Let's look at an example:
     def process_data(data: SimpleData | DescribedData) -> None:
         ...
 
-Now consider that we'd call ``process_data(create_simple_data_reference())`` from the model. ``process_data`` accepts a dataclass,
-but we pass in a reference. Luckily, all ``SimpleData``'s attributes support references, so the compiler converts the argument
-to ``SimpleData(value=<reference>)``. On the other hand, if we'd call ``process_data(create_described_data_reference())`` from the
-model, the compiler will raise an error, because ``DescribedData`` does not allow references for its ``description`` attribute.
+
+Note how the ``process_data`` plugin doesn't declare reference support. It just accepts either ``SimpleData`` or
+``DescribedData``, both of which are dataclasses.
+
+Now consider that we'd call ``process_data(create_simple_data_reference())`` from the model. ``process_data`` accepts a
+dataclass, but we pass in a reference. For any other reference type, the compiler would reject this. But in this case it
+recognizes that conceptually, a reference to a dataclass can also be represented as a dataclass with references as
+attributes. And it turns out that ``SimpleData`` supports references in all its (only) attribute(s). So, the compiler
+coerces the ``Reference[SimpleData]`` to ``SimpleData(value=<attribute_reference>)``.
+
+Finally, let's consider that  we'd call ``process_data(create_described_data_reference())`` from the model. Following the
+same logic as for ``SimpleData``, this is conceptually the same as
+``DescribedData(value=<attribute_reference>, description=<attribute_reference_2>)``. But that would make ``description``
+a reference, while its definition says that a string is expected. So we conclude that in this case the reference can not
+be coerced to a dataclass instance. The compiler raises the same exception that it would for a non-dataclass reference type.
+
+Concluding, references `inside` dataclasses have to match the dataclass' type signature, in the same way that references
+as arguments to a plugin have to match the plugin's type signature. References `to` dataclasses as plugin arguments behave
+the same as other references, with one exception: a reference may be coerced to a dataclass if the dataclass' type signature
+allows it. Concretely, this means that coercion is possible if and only if all the dataclass' attributes support references.
 
 
 References in resources
 -----------------------
 
 References may occur in resource entities, as in any other entities. Consequentially, they may also appear when accessing the
-model for field mapping methods (``get_$(field_name)`` as described in the :ref:`resources` section). Unlike in plugins,
-references are supposed to be transparent in resources. Therefore, the resource developer should be aware when accessing model
-values from these mapping methods, reference values may occur anywhere.
+model for field mapping methods (``get_$(field_name)`` as described in the :ref:`resources` section). Since both references
+and resources are intended for the agent, references may occur anywhere in a resource and the exporter can transparently
+handle them. Therefore, the resource developer should be aware that any value accessed inside such a mapping method may be a
+reference. It is safe to return them from the method as is, but care should be taken when inspecting model values, e.g.
+``if resource.condition`` will not behave as expected if ``condition`` is a reference. This in contrast to plugins, where
+accessing ``resource.condition`` in the first place would require an explicit ``plugins.allow_reference_values()``
