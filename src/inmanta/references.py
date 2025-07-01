@@ -77,7 +77,7 @@ class ReferenceCycleException(Exception):
         self.references.append(element)
 
     def get_message(self) -> str:
-        trace = " -> ".join([str(x) for x in self.references])
+        trace = " -> ".join([repr(x) for x in self.references])
         return "Reference cycle detected: %s" % (trace)
 
     def __str__(self) -> str:
@@ -452,7 +452,7 @@ class Reference(ReferenceLike, Generic[T]):
             self._reference_value_cached = True
 
         else:
-            logger.debug("Using cached value for reference %(reference)s", reference=str(self))
+            logger.debug("Using cached value for reference %(reference)s", reference=repr(self))
         return self._reference_value
 
     def serialize(self) -> ReferenceModel:
