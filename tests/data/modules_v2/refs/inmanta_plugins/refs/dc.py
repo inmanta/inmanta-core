@@ -33,8 +33,8 @@ class NoRefsDataclassReference(Reference[NoRefsDataclass]):
     def resolve(self, logger: LoggerABC) -> NoRefsDataclass:
         return NoRefsDataclassReference()
 
-    def __str__(self):
-        return "NoRefsDataclassReference"
+    def __repr__(self) -> str:
+        return f"NoRefsDataclassReference()"
 
 
 class AllRefsDataclassReferenceABC[D: AllRefsDataclass](Reference[D]):
@@ -46,8 +46,8 @@ class AllRefsDataclassReferenceABC[D: AllRefsDataclass](Reference[D]):
     def resolve(self, logger: LoggerABC) -> D:
         return self._dc_type(maybe_ref_value=self.resolve_other(self.maybe_ref_value, logger))
 
-    def __str__(self):
-        return f"{self._dc_type.__name__}Reference {self.maybe_ref_value}"
+    def __repr__(self):
+        return f"{self._dc_type.__name__}Reference({self.maybe_ref_value!r})"
 
 
 @reference("refs::dc::AllRefsDataclassReference")

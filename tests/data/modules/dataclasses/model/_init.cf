@@ -11,3 +11,9 @@ end
 implement Virtualmachine using std::none
 
 
+entity DataclassABC extends std::Dataclass: end
+
+entity SimpleDC extends DataclassABC:
+    int n
+end
+implement SimpleDC using std::none

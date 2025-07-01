@@ -1,8 +1,8 @@
 from collections.abc import Mapping, Sequence
-from typing import Annotated, Any, Protocol
+from typing import Annotated, Any, Optional, Protocol
 
 from inmanta import plugins
-from inmanta.execute.proxy import DynamicProxy
+from inmanta.execute.proxy import DynamicProxy, SequenceProxy, DictProxy
 from inmanta.plugins import plugin, ModelType
 from inmanta.references import Reference
 from inmanta_plugins.refs import dc
@@ -30,11 +30,11 @@ def iterates_obj(v: object) -> None:
 
 
 @plugin
-def takes_obj_ref(v: object | Reference[object]) -> None: ...
+def takes_obj_ref(v: object | Reference) -> None: ...
 
 
 @plugin
-def takes_obj_ref_only(v: Reference[object]) -> None:
+def takes_obj_ref_only(v: Reference) -> None:
     assert isinstance(v, Reference)
 
 
@@ -52,6 +52,16 @@ def takes_complex_union_or_ref(v: int | str | None | Reference[str | None]) -> N
     Takes a complex union that allows references, but not to the exact same types.
     """
     ...
+
+
+@plugin
+def takes_union_with_dc(v: Entity | Sequence[Optional[Entity]] | Mapping[str, Entity] | dc.AllRefsDataclass) -> None:
+    """
+    Takes a union that includes a dataclass (i.e. the union has a custom to_python)
+    """
+    all_values = v if isinstance(v, SequenceProxy) else v.values() if isinstance(v, DictProxy) else [v]
+    for x in all_values:
+        x.non_ref_value
 
 
 @plugin
@@ -91,7 +101,7 @@ def iterates_object_dict(l: Mapping[str, object]) -> None:
 
 
 @plugin
-def iterates_object_ref_dict(l: Mapping[str, object | Reference[object]]) -> None:
+def iterates_object_ref_dict(l: Mapping[str, object | Reference]) -> None:
     for v in l.values():
         ...
     for k in l.keys():
@@ -259,3 +269,21 @@ def returns_entity_ref_list(instance: ListContainer) -> list[str | Reference[str
 @plugin
 def allow_references_on_non_proxy() -> None:
     plugins.allow_reference_values([])
+
+
+@plugin
+def bool_on_reference(v: Reference) -> None:
+    if v:
+        ...
+
+
+@plugin
+def str_on_reference(v: Reference) -> str:
+    # test references all override __str__, defeating the purpose of this test if we call str() directly
+    return Reference.__str__(v)
+
+
+@plugin
+def repr_on_reference(v: Reference) -> str:
+    # test references all override __str__, defeating the purpose of this test if we call str() directly
+    return Reference.__repr__(v)

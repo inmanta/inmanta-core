@@ -52,16 +52,21 @@ if typing.TYPE_CHECKING:
 
 
 @contextlib.contextmanager
-def raises_wrapped(exc_tp: type[RuntimeException], *, match: Optional[str] = None) -> Iterator[None]:
+def raises_wrapped(
+    exc_tp: type[Exception],
+    *,
+    match: Optional[str] = None,
+    outer_exception: type[WrappingRuntimeException | ExternalException] = WrappingRuntimeException,
+) -> Iterator[None]:
     """
     Context manager wrapper around pytest.raises. Expects a WrappingRuntimeException to be raised, and asserts that it wraps
     the provided exception type and that its message matches the provided pattern.
     """
-    with pytest.raises(WrappingRuntimeException) as exc_info:
+    with pytest.raises(outer_exception) as exc_info:
         yield
     assert isinstance(exc_info.value.__cause__, exc_tp)
     if match is not None:
-        msg: str = exc_info.value.__cause__.format()
+        msg: str = str(exc_info.value.__cause__)
         assert re.search(match, msg) is not None, msg
 
 
@@ -136,7 +141,7 @@ def test_references_in_model(
     with caplog.at_level(DEBUG):
         resource.get_reference_value(UUID("1102e0ce-2f03-31a5-ac3e-ef1a6609daaf"), PythonLogger(logging.getLogger("test.refs")))
 
-    log_contains(caplog, "test.refs", DEBUG, "Using cached value for reference AllRefsDataclassReference CWD")
+    log_contains(caplog, "test.refs", DEBUG, "Using cached value for reference AllRefsDataclassReference('CWD')")
 
 
 def test_undeclared_reference_in_map(
@@ -299,10 +304,10 @@ def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", module
     ## -> this is not a strong requirement. The assertion is here simply to ensure the behavior remains stable
     run_snippet(snippet="refs::plugins::takes_obj(['hello', refs::create_string_reference('hello')])")
     run_snippet(snippet="refs::plugins::iterates_obj(['hello', refs::create_string_reference('hello')])")
-    # Scenario: plugin argument annotated as `object | Reference[object]`
+    # Scenario: plugin argument annotated as `object | Reference`
     run_snippet(snippet="refs::plugins::takes_obj_ref('hello')")
     run_snippet(snippet="refs::plugins::takes_obj_ref(refs::create_string_reference('name'))")
-    # Scenario: plugin argument annotated as `Reference[object]`
+    # Scenario: plugin argument annotated as `Reference`
     with pytest.raises(PluginTypeException, match=re.escape("Expected type: Reference[any]")):
         run_snippet(snippet="refs::plugins::takes_obj_ref_only('hello')")
     run_snippet(snippet="refs::plugins::takes_obj_ref_only(refs::create_string_reference('name'))")
@@ -355,7 +360,7 @@ def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", module
     run_snippet(snippet="refs::plugins::iterates_object_dict({'h': 'h', 'e': 'e'})")
     with pytest.raises(PluginTypeException, match="contains a reference"):
         run_snippet(snippet="refs::plugins::iterates_object_dict({'h': 'h', 'e': refs::create_string_reference('name')})")
-    # Scenario: plugin argument annotated as `Mapping[str, object | Reference[object]]`
+    # Scenario: plugin argument annotated as `Mapping[str, object | Reference]`
     run_snippet(snippet="refs::plugins::iterates_object_ref_dict({'h': 'h', 'e': 'e'})")
     run_snippet(snippet="refs::plugins::iterates_object_ref_dict({'h': 'h', 'e': refs::create_string_reference('name')})")
 
@@ -502,6 +507,23 @@ def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", module
         """
     )
 
+    ## plugin argument annotated with Entity | DC => custom to_python
+    #  -> verify that resulting dynamic proxy has appropriate path context
+    with raises_wrapped(UnexpectedReference, match="Encountered unexpected reference .* Encountered at v.non_ref_value"):
+        run_snippet(
+            "refs::plugins::takes_union_with_dc(refs::NormalEntity(non_ref_value=refs::create_string_reference('test')))"
+        )
+    with raises_wrapped(UnexpectedReference, match=r"Encountered unexpected reference .* Encountered at v\[0\].non_ref_value"):
+        run_snippet(
+            "refs::plugins::takes_union_with_dc([refs::NormalEntity(non_ref_value=refs::create_string_reference('test'))])"
+        )
+    with raises_wrapped(
+        UnexpectedReference, match=r"Encountered unexpected reference .* Encountered at v\['x'\].non_ref_value"
+    ):
+        run_snippet(
+            "refs::plugins::takes_union_with_dc({'x': refs::NormalEntity(non_ref_value=refs::create_string_reference('test'))})"
+        )
+
     # Scenario: plugin annotated as <dataclass> gets Reference[<dataclass>]
     ## dataclass type that does not support reference attrs
     ### plain dataclass
@@ -597,12 +619,15 @@ def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", module
         "refs::plugins::returns_entity_ref_list(refs::ListContainer(value=['Hello', refs::create_string_reference('hello')]))"
     )
 
-    # Scenario: allow_reference_values() called on non-proxy list (e.g. list inside dataclass)
-    with pytest.raises(
-        ExternalException,
-        match="should only be called on inmanta instances, lists or dicts. Python lists and dicts do not need this wrapper",
-    ):
-        run_snippet("refs::plugins::allow_references_on_non_proxy()")
+    # Scenario: allow_reference_values() called on non-proxy list (e.g. list inside dataclass). Allowed, does nothing
+    run_snippet("refs::plugins::allow_references_on_non_proxy()")
+
+    # Scenario: accidental operators on references
+    with raises_wrapped(NotImplementedError, outer_exception=ExternalException, match="is an inmanta reference, not a boolean"):
+        run_snippet("refs::plugins::bool_on_reference(refs::create_string_reference('hello'))")
+    # allowed by necessity because it makes error message very brittle otherwise
+    run_snippet("refs::plugins::str_on_reference(refs::create_string_reference('hello'))")
+    run_snippet("refs::plugins::repr_on_reference(refs::create_string_reference('hello'))")
 
 
 def test_reference_cycle(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
@@ -629,7 +654,7 @@ def test_reference_cycle(snippetcompiler: "SnippetCompilationTest", modules_v2_d
     ) as e:
         snippetcompiler.do_export()
     assert isinstance(e.value.__cause__, ReferenceCycleException)
-    assert "Reference cycle detected: StringReference -> StringReference" in str(e.value.__cause__)
+    assert "Reference cycle detected: StringReference() -> StringReference()" in str(e.value.__cause__)
 
 
 def test_references_in_expression(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
@@ -648,7 +673,7 @@ def test_references_in_expression(snippetcompiler: "SnippetCompilationTest", mod
 
     with pytest.raises(
         RuntimeException,
-        match=r"Invalid value `BoolReference StringReference`: "
+        match=r"Invalid value `BoolReference\(StringReference\(\)\)`: "
         "the condition for an if statement can only be a boolean expression",
     ):
         snippetcompiler.do_export()
@@ -740,7 +765,7 @@ def test_references_in_index(snippetcompiler: "SnippetCompilationTest", modules_
     )
     with pytest.raises(
         TypingException,
-        match="Invalid value `StringReference` in index for attribute value: references can not be used in indexes",
+        match=r"Invalid value `StringReference\(\)` in index for attribute value: references can not be used in indexes",
     ):
         snippetcompiler.do_export()
 
@@ -765,7 +790,7 @@ def test_references_in_index(snippetcompiler: "SnippetCompilationTest", modules_
     )
     with pytest.raises(
         TypingException,
-        match="Invalid value `StringReference` in index for attribute value: references can not be used in indexes",
+        match=r"Invalid value `StringReference\(\)` in index for attribute value: references can not be used in indexes",
     ):
         snippetcompiler.do_export()
 
