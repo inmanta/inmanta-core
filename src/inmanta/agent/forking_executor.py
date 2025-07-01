@@ -937,8 +937,12 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
                 self.render_id(blueprint),
             )
             return executor
+        except ModuleLoadingException:
+            # Make sure to clean up the executor process if its initialization fails.
+            await executor.request_shutdown()
+            raise
         except Exception:
-            # Make sure to cleanup the executor process if its initialization fails.
+            # Make sure to clean up the executor process if its initialization fails.
             await executor.request_shutdown()
             raise Exception(
                 f"Failed to initialize scheduler process (pid: {executor.process.pid}) for {self.render_id(blueprint)}"
