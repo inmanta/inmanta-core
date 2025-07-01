@@ -267,4 +267,4 @@ and resources are intended for the agent, references may occur anywhere in a res
 handle them. Therefore, the resource developer should be aware that any value accessed inside such a mapping method may be a
 reference. It is safe to return them from the method as is, but care should be taken when inspecting model values, e.g.
 ``if resource.condition`` will not behave as expected if ``condition`` is a reference. This in contrast to plugins, where
-accessing ``resource.condition`` in the first place would require an explicit ``plugins.allow_reference_values()``
+accessing ``resource.condition`` in the first place would require an explicit ``plugins.allow_reference_values()``.
