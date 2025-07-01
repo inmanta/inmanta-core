@@ -20,7 +20,10 @@ import json
 import os.path
 
 from inmanta import resources, const
-from inmanta.agent.handler import provider, CRUDHandler, HandlerContext
+from inmanta.agent.handler import provider, CRUDHandler, HandlerContext, LoggerABC
+
+from inmanta.plugins import plugin
+from inmanta.references import reference, Reference
 
 
 @resources.resource("successhandlermodule::SuccessResource", agent="agent", id_attribute="name")
@@ -62,3 +65,28 @@ class SuccessResourceWithReferenceHandler(CRUDHandler):
     def execute(self, ctx: HandlerContext, resource: SuccessResourceWithReference, dry_run: bool = False) -> None:
 
         ctx.set_status(const.ResourceState.deployed)
+
+
+@reference("successhandlermodule::FooReference")
+class FooReference(Reference[str]):
+    """A reference to the 'foo' string"""
+
+    def __init__(self, base: str | Reference[str]) -> None:
+        """
+        :param name: The name of the environment variable.
+        """
+        super().__init__()
+        self.base = base
+
+    def resolve(self, logger: LoggerABC) -> str:
+        """Resolve the reference"""
+        return self.resolve_other(self.base, logger) + "foo"
+
+
+@plugin
+def create_my_ref(base: str | Reference[str]) -> Reference[str]:
+    """Create an environment reference
+
+    :return: A reference to what can be resolved to a string
+    """
+    return FooReference(base)
