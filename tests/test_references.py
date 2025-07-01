@@ -141,7 +141,7 @@ def test_references_in_model(
     with caplog.at_level(DEBUG):
         resource.get_reference_value(UUID("1102e0ce-2f03-31a5-ac3e-ef1a6609daaf"), PythonLogger(logging.getLogger("test.refs")))
 
-    log_contains(caplog, "test.refs", DEBUG, "Using cached value for reference AllRefsDataclassReference CWD")
+    log_contains(caplog, "test.refs", DEBUG, "Using cached value for reference AllRefsDataclassReference('CWD')")
 
 
 def test_undeclared_reference_in_map(
@@ -625,10 +625,8 @@ def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", module
     # Scenario: accidental operators on references
     with raises_wrapped(NotImplementedError, outer_exception=ExternalException, match="is an inmanta reference, not a boolean"):
         run_snippet("refs::plugins::bool_on_reference(refs::create_string_reference('hello'))")
-    with raises_wrapped(
-        NotImplementedError, outer_exception=ExternalException, match=r"is an inmanta reference\..* Use `repr\(\)`"
-    ):
-        run_snippet("refs::plugins::str_on_reference(refs::create_string_reference('hello'))")
+    # allowed by necessity because it makes error message very brittle otherwise
+    run_snippet("refs::plugins::str_on_reference(refs::create_string_reference('hello'))")
     run_snippet("refs::plugins::repr_on_reference(refs::create_string_reference('hello'))")
 
 
@@ -656,7 +654,7 @@ def test_reference_cycle(snippetcompiler: "SnippetCompilationTest", modules_v2_d
     ) as e:
         snippetcompiler.do_export()
     assert isinstance(e.value.__cause__, ReferenceCycleException)
-    assert "Reference cycle detected: StringReference -> StringReference" in str(e.value.__cause__)
+    assert "Reference cycle detected: StringReference() -> StringReference()" in str(e.value.__cause__)
 
 
 def test_references_in_expression(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
@@ -675,7 +673,7 @@ def test_references_in_expression(snippetcompiler: "SnippetCompilationTest", mod
 
     with pytest.raises(
         RuntimeException,
-        match=r"Invalid value `BoolReference StringReference`: "
+        match=r"Invalid value `BoolReference\(StringReference\(\)\)`: "
         "the condition for an if statement can only be a boolean expression",
     ):
         snippetcompiler.do_export()
@@ -767,7 +765,7 @@ def test_references_in_index(snippetcompiler: "SnippetCompilationTest", modules_
     )
     with pytest.raises(
         TypingException,
-        match="Invalid value `StringReference` in index for attribute value: references can not be used in indexes",
+        match=r"Invalid value `StringReference\(\)` in index for attribute value: references can not be used in indexes",
     ):
         snippetcompiler.do_export()
 
@@ -792,7 +790,7 @@ def test_references_in_index(snippetcompiler: "SnippetCompilationTest", modules_
     )
     with pytest.raises(
         TypingException,
-        match="Invalid value `StringReference` in index for attribute value: references can not be used in indexes",
+        match=r"Invalid value `StringReference\(\)` in index for attribute value: references can not be used in indexes",
     ):
         snippetcompiler.do_export()
 

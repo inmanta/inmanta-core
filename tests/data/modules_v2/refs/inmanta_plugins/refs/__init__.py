@@ -22,8 +22,8 @@ class BoolReference(Reference[bool]):
         """Resolve the reference"""
         return False
 
-    def __str__(self) -> str:
-        return f"BoolReference {self.name}"
+    def __repr__(self) -> str:
+        return f"BoolReference({self.name!r})"
 
 
 @reference("refs::Int")
@@ -40,8 +40,8 @@ class IntReference(Reference[int]):
         """Resolve the reference"""
         return 42
 
-    def __str__(self) -> str:
-        return f"IntReference {self.name}"
+    def __repr__(self) -> str:
+        return f"IntReference({self.name!r})"
 
 
 @reference("refs::String")
@@ -59,8 +59,8 @@ class StringReference(Reference[str]):
         """Resolve the reference"""
         return self.resolve_other(self.name, logger)
 
-    def __str__(self) -> str:
-        return f"StringReference"
+    def __repr__(self) -> str:
+        return f"StringReference()"
 
 
 @plugin
@@ -122,8 +122,8 @@ class BadReference(Reference[str]):
         """Resolve the reference"""
         raise Exception("BAD")
 
-    def __str__(self) -> str:
-        return f"BadReference"
+    def __repr__(self) -> str:
+        return f"BadReference({self.name!r})"
 
 
 @plugin
@@ -146,8 +146,8 @@ class DictMade(Reference[str]):
         """Resolve the reference"""
         return self.resolve_other(self.name["name"], logger)
 
-    def __str__(self) -> str:
-        return f"DictMade"
+    def __repr__(self) -> str:
+        return f"DictMade({self.name!r})"
 
 
 @plugin
