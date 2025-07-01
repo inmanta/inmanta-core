@@ -1060,7 +1060,6 @@ class MPManager(
         # Use pool manager
         return await self.get(executor_id)
 
-
     async def create_member(self, executor_id: executor.ExecutorId) -> MPExecutor:
         try:
             process = await self.process_pool.get(executor_id.blueprint)

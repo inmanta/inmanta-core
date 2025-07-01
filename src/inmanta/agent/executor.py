@@ -686,7 +686,10 @@ class ModuleLoadingException(Exception):
         """
         self.failed_modules = failed_modules
 
-    def set_agent_name(self, agent_name: str, ):
+    def set_agent_name(
+        self,
+        agent_name: str,
+    ) -> None:
         self.agent_name = agent_name
 
     def _format_module_loading_errors(self) -> str:
