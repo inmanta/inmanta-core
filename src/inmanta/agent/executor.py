@@ -680,7 +680,6 @@ class ModuleLoadingException(Exception):
 
     def __init__(self, failed_modules: FailedInmantaModules) -> None:
         """
-        :param agent_name: Name of the agent for which module loading was unsuccessful
         :param failed_modules: Data for all module loading errors as a nested map of
             inmanta module name -> python module name -> Exception.
         """
@@ -690,7 +689,7 @@ class ModuleLoadingException(Exception):
         self,
         agent_name: str,
     ) -> None:
-        self.agent_name = agent_name
+        self._agent_name = agent_name
 
     def _format_module_loading_errors(self) -> str:
         """
@@ -720,7 +719,7 @@ class ModuleLoadingException(Exception):
 
         """
         message = "Agent %s failed to load the following modules: %s." % (
-            self.agent_name,
+            self._agent_name,
             ", ".join(self.failed_modules.keys()),
         )
 
@@ -735,9 +734,7 @@ class ModuleLoadingException(Exception):
             errors=formatted_module_loading_errors,
         )
 
-    def log_resource_action_to_scheduler_log(
-        self, agent: str, rid: ResourceVersionIdStr, *, include_exception_info: bool
-    ) -> None:
+    def log_resource_action_to_scheduler_log(self, rid: ResourceVersionIdStr, *, include_exception_info: bool) -> None:
         """
         Helper method to log module loading failures to the scheduler's resource action log.
 
@@ -747,4 +744,6 @@ class ModuleLoadingException(Exception):
 
         """
         log_line = self.create_log_line_for_failed_modules(verbose_message=True)
-        log_line.write_to_logger_for_resource(agent=agent, resource_version_string=rid, exc_info=include_exception_info)
+        log_line.write_to_logger_for_resource(
+            agent=self._agent_name, resource_version_string=rid, exc_info=include_exception_info
+        )

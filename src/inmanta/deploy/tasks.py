@@ -154,9 +154,7 @@ class Deploy(Task):
                     )
                 except ModuleLoadingException as e:
                     e.set_agent_name(agent)
-                    e.log_resource_action_to_scheduler_log(
-                        agent=agent, rid=executor_resource_details.rvid, include_exception_info=True
-                    )
+                    e.log_resource_action_to_scheduler_log(rid=executor_resource_details.rvid, include_exception_info=True)
                     log_line_for_web_console = e.create_log_line_for_failed_modules(level=logging.ERROR, verbose_message=False)
                     deploy_report = DeployReport.undeployable(
                         executor_resource_details.rvid, action_id, log_line_for_web_console
