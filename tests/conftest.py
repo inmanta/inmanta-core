@@ -1182,6 +1182,7 @@ class SnippetCompilationTest(KeepOnFail):
             index_url,
             extra_index_url,
             main_file,
+            autostd=autostd,
         )
 
         dirty_venv = autostd or install_project or install_v2_modules or self.re_check_venv or python_requires
@@ -1254,12 +1255,17 @@ class SnippetCompilationTest(KeepOnFail):
         index_url: Optional[str] = None,
         extra_index_url: list[str] = [],
         main_file: str = "main.cf",
+        *,
+        autostd: bool = False,
         ministd: bool = False,
     ) -> None:
         add_to_module_path = add_to_module_path if add_to_module_path is not None else []
         python_package_sources = python_package_sources if python_package_sources is not None else []
 
-        project_requires = project_requires if project_requires is not None else []
+        project_requires = [
+            *(project_requires if project_requires is not None else []),
+            *(["std<5.3"] if autostd and not ministd else []),
+        ]
         python_requires = python_requires if python_requires is not None else []
         relation_precedence_rules = relation_precedence_rules if relation_precedence_rules else []
         ministd_path = os.path.join(__file__, "..", "data/mini_str_container")
@@ -1276,7 +1282,6 @@ class SnippetCompilationTest(KeepOnFail):
                 - {{type: git, url: {self.repo} }}
             """.rstrip()
             )
-
             if relation_precedence_rules:
                 cfg.write("\n            relation_precedence_policy:\n")
                 cfg.write("\n".join(f"                - {rule}" for rule in relation_precedence_rules))
