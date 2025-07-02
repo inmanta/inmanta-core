@@ -19,6 +19,7 @@ Contact: code@inmanta.com
 import asyncio
 import json
 import logging
+import math
 import pprint
 import time
 import typing
@@ -621,20 +622,26 @@ async def test_resources_paging_api(server, client, env_with_resources, page_siz
     env = env_with_resources
 
     last_batch_flag = False
+    rt = await client.resource_list(tid=env.id)
+    assert rt.code == 200
+
+    total_resource_count = len(rt.result["data"])
 
     rt = await client.resource_list(tid=env.id, limit=page_size)
     pprint.pprint(rt.result)
 
-    n = 0
+    batch_count = 0
     async for item in iter_result(rt, str(env.id), client):
-        pprint.pprint(f"batch {n}")
+        pprint.pprint(f"batch {batch_count}")
         pprint.pprint(item.result["data"])
 
         if len(item.result["data"]) != page_size:
             if last_batch_flag:
                 raise Exception(f"Only the very last batch should have less than {page_size} items.")
             last_batch_flag = True
-        n += 1
+        batch_count += 1
+
+    assert batch_count == math.ceil(total_resource_count / page_size)
 
 
 @pytest.mark.parametrize(
