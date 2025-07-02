@@ -25,8 +25,11 @@ A South Bound integration always consists of three parts:
 * The :term:`resource scheduler` will spawn :term:`executors<executor>` that will load the :term:`handler<handler>` code in order to enforce the :term:`desired state` on the managed infrastructure.
 
 
+.. _resources:
+
 Resource
 ^^^^^^^^
+
 A resource is represented by a Python class that is registered with Inmanta using the
 :func:`@resource<inmanta.resources.resource>` decorator. This decorator decorates a class that inherits from
 the :class:`~inmanta.resources.Resource` class.

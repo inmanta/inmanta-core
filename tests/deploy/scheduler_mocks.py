@@ -57,7 +57,6 @@ class DummyExecutor(executor.Executor):
         self.execute_count = 0
         self.dry_run_count = 0
         self.facts_count = 0
-        self.failed_modules = {}
         self.mock_versions = {}
 
     def reset_counters(self) -> None:
