@@ -538,8 +538,6 @@ def test_install_from_index_dont_leak_pip_index(
     # install project
     os.chdir(module.Project.get().path)
     assert os.getenv(env_var) == index.url if env_var != "PIP_CONFIG_FILE" else pip_config_file
-    # TODO: this exception is now no longer raised, instead simple PackageNotFoundException
-    #   => how does end user reporting change????
     with pytest.raises(PackageNotFound):
         ProjectTool().execute("install", [])
     assert os.getenv(env_var) == index.url if env_var != "PIP_CONFIG_FILE" else pip_config_file
@@ -1023,8 +1021,6 @@ def test_no_matching_distribution(local_module_package_index: str, snippetcompil
     )
 
 
-# TODO: is this acceptable?
-@pytest.mark.xfail
 @pytest.mark.slowtest
 def test_version_snapshot(local_module_package_index: str, snippetcompiler_clean, caplog, modules_v2_dir, tmpdir):
     """
@@ -1094,7 +1090,7 @@ def test_version_snapshot(local_module_package_index: str, snippetcompiler_clean
         logging.DEBUG,
         (
             """\
-Modules versions after installation:
+Successfully installed modules for project
 + module_a: 5.0.0
 + module_b: 1.2.3"""
         ),
@@ -1124,7 +1120,7 @@ Modules versions after installation:
         logging.DEBUG,
         (
             """\
-Modules versions after installation:
+Successfully installed modules for project
 + module_a: 1.0.0
 - module_a: 5.0.0
 + module_c: 8.8.8"""
@@ -1132,8 +1128,6 @@ Modules versions after installation:
     )
 
 
-# TODO: is this acceptable?
-@pytest.mark.xfail
 @pytest.mark.slowtest
 def test_constraints_logging_v2(modules_v2_dir, tmpdir, caplog, snippetcompiler_clean, local_module_package_index):
     """

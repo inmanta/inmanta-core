@@ -2289,11 +2289,9 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         requirements_txt_file = RequirementsTxtFile(requirements_txt_file_path, create_file_if_not_exists=True)
         requirements_txt_file.set_requirement_and_write(requirement.get_python_package_requirement())
 
-    # TODO: is this still relevant?
     def get_module_requirements(self) -> list[str]:
         return [*self.metadata.requires, *(str(req) for req in self.get_module_v2_requirements())]
 
-    # TODO: what is this used for? Is this correct?
     def requires(self) -> "List[InmantaModuleRequirement]":
         """
         Get the requires for this project
