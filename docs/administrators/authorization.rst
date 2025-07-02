@@ -195,7 +195,7 @@ Enable the policy-engine authorization provider
 Writing a custom access policy
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-This section provides some guidence on how to test/debug you own access policy.
+This section provides some guidance on how to test/debug your own access policy.
 
 
 Troubleshooting: Policy engine fails to start
