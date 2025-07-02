@@ -82,7 +82,7 @@ def test_attribute_mapping_export(snippetcompiler):
     assert resources == {
         "a": {
             "mapped": "mapped_value_a",
-            const.RESOURCE_ATTRIBUTE_SEND_EVENTS: False,
+            const.RESOURCE_ATTRIBUTE_SEND_EVENTS: True,
             const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS: True,
         },
         "b": {
