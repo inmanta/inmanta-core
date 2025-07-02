@@ -252,8 +252,8 @@ class UnConvertibleEntity(inmanta_type.Type):
     def has_custom_to_python(self) -> bool:
         return False
 
-    def to_python(self, instance: object) -> "object":
-        return self.base_entity.to_python(instance)
+    def to_python(self, instance: object, *, path: str) -> object:
+        return self.base_entity.to_python(instance, path=path)
 
     def get_location(self) -> Optional[Location]:
         return self.base_entity.get_location()
@@ -280,6 +280,8 @@ python_to_model = {
     typing.Sequence: inmanta_type.List(),
     Sequence: inmanta_type.List(),
     object: inmanta_type.Any(),
+    # unannotated Reference -> Reference[object]
+    Reference: ReferenceType(inmanta_type.Any()),
 }
 
 
@@ -498,7 +500,7 @@ def validate_and_convert_to_python_domain(*, name: str, expected_type: inmanta_t
         return None
 
     if expected_type.has_custom_to_python():
-        return expected_type.to_python(value)
+        return expected_type.to_python(value, path=name)
 
     return DynamicProxy.return_value(value, context=proxy.ProxyContext(path=name, validated=True))
 
@@ -1228,7 +1230,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
     def corresponds_to(self, type: inmanta_type.Type) -> bool:
         raise NotImplementedError("Plugins should not be arguments to plugins, this code is not expected to be called")
 
-    def to_python(self, instance: object) -> "object":
+    def to_python(self, instance: object, *, path: str) -> object:
         raise NotImplementedError("Plugins should not be arguments to plugins, this code is not expected to be called")
 
 
@@ -1365,16 +1367,6 @@ def allow_reference_values[T](instance: T) -> T:  # T not bound to DynamicProxy 
 
     This function is not required for plugin arguments or dataclasses. In those cases, reference support can be declared
     directly via type annotations (e.g. `int | Reference[int]`), in which case no special access function is required.
+    However, when called on such values, the function simply returns the argument unchanged.
     """
-    if not isinstance(instance, DynamicProxy):
-        extra: str = (
-            # special-case common (assumed) case
-            "Python lists and dicts do not need this wrapper, because they are out of the compiler's control."
-            if isinstance(instance, (list, dict))
-            else ""
-        )
-        raise PluginException(
-            f"allow_reference_values() should only be called on inmanta instances, lists or dicts. {extra}"
-            f" Got `{instance}` of type `{type(instance).__name__}`"
-        )
-    return instance._allow_references()
+    return instance._allow_references() if isinstance(instance, DynamicProxy) else instance

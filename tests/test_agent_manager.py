@@ -880,7 +880,7 @@ async def test_process_already_terminated(server, environment):
     assert len(autostarted_agent_manager._agent_procs) == 1
 
     # Terminate process
-    autostarted_agent_manager._agent_procs[env_id].terminate()
+    autostarted_agent_manager._agent_procs[env_id].process.terminate()
 
     # This call shouldn't raise an exception
     await autostarted_agent_manager._terminate_agents()
@@ -999,7 +999,7 @@ async def test_heartbeat_different_session(server_pre_start, async_finalizer, ca
     @typedmethod(
         path="/test",
         operation="GET",
-        client_types=["agent"],
+        client_types=[const.ClientType.agent],
         agent_server=True,
     )
     def test_method(number: int) -> ReturnValue[int]:  # NOQA

@@ -35,7 +35,7 @@ from inmanta.protocol.openapi.model import OpenAPI
 from inmanta.types import PrimitiveTypes, ResourceIdStr
 
 
-@auth(auth_label=const.AuthorizationLabel.DESIRED_STATE_WRITE, read_only=False, environment_param="tid")
+@auth(auth_label=const.CoreAuthorizationLabel.DESIRED_STATE_WRITE, read_only=False, environment_param="tid")
 @typedmethod(
     path="/version/partial",
     operation="PUT",
@@ -87,7 +87,7 @@ def put_partial(
 
 
 # Method for working with projects
-@auth(auth_label=const.AuthorizationLabel.PROJECT_CREATE, read_only=False)
+@auth(auth_label=const.CoreAuthorizationLabel.PROJECT_CREATE, read_only=False)
 @typedmethod(path="/project", operation="PUT", client_types=[ClientType.api], api_version=2)
 def project_create(name: str, project_id: Optional[uuid.UUID] = None) -> model.Project:
     """
@@ -98,7 +98,7 @@ def project_create(name: str, project_id: Optional[uuid.UUID] = None) -> model.P
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.PROJECT_MODIFY, read_only=False)
+@auth(auth_label=const.CoreAuthorizationLabel.PROJECT_MODIFY, read_only=False)
 @typedmethod(path="/project/<id>", operation="POST", client_types=[ClientType.api], api_version=2)
 def project_modify(id: uuid.UUID, name: str) -> model.Project:
     """
@@ -109,7 +109,7 @@ def project_modify(id: uuid.UUID, name: str) -> model.Project:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.PROJECT_DELETE, read_only=False)
+@auth(auth_label=const.CoreAuthorizationLabel.PROJECT_DELETE, read_only=False)
 @typedmethod(path="/project/<id>", operation="DELETE", client_types=[ClientType.api], api_version=2)
 def project_delete(id: uuid.UUID) -> None:
     """
@@ -119,7 +119,7 @@ def project_delete(id: uuid.UUID) -> None:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.PROJECT_READ, read_only=True)
+@auth(auth_label=const.CoreAuthorizationLabel.PROJECT_READ, read_only=True)
 @typedmethod(path="/project", operation="GET", client_types=[ClientType.api], api_version=2)
 def project_list(environment_details: bool = False) -> list[model.Project]:
     """
@@ -129,7 +129,7 @@ def project_list(environment_details: bool = False) -> list[model.Project]:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.PROJECT_READ, read_only=True)
+@auth(auth_label=const.CoreAuthorizationLabel.PROJECT_READ, read_only=True)
 @typedmethod(path="/project/<id>", operation="GET", client_types=[ClientType.api], api_version=2)
 def project_get(id: uuid.UUID, environment_details: bool = False) -> model.Project:
     """
@@ -141,7 +141,7 @@ def project_get(id: uuid.UUID, environment_details: bool = False) -> model.Proje
 
 
 # Methods for working with environments
-@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_CREATE, read_only=False)
+@auth(auth_label=const.CoreAuthorizationLabel.ENVIRONMENT_CREATE, read_only=False)
 @typedmethod(path="/environment", operation="PUT", client_types=[ClientType.api], api_version=2)
 def environment_create(
     project_id: uuid.UUID,
@@ -170,7 +170,7 @@ def environment_create(
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_MODIFY, read_only=False, environment_param="id")
+@auth(auth_label=const.CoreAuthorizationLabel.ENVIRONMENT_MODIFY, read_only=False, environment_param="id")
 @typedmethod(path="/environment/<id>", operation="POST", client_types=[ClientType.api], api_version=2)
 def environment_modify(
     id: uuid.UUID,
@@ -202,7 +202,7 @@ def environment_modify(
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_DELETE, read_only=False, environment_param="id")
+@auth(auth_label=const.CoreAuthorizationLabel.ENVIRONMENT_DELETE, read_only=False, environment_param="id")
 @typedmethod(path="/environment/<id>", operation="DELETE", client_types=[ClientType.api], api_version=2)
 def environment_delete(id: uuid.UUID) -> None:
     """
@@ -215,7 +215,7 @@ def environment_delete(id: uuid.UUID) -> None:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_READ, read_only=True)
+@auth(auth_label=const.CoreAuthorizationLabel.ENVIRONMENT_READ, read_only=True)
 @typedmethod(path="/environment", operation="GET", client_types=[ClientType.api], api_version=2)
 def environment_list(details: bool = False) -> list[model.Environment]:
     """
@@ -225,7 +225,7 @@ def environment_list(details: bool = False) -> list[model.Environment]:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_READ, read_only=True, environment_param="id")
+@auth(auth_label=const.CoreAuthorizationLabel.ENVIRONMENT_READ, read_only=True, environment_param="id")
 @typedmethod(
     path="/environment/<id>",
     operation="GET",
@@ -242,7 +242,7 @@ def environment_get(id: uuid.UUID, details: bool = False) -> model.Environment:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_HALT_RESUME, read_only=False, environment_param="tid")
+@auth(auth_label=const.CoreAuthorizationLabel.ENVIRONMENT_HALT_RESUME, read_only=False, environment_param="tid")
 @typedmethod(
     path="/actions/environment/halt",
     operation="POST",
@@ -262,7 +262,7 @@ def halt_environment(tid: uuid.UUID) -> None:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_HALT_RESUME, read_only=False, environment_param="tid")
+@auth(auth_label=const.CoreAuthorizationLabel.ENVIRONMENT_HALT_RESUME, read_only=False, environment_param="tid")
 @typedmethod(
     path="/actions/environment/resume",
     operation="POST",
@@ -281,7 +281,7 @@ def resume_environment(tid: uuid.UUID) -> None:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_CLEAR, read_only=False, environment_param="id")
+@auth(auth_label=const.CoreAuthorizationLabel.ENVIRONMENT_CLEAR, read_only=False, environment_param="id")
 @typedmethod(
     path="/decommission/<id>",
     operation="DELETE",
@@ -301,7 +301,7 @@ def environment_clear(id: uuid.UUID) -> None:
 
 
 # Method for listing and creating auth tokens for an environment that can be used by the agent and compilers
-@auth(auth_label=const.AuthorizationLabel.TOKEN, read_only=False, environment_param="tid")
+@auth(auth_label=const.CoreAuthorizationLabel.TOKEN, read_only=False, environment_param="tid")
 @typedmethod(
     path="/environment_auth",
     operation="POST",
@@ -323,7 +323,7 @@ def environment_create_token(tid: uuid.UUID, client_types: list[str], idempotent
 
 # Method for listing/getting/setting/removing settings of an environment. This API is also used by agents to configure
 # environments.
-@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_SETTING_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.CoreAuthorizationLabel.ENVIRONMENT_SETTING_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/environment_settings",
     operation="GET",
@@ -341,7 +341,7 @@ def environment_settings_list(tid: uuid.UUID) -> model.EnvironmentSettingsRepons
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_SETTING_WRITE, read_only=False, environment_param="tid")
+@auth(auth_label=const.CoreAuthorizationLabel.ENVIRONMENT_SETTING_WRITE, read_only=False, environment_param="tid")
 @typedmethod(
     path="/environment_settings/<id>",
     operation="POST",
@@ -362,7 +362,7 @@ def environment_settings_set(tid: uuid.UUID, id: str, value: model.EnvSettingTyp
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_SETTING_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.CoreAuthorizationLabel.ENVIRONMENT_SETTING_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/environment_settings/<id>",
     operation="GET",
@@ -382,7 +382,7 @@ def environment_setting_get(tid: uuid.UUID, id: str) -> model.EnvironmentSetting
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_SETTING_WRITE, read_only=False, environment_param="tid")
+@auth(auth_label=const.CoreAuthorizationLabel.ENVIRONMENT_SETTING_WRITE, read_only=False, environment_param="tid")
 @typedmethod(
     path="/environment_settings/<id>",
     operation="DELETE",
@@ -401,7 +401,7 @@ def environment_setting_delete(tid: uuid.UUID, id: str) -> ReturnValue[None]:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.DESIRED_STATE_WRITE, read_only=False, environment_param="tid")
+@auth(auth_label=const.CoreAuthorizationLabel.DESIRED_STATE_WRITE, read_only=False, environment_param="tid")
 @typedmethod(
     path="/reserve_version", operation="POST", arg_options=methods.ENV_OPTS, client_types=[ClientType.compiler], api_version=2
 )
@@ -413,7 +413,7 @@ def reserve_version(tid: uuid.UUID) -> int:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.DOCS_READ, read_only=True)
+@auth(auth_label=const.CoreAuthorizationLabel.DOCS_READ, read_only=True)
 @typedmethod(path="/docs", operation="GET", client_types=[ClientType.api], api_version=2, token_param="token")
 def get_api_docs(
     format: Optional[ApiDocsFormat] = ApiDocsFormat.swagger, token: str | None = None
@@ -426,7 +426,7 @@ def get_api_docs(
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.STATUS_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.CoreAuthorizationLabel.STATUS_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/scheduler_status",
     operation="GET",
@@ -476,7 +476,7 @@ def notify_timer_update(tid: uuid.UUID) -> None:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.AGENT_PAUSE_RESUME, read_only=False, environment_param="tid")
+@auth(auth_label=const.CoreAuthorizationLabel.AGENT_PAUSE_RESUME, read_only=False, environment_param="tid")
 @typedmethod(
     path="/agent/<name>/<action>", operation="POST", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
@@ -499,7 +499,7 @@ def agent_action(tid: uuid.UUID, name: str, action: AgentAction) -> None:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_HALT_RESUME, read_only=False, environment_param="tid")
+@auth(auth_label=const.CoreAuthorizationLabel.ENVIRONMENT_HALT_RESUME, read_only=False, environment_param="tid")
 @typedmethod(
     path="/agents/<action>", operation="POST", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
@@ -521,7 +521,7 @@ def all_agents_action(tid: uuid.UUID, action: AgentAction) -> None:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.AGENT_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.CoreAuthorizationLabel.AGENT_READ, read_only=True, environment_param="tid")
 @typedmethod(path="/agents", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2)
 def get_agents(
     tid: uuid.UUID,
@@ -557,7 +557,7 @@ def get_agents(
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.AGENT_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.CoreAuthorizationLabel.AGENT_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/agents/process/<id>", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
@@ -573,7 +573,7 @@ def get_agent_process_details(tid: uuid.UUID, id: uuid.UUID, report: bool = Fals
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.STATUS_READ, read_only=True)
+@auth(auth_label=const.CoreAuthorizationLabel.STATUS_READ, read_only=True)
 @typedmethod(
     path="/db_status", api=False, server_agent=True, enforce_auth=False, operation="POST", client_types=[], api_version=2
 )
@@ -583,7 +583,7 @@ def get_db_status() -> DataBaseReport:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.COMPILE_REPORT_READ, read_only=True)
+@auth(auth_label=const.CoreAuthorizationLabel.COMPILE_REPORT_READ, read_only=True)
 @typedmethod(
     path="/compiledata/<id>",
     operation="GET",
@@ -598,7 +598,7 @@ def get_compile_data(id: uuid.UUID) -> Optional[model.CompileData]:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.RESOURCE_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.CoreAuthorizationLabel.RESOURCE_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/resource_actions", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
@@ -645,7 +645,7 @@ def get_resource_actions(
 
 
 # No pagination support is provided for this endpoint because there is no elegant way to page the output of this endpoint.
-@auth(auth_label=const.AuthorizationLabel.RESOURCE_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.CoreAuthorizationLabel.RESOURCE_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/resource/<rvid>/events",
     operation="GET",
@@ -701,7 +701,7 @@ def resource_did_dependency_change(
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.RESOURCE_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.CoreAuthorizationLabel.RESOURCE_READ, read_only=True, environment_param="tid")
 @typedmethod(path="/resource", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2)
 def resource_list(
     tid: uuid.UUID,
@@ -762,7 +762,7 @@ def resource_list(
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.RESOURCE_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.CoreAuthorizationLabel.RESOURCE_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/resource/<rid>", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
@@ -777,7 +777,7 @@ def resource_details(tid: uuid.UUID, rid: inmanta.types.ResourceIdStr) -> model.
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.RESOURCE_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.CoreAuthorizationLabel.RESOURCE_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/resource/<rid>/history", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
@@ -814,7 +814,7 @@ def resource_history(
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.RESOURCE_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.CoreAuthorizationLabel.RESOURCE_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/resource/<rid>/logs", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
@@ -876,7 +876,7 @@ def resource_logs(
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.FACT_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.CoreAuthorizationLabel.FACT_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/resource/<rid>/facts", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
@@ -890,7 +890,7 @@ def get_facts(tid: uuid.UUID, rid: inmanta.types.ResourceIdStr) -> list[model.Fa
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.FACT_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.CoreAuthorizationLabel.FACT_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/resource/<rid>/facts/<id>",
     operation="GET",
@@ -909,7 +909,7 @@ def get_fact(tid: uuid.UUID, rid: inmanta.types.ResourceIdStr, id: uuid.UUID) ->
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.COMPILE_REPORT_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.CoreAuthorizationLabel.COMPILE_REPORT_READ, read_only=True, environment_param="tid")
 @typedmethod(path="/compilereport", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2)
 def get_compile_reports(
     tid: uuid.UUID,
@@ -969,7 +969,7 @@ def get_compile_reports(
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.COMPILE_REPORT_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.CoreAuthorizationLabel.COMPILE_REPORT_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/compilereport/<id>", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
@@ -986,7 +986,7 @@ def compile_details(tid: uuid.UUID, id: uuid.UUID) -> model.CompileDetails:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.DESIRED_STATE_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.CoreAuthorizationLabel.DESIRED_STATE_READ, read_only=True, environment_param="tid")
 @typedmethod(path="/desiredstate", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2)
 def list_desired_state_versions(
     tid: uuid.UUID,
@@ -1016,7 +1016,7 @@ def list_desired_state_versions(
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.DESIRED_STATE_WRITE, read_only=False, environment_param="tid")
+@auth(auth_label=const.CoreAuthorizationLabel.DESIRED_STATE_WRITE, read_only=False, environment_param="tid")
 @typedmethod(
     path="/desiredstate/<version>/promote",
     operation="POST",
@@ -1036,7 +1036,7 @@ def promote_desired_state_version(
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.RESOURCE_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.CoreAuthorizationLabel.RESOURCE_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/desiredstate/<version>",
     operation="GET",
@@ -1083,7 +1083,7 @@ def get_resources_in_version(
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.DESIRED_STATE_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.CoreAuthorizationLabel.DESIRED_STATE_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/desiredstate/diff/<from_version>/<to_version>",
     operation="GET",
@@ -1115,7 +1115,7 @@ def get_diff_of_versions(
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.RESOURCE_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.CoreAuthorizationLabel.RESOURCE_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/desiredstate/<version>/resource/<rid>",
     operation="GET",
@@ -1135,7 +1135,7 @@ def versioned_resource_details(
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.PARAMETER_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.CoreAuthorizationLabel.PARAMETER_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/parameters",
     operation="GET",
@@ -1181,7 +1181,7 @@ def get_parameters(
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.PARAMETER_WRITE, read_only=False, environment_param="tid")
+@auth(auth_label=const.CoreAuthorizationLabel.PARAMETER_WRITE, read_only=False, environment_param="tid")
 @typedmethod(
     path="/parameters/<name>",
     operation="PUT",
@@ -1210,7 +1210,7 @@ def set_parameter(
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.FACT_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.CoreAuthorizationLabel.FACT_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/facts",
     operation="GET",
@@ -1255,7 +1255,7 @@ def get_all_facts(
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.FACT_WRITE, read_only=False, environment_param="tid")
+@auth(auth_label=const.CoreAuthorizationLabel.FACT_WRITE, read_only=False, environment_param="tid")
 @typedmethod(
     path="/facts/<name>",
     operation="PUT",
@@ -1291,7 +1291,7 @@ def set_fact(
 # Dryrun related methods
 
 
-@auth(auth_label=const.AuthorizationLabel.DRYRUN_WRITE, read_only=False, environment_param="tid")
+@auth(auth_label=const.CoreAuthorizationLabel.DRYRUN_WRITE, read_only=False, environment_param="tid")
 @typedmethod(
     path="/dryrun/<version>", operation="POST", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
@@ -1306,7 +1306,7 @@ def dryrun_trigger(tid: uuid.UUID, version: int) -> uuid.UUID:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.DRYRUN_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.CoreAuthorizationLabel.DRYRUN_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/dryrun/<version>", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
@@ -1321,7 +1321,7 @@ def list_dryruns(tid: uuid.UUID, version: int) -> list[model.DryRun]:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.DRYRUN_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.CoreAuthorizationLabel.DRYRUN_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/dryrun/<version>/<report_id>",
     operation="GET",
@@ -1342,7 +1342,7 @@ def get_dryrun_diff(tid: uuid.UUID, version: int, report_id: uuid.UUID) -> model
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.NOTIFICATION_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.CoreAuthorizationLabel.NOTIFICATION_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/notification",
     operation="GET",
@@ -1392,7 +1392,7 @@ def list_notifications(
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.NOTIFICATION_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.CoreAuthorizationLabel.NOTIFICATION_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/notification/<notification_id>",
     operation="GET",
@@ -1414,7 +1414,7 @@ def get_notification(
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.NOTIFICATION_WRITE, read_only=False, environment_param="tid")
+@auth(auth_label=const.CoreAuthorizationLabel.NOTIFICATION_WRITE, read_only=False, environment_param="tid")
 @typedmethod(
     path="/notification/<notification_id>",
     operation="PATCH",
@@ -1440,7 +1440,7 @@ def update_notification(
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.PIP_CONFIG_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.CoreAuthorizationLabel.PIP_CONFIG_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/pip/config/<version>",
     operation="GET",
@@ -1460,7 +1460,7 @@ def get_pip_config(tid: uuid.UUID, version: int) -> Optional[model.PipConfig]:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.METRICS_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.CoreAuthorizationLabel.METRICS_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/metrics",
     operation="GET",
@@ -1514,7 +1514,7 @@ def login(username: str, password: str) -> ReturnValue[model.LoginReturn]:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.USER_READ, read_only=True)
+@auth(auth_label=const.CoreAuthorizationLabel.ROLE_ASSIGNMENT_READ, read_only=True)
 @typedmethod(path="/user", operation="GET", client_types=[ClientType.api], api_version=2)
 def list_users() -> list[model.UserWithRoles]:
     """List all users
@@ -1522,7 +1522,7 @@ def list_users() -> list[model.UserWithRoles]:
     :return: A list of all users"""
 
 
-@auth(auth_label=const.AuthorizationLabel.USER_READ, read_only=True)
+@auth(auth_label=const.CoreAuthorizationLabel.USER_READ, read_only=True)
 @typedmethod(path="/current_user", operation="GET", client_types=[ClientType.api], api_version=2)
 def get_current_user() -> model.CurrentUser:
     """Get the current logged in user (based on the provided JWT) and server auth settings
@@ -1531,7 +1531,7 @@ def get_current_user() -> model.CurrentUser:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.USER_WRITE, read_only=False)
+@auth(auth_label=const.CoreAuthorizationLabel.USER_WRITE, read_only=False)
 @typedmethod(path="/user/<username>", operation="DELETE", client_types=[ClientType.api], api_version=2)
 def delete_user(username: str) -> None:
     """Delete a user from the system with given username.
@@ -1542,7 +1542,7 @@ def delete_user(username: str) -> None:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.USER_WRITE, read_only=False)
+@auth(auth_label=const.CoreAuthorizationLabel.USER_WRITE, read_only=False)
 @typedmethod(path="/user", operation="POST", client_types=[ClientType.api], api_version=2)
 def add_user(username: str, password: str) -> model.User:
     """Add a new user to the system
@@ -1554,7 +1554,7 @@ def add_user(username: str, password: str) -> model.User:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.USER_CHANGE_PASSWORD, read_only=False)
+@auth(auth_label=const.CoreAuthorizationLabel.USER_CHANGE_PASSWORD, read_only=False)
 @typedmethod(path="/user/<username>/password", operation="PATCH", client_types=[ClientType.api], api_version=2)
 def set_password(username: str, password: str) -> None:
     """Change the password of a user
@@ -1566,7 +1566,7 @@ def set_password(username: str, password: str) -> None:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.ROLE_IS_ADMIN, read_only=False)
+@auth(auth_label=const.CoreAuthorizationLabel.ROLE_IS_ADMIN, read_only=False)
 @typedmethod(path="/is_admin", operation="PATCH", client_types=[ClientType.api], api_version=2)
 def set_is_admin(username: str, is_admin: bool) -> None:
     """
@@ -1578,7 +1578,7 @@ def set_is_admin(username: str, is_admin: bool) -> None:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.ROLE_READ, read_only=True)
+@auth(auth_label=const.CoreAuthorizationLabel.ROLE_READ, read_only=True)
 @typedmethod(path="/role", operation="GET", client_types=[ClientType.api], api_version=2)
 def list_roles() -> list[str]:
     """
@@ -1586,7 +1586,7 @@ def list_roles() -> list[str]:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.ROLE_WRITE, read_only=False)
+@auth(auth_label=const.CoreAuthorizationLabel.ROLE_WRITE, read_only=False)
 @typedmethod(path="/role", operation="POST", client_types=[ClientType.api], api_version=2)
 def create_role(name: str) -> None:
     """
@@ -1597,7 +1597,7 @@ def create_role(name: str) -> None:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.ROLE_WRITE, read_only=False)
+@auth(auth_label=const.CoreAuthorizationLabel.ROLE_WRITE, read_only=False)
 @typedmethod(path="/role", operation="DELETE", client_types=[ClientType.api], api_version=2)
 def delete_role(name: str) -> None:
     """
@@ -1608,7 +1608,7 @@ def delete_role(name: str) -> None:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.ROLE_ASSIGNMENT_READ, read_only=True)
+@auth(auth_label=const.CoreAuthorizationLabel.ROLE_ASSIGNMENT_READ, read_only=True)
 @typedmethod(path="/role_assignment/<username>", operation="GET", client_types=[ClientType.api], api_version=2)
 def list_roles_for_user(username: str) -> list[model.RoleAssignment]:
     """
@@ -1618,7 +1618,7 @@ def list_roles_for_user(username: str) -> list[model.RoleAssignment]:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.ROLE_ASSIGNMENT_WRITE, read_only=False)
+@auth(auth_label=const.CoreAuthorizationLabel.ROLE_ASSIGNMENT_WRITE, read_only=False)
 @typedmethod(path="/role_assignment/<username>", operation="POST", client_types=[ClientType.api], api_version=2)
 def assign_role(username: str, environment: uuid.UUID, role: str) -> None:
     """
@@ -1631,7 +1631,7 @@ def assign_role(username: str, environment: uuid.UUID, role: str) -> None:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.ROLE_ASSIGNMENT_WRITE, read_only=False)
+@auth(auth_label=const.CoreAuthorizationLabel.ROLE_ASSIGNMENT_WRITE, read_only=False)
 @typedmethod(path="/role_assignment/<username>", operation="DELETE", client_types=[ClientType.api], api_version=2)
 def unassign_role(username: str, environment: uuid.UUID, role: str) -> None:
     """
@@ -1687,7 +1687,7 @@ def discovered_resource_create_batch(tid: uuid.UUID, discovered_resources: list[
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.DISCOVERED_RESOURCES_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.CoreAuthorizationLabel.DISCOVERED_RESOURCES_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/discovered/<discovered_resource_id>",
     operation="GET",
@@ -1704,7 +1704,7 @@ def discovered_resources_get(tid: uuid.UUID, discovered_resource_id: ResourceIdS
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.DISCOVERED_RESOURCES_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.CoreAuthorizationLabel.DISCOVERED_RESOURCES_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/discovered",
     operation="GET",
@@ -1752,7 +1752,7 @@ def discovered_resources_get_batch(
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.GRAPHQL_READ, read_only=True)
+@auth(auth_label=const.CoreAuthorizationLabel.GRAPHQL_READ, read_only=True)
 @typedmethod(
     path="/graphql",
     operation="POST",
@@ -1770,7 +1770,7 @@ def graphql(query: str) -> Any:  # Actual return type: strawberry.types.executio
     pass
 
 
-@auth(auth_label=const.AuthorizationLabel.GRAPHQL_READ, read_only=True)
+@auth(auth_label=const.CoreAuthorizationLabel.GRAPHQL_READ, read_only=True)
 @typedmethod(
     path="/graphql/schema",
     operation="GET",

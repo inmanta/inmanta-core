@@ -24,6 +24,20 @@ from inmanta.execute.proxy import DynamicProxy
 from inmanta.plugins import plugin, ModelType
 
 
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class DataclassABC: ...
+
+
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class SimpleDC(DataclassABC):
+    n: int
+
+
+@plugin
+def create_simple_dc() -> DataclassABC:  # annotated with ABC to test inheritance
+    return SimpleDC(n=42)
+
+
 @dataclasses.dataclass(frozen=True)
 class Virtualmachine:
     name: "str"

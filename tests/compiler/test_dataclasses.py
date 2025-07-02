@@ -125,6 +125,11 @@ if true: if true:
     lazy_vm.disk = []
     lazy_vm.slots = null
 end end
+
+# simple inheritance
+simple_dc = dataclasses::create_simple_dc()
+assert = true
+assert = simple_dc.n == 42
 """,
         ministd=True,
     )

@@ -580,13 +580,13 @@ def test_relation_list_duplicate_assignment(snippetcompiler):
 def test_error_list_validation(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
-        std::print(std::count("hello"))
+        std::print(std::select("hello", "world"))
         """,
         autostd=True,
     )
     with pytest.raises(
         RuntimeException,
-        match="Value 'hello' for argument item_list of plugin std::count has incompatible type. Expected type: list",
+        match="Value 'hello' for argument objects of plugin std::select has incompatible type. Expected type: list",
     ):
         (_, scopes) = compiler.do_compile()
 

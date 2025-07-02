@@ -78,34 +78,45 @@ async def server_with_test_slice(
     policy_engine.path_opa_executable.set(path_policy_engine_executable)
 
     # Define the TestSlice and its API endpoints
-    @decorators.auth(auth_label="test", read_only=True)
-    @typedmethod(path="/read-only", operation="GET", client_types=["api", "compiler"])
+    @decorators.auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=True)
+    @typedmethod(path="/read-only", operation="GET", client_types=[const.ClientType.api, const.ClientType.compiler])
     def read_only_method() -> None:  # NOQA
         pass
 
-    @decorators.auth(auth_label="test", read_only=False, environment_param="env")
-    @typedmethod(path="/environment-scoped", operation="POST", client_types=["api"])
+    @decorators.auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False, environment_param="env")
+    @typedmethod(path="/environment-scoped", operation="POST", client_types=[const.ClientType.api])
     def environment_scoped_method(env: uuid.UUID) -> None:  # NOQA
         pass
 
-    @decorators.auth(auth_label="user", read_only=False, environment_param="env")
-    @typedmethod(path="/user-endpoint", operation="POST", client_types=["api"])
+    @decorators.auth(auth_label=const.CoreAuthorizationLabel.TEST_2, read_only=False, environment_param="env")
+    @typedmethod(path="/user-endpoint", operation="POST", client_types=[const.ClientType.api])
     def user_method(env: uuid.UUID) -> None:  # NOQA
         pass
 
-    @decorators.auth(auth_label="admin", read_only=False)
-    @typedmethod(path="/admin-only", operation="POST", client_types=["api"])
+    @decorators.auth(auth_label=const.CoreAuthorizationLabel.TEST_3, read_only=False)
+    @typedmethod(path="/admin-only", operation="POST", client_types=[const.ClientType.api])
     def admin_only_method() -> None:  # NOQA
         pass
 
-    @decorators.auth(auth_label="test", read_only=False)
-    @typedmethod(path="/enforce-auth-disabled", operation="GET", client_types=["api"], enforce_auth=False)
+    @decorators.auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+    @typedmethod(path="/enforce-auth-disabled", operation="GET", client_types=[const.ClientType.api], enforce_auth=False)
     def enforce_auth_disabled_method() -> None:  # NOQA
         pass
 
-    @decorators.auth(auth_label="test", read_only=False)
-    @typedmethod(path="/method-with-call-context", operation="GET", client_types=["api"])
-    def call_context_method(arg1: uuid.UUID, arg2: str) -> None:  # NOQA
+    async def _idempotent_getter(val: uuid.UUID, metadata: dict) -> uuid.UUID:
+        """
+        Getter that can be passed to the ArgOption constructor that doesn't alter the value.
+        """
+        return val
+
+    @decorators.auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+    @typedmethod(
+        path="/method-with-call-context",
+        operation="GET",
+        client_types=[const.ClientType.api],
+        arg_options={"tid": common.ArgOption(header=const.INMANTA_MT_HEADER, reply_header=True, getter=_idempotent_getter)},
+    )
+    def call_context_method(tid: uuid.UUID, arg1: uuid.UUID, arg2: str) -> None:  # NOQA
         pass
 
     class TestSlice(protocol.ServerSlice):
@@ -131,7 +142,7 @@ async def server_with_test_slice(
 
         @handle(call_context_method, test="arg1")
         async def handle_call_context_method(
-            self, call_context: common.CallContext, test: uuid.UUID, arg2: str
+            self, call_context: common.CallContext, tid: uuid.UUID, test: uuid.UUID, arg2: str
         ) -> None:  # NOQA
             return
 
@@ -188,10 +199,10 @@ async def create_client_for_user(client, username: str, password: str) -> protoc
             "read-write" in input.token["urn:inmanta:roles"][request_environment]
         }
 
-        # Users with the user role in a given environment can execute API endpoints
-        # with auth_label="user" in that environment.
+        # Users with the test2 role in a given environment can execute API endpoints
+        # with auth_label="test2" in that environment.
         allow if {
-            endpoint_data.auth_label == "user"
+            endpoint_data.auth_label == "test2"
             request_environment != null
             "user" in input.token["urn:inmanta:roles"][request_environment]
         }
@@ -401,18 +412,18 @@ async def test_policy_engine_data() -> None:
     authorization metadata about the endpoints, is correct.
     """
 
-    @decorators.auth(auth_label="test", read_only=True)
-    @typedmethod(path="/read-only", operation="GET", client_types=["api"])
+    @decorators.auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=True)
+    @typedmethod(path="/read-only", operation="GET", client_types=[const.ClientType.api])
     def test_read_only() -> None:  # NOQA
         pass
 
-    @decorators.auth(auth_label="other-test", read_only=False, environment_param="tid")
-    @typedmethod(path="/read-write", operation="POST", client_types=["api", "agent"])
+    @decorators.auth(auth_label=const.CoreAuthorizationLabel.TEST_2, read_only=False, environment_param="tid")
+    @typedmethod(path="/read-write", operation="POST", client_types=[const.ClientType.api, const.ClientType.agent])
     def test_read_write(tid: uuid.UUID) -> None:  # NOQA
         pass
 
-    @decorators.auth(auth_label="other-test2", read_only=False, environment_param="tid")
-    @typedmethod(path="/read-write2/<tid>", operation="POST", client_types=["api", "agent"])
+    @decorators.auth(auth_label=const.CoreAuthorizationLabel.TEST_3, read_only=False, environment_param="tid")
+    @typedmethod(path="/read-write2/<tid>", operation="POST", client_types=[const.ClientType.api, const.ClientType.agent])
     def test_param(tid: uuid.UUID) -> None:  # NOQA
         pass
 
@@ -428,7 +439,7 @@ async def test_policy_engine_data() -> None:
     endpoint_id = "POST /api/v1/read-write"
     assert endpoint_id in data["endpoints"]
     read_write_method_metadata = data["endpoints"][endpoint_id]
-    assert read_write_method_metadata["auth_label"] == "other-test"
+    assert read_write_method_metadata["auth_label"] == "test2"
     assert read_write_method_metadata["read_only"] is False
     assert read_write_method_metadata["client_types"] == ["api", "agent"]
     assert read_write_method_metadata["environment_param"] == "tid"
@@ -436,7 +447,7 @@ async def test_policy_engine_data() -> None:
     endpoint_id = "POST /api/v1/read-write2/<tid>"
     assert endpoint_id in data["endpoints"]
     read_write_method_metadata = data["endpoints"][endpoint_id]
-    assert read_write_method_metadata["auth_label"] == "other-test2"
+    assert read_write_method_metadata["auth_label"] == "test3"
     assert read_write_method_metadata["read_only"] is False
     assert read_write_method_metadata["client_types"] == ["api", "agent"]
     assert read_write_method_metadata["environment_param"] == "tid"
@@ -518,48 +529,48 @@ async def test_auth_annotation() -> None:
     Validate whether the logic behind the @auth annotation works correctly.
     """
 
-    @decorators.auth(auth_label="label1", read_only=True, environment_param="id")
+    @decorators.auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=True, environment_param="id")
     @method(path="/test1/<id>", operation="GET")
     def method_1(id: str) -> None:
         pass
 
-    @decorators.auth(auth_label="label2", read_only=False)
+    @decorators.auth(auth_label=const.CoreAuthorizationLabel.TEST_2, read_only=False)
     @method(path="/test2", operation="POST", client_types=[const.ClientType.api, const.ClientType.agent])
     def method_2(id: str) -> None:
         pass
 
-    @decorators.auth(auth_label="label3", read_only=True, environment_param="id")
+    @decorators.auth(auth_label=const.CoreAuthorizationLabel.TEST_3, read_only=True, environment_param="id")
     @typedmethod(path="/test3/<id>", operation="GET")
     def method_3(id: str) -> None:
         pass
 
-    @decorators.auth(auth_label="label4", read_only=False)
+    @decorators.auth(auth_label=const.CoreAuthorizationLabel.TEST_4, read_only=False)
     @typedmethod(path="/test4", operation="POST", client_types=[const.ClientType.api, const.ClientType.agent])
     def method_4(id: str) -> None:
         pass
 
     data: dict[str, object] = common.MethodProperties.get_open_policy_agent_data()
     assert data["endpoints"]["GET /api/v1/test1/<id>"] == {
-        "client_types": [const.ClientType.api],
-        "auth_label": "label1",
+        "client_types": ["api"],
+        "auth_label": "test",
         "read_only": True,
         "environment_param": "id",
     }
     assert data["endpoints"]["POST /api/v1/test2"] == {
-        "client_types": [const.ClientType.api, const.ClientType.agent],
-        "auth_label": "label2",
+        "client_types": ["api", "agent"],
+        "auth_label": "test2",
         "read_only": False,
         "environment_param": None,
     }
     assert data["endpoints"]["GET /api/v1/test3/<id>"] == {
-        "client_types": [const.ClientType.api],
-        "auth_label": "label3",
+        "client_types": ["api"],
+        "auth_label": "test3",
         "read_only": True,
         "environment_param": "id",
     }
     assert data["endpoints"]["POST /api/v1/test4"] == {
-        "client_types": [const.ClientType.api, const.ClientType.agent],
-        "auth_label": "label4",
+        "client_types": ["api", "agent"],
+        "auth_label": "test4",
         "read_only": False,
         "environment_param": None,
     }
@@ -604,14 +615,15 @@ async def test_get_input_for_policy_engine(capture_input_for_policy_engine: Capt
     env_id = str(uuid.uuid4())
     client = utils.get_auth_client(env_to_role_dct={env_id: ["test"]}, is_admin=False, client_types=[const.ClientType.api])
 
+    tid = uuid.uuid4()
     arg1 = uuid.uuid4()
     arg2 = "test"
     assert capture_input_for_policy_engine.value is None
-    result = await client.call_context_method(arg1, arg2)
+    result = await client.call_context_method(tid=tid, arg1=arg1, arg2=arg2)
     assert result.code == 200
     pe_input = capture_input_for_policy_engine.value
     assert pe_input["input"]["request"]["endpoint_id"] == "GET /api/v1/method-with-call-context"
-    assert pe_input["input"]["request"]["parameters"] == {"arg1": arg1, "arg2": arg2}
+    assert pe_input["input"]["request"]["parameters"] == {const.INMANTA_MT_HEADER: tid, "arg1": arg1, "arg2": arg2}
     assert pe_input["input"]["token"]["urn:inmanta:ct"] == ["api"]
     assert pe_input["input"]["token"][const.INMANTA_ROLES_URN] == {env_id: ["test"]}
     assert pe_input["input"]["token"][const.INMANTA_IS_ADMIN_URN] is False

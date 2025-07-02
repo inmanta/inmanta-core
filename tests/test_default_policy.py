@@ -278,5 +278,5 @@ async def test_roles_in_default_policy(server) -> None:
     Verify that the labels, used in the default policy, map to the labels defined in the AuthorizationLabel enum.
     """
     await utils.verify_authorization_labels_in_default_policy(
-        const.AuthorizationLabel, exclude_prefixes={"lsm.", "support.", "license.", "ui."}
+        const.CoreAuthorizationLabel, exclude_prefixes={"lsm.", "support.", "license.", "ui."}
     )
