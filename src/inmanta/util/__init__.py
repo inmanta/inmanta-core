@@ -44,7 +44,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from logging import Logger
 from types import TracebackType
-from typing import TYPE_CHECKING, BinaryIO, Callable, Generic, Mapping, Optional, Sequence, TypeVar, Union, AsyncIterator
+from typing import TYPE_CHECKING, AsyncIterator, BinaryIO, Callable, Generic, Mapping, Optional, Sequence, TypeVar, Union
 
 import asyncpg
 import click
@@ -64,7 +64,7 @@ from packaging.utils import NormalizedName
 
 if TYPE_CHECKING:
     from inmanta.data.model import ResourceId
-    from inmanta.protocol import Result, Client
+    from inmanta.protocol import Client, Result
 
 
 LOGGER = logging.getLogger(__name__)

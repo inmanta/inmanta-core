@@ -616,16 +616,24 @@ async def test_none_resources_paging(server, client, env_with_resources):
     assert len(actual_result_asc_next.result["data"]) == 2
 
 
-async def test_resources_paging_api(server, client, env_with_resources):
+@pytest.mark.parametrize("page_size", [1, 2, 5, 8])
+async def test_resources_paging_api(server, client, env_with_resources, page_size):
     env = env_with_resources
 
-    rt = await client.resource_list(tid=env.id, limit=2)
+    last_batch_flag = False
+
+    rt = await client.resource_list(tid=env.id, limit=page_size)
     pprint.pprint(rt.result)
 
     n = 0
     async for item in iter_result(rt, str(env.id), client):
-        print(f"batch {n}")
-        print(item.result["data"])
+        pprint.pprint(f"batch {n}")
+        pprint.pprint(item.result["data"])
+
+        if len(item.result["data"]) != page_size:
+            if last_batch_flag:
+                raise Exception(f"Only the very last batch should have less than {page_size} items.")
+            last_batch_flag = True
         n += 1
 
 
