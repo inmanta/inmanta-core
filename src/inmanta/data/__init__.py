@@ -3296,7 +3296,7 @@ class Agent(BaseDocument):
     :param name: The name of this agent
     :param last_failover: Moment at which the primary was last changed
     :param paused: is this agent paused (if so, skip it)
-    :param primary: what is the current active instance (if none, state is down)
+    :param primary: what is the current active instance (if none, state is down). Only relevant for the $__scheduler agent.
     :param unpause_on_resume: whether this agent should be unpaused when resuming from environment-wide halt. Used to
         persist paused state when halting.
     """
@@ -3427,8 +3427,8 @@ class Agent(BaseDocument):
         :return A list of agent names that have been paused/unpaused by this method.
         """
         if endpoint is None:
-            query = f"UPDATE {cls.table_name()} SET paused=$1 WHERE environment=$2 RETURNING name"
-            values = [cls._get_value(paused), cls._get_value(env)]
+            query = f"UPDATE {cls.table_name()} SET paused=$1 WHERE environment=$2 AND name!=$3 RETURNING name"
+            values = [cls._get_value(paused), cls._get_value(env), const.AGENT_SCHEDULER_ID]
         else:
             query = f"UPDATE {cls.table_name()} SET paused=$1 WHERE environment=$2 AND name=$3 RETURNING name"
             values = [cls._get_value(paused), cls._get_value(env), cls._get_value(endpoint)]
@@ -3587,6 +3587,9 @@ class Compile(BaseDocument):
         By default, notifications are enabled only for exporting compiles.
     :param failed_compile_message: Optional message to use when a notification for a failed compile is created
     :param soft_delete: Prevents deletion of resources in removed_resource_sets if they are being exported.
+    :param links: An object that contains relevant links to this compile.
+        It is a dictionary where the key is something that identifies one or more links
+        and the value is a list of urls. i.e. {"instances": ["link-1',"link-2"], "compiles": ["link-3"]}
     """
 
     __primary_key__ = ("id",)
@@ -3624,6 +3627,7 @@ class Compile(BaseDocument):
     failed_compile_message: Optional[str] = None
 
     soft_delete: bool = False
+    links: dict[str, list[str]] = {}
 
     @classmethod
     async def get_substitute_by_id(cls, compile_id: uuid.UUID, connection: Optional[Connection] = None) -> Optional["Compile"]:
@@ -3783,6 +3787,7 @@ class Compile(BaseDocument):
                 c.exporter_plugin,
                 c.notify_failed_compile,
                 c.failed_compile_message,
+                c.links,
                 r.id as report_id,
                 r.started report_started,
                 r.completed report_completed,
@@ -3818,6 +3823,7 @@ class Compile(BaseDocument):
                     comp.exporter_plugin,
                     comp.notify_failed_compile,
                     comp.failed_compile_message,
+                    comp.links,
                     rep.id as report_id,
                     rep.started as report_started,
                     rep.completed as report_completed,
@@ -3849,21 +3855,27 @@ class Compile(BaseDocument):
             return None
         requested_compile = records[0]
 
-        # Reports should be included from the substituted compile (as well)
-        reports = [
-            m.CompileRunReport(
-                id=report["report_id"],
-                started=report["report_started"],
-                completed=report["report_completed"],
-                command=report["command"],
-                name=report["name"],
-                errstream=report["errstream"],
-                outstream=report["outstream"],
-                returncode=report["returncode"],
-            )
-            for report in result
-            if report.get("report_id")
-        ]
+        # Concatenate the links of the requested compile and all substitute compiles
+        links: dict[str, set[str]] = defaultdict(set)
+        reports = []
+        for compile in result:
+            # Reports should be included from the substituted compile (as well)
+            if compile.get("report_id"):
+                reports.append(
+                    m.CompileRunReport(
+                        id=compile["report_id"],
+                        started=compile["report_started"],
+                        completed=compile["report_completed"],
+                        command=compile["command"],
+                        name=compile["name"],
+                        errstream=compile["errstream"],
+                        outstream=compile["outstream"],
+                        returncode=compile["returncode"],
+                    )
+                )
+            for name, url in (json.loads(compile["links"]) if requested_compile["links"] else {}).items():
+                links[name].add(*url)
+
         return m.CompileDetails(
             id=requested_compile["id"],
             remote_id=requested_compile["remote_id"],
@@ -3890,6 +3902,7 @@ class Compile(BaseDocument):
             failed_compile_message=requested_compile["failed_compile_message"],
             compile_data=json.loads(requested_compile["compile_data"]) if requested_compile["compile_data"] else None,
             reports=reports,
+            links={key: sorted(list(links)) for key, links in links.items()},
         )
 
     def to_dto(self) -> m.CompileRun:
@@ -3911,6 +3924,7 @@ class Compile(BaseDocument):
             exporter_plugin=self.exporter_plugin,
             notify_failed_compile=self.notify_failed_compile,
             failed_compile_message=self.failed_compile_message,
+            links=self.links,
         )
 
     def to_dict(self) -> JsonType:
@@ -3937,7 +3951,7 @@ class LogLine(DataDocument):
         - msg: the message to write to logs (value type: str)
         - args: the args that can be passed to the logger (value type: list)
         - level: the log level of the message (value type: str, example: "CRITICAL")
-        - kwargs: the key-word args that where used to generated the log (value type: list)
+        - kwargs: the key-word args that were used to generate the log (value type: list)
         - timestamp: the time at which the LogLine was created (value type: datetime.datetime)
     """
 
@@ -4594,11 +4608,8 @@ class ResourcePersistentState(BaseDocument):
                     ELSE 'NOT_BLOCKED'
                 END
             FROM {Resource.table_name()} AS r
-            WHERE r.environment=$1 AND r.model=$2 AND NOT EXISTS(
-                SELECT *
-                FROM {cls.table_name()} AS rps
-                WHERE rps.environment=r.environment AND rps.resource_id=r.resource_id
-            )
+            WHERE r.environment=$1 AND r.model=$2
+            ON CONFLICT DO NOTHING
             """,
             environment,
             model_version,
@@ -5019,6 +5030,7 @@ class Resource(BaseDocument):
     @classmethod
     async def get_resources_report(cls, environment: uuid.UUID) -> list[JsonType]:
         """
+        [DEPRECATED] Only used in v1 get_environment endpoint
         This method generates a report of all resources in the given environment,
         with their latest version and when they are last deployed.
         """
@@ -5325,7 +5337,7 @@ class Resource(BaseDocument):
             return None
         record = result[0]
         parsed_id = resources.Id.parse_id(record["latest_resource_id"])
-        attributes = json.loads(record["attributes"])
+        attributes = json.loads(record["attributes"])  # type: ignore[arg-type]
         # Due to a bug, the version field has always been present in the attributes dictionary.
         # This bug has been fixed in the database. For backwards compatibility reason we here make sure that the
         # version field is present in the attributes dictionary served out via the API.

@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump logfire from 3.14.0 to 3.14.1
+destination-branches:
+- iso8
+sections: {}

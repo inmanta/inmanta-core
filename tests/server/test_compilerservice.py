@@ -1031,7 +1031,12 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     # request a compile
     remote_id1 = uuid.uuid4()
     await compilerslice.request_recompile(
-        env=env, force_update=False, do_export=False, remote_id=remote_id1, env_vars={"my_unique_var": "1"}
+        env=env,
+        force_update=False,
+        do_export=False,
+        remote_id=remote_id1,
+        env_vars={"my_unique_var": "1"},
+        links={"self": ["my-link"]},
     )
 
     # api should return one
@@ -1041,6 +1046,8 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     result = await client.get_compile_queue(environment)
     assert len(result.result["queue"]) == 1
     assert result.result["queue"][0]["remote_id"] == str(remote_id1)
+    # Assert that links are present in the compile queue
+    assert result.result["queue"][0]["links"] == {"self": ["my-link"]}
     assert result.code == 200
     # None in the queue, all running
     await retry_limited(lambda: compilerslice._queue_count_cache == 0, 10)
@@ -1268,12 +1275,18 @@ async def test_compilerservice_halt(
 ) -> None:
     compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
 
+    # Wait until the compiler service is ready to process compiles.
+    # As long as the compiler service is not fully ready,
+    # is_compiling() will always return False.
+    await retry_limited(lambda: compilerslice.fully_ready, timeout=10)
+
     result = await client.get_compile_queue(environment)
     assert result.code == 200
     assert len(result.result["queue"]) == 0
     assert compilerslice._queue_count_cache == 0
 
-    await client.halt_environment(environment)
+    result = await client.halt_environment(environment)
+    assert result.code == 200
 
     env = await data.Environment.get_by_id(environment)
     assert env is not None
@@ -1287,7 +1300,8 @@ async def test_compilerservice_halt(
     result = await client.is_compiling(environment)
     assert result.code == 204
 
-    await client.resume_environment(environment)
+    result = await client.resume_environment(environment)
+    assert result.code == 200
     result = await client.is_compiling(environment)
     assert result.code == 200
 
@@ -1568,6 +1582,7 @@ async def test_git_uses_environment_variables(environment_factory: EnvironmentFa
     assert "trace: " in report.errstream
 
 
+@pytest.mark.parametrize("no_agent", [True])
 @pytest.mark.parametrize(
     "recompile_backoff,expected_log_message,expected_log_level",
     [

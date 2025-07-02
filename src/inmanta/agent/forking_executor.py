@@ -72,9 +72,11 @@ import os
 import pathlib
 import socket
 import threading
+import traceback
 import typing
 import uuid
 from asyncio import Future, transports
+from collections import defaultdict
 from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
 from typing import Awaitable
@@ -95,9 +97,10 @@ import inmanta.types
 import inmanta.util
 from inmanta import const, tracing
 from inmanta.agent import executor, resourcepool
-from inmanta.agent.executor import DeployReport, GetFactReport
+from inmanta.agent.executor import DeployReport, FailedInmantaModules, GetFactReport
 from inmanta.agent.resourcepool import PoolManager, PoolMember
 from inmanta.const import LOGGER_NAME_EXECUTOR
+from inmanta.loader import get_inmanta_module_name
 from inmanta.protocol.ipc_light import (
     FinalizingIPCClient,
     IPCMethod,
@@ -107,7 +110,7 @@ from inmanta.protocol.ipc_light import (
     LogShipper,
     ReturnType,
 )
-from inmanta.types import ResourceIdStr, ResourceType
+from inmanta.types import ResourceIdStr
 from setproctitle import setproctitle
 
 LOGGER = logging.getLogger(LOGGER_NAME_EXECUTOR)
@@ -371,7 +374,7 @@ class StopCommandFor(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]
         await context.stop_for(self.name)
 
 
-class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.Sequence[inmanta.loader.FailedModuleSource]]):
+class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedInmantaModules]):
     """
     Initialize the executor process:
     1. setup the client, using the session id of the agent
@@ -400,7 +403,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         self.sources = sources
         self._venv_touch_interval = venv_touch_interval
 
-    async def call(self, context: ExecutorContext) -> typing.Sequence[inmanta.loader.FailedModuleSource]:
+    async def call(self, context: ExecutorContext) -> FailedInmantaModules:
         assert context.server.timer_venv_scheduler_interval is None, "InitCommand should be only called once!"
 
         loop = asyncio.get_running_loop()
@@ -422,7 +425,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         sync_client = inmanta.protocol.SyncClient(client=context.client, ioloop=loop)
         sources = [s.with_client(sync_client) for s in self.sources]
 
-        failed: list[inmanta.loader.FailedModuleSource] = []
+        failed_modules: FailedInmantaModules = defaultdict(dict)
         in_place: list[inmanta.loader.ModuleSource] = []
         # First put all files on disk
         for module_source in sources:
@@ -431,12 +434,8 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
                 in_place.append(module_source)
             except Exception as e:
                 logger.info("Failed to load sources: %s", module_source, exc_info=True)
-                failed.append(
-                    inmanta.loader.FailedModuleSource(
-                        module_source=module_source,
-                        exception=e,
-                    )
-                )
+                inmanta_module_name = get_inmanta_module_name(module_source.name)
+                failed_modules[inmanta_module_name][module_source.name] = e
 
         # then try to import them
         for module_source in in_place:
@@ -446,15 +445,11 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
                     functools.partial(loader.load_module, module_source.name, module_source.hash_value),
                 )
             except Exception as e:
-                logger.info("Failed to load sources: %s", module_source, exc_info=True)
-                failed.append(
-                    inmanta.loader.FailedModuleSource(
-                        module_source=module_source,
-                        exception=e,
-                    )
-                )
+                logger.info("Failed to import source: %s", module_source.name, exc_info=True)
+                inmanta_module_name = get_inmanta_module_name(module_source.name)
+                failed_modules[inmanta_module_name][module_source.name] = ModuleImportException(e, module_source.name)
 
-        return failed
+        return failed_modules
 
 
 class InitCommandFor(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
@@ -613,6 +608,7 @@ class MPProcess(PoolManager[executor.ExecutorId, executor.ExecutorId, "MPExecuto
 
         # Set by init, keeps state for the underlying executors
         self.failed_resource_results: typing.Sequence[inmanta.loader.FailedModuleSource] = list()
+        self._failed_modules: FailedInmantaModules
 
         # threadpool for cleanup jobs
         self.worker_threadpool = worker_threadpool
@@ -760,7 +756,7 @@ class MPExecutor(executor.Executor, resourcepool.PoolMember[executor.ExecutorId]
 
         # Set by init and parent class
         self.failed_resource_results: typing.Sequence[inmanta.loader.FailedModuleSource] = process.failed_resource_results
-        self.failed_resources: executor.FailedResources = {}
+        self.failed_modules: FailedInmantaModules = process._failed_modules
 
     async def call(self, method: IPCMethod[ExecutorContext, ReturnType]) -> ReturnType:
         try:
@@ -933,7 +929,7 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
             )
             storage_for_blueprint = os.path.join(self.code_folder, blueprint.blueprint_hash())
             os.makedirs(storage_for_blueprint, exist_ok=True)
-            failed_types = await executor.connection.call(
+            failed_modules = await executor.connection.call(
                 InitCommand(
                     venv.env_path,
                     storage_for_blueprint,
@@ -947,7 +943,7 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
                 executor.process.pid,
                 self.render_id(blueprint),
             )
-            executor.failed_resource_results = failed_types
+            executor._failed_modules = failed_modules
             return executor
         except Exception:
             # Make sure to cleanup the executor process if its initialization fails.
@@ -1071,20 +1067,6 @@ class MPManager(
         # Use pool manager
         my_executor = await self.get(executor_id)
 
-        # translation from code to type can only be done here
-        if my_executor.failed_resource_results and not my_executor.failed_resources:
-            # If some code loading failed, resolve here
-            # reverse index
-            type_for_spec: dict[inmanta.loader.ModuleSource, list[ResourceType]] = collections.defaultdict(list)
-            for spec in code:
-                for source in spec.blueprint.sources:
-                    type_for_spec[source].append(spec.resource_type)
-            # resolve
-            for failed_resource_result in my_executor.failed_resource_results:
-                for rtype in type_for_spec.get(failed_resource_result.module_source, []):
-                    if rtype not in my_executor.failed_resources:
-                        my_executor.failed_resources[rtype] = failed_resource_result.exception
-
         # FIXME: recovery. If loading failed, we currently never rebuild https://github.com/inmanta/inmanta-core/issues/7695
         return my_executor
 
@@ -1144,3 +1126,13 @@ class MPManager(
         children = list(self.agent_map[agent_name])
         await asyncio.gather(*(child.request_shutdown() for child in children))
         return children
+
+
+class ModuleImportException(Exception):
+    def __init__(self, base_exception: Exception, module_name: str):
+        self.message = f"Failed to import module source {module_name}:\n{str(base_exception)}.\n"
+        self.tb = "".join(traceback.format_tb(base_exception.__traceback__))
+        self.__cause__ = base_exception
+
+    def __str__(self) -> str:
+        return self.message + self.tb + "\n"

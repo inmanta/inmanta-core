@@ -148,8 +148,15 @@ class Server(protocol.ServerSlice):
 
         return response
 
+    @handle(methods_v2.health)
+    async def health(self) -> ReturnValue[None]:
+        status = await self.get_server_status()
+        return ReturnValue(status_code=(200 if status.status == ReportedStatus.OK else 500))
+
     @handle(methods_v2.get_api_docs)
-    async def get_api_docs(self, format: Optional[ApiDocsFormat] = ApiDocsFormat.swagger) -> ReturnValue[Union[OpenAPI, str]]:
+    async def get_api_docs(
+        self, format: Optional[ApiDocsFormat] = ApiDocsFormat.swagger, token: str | None = None
+    ) -> ReturnValue[Union[OpenAPI, str]]:
         url_map = self._server._transport.get_global_url_map(self._server.get_slices().values())
         feature_manager = self.feature_manager
         openapi = OpenApiConverter(url_map, feature_manager)

@@ -1,0 +1,8 @@
+---
+description: "Fix bug where the scheduler is paused by calling the `POST /api/v2/agents/pause` endpoint."
+issue-nr: 9081
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso8]
+sections:
+  bugfix: "{{description}}"

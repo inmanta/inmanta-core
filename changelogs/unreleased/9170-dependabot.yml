@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump types-setuptools from 80.8.0.20250521 to 80.9.0.20250529
+destination-branches:
+- iso8
+sections: {}

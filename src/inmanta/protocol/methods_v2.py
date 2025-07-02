@@ -384,12 +384,15 @@ def reserve_version(tid: uuid.UUID) -> int:
     """
 
 
-@typedmethod(path="/docs", operation="GET", client_types=[ClientType.api], api_version=2)
-def get_api_docs(format: Optional[ApiDocsFormat] = ApiDocsFormat.swagger) -> ReturnValue[Union[OpenAPI, str]]:
+@typedmethod(path="/docs", operation="GET", client_types=[ClientType.api], api_version=2, token_param="token")
+def get_api_docs(
+    format: Optional[ApiDocsFormat] = ApiDocsFormat.swagger, token: str | None = None
+) -> ReturnValue[Union[OpenAPI, str]]:
     """
     Get the OpenAPI definition of the API
 
     :param format: Use 'openapi' to get the schema in json format, leave empty or use 'swagger' to get the Swagger-UI view
+    :param token: If provided, use this token to authorize the request instead of the value from the authorization header.
     """
 
 
@@ -875,6 +878,9 @@ def get_compile_reports(
     """
     Get the compile reports from an environment.
 
+    The returned compile report objects may carry links to other objects, e.g. a service instance.
+    The full list of supported links can be found :ref:`here <api_self_referencing_links>`.
+
     :param tid: The id of the environment
     :param limit: Limit the number of instances that are returned
     :param first_id: The id to use as a continuation token for paging, in combination with the 'start' value,
@@ -922,6 +928,9 @@ def get_compile_reports(
 )
 def compile_details(tid: uuid.UUID, id: uuid.UUID) -> model.CompileDetails:
     """
+    The returned compile details object may carry links to other objects, e.g. a service instance.
+    The full list of supported links can be found :ref:`here <api_self_referencing_links>`.
+
     :param tid: The id of the environment in which the compilation process occurred.
     :param id: The id of the compile for which the details are being requested.
 
@@ -1609,3 +1618,14 @@ def discovered_resources_get_batch(
     :raise NotFound: This exception is raised when the referenced environment is not found
     :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid
     """
+
+
+@typedmethod(path="/health", operation="GET", client_types=[ClientType.api], enforce_auth=False, api_version=2)
+def health() -> ReturnValue[None]:
+    """
+    Returns a 200 response code if the server is healthy
+    or a 500 if the server is not healthy.
+
+    In contrast to the 'GET /api/v1/serverstatus' endpoint, this endpoint does not require authentication.
+    """
+    pass
