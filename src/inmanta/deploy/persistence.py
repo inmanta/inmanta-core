@@ -274,7 +274,7 @@ class ToDbUpdateManager(StateUpdateManager):
 
                 if not stale_deploy and change is Change.purged and status == const.ResourceState.deployed:
                     await data.Parameter.delete_all(
-                        environment=self.environment, resource_id=resource_id_parsed, connection=connection
+                        environment=self.environment, resource_id=resource_id_parsed.resource_str(), connection=connection
                     )
 
     async def dryrun_update(self, env: UUID, dryrun_result: executor.DryrunReport) -> None:
