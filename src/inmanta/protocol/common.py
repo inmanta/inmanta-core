@@ -32,7 +32,7 @@ from datetime import datetime
 from enum import Enum
 from functools import partial
 from inspect import Parameter
-from typing import TYPE_CHECKING, Any, Callable, Generic, Optional, TypeVar, Union, cast, get_type_hints
+from typing import TYPE_CHECKING, Any, AsyncIterator, Callable, Optional, TypeVar, Union, cast, get_type_hints
 from urllib import parse
 
 import docstring_parser
@@ -170,7 +170,7 @@ class Request:
 T_co = TypeVar("T_co", bound=Union[None, ArgumentTypes], covariant=True)
 
 
-class ReturnValue(Generic[T_co]):
+class ReturnValue[T_co]:
     """
     An object that handlers can return to provide a response to a method call.
     """
@@ -1094,6 +1094,14 @@ def shorten(msg: str, max_len: int = 10) -> str:
     return msg[0 : max_len - 3] + "..."
 
 
+class IteratorCoro[T]:
+    def __init__(self, aiter: Callable[[], AsyncIterator[T]]):
+        self.aiter = aiter
+
+    def __aiter__(self) -> AsyncIterator[T]:
+        return self.aiter()
+
+
 @stable_api
 class Result:
     """
@@ -1144,6 +1152,18 @@ class Result:
         Set a callback function that is to be called when the result is ready.
         """
         self._callback = fnc
+
+    async def _aiter(self) -> AsyncIterator[str]:
+        try:
+            if self.result:
+                link = self.result.get("links", {}).get("next")
+        except KeyError:
+            return
+        if link:
+            yield str(link)
+
+    def all(self) -> IteratorCoro[str]:
+        return IteratorCoro(aiter=self._aiter)
 
 
 class SessionManagerInterface:

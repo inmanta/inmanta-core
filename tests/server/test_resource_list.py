@@ -19,6 +19,7 @@ Contact: code@inmanta.com
 import asyncio
 import json
 import logging
+import pprint
 import time
 import typing
 import urllib.parse
@@ -39,6 +40,7 @@ from inmanta.agent.executor import DeployReport
 from inmanta.const import ResourceState
 from inmanta.data.model import LatestReleasedResource
 from inmanta.deploy import scheduler
+from inmanta.protocol import Result
 from inmanta.resources import Id
 from inmanta.server import config
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
@@ -612,6 +614,33 @@ async def test_none_resources_paging(server, client, env_with_resources):
     assert actual_result_asc_next.result["links"] == expected_result_asc_next
     assert actual_result_asc_next.result["metadata"] == {"after": 4, "before": 0, "page_size": 2, "total": 6}
     assert len(actual_result_asc_next.result["data"]) == 2
+
+
+async def test_resources_paging_api(server, client, env_with_resources):
+    env = env_with_resources
+
+    rt = await client.resource_list(tid=env.id, limit=2)
+    pprint.pprint(rt.result)
+
+    n = 0
+    async for item in iter_result(rt, str(env.id), client):
+        print(f"batch {n}")
+        print(item.result["data"])
+        n += 1
+
+
+async def iter_result(result: Result, env: str, client):
+    yield result
+    async for next_link in result.all():
+        cfg = client._transport_instance._get_client_config()
+        url = cfg + next_link
+        request = HTTPRequest(url=url, method="GET", headers={"X-Inmanta-tid": env})
+        next_result = client._transport_instance._decode_response(
+            await client._transport_instance.client.fetch(request, raise_error=False)
+        )
+
+        async for item in iter_result(next_result, env, client):
+            yield item
 
 
 @pytest.mark.parametrize(

@@ -244,11 +244,13 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
                 offset=query_builder.offset, col_name_prefix=None, **self.filter
             )
         )
+        # breakpoint()
         query_builder = self.clip_to_page(query_builder)
         sql_query, values = query_builder.build()
 
         records = await data.Resource.select_query(sql_query, values, no_obj=True)
         dtos = self.construct_dtos(records)
+        # breakpoint()
 
         paging_boundaries = (
             self.order.get_paging_boundaries(dict(records[0]), dict(records[-1]))
@@ -327,6 +329,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
             dtos, paging_boundaries = await self.get_data()
             metadata = await self._get_page_count(paging_boundaries)
             links = await self.prepare_paging_links(paging_boundaries, metadata)
+            # breakpoint()
             return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=metadata.to_dict())
         except (InvalidFilter, InvalidSort, data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
             raise BadRequest(e.message) from e

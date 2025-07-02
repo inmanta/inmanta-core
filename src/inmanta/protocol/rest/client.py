@@ -170,7 +170,7 @@ class RESTClient(RESTBase):
         if self.forced_instance:
             self.client.close()
 
-    def _decode_response(self, response: HTTPResponse):
+    def _decode_response(self, response: HTTPResponse) -> common.Result:
         content_type = response.headers.get(common.CONTENT_TYPE, None)
 
         if content_type is None or content_type == common.JSON_CONTENT:
