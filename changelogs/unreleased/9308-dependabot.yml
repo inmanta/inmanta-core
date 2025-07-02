@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump logfire from 3.21.2 to 3.22.0 in the logfire group
+destination-branches:
+- iso8
+sections: {}
