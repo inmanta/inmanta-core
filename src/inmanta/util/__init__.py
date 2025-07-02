@@ -44,12 +44,13 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from logging import Logger
 from types import TracebackType
-from typing import TYPE_CHECKING, BinaryIO, Callable, Generic, Mapping, Optional, Sequence, TypeVar, Union
+from typing import TYPE_CHECKING, BinaryIO, Callable, Generic, Mapping, Optional, Sequence, TypeVar, Union, AsyncIterator
 
 import asyncpg
 import click
 import pydantic
 from tornado import gen
+from tornado.httpclient import HTTPRequest
 
 import packaging
 import packaging.requirements
@@ -63,6 +64,8 @@ from packaging.utils import NormalizedName
 
 if TYPE_CHECKING:
     from inmanta.data.model import ResourceId
+    from inmanta.protocol import Result, Client
+
 
 LOGGER = logging.getLogger(__name__)
 SALT_SIZE = 16
@@ -1006,3 +1009,17 @@ def make_attribute_hash(resource_id: "ResourceId", attributes: Mapping[str, obje
     m.update(resource_id.encode("utf-8"))
     m.update(character.encode("utf-8"))
     return m.hexdigest()
+
+
+async def iter_result(result: "Result", env: str, client: "Client") -> AsyncIterator["Result"]:
+    yield result
+    async for next_link_url in result.all():
+        server_url = client._transport_instance._get_client_config()
+        url = server_url + next_link_url
+        request = HTTPRequest(url=url, method="GET", headers={"X-Inmanta-tid": env})
+        next_result = client._transport_instance._decode_response(
+            await client._transport_instance.client.fetch(request, raise_error=False)
+        )
+
+        async for item in iter_result(next_result, env, client):
+            yield item

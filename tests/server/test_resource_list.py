@@ -40,10 +40,10 @@ from inmanta.agent.executor import DeployReport
 from inmanta.const import ResourceState
 from inmanta.data.model import LatestReleasedResource
 from inmanta.deploy import scheduler
-from inmanta.protocol import Result
 from inmanta.resources import Id
 from inmanta.server import config
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
+from inmanta.util import iter_result
 
 
 async def test_resource_list_no_released_version(server, client):
@@ -627,20 +627,6 @@ async def test_resources_paging_api(server, client, env_with_resources):
         print(f"batch {n}")
         print(item.result["data"])
         n += 1
-
-
-async def iter_result(result: Result, env: str, client):
-    yield result
-    async for next_link in result.all():
-        cfg = client._transport_instance._get_client_config()
-        url = cfg + next_link
-        request = HTTPRequest(url=url, method="GET", headers={"X-Inmanta-tid": env})
-        next_result = client._transport_instance._decode_response(
-            await client._transport_instance.client.fetch(request, raise_error=False)
-        )
-
-        async for item in iter_result(next_result, env, client):
-            yield item
 
 
 @pytest.mark.parametrize(
