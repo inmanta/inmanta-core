@@ -27,7 +27,13 @@ When this authorization provider is enabled, it's used to evaluate authorization
 Data sources for policy engine
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-An mentioned above, the policy engine relies on three pieces of information to determine whether an API call is authorized: authorization-related metadata about each API endpoint on the server, the data in the specific API request done by the client and the access policy. The sections below discuss each of these three elements in more detail.
+As mentioned above, the policy engine relies on three pieces of information to determine whether an API call is authorized:
+
+* Authorization-related metadata about each API endpoint on the server
+* The data in the specific API request done by the client
+* The access policy
+
+The sections below discuss each of these three elements in more detail.
 
 
 Metadata API endpoints
