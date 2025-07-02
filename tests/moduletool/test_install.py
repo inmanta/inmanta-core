@@ -39,7 +39,7 @@ from inmanta.config import Config
 from inmanta.env import CommandRunner, ConflictingRequirements, PipConfig
 from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleLoadingException, ModuleNotFoundException
 from inmanta.moduletool import DummyProject, ModuleConverter, ModuleTool, ProjectTool
-from moduletool.common import BadModProvider, install_project
+from moduletool.common import BadModProvider
 from packaging import version
 from utils import LogSequence, PipIndex, log_contains, module_from_template
 
@@ -189,16 +189,6 @@ def test_bad_dep_checkout(git_modules_dir, modules_repo):
 
     with pytest.raises(CompilerException, match="requirement mod2<2016 on module mod2 not fulfilled, now at version 2016.1"):
         ProjectTool().execute("install", [])
-
-
-def test_master_checkout(git_modules_dir: str, modules_repo: str, tmpdir):
-    coroot = install_project(git_modules_dir, "masterproject", tmpdir)
-
-    ProjectTool().execute("install", [])
-
-    dirname = os.path.join(coroot, "libs", "mod8")
-    assert os.path.exists(os.path.join(dirname, "devsignal"))
-    assert os.path.exists(os.path.join(dirname, "mastersignal"))
 
 
 def test_dev_checkout(git_modules_dir, modules_repo):
@@ -508,7 +498,7 @@ def test_project_install(
         autostd=False,
         index_url=local_module_package_index,
         # We add tornado, as there is a code path in update for the case where the project has python requires
-        python_requires=["tornado"]
+        python_requires=[inmanta.util.parse_requirement("tornado")]
         + [
             inmanta.util.parse_requirement(requirement=module.ModuleV2Source.get_package_name_for(mod))
             for mod in install_module_names
@@ -1196,35 +1186,6 @@ import custom_mod_two
     )
 
 
-def test_install_project_with_install_mode_master(tmpdir: py.path.local, snippetcompiler, modules_repo, capsys) -> None:
-    """
-    Ensure that an appropriate exception message is returned when a module installed in a project is not in-line with
-    the version constraint on the project and the install_mode of the project is set to master.
-    """
-    mod_with_multiple_version = os.path.join(modules_repo, "mod11")
-    mod_with_multiple_version_copy = os.path.join(tmpdir, "mod11")
-    shutil.copytree(mod_with_multiple_version, mod_with_multiple_version_copy)
-    snippetcompiler.setup_for_snippet(
-        snippet="import mod11",
-        autostd=False,
-        install_project=False,
-        add_to_module_path=[str(tmpdir)],
-        project_requires=[InmantaModuleRequirement(inmanta.util.parse_requirement(requirement="mod11==3.2.1"))],
-        install_mode=InstallMode.master,
-    )
-
-    with pytest.raises(CompilerException) as excinfo:
-        ProjectTool().execute("update", [])
-
-    assert """
-The following requirements were not satisfied:
-\t* requirement mod11==3.2.1 on module mod11 not fulfilled, now at version 4.2.0.
-The release type of the project is set to 'master'. Set it to a value that is appropriate for the version constraint
-    """.strip() in str(
-        excinfo.value
-    )
-
-
 @pytest.mark.slowtest
 def test_module_install_logging(local_module_package_index: str, snippetcompiler_clean, caplog) -> None:
     """
@@ -1710,5 +1671,6 @@ def test_constraints_logging_v1(caplog, snippetcompiler_clean, local_module_pack
         caplog,
         "inmanta.module",
         logging.DEBUG,
-        "Installing module std (v1) (with constraints std>0.0 std>=0.0 std==4.2.1 std<=100.0.0 std<100.0.0)",
+        # snippetcompiler adds <5.3 constraint
+        "Installing module std (v1) (with constraints std>0.0 std>=0.0 std==4.2.1 std<=100.0.0 std<100.0.0 std<5.3)",
     )

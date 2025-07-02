@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 
+import itertools
 import logging.config
 import warnings
 from re import Pattern
@@ -1262,12 +1263,17 @@ class SnippetCompilationTest(KeepOnFail):
         add_to_module_path = add_to_module_path if add_to_module_path is not None else []
         python_package_sources = python_package_sources if python_package_sources is not None else []
 
-        project_requires = [
-            *(project_requires if project_requires is not None else []),
-            *(["std<5.3"] if autostd and not ministd else []),
-        ]
+        project_requires = project_requires if project_requires is not None else []
         python_requires = python_requires if python_requires is not None else []
         relation_precedence_rules = relation_precedence_rules if relation_precedence_rules else []
+
+        using_std: bool = (
+            autostd
+            or "import std" in snippet
+            or any(req.name in ("std", "inmanta-module-std") for req in itertools.chain(project_requires, python_requires))
+        )
+        all_project_requires = [*project_requires, "std<5.3"] if using_std else project_requires
+
         ministd_path = os.path.join(__file__, "..", "data/mini_str_container")
         if ministd:
             add_to_module_path += ministd_path
@@ -1285,10 +1291,11 @@ class SnippetCompilationTest(KeepOnFail):
             if relation_precedence_rules:
                 cfg.write("\n            relation_precedence_policy:\n")
                 cfg.write("\n".join(f"                - {rule}" for rule in relation_precedence_rules))
-            if project_requires:
+            if all_project_requires:
                 cfg.write("\n            requires:\n")
-                cfg.write("\n".join(f"                - {req}" for req in project_requires))
+                cfg.write("\n".join(f"                - {req}" for req in all_project_requires))
             if install_mode:
+                assert install_mode is not InstallMode.master
                 cfg.write(f"\n            install_mode: {install_mode.value}")
 
             cfg.write(
