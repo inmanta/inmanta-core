@@ -158,7 +158,7 @@ The default policy makes the following assumptions about the content of the acce
 Integration with database authentication
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The default policy integrates seemlessly with database authentication.
+The default policy integrates seamlessly with database authentication.
 
 * The admin user created using the ``/opt/inmanta/bin/inmanta-initial-user-setup`` command will have the ``urn:inmanta:is_admin`` claim set to true.
 * The web-console provides support to manage users and role assignments.
