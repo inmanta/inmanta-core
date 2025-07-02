@@ -1,0 +1,4 @@
+change-type: patch
+description: Bump COMPILER_VERSION to 2025.4
+destination-branches:
+- master
