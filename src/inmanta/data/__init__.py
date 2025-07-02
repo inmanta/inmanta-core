@@ -4612,6 +4612,44 @@ class ResourcePersistentState(BaseDocument):
             connection=connection,
         )
 
+    @classmethod
+    async def update_persistent_state(
+        cls,
+        environment: uuid.UUID,
+        resource_id: ResourceIdStr,
+        is_deploying: bool | None = None,
+        last_deploy: datetime.datetime | None = None,
+        last_deployed_version: int | None = None,
+        last_non_deploying_status: Optional[const.NonDeployingResourceState] = None,
+        last_success: Optional[datetime.datetime] = None,
+        last_produced_events: Optional[datetime.datetime] = None,
+        last_deployed_attribute_hash: Optional[str] = None,
+        connection: Optional[asyncpg.connection.Connection] = None,
+        # TODO[#8541]: accept state.ResourceState and write blocked status as well
+        last_deploy_result: Optional[state.DeployResult] = None,
+    ) -> None:
+        """Update the data in the resource_persistent_state table"""
+        args = ArgumentCollector(2)
+
+        invalues = {
+            "is_deploying": is_deploying,
+            "last_deploy": last_deploy,
+            "last_non_deploying_status": last_non_deploying_status,
+            "last_success": last_success,
+            "last_produced_events": last_produced_events,
+            "last_deployed_attribute_hash": last_deployed_attribute_hash,
+            "last_deployed_version": last_deployed_version,
+        }
+        query_parts = [f"{k}={args(v)}" for k, v in invalues.items() if v is not None]
+        if last_deploy_result:
+            query_parts.append(f"last_deploy_result={args(last_deploy_result.name)}")
+        if not query_parts:
+            return
+        query = f"UPDATE public.resource_persistent_state SET {','.join(query_parts)} WHERE environment=$1 and resource_id=$2"
+
+        result = await cls._execute_query(query, environment, resource_id, *args.args, connection=connection)
+        assert result == "UPDATE 1"
+
     def get_compliance_status(self) -> Optional[state.Compliance]:
         """
         Return the Compliance associated with this resource_persistent_state. Returns None for orphaned resources.
@@ -5370,41 +5408,6 @@ class Resource(BaseDocument):
             resource_id_value=self.resource_id_value,
             resource_set=self.resource_set,
         )
-
-    async def update_persistent_state(
-        self,
-        is_deploying: bool | None = None,
-        last_deploy: datetime.datetime | None = None,
-        last_deployed_version: int | None = None,
-        last_non_deploying_status: Optional[const.NonDeployingResourceState] = None,
-        last_success: Optional[datetime.datetime] = None,
-        last_produced_events: Optional[datetime.datetime] = None,
-        last_deployed_attribute_hash: Optional[str] = None,
-        connection: Optional[asyncpg.connection.Connection] = None,
-        # TODO[#8541]: accept state.ResourceState and write blocked status as well
-        last_deploy_result: Optional[state.DeployResult] = None,
-    ) -> None:
-        """Update the data in the resource_persistent_state table"""
-        args = ArgumentCollector(2)
-
-        invalues = {
-            "is_deploying": is_deploying,
-            "last_deploy": last_deploy,
-            "last_non_deploying_status": last_non_deploying_status,
-            "last_success": last_success,
-            "last_produced_events": last_produced_events,
-            "last_deployed_attribute_hash": last_deployed_attribute_hash,
-            "last_deployed_version": last_deployed_version,
-        }
-        query_parts = [f"{k}={args(v)}" for k, v in invalues.items() if v is not None]
-        if last_deploy_result:
-            query_parts.append(f"last_deploy_result={args(last_deploy_result.name)}")
-        if not query_parts:
-            return
-        query = f"UPDATE public.resource_persistent_state SET {','.join(query_parts)} WHERE environment=$1 and resource_id=$2"
-
-        result = await self._execute_query(query, self.environment, self.resource_id, *args.args, connection=connection)
-        assert result == "UPDATE 1"
 
 
 @stable_api

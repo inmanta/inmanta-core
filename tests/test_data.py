@@ -2580,10 +2580,11 @@ async def test_get_last_non_deploying_state_for_dependencies(init_dataclasses_an
             attributes=attributes,
         )
         await r1.insert()
-        await data.ResourcePersistentState.populate_for_version(
-            environment=env.id, model_version=Id.parse_id(resource_version_id).version
-        )
-        await r1.update_persistent_state(
+        r1id = Id.parse_id(resource_version_id)
+        await data.ResourcePersistentState.populate_for_version(environment=env.id, model_version=r1id.version)
+        await data.ResourcePersistentState.update_persistent_state(
+            environment=env.id,
+            resource_id=r1id.resource_str(),
             last_deploy=datetime.datetime.now(tz=UTC),
             last_non_deploying_status=last_non_deploying_status,
         )
