@@ -1,0 +1,4 @@
+---
+description: Fix tests related to std
+change-type: patch
+destination-branches: [master, iso8]
