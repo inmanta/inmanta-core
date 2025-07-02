@@ -201,7 +201,7 @@ This section provides some guidance on how to test/debug your own access policy.
 Troubleshooting: Policy engine fails to start
 """""""""""""""""""""""""""""""""""""""""""""
 
-When the access policy contains a syntax error, the policy engine will fail to start and as such also the Inmanta server. In that case, the ``server.log`` file will indicate the policy engine failed to start with a reference to the log file of the policy engine. The latter log file will contains more information about the specific issue. If required, the log level of the policy engine can be increased using the :inmanta.config:option:`policy_engine.log-level` config option.
+When the access policy contains a syntax error, the policy engine will fail to start and as such also the Inmanta server. In that case, the ``server.log`` file will indicate that the policy engine failed to start with a reference to the log file of the policy engine. The latter log file will contain more information about the specific issue. If required, the log level of the policy engine can be increased using the :inmanta.config:option:`policy_engine.log-level` config option.
 
 
 .. _authorization-debugging-access-policy:
