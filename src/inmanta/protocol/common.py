@@ -1093,15 +1093,6 @@ def shorten(msg: str, max_len: int = 10) -> str:
         return msg
     return msg[0 : max_len - 3] + "..."
 
-
-class IteratorCoro[T]:
-    def __init__(self, aiter: Callable[[], AsyncIterator[T]]):
-        self.aiter = aiter
-
-    def __aiter__(self) -> AsyncIterator[T]:
-        return self.aiter()
-
-
 @stable_api
 class Result:
     """
@@ -1152,19 +1143,6 @@ class Result:
         Set a callback function that is to be called when the result is ready.
         """
         self._callback = fnc
-
-    async def _aiter(self) -> AsyncIterator[str]:
-        try:
-            if self.result:
-                link = self.result.get("links", {}).get("next")
-        except KeyError:
-            return
-        if link:
-            yield str(link)
-
-    def all(self) -> IteratorCoro[str]:
-        return IteratorCoro(aiter=self._aiter)
-
 
 class SessionManagerInterface:
     """

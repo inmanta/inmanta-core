@@ -20,7 +20,6 @@ import asyncio
 import json
 import logging
 import math
-import pprint
 import time
 import typing
 import urllib.parse
@@ -44,7 +43,8 @@ from inmanta.deploy import scheduler
 from inmanta.resources import Id
 from inmanta.server import config
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
-from inmanta.util import iter_result
+
+LOGGER: logging.Logger = logging.getLogger(__name__)
 
 
 async def test_resource_list_no_released_version(server, client):
@@ -618,22 +618,21 @@ async def test_none_resources_paging(server, client, env_with_resources):
 
 
 @pytest.mark.parametrize("page_size", [1, 2, 5, 8])
-async def test_resources_paging_api(server, client, env_with_resources, page_size):
+async def test_client_all_pages_helper(server, client, env_with_resources, page_size):
     env = env_with_resources
 
-    last_batch_flag = False
     rt = await client.resource_list(tid=env.id)
     assert rt.code == 200
-
     total_resource_count = len(rt.result["data"])
 
-    rt = await client.resource_list(tid=env.id, limit=page_size)
-    pprint.pprint(rt.result)
+    coro = client.resource_list(tid=env.id, limit=page_size)
 
     batch_count = 0
-    async for item in iter_result(rt, str(env.id), client):
-        pprint.pprint(f"batch {batch_count}")
-        pprint.pprint(item.result["data"])
+    last_batch_flag = False
+
+    async for item in client.all_pages(coro, str(env.id)):
+        LOGGER.debug(f"batch {batch_count}")
+        LOGGER.debug(item.result["data"])
 
         if len(item.result["data"]) != page_size:
             if last_batch_flag:
@@ -878,7 +877,7 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, mo
     for iteration in [0, 1]:
         for tenant in range(instances):
             resources = await make_resource_set(tenant, iteration)
-            logging.getLogger(__name__).warning("deploys: %d, tenant: %d, iteration: %d", deploy_counter, tenant, iteration)
+            LOGGER.warning("deploys: %d, tenant: %d, iteration: %d", deploy_counter, tenant, iteration)
             # Since we are using null_agent we need to manually mark orphans
             if iteration == 0:
                 first_iteration_resources[tenant] = {Id.parse_id(res["id"]).resource_str() for res in resources}
@@ -980,6 +979,4 @@ async def test_resources_paging_performance(client, environment, very_big_env: i
             latency_page2, links = await time_page(links, "next")
             latency_page3, links = await time_page(links, "next")
 
-            logging.getLogger(__name__).warning(
-                "Timings %s %s %d %d %d", filter, order, latency_page1, latency_page2, latency_page3
-            )
+            LOGGER.warning("Timings %s %s %d %d %d", filter, order, latency_page1, latency_page2, latency_page3)

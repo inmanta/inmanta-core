@@ -25,14 +25,15 @@ from asyncio import CancelledError, run_coroutine_threadsafe, sleep
 from collections import abc, defaultdict
 from collections.abc import Coroutine
 from enum import Enum
-from typing import Any, Callable, Optional
+from typing import Any, AsyncIterator, Callable, Optional
 from urllib import parse
 
 import pydantic
+from tornado.httpclient import HTTPRequest
 
 from inmanta import config as inmanta_config
 from inmanta import const, tracing, types, util
-from inmanta.protocol import common, exceptions
+from inmanta.protocol import Result, common, exceptions
 from inmanta.util import TaskHandler
 
 from .rest import client
@@ -398,6 +399,21 @@ class Client(Endpoint):
             return self._call(method_properties=method, args=args, kwargs=kwargs)
 
         return wrap
+
+    async def all_pages(self, coro: Coroutine, env: str) -> AsyncIterator[Result]:
+        result = await coro
+        while result.code == 200:
+            yield result
+
+            next_link_url = result.result.get("links", {}).get("next")
+
+            if not next_link_url:
+                return
+
+            server_url = self._transport_instance._get_client_config()
+            url = server_url + next_link_url
+            request = HTTPRequest(url=url, method="GET", headers={"X-Inmanta-tid": env})
+            result = self._transport_instance._decode_response(await self._transport_instance.client.fetch(request))
 
 
 class SyncClient:
