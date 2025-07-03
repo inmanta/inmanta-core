@@ -27,7 +27,6 @@ from typing import cast
 import pytest
 
 from inmanta.data import model
-from inmanta.module import ModuleLoadingException, Project
 from inmanta.server import SLICE_ENVIRONMENT
 from inmanta.server.services.environmentservice import EnvironmentAction, EnvironmentListener, EnvironmentService
 from utils import log_contains

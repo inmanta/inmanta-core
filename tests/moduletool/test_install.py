@@ -1716,7 +1716,7 @@ def test_project_load_install(snippetcompiler_clean, install: bool, modules_repo
     Verify that loading a project only installs modules when install is True.
     """
     snippetcompiler_clean.repo = modules_repo
-    project: Project = snippetcompiler_clean.setup_for_snippet("import mod7", autostd=False, install_project=False)
+    project: module.Project = snippetcompiler_clean.setup_for_snippet("import mod7", autostd=False, install_project=False)
     if install:
         project.load(install=True)
     else:
