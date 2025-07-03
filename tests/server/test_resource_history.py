@@ -19,6 +19,7 @@ Contact: code@inmanta.com
 import datetime
 import itertools
 import json
+import logging
 import uuid
 from collections import defaultdict
 from operator import itemgetter
@@ -32,6 +33,9 @@ from inmanta.const import ResourceState
 from inmanta.server import config
 from inmanta.types import ResourceVersionIdStr
 from inmanta.util import parse_timestamp
+from util.test_util import test_helper_method_using_paging_links
+
+LOGGER: logging.Logger = logging.getLogger(__name__)
 
 
 class ResourceFactory:
@@ -465,6 +469,19 @@ async def test_resource_history_paging(server, client, order_by_column, order, e
     assert attribute_hashes(result.result["data"]) == all_resource_ids_in_expected_order
 
     assert result.result["metadata"] == {"total": 5, "before": 0, "after": 0, "page_size": 5}
+
+    fetch_all_data_coro = client.resource_history(env.id, resource_with_long_history, sort=f"{order_by_column}.{order}")
+    page_size = 2
+    fetch_page_by_page_coro = client.resource_history(
+        env.id, resource_with_long_history, limit=page_size, sort=f"{order_by_column}.{order}"
+    )
+    await test_helper_method_using_paging_links(
+        client=client,
+        fetch_all_data_coro=fetch_all_data_coro,
+        fetch_page_by_page_coro=fetch_page_by_page_coro,
+        page_size=page_size,
+        env=str(env.id),
+    )
 
 
 async def test_history_not_continuous_versions(server, client, environment):

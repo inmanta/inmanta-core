@@ -20,18 +20,20 @@ import asyncio
 import dataclasses
 import datetime
 import logging
+import math
 import uuid
 import zoneinfo
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from queue import Queue
 from threading import Event
-from typing import Optional
+from typing import Any, Coroutine, Optional
 
 import pytest
 
 import inmanta
-from inmanta import util
+from inmanta import protocol, util
+from inmanta.protocol import common
 from inmanta.util import (
     CronSchedule,
     CycleException,
@@ -577,3 +579,30 @@ def test_datetime_iso_format(time_machine):
     assert timestamp_iso_str == "2023-12-03T09:00:00.000000+01:00"
     timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, tz_aware=False)
     assert timestamp_iso_str == "2023-12-03T08:00:00.000000"
+
+
+async def test_helper_method_using_paging_links(
+    client: protocol.Client,
+    fetch_all_data_coro: Coroutine[Any, Any, common.Result],
+    fetch_page_by_page_coro: Coroutine[Any, Any, common.Result],
+    page_size: int,
+    env: str,
+) -> None:
+    rt = await fetch_all_data_coro
+    assert rt.code == 200
+    n_results = len(rt.result["data"])
+
+    page_count = 0
+    last_batch_flag = False
+
+    async for item in client.all_pages(fetch_page_by_page_coro, env):
+        LOGGER.debug(f"batch {page_count}")
+        LOGGER.debug(item.result["data"])
+
+        if len(item.result["data"]) != page_size:
+            if last_batch_flag:
+                raise Exception(f"Only the very last batch should have less than {page_size} items.")
+            last_batch_flag = True
+        page_count += 1
+
+    assert page_count == math.ceil(n_results / page_size)

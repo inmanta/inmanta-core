@@ -19,7 +19,6 @@ Contact: code@inmanta.com
 import asyncio
 import json
 import logging
-import math
 import time
 import typing
 import urllib.parse
@@ -43,6 +42,7 @@ from inmanta.deploy import scheduler
 from inmanta.resources import Id
 from inmanta.server import config
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
+from util.test_util import test_helper_method_using_paging_links
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 
@@ -621,26 +621,15 @@ async def test_none_resources_paging(server, client, env_with_resources):
 async def test_client_all_pages_helper(server, client, env_with_resources, page_size):
     env = env_with_resources
 
-    rt = await client.resource_list(tid=env.id)
-    assert rt.code == 200
-    total_resource_count = len(rt.result["data"])
-
-    coro = client.resource_list(tid=env.id, limit=page_size)
-
-    batch_count = 0
-    last_batch_flag = False
-
-    async for item in client.all_pages(coro, str(env.id)):
-        LOGGER.debug(f"batch {batch_count}")
-        LOGGER.debug(item.result["data"])
-
-        if len(item.result["data"]) != page_size:
-            if last_batch_flag:
-                raise Exception(f"Only the very last batch should have less than {page_size} items.")
-            last_batch_flag = True
-        batch_count += 1
-
-    assert batch_count == math.ceil(total_resource_count / page_size)
+    fetch_all_data_coro = client.resource_list(tid=env.id)
+    fetch_page_by_page_coro = client.resource_list(tid=env.id, limit=page_size)
+    await test_helper_method_using_paging_links(
+        client=client,
+        fetch_all_data_coro=fetch_all_data_coro,
+        fetch_page_by_page_coro=fetch_page_by_page_coro,
+        page_size=page_size,
+        env=str(env.id),
+    )
 
 
 @pytest.mark.parametrize(
