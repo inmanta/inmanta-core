@@ -400,10 +400,13 @@ class Client(Endpoint):
 
         return wrap
 
-    async def all_pages(self, coro: Coroutine, env: str) -> AsyncIterator[Result]:
+    async def all_pages(self, coro: Coroutine[Any, Any, common.Result], env: str) -> AsyncIterator[Result]:
         result = await coro
         while result.code == 200:
             yield result
+
+            if not result.result:
+                return
 
             next_link_url = result.result.get("links", {}).get("next")
 

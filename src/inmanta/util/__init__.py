@@ -44,13 +44,12 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from logging import Logger
 from types import TracebackType
-from typing import TYPE_CHECKING, AsyncIterator, BinaryIO, Callable, Generic, Mapping, Optional, Sequence, TypeVar, Union
+from typing import TYPE_CHECKING, BinaryIO, Callable, Generic, Mapping, Optional, Sequence, TypeVar, Union
 
 import asyncpg
 import click
 import pydantic
 from tornado import gen
-from tornado.httpclient import HTTPRequest
 
 import packaging
 import packaging.requirements
@@ -64,7 +63,6 @@ from packaging.utils import NormalizedName
 
 if TYPE_CHECKING:
     from inmanta.data.model import ResourceId
-    from inmanta.protocol import Client, Result
 
 
 LOGGER = logging.getLogger(__name__)

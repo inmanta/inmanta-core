@@ -32,7 +32,7 @@ from datetime import datetime
 from enum import Enum
 from functools import partial
 from inspect import Parameter
-from typing import TYPE_CHECKING, Any, AsyncIterator, Callable, Optional, TypeVar, Union, cast, get_type_hints
+from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar, Union, cast, get_type_hints
 from urllib import parse
 
 import docstring_parser
@@ -1093,6 +1093,7 @@ def shorten(msg: str, max_len: int = 10) -> str:
         return msg
     return msg[0 : max_len - 3] + "..."
 
+
 @stable_api
 class Result:
     """
@@ -1143,6 +1144,7 @@ class Result:
         Set a callback function that is to be called when the result is ready.
         """
         self._callback = fnc
+
 
 class SessionManagerInterface:
     """
