@@ -517,22 +517,6 @@ async def test_environment_listener(server, client_v2, caplog):
     assert environment_listener.deleted_counter == 1
 
 
-@pytest.mark.parametrize("install", [True, False])
-def test_project_load_install(snippetcompiler_clean, install: bool) -> None:
-    """
-    Verify that loading a project only installs modules when install is True.
-    """
-    project: Project = snippetcompiler_clean.setup_for_snippet("import ip", autostd=False, install_project=False)
-    if install:
-        project.load(install=True)
-    else:
-        with pytest.raises(ModuleLoadingException, match="Failed to load module ip"):
-            project.load()
-        # make sure project load works after installing modules
-        project.install_modules()
-        project.load()
-
-
 @pytest.fixture
 def environment_icons() -> dict[str, str]:
     icon_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "icon")

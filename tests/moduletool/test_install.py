@@ -1688,6 +1688,9 @@ def test_constraints_logging_v1(caplog, snippetcompiler_clean, local_module_pack
     )
 
 
+# the following tests aren't direct module tests but they make use of the moduletool/conftest.py
+
+
 def test_load_module_v1_module_using_install(snippetcompiler_clean, modules_repo) -> None:
     """
     Test whether the Project.load_module() method works correctly when a module is only available as a V1 module
@@ -1705,3 +1708,20 @@ def test_load_module_v1_module_using_install(snippetcompiler_clean, modules_repo
     project.load_module(module_name=module_name, install_v1=True, allow_v1=True)
     assert module_name in project.modules
     assert module_name in os.listdir(project.downloadpath)
+
+
+@pytest.mark.parametrize("install", [True, False])
+def test_project_load_install(snippetcompiler_clean, install: bool, modules_repo) -> None:
+    """
+    Verify that loading a project only installs modules when install is True.
+    """
+    snippetcompiler_clean.repo = modules_repo
+    project: Project = snippetcompiler_clean.setup_for_snippet("import mod7", autostd=False, install_project=False)
+    if install:
+        project.load(install=True)
+    else:
+        with pytest.raises(ModuleLoadingException, match="Failed to load module mod7"):
+            project.load()
+        # make sure project load works after installing modules
+        project.install_modules()
+        project.load()
