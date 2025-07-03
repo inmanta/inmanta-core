@@ -36,12 +36,12 @@ def test_issue_120_bad_import_extra(snippetcompiler):
 def test_1480_1767_invalid_repo(snippetcompiler_clean):
     snippetcompiler_clean.repo = "some_invalid_url"
     snippetcompiler_clean.setup_for_error(
-        """
-
+        """\
+        import lsm
         """,
-        "Failed to load module std (reported in import std (__internal__:1:1))"
+        "Failed to load module lsm (reported in import lsm ({dir}/main.cf:1))"
         "\ncaused by:"
-        "\n  Could not find module std. Please make sure to add any module v2 requirements with `inmanta module add --v2` and"
+        "\n  Could not find module lsm. Please make sure to add any module v2 requirements with `inmanta module add --v2` and"
         " to install all the project's dependencies with `inmanta project install`.",
         autostd=True,
     )
