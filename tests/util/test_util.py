@@ -583,26 +583,30 @@ def test_datetime_iso_format(time_machine):
 
 async def test_helper_method_using_paging_links(
     client: protocol.Client,
-    fetch_all_data_coro: Coroutine[Any, Any, common.Result],
     fetch_page_by_page_coro: Coroutine[Any, Any, common.Result],
     page_size: int,
+    expected_item_count: int,
     env: str,
+    *,
+    iterate_per_item: bool,
 ) -> None:
-    rt = await fetch_all_data_coro
-    assert rt.code == 200
-    n_results = len(rt.result["data"])
 
-    page_count = 0
+    item_count = 0
     last_batch_flag = False
 
-    async for item in client.all_pages(fetch_page_by_page_coro, env):
-        LOGGER.debug(f"batch {page_count}")
-        LOGGER.debug(item.result["data"])
+    async for item in client.all_pages(fetch_page_by_page_coro, env, iterate_per_item=iterate_per_item):
+        LOGGER.debug(f"batch {item_count}")
+        LOGGER.debug(item)
+        if not iterate_per_item:
+            # Check all pages have the right size (except maybe the last)
+            if len(item) != page_size:
+                if last_batch_flag:
+                    raise Exception(f"Only the very last batch should have less than {page_size} items.")
+                last_batch_flag = True
+        item_count += 1
 
-        if len(item.result["data"]) != page_size:
-            if last_batch_flag:
-                raise Exception(f"Only the very last batch should have less than {page_size} items.")
-            last_batch_flag = True
-        page_count += 1
+    if not iterate_per_item:
+        # Count number of pages instead of number of individual items
+        expected_item_count = math.ceil(expected_item_count / page_size)
 
-    assert page_count == math.ceil(n_results / page_size)
+    assert item_count == expected_item_count

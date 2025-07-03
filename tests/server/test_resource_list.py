@@ -618,17 +618,32 @@ async def test_none_resources_paging(server, client, env_with_resources):
 
 
 @pytest.mark.parametrize("page_size", [1, 2, 5, 8])
-async def test_client_all_pages_helper(server, client, env_with_resources, page_size):
+@pytest.mark.parametrize("iterate_per_item", [True, False])
+async def test_client_all_pages_helper(server, client, env_with_resources, page_size, iterate_per_item):
     env = env_with_resources
 
-    fetch_all_data_coro = client.resource_list(tid=env.id)
+    result = await client.resource_list(tid=env.id)
+    assert result.code == 200
+    n_results = len(result.result["data"])
+
     fetch_page_by_page_coro = client.resource_list(tid=env.id, limit=page_size)
     await test_helper_method_using_paging_links(
         client=client,
-        fetch_all_data_coro=fetch_all_data_coro,
         fetch_page_by_page_coro=fetch_page_by_page_coro,
         page_size=page_size,
+        expected_item_count=n_results,
         env=str(env.id),
+        iterate_per_item=True,
+    )
+
+    fetch_page_by_page_coro = client.resource_list(tid=env.id, limit=page_size)
+    await test_helper_method_using_paging_links(
+        client=client,
+        fetch_page_by_page_coro=fetch_page_by_page_coro,
+        page_size=page_size,
+        expected_item_count=n_results,
+        env=str(env.id),
+        iterate_per_item=False,
     )
 
 
