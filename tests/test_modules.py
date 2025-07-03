@@ -263,12 +263,12 @@ def test_module_v2_source_get_installed_module_editable(
     assert mod._is_editable_install == editable
 
 
-def test_module_v2_source_path_for_v1(snippetcompiler) -> None:
+def test_module_v2_source_path_for_v1(snippetcompiler, tmpvenv_active) -> None:
     """
     Make sure ModuleV2Source.path_for does not include modules loaded by the v1 module loader.
     """
     # install and load std as v1
-    snippetcompiler.setup_for_snippet("import std")
+    snippetcompiler.setup_for_snippet("import std", use_pip_config_file=True)
     module.Project.get().load_plugins()
 
     # make sure the v1 module finder is configured and discovered by env.process_env
