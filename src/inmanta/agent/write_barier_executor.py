@@ -1,19 +1,19 @@
 """
-    Copyright 2024 Inmanta
+Copyright 2024 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import concurrent
@@ -24,14 +24,7 @@ from copy import deepcopy
 
 from inmanta import const
 from inmanta.agent import executor
-from inmanta.agent.executor import (
-    DeployReport,
-    DryrunReport,
-    FailedResources,
-    GetFactReport,
-    ResourceDetails,
-    ResourceInstallSpec,
-)
+from inmanta.agent.executor import DeployReport, DryrunReport, GetFactReport, ModuleInstallSpec, ResourceDetails
 from inmanta.types import ResourceIdStr
 
 
@@ -70,14 +63,6 @@ class WriteBarierExecutor(executor.Executor):
     async def join(self) -> None:
         await self.delegate.join()
 
-    @property
-    def failed_resources(self) -> FailedResources:
-        return self.delegate.failed_resources
-
-    @failed_resources.setter
-    def failed_resources(self, value: FailedResources) -> None:
-        self.delegate.failed_resources = value
-
 
 class WriteBarierExecutorManager(executor.ExecutorManager[WriteBarierExecutor]):
     """Executor manager wrapping all executors in a write barier"""
@@ -86,8 +71,10 @@ class WriteBarierExecutorManager(executor.ExecutorManager[WriteBarierExecutor]):
         self.delegate = delegate
 
     async def get_executor(
-        self, agent_name: str, agent_uri: str, code: typing.Collection[ResourceInstallSpec]
+        self, agent_name: str, agent_uri: str, code: typing.Collection[ModuleInstallSpec]
     ) -> WriteBarierExecutor:
+        if not code:
+            raise ValueError(f"{self.__class__.__name__}.get_executor() expects at least one resource install specification")
         return WriteBarierExecutor(await self.delegate.get_executor(agent_name, agent_uri, code))
 
     async def stop_for_agent(self, agent_name: str) -> list[WriteBarierExecutor]:

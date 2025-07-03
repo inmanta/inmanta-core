@@ -1,0 +1,8 @@
+---
+description: Fixed bug that caused code loading problems not to be reported into the resource action log.
+issue-nr: 8722
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso8]
+sections:
+  bugfix: "{{description}}"

@@ -1,32 +1,31 @@
 """
-    Copyright 2019 Inmanta
+Copyright 2019 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import logging
 from time import perf_counter, time
 from typing import Mapping, Optional
 
-from pyformance import gauge
-from pyformance.meters import Gauge
-
 from inmanta.reporter import InfluxReporter
 from inmanta.server import SLICE_METRICS
 from inmanta.server import config as opt
 from inmanta.server import protocol
+from inmanta.vendor.pyformance import gauge
+from inmanta.vendor.pyformance.meters.gauge import Gauge
 
 LOGGER = logging.getLogger(__name__)
 
@@ -79,7 +78,7 @@ class MetricsService(protocol.ServerSlice):
         gauge("self.spec.cpu", CPUMicroBenchMark())
 
 
-class CachingCallbackGuage(Gauge):
+class CachingCallbackGuage(Gauge[int]):
     """
     A gauge that calculates a value on the fly and holds it for a specific time interval.
 

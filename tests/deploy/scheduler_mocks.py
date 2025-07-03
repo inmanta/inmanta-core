@@ -1,29 +1,28 @@
 """
-    Copyright 2025 Inmanta
+Copyright 2025 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import asyncio
 import datetime
 import typing
 import uuid
-from collections.abc import Set
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
-from typing import Any, Callable, Coroutine, Mapping, Never, Optional, Sequence
+from typing import Any, Callable, Coroutine, Mapping, Never, Optional, Sequence, Set
 from uuid import UUID
 
 import asyncpg
@@ -31,7 +30,7 @@ from asyncpg import Connection
 
 from inmanta import const
 from inmanta.agent import Agent, executor
-from inmanta.agent.executor import DeployReport, DryrunReport, GetFactReport, ResourceDetails, ResourceInstallSpec
+from inmanta.agent.executor import DeployReport, DryrunReport, GetFactReport, ModuleInstallSpec, ResourceDetails
 from inmanta.const import Change
 from inmanta.deploy import state
 from inmanta.deploy.persistence import StateUpdateManager
@@ -58,7 +57,6 @@ class DummyExecutor(executor.Executor):
         self.execute_count = 0
         self.dry_run_count = 0
         self.facts_count = 0
-        self.failed_resources = {}
         self.mock_versions = {}
 
     def reset_counters(self) -> None:
@@ -175,9 +173,9 @@ class DummyManager(executor.ExecutorManager[executor.Executor]):
         self.executors[agent_name] = executor
         return executor
 
-    async def get_executor(
-        self, agent_name: str, agent_uri: str, code: typing.Collection[ResourceInstallSpec]
-    ) -> DummyExecutor:
+    async def get_executor(self, agent_name: str, agent_uri: str, code: typing.Collection[ModuleInstallSpec]) -> DummyExecutor:
+        if not code:
+            raise ValueError(f"{self.__class__.__name__}.get_executor() expects at least one resource install specification")
         if agent_name not in self.executors:
             self.executors[agent_name] = DummyExecutor()
         return self.executors[agent_name]
@@ -279,13 +277,16 @@ class DummyStateManager(StateUpdateManager):
     ) -> None:
         pass
 
-    async def mark_as_orphan(
-        self, environment: UUID, resource_ids: Set[ResourceIdStr], connection: Optional[Connection] = None
+    async def set_last_processed_model_version(
+        self, environment: UUID, version: int, connection: Optional[Connection] = None
     ) -> None:
         pass
 
-    async def set_last_processed_model_version(
-        self, environment: UUID, version: int, connection: Optional[Connection] = None
+    async def mark_as_orphan(
+        self,
+        environment: UUID,
+        resource_ids: Set[ResourceIdStr],
+        connection: Optional[Connection] = None,
     ) -> None:
         pass
 
@@ -299,7 +300,7 @@ class TestScheduler(ResourceScheduler):
         super().__init__(environment, executor_manager, client)
         # Bypass DB
         self.executor_manager = self.executor_manager
-        self.code_manager = DummyCodeManager(client)
+        self.code_manager = DummyCodeManager()
         self.mock_versions = {}
         self.state_update_manager = DummyStateManager()
         self._timer_manager = DummyTimerManager(self)

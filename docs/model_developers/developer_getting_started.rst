@@ -131,43 +131,8 @@ The module dependencies are installed using the inmanta CLI tool:
 Set project sources
 #####################
 
-When starting a new project, the next step is to set the sources of your project so that it knows where to get its required modules from.
-
-V1 module source
-================
-
-If you only use opensource v1 modules as provided by Inmanta, you can skip below step.
-
-1. Find the module you want to work on
-2. Copy the SSH URL of the repo
-3. In your VS code, open the ``project.yml`` file and under ``repo:``, add the copied line there but keep in mind to replace the name of a specific module with a place holder, like below example:
-
-.. code-block:: bash
-
-    code project.yml
-
-.. code-block:: yaml
-
-    repo:
-        - url: git@code.inmanta.com:example/my_module.git
-          type: git
-
-Becomes:
-
-.. code-block:: yaml
-
-    repo:
-        - url: git@code.inmanta.com:example/{}.git
-          type: git
-
-* Now, in your ``main.cf`` file, if you import a module like, ``import <my_module>`` and save the file, you can get code completion. If you are working on an existing project with a populated ``main.cf`` file, code completion will work as expected.
-
-**Please note, code completion and navigation work on modules that are imported in the** ``main.cf`` **file**.
-
-Pip index for V2 modules and V1 modules' dependencies
-=====================================================
-
-Add the pip index where your modules and dependencies are hosted to ``project.yml`` in the ``pip.index-url`` :ref:`section<specify_location_pip>`.
+When starting a new project, the next step is to add the pip index where your modules and dependencies are hosted to
+``project.yml`` in the ``pip.index-url`` :ref:`section<specify_location_pip>`.
 For example, for modules hosted on PyPi:
 
 .. code-block:: yaml
@@ -195,25 +160,14 @@ Same as :ref:`Working on a New Project <dgs-new-project>` part, modules can also
 .. code-block:: bash
 
     pip install cookiecutter
-    cookiecutter --checkout v1 https://github.com/inmanta/inmanta-module-template.git
-
-for a v1 module. If you want to use the module in a project, make sure to put it in the project's module path.
-
-For a v2 module, use the v2 cookiecutter template, then install the module:
-
-.. code-block:: bash
-
-    pip install cookiecutter
     cookiecutter https://github.com/inmanta/inmanta-module-template.git
     pip install -e ./<module-name>
 
 This will install a Python package with the name ``inmanta-module-<module-name>`` in the active environment.
 
 If you want to use the v2 module in a project, make sure to set up a v2 module source as outlined in the section above,
-then add the module as a dependency of the project as described in :ref:`dgs-existing-module`.
+then add the module as a dependency of the project as described in the next section :ref:`dgs-existing-module`.
 The location of the module directory is not important for a v2 module.
-
-
 
 For more information on how to work on modules, see :ref:`moddev-module` and `the module template documentation <https://github.com/inmanta/inmanta-module-template>`_.
 
@@ -226,15 +180,7 @@ Modules that you want to work on, have to be added to your Inmanta project using
 
 .. code-block:: bash
 
-    inmanta module add --v1 <module-name>
-
-for a v1 module or
-
-.. code-block:: bash
-
     inmanta module add --v2 <module-name>
-
-for a v2 module. The latter will implicitly trust any Python package named ``inmanta-module-<module-name>`` in the project's configured module source.
 
 When starting to work on an existing module, it is recommended to check the ``readme.md`` file that comes with the module to see the instructions on how to install and use them.
 

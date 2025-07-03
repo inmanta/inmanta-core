@@ -1,28 +1,27 @@
 """
-    Copyright 2024 Inmanta
+Copyright 2024 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import abc
 import datetime
 import logging
 import uuid
-from collections.abc import Set
 from contextlib import AbstractAsyncContextManager
-from typing import Any, Optional
+from typing import Any, Optional, Set
 from uuid import UUID
 
 from asyncpg import Connection, UniqueViolationError
@@ -99,7 +98,10 @@ class StateUpdateManager(abc.ABC):
 
     @abc.abstractmethod
     async def mark_as_orphan(
-        self, environment: UUID, resource_ids: Set[ResourceIdStr], connection: Optional[Connection] = None
+        self,
+        environment: UUID,
+        resource_ids: Set[ResourceIdStr],
+        connection: Optional[Connection] = None,
     ) -> None:
         pass
 
@@ -121,7 +123,7 @@ class ToDbUpdateManager(StateUpdateManager):
         self.client = client
 
     def get_connection(self, connection: Optional[Connection] = None) -> AbstractAsyncContextManager[Connection]:
-        return data.Scheduler.get_connection()
+        return data.Scheduler.get_connection(connection)
 
     async def send_in_progress(self, action_id: UUID, resource_id: Id) -> None:
         """
@@ -163,8 +165,12 @@ class ToDbUpdateManager(StateUpdateManager):
                 except UniqueViolationError:
                     raise ValueError(f"A resource action with id {action_id} already exists.")
 
-                # FIXME: we may want to have this in the RPS table instead of Resource table, at some point
+                # FIXME: At some point, we will only need this on the RPS table
                 await resource.update_fields(connection=connection, status=const.ResourceState.deploying)
+                await resource.update_persistent_state(
+                    is_deploying=True,
+                    connection=connection,
+                )
 
     async def send_deploy_done(
         self,
@@ -274,7 +280,9 @@ class ToDbUpdateManager(StateUpdateManager):
                     status=status,
                     connection=connection,
                 )
+
                 await resource.update_persistent_state(
+                    is_deploying=False,
                     last_deploy=finished,
                     last_deployed_version=resource_id_parsed.version,
                     last_deployed_attribute_hash=resource.attribute_hash,
@@ -366,10 +374,7 @@ class ToDbUpdateManager(StateUpdateManager):
         )
 
     async def mark_as_orphan(
-        self,
-        environment: UUID,
-        resource_ids: Set[ResourceIdStr],
-        connection: Optional[Connection] = None,
+        self, environment: UUID, resource_ids: Set[ResourceIdStr], connection: Optional[Connection] = None
     ) -> None:
         await data.ResourcePersistentState.mark_as_orphan(environment, resource_ids, connection=connection)
 

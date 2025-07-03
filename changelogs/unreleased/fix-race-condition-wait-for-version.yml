@@ -1,0 +1,4 @@
+---
+description: "Fix race condition in utils.wait_for_version method."
+change-type: patch
+destination-branches: [master, iso8, iso7]

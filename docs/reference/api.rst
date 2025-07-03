@@ -65,6 +65,10 @@ Plugins
     :members: add_function, clear, get_functions
     :undoc-members:
 
+.. autoclass:: inmanta.ast.UnsetException
+
+.. autofunction:: inmanta.plugins.allow_reference_values
+
 Resources
 ---------
 
@@ -106,6 +110,12 @@ Handlers
     :inherited-members:
     :undoc-members:
 
+References
+----------
+
+.. autoclass:: inmanta.references.Reference
+
+.. autodecorator:: inmanta.references.reference
 
 Export
 ------
@@ -348,6 +358,8 @@ when bypassing the usual plugin workflow by calling internal methods directly.
 .. autoclass:: inmanta.execute.proxy.DynamicProxy()
     :members: return_value, unwrap
     :undoc-members:
+
+
 
 Rest API
 ---------

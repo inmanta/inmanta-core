@@ -16,6 +16,7 @@ Inmanta, please check out the :doc:`../quickstart` guide.
     projectyml
     api
     json
+    expertfeatures
     modules
     openapi
     compatibility

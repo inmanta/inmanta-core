@@ -1,30 +1,33 @@
 """
-    Copyright 2023 Inmanta
+Copyright 2023 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import pytest
 
-from inmanta import config, const
-from inmanta.protocol import auth, endpoints
+import nacl.pwhash
+from inmanta import config, const, data
+from inmanta.data.model import AuthMethod
+from inmanta.protocol import endpoints
+from inmanta.protocol.auth import auth
 from inmanta.server import SLICE_USER, protocol
 
 
 @pytest.fixture
-def server_pre_start(server_config):
+def server_pre_start(server_config, tmpdir):
     """Ensure that the server started by the server fixtures have authentication enabled with auth_method database"""
     config.Config.set("server", "auth", "true")
     config.Config.set("server", "auth_method", "database")
@@ -152,3 +155,37 @@ async def test_set_password(server: protocol.Server, auth_client: endpoints.Clie
 
     response = await auth_client.login("admin", new_pw)
     assert response.code == 200
+
+
+async def test_environment_create_token(server: protocol.Server, auth_client: endpoints.Client, monkeypatch) -> None:
+    """
+    Verify that the environment_create_token endpoint works correctly when the server.auth=true
+    option is set via an environment variable.
+    Reproduction of bug: https://github.com/inmanta/inmanta-core/issues/8962
+    """
+    config.Config.set("server", "auth", "false")
+    monkeypatch.setenv("INMANTA_SERVER_AUTH", "true")
+    user = data.User(
+        username="admin",
+        password_hash=nacl.pwhash.str("adminadmin".encode()).decode(),
+        auth_method=AuthMethod.database,
+    )
+    await user.insert()
+
+    response = await auth_client.login("admin", "adminadmin")
+    assert response.code == 200
+    token = response.result["data"]["token"]
+    config.Config.set("client_rest_transport", "token", token)
+    auth_client = protocol.Client("client")
+
+    response = await auth_client.project_create(name="test")
+    assert response.code == 200
+    project_id = response.result["data"]["id"]
+
+    response = await auth_client.environment_create(project_id=project_id, name="test")
+    assert response.code == 200
+    env_id = response.result["data"]["id"]
+
+    response = await auth_client.environment_create_token(tid=env_id, client_types=["api"])
+    assert response.code == 200
+    assert response.result["data"]

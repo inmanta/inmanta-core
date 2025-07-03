@@ -1,0 +1,8 @@
+description: Added documentation about unknowns
+change-type: patch
+sections:
+  minor-improvement: "{{description}}"
+issue-nr: 6056
+destination-branches:
+  - master
+  - iso8

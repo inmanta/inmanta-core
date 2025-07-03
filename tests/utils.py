@@ -1,31 +1,35 @@
 """
-    Copyright 2021 Inmanta
+Copyright 2021 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import asyncio
 import base64
 import configparser
 import datetime
+import enum
 import functools
 import json
 import logging
 import math
 import os
+import pathlib
+import queue
 import random
+import re
 import shutil
 import uuid
 from collections import abc
@@ -33,10 +37,12 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import timezone
 from logging import LogRecord
-from typing import Any, Collection, Mapping, Optional, Set, TypeVar, Union
+from typing import TYPE_CHECKING, Any, Collection, Mapping, Optional, Set, TypeVar, Union
 
 import pytest
 import yaml
+from tornado import httpclient
+from tornado.httpclient import HTTPRequest
 
 import build
 import build.env
@@ -48,23 +54,29 @@ from inmanta import config, const, data, env, module, protocol, util
 from inmanta.agent import config as cfg
 from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
-from inmanta.agent.executor import ExecutorBlueprint, ResourceInstallSpec
+from inmanta.agent.executor import ExecutorBlueprint, ModuleInstallSpec
 from inmanta.const import AGENT_SCHEDULER_ID
-from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig
+from inmanta.data.model import LEGACY_PIP_DEFAULT, AuthMethod, PipConfig, SchedulerStatusReport
 from inmanta.deploy import state
 from inmanta.deploy.scheduler import ResourceScheduler
 from inmanta.deploy.state import ResourceIntent
 from inmanta.moduletool import ModuleTool
-from inmanta.protocol import Client, SessionEndpoint, methods
+from inmanta.protocol import Client, SessionEndpoint, methods, methods_v2
+from inmanta.protocol.auth import auth, policy_engine
 from inmanta.server.bootloader import InmantaBootloader
+from inmanta.server.config import AuthorizationProviderName, server_auth_method
 from inmanta.server.extensions import ProductMetadata
-from inmanta.types import Apireturn, ResourceIdStr, ResourceType
+from inmanta.server.services.compilerservice import CompilerService
+from inmanta.types import Apireturn, ResourceIdStr
 from inmanta.util import get_compiler_version, hash_file
 from libpip2pi.commands import dir2pi
 
 T = TypeVar("T")
 
 LOGGER = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from conftest import CompileRunnerMock
 
 
 def get_all_subclasses(cls: type[T]) -> set[type[T]]:
@@ -152,7 +164,7 @@ def log_contains(caplog, loggerpart, level, msg, test_phase="call"):
             print(logger_name, log_level, message)
         print("------------")
 
-    assert False
+    assert False, f'Message "{msg}" not present in logs'
 
 
 def log_doesnt_contain(caplog, loggerpart, level, msg):
@@ -243,7 +255,7 @@ class LogSequence:
         if not self.allow_errors:
             # first error is later
             idxe = self._find("", logging.ERROR, "", self.index, min_level)
-            assert idxe == -1 or idxe >= index
+            assert idxe == -1 or idxe >= index, f"Unexpected ERROR log line found: {self.caplog.records[idxe]}"
         assert index >= 0, "could not find " + msg
         return LogSequence(self.caplog, index + 1, self.allow_errors, self.ignore)
 
@@ -275,27 +287,31 @@ def assert_no_warning(caplog, loggers_to_allow: list[str] = NOISY_LOGGERS):
         assert record.levelname != "WARNING" or (record.name in loggers_to_allow), str(record) + record.getMessage()
 
 
-def configure(unused_tcp_port, database_name, database_port):
-    import inmanta.agent.config  # noqa: F401
-    import inmanta.server.config  # noqa: F401
-    from inmanta.config import Config
-
-    free_port = str(unused_tcp_port)
-    Config.load_config()
-    Config.set("server", "bind-port", free_port)
-    Config.set("agent_rest_transport", "port", free_port)
-    Config.set("compiler_rest_transport", "port", free_port)
-    Config.set("client_rest_transport", "port", free_port)
-    Config.set("cmdline_rest_transport", "port", free_port)
-    Config.set("database", "name", database_name)
-    Config.set("database", "host", "localhost")
-    Config.set("database", "port", str(database_port))
-
-
-def configure_auth(auth: bool, ca: bool, ssl: bool) -> None:
+def configure_auth(
+    auth: bool,
+    ca: bool,
+    ssl: bool,
+    authentication_method: AuthMethod | None = None,
+    authorization_provider: AuthorizationProviderName | None = None,
+    access_policy: str | None = None,
+    path_opa_executable: str | None = None,
+) -> None:
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
     if auth:
         config.Config.set("server", "auth", "true")
+        if authentication_method:
+            server_auth_method.set(authentication_method.value)
+        if authorization_provider:
+            config.Config.set("server", "authorization-provider", authorization_provider.value)
+        if access_policy:
+            assert path_opa_executable is not None
+            state_dir = config.state_dir.get()
+            os.mkdir(os.path.join(state_dir, "policy_engine"))
+            access_policy_file = os.path.join(state_dir, "policy_engine", "policy.rego")
+            with open(access_policy_file, "w") as fh:
+                fh.write(access_policy)
+            policy_engine.policy_file.set(access_policy_file)
+            policy_engine.path_opa_executable.set(path_opa_executable)
     for x, ct in [
         ("server", None),
         ("agent_rest_transport", ["agent"]),
@@ -326,7 +342,7 @@ async def report_db_index_usage(min_precent=100):
         " n_live_tup rows_in_table, seq_scan * n_live_tup badness  FROM pg_stat_user_tables "
         "WHERE seq_scan + idx_scan > 0 order by badness desc"
     )
-    async with data.Compile._connection_pool.acquire() as con:
+    async with data.get_connection_pool().acquire() as con:
         result = await con.fetch(q)
 
     for row in result:
@@ -348,7 +364,7 @@ async def wait_until_version_is_released(client, environment: uuid.UUID, version
     await retry_limited(_is_version_released, timeout=10)
 
 
-async def wait_for_version(client, environment, cnt, compile_timeout: int = 30):
+async def wait_for_version(client, environment, cnt: int, compile_timeout: int = 30):
     """
     :param compile_timeout: Raise an AssertionError if the compilation didn't finish after this amount of seconds.
     """
@@ -356,12 +372,13 @@ async def wait_for_version(client, environment, cnt, compile_timeout: int = 30):
     # Wait until the server is no longer compiling
     # wait for it to finish
     async def compile_done():
-        compiling = await client.is_compiling(environment)
-        code = compiling.code
-        return code == 204
+        result = await client.get_reports(environment)
+        assert result.code == 200
+        return all(r["success"] is not None for r in result.result["reports"])
 
     await retry_limited(compile_done, compile_timeout)
 
+    # Output compile report for debugging purposes
     reports = await client.get_reports(environment)
     for report in reports.result["reports"]:
         data = await client.get_report(report["id"])
@@ -416,7 +433,11 @@ async def wait_until_deployment_finishes(
 
         if version >= 0:
             scheduler = await data.Scheduler.get_one(environment=environment)
-            if scheduler.last_processed_model_version is None or scheduler.last_processed_model_version < version:
+            if (
+                scheduler is None
+                or scheduler.last_processed_model_version is None
+                or scheduler.last_processed_model_version < version
+            ):
                 return False
 
         result = await client.resource_list(environment, deploy_summary=True)
@@ -495,6 +516,7 @@ class ClientHelper:
             unknowns=[],
             version_info={},
             compiler_version=get_compiler_version(),
+            module_version_info={},
         )
         assert res.code == 200, res.result
         if wait_for_released:
@@ -702,7 +724,7 @@ def module_from_template(
     """
 
     def to_python_requires(
-        requires: abc.Sequence[Union[module.InmantaModuleRequirement, inmanta.util.CanonicalRequirement]]
+        requires: abc.Sequence[Union[module.InmantaModuleRequirement, inmanta.util.CanonicalRequirement]],
     ) -> list[str]:
         return [
             str(req) if isinstance(req, packaging.requirements.Requirement) else str(req.get_python_package_requirement())
@@ -769,14 +791,14 @@ def module_from_template(
                 config=PipConfig(use_system_config=True),
             )
         else:
-            mod_artifact_path = ModuleTool().build(path=dest_dir)
+            mod_artifact_paths = ModuleTool().build(path=dest_dir, wheel=True)
             env.process_env.install_for_config(
                 requirements=[],
-                paths=[env.LocalPackagePath(path=mod_artifact_path)],
+                paths=[env.LocalPackagePath(path=mod_artifact_paths[0])],
                 config=PipConfig(use_system_config=True),
             )
     if publish_index is not None:
-        ModuleTool().build(path=dest_dir, output_dir=publish_index.artifact_dir)
+        ModuleTool().build(path=dest_dir, output_dir=publish_index.artifact_dir, wheel=True)
         publish_index.publish()
     with open(config_file) as fh:
         return module.ModuleV2Metadata.parse(fh)
@@ -920,6 +942,7 @@ async def _deploy_resources(client, environment, resources, version: int, push, 
         unknowns=[],
         version_info={},
         compiler_version=get_compiler_version(),
+        module_version_info={},
     )
     assert result.code == 200
 
@@ -989,27 +1012,34 @@ class NullAgent(SessionEndpoint):
     async def get_status(self) -> Apireturn:
         return 200, {}
 
+    @protocol.handle(methods_v2.trigger_get_status, env="tid")
+    async def get_scheduler_resource_state(self, env: data.Environment) -> SchedulerStatusReport:
+        return SchedulerStatusReport(scheduler_state={}, db_state={}, resource_states={}, discrepancies=[])
+
 
 def make_requires(resources: Mapping[ResourceIdStr, ResourceIntent]) -> Mapping[ResourceIdStr, Set[ResourceIdStr]]:
     """Convert resources from the scheduler input format to its requires format"""
     return {k: {req for req in resource.attributes.get("requires", [])} for k, resource in resources.items()}
 
 
-dummyblueprint = ExecutorBlueprint(
-    pip_config=LEGACY_PIP_DEFAULT,
-    requirements=[],
-    python_version=(3, 11),
-    sources=[],
-)
+def _get_dummy_blueprint_for(environment: uuid.UUID) -> ExecutorBlueprint:
+    return ExecutorBlueprint(
+        environment_id=environment,
+        pip_config=LEGACY_PIP_DEFAULT,
+        requirements=[],
+        python_version=(3, 11),
+        sources=[],
+    )
 
 
 class DummyCodeManager(CodeManager):
-    """Code manager that prentend no code is ever needed"""
+    """Code manager that pretends no code is ever needed"""
 
     async def get_code(
-        self, environment: uuid.UUID, version: int, resource_types: Collection[ResourceType]
-    ) -> tuple[Collection[ResourceInstallSpec], executor.FailedResources]:
-        return ([ResourceInstallSpec(rt, version, dummyblueprint) for rt in resource_types], {})
+        self, environment: uuid.UUID, model_version: int, agent_name: str
+    ) -> tuple[Collection[ModuleInstallSpec], executor.FailedModules]:
+        dummyblueprint: ExecutorBlueprint = _get_dummy_blueprint_for(environment)
+        return ([ModuleInstallSpec("dummy_module", "0.0.0", dummyblueprint)], {})
 
 
 async def is_agent_done(scheduler: ResourceScheduler, agent_name: str) -> bool:
@@ -1053,3 +1083,144 @@ def assert_resource_persistent_state(
         f"{resource_persistent_state.resource_id}"
         f" ({resource_persistent_state.get_compliance_status()} != {expected_compliance})"
     )
+
+
+async def run_compile_and_wait_until_compile_is_done(
+    compiler_service: CompilerService,
+    compiler_queue: queue.Queue["CompileRunnerMock"],
+    env_id: uuid.UUID,
+    fail: Optional[bool] = None,
+    fail_on_pull=False,
+) -> "CompileRunnerMock":
+    """
+    Unblock the first compile in the compiler queue and wait until the compile finishes.
+    """
+    # prevent race conditions where compile request is not yet in queue
+    await retry_limited(lambda: not compiler_queue.empty(), timeout=10)
+    run = compiler_queue.get(block=True)
+    if fail is not None:
+        run._make_compile_fail = fail
+    run._make_pull_fail = fail_on_pull
+
+    current_task = compiler_service._env_to_compile_task[env_id]
+    run.block = False
+
+    def _is_compile_finished() -> bool:
+        if env_id not in compiler_service._env_to_compile_task:
+            return True
+        if current_task is not compiler_service._env_to_compile_task[env_id]:
+            return True
+        return False
+
+    await retry_limited(_is_compile_finished, timeout=10)
+    return run
+
+
+def validate_version_numbers_migration_scripts(versions_folder: pathlib.Path) -> None:
+    """
+    Validate whether the names of the database migration scripts in the given directory
+    are compliant with the schema. Migration scripts must have the format vYYYYMMDDN.py
+    """
+    v1_found = False
+    for path in versions_folder.iterdir():
+        file_name = path.name
+        if not file_name.endswith(".py"):
+            continue
+        if file_name == "__init__.py":
+            continue
+        if file_name == "v1.py":
+            v1_found = True
+            continue
+        if not re.fullmatch(r"v([0-9]{9})\.py", file_name):
+            raise Exception(f"Database migration script {file_name} has invalid format.")
+    assert v1_found
+
+
+def get_auth_client(
+    env_to_role_dct: dict[str, list[str]], is_admin: bool, client_types: abc.Sequence[const.ClientType] | None = None
+) -> protocol.Client:
+    """
+    Returns a client that uses an access token to authenticate to the server.
+
+    This method changes the `client_rest_transport.token` config option.
+
+    :param env_to_role_dct: A dictionary that maps the id of an environment to a list of roles that user has
+                            in that environment.
+    :param id_admin: A boolean that indicates whether the user is a global admin.
+    :param client_type: A sequence of client_types that should be included in the token.
+    """
+    if client_types is None:
+        client_types = [const.ClientType.api]
+    token = auth.encode_token(
+        client_types=[c.value for c in client_types],
+        expire=None,
+        custom_claims={
+            const.INMANTA_ROLES_URN: env_to_role_dct,
+            const.INMANTA_IS_ADMIN_URN: is_admin,
+        },
+    )
+    config.Config.set("client_rest_transport", "token", token)
+    return protocol.Client("client")
+
+
+async def verify_authorization_labels_in_default_policy(
+    enum_with_labels: enum.Enum, include_prefixes: Set[str] | None = None, exclude_prefixes: Set[str] | None = None
+) -> None:
+    """
+    Ensure that authorization labels defined in the access policy map to their corresponding enum and
+    ensure every label only occurs in one set.
+
+    :param enum_with_labels: The enum that has to be used to validate the authorization labels.
+    :param include_prefixes: If provided, only check authorization labels that start with these prefixes.
+    :param exclude_prefixes: If provided, don't check authorization labls that start with these prefixes.
+    """
+    policy_engine_client = httpclient.AsyncHTTPClient()
+
+    async def evaluate_in_policy(query: str):
+        request = HTTPRequest(
+            url=f"http://policy_engine/v1/data/policy/{query}",
+            method="POST",
+            headers={"Content-Type": "application/json"},
+            body="",
+        )
+        response = await policy_engine_client.fetch(request)
+        if response.code != 200:
+            raise Exception(f"Policy evaluation failed: {response.body}")
+        return json.loads(response.body.decode())["result"]
+
+    variables_containing_labels = [
+        "read_only_labels",
+        "noc_specific_labels",
+        "operator_specific_labels",
+        "admin_specific_labels",
+        "expert_admin_specific_labels",
+    ]
+
+    # 1. Fetch labels from the policy
+    # 2. Verify they exist in the enum
+    var_name_to_labels = {
+        var_name: {
+            enum_with_labels(label)
+            for label in await evaluate_in_policy(var_name)
+            if (exclude_prefixes is None or not any(label.startswith(p) for p in exclude_prefixes))
+            and (include_prefixes is None or any(label.startswith(p) for p in include_prefixes))
+        }
+        for var_name in variables_containing_labels
+    }
+
+    # Ensure no label exists in more than one variable
+    for i in range(len(variables_containing_labels) - 1):
+        for j in range(i + 1, len(variables_containing_labels)):
+            var_name_i = variables_containing_labels[i]
+            var_name_j = variables_containing_labels[j]
+            intersection = var_name_to_labels[var_name_i] & var_name_to_labels[var_name_j]
+            if intersection:
+                raise Exception(f"Label(s) {intersection} exist(s) in {var_name_i} and {var_name_j}.")
+
+
+def read_file(file_name: str) -> str:
+    """
+    Returns the content of the given file.
+    """
+    with open(file_name, "r") as fh:
+        return fh.read()

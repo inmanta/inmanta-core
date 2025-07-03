@@ -1,19 +1,19 @@
 """
-    Copyright 2019 Inmanta
+Copyright 2019 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import asyncio
@@ -47,15 +47,15 @@ class CallTarget:
 
     def _get_endpoint_metadata(self) -> dict[str, list[tuple[str, Callable]]]:
         total_dict = {
-            method_name: method
-            for method_name, method in inspect.getmembers(self)
-            if callable(method) and method_name[0] != "_"
+            handle_name: method
+            for handle_name, method in inspect.getmembers(self)
+            if callable(method) and handle_name[0] != "_"
         }
 
         methods: dict[str, list[tuple[str, Callable]]] = defaultdict(list)
-        for name, attr in total_dict.items():
+        for handle_name, attr in total_dict.items():
             if hasattr(attr, "__protocol_method__"):
-                methods[attr.__protocol_method__.__name__].append((name, attr))
+                methods[attr.__protocol_method__.__name__].append((handle_name, attr))
 
         return methods
 
@@ -67,26 +67,23 @@ class CallTarget:
 
         # Loop over all methods in this class that have a handler annotation. The handler annotation refers to a method
         # definition. This method definition defines how the handler is invoked.
-        for method, handler_list in self._get_endpoint_metadata().items():
-            for method_handlers in handler_list:
-                # Go over all method annotation on the method associated with the handler
-                for properties in common.MethodProperties.methods[method]:
+        for method_name, handler_list in self._get_endpoint_metadata().items():
+            for handle_name, fnc in handler_list:
+                # Go over all method annotations on the method associated with the handler
+                for properties in common.MethodProperties.methods[method_name]:
                     url = properties.get_listen_url()
 
                     # Associate the method with the handler if:
                     # - the handler does not specific a method version
                     # - the handler specifies a method version and the method version matches the method properties
-                    if method_handlers[1].__api_version__ is None or (
-                        method_handlers[1].__api_version__ is not None
-                        and properties.api_version == method_handlers[1].__api_version__
+                    if fnc.__api_version__ is None or (
+                        fnc.__api_version__ is not None and properties.api_version == fnc.__api_version__
                     ):
                         # there can only be one
                         if url in url_map and properties.operation in url_map[url]:
-                            raise Exception(f"A handler is already registered for {properties.operation} {url}. ")
+                            raise Exception(f"A handler is already registered for {properties.operation} {url}.")
 
-                        url_map[url][properties.operation] = common.UrlMethod(
-                            properties, self, method_handlers[1], method_handlers[0]
-                        )
+                        url_map[url][properties.operation] = common.UrlMethod(properties, self, fnc, handle_name)
         return url_map
 
 

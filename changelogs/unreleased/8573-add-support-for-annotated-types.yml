@@ -1,0 +1,4 @@
+description: Add support for annotated types to plugins.
+issue-nr: 8573
+change-type: minor
+destination-branches: [master, iso8]

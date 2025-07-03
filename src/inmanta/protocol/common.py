@@ -1,19 +1,19 @@
 """
-    Copyright 2019 Inmanta
+Copyright 2019 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import enum
@@ -44,7 +44,8 @@ from tornado import web
 
 from inmanta import const, execute, types, util
 from inmanta.data.model import BaseModel, DateTimeNormalizerModel
-from inmanta.protocol import auth
+from inmanta.protocol.auth import auth
+from inmanta.protocol.auth.decorators import AuthorizationMetadata
 from inmanta.protocol.exceptions import BadRequest, BaseHttpException
 from inmanta.protocol.openapi import model as openapi_model
 from inmanta.stable_api import stable_api
@@ -361,8 +362,16 @@ class MethodProperties:
                 f"Method {properties.function.__name__} already has a "
                 f"method definition for api path {properties.path} and API version {properties.api_version}"
             )
+        if (
+            cls.methods[properties.function_name]
+            and cls.methods[properties.function_name][-1].authorization_metadata is not None
+        ):
+            raise Exception(
+                f"Method {properties.function_name} has a @method/@typedmethod annotation above an @auth annotation."
+                " The @auth method always needs to be defined above the @method/@typedmethod annotations."
+            )
 
-        cls.methods[properties.function.__name__].append(properties)
+        cls.methods[properties.function_name].append(properties)
 
     def __init__(
         self,
@@ -385,6 +394,7 @@ class MethodProperties:
         strict_typing: bool = True,
         enforce_auth: bool = True,
         varkw: bool = False,
+        token_param: str | None = None,
     ) -> None:
         """
         Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
@@ -411,6 +421,8 @@ class MethodProperties:
         :param varkw: If true, additional arguments are allowed and will be dispatched to the handler. The handler is
                       responsible for the validation.
         :param reply: If False, this is a fire-and-forget query: we will not wait for any result, just deliver the call
+        :param token_param: The parameter that contains the authorization token or None if the authorization token
+                            should be retrieved from the Authorization header.
         """
         if api is None:
             api = not server_agent and not agent_server
@@ -438,9 +450,11 @@ class MethodProperties:
         self._strict_typing = strict_typing
         self._enforce_auth = enforce_auth
         self.function = function
+        self.function_name = function.__name__
         self._varkw: bool = varkw
         self._varkw_name: Optional[str] = None
         self._return_type: Optional[type] = None
+        self.token_param = token_param
 
         self._parsed_docstring = docstring_parser.parse(text=function.__doc__, style=docstring_parser.DocstringStyle.REST)
         self._docstring_parameter_map = {p.arg_name: p.description for p in self._parsed_docstring.params}
@@ -452,6 +466,64 @@ class MethodProperties:
 
         self._validate_function_types(typed)
         self.argument_validator = self.arguments_to_pydantic()
+
+        if not hasattr(self.function, "__method_properties__"):
+            self.function.__method_properties__ = []
+        self.function.__method_properties__.append(self)
+
+        self.authorization_metadata: AuthorizationMetadata | None = None
+
+    @classmethod
+    def get_open_policy_agent_data(cls) -> dict[str, object]:
+        """
+        Return the information about the different endpoints that exist
+        in the format used as data to Open Policy Agent.
+        """
+        endpoints = {}
+        for method_properties_list in cls.methods.values():
+            for method_properties in method_properties_list:
+                auth_metadata = method_properties.authorization_metadata
+                if auth_metadata is None:
+                    continue
+                endpoint_id = f"{method_properties.operation} {method_properties.get_full_path()}"
+                environment_param = (
+                    method_properties._get_argument_name_for_policy_engine(auth_metadata.environment_param)
+                    if auth_metadata.environment_param
+                    else None
+                )
+                endpoints[endpoint_id] = {
+                    "client_types": [c.value for c in method_properties.client_types],
+                    "auth_label": auth_metadata.auth_label.value,
+                    "read_only": auth_metadata.read_only,
+                    "environment_param": environment_param,
+                }
+        return {"endpoints": endpoints}
+
+    def _get_argument_name_for_policy_engine(self, arg_name: str) -> str:
+        """
+        Return the name for the given argument as it should be fed into the access policy.
+
+        :param arg_name: The name of the argument as mentioned in the method annotated with @method or @typedmethod.
+        """
+        if arg_name in self.arg_options and self.arg_options[arg_name].header:
+            # Make sure we use the name of the header if the parameter was set using a header.
+            # The data in the access policy needs to be structured like on the API, because
+            # that is the structure that end-users know.
+            header_name = self.arg_options[arg_name].header
+            assert header_name is not None  # Make mypy happy
+            return header_name
+        else:
+            return arg_name
+
+    def is_external_interface(self) -> bool:
+        """
+        Returns False iff this endpoint is exclusively used by other software components
+        (agent, scheduler, compiler, etc.).
+        """
+        if self._agent_server or self._server_agent:
+            return False
+        machine_to_machine_client_types = {const.ClientType.agent, const.ClientType.compiler}
+        return len(set(self.client_types) - machine_to_machine_client_types) > 0
 
     @property
     def varkw(self) -> bool:
@@ -476,7 +548,7 @@ class MethodProperties:
         """
         try:
             out = self.argument_validator(**values)
-            return {f: getattr(out, f) for f in out.model_fields.keys()}
+            return {f: getattr(out, f) for f in self.argument_validator.model_fields.keys()}
         except ValidationError as e:
             error_msg = f"Failed to validate argument\n{str(e)}"
             LOGGER.exception(error_msg)
@@ -497,7 +569,7 @@ class MethodProperties:
                 return (param.annotation, None)
 
         return create_model(
-            f"{self.function.__name__}_arguments",
+            f"{self.function_name}_arguments",
             **{param.name: to_tuple(param) for param in sig.parameters.values() if param.name != self._varkw_name},
             __base__=DateTimeNormalizerModel,
         )
@@ -525,6 +597,9 @@ class MethodProperties:
         # TODO: body and get does not work
         self._path.validate_vars(type_hints.keys(), str(self.function))
 
+        if self.token_param is not None and self.token_param not in type_hints:
+            raise InvalidMethodDefinition(f"token_param ({self.token_param}) is missing in parameters of method.")
+
         if not typed:
             return
 
@@ -533,7 +608,6 @@ class MethodProperties:
         for arg in full_spec.args:
             if arg not in type_hints:
                 raise InvalidMethodDefinition(f"{arg} in function {self.function} has no type annotation.")
-
             self._validate_type_arg(
                 arg, type_hints[arg], strict=self.strict_typing, allow_none_type=True, in_url=self.arguments_in_url()
             )
@@ -828,6 +902,12 @@ class MethodProperties:
         url = "/%s/v%d" % (self._api_prefix, self._api_version)
         return url + self._path.generate_regex_path()
 
+    def get_full_path(self) -> str:
+        """
+        Return the path of this endpoint including the api prefix and version number.
+        """
+        return f"/{self._api_prefix}/v{self._api_version}{self._path.path}"
+
     def get_call_url(self, msg: dict[str, str]) -> str:
         """
         Create a calling url for the client
@@ -958,6 +1038,12 @@ class UrlMethod:
 
     def get_operation(self) -> str:
         return self._properties.operation
+
+    def get_path(self) -> str:
+        """
+        Returns the path part of the URL. Parameters in this path are templated using the <param> notation.
+        """
+        return self._properties.get_full_path()
 
 
 # Util functions

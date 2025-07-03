@@ -1,0 +1,4 @@
+description: updated sqlalchemy schema to prevent conflicts
+change-type: patch
+destination-branches:
+  - master

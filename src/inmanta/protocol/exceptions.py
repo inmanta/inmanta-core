@@ -1,19 +1,19 @@
 """
-    Copyright 2019 Inmanta
+Copyright 2019 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 from typing import Any, Optional
@@ -71,11 +71,14 @@ class UnauthorizedException(BaseHttpException):
     An exception raised when access to this resource is unauthorized
     """
 
-    def __init__(self, message: Optional[str] = None, details: Optional[JsonType] = None) -> None:
-        msg = "Access to this resource is unauthorized"
-        if message is not None:
-            msg += ": " + message
-
+    def __init__(self, message: Optional[str] = None, details: Optional[JsonType] = None, no_prefix: bool = False) -> None:
+        """
+        :param no_prefix: Don't add the 'Access to this resource is unauthorized: ' prefix to message if provided.
+        """
+        default_msg = "Access to this resource is unauthorized"
+        msg = default_msg if message is None else message
+        if message is not None and not no_prefix:
+            msg = f"{default_msg}: {msg}"
         super().__init__(401, msg, details)
 
 

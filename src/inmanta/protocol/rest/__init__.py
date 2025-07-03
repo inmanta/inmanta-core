@@ -1,27 +1,29 @@
 """
-    Copyright 2019 Inmanta
+Copyright 2019 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
+import abc
+import copy
 import inspect
 import json
 import logging
 import uuid
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, cast, get_type_hints  # noqa: F401
+from typing import Any, Dict, List, Optional, Tuple, Type, cast, get_type_hints  # noqa: F401
 
 import pydantic
 import typing_inspect
@@ -29,9 +31,11 @@ from tornado import escape
 
 from inmanta import const, tracing, util
 from inmanta.data.model import BaseModel
-from inmanta.protocol import auth, common, exceptions
+from inmanta.protocol import common, exceptions
+from inmanta.protocol.auth import auth, providers
 from inmanta.protocol.common import ReturnValue
 from inmanta.server import config as server_config
+from inmanta.stable_api import stable_api
 from inmanta.types import Apireturn, JsonType
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
@@ -54,7 +58,10 @@ class CallArguments:
     """
 
     def __init__(
-        self, config: common.UrlMethod, message: dict[str, Optional[object]], request_headers: Mapping[str, str]
+        self,
+        config: common.UrlMethod,
+        message: dict[str, Optional[object]],
+        request_headers: Mapping[str, str],
     ) -> None:
         """
         :param config: The method configuration that contains the metadata and functions to call
@@ -69,6 +76,7 @@ class CallArguments:
         self._argspec: inspect.FullArgSpec = inspect.getfullargspec(self._properties.function)
 
         self._call_args: JsonType = {}
+        self._policy_engine_call_args: JsonType = {}
         self._headers: dict[str, str] = {}
         self._metadata: dict[str, object] = {}
         self._auth_token: Optional[auth.claim_type] = None
@@ -77,11 +85,37 @@ class CallArguments:
         self._processed: bool = False
 
     @property
+    def method_properties(self) -> common.MethodProperties:
+        return self._properties
+
+    @property
+    def config(self) -> common.UrlMethod:
+        return self._config
+
+    @property
+    def auth_token(self) -> auth.claim_type | None:
+        return self._auth_token
+
+    @property
     def call_args(self) -> dict[str, object]:
+        """
+        The arguments formatted according to the signature of the @handle method of the API endpoint.
+        """
         if not self._processed:
             raise Exception("Process call first before accessing property")
 
         return self._call_args
+
+    @property
+    def policy_engine_call_args(self) -> dict[str, object]:
+        """
+        The call arguments formatted according to what the policy engine needs as input,
+        i.e. the name of every parameter is the name of the parameter or header on the API.
+        """
+        if not self._processed:
+            raise Exception("Process call first before accessing property")
+
+        return self._policy_engine_call_args
 
     @property
     def auth_username(self) -> Optional[str]:
@@ -268,12 +302,6 @@ class CallArguments:
         # validate types
         call_args = self._properties.validate_arguments(call_args)
 
-        for arg, value in call_args.items():
-            # run getters
-            value = await self._run_getters(arg, value)
-
-            self._call_args[arg] = value
-
         # discard session handling data
         if self._properties.agent_server and "sid" in all_fields:
             all_fields.remove("sid")
@@ -281,12 +309,28 @@ class CallArguments:
         if self._properties.varkw:
             # add all other arguments to the call args as well
             for field in all_fields:
-                self._call_args[field] = self._message[field]
+                call_args[field] = self._message[field]
 
         if len(all_fields) > 0 and self._argspec.varkw is None:
             raise exceptions.BadRequest(
                 "request contains fields %s that are not declared in method and no kwargs argument is provided." % all_fields
             )
+
+        # Populate self._policy_engine_call_args
+        self._policy_engine_call_args = copy.deepcopy(call_args)
+        for arg_name, arg_opt in self._properties.arg_options.items():
+            if arg_opt.header and arg_name in self._policy_engine_call_args:
+                # Make sure we use the name of the header if the parameter was set using a header.
+                # The data in the access policy needs to be structured like on the API, because
+                # that is the structure that end-users know.
+                self._policy_engine_call_args[arg_opt.header] = self._policy_engine_call_args[arg_name]
+                del self._policy_engine_call_args[arg_name]
+
+        for arg, value in call_args.items():
+            # run getters
+            value = await self._run_getters(arg, value)
+
+            self._call_args[arg] = value
 
         # rename arguments if the handler requests this
         if hasattr(self._config.handler, "__protocol_mapping__"):
@@ -494,15 +538,37 @@ class CallArguments:
 
         :return: A mapping of claims
         """
+        token: str | None = None
+
+        # Try to get token from parameters if token_param set in method properties.
+        token_param = self._properties.token_param
+        if token_param is not None and self._message.get(token_param):
+            token = self._message[token_param]
+
+        # Try to get token from header
+        if token is None:
+            token = self.get_auth_token_from_header(self._request_headers)
+
+        if token is None:
+            return None
+
+        self._auth_token, cfg = auth.decode_token(token)
+
+        if cfg.jwt_username_claim in self._auth_token:
+            self._auth_username = str(self._auth_token[cfg.jwt_username_claim])
+
+    @stable_api
+    @classmethod
+    def get_auth_token_from_header(cls, request_headers: Mapping[str, str]) -> str | None:
         header_value: Optional[str] = None
 
         if additional_header := server_config.server_additional_auth_header.get():
-            if additional_header in self._request_headers:
-                header_value = self._request_headers[additional_header]
+            if additional_header in request_headers:
+                header_value = request_headers[additional_header]
 
-        if header_value is None and "Authorization" in self._request_headers:
+        if header_value is None and "Authorization" in request_headers:
             # In Authorization it is parsed as a bearer token
-            parts = self._request_headers["Authorization"].split(" ")
+            parts = request_headers["Authorization"].split(" ")
 
             if len(parts) != 2 or parts[0].lower() != "bearer":
                 logging.getLogger(__name__).warning(
@@ -513,13 +579,7 @@ class CallArguments:
 
             header_value = parts[1]
 
-        if header_value is None:
-            return None
-
-        self._auth_token, cfg = auth.decode_token(header_value)
-
-        if cfg.jwt_username_claim in self._auth_token:
-            self._auth_username = str(self._auth_token[cfg.jwt_username_claim])
+        return header_value
 
     def authenticate(self, auth_enabled: bool) -> None:
         """Fetch any identity information and authenticate. This will also load this authentication
@@ -536,45 +596,18 @@ class CallArguments:
             # We only need a valid token when the endpoint enforces authentication
             raise exceptions.UnauthorizedException()
 
-    def authorize_request(self, auth_enabled: bool) -> None:
-        """Authorize a request based on the given data
-
-        :param auth_enabled: is authentication enabled?
+    def is_service_request(self) -> bool:
         """
-        if not auth_enabled:
-            return
-
-        if self._auth_token is None:
-            if self._config.properties.enforce_auth:
-                # We only need a valid token when the endpoint enforces authentication and auth is enabled
-                raise exceptions.UnauthorizedException()
-            return None
-
-        # Enforce environment restrictions
-        env_key: str = const.INMANTA_URN + "env"
-        if env_key in self._auth_token:
-            if env_key not in self.metadata:
-                raise exceptions.Forbidden("The authorization token is scoped to a specific environment.")
-
-            if self.metadata[env_key] != "all" and self._auth_token[env_key] != self.metadata[env_key]:
-                raise exceptions.Forbidden("The authorization token is not valid for the requested environment.")
-
-        # Enforce client_types restrictions
-        ok: bool = False
+        Return True iff this is a machine-to-machine request.
+        """
         ct_key: str = const.INMANTA_URN + "ct"
-        for ct in self._auth_token[ct_key]:
-            if ct in self._config.properties.client_types:
-                ok = True
-
-        if not ok:
-            raise exceptions.Forbidden(
-                "The authorization token does not have a valid client type for this call."
-                + f" ({self._auth_token[ct_key]} provided, {self._config.properties.client_types} expected"
-            )
+        assert self._auth_token is not None
+        client_types_token = self._auth_token[ct_key]
+        return any(ct in {const.ClientType.agent.value, const.ClientType.compiler.value} for ct in client_types_token)
 
 
 # Shared
-class RESTBase(util.TaskHandler[None]):
+class RESTBase(util.TaskHandler[None], abc.ABC):
     """
     Base class for REST based client and servers
     """
@@ -598,6 +631,12 @@ class RESTBase(util.TaskHandler[None]):
     def validate_sid(self, sid: uuid.UUID) -> bool:
         raise NotImplementedError()
 
+    def is_auth_enabled(self) -> bool:
+        """
+        Return True iff authentication is enabled.
+        """
+        raise NotImplementedError()
+
     async def _execute_call(
         self,
         config: common.UrlMethod,
@@ -619,9 +658,12 @@ class RESTBase(util.TaskHandler[None]):
             # Authorization might need data from the request but we do not want to process it before we are sure the call
             # is authenticated.
             arguments = CallArguments(config, message, request_headers)
-            arguments.authenticate(server_config.server_enable_auth.get())
+            is_auth_enabled: bool = self.is_auth_enabled()
+            arguments.authenticate(auth_enabled=is_auth_enabled)
             await arguments.process()
-            arguments.authorize_request(server_config.server_enable_auth.get())
+            authorization_provider = self.get_authorization_provider()
+            if authorization_provider:
+                await authorization_provider.authorize_request(arguments)
 
             LOGGER.debug(
                 "Calling method %s(%s) user=%s",
@@ -645,3 +687,10 @@ class RESTBase(util.TaskHandler[None]):
         except Exception as e:
             LOGGER.exception("An exception occurred during the request.")
             raise exceptions.ServerError(str(e.args))
+
+    @abc.abstractmethod
+    def get_authorization_provider(self) -> providers.AuthorizationProvider | None:
+        """
+        Returns the authorization provider or None if we are not running on the server.
+        """
+        raise NotImplementedError()

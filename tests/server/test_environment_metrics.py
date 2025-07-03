@@ -1,19 +1,19 @@
 """
-    Copyright 2022 Inmanta
+Copyright 2022 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import functools
@@ -28,6 +28,9 @@ import asyncpg
 import pytest
 
 from inmanta import const, data
+from inmanta.agent import executor
+from inmanta.deploy import persistence, state
+from inmanta.resources import Id
 from inmanta.server import SLICE_ENVIRONMENT_METRICS, protocol
 from inmanta.server.services.environment_metrics_service import (
     DEFAULT_CATEGORY,
@@ -41,7 +44,8 @@ from inmanta.server.services.environment_metrics_service import (
     MetricValueTimer,
     ResourceCountMetricsCollector,
 )
-from inmanta.util import get_compiler_version, parse_timestamp
+from inmanta.types import ResourceIdStr
+from inmanta.util import get_compiler_version, make_attribute_hash, parse_timestamp
 from utils import ClientHelper, wait_until_version_is_released
 
 env_uuid = uuid.uuid4()
@@ -389,6 +393,7 @@ async def test_resource_count_metric(clienthelper, client, agent):
         unknowns=[],
         version_info={},
         compiler_version=get_compiler_version(),
+        module_version_info={},
     )
     assert result.code == 200
     version_env1 = str(await ClientHelper(client, env_uuid1).get_version())
@@ -426,6 +431,7 @@ async def test_resource_count_metric(clienthelper, client, agent):
         unknowns=[],
         version_info={},
         compiler_version=get_compiler_version(),
+        module_version_info={},
     )
     assert result.code == 200
     resources_env2 = [
@@ -453,6 +459,7 @@ async def test_resource_count_metric(clienthelper, client, agent):
         unknowns=[],
         version_info={},
         compiler_version=get_compiler_version(),
+        module_version_info={},
     )
     assert result.code == 200
     assert len(await data.Resource.get_list()) == 6
@@ -460,6 +467,10 @@ async def test_resource_count_metric(clienthelper, client, agent):
     # Wait until the latest version in each environment is released
     await wait_until_version_is_released(client, environment=env_uuid1, version=version_env1)
     await wait_until_version_is_released(client, environment=env_uuid2, version=version_env2)
+
+    await data.ResourcePersistentState.mark_as_orphan(
+        environment=env_uuid1, resource_ids={ResourceIdStr("test::Resource[agent1,key=key1]")}
+    )
 
     # adds the ResourceCountMetricsCollector
     rcmc = ResourceCountMetricsCollector()
@@ -480,23 +491,37 @@ async def test_resource_count_metric(clienthelper, client, agent):
         for x in result_gauge
     )
 
-    # change the state of one of the resources
-    now = datetime.now()
-    action_id = uuid.uuid4()
-    aclient = agent._client
-    result = await aclient.resource_action_update(
-        env_uuid1,
-        ["test::Resource[agent1,key=key2],v=" + version_env1],
-        action_id,
-        "deploy",
-        now,
-        now,
-        "deployed",
-        [],
-        {},
-    )
+    # Assert that we only fetch the status of the latest version of the resource
+    total_res = sum(x.count for x in result_gauge if x.environment == env_uuid1 and x.count != 0)
+    assert total_res == 3
 
-    assert result.code == 200
+    # change the state of one of the resources
+    action_id = uuid.uuid4()
+
+    update_manager = persistence.ToDbUpdateManager(client, env_uuid1)
+    now = datetime.now()
+    rvid = Id.parse_id("test::Resource[agent1,key=key2],v=" + version_env1)
+    await update_manager.send_in_progress(action_id, rvid)
+
+    await update_manager.send_deploy_done(
+        attribute_hash=make_attribute_hash(resource_id=rvid.resource_str(), attributes=resources_env1_v2[0]),
+        result=executor.DeployReport(
+            rvid=rvid.resource_version_str(),
+            action_id=action_id,
+            resource_state=const.HandlerResourceState.deployed,
+            messages=[],
+            changes={},
+            change=const.Change.updated,
+        ),
+        state=state.ResourceState(
+            compliance=state.Compliance.COMPLIANT,
+            last_deploy_result=state.DeployResult.DEPLOYED,
+            blocked=state.Blocked.NOT_BLOCKED,
+            last_deployed=now,
+        ),
+        started=now,
+        finished=now,
+    )
 
     # flush the metrics for the second time:
     # 60 records in total and 5 with a count different from 0
@@ -529,6 +554,54 @@ async def test_resource_count_metric(clienthelper, client, agent):
     ]
 
     assert len(env_uuid2_records) == 2
+
+    version_env1 = str(await ClientHelper(client, env_uuid1).get_version())
+    assert version_env1 == "3"
+    resources_env1_v3 = [
+        {
+            "key": "key2",
+            "value": "value2",
+            "id": "test::Resource[agent1,key=key2],v=" + version_env1,
+            "send_event": False,
+            "requires": [],
+            "purged": False,
+        },
+        {
+            "key": "key4",
+            "value": "value4",
+            "id": "test::Resource[agent1,key=key4],v=" + version_env1,
+            "send_event": False,
+            "requires": [],
+            "purged": True,
+        },
+    ]
+    result = await client.put_version(
+        tid=env_uuid1,
+        version=version_env1,
+        resources=resources_env1_v3,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+        module_version_info={},
+    )
+    assert result.code == 200
+
+    # Wait until the latest version is released
+    await wait_until_version_is_released(client, environment=env_uuid1, version=version_env1)
+
+    await data.ResourcePersistentState.mark_as_orphan(
+        environment=env_uuid1, resource_ids={ResourceIdStr("test::Resource[agent1,key=key3]")}
+    )
+
+    await metrics_service.flush_metrics()
+    result_gauge = await data.EnvironmentMetricsGauge.get_list()
+    assert len(result_gauge) == 90
+    # Assert that we only fetch the status of the resources on the latest version of the model
+    non_zero_status = sorted(
+        [x for x in result_gauge if x.environment == env_uuid1 and x.count != 0], key=lambda x: x.timestamp, reverse=True
+    )
+    total_res = sum(x.count for x in non_zero_status if x.timestamp == non_zero_status[0].timestamp)
+    assert total_res == 2
 
 
 async def test_resource_count_metric_released(client, server, agent, clienthelper: ClientHelper, environment):
@@ -577,6 +650,7 @@ async def test_resource_count_metric_released(client, server, agent, clienthelpe
         unknowns=[],
         version_info={},
         compiler_version=get_compiler_version(),
+        module_version_info={},
     )
     assert result.code == 200
 
@@ -598,6 +672,7 @@ async def test_resource_count_metric_released(client, server, agent, clienthelpe
         unknowns=[],
         version_info={},
         compiler_version=get_compiler_version(),
+        module_version_info={},
     )
     assert result.code == 200
 

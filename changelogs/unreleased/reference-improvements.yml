@@ -1,0 +1,5 @@
+description: Made some improvements to references and dataclasses
+change-type: patch
+destination-branches:
+  - master
+  - iso8

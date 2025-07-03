@@ -1,21 +1,22 @@
 """
-    Copyright 2018 Inmanta
+Copyright 2018 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
+import json
 import logging
 import os
 import re
@@ -103,7 +104,10 @@ def get_command(
 def do_run(args: list[str], env: typing.Optional[dict[str, str]] = None, cwd: typing.Optional[str] = None) -> subprocess.Popen:
     if env is None:
         env = {}
-    LOGGER.info("Running %s with env %s and cwd %s", args, env, cwd)
+    env_display = "parent process env vars"
+    if env:
+        env_display += " and the following extra env vars %s" % env
+    LOGGER.info("Running %s with %s and cwd %s.", args, env_display, cwd)
     baseenv = os.environ.copy()
     baseenv.update(env)
     process = subprocess.Popen(args, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=baseenv)
@@ -142,17 +146,29 @@ def do_kill(process: subprocess.Popen, killtime: int = 3, termtime: int = 2) -> 
 
 
 def run_without_tty(
-    args: list[str], env: typing.Optional[dict[str, str]] = None, killtime: int = 15, termtime: int = 10
+    args: list[str],
+    env: typing.Optional[dict[str, str]] = None,
+    killtime: int = 15,
+    termtime: int = 10,
+    *,
+    treat_warnings_as_errors: bool = False,
 ) -> tuple[str, str, int]:
     """Run the given command without a tty"""
+    if treat_warnings_as_errors:
+        if env is None:
+            env = {}
+        env["PYTHONWARNINGS"] = "error"
+
     process = do_run(args, env)
     return do_kill(process, killtime, termtime)
 
 
-def run_with_tty(args, killtime=4, termtime=3):
+def run_with_tty(args, killtime=4, termtime=3, *, treat_warnings_as_errors: bool = False):
     """Could not get code for actual tty to run stable in docker, so we are faking it"""
     env = {const.ENVIRON_FORCE_TTY: "true"}
-    return run_without_tty(args, env=env, killtime=killtime, termtime=termtime)
+    return run_without_tty(
+        args, env=env, killtime=killtime, termtime=termtime, treat_warnings_as_errors=treat_warnings_as_errors
+    )
 
 
 def is_colorama_package_available():
@@ -244,6 +260,38 @@ def test_log_file_set(tmpdir, log_level, with_tty, regexes_required_lines, regex
     check_logs(log_lines, regexes_required_lines, regexes_forbidden_lines, timed=False)
     # Check if the message appears in the logs, it is not a full line match so timing is not relevant
     check_logs(stdout, [], regexes_required_lines, timed=False)
+
+
+@pytest.mark.parametrize_any(
+    "with_tty, regexes_required_lines",
+    [
+        (False, [r"Inmanta Service Orchestrator", r"Compiler version: ", r"Extensions:", r"\s*\* core:"]),
+        (True, [r"Inmanta Service Orchestrator", r"Compiler version: ", r"Extensions:", r"\s*\* core:"]),
+    ],
+)
+@pytest.mark.timeout(60)
+def test_version_command(tmpdir, with_tty: bool, regexes_required_lines: list[str]):
+    """
+    Basic smoke test to check that no warnings show up when running 'inmanta --version'
+    """
+    if is_colorama_package_available() and with_tty:
+        pytest.skip("Colorama is present")
+
+    (args, log_dir) = get_command(tmpdir, command="--version")
+    if with_tty:
+        (stdout, stderr, return_code) = run_with_tty(args, treat_warnings_as_errors=True)
+    else:
+        (stdout, stderr, return_code) = run_without_tty(args, treat_warnings_as_errors=True)
+
+    if return_code != 0 or stderr:
+        e = Exception("An unexpected error occurred or warnings were logged while running 'inmanta --version'")
+        if stderr:
+            e.add_note("\n".join(stderr))
+        if stdout:
+            e.add_note("\n".join(stdout))
+        raise e
+    # Check if the message appears in the logs, it is not a full line match so timing is not relevant
+    check_logs(stdout, regexes_required_lines, regexes_forbidden_lines=[], timed=False)
 
 
 @pytest.mark.parametrize_any(
@@ -726,3 +774,17 @@ def test_validate_logging_config(tmpdir, monkeypatch):
         )
         assert any(f"{component_name} -- Log line from Inmanta server at level INFO" in line for line in stdout)
         assert returncode == 0
+
+
+def test_print_endpoint_data() -> None:
+    """
+    Test the `inmanta policy-engine print-endpoint-data` command.
+    """
+    args = [sys.executable, "-m", "inmanta.app", "policy-engine", "print-endpoint-data"]
+    (stdout, err, return_code) = run_with_tty(args)
+    assert return_code == 0
+    assert not err, err
+    stdout_str = "\n".join(stdout)
+    parsed_stdout = json.loads(stdout_str)
+    assert isinstance(parsed_stdout, dict), parsed_stdout
+    assert len(parsed_stdout["endpoints"]) > 0

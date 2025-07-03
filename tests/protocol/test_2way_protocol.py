@@ -1,19 +1,19 @@
 """
-    Copyright 2016 Inmanta
+Copyright 2016 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import asyncio
@@ -27,16 +27,19 @@ from tornado.gen import sleep
 
 # Methods need to be defined before the Client class is loaded by Python
 from inmanta import protocol  # NOQA
-from inmanta import data
+from inmanta import const, data
 from inmanta.protocol import method
+from inmanta.protocol.auth.decorators import auth
 from inmanta.protocol.methods import ENV_OPTS
 from inmanta.server import SLICE_SESSION_MANAGER
+from inmanta.server.config import AuthorizationProviderName
 from inmanta.server.protocol import Server, ServerSlice, SessionListener
-from utils import configure, configure_auth, retry_limited
+from utils import configure_auth, retry_limited
 
 LOGGER = logging.getLogger(__name__)
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=True, environment_param="tid")
 @method(path="/status", operation="GET")
 def get_status_x(tid: uuid.UUID):
     pass
@@ -127,7 +130,7 @@ async def assert_agent_counter(agent: Agent, reconnect: int, disconnected: int) 
 
 async def test_2way_protocol(inmanta_config, server_config, no_tid_check, postgres_db, database_name):
     # Authentication complicates this even further
-    configure_auth(auth=True, ca=False, ssl=False)
+    configure_auth(auth=True, ca=False, ssl=False, authorization_provider=AuthorizationProviderName.legacy)
     rs = Server()
     server = SessionSpy()
     rs.get_slice(SLICE_SESSION_MANAGER).add_listener(server)
@@ -141,7 +144,7 @@ async def test_2way_protocol(inmanta_config, server_config, no_tid_check, postgr
 
     await retry_limited(lambda: len(server.get_sessions()) == 1, 10)
     assert len(server.get_sessions()) == 1
-    await assert_agent_counter(agent, 1, 0)
+    await assert_agent_counter(agent, reconnect=1, disconnected=0)
 
     client = protocol.Client("client")
     status = await client.get_status_x(str(agent.environment))
@@ -162,7 +165,10 @@ async def test_2way_protocol(inmanta_config, server_config, no_tid_check, postgr
 
     await rs.stop()
     await agent.stop()
-    await assert_agent_counter(agent, 1, 0)
+    assert agent.reconnect == 1
+    # If the agent already detected that the server is gone agent.disconnect == 1.
+    # Otherwise, agent.disconnect == 0.
+    assert agent.disconnect < 2
 
 
 async def check_sessions(sessions):
@@ -174,10 +180,8 @@ async def check_sessions(sessions):
 
 
 @pytest.mark.slowtest
-async def test_agent_timeout(unused_tcp_port, no_tid_check, async_finalizer, postgres_db, database_name):
+async def test_agent_timeout(server_config, no_tid_check, async_finalizer):
     from inmanta.config import Config
-
-    configure(unused_tcp_port, database_name, postgres_db.port)
 
     Config.set("server", "agent-timeout", "1")
 
@@ -236,10 +240,8 @@ async def test_agent_timeout(unused_tcp_port, no_tid_check, async_finalizer, pos
 
 
 @pytest.mark.slowtest
-async def test_server_timeout(unused_tcp_port, no_tid_check, async_finalizer, postgres_db, database_name):
+async def test_server_timeout(server_config, no_tid_check, async_finalizer):
     from inmanta.config import Config
-
-    configure(unused_tcp_port, database_name, postgres_db.port)
 
     Config.set("server", "agent-timeout", "1")
 

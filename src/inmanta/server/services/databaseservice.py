@@ -1,35 +1,35 @@
 """
-    Copyright 2019 Inmanta
+Copyright 2019 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import logging
 from typing import Mapping, Optional
 
 import asyncpg
-from pyformance import gauge, global_registry
-from pyformance.meters import CallbackGauge
 
-from inmanta import data
-from inmanta.data.model import DataBaseReport
+from inmanta.data import start_engine, stop_engine
+from inmanta.data.model import DataBaseReport, ReportedStatus
 from inmanta.server import SLICE_DATABASE
 from inmanta.server import config as opt
 from inmanta.server import protocol
 from inmanta.types import ArgumentTypes
 from inmanta.util import IntervalSchedule, Scheduler
+from inmanta.vendor.pyformance import gauge, global_registry
+from inmanta.vendor.pyformance.meters.gauge import AnyGauge, CallbackGauge
 
 LOGGER = logging.getLogger(__name__)
 
@@ -42,6 +42,8 @@ class DatabaseMonitor:
         db_name: str,
         db_host: str,
     ) -> None:
+        if pool.is_closing():
+            raise Exception("Connection pool is closing or closed.")
         self._pool = pool
         self._scheduler = Scheduler(f"Database monitor for {db_name}")
         self.dn_name = db_name
@@ -112,11 +114,11 @@ class DatabaseMonitor:
         )
 
     def get_pool_free(self) -> int:
-        if self._pool is None or self._pool._closing:
+        if self._pool is None or self._pool.is_closing():
             return 0
         return self._pool.get_max_size() - self._pool.get_size() + self._pool.get_idle_size()
 
-    def _add_gauge(self, name: str, the_gauge: CallbackGauge) -> None:
+    def _add_gauge(self, name: str, the_gauge: AnyGauge) -> None:
         """Helper to register gauges and keep track of registrations"""
         gauge(name, the_gauge)
         self.registered_gauges.append(name)
@@ -126,9 +128,7 @@ class DatabaseMonitor:
 
         self._add_gauge(
             "db.connected",
-            CallbackGauge(
-                callback=lambda: 1 if (self._pool is not None and not self._pool._closing and not self._pool._closed) else 0
-            ),
+            CallbackGauge(callback=lambda: 1 if (self._pool is not None and not self._pool.is_closing()) else 0),
         )
         self._add_gauge(
             "db.max_pool", CallbackGauge(callback=lambda: self._pool.get_max_size() if self._pool is not None else 0)
@@ -162,7 +162,7 @@ class DatabaseMonitor:
         self.registered_gauges.clear()
 
     async def get_connection_status(self) -> bool:
-        if self._pool is not None and not self._pool._closing and not self._pool._closed:
+        if self._pool is not None and not self._pool.is_closing():
             try:
                 async with self._pool.acquire(timeout=10):
                     return True
@@ -213,18 +213,40 @@ class DatabaseService(protocol.ServerSlice):
 
         # Check if JIT is enabled
         async with self._pool.acquire() as connection:
+            # Check if JIT is enabled
             jit_available = await connection.fetchval("SELECT pg_jit_available();")
             if jit_available:
                 LOGGER.warning("JIT is enabled in the PostgreSQL database. This might result in poor query performance.")
 
     async def disconnect_database(self) -> None:
         """Disconnect the database"""
-        await data.disconnect()
+        await stop_engine()
+        self._pool = None
+
+    async def get_reported_status(self) -> tuple[ReportedStatus, Optional[str]]:
+        """
+        Returns the reported status of this slice:
+            - Error: Not Connected
+            - Warning: The pool has less than 5 connections or 10% of the max pool size
+            - OK: Otherwise
+        """
+
+        try:
+            assert self._db_monitor
+            status = await self._db_monitor.get_status()
+            assert status.connected
+        except Exception:
+            return ReportedStatus.Error, "Database is not connected"
+
+        if status.free_pool < min(5, status.max_pool // 10):
+            return ReportedStatus.Warning, f"Only {status.free_pool} connections left in the pool."
+
+        return ReportedStatus.OK, None
 
     async def get_status(self) -> Mapping[str, ArgumentTypes]:
         """Get the status of the database connection"""
         assert self._db_monitor is not None  # make mypy happy
-        return (await self._db_monitor.get_status()).dict()
+        return (await self._db_monitor.get_status()).model_dump(mode="json")
 
 
 async def initialize_database_connection_pool(
@@ -233,13 +255,14 @@ async def initialize_database_connection_pool(
     database_name: str,
     database_username: str,
     database_password: str,
-    create_db_schema: bool,
-    connection_pool_min_size: int,
-    connection_pool_max_size: int,
-    connection_timeout: float,
+    create_db_schema: bool = False,
+    connection_pool_min_size: int = 10,
+    connection_pool_max_size: int = 10,
+    connection_timeout: float = 60.0,
 ) -> asyncpg.pool.Pool:
     """
-    Initialize the database connection pool for the current process and return it.
+    Initialize the sql alchemy engine for the current process and return the underlying
+    asyncpg database connection pool.
 
     :param database_host: Database host address.
     :param database_port: Port number to connect to at the server host.
@@ -252,16 +275,17 @@ async def initialize_database_connection_pool(
     :param connection_timeout: Connection timeout (in seconds) when interacting with the database.
     """
 
-    out = await data.connect(
-        host=database_host,
-        port=database_port,
-        database=database_name,
-        username=database_username,
-        password=database_password,
+    pool = await start_engine(
+        database_username=database_username,
+        database_password=database_password,
+        database_host=database_host,
+        database_port=database_port,
+        database_name=database_name,
         create_db_schema=create_db_schema,
         connection_pool_min_size=connection_pool_min_size,
         connection_pool_max_size=connection_pool_max_size,
         connection_timeout=connection_timeout,
     )
+
     LOGGER.info("Connected to PostgreSQL database %s on %s:%d", database_name, database_host, database_port)
-    return out
+    return pool

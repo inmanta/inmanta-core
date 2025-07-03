@@ -1,27 +1,49 @@
 """
-    Copyright 2019 Inmanta
+Copyright 2019 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import datetime
+import typing
 from collections import abc
 from enum import Enum
 from typing import Optional
 
 from inmanta.stable_api import stable_api
+
+# This query assumes that the resource_persistent_state table is present in the query as rps.
+# It returns the status of the resource in the "status" field.
+SQL_RESOURCE_STATUS_SELECTOR: typing.LiteralString = """
+(
+    CASE
+        WHEN rps.is_orphan
+            THEN 'orphaned'
+        WHEN rps.is_deploying
+            THEN 'deploying'
+        WHEN rps.is_undefined
+            THEN 'undefined'
+        WHEN rps.blocked = 'BLOCKED'
+            THEN 'skipped_for_undefined'
+        WHEN rps.current_intent_attribute_hash <> rps.last_deployed_attribute_hash
+            THEN 'available'
+        ELSE
+            rps.last_non_deploying_status::text
+    END
+)
+"""
 
 
 class ResourceState(str, Enum):
@@ -76,6 +98,14 @@ class DeprecatedResourceState(str, Enum):
     processing_events = "processing_events"
 
 
+"""
+The following consts are considered to be part of the stable API.
+Modifying them may break some libraries:
+    - UNDEPLOYABLE_STATES
+    - TRANSIENT_STATES
+    - NOT_DONE_STATES
+    - DONE_STATES
+"""
 # undeployable
 UNDEPLOYABLE_STATES = [ResourceState.undefined, ResourceState.skipped_for_undefined]
 UNDEPLOYABLE_NAMES = [s.name for s in UNDEPLOYABLE_STATES]
@@ -231,6 +261,8 @@ LOG_LEVEL_AS_INTEGER: abc.Mapping[LogLevel, int] = {
 INTEGER_AS_LOG_LEVEL: abc.Mapping[int, LogLevel] = {value: log_level for log_level, value in LOG_LEVEL_AS_INTEGER.items()}
 
 INMANTA_URN = "urn:inmanta:"
+INMANTA_IS_ADMIN_URN = f"{INMANTA_URN}is_admin"
+INMANTA_ROLES_URN = f"{INMANTA_URN}roles"
 
 
 class Compilestate(str, Enum):
@@ -271,6 +303,10 @@ SHUTDOWN_GRACE_IOLOOP = 10
 SHUTDOWN_GRACE_HARD = 15
 # Time we give the executor to shutdown gracefully, before we execute sys.exit(3)
 EXECUTOR_GRACE_HARD = 3
+# Time we give the policy engine to shutdown gracefully (in seconds).
+POLICY_ENGINE_GRACE_HARD = 3
+# Time we give the policy engine to startup (in seconds).
+POLICY_ENGINE_STARTUP_TIMEOUT = 10
 
 # Hard shutdown exit code
 EXIT_HARD = 3
@@ -385,11 +421,13 @@ DEFAULT_INMANTA_DISK_LAYOUT_VERSION = 2
 # ID to represent the new scheduler as an agent
 AGENT_SCHEDULER_ID = "$__scheduler"
 
-
 # resource attributes for event propagation
-RESOURCE_ATTRIBUTE_SEND_EVENTS = "send_event"
-RESOURCE_ATTRIBUTE_RECEIVE_EVENTS = "receive_events"
+RESOURCE_ATTRIBUTE_SEND_EVENTS: typing.Final[str] = "send_event"
+RESOURCE_ATTRIBUTE_RECEIVE_EVENTS: typing.Final[str] = "receive_events"
 
+# resource attributes for references
+RESOURCE_ATTRIBUTE_REFERENCES: typing.Final[str] = "references"
+RESOURCE_ATTRIBUTE_MUTATORS: typing.Final[str] = "mutators"
 
 # Per component log variables
 LOG_CONTEXT_VAR_ENVIRONMENT = "environment"
@@ -399,3 +437,68 @@ ALL_LOG_CONTEXT_VARS = [LOG_CONTEXT_VAR_ENVIRONMENT]
 
 # Logger namespace
 LOGGER_NAME_EXECUTOR = "inmanta.executor"
+
+
+class AuthorizationLabel(Enum):
+    """
+    Base class for AuthorizationLabel enums, so that extensions
+    can create their own AuthorizationLabel enums that are compatible
+    with the API of core.
+    """
+
+    pass
+
+
+class CoreAuthorizationLabel(AuthorizationLabel):
+    AGENT_READ = "agent.read"
+    AGENT_WRITE = "agent.write"
+    USER_READ = "user.read"
+    USER_WRITE = "user.write"
+    USER_CHANGE_PASSWORD = "user.change-password"
+    COMPILE_REPORT_READ = "compile-report.read"
+    COMPILER_EXECUTE = "compiler.execute"
+    COMPILER_STATUS_READ = "compiler.status.read"
+    DEPLOY = "deploy"
+    DESIRED_STATE_READ = "desired-state.read"
+    DESIRED_STATE_WRITE = "desired-state.write"
+    DISCOVERED_RESOURCES_READ = "discovered-resources.read"
+    DOCS_READ = "docs.read"
+    DRYRUN_READ = "dryrun.read"
+    DRYRUN_WRITE = "dryrun.write"
+    AGENT_PAUSE_RESUME = "agent.pause-resume"
+    ENVIRONMENT_HALT_RESUME = "environment.halt-resume"
+    ENVIRONMENT_READ = "environment.read"
+    ENVIRONMENT_CREATE = "environment.create"
+    ENVIRONMENT_MODIFY = "environment.modify"
+    ENVIRONMENT_DELETE = "environment.delete"
+    ENVIRONMENT_CLEAR = "environment.clear"
+    ENVIRONMENT_SETTING_READ = "environment.setting.read"
+    ENVIRONMENT_SETTING_WRITE = "environment.setting.write"
+    FACT_READ = "fact.read"
+    FACT_WRITE = "fact.write"
+    FILE_READ = "file.read"
+    FILE_WRITE = "file.write"
+    GRAPHQL_READ = "graphql.read"
+    METRICS_READ = "metrics.read"
+    NOTIFICATION_READ = "notification.read"
+    NOTIFICATION_WRITE = "notification.write"
+    PARAMETER_READ = "parameter.read"
+    PARAMETER_WRITE = "parameter.write"
+    PIP_CONFIG_READ = "pip-config.read"
+    PROJECT_READ = "project.read"
+    PROJECT_CREATE = "project.create"
+    PROJECT_MODIFY = "project.modify"
+    PROJECT_DELETE = "project.delete"
+    RESOURCE_READ = "resource.read"
+    STATUS_READ = "status.read"
+    TOKEN = "token"
+    ROLE_READ = "role.read"
+    ROLE_WRITE = "role.write"
+    ROLE_ASSIGNMENT_READ = "role-assignment.read"
+    ROLE_ASSIGNMENT_WRITE = "role-assignment.write"
+    ROLE_IS_ADMIN = "role.is-admin"
+    # These labels should only be used in tests
+    TEST = "test"
+    TEST_2 = "test2"
+    TEST_3 = "test3"
+    TEST_4 = "test4"

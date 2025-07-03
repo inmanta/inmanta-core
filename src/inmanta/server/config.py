@@ -1,21 +1,22 @@
 """
-    Copyright 2018 Inmanta
+Copyright 2018 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
+import enum
 import logging
 import warnings
 from typing import Optional
@@ -136,7 +137,6 @@ server_bind_port = Option(
     is_int,
 )
 
-
 server_tz_aware_timestamps = Option(
     "server",
     "tz_aware_timestamps",
@@ -159,6 +159,50 @@ server_ssl_key = Option(
 
 server_ssl_cert = Option(
     "server", "ssl_cert_file", None, "SSL certificate file for the server key. Leave blank to disable SSL", is_str_opt
+)
+
+
+class AuthorizationProviderName(enum.Enum):
+    """
+    An enum that contains the possible values for the server.authorization_provider config option.
+    """
+
+    legacy = "legacy"
+    policy_engine = "policy-engine"
+
+    @classmethod
+    def get_valid_values_str(cls) -> str:
+        """
+        Returns a human readable string containing the valid values for
+        the server.authorization_provider config option.
+        """
+        valid_values = [e.value for e in cls]
+        assert len(valid_values) > 1
+        return ", ".join(valid_values[0:-1]) + " or " + valid_values[-1]
+
+
+def _is_authorization_provider(value: str) -> str:
+    f"""
+    str, valid values: {AuthorizationProviderName.get_valid_values_str()}
+    """
+    value = value.lower()
+    try:
+        AuthorizationProviderName(value)
+    except ValueError:
+        raise ValueError(
+            f"Invalid value for config option {authorization_provider.get_full_name()}: {value}."
+            f" Valid values: {AuthorizationProviderName.get_valid_values_str()}"
+        )
+    else:
+        return value
+
+
+authorization_provider = Option(
+    "server",
+    "authorization-provider",
+    AuthorizationProviderName.legacy.value,
+    f"The authorization provider that should be used if authentication is enabled: {AuthorizationProviderName.get_valid_values_str()}",
+    _is_authorization_provider,
 )
 
 
@@ -272,7 +316,7 @@ server_enabled_extensions: Option[list[str]] = Option(
     "enabled_extensions",
     list,
     "A list of extensions the server must load. Core is always loaded."
-    "If an extension listed in this list is not available, the server will refuse to start.",
+    " If an extension listed in this list is not available, the server will refuse to start.",
     is_list,
 )
 
@@ -281,7 +325,7 @@ server_access_control_allow_origin = Option(
     "access-control-allow-origin",
     None,
     "Configures the Access-Control-Allow-Origin setting of the http server."
-    "Defaults to not sending an Access-Control-Allow-Origin header.",
+    " Defaults to not sending an Access-Control-Allow-Origin header.",
     is_str_opt,
 )
 

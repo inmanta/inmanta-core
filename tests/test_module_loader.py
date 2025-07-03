@@ -1,19 +1,19 @@
 """
-    Copyright 2021 Inmanta
+Copyright 2021 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import logging
@@ -221,7 +221,7 @@ def test_load_module_v1_module_using_install(snippetcompiler) -> None:
     Test whether the Project.load_module() method works correctly when a module is only available as a V1 module
     and that module is not yet present in the module path.
     """
-    module_name = "std"
+    module_name = "dummy_module"
     project: Project = snippetcompiler.setup_for_snippet(snippet=f"import {module_name}", install_project=False)
     # Remove std module in downloadpath created by other test case
     shutil.rmtree(os.path.join(project.downloadpath, module_name), ignore_errors=True)
@@ -623,9 +623,9 @@ def test_project_requirements_dont_overwrite_core_requirements_source(
     jinja2_version_before = active_env.get_installed_packages()["jinja2"].base_version
 
     # Install the module
-    mod_artifact_path = ModuleTool().build(path=module_path)
+    mod_artifact_paths = ModuleTool().build(path=module_path, wheel=True)
     with pytest.raises(ConflictingRequirements) as e:
-        env.process_env.install_from_source([env.LocalPackagePath(path=mod_artifact_path, editable=False)])
+        env.process_env.install_from_source([env.LocalPackagePath(path=mod_artifact_paths[0], editable=False)])
 
     assert ("these package versions have conflicting dependencies") in str(e.value.msg)
 
@@ -1382,11 +1382,11 @@ class Test(Resource):
         code_manager.register_code(type_name, resource_definition)
 
     module_code = False
-    for name, source_info in code_manager.get_types():
-        for info in source_info:
-            if info.module_name == "inmanta_plugins.modulev1":
+    for name, inmanta_module_dto in code_manager.get_module_version_info().items():
+        for module_source in inmanta_module_dto.files_in_module:
+            if module_source.name == "inmanta_plugins.modulev1":
                 module_code = True
-                assert info.path[-4:] == ".pyc"
+                assert module_source.is_byte_code
 
     assert module_code
 
