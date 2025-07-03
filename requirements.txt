@@ -18,6 +18,7 @@ graphviz==0.20.3
 importlib_metadata==8.5.0
 flake8-junit-report==2.1.0
 inmanta-dev-dependencies==2.146.0
+inmanta-module-std==5.2.8
 inmanta-sphinx==2.3.0
 jinja2==3.1.5
 more-itertools==10.6.0

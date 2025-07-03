@@ -7,3 +7,5 @@ repo:
     - https://github.com/inmanta/
 pip:
   use_system_config: true
+requires:
+  - "std<5.3"
