@@ -400,13 +400,25 @@ class Client(Endpoint):
 
         return wrap
 
-    async def all_pages(self, coro: Coroutine[Any, Any, common.Result], env: str) -> AsyncIterator[Result]:
+    async def all_pages(
+        self,
+        coro: Coroutine[Any, Any, common.Result],
+        env: str,
+        *,
+        iterate_per_item: bool = False,
+        envelope_key: str = "data",
+    ) -> AsyncIterator[Result] | AsyncIterator[types.JsonType]:
         result = await coro
         while result.code == 200:
-            yield result
-
             if not result.result:
                 return
+
+            page = result.result.get(envelope_key, [])
+            if iterate_per_item:
+                for item in page:
+                    yield item
+            else:
+                yield page
 
             next_link_url = result.result.get("links", {}).get("next")
 
