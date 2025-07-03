@@ -33,7 +33,7 @@ from inmanta.const import ResourceState
 from inmanta.server import config
 from inmanta.types import ResourceVersionIdStr
 from inmanta.util import parse_timestamp
-from util.test_util import test_helper_method_using_paging_links
+from util.test_util import check_helper_method_using_paging_links
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 
@@ -478,7 +478,7 @@ async def test_resource_history_paging(server, client, order_by_column, order, e
         env.id, resource_with_long_history, limit=page_size, sort=f"{order_by_column}.{order}"
     )
 
-    await test_helper_method_using_paging_links(
+    await check_helper_method_using_paging_links(
         client=client,
         fetch_page_by_page_coro=fetch_page_by_page_coro,
         page_size=page_size,
@@ -490,7 +490,7 @@ async def test_resource_history_paging(server, client, order_by_column, order, e
         env.id, resource_with_long_history, limit=page_size, sort=f"{order_by_column}.{order}"
     )
 
-    await test_helper_method_using_paging_links(
+    await check_helper_method_using_paging_links(
         client=client,
         fetch_page_by_page_coro=fetch_page_by_page_coro,
         page_size=page_size,

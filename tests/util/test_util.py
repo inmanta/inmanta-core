@@ -581,7 +581,7 @@ def test_datetime_iso_format(time_machine):
     assert timestamp_iso_str == "2023-12-03T08:00:00.000000"
 
 
-async def test_helper_method_using_paging_links(
+async def check_helper_method_using_paging_links(
     client: protocol.Client,
     fetch_page_by_page_coro: Coroutine[Any, Any, common.Result],
     page_size: int,

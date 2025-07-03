@@ -42,7 +42,7 @@ from inmanta.deploy import scheduler
 from inmanta.resources import Id
 from inmanta.server import config
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
-from util.test_util import test_helper_method_using_paging_links
+from util.test_util import check_helper_method_using_paging_links
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 
@@ -627,7 +627,7 @@ async def test_client_all_pages_helper(server, client, env_with_resources, page_
     n_results = len(result.result["data"])
 
     fetch_page_by_page_coro = client.resource_list(tid=env.id, limit=page_size)
-    await test_helper_method_using_paging_links(
+    await check_helper_method_using_paging_links(
         client=client,
         fetch_page_by_page_coro=fetch_page_by_page_coro,
         page_size=page_size,
@@ -637,7 +637,7 @@ async def test_client_all_pages_helper(server, client, env_with_resources, page_
     )
 
     fetch_page_by_page_coro = client.resource_list(tid=env.id, limit=page_size)
-    await test_helper_method_using_paging_links(
+    await check_helper_method_using_paging_links(
         client=client,
         fetch_page_by_page_coro=fetch_page_by_page_coro,
         page_size=page_size,
