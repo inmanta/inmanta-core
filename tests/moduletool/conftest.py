@@ -180,14 +180,6 @@ def modules_repo(git_modules_dir) -> str:
     devproject = makeproject(reporoot, "devproject", imports=["mod8"], install_mode=InstallMode.prerelease)
     commitmodule(devproject, "first commit")
 
-    masterproject = makeproject(reporoot, "masterproject", imports=["mod8"], install_mode=InstallMode.master)
-    commitmodule(masterproject, "first commit")
-
-    masterproject_multi_mod = makeproject(
-        reporoot, "masterproject_multi_mod", imports=["mod2", "mod8"], install_mode=InstallMode.master
-    )
-    commitmodule(masterproject_multi_mod, "first commit")
-
     nover = makemodule(reporoot, "nover", [])
     commitmodule(nover, "first commit")
     add_file(nover, "signal", "present", "second commit")

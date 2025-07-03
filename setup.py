@@ -88,6 +88,7 @@ setup(
             "bumpversion",
             "flake8-junit-report",
             "inmanta-dev-dependencies[pytest,async,core]",
+            "inmanta-module-std",
             "openapi_spec_validator",
             "pip2pi",
             "psutil",

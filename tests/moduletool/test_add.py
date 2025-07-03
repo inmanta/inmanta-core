@@ -291,33 +291,34 @@ def test_module_add_preinstalled(tmpdir: py.path.local, modules_v2_dir: str, sni
     assert ModuleTool().get_module(module_name).version == Version("2.0.0")
 
 
-def test_module_add_preinstalled_v1(snippetcompiler_clean, caplog) -> None:
+def test_module_add_preinstalled_v1(snippetcompiler_clean, caplog, modules_repo) -> None:
     """
     Verify that `inmanta module add` respects preinstalled v1 modules when they're compatible and logs a warning when they're
     not.
     """
-    module_name: str = "std"
+    module_name: str = "mod7"
+    snippetcompiler_clean.repo = modules_repo
     snippetcompiler_clean.setup_for_snippet(snippet="", autostd=False)
 
     # preinstall 2.0.0
-    ModuleTool().add(module_req=f"{module_name}==2.0.0", v1=True)
-    assert ModuleTool().get_module(module_name).version == Version("2.0.0")
+    ModuleTool().add(module_req=f"{module_name}==3.2.0", v1=True)
+    assert ModuleTool().get_module(module_name).version == Version("3.2.0")
 
     # verify that compatible constraint does not reinstall or update
-    ModuleTool().add(module_req=f"{module_name}~=2.0", v1=True, override=True)
+    ModuleTool().add(module_req=f"{module_name}~=3.0", v1=True, override=True)
     caplog.clear()
     with caplog.at_level(logging.WARNING):
-        assert ModuleTool().get_module(module_name).version == Version("2.0.0")
+        assert ModuleTool().get_module(module_name).version == Version("3.2.0")
         assert not caplog.messages
 
     # verify that incompatible constraint does reinstall and logs a warning
     with caplog.at_level(logging.WARNING):
-        ModuleTool().add(module_req=f"{module_name}~=2.1.0", v1=True, override=True)
+        ModuleTool().add(module_req=f"{module_name}~=3.2.1", v1=True, override=True)
         assert (
-            f"Currently installed {module_name}-2.0.0 does not match constraint ~=2.1.0: updating to compatible version."
+            f"Currently installed {module_name}-3.2 does not match constraint ~=3.2.1: updating to compatible version."
             in caplog.messages
         )
-    assert Version("2.1.11") <= ModuleTool().get_module(module_name).version < Version("2.2")
+    assert ModuleTool().get_module(module_name).version == Version("3.2.2")
 
 
 def test_module_add_v2_wrong_name_error(tmpdir: py.path.local, monkeypatch, modules_v2_dir: str) -> None:

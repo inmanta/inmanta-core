@@ -4,3 +4,5 @@ modulepath: libs
 downloadpath: libs
 version: 1.0
 repo: "."
+requires:
+  - "std<5.3"

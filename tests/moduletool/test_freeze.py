@@ -31,7 +31,7 @@ from test_app_cli import app
 
 
 @pytest.mark.slowtest
-def test_freeze_basic(git_modules_dir: str, modules_repo: str, tmpdir):
+def test_freeze_basic(git_modules_dir: str, modules_repo: str, tmpdir, tmpvenv_active):
     install_project(git_modules_dir, "projecta", tmpdir)
     modtool = ModuleTool()
     cmod = modtool.get_module("modc")
@@ -48,7 +48,7 @@ def test_freeze_basic(git_modules_dir: str, modules_repo: str, tmpdir):
 
 
 @pytest.mark.slowtest
-def test_project_freeze_basic(git_modules_dir: str, modules_repo: str, tmpdir):
+def test_project_freeze_basic(git_modules_dir: str, modules_repo: str, tmpdir, tmpvenv_active):
     install_project(git_modules_dir, "projecta", tmpdir)
     modtool = ModuleTool()
     proj = modtool.get_project()
@@ -84,7 +84,7 @@ def test_project_freeze_bad(git_modules_dir: str, modules_repo: str, tmpdir):
 
 
 @pytest.mark.slowtest
-def test_project_freeze(git_modules_dir: str, modules_repo: str, capsys, tmpdir):
+def test_project_freeze(git_modules_dir: str, modules_repo: str, capsys, tmpdir, tmpvenv_active):
     coroot = install_project(git_modules_dir, "projecta", tmpdir)
 
     app(["project", "freeze", "-o", "-"])
@@ -112,7 +112,7 @@ requires:
 
 
 @pytest.mark.slowtest
-def test_project_freeze_disk(git_modules_dir: str, modules_repo: str, capsys, tmpdir):
+def test_project_freeze_disk(git_modules_dir: str, modules_repo: str, capsys, tmpdir, tmpvenv_active):
     coroot = install_project(git_modules_dir, "projecta", tmpdir)
 
     app(["project", "freeze"])
@@ -162,7 +162,7 @@ def test_project_freeze_odd_opperator(git_modules_dir: str, modules_repo: str, t
 
 
 @pytest.mark.slowtest
-def test_project_options_in_config(git_modules_dir: str, modules_repo: str, capsys, tmpdir):
+def test_project_options_in_config(git_modules_dir: str, modules_repo: str, capsys, tmpdir, tmpvenv_active):
     coroot = install_project(
         git_modules_dir,
         "projecta",
@@ -217,7 +217,7 @@ requires:
 
 
 @pytest.mark.slowtest
-def test_module_freeze(git_modules_dir: str, modules_repo: str, capsys, tmpdir):
+def test_module_freeze(git_modules_dir: str, modules_repo: str, capsys, tmpdir, tmpvenv_active):
     coroot = install_project(git_modules_dir, "projecta", tmpdir)
 
     def verify():
@@ -242,7 +242,7 @@ requires:
 
 
 @pytest.mark.slowtest
-def test_module_freeze_self_disk(git_modules_dir: str, modules_repo: str, capsys, tmpdir):
+def test_module_freeze_self_disk(git_modules_dir: str, modules_repo: str, capsys, tmpdir, tmpvenv_active):
     coroot = install_project(git_modules_dir, "projecta", tmpdir)
 
     def verify():
