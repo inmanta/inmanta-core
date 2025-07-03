@@ -1,0 +1,4 @@
+---
+description: "Added the 'GET /api/v2/health' endpoint."
+change-type: patch
+destination-branches: [iso7]

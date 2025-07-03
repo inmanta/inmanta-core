@@ -18,7 +18,6 @@
 
 import traceback
 from abc import abstractmethod
-from functools import lru_cache
 from typing import Dict, List, Optional, Union
 
 from inmanta import warnings
@@ -329,7 +328,7 @@ class Namespace(Namespaced):
     This class models a namespace that contains defined types, modules, ...
     """
 
-    __slots__ = ("__name", "__parent", "__children", "defines_types", "visible_namespaces", "primitives", "scope")
+    __slots__ = ("__name", "__parent", "__children", "defines_types", "visible_namespaces", "primitives", "scope", "__path")
 
     def __init__(self, name: str, parent: "Optional[Namespace]" = None) -> None:
         Namespaced.__init__(self)
@@ -345,6 +344,12 @@ class Namespace(Namespaced):
             self.visible_namespaces = {name: MockImport(self)}
         self.primitives = None  # type: Optional[Dict[str,Type]]
         self.scope = None  # type:  Optional[ExecutionContext]
+        self.__path: list[str]
+
+        if self.__parent is None or self.__parent.get_name() == "__root__":
+            self.__path = [self.__name]
+        else:
+            self.__path = self.__parent.to_path() + [self.__name]
 
     def set_primitives(self, primitives: "Dict[str,Type]") -> None:
         self.primitives = primitives
@@ -541,15 +546,11 @@ class Namespace(Namespaced):
                 return None
             return child._get_ns(ns_parts[1:])
 
-    @lru_cache
     def to_path(self) -> list[str]:
         """
         Return a list with the namespace path elements in it.
         """
-        if self.__parent is None or self.__parent.get_name() == "__root__":
-            return [self.__name]
-        else:
-            return self.__parent.to_path() + [self.__name]
+        return self.__path
 
     def get_namespace(self) -> "Namespace":
         return self

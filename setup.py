@@ -46,7 +46,7 @@ with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
 
 # This version is managed by bumpversion. Should you ever update it manually, make sure to consistently update it everywhere
 # (See the bumpversion.cfg file for relevant locations).
-version = "11.5.2"
+version = "11.5.3"
 
 setup(
     version=version,
@@ -84,6 +84,34 @@ setup(
     include_package_data=True,
     install_requires=requires,
     extras_require={
+        "dev": [
+            "bumpversion",
+            "flake8-junit-report",
+            "inmanta-dev-dependencies[pytest,async,core]",
+            "inmanta-module-std",
+            "openapi_spec_validator",
+            "pip2pi",
+            "psutil",
+            "time-machine",
+            "types-PyYAML",
+            "types-python-dateutil",
+            "types-setuptools",
+            "types-toml",
+            # documentation
+            "furo",
+            "inmanta-sphinx",
+            "myst-parser",
+            "sphinx",
+            "sphinxcontrib-contentui",
+            "sphinxcontrib-redoc",
+            "sphinxcontrib-serializinghtml",
+            "sphinx-argparse",
+            "sphinx-autodoc-annotation",
+            "sphinx-click",
+            "sphinx-design",
+            "Sphinx-Substitution-Extensions",
+            "sphinxcontrib.datatemplates",
+        ],
         "debug": ["rpdb"],
         # option to install a matched pair of inmanta-core and pytest-inmanta-extensions
         "pytest-inmanta-extensions": [f"pytest-inmanta-extensions~={version}.0.dev"],

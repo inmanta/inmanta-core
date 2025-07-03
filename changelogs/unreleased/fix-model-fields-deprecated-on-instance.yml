@@ -1,0 +1,4 @@
+---
+description: Fix pydantic deprecation warning where model_fields is deprecated on model instance.
+change-type: patch
+destination-branches: [iso7]

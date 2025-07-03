@@ -3,4 +3,5 @@ description: test for plugin typing
 modulepath: libs
 downloadpath: libs
 repo: "."
-
+requires:
+  - "std<5.3"
