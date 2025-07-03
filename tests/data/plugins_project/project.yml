@@ -5,3 +5,5 @@ downloadpath: libs
 install_mode: "release"
 repo:
     - https://github.com/inmanta/
+requires:
+  - "std<5.3"
