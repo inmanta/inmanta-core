@@ -100,7 +100,7 @@ def test_bad_setup(git_modules_dir, modules_repo):
         ModuleTool().execute("verify", [])
 
 
-def test_complex_checkout(git_modules_dir, modules_repo):
+def test_complex_checkout(git_modules_dir, modules_repo, tmpvenv_active):
     coroot = os.path.join(git_modules_dir, "testproject")
     subprocess.check_output(
         ["git", "clone", os.path.join(git_modules_dir, "repos", "testproject")], cwd=git_modules_dir, stderr=subprocess.STDOUT
@@ -1686,3 +1686,22 @@ def test_constraints_logging_v1(caplog, snippetcompiler_clean, local_module_pack
         # snippetcompiler adds <5.3 constraint
         "Installing module mod7 (v1) (with constraints mod7>0.0 mod7>=0.0 mod7==3.2.1 mod7<=100.0.0 mod7<100.0.0)",
     )
+
+
+def test_load_module_v1_module_using_install(snippetcompiler_clean, modules_repo) -> None:
+    """
+    Test whether the Project.load_module() method works correctly when a module is only available as a V1 module
+    and that module is not yet present in the module path.
+    """
+    module_name = "mod7"
+    snippetcompiler_clean.repo = modules_repo
+    project: module.Project = snippetcompiler_clean.setup_for_snippet(
+        snippet=f"import {module_name}", install_project=False, autostd=False
+    )
+    # Remove std module in downloadpath created by other test case
+    shutil.rmtree(os.path.join(project.downloadpath, module_name), ignore_errors=True)
+    assert module_name not in project.modules
+    assert module_name not in os.listdir(project.downloadpath)
+    project.load_module(module_name=module_name, install_v1=True, allow_v1=True)
+    assert module_name in project.modules
+    assert module_name in os.listdir(project.downloadpath)

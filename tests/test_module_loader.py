@@ -216,22 +216,6 @@ def test_load_module_v1_already_installed(snippetcompiler, modules_dir: str, all
             project.load_module(module_name=module_name, install_v1=False, allow_v1=allow_v1)
 
 
-def test_load_module_v1_module_using_install(snippetcompiler) -> None:
-    """
-    Test whether the Project.load_module() method works correctly when a module is only available as a V1 module
-    and that module is not yet present in the module path.
-    """
-    module_name = "std"
-    project: Project = snippetcompiler.setup_for_snippet(snippet=f"import {module_name}", install_project=False)
-    # Remove std module in downloadpath created by other test case
-    shutil.rmtree(os.path.join(project.downloadpath, module_name), ignore_errors=True)
-    assert module_name not in project.modules
-    assert module_name not in os.listdir(project.downloadpath)
-    project.load_module(module_name=module_name, install_v1=True, allow_v1=True)
-    assert module_name in project.modules
-    assert module_name in os.listdir(project.downloadpath)
-
-
 @pytest.mark.parametrize("allow_v1", [True, False])
 @pytest.mark.parametrize("editable_install", [True, False])
 def test_load_module_v2_already_installed(

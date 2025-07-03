@@ -522,11 +522,11 @@ def test_project_load_install(snippetcompiler_clean, install: bool) -> None:
     """
     Verify that loading a project only installs modules when install is True.
     """
-    project: Project = snippetcompiler_clean.setup_for_snippet("", autostd=True, install_project=False)
+    project: Project = snippetcompiler_clean.setup_for_snippet("import ip", autostd=False, install_project=False)
     if install:
         project.load(install=True)
     else:
-        with pytest.raises(ModuleLoadingException, match="Failed to load module std"):
+        with pytest.raises(ModuleLoadingException, match="Failed to load module ip"):
             project.load()
         # make sure project load works after installing modules
         project.install_modules()

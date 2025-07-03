@@ -55,6 +55,8 @@ def makemodule(reporoot, name, deps=[], project=False, imports=None, install_mod
 modulepath: libs
 downloadpath: libs
 repo: %s
+requires:
+    - std<5.3
 """
                 % reporoot
             )
