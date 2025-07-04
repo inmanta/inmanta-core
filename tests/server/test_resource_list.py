@@ -42,7 +42,6 @@ from inmanta.deploy import scheduler
 from inmanta.resources import Id
 from inmanta.server import config
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
-from util.test_util import check_helper_method_using_paging_links
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 
@@ -617,59 +616,7 @@ async def test_none_resources_paging(server, client, env_with_resources):
     assert len(actual_result_asc_next.result["data"]) == 2
 
 
-@pytest.mark.parametrize("page_size", [1, 2, 5, 8])
-@pytest.mark.parametrize("iterate_per_item", [True, False])
-async def test_client_all_pages_helper(server, client, env_with_resources, page_size, iterate_per_item):
-    env = env_with_resources
-
-    result = await client.resource_list(tid=env.id)
-    assert result.code == 200
-    n_results = len(result.result["data"])
-
-    fetch_page_by_page_coro = client.resource_list(tid=env.id, limit=page_size)
-    await check_helper_method_using_paging_links(
-        client=client,
-        fetch_page_by_page_coro=fetch_page_by_page_coro,
-        page_size=page_size,
-        expected_item_count=n_results,
-        env=str(env.id),
-        iterate_per_item=True,
-    )
-
-    fetch_page_by_page_coro = client.resource_list(tid=env.id, limit=page_size)
-    await check_helper_method_using_paging_links(
-        client=client,
-        fetch_page_by_page_coro=fetch_page_by_page_coro,
-        page_size=page_size,
-        expected_item_count=n_results,
-        env=str(env.id),
-        iterate_per_item=False,
-    )
-
-
 async def test_client_all_pages(server, client, env_with_resources):
-    env = env_with_resources
-    result = await client.resource_list(tid=env.id)
-    assert result.code == 200
-    all_resources = result.result["data"]
-    assert len(all_resources) == 6
-
-    page_size = 4
-    coro = client.resource_list(tid=env.id, limit=page_size)
-
-    idx = 0
-    async for item in client.all_pages(coro, str(env.id), iterate_per_item=True):
-        assert item == all_resources[idx]
-        idx += 1
-
-    coro = client.resource_list(tid=env.id, limit=page_size)
-    idx = 0
-    async for batch in client.all_pages(coro, str(env.id), iterate_per_item=False):
-        assert batch == all_resources[idx : idx + page_size]
-        idx += page_size
-
-
-async def test_client_all_pages_v2(server, client, env_with_resources):
     env = env_with_resources
     result = await client.resource_list(tid=env.id)
     assert result.code == 200
@@ -680,9 +627,11 @@ async def test_client_all_pages_v2(server, client, env_with_resources):
     result = await client.resource_list(tid=env.id, limit=page_size)
 
     idx = 0
-    async for item in result.all():
+    async for item in result.all(client, env=str(env.id)):
         assert item == all_resources[idx]
         idx += 1
+    assert idx == len(all_resources)
+
 
 @pytest.mark.parametrize(
     "sort, expected_status",

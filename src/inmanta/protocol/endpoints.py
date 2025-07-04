@@ -25,11 +25,10 @@ from asyncio import CancelledError, run_coroutine_threadsafe, sleep
 from collections import abc, defaultdict
 from collections.abc import Coroutine
 from enum import Enum
-from typing import Any, AsyncIterator, Callable, Optional
+from typing import Any, Callable, Optional
 from urllib import parse
 
 import pydantic
-from tornado.httpclient import HTTPRequest
 
 from inmanta import config as inmanta_config
 from inmanta import const, tracing, types, util
@@ -400,47 +399,6 @@ class Client(Endpoint):
 
         return wrap
 
-    async def all_pages(
-        self,
-        coro: Coroutine[Any, Any, common.Result],
-        env: str,
-        *,
-        iterate_per_item: bool = False,
-        envelope_key: str = "data",
-    ) -> AsyncIterator[list[types.JsonType]] | AsyncIterator[types.JsonType]:
-        """
-        Helper method to iteratively fetch results of a coroutine. This method
-        iteratively follows the returned paging link.
-
-        The page size is controlled by the 'limit' argument passed to the coroutine.
-
-        :param coro: A coroutine returning a common.Result object
-        :param env: The environment to query
-        :param iterate_per_item: Boolean flag, allows iteration per item instead of per page.
-        :param envelope_key: The key in the result.result mapping under which lives the data to return
-        """
-        result = await coro
-        while result.code == 200:
-            if not result.result:
-                return
-
-            page = result.result.get(envelope_key, [])
-            if iterate_per_item:
-                for item in page:
-                    yield item
-            else:
-                yield page
-
-            next_link_url = result.result.get("links", {}).get("next")
-
-            if not next_link_url:
-                return
-
-            server_url = self._transport_instance._get_client_config()
-            url = server_url + next_link_url
-            request = HTTPRequest(url=url, method="GET", headers={"X-Inmanta-tid": env})
-            result = self._transport_instance._decode_response(await self._transport_instance.client.fetch(request))
-
 
 class SyncClient:
     """
@@ -518,6 +476,14 @@ class SessionClient(Client):
 
         result = await self._transport_instance.call(method_properties, args, kwargs)
         return result
+
+
+# todo add ?
+class TypedPagedClient(Client):
+    pass
+
+
+# todo make sure it works with the typedclient
 
 
 class TypedClient(Client):

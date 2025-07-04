@@ -33,7 +33,6 @@ from inmanta.const import ResourceState
 from inmanta.server import config
 from inmanta.types import ResourceVersionIdStr
 from inmanta.util import parse_timestamp
-from util.test_util import check_helper_method_using_paging_links
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 
@@ -472,32 +471,16 @@ async def test_resource_history_paging(server, client, order_by_column, order, e
 
     result = await client.resource_history(env.id, resource_with_long_history, sort=f"{order_by_column}.{order}")
     assert result.code == 200
-    n_results = len(result.result["data"])
-    page_size = 2
-    fetch_page_by_page_coro = client.resource_history(
-        env.id, resource_with_long_history, limit=page_size, sort=f"{order_by_column}.{order}"
-    )
+    full_history = result.result["data"]
 
-    await check_helper_method_using_paging_links(
-        client=client,
-        fetch_page_by_page_coro=fetch_page_by_page_coro,
-        page_size=page_size,
-        expected_item_count=n_results,
-        env=str(env.id),
-        iterate_per_item=True,
-    )
-    fetch_page_by_page_coro = client.resource_history(
-        env.id, resource_with_long_history, limit=page_size, sort=f"{order_by_column}.{order}"
-    )
+    result = await client.resource_history(env.id, resource_with_long_history, sort=f"{order_by_column}.{order}")
 
-    await check_helper_method_using_paging_links(
-        client=client,
-        fetch_page_by_page_coro=fetch_page_by_page_coro,
-        page_size=page_size,
-        expected_item_count=n_results,
-        env=str(env.id),
-        iterate_per_item=False,
-    )
+    idx = 0
+    async for item in result.all(client, env=str(env.id)):
+        assert item == full_history[idx]
+        idx += 1
+
+    assert idx == len(full_history)
 
 
 async def test_history_not_continuous_versions(server, client, environment):

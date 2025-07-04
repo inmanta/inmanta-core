@@ -18,7 +18,6 @@ Contact: code@inmanta.com
 
 import asyncio
 import datetime
-import functools
 import logging
 import uuid
 from collections import abc, defaultdict
