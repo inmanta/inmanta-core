@@ -28,7 +28,7 @@ import inmanta.protocol
 import inmanta.util
 from inmanta import const, data, env, tracing
 from inmanta.agent import executor, handler
-from inmanta.agent.executor import DeployReport, DryrunReport, FailedResources, GetFactReport, ResourceDetails
+from inmanta.agent.executor import DeployReport, DryrunReport, FailedInmantaModules, GetFactReport, ResourceDetails
 from inmanta.agent.handler import HandlerAPI, SkipResource, SkipResourceForDependencies
 from inmanta.const import NAME_RESOURCE_ACTION_LOGGER, ParameterSource
 from inmanta.data.model import AttributeStateChange
@@ -76,7 +76,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
 
         self._stopped = False
 
-        self.failed_resources: FailedResources = dict()
+        self.failed_modules: FailedInmantaModules = dict()
 
         self.cache_cleanup_tick_rate = inmanta.agent.config.agent_cache_cleanup_tick_rate.get()
         self.periodic_cache_cleanup_job: Optional[asyncio.Task[None]] = None
@@ -419,7 +419,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                             provider: HandlerAPI[Resource],
                             ctx: handler.HandlerContext,
                             resource: Resource,
-                        ) -> dict[str, object]:
+                        ) -> dict[str, str]:
                             resource.resolve_all_references(ctx)
                             return provider.check_facts(ctx, resource)
 
@@ -574,14 +574,14 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
                     await out.start()
                     self.executors[agent_name] = out
         assert out.uri == agent_uri
-        out.failed_resources = await self.ensure_code(code)
+        out.failed_modules = await self.ensure_code(code)
 
         return out
 
-    async def ensure_code(self, code: typing.Collection[executor.ResourceInstallSpec]) -> executor.FailedResources:
+    async def ensure_code(self, code: typing.Collection[executor.ResourceInstallSpec]) -> executor.FailedInmantaModules:
         """Ensure that the code for the given environment and version is loaded"""
 
-        failed_to_load: executor.FailedResources = {}
+        failed_to_load: FailedInmantaModules = defaultdict(dict)
 
         if self._loader is None:
             return failed_to_load
@@ -620,8 +620,9 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
                         resource_install_spec.resource_type,
                         resource_install_spec.model_version,
                     )
+
                     if resource_install_spec.resource_type not in failed_to_load:
-                        failed_to_load[resource_install_spec.resource_type] = Exception(
+                        failed_to_load[resource_install_spec.resource_type][resource_install_spec.resource_type] = Exception(
                             f"Failed to install handler {resource_install_spec.resource_type} "
                             f"version={resource_install_spec.model_version}: {e}"
                         ).with_traceback(e.__traceback__)

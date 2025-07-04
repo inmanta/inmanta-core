@@ -110,6 +110,26 @@ else:
 end
 dataclasses::is_odd_string(hs.thestring)
 
+# A dataclass instance that is still waiting for its values when the plugin is called.
+# Plugins need to be able to reschedule when not all values are present yet. This includes when we try to construct a
+# dataclass instance for which not all values are there yet. This scenario verifies the absence of a bug that was
+# discovered in the `Union` type during #8946
+lazy_vm = dataclasses::Virtualmachine()
+dataclasses::dc_union(lazy_vm)
+if true: if true:
+    # nest the assignments to make sure the plugin is called before this is executed
+    lazy_vm.name = "lazy_vm"
+    lazy_vm.os = {}
+    lazy_vm.ram = null
+    lazy_vm.cpus = {}
+    lazy_vm.disk = []
+    lazy_vm.slots = null
+end end
+
+# simple inheritance
+simple_dc = dataclasses::create_simple_dc()
+assert = true
+assert = simple_dc.n == 42
 """,
         ministd=True,
     )

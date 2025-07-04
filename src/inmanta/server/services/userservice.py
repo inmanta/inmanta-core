@@ -109,13 +109,14 @@ class UserService(server_protocol.ServerSlice):
     async def login(self, username: str, password: str) -> common.ReturnValue[model.LoginReturn]:
         verify_authentication_enabled()
         # check if the user exists
+        invalid_username_password_msg = "Invalid username or password"
         user = await data.User.get_one(username=username)
         if not user or not user.password_hash:
-            raise exceptions.UnauthorizedException()
+            raise exceptions.UnauthorizedException(message=invalid_username_password_msg, no_prefix=True)
         try:
             nacl.pwhash.verify(user.password_hash.encode(), password.encode())
         except nacl.exceptions.InvalidkeyError:
-            raise exceptions.UnauthorizedException()
+            raise exceptions.UnauthorizedException(message=invalid_username_password_msg, no_prefix=True)
 
         token = auth.encode_token([str(const.ClientType.api.value)], expire=None, custom_claims={"sub": username})
         return common.ReturnValue(

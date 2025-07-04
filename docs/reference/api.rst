@@ -67,6 +67,8 @@ Plugins
 
 .. autoclass:: inmanta.ast.UnsetException
 
+.. autofunction:: inmanta.plugins.allow_reference_values
+
 Resources
 ---------
 

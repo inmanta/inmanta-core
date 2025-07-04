@@ -125,11 +125,9 @@ from typing import Any, Callable, Dict, Generic, Optional, Union
 import asyncpg
 import psutil
 import py
-import pyformance
 import pytest
 from asyncpg.exceptions import DuplicateDatabaseError
 from click import testing
-from pyformance.registry import MetricsRegistry
 from tornado import netutil
 
 import inmanta
@@ -159,6 +157,8 @@ from inmanta.server.protocol import Server, SliceStartupException
 from inmanta.server.services import orchestrationservice
 from inmanta.server.services.compilerservice import CompilerService, CompileRun
 from inmanta.types import JsonType, ResourceIdStr
+from inmanta.vendor import pyformance
+from inmanta.vendor.pyformance import MetricsRegistry
 from inmanta.warnings import WarningsManager
 from libpip2pi.commands import dir2pi
 from packaging.version import Version
@@ -564,7 +564,6 @@ def clean_reset_session():
 
 def reset_all_objects():
     resources.resource.reset()
-    asyncio.set_child_watcher(None)
     reset_metrics()
     # No dynamic loading of commands at the moment, so no need to reset/reload
     # command.Commander.reset()
@@ -1647,7 +1646,7 @@ class CLI:
     async def run(self, *args, **kwargs):
         # set column width very wide so lines are not wrapped
         os.environ["COLUMNS"] = "1000"
-        runner = testing.CliRunner(mix_stderr=False)
+        runner = testing.CliRunner()
         cmd_args = ["--host", "localhost", "--port", config.Config.get("cmdline_rest_transport", "port")]
         cmd_args.extend(args)
 
@@ -1926,7 +1925,7 @@ def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
             ModuleTool().build(path=path, output_dir=build_dir, wheel=True)
         # Download bare necessities
         CommandRunner(logging.getLogger(__name__)).run_command_and_log_output(
-            ["pip", "download", "setuptools", "wheel"], cwd=build_dir
+            [sys.executable, "-m", "pip", "download", "setuptools", "wheel"], cwd=build_dir
         )
 
         # Build python package repository

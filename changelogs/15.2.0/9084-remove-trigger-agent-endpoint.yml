@@ -1,0 +1,6 @@
+---
+description: "Removed the `POST /api/v1/agent/<id>` API endpoint."
+change-type: patch
+destination-branches: [iso8]
+sections:
+  upgrade-note:  "{{description}}"

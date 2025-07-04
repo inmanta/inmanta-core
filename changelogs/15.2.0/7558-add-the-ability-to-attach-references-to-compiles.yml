@@ -1,0 +1,4 @@
+description: Add the ability to attach references to compiles
+issue-nr: 7558
+change-type: minor
+destination-branches: [master, iso8]

@@ -25,7 +25,9 @@ import json
 import logging
 import math
 import os
+import pathlib
 import random
+import re
 import shutil
 import uuid
 from collections import abc
@@ -243,7 +245,7 @@ class LogSequence:
         if not self.allow_errors:
             # first error is later
             idxe = self._find("", logging.ERROR, "", self.index, min_level)
-            assert idxe == -1 or idxe >= index
+            assert idxe == -1 or idxe >= index, f"Unexpected ERROR log line found: {self.caplog.records[idxe]}"
         assert index >= 0, "could not find " + msg
         return LogSequence(self.caplog, index + 1, self.allow_errors, self.ignore)
 
@@ -1051,3 +1053,23 @@ def assert_resource_persistent_state(
         f"{resource_persistent_state.resource_id}"
         f" ({resource_persistent_state.get_compliance_status()} != {expected_compliance})"
     )
+
+
+def validate_version_numbers_migration_scripts(versions_folder: pathlib.Path) -> None:
+    """
+    Validate whether the names of the database migration scripts in the given directory
+    are compliant with the schema. Migration scripts must have the format vYYYYMMDDN.py
+    """
+    v1_found = False
+    for path in versions_folder.iterdir():
+        file_name = path.name
+        if not file_name.endswith(".py"):
+            continue
+        if file_name == "__init__.py":
+            continue
+        if file_name == "v1.py":
+            v1_found = True
+            continue
+        if not re.fullmatch(r"v([0-9]{9})\.py", file_name):
+            raise Exception(f"Database migration script {file_name} has invalid format.")
+    assert v1_found

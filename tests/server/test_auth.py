@@ -18,7 +18,9 @@ Contact: code@inmanta.com
 
 import pytest
 
-from inmanta import config, const
+import nacl.pwhash
+from inmanta import config, const, data
+from inmanta.data.model import AuthMethod
 from inmanta.protocol import auth
 from inmanta.server import SLICE_USER, protocol
 
@@ -77,3 +79,52 @@ async def test_claim_assertions(server: protocol.Server, server_pre_start) -> No
         claims=dict(environments=["prod", "lab"], type="lab", username="bob"),
     )
     assert (await client.list_users()).code == 403
+
+
+async def test_provide_token_as_parameter(server: protocol.Server, client) -> None:
+    """
+    Validate whether the authorization token is handled correctly
+    when provided using a parameter instead of a header.
+    """
+    config.Config.set("server", "auth", "true")
+    config.Config.set("server", "auth_method", "database")
+    user = data.User(
+        username="admin",
+        password_hash=nacl.pwhash.str("adminadmin".encode()).decode(),
+        auth_method=AuthMethod.database,
+    )
+    await user.insert()
+
+    # No authorization token provided
+    result = await client.get_api_docs()
+    assert result.code == 401
+
+    response = await client.login("admin", "adminadmin")
+    assert response.code == 200
+    token = response.result["data"]["token"]
+
+    result = await client.get_api_docs(token=token)
+    assert result.code == 200
+
+
+async def test_login_failed(server, client) -> None:
+    """
+    Ensure that a meaningful error message is returned when incorrect
+    credentials are provided to the login endpoint.
+    """
+    user = data.User(
+        username="admin",
+        password_hash=nacl.pwhash.str("admin".encode()).decode(),
+        auth_method=AuthMethod.database,
+    )
+    await user.insert()
+
+    # Invalid username
+    result = await client.login(username="test", password="test")
+    assert result.code == 401
+    assert "Invalid username or password" == result.result["message"]
+
+    # Invalid password
+    result = await client.login(username="admin", password="test")
+    assert result.code == 401
+    assert "Invalid username or password" == result.result["message"]

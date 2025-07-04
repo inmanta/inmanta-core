@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump packaging from 24.2 to 25.0
+destination-branches:
+- iso8
+sections: {}

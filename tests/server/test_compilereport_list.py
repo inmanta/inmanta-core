@@ -64,6 +64,7 @@ async def env_with_compile_reports(client, environment):
             version=i,
             substitute_compile_id=None,
             compile_data=None,
+            links={},
         ).insert()
     return environment, compile_requested_timestamps
 
