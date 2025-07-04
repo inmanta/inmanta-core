@@ -32,7 +32,7 @@ from datetime import datetime
 from enum import Enum
 from functools import partial
 from inspect import Parameter
-from typing import TYPE_CHECKING, Any, Callable, Generic, Optional, TypeVar, Union, cast, get_type_hints
+from typing import TYPE_CHECKING, Any, AsyncIterator, Callable, Optional, TypeVar, Union, cast, get_type_hints
 from urllib import parse
 
 import docstring_parser
@@ -41,6 +41,7 @@ import typing_inspect
 from pydantic import ValidationError
 from pydantic.main import create_model
 from tornado import web
+from tornado.httpclient import HTTPRequest
 
 from inmanta import const, execute, types, util
 from inmanta.data.model import BaseModel, DateTimeNormalizerModel
@@ -52,6 +53,8 @@ from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes, HandlerType, JsonType, MethodType, ReturnTypes
 
 if TYPE_CHECKING:
+    from inmanta.protocol.rest.client import RESTClient
+
     from .endpoints import CallTarget
 
 
@@ -170,7 +173,7 @@ class Request:
 T_co = TypeVar("T_co", bound=Union[None, ArgumentTypes], covariant=True)
 
 
-class ReturnValue(Generic[T_co]):
+class ReturnValue[T_co]:
     """
     An object that handlers can return to provide a response to a method call.
     """
@@ -1100,9 +1103,10 @@ class Result:
     A result of a method call
     """
 
-    def __init__(self, code: int = 0, result: Optional[JsonType] = None) -> None:
+    def __init__(self, client: Optional["RESTClient"] = None, code: int = 0, result: Optional[JsonType] = None) -> None:
         self._result = result
         self.code = code
+        self._client = client
         """
         The result code of the method call.
         """
@@ -1144,6 +1148,29 @@ class Result:
         Set a callback function that is to be called when the result is ready.
         """
         self._callback = fnc
+
+    async def all(self, env: str, envelope_key: str = "data") -> AsyncIterator[types.JsonType]:
+        result = self
+        while result.code == 200:
+            if not result.result:
+                return
+
+            if not self._client:
+                raise Exception("Panic!")
+
+            page = result.result.get(envelope_key, [])
+            for item in page:
+                yield item
+
+            next_link_url = result.result.get("links", {}).get("next")
+
+            if not next_link_url:
+                return
+
+            server_url = self._client._get_client_config()
+            url = server_url + next_link_url
+            request = HTTPRequest(url=url, method="GET", headers={"X-Inmanta-tid": env})
+            result = self._client._decode_response(await self._client.client.fetch(request))
 
 
 class SessionManagerInterface:
