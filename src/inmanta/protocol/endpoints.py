@@ -33,7 +33,7 @@ from tornado.httpclient import HTTPRequest
 
 from inmanta import config as inmanta_config
 from inmanta import const, tracing, types, util
-from inmanta.protocol import Result, common, exceptions
+from inmanta.protocol import common, exceptions
 from inmanta.util import TaskHandler
 
 from .rest import client
@@ -407,7 +407,18 @@ class Client(Endpoint):
         *,
         iterate_per_item: bool = False,
         envelope_key: str = "data",
-    ) -> AsyncIterator[Result] | AsyncIterator[types.JsonType]:
+    ) -> AsyncIterator[list[types.JsonType]] | AsyncIterator[types.JsonType]:
+        """
+        Helper method to iteratively fetch results of a coroutine. This method
+        iteratively follows the returned paging link.
+
+        The page size is controlled by the 'limit' argument passed to the coroutine.
+
+        :param coro: A coroutine returning a common.Result object
+        :param env: The environment to query
+        :param iterate_per_item: Boolean flag, allows iteration per item instead of per page.
+        :param envelope_key: The key in the result.result mapping under which lives the data to return
+        """
         result = await coro
         while result.code == 200:
             if not result.result:
