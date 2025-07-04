@@ -219,10 +219,9 @@ async def test_docs_snippets_unmanaged_resources_basic(
 
     model = textwrap.dedent(
         """
-        import ip
         import my_module
 
-        host = ip::Host(ip="127.0.0.1", name="agent1", os=std::linux)
+        host = std::Host(ip="127.0.0.1", name="agent1", os=std::linux)
         my_module::InterfaceDiscovery(host=host)
         """
     )
@@ -278,15 +277,14 @@ async def test_docs_snippets_unmanaged_resources_shared_attributes(
 
     model = textwrap.dedent(
         """
-        import ip
         import my_module
 
-        host = ip::Host(ip="127.0.0.1", name="agent1", os=std::linux)
+        host = std::Host(ip="127.0.0.1", name="agent1", os=std::linux)
         credentials = my_module::Credentials(username="test", password="test")
         my_module::InterfaceDiscovery(name_filter="eth[1-9]", host=host, credentials=credentials)
         """
     )
-    snippetcompiler.setup_for_snippet(model, add_to_module_path=[str(tmpdir)], use_pip_config_file=True)
+    snippetcompiler.setup_for_snippet(model, add_to_module_path=[str(tmpdir)], use_pip_config_file=True, autostd=True)
     version, _ = await snippetcompiler.do_export_and_deploy()
 
     await clienthelper.wait_for_released(version)

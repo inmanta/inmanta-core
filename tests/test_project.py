@@ -525,15 +525,20 @@ async def test_environment_listener(server, client_v2, caplog):
 
 
 @pytest.mark.parametrize("install", [True, False])
-def test_project_load_install(snippetcompiler_clean, install: bool) -> None:
+def test_project_load_install(snippetcompiler_clean, local_module_package_index: str, install: bool) -> None:
     """
     Verify that loading a project only installs modules when install is True.
     """
-    project: Project = snippetcompiler_clean.setup_for_snippet("import dummy_module", autostd=True, install_project=False)
+    project: Project = snippetcompiler_clean.setup_for_snippet(
+        "import minimalv2module",
+        python_requires=[inmanta.util.parse_requirement("inmanta-module-minimalv2module")],
+        install_project=False,
+        index_url=local_module_package_index,
+    )
     if install:
         project.load(install=True)
     else:
-        with pytest.raises(ModuleLoadingException, match="Failed to load module dummy_module"):
+        with pytest.raises(ModuleLoadingException, match="Failed to load module minimalv2module"):
             project.load()
         # make sure project load works after installing modules
         project.install_modules()
