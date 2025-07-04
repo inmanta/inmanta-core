@@ -624,14 +624,10 @@ async def test_deploy_with_undefined(server, client, resource_container, agent, 
     resources = await data.Resource.get_list(environment=environment)
     assert len(resources) == 4
     # Assert that we get 2 undefined resources
-    undefined_state = [res for res in resources if res.status == const.ResourceState.undefined]
-    other_state = [res for res in resources if res.status != const.ResourceState.undefined]
+    undefined_state = [res for res in resources if res.is_undefined]
+    other_state = [res for res in resources if not res.is_undefined]
     assert len(undefined_state) == 2
     assert len(other_state) == 2
-    # Assert that the undefined resources have is_undefined set to true
-    # And resources in any other state have it set to false
-    for resource in resources:
-        assert resource.is_undefined == (resource in undefined_state)
 
     # do a deploy
     result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)

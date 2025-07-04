@@ -125,7 +125,6 @@ async def env_with_resources(server, client):
             environment=environment,
             resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),
             attributes={**attributes, **{"name": name}},
-            status=status,
         )
         await res.insert()
         await data.ResourcePersistentState.populate_for_version(environment=environment, model_version=version)
@@ -142,7 +141,9 @@ async def env_with_resources(server, client):
         last_deploy = last_deploy if update_last_deployed else None
         last_non_deploying_status = status if is_version_released[version] and status != ResourceState.deploying else None
         is_orphan = version < latest_released_version[environment]
-        await res.update_persistent_state(
+        await data.ResourcePersistentState.update_persistent_state(
+            environment=environment,
+            resource_id=res.resource_id,
             last_deploy=last_deploy,
             last_non_deploying_status=last_non_deploying_status,
             is_deploying=is_deploying,

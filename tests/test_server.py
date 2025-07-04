@@ -819,7 +819,6 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
         res1 = data.Resource.new(
             environment=env.id,
             resource_version_id="std::testing::NullResource[agent1,name=motd],v=%s" % str(i),
-            status=const.ResourceState.deployed,
             attributes={"attr": [{"a": 1, "b": "c"}], "path": "/etc/motd"},
         )
         await res1.insert()
@@ -951,7 +950,6 @@ async def test_send_in_progress(server, client, environment, agent):
     rvid_r3_v1 = f"{rvid_r3},v={model_version}"
 
     async def make_resource_with_last_non_deploying_status(
-        status: const.ResourceState,
         last_non_deploying_status: const.NonDeployingResourceState,
         resource_version_id: str,
         attributes: dict[str, object],
@@ -959,30 +957,31 @@ async def test_send_in_progress(server, client, environment, agent):
     ) -> None:
         r1 = data.Resource.new(
             environment=env_id,
-            status=status,
             resource_version_id=resource_version_id,
             attributes=attributes,
         )
         await r1.insert()
         await data.ResourcePersistentState.populate_for_version(environment=uuid.UUID(environment), model_version=version)
-        await r1.update_persistent_state(last_deploy=datetime.now(tz=UTC), last_non_deploying_status=last_non_deploying_status)
+        await data.ResourcePersistentState.update_persistent_state(
+            environment=uuid.UUID(environment),
+            resource_id=r1.resource_id,
+            last_deploy=datetime.now(tz=UTC),
+            last_non_deploying_status=last_non_deploying_status,
+        )
 
     await make_resource_with_last_non_deploying_status(
-        status=const.ResourceState.skipped,
         last_non_deploying_status=const.NonDeployingResourceState.skipped,
         resource_version_id=rvid_r1_v1,
         attributes={"purge_on_delete": False, "requires": [rvid_r2, rvid_r3]},
         version=model_version,
     )
     await make_resource_with_last_non_deploying_status(
-        status=const.ResourceState.deployed,
         last_non_deploying_status=const.NonDeployingResourceState.deployed,
         resource_version_id=rvid_r2_v1,
         attributes={"purge_on_delete": False, "requires": []},
         version=model_version,
     )
     await make_resource_with_last_non_deploying_status(
-        status=const.ResourceState.failed,
         last_non_deploying_status=const.NonDeployingResourceState.failed,
         resource_version_id=rvid_r3_v1,
         attributes={"purge_on_delete": False, "requires": []},
@@ -1033,7 +1032,6 @@ async def test_send_in_progress_action_id_conflict(server, client, environment, 
 
     await data.Resource.new(
         environment=env_id,
-        status=const.ResourceState.skipped,
         resource_version_id=rvid_r1_v1,
         attributes={"purge_on_delete": False, "requires": []},
     ).insert()
@@ -1235,33 +1233,9 @@ async def test_send_deploy_done_error_handling(server, client, environment, agen
 
     rvid_r1_v1 = ResourceVersionIdStr(f"std::testing::NullResource[agent1,name=file1],v={model_version}")
 
-    # Resource doesn't exist
-    with pytest.raises(ValueError) as exec_info:
-        await update_manager.send_deploy_done(
-            attribute_hash="",
-            result=executor.DeployReport(
-                rvid=rvid_r1_v1,
-                action_id=uuid.uuid4(),
-                resource_state=const.HandlerResourceState.deployed,
-                messages=[],
-                changes={},
-                change=const.Change.nochange,
-            ),
-            state=state.ResourceState(
-                compliance=state.Compliance.COMPLIANT,
-                last_deploy_result=state.DeployResult.DEPLOYED,
-                blocked=state.Blocked.NOT_BLOCKED,
-                last_deployed=datetime.now().astimezone(),
-            ),
-            started=datetime.now().astimezone(),
-            finished=datetime.now().astimezone(),
-        )
-    assert "The resource with the given id does not exist in the given environment" in str(exec_info.value)
-
     # Create resource
     await data.Resource.new(
         environment=env_id,
-        status=const.ResourceState.available,
         resource_version_id=rvid_r1_v1,
         attributes={"purge_on_delete": False, "requires": []},
     ).insert()

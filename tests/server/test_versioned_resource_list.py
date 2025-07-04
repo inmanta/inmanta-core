@@ -26,7 +26,6 @@ import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 from inmanta import data
-from inmanta.const import ResourceState
 from inmanta.data.model import VersionedResource
 from inmanta.server import config
 from inmanta.types import ResourceVersionIdStr
@@ -60,7 +59,6 @@ async def env_with_resources(server, client):
                 environment=environment,
                 resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),
                 attributes={"name": name, "v": version, "version": version},
-                status=ResourceState.deployed,
             )
             await res.insert()
 

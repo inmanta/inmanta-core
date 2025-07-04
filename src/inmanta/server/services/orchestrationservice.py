@@ -584,9 +584,8 @@ class OrchestrationService(protocol.ServerSlice):
                     f" version field ({res_dict['version']})."
                 )
             res_obj = data.Resource.new(env_id, res_dict["id"])
-            # Populate status field
+            # Populate is_undefined field
             if res_obj.resource_id in resource_state:
-                res_obj.status = const.ResourceState[resource_state[res_obj.resource_id]]
                 res_obj.is_undefined = const.ResourceState[resource_state[res_obj.resource_id]] == const.ResourceState.undefined
             # Populate resource_set field
             if res_obj.resource_id in resource_sets:
