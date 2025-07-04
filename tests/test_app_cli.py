@@ -170,6 +170,8 @@ name: testproject
 modulepath: {libs_dir}
 downloadpath: {libs_dir}
 repo: https://github.com/inmanta/
+requires:
+    - std<5.3
 """
     )
 
@@ -257,6 +259,8 @@ name: testproject
 modulepath: {libs_dir}
 downloadpath: {libs_dir}
 repo: https://github.com/inmanta/
+requires:
+    - std<5.3
 """
     )
 
@@ -395,6 +399,8 @@ name: testproject
 modulepath: {libs_dir}
 downloadpath: {libs_dir}
 repo: https://github.com/inmanta/
+requires:
+    - std<5.3
 """
     )
 
@@ -521,6 +527,8 @@ async def test_logger_name_in_compiler_exporter_output(
                 modulepath: {libs_dir}
                 downloadpath: {libs_dir}
                 repo: https://github.com/inmanta/
+                requires:
+                    - std<5.3
             """
         )
     )

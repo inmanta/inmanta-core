@@ -385,6 +385,7 @@ class MethodProperties:
         strict_typing: bool = True,
         enforce_auth: bool = True,
         varkw: bool = False,
+        token_param: str | None = None,
     ) -> None:
         """
         Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
@@ -411,6 +412,8 @@ class MethodProperties:
         :param varkw: If true, additional arguments are allowed and will be dispatched to the handler. The handler is
                       responsible for the validation.
         :param reply: If False, this is a fire-and-forget query: we will not wait for any result, just deliver the call
+        :param token_param: The parameter that contains the authorization token or None if the authorization token
+                            should be retrieved from the Authorization header.
         """
         if api is None:
             api = not server_agent and not agent_server
@@ -441,6 +444,7 @@ class MethodProperties:
         self._varkw: bool = varkw
         self._varkw_name: Optional[str] = None
         self._return_type: Optional[type] = None
+        self.token_param = token_param
 
         self._parsed_docstring = docstring_parser.parse(text=function.__doc__, style=docstring_parser.DocstringStyle.REST)
         self._docstring_parameter_map = {p.arg_name: p.description for p in self._parsed_docstring.params}
@@ -476,7 +480,7 @@ class MethodProperties:
         """
         try:
             out = self.argument_validator(**values)
-            return {f: getattr(out, f) for f in out.model_fields.keys()}
+            return {f: getattr(out, f) for f in self.argument_validator.model_fields.keys()}
         except ValidationError as e:
             error_msg = f"Failed to validate argument\n{str(e)}"
             LOGGER.exception(error_msg)
@@ -524,6 +528,9 @@ class MethodProperties:
         # TODO: only primitive types are allowed in the path
         # TODO: body and get does not work
         self._path.validate_vars(type_hints.keys(), str(self.function))
+
+        if self.token_param is not None and self.token_param not in type_hints:
+            raise InvalidMethodDefinition(f"token_param ({self.token_param}) is missing in parameters of method.")
 
         if not typed:
             return
@@ -828,6 +835,12 @@ class MethodProperties:
         url = "/%s/v%d" % (self._api_prefix, self._api_version)
         return url + self._path.generate_regex_path()
 
+    def get_full_path(self) -> str:
+        """
+        Return the path of this endpoint including the api prefix and version number.
+        """
+        return f"/{self._api_prefix}/v{self._api_version}{self._path.path}"
+
     def get_call_url(self, msg: dict[str, str]) -> str:
         """
         Create a calling url for the client
@@ -958,6 +971,12 @@ class UrlMethod:
 
     def get_operation(self) -> str:
         return self._properties.operation
+
+    def get_path(self) -> str:
+        """
+        Returns the path part of the URL. Parameters in this path are templated using the <param> notation.
+        """
+        return self._properties.get_full_path()
 
 
 # Util functions

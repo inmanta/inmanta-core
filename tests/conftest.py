@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 
+import itertools
 import logging.config
 import warnings
 from re import Pattern
@@ -756,7 +757,7 @@ def log_state_tcp_ports(request, log_file):
 
 
 @pytest.fixture(scope="function")
-async def server_config(event_loop, inmanta_config, postgres_db, database_name, clean_reset, unused_tcp_port_factory):
+async def server_config(inmanta_config, postgres_db, database_name, clean_reset, unused_tcp_port_factory):
     reset_metrics()
 
     with tempfile.TemporaryDirectory() as state_dir:
@@ -788,10 +789,6 @@ async def server_config(event_loop, inmanta_config, postgres_db, database_name, 
 
 @pytest.fixture(scope="function")
 async def server(server_pre_start) -> abc.AsyncIterator[Server]:
-    """
-    :param event_loop: explicitly include event_loop to make sure event loop started before and closed after this fixture.
-    May not be required
-    """
     # fix for fact that pytest_tornado never set IOLoop._instance, the IOLoop of the main thread
     # causes handler failure
 
@@ -823,12 +820,8 @@ async def server(server_pre_start) -> abc.AsyncIterator[Server]:
     ids=["SSL and Auth", "SSL", "Auth", "Normal", "SSL and Auth with not self signed certificate"],
 )
 async def server_multi(
-    server_pre_start, event_loop, inmanta_config, postgres_db, database_name, request, clean_reset, unused_tcp_port_factory
+    server_pre_start, inmanta_config, postgres_db, database_name, request, clean_reset, unused_tcp_port_factory
 ):
-    """
-    :param event_loop: explicitly include event_loop to make sure event loop started before and closed after this fixture.
-    May not be required
-    """
     with tempfile.TemporaryDirectory() as state_dir:
         ssl, auth, ca = request.param
 
@@ -1190,6 +1183,7 @@ class SnippetCompilationTest(KeepOnFail):
             index_url,
             extra_index_url,
             main_file,
+            autostd=autostd,
         )
 
         dirty_venv = autostd or install_project or install_v2_modules or self.re_check_venv or python_requires
@@ -1262,6 +1256,8 @@ class SnippetCompilationTest(KeepOnFail):
         index_url: Optional[str] = None,
         extra_index_url: list[str] = [],
         main_file: str = "main.cf",
+        *,
+        autostd: bool = False,
         ministd: bool = False,
     ) -> None:
         add_to_module_path = add_to_module_path if add_to_module_path is not None else []
@@ -1270,6 +1266,14 @@ class SnippetCompilationTest(KeepOnFail):
         project_requires = project_requires if project_requires is not None else []
         python_requires = python_requires if python_requires is not None else []
         relation_precedence_rules = relation_precedence_rules if relation_precedence_rules else []
+
+        using_std: bool = (
+            autostd
+            or "import std" in snippet
+            or any(req.name in ("std", "inmanta-module-std") for req in itertools.chain(project_requires, python_requires))
+        )
+        all_project_requires = [*project_requires, "std<5.3"] if using_std else project_requires
+
         ministd_path = os.path.join(__file__, "..", "data/mini_str_container")
         if ministd:
             add_to_module_path += ministd_path
@@ -1284,14 +1288,14 @@ class SnippetCompilationTest(KeepOnFail):
                 - {{type: git, url: {self.repo} }}
             """.rstrip()
             )
-
             if relation_precedence_rules:
                 cfg.write("\n            relation_precedence_policy:\n")
                 cfg.write("\n".join(f"                - {rule}" for rule in relation_precedence_rules))
-            if project_requires:
+            if all_project_requires:
                 cfg.write("\n            requires:\n")
-                cfg.write("\n".join(f"                - {req}" for req in project_requires))
+                cfg.write("\n".join(f"                - {req}" for req in all_project_requires))
             if install_mode:
+                assert install_mode is not InstallMode.master
                 cfg.write(f"\n            install_mode: {install_mode.value}")
 
             cfg.write(
@@ -1787,7 +1791,7 @@ def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
             ModuleTool().build(path=path, output_dir=build_dir)
         # Download bare necessities
         CommandRunner(logging.getLogger(__name__)).run_command_and_log_output(
-            ["pip", "download", "setuptools", "wheel"], cwd=build_dir
+            [sys.executable, "-m", "pip", "download", "setuptools", "wheel"], cwd=build_dir
         )
 
         # Build python package repository

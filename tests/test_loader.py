@@ -459,7 +459,7 @@ name: test
 modulepath: libs
 downloadpath: libs
 repo: https://github.com/inmanta/inmanta.git
-install_mode: master
+install_mode: release
     """
     )
 

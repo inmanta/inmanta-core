@@ -24,7 +24,7 @@ https://github.com/tiangolo/fastapi
 """
 from collections import abc
 from enum import Enum
-from typing import Any, Optional, Self, Union
+from typing import Any, Optional, Self, TypeAlias, Union
 
 import pydantic
 from pydantic import AnyUrl, ConfigDict, Field
@@ -263,6 +263,16 @@ class PathItem(BaseModel):
     parameters: Optional[list[Union[Parameter, Reference]]] = None
 
 
+SecuritySchemeName: TypeAlias = str
+Scope: TypeAlias = str
+
+
+class SecurityScheme(BaseModel):
+    type: str
+    scheme: str
+    bearerFormat: str
+
+
 class Components(BaseModel):
     schemas: Optional[dict[str, Schema]] = None
     responses: Optional[dict[str, Union[Response, Reference]]] = None
@@ -270,6 +280,7 @@ class Components(BaseModel):
     examples: Optional[dict[str, Union[Example, Reference]]] = None
     requestBodies: Optional[dict[str, Union[RequestBody, Reference]]] = None
     headers: Optional[dict[str, Union[Header, Reference]]] = None
+    securitySchemes: Optional[dict[SecuritySchemeName, SecurityScheme]] = None
 
 
 class OpenAPI(BaseModel):
@@ -278,6 +289,7 @@ class OpenAPI(BaseModel):
     servers: Optional[list[Server]] = None
     paths: dict[str, PathItem]
     components: Optional[Components] = None
+    security: Optional[list[dict[SecuritySchemeName, list[Scope]]]] = None
 
 
 class OpenApiDataTypes(Enum):

@@ -18,6 +18,8 @@
 
 from pathlib import Path
 
+import utils
+
 
 def test_migration_check():
     """
@@ -61,3 +63,13 @@ def test_migration_check():
         )
     migration_test: Path = migration_tests[-1]
     assert migration_test.is_file()
+
+
+async def test_filenames_migration_scripts() -> None:
+    """
+    Validate that the version numbers of the database migration scripts have the correct format.
+    Migration scripts must have the format vYYYYMMDDN.py
+    """
+    inmanta_dir: Path = Path(__file__).parent.parent.parent.absolute()
+    versions_folder: Path = inmanta_dir / "src" / "inmanta" / "db" / "versions"
+    utils.validate_version_numbers_migration_scripts(versions_folder)

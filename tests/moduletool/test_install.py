@@ -39,7 +39,7 @@ from inmanta.config import Config
 from inmanta.env import CommandRunner, ConflictingRequirements, PipConfig
 from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleLoadingException, ModuleNotFoundException
 from inmanta.moduletool import DummyProject, ModuleConverter, ModuleTool, ProjectTool
-from moduletool.common import BadModProvider, install_project
+from moduletool.common import BadModProvider
 from packaging import version
 from utils import LogSequence, PipIndex, log_contains, module_from_template
 
@@ -100,7 +100,7 @@ def test_bad_setup(git_modules_dir, modules_repo):
         ModuleTool().execute("verify", [])
 
 
-def test_complex_checkout(git_modules_dir, modules_repo):
+def test_complex_checkout(git_modules_dir, modules_repo, tmpvenv_active):
     coroot = os.path.join(git_modules_dir, "testproject")
     subprocess.check_output(
         ["git", "clone", os.path.join(git_modules_dir, "repos", "testproject")], cwd=git_modules_dir, stderr=subprocess.STDOUT
@@ -124,7 +124,7 @@ def test_complex_checkout(git_modules_dir, modules_repo):
     ModuleTool().execute("push", [])
 
 
-def test_for_git_failures(git_modules_dir, modules_repo):
+def test_for_git_failures(git_modules_dir, modules_repo, tmpvenv_active):
     coroot = os.path.join(git_modules_dir, "testproject2")
     subprocess.check_output(
         ["git", "clone", os.path.join(git_modules_dir, "repos", "testproject"), "testproject2"],
@@ -189,16 +189,6 @@ def test_bad_dep_checkout(git_modules_dir, modules_repo):
 
     with pytest.raises(CompilerException, match="requirement mod2<2016 on module mod2 not fulfilled, now at version 2016.1"):
         ProjectTool().execute("install", [])
-
-
-def test_master_checkout(git_modules_dir: str, modules_repo: str, tmpdir):
-    coroot = install_project(git_modules_dir, "masterproject", tmpdir)
-
-    ProjectTool().execute("install", [])
-
-    dirname = os.path.join(coroot, "libs", "mod8")
-    assert os.path.exists(os.path.join(dirname, "devsignal"))
-    assert os.path.exists(os.path.join(dirname, "mastersignal"))
 
 
 def test_dev_checkout(git_modules_dir, modules_repo):
@@ -495,20 +485,22 @@ def test_project_install(
     snippetcompiler_clean,
     install_module_names: list[str],
     module_dependencies: list[str],
+    modules_repo: str,
 ) -> None:
     """
     Install a simple inmanta project with `inmanta project install`. Make sure both v1 and v2 modules are installed
     as expected.
     """
+    snippetcompiler_clean.repo = modules_repo
     fq_mod_names: list[str] = [f"inmanta_plugins.{mod}" for mod in chain(install_module_names, module_dependencies)]
 
     # set up project and modules
     project: module.Project = snippetcompiler_clean.setup_for_snippet(
-        "\n".join(f"import {mod}" for mod in ["std", *install_module_names]),
+        "\n".join(f"import {mod}" for mod in ["std", "mod11", *install_module_names]),
         autostd=False,
         index_url=local_module_package_index,
         # We add tornado, as there is a code path in update for the case where the project has python requires
-        python_requires=["tornado"]
+        python_requires=[inmanta.util.parse_requirement("tornado")]
         + [
             inmanta.util.parse_requirement(requirement=module.ModuleV2Source.get_package_name_for(mod))
             for mod in install_module_names
@@ -531,7 +523,7 @@ def test_project_install(
         assert env_module_file == os.path.join(env.process_env.site_packages_dir, *fq_mod_name.split("."), "__init__.py")
     v1_mod_dir: str = os.path.join(project.path, project.downloadpath)
     assert os.path.exists(v1_mod_dir)
-    assert os.listdir(v1_mod_dir) == ["std"]
+    assert os.listdir(v1_mod_dir) == ["mod11"]
 
     # ensure we can compile
     compiler.do_compile()
@@ -541,7 +533,7 @@ def test_project_install(
 
     # add a dependency
     project: module.Project = snippetcompiler_clean.setup_for_snippet(
-        "\n".join(f"import {mod}" for mod in ["std", *install_module_names]),
+        "\n".join(f"import {mod}" for mod in ["std", "mod11", *install_module_names]),
         autostd=False,
         python_package_sources=[local_module_package_index],
         python_requires=[
@@ -706,20 +698,17 @@ def test_project_install_modules_cache_invalid(
     assert message in (rec.message for rec in caplog.records)
 
 
-@pytest.mark.parametrize_any("autostd", [True, False])
 def test_project_install_incompatible_versions(
     caplog,
     snippetcompiler_clean,
     tmpdir: py.path.local,
     modules_dir: str,
     modules_v2_dir: str,
-    autostd: bool,
 ) -> None:
     """
     Verify that introducing module version incompatibilities results in the appropriate exception and warnings.
-    Make sure this works both for autostd (no explicit import) and for standard modules.
     """
-    v2_mod_name: str = "std" if autostd else "v2mod"
+    v2_mod_name: str = "v2mod"
 
     # declare conflicting module parameters
     current_version: version.Version = version.Version("1.0.0")
@@ -757,13 +746,12 @@ def test_project_install_incompatible_versions(
 
     # set up project
     snippetcompiler_clean.setup_for_snippet(
-        """
+        f"""
         import v1mod2
         import v1mod1
-        %s
-        """
-        % (f"import {v2_mod_name}" if not autostd else ""),
-        autostd=autostd,
+        import {v2_mod_name}
+        """,
+        autostd=False,
         install_project=False,
         add_to_module_path=[v1_modules_path],
         index_url=index.url,
@@ -1105,12 +1093,18 @@ def test_install_with_use_config_but_PIP_CONFIG_FILE_not_set(
 
 @pytest.mark.slowtest
 def test_moduletool_list(
-    capsys, tmpdir: py.path.local, local_module_package_index: str, snippetcompiler_clean, modules_v2_dir: str
+    capsys,
+    tmpdir: py.path.local,
+    local_module_package_index: str,
+    snippetcompiler_clean,
+    modules_v2_dir: str,
+    modules_repo: str,
 ) -> None:
     """
     Verify that `inmanta module list` correctly lists all installed modules, both v1 and v2.
     """
     # set up venv
+    snippetcompiler_clean.repo = modules_repo
     snippetcompiler_clean.setup_for_snippet("", autostd=False)
 
     module_template_path: str = os.path.join(modules_v2_dir, "minimalv2module")
@@ -1136,13 +1130,13 @@ def test_moduletool_list(
     # set up project with a v1 and a v2 module
     project: module.Project = snippetcompiler_clean.setup_for_snippet(
         """
-import std
+import mod7
 import custom_mod_one
 import custom_mod_two
         """.strip(),
         python_package_sources=[local_module_package_index],
         project_requires=[
-            module.InmantaModuleRequirement.parse("std~=4.3.3,<4.3.4"),
+            module.InmantaModuleRequirement.parse("mod7~=3.2.0,<3.2.2"),
             module.InmantaModuleRequirement.parse("custom_mod_one>0"),
         ],
         python_requires=[
@@ -1164,7 +1158,7 @@ import custom_mod_two
 +================+======+==========+================+================+=========+
 | custom_mod_one | v2   | no       | 1.0.0          | >0,<999,~=1.0  | yes     |
 | custom_mod_two | v2   | yes      | 1.0.0          | *              | yes     |
-| std            | v1   | yes      | 4.3.3          | 4.3.3          | yes     |
+| mod7           | v1   | yes      | 3.2.1          | 3.2.1          | yes     |
 +----------------+------+----------+----------------+----------------+---------+
     """.strip()
     )
@@ -1190,58 +1184,35 @@ import custom_mod_two
 +================+======+==========+================+================+=========+
 | custom_mod_one | v2   | no       | 2.0.0          | >0,<999,~=1.0  | no      |
 | custom_mod_two | v2   | yes      | 1.0.0          | *              | yes     |
-| std            | v1   | yes      | 4.3.3          | 4.3.3          | yes     |
+| mod7           | v1   | yes      | 3.2.1          | 3.2.1          | yes     |
 +----------------+------+----------+----------------+----------------+---------+
     """.strip()
     )
 
 
-def test_install_project_with_install_mode_master(tmpdir: py.path.local, snippetcompiler, modules_repo, capsys) -> None:
-    """
-    Ensure that an appropriate exception message is returned when a module installed in a project is not in-line with
-    the version constraint on the project and the install_mode of the project is set to master.
-    """
-    mod_with_multiple_version = os.path.join(modules_repo, "mod11")
-    mod_with_multiple_version_copy = os.path.join(tmpdir, "mod11")
-    shutil.copytree(mod_with_multiple_version, mod_with_multiple_version_copy)
-    snippetcompiler.setup_for_snippet(
-        snippet="import mod11",
-        autostd=False,
-        install_project=False,
-        add_to_module_path=[str(tmpdir)],
-        project_requires=[InmantaModuleRequirement(inmanta.util.parse_requirement(requirement="mod11==3.2.1"))],
-        install_mode=InstallMode.master,
-    )
-
-    with pytest.raises(CompilerException) as excinfo:
-        ProjectTool().execute("update", [])
-
-    assert """
-The following requirements were not satisfied:
-\t* requirement mod11==3.2.1 on module mod11 not fulfilled, now at version 4.2.0.
-The release type of the project is set to 'master'. Set it to a value that is appropriate for the version constraint
-    """.strip() in str(
-        excinfo.value
-    )
-
-
 @pytest.mark.slowtest
-def test_module_install_logging(local_module_package_index: str, snippetcompiler_clean, caplog) -> None:
+def test_module_install_logging(
+    modules_repo: str,
+    local_module_package_index: str,
+    snippetcompiler_clean,
+    tmpdir: py.path.local,
+    caplog,
+) -> None:
     """
     Make sure the module's informations are displayed when it is being installed for both v1 and v2 modules.
-    The check for v1 module is performed on the std module as it gets downloaded and installed, unlike other
-    v1 modules in tests/data/modules which are already on disk.
     """
 
     caplog.set_level(logging.DEBUG)
 
     v2_module = "minimalv2module"
+    v1_module: str = "mod11"
+    snippetcompiler_clean.repo = modules_repo
 
     v2_requirements = [inmanta.util.parse_requirement(requirement=module.ModuleV2Source.get_package_name_for(v2_module))]
 
     # set up project and modules
     project: module.Project = snippetcompiler_clean.setup_for_snippet(
-        "\n".join(f"import {mod}" for mod in ["std", v2_module]),
+        "\n".join(f"import {mod}" for mod in [v1_module, v2_module]),
         autostd=False,
         index_url=local_module_package_index,
         python_requires=v2_requirements,
@@ -1260,10 +1231,10 @@ def test_module_install_logging(local_module_package_index: str, snippetcompiler
     expected_logs = [
         ("Installing module minimalv2module (v2)", logging.DEBUG),
         ("Successfully installed module minimalv2module (v2) version 1.2.3", logging.DEBUG),
-        ("Installing module std (v1)", logging.DEBUG),
+        (f"Installing module {v1_module} (v1)", logging.DEBUG),
         (
-            """Successfully installed module std (v1) version 4.2.1 in %s from %s"""
-            % (os.path.join(project.downloadpath, "std"), "https://github.com/inmanta/std"),
+            "Successfully installed module %s (v1) version 4.2.0 in %s from %s"
+            % (v1_module, os.path.join(project.downloadpath, v1_module), f"{modules_repo}/{v1_module}"),
             logging.DEBUG,
         ),
     ]
@@ -1369,22 +1340,23 @@ def test_pip_output(local_module_package_index: str, snippetcompiler_clean, capl
 
 
 @pytest.mark.slowtest
-def test_git_clone_output(snippetcompiler_clean, caplog, modules_v2_dir):
+def test_git_clone_output(snippetcompiler_clean, caplog, modules_v2_dir, modules_repo):
     """
     This test checks that git clone output is correctly logged on module install.
     """
     caplog.set_level(logging.DEBUG)
+    snippetcompiler_clean.repo = modules_repo
 
     project = snippetcompiler_clean.setup_for_snippet(
         """
-        import std
+        import mod7
         """,
         autostd=False,
         install_project=True,
     )
 
     expected_logs = [
-        ("Cloning into '%s'..." % os.path.join(project.downloadpath, "std"), logging.DEBUG),
+        ("Cloning into '%s'..." % os.path.join(project.downloadpath, "mod7"), logging.DEBUG),
     ]
 
     for message, level in expected_logs:
@@ -1688,21 +1660,22 @@ def test_constraints_logging_v2(modules_v2_dir, tmpdir, caplog, snippetcompiler_
 
 
 @pytest.mark.slowtest
-def test_constraints_logging_v1(caplog, snippetcompiler_clean, local_module_package_index):
+def test_constraints_logging_v1(caplog, snippetcompiler_clean, local_module_package_index, modules_repo):
     caplog.set_level(logging.DEBUG)
 
+    snippetcompiler_clean.repo = modules_repo
     snippetcompiler_clean.setup_for_snippet(
         """
-        import std
+        import mod7
         """,
         autostd=False,
         install_project=True,
         project_requires=[
-            module.InmantaModuleRequirement.parse("std>0.0"),
-            module.InmantaModuleRequirement.parse("std>=0.0"),
-            module.InmantaModuleRequirement.parse("std==4.2.1"),
-            module.InmantaModuleRequirement.parse("std<=100.0.0"),
-            module.InmantaModuleRequirement.parse("std<100.0.0"),
+            module.InmantaModuleRequirement.parse("mod7>0.0"),
+            module.InmantaModuleRequirement.parse("mod7>=0.0"),
+            module.InmantaModuleRequirement.parse("mod7==3.2.1"),
+            module.InmantaModuleRequirement.parse("mod7<=100.0.0"),
+            module.InmantaModuleRequirement.parse("mod7<100.0.0"),
         ],
         index_url=local_module_package_index,
     )
@@ -1710,5 +1683,45 @@ def test_constraints_logging_v1(caplog, snippetcompiler_clean, local_module_pack
         caplog,
         "inmanta.module",
         logging.DEBUG,
-        "Installing module std (v1) (with constraints std>0.0 std>=0.0 std==4.2.1 std<=100.0.0 std<100.0.0)",
+        # snippetcompiler adds <5.3 constraint
+        "Installing module mod7 (v1) (with constraints mod7>0.0 mod7>=0.0 mod7==3.2.1 mod7<=100.0.0 mod7<100.0.0)",
     )
+
+
+# the following tests aren't direct module tests but they make use of the moduletool/conftest.py
+
+
+def test_load_module_v1_module_using_install(snippetcompiler_clean, modules_repo) -> None:
+    """
+    Test whether the Project.load_module() method works correctly when a module is only available as a V1 module
+    and that module is not yet present in the module path.
+    """
+    module_name = "mod7"
+    snippetcompiler_clean.repo = modules_repo
+    project: module.Project = snippetcompiler_clean.setup_for_snippet(
+        snippet=f"import {module_name}", install_project=False, autostd=False
+    )
+    # Remove std module in downloadpath created by other test case
+    shutil.rmtree(os.path.join(project.downloadpath, module_name), ignore_errors=True)
+    assert module_name not in project.modules
+    assert module_name not in os.listdir(project.downloadpath)
+    project.load_module(module_name=module_name, install_v1=True, allow_v1=True)
+    assert module_name in project.modules
+    assert module_name in os.listdir(project.downloadpath)
+
+
+@pytest.mark.parametrize("install", [True, False])
+def test_project_load_install(snippetcompiler_clean, install: bool, modules_repo) -> None:
+    """
+    Verify that loading a project only installs modules when install is True.
+    """
+    snippetcompiler_clean.repo = modules_repo
+    project: module.Project = snippetcompiler_clean.setup_for_snippet("import mod7", autostd=False, install_project=False)
+    if install:
+        project.load(install=True)
+    else:
+        with pytest.raises(ModuleLoadingException, match="Failed to load module mod7"):
+            project.load()
+        # make sure project load works after installing modules
+        project.install_modules()
+        project.load()

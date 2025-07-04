@@ -3,3 +3,5 @@ description: Model to test basic compiler functions
 modulepath: libs
 downloadpath: libs
 repo: "."
+requires:
+  - "std<5.3"

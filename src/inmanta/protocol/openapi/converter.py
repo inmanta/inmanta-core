@@ -18,6 +18,7 @@
 
 import inspect
 import json
+import logging
 import re
 from typing import Callable, Optional, Union
 
@@ -42,11 +43,16 @@ from inmanta.protocol.openapi.model import (
     RequestBody,
     Response,
     Schema,
+    Scope,
+    SecurityScheme,
+    SecuritySchemeName,
     Server,
 )
 from inmanta.server import config
 from inmanta.server.extensions import FeatureManager
 from inmanta.types import ReturnTypes
+
+LOGGER = logging.getLogger(__name__)
 
 
 def openapi_json_encoder(o: object) -> Union[ReturnTypes, util.JSONSerializable]:
@@ -88,10 +94,24 @@ class OpenApiConverter:
         for path, methods in self.global_url_map.items():
             api_methods = self._filter_api_methods(methods)
             if len(api_methods) > 0:
-                path_in_openapi_format = self._format_path(path)
-                path_item = self._extract_operations_from_methods(api_methods, path_in_openapi_format)
-                paths[path_in_openapi_format] = path_item
-        return OpenAPI(openapi="3.0.2", info=info, paths=paths, servers=servers, components=self.type_converter.components)
+                url_method: UrlMethod = next(iter(methods.values()))
+                parameterized_path: str = url_method.get_path()
+                path_item = self._extract_operations_from_methods(api_methods, parameterized_path)
+                paths[parameterized_path] = path_item
+        security: list[dict[SecuritySchemeName, list[Scope]]] | None = (
+            # Set the security scheme globally for all endpoints.
+            [{schema_name: []} for schema_name in self.type_converter.components.securitySchemes]
+            if self.type_converter.components.securitySchemes
+            else None
+        )
+        return OpenAPI(
+            openapi="3.0.2",
+            info=info,
+            paths=paths,
+            servers=servers,
+            components=self.type_converter.components,
+            security=security,
+        )
 
     def _filter_api_methods(self, methods: dict[str, UrlMethod]) -> dict[str, UrlMethod]:
         return {
@@ -99,9 +119,6 @@ class OpenApiConverter:
             for method_name, url_method in methods.items()
             if "api" in url_method.properties.client_types
         }
-
-    def _format_path(self, path: str) -> str:
-        return path.replace("(?P<", "{").replace(">[^/]+)", "}")
 
     def _extract_operations_from_methods(self, api_methods: dict[str, UrlMethod], path: str) -> PathItem:
         path_item = PathItem()
@@ -156,10 +173,22 @@ class OpenApiTypeConverter:
     """
 
     def __init__(self) -> None:
-        self.components = Components(schemas={})
+        self.components = Components(schemas={}, securitySchemes=self._get_security_schemes())
         self._pydantic_ref_key = "$defs"
         self.openapi_ref_prefix = "#/components/schemas/"
         self._ref_regex = re.compile(re.escape(self.openapi_ref_prefix) + r"(.*)")
+
+    def _get_security_schemes(self) -> dict[SecuritySchemeName, SecurityScheme] | None:
+        if config.server_enable_auth.get():
+            return {
+                "bearerAuth": SecurityScheme(
+                    type="http",
+                    scheme="bearer",
+                    bearerFormat="JWT",
+                )
+            }
+        else:
+            return None
 
     def get_openapi_type_of_parameter(self, parameter_type: inspect.Parameter) -> Schema:
         schema = self.get_openapi_type(parameter_type.annotation)
@@ -323,7 +352,7 @@ class FunctionParameterHandler:
         self.non_path_and_non_header_params: dict[str, inspect.Parameter] = {}
 
         for param_name, param in self.all_params_dct.items():
-            if f"{{{param_name}}}" in self.path:
+            if f"<{param_name}>" in self.path:
                 self.path_params[param_name] = param
             elif (
                 param_name in self.method_properties.arg_options.keys()

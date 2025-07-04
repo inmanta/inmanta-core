@@ -98,7 +98,6 @@ class Config:
         """
         Load the configuration file
         """
-
         cfg_files_in_config_dir: list[str]
         if config_dir and os.path.isdir(config_dir):
             cfg_files_in_config_dir = sorted(
@@ -118,8 +117,13 @@ class Config:
 
         config = LenientConfigParser(interpolation=Interpolation())
         config.read(files)
+        cls._save_loaded_config(config, config_dir)
+
+    @classmethod
+    def _save_loaded_config(cls, config: LenientConfigParser, config_dir: Optional[str]) -> None:
         cls.__instance = config
         cls._config_dir = config_dir
+        cls._config_updated()
 
     @classmethod
     def _get_instance(cls) -> ConfigParser:
@@ -138,6 +142,18 @@ class Config:
     def _reset(cls) -> None:
         cls.__instance = None
         cls._config_dir = None
+        cls._config_updated()
+
+    @classmethod
+    def _config_updated(cls) -> None:
+        """
+        This method must be called every time the configuration is updated.
+        """
+        from inmanta.protocol import auth
+
+        # Clear the cached JWT config. It might have become out of sync with
+        # the configuration in this class.
+        auth.AuthJWTConfig.reset()
 
     @overload
     @classmethod
@@ -172,7 +188,7 @@ class Config:
         cfg: ConfigParser = cls.get_instance()
         val: Optional[str] = _get_from_env(section, name)
         if val is not None:
-            LOGGER.debug(f"Setting {section}:{name} was set using an environment variable")
+            LOGGER.debug("Setting %s:%s was set using an environment variable", section, name)
             return val
         # Typing of this method in the sdk is not entirely accurate
         # It just returns the fallback, whatever its type
@@ -188,8 +204,10 @@ class Config:
         """
         Return a boolean from the configuration
         """
-        cls.validate_option_request(section, name, default_value)
-        return cls.get_instance().getboolean(section, name, fallback=default_value)
+        value = cls.get(section, name, default_value)
+        if value is None:
+            raise ValueError(f"Expected boolean value. Found: {value}")
+        return is_bool(value)
 
     @classmethod
     def set(cls, section: str, name: str, value: str) -> None:
@@ -201,6 +219,7 @@ class Config:
         if section not in cls.get_instance():
             cls.get_instance().add_section(section)
         cls.get_instance().set(section, name, value)
+        cls._config_updated()
 
     @classmethod
     def register_option(cls, option: "Option") -> None:
@@ -209,7 +228,7 @@ class Config:
     @classmethod
     def validate_option_request(cls, section: str, name: str, default_value: Optional[T]) -> Optional["Option[T]"]:
         if section not in cls.__config_definition:
-            LOGGER.warning("Config section %s not defined" % (section))
+            LOGGER.warning("Config section %s not defined", section)
             # raise Exception("Config section %s not defined" % (section))
             return None
         if name not in cls.__config_definition[section]:
@@ -219,8 +238,7 @@ class Config:
         opt = cls.__config_definition[section][name]
         if default_value is not None and opt.get_default_value() != default_value:
             LOGGER.warning(
-                "Inconsistent default value for option %s.%s: defined as %s, got %s"
-                % (section, name, opt.default, default_value)
+                "Inconsistent default value for option %s.%s: defined as %s, got %s", section, name, opt.default, default_value
             )
 
         return opt
