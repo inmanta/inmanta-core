@@ -67,23 +67,10 @@ Inmanta expects a token of which it can validate the signature. Inmanta can veri
 HS256 and asymmetric signatures with RSA (RS256). Tokens it signs itself for other processes are always signed using HS256.
 There are no key distribution issues because the server is both the signing and the validating party.
 
-The server also provides limited authorization by checking for inmanta specific claims inside the token. All inmanta claims
-are prefixed with ``urn:inmanta:``. These claims are:
-
-* ``urn:inmanta:ct`` A *required* comma delimited list of client types for which this client is authenticated. Each API call
-  has one or more allowed client types. The list of valid client types (ct) are:
-
-  * agent
-  * compiler
-  * api (cli, web-console, 3rd party service)
-* ``urn:inmanta:env`` An *optional* claim. When this claim is present the token is scoped to this inmanta environment. All
-  tokens that the server generates for agents and compilers have this claim present to limit their access to the environment
-  they belong to.
 
 Setup server auth
 ^^^^^^^^^^^^^^^^^
-The server requests authentication for all API calls when :inmanta.config:option:`server.auth` is set to true. When
-authentication is enabled all other components require a valid token.
+The server requests authentication for all API calls (except for the `GET /api/v2/health` endpoint) when :inmanta.config:option:`server.auth` is set to true. In that case all other components require a valid token.
 
 .. warning:: When multiple servers are used in a HA setup, each server requires the same configuration (SSL enabled and
     private keys).

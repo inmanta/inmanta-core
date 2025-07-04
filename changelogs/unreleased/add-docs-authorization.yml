@@ -1,0 +1,6 @@
+---
+description: "Added docs for the authorization framework."
+change-type: minor
+destination-branches: [master]
+sections:
+  feature: "Added support for policy-based authorization"

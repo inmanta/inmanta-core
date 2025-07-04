@@ -1,0 +1,300 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="237mm"
+   height="104mm"
+   viewBox="0 0 237 104"
+   version="1.1"
+   id="svg1"
+   inkscape:version="1.4.2 (ebf0e940d0, 2025-05-08)"
+   sodipodi:docname="overview_policy_engine.svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="mm"
+     inkscape:zoom="0.89619809"
+     inkscape:cx="396.11778"
+     inkscape:cy="520.53224"
+     inkscape:window-width="2190"
+     inkscape:window-height="1180"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="0"
+     inkscape:current-layer="layer1" />
+  <defs
+     id="defs1">
+    <marker
+       style="overflow:visible"
+       id="RoundedArrow"
+       refX="0"
+       refY="0"
+       orient="auto-start-reverse"
+       inkscape:stockid="Rounded arrow"
+       markerWidth="1"
+       markerHeight="1"
+       viewBox="0 0 1 1"
+       inkscape:isstock="true"
+       inkscape:collect="always"
+       preserveAspectRatio="xMidYMid">
+      <path
+         transform="scale(0.7)"
+         d="m -0.21114562,-4.1055728 6.42229122,3.21114561 a 1,1 90 0 1 0,1.78885438 L -0.21114562,4.1055728 A 1.236068,1.236068 31.717474 0 1 -2,3 v -6 a 1.236068,1.236068 148.28253 0 1 1.78885438,-1.1055728 z"
+         style="fill:context-stroke;fill-rule:evenodd;stroke:none"
+         id="path8" />
+    </marker>
+    <rect
+       x="417.31845"
+       y="83.686852"
+       width="162.91042"
+       height="95.96093"
+       id="rect4" />
+    <rect
+       x="408.39185"
+       y="76.991905"
+       width="174.06866"
+       height="66.949486"
+       id="rect3" />
+    <rect
+       x="422.89758"
+       y="246.59727"
+       width="160.67876"
+       height="70.296959"
+       id="rect2" />
+    <marker
+       style="overflow:visible"
+       id="RoundedArrow-4"
+       refX="0"
+       refY="0"
+       orient="auto-start-reverse"
+       inkscape:stockid="Rounded arrow"
+       markerWidth="1"
+       markerHeight="1"
+       viewBox="0 0 1 1"
+       inkscape:isstock="true"
+       inkscape:collect="always"
+       preserveAspectRatio="xMidYMid">
+      <path
+         transform="scale(0.7)"
+         d="m -0.21114562,-4.1055728 6.42229122,3.21114561 a 1,1 90 0 1 0,1.78885438 L -0.21114562,4.1055728 A 1.236068,1.236068 31.717474 0 1 -2,3 v -6 a 1.236068,1.236068 148.28253 0 1 1.78885438,-1.1055728 z"
+         style="fill:context-stroke;fill-rule:evenodd;stroke:none"
+         id="path8-7" />
+    </marker>
+  </defs>
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1">
+    <rect
+       style="fill:#ffffff;stroke:#2b0011;stroke-width:0.715054;stroke-linejoin:bevel;paint-order:markers stroke fill"
+       id="rect1-1"
+       width="48.702442"
+       height="24.198463"
+       x="78.713036"
+       y="39.648781" />
+    <rect
+       style="fill:#ffffff;stroke:#2b0011;stroke-width:0.715054;stroke-linejoin:bevel;paint-order:markers stroke fill"
+       id="rect1-1-3"
+       width="48.702442"
+       height="24.198463"
+       x="175.13239"
+       y="39.640587" />
+    <text
+       xml:space="preserve"
+       transform="matrix(0.26458333,0,0,0.26458333,-29.522863,-22.142147)"
+       id="text2"
+       style="font-size:26.6667px;line-height:1.25;font-family:sans-serif;text-align:center;white-space:pre;shape-inside:url(#rect2);display:inline"><tspan
+         x="449.99721"
+         y="270.86103"
+         id="tspan1">Inmanta </tspan><tspan
+         x="463.09062"
+         y="304.1944"
+         id="tspan2">Server</tspan></text>
+    <text
+       xml:space="preserve"
+       transform="scale(0.26458333)"
+       id="text3"
+       style="font-size:40px;line-height:1.25;font-family:sans-serif;text-align:center;white-space:pre;shape-inside:url(#rect3);display:inline" />
+    <text
+       xml:space="preserve"
+       transform="matrix(0.26458333,0,0,0.26458333,67.312127,19.189861)"
+       id="text4"
+       style="font-size:26.6667px;line-height:1.25;font-family:sans-serif;text-align:center;white-space:pre;shape-inside:url(#rect4);shape-padding:7.81077;display:inline"><tspan
+         x="462.56009"
+         y="115.76142"
+         id="tspan3">Policy </tspan><tspan
+         x="455.72007"
+         y="149.09479"
+         id="tspan4">Engine</tspan></text>
+    <path
+       style="fill:none;stroke:#000000;stroke-width:0.682;stroke-linecap:butt;stroke-linejoin:miter;stroke-dasharray:none;stroke-opacity:1;marker-start:url(#RoundedArrow)"
+       d="m 171.32225,50.559638 -43.36156,-0.22794"
+       id="path4" />
+    <path
+       style="fill:none;stroke:#000000;stroke-width:0.668;stroke-linecap:butt;stroke-linejoin:miter;stroke-dasharray:none;stroke-opacity:1;marker-start:url(#RoundedArrow)"
+       d="M 75.472055,51.665008 H 30.703778"
+       id="path5" />
+    <text
+       xml:space="preserve"
+       style="font-size:5.64444px;line-height:1.25;font-family:sans-serif;text-align:center;text-anchor:middle;stroke-width:0.264583"
+       x="54.02684"
+       y="47.531799"
+       id="text5"><tspan
+         sodipodi:role="line"
+         id="tspan5"
+         style="font-size:5.64444px;stroke-width:0.264583"
+         x="54.02684"
+         y="47.531799">API request</tspan></text>
+    <text
+       xml:space="preserve"
+       style="font-size:5.29167px;line-height:1.25;font-family:sans-serif;text-align:center;text-anchor:middle;stroke-width:0.264583"
+       x="53.731606"
+       y="57.569595"
+       id="text6"><tspan
+         sodipodi:role="line"
+         id="tspan6"
+         style="font-size:5.29167px;stroke-width:0.264583"
+         x="53.731606"
+         y="57.569595">{params}</tspan><tspan
+         sodipodi:role="line"
+         style="font-size:5.29167px;stroke-width:0.264583"
+         x="53.731606"
+         y="64.184181"
+         id="tspan7">{access token}</tspan></text>
+    <text
+       xml:space="preserve"
+       style="font-size:5.29167px;line-height:1.25;font-family:sans-serif;text-align:center;text-anchor:middle;stroke-width:0.264583"
+       x="151.55524"
+       y="57.169205"
+       id="text6-9"><tspan
+         sodipodi:role="line"
+         id="tspan6-7"
+         style="font-size:5.29167px;stroke-width:0.264583"
+         x="151.55524"
+         y="57.169205">{params}</tspan><tspan
+         sodipodi:role="line"
+         style="font-size:5.29167px;stroke-width:0.264583"
+         x="151.55524"
+         y="63.783791"
+         id="tspan7-3">{access token}</tspan></text>
+    <text
+       xml:space="preserve"
+       style="font-size:5.29167px;line-height:1.25;font-family:sans-serif;text-align:center;text-anchor:middle;stroke-width:0.264583"
+       x="149.68094"
+       y="46.941345"
+       id="text8"><tspan
+         sodipodi:role="line"
+         style="font-size:5.29167px;stroke-width:0.264583"
+         x="149.68094"
+         y="46.941345"
+         id="tspan10">Policy query</tspan></text>
+    <text
+       xml:space="preserve"
+       style="font-size:5.29167px;line-height:1.25;font-family:sans-serif;text-align:center;text-anchor:middle;stroke-width:0.264583"
+       x="166.21373"
+       y="48.712723"
+       id="text11"><tspan
+         sodipodi:role="line"
+         style="font-size:5.29167px;stroke-width:0.264583"
+         x="166.21373"
+         y="48.712723"
+         id="tspan12" /></text>
+    <text
+       xml:space="preserve"
+       style="font-size:5.29167px;line-height:1.25;font-family:sans-serif;text-align:center;text-anchor:middle;stroke-width:0.264583"
+       x="220.53577"
+       y="62.883701"
+       id="text13"><tspan
+         sodipodi:role="line"
+         style="font-size:5.29167px;stroke-width:0.264583"
+         x="220.53577"
+         y="62.883701"
+         id="tspan14" /></text>
+    <text
+       xml:space="preserve"
+       style="font-size:5.29167px;line-height:1.25;font-family:sans-serif;text-align:center;text-anchor:middle;stroke-width:0.264583"
+       x="159.42348"
+       y="62.883698"
+       id="text15"><tspan
+         sodipodi:role="line"
+         style="font-size:5.29167px;stroke-width:0.264583"
+         x="159.42348"
+         y="62.883698"
+         id="tspan16" /></text>
+    <ellipse
+       style="fill:#ffffff;stroke:#2b0011;stroke-width:0.667999;stroke-linejoin:bevel;stroke-dasharray:none;paint-order:markers stroke fill"
+       id="path18"
+       cx="200.60783"
+       cy="87.092438"
+       rx="32.327534"
+       ry="10.037773" />
+    <ellipse
+       style="fill:#ffffff;stroke:#2b0011;stroke-width:0.667999;stroke-linejoin:bevel;stroke-dasharray:none;paint-order:markers stroke fill"
+       id="path18-3"
+       cx="198.89326"
+       cy="15.937477"
+       rx="32.327534"
+       ry="10.037773" />
+    <text
+       xml:space="preserve"
+       style="font-size:5.29167px;line-height:1.25;font-family:sans-serif;text-align:center;text-anchor:middle;stroke-width:0.264583"
+       x="200.46024"
+       y="85.91153"
+       id="text19"><tspan
+         sodipodi:role="line"
+         id="tspan19"
+         style="font-size:5.29167px;stroke-width:0.264583"
+         x="200.46024"
+         y="85.91153">Endpoint Metadata</tspan><tspan
+         sodipodi:role="line"
+         style="font-size:5.29167px;stroke-width:0.264583"
+         x="200.46024"
+         y="92.526115"
+         id="tspan20">(data.json)</tspan></text>
+    <text
+       xml:space="preserve"
+       style="font-size:5.29167px;line-height:1.25;font-family:sans-serif;text-align:center;text-anchor:middle;stroke-width:0.264583"
+       x="197.80318"
+       y="14.761429"
+       id="text21"><tspan
+         sodipodi:role="line"
+         id="tspan21"
+         style="font-size:5.29167px;stroke-width:0.264583"
+         x="197.80318"
+         y="14.761429">Policy File</tspan><tspan
+         sodipodi:role="line"
+         style="font-size:5.29167px;stroke-width:0.264583"
+         x="197.80318"
+         y="21.376017"
+         id="tspan22">(policy.rego)</tspan></text>
+    <path
+       style="fill:none;stroke:#000000;stroke-width:0.682;stroke-linecap:butt;stroke-linejoin:miter;stroke-dasharray:2.728, 0.682;stroke-dashoffset:0;stroke-opacity:1;marker-end:url(#RoundedArrow)"
+       d="m 199.86977,76.759448 v -9.72413"
+       id="path23" />
+    <path
+       style="fill:none;stroke:#000000;stroke-width:0.682;stroke-linecap:butt;stroke-linejoin:miter;stroke-dasharray:2.046, 2.046;stroke-dashoffset:0;stroke-opacity:1;marker-end:url(#RoundedArrow-4)"
+       d="m 199.28883,26.277019 -0.041,9.724044"
+       id="path23-5" />
+    <text
+       xml:space="preserve"
+       style="font-size:7.05556px;line-height:1.25;font-family:sans-serif;text-align:center;text-anchor:middle;stroke-width:0.264583"
+       x="16.82803"
+       y="54.02684"
+       id="text23"><tspan
+         sodipodi:role="line"
+         id="tspan23"
+         style="font-size:7.05556px;stroke-width:0.264583"
+         x="16.82803"
+         y="54.02684">Client</tspan></text>
+  </g>
+</svg>
