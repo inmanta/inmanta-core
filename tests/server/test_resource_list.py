@@ -647,6 +647,28 @@ async def test_client_all_pages_helper(server, client, env_with_resources, page_
     )
 
 
+async def test_client_all_pages(server, client, env_with_resources):
+    env = env_with_resources
+    result = await client.resource_list(tid=env.id)
+    assert result.code == 200
+    all_resources = result.result["data"]
+    assert len(all_resources) == 6
+
+    page_size = 4
+    coro = client.resource_list(tid=env.id, limit=page_size)
+
+    idx = 0
+    async for item in client.all_pages(coro, str(env.id), iterate_per_item=True):
+        assert item == all_resources[idx]
+        idx += 1
+
+    coro = client.resource_list(tid=env.id, limit=page_size)
+    idx = 0
+    async for batch in client.all_pages(coro, str(env.id), iterate_per_item=False):
+        assert batch == all_resources[idx : idx + page_size]
+        idx += page_size
+
+
 @pytest.mark.parametrize(
     "sort, expected_status",
     [
