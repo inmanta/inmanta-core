@@ -677,7 +677,6 @@ async def test_client_all_pages_v2(server, client, env_with_resources):
     assert len(all_resources) == 6
 
     page_size = 4
-    # coro =
     result = await client.resource_list(tid=env.id, limit=page_size)
 
     idx = 0
