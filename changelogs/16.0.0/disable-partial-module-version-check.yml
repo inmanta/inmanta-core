@@ -1,0 +1,3 @@
+description: Temporarily disable module version check during partial exports.
+change-type: patch
+destination-branches: [master]

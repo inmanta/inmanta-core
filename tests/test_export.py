@@ -1,19 +1,19 @@
 """
-    Copyright 2017 Inmanta
+Copyright 2017 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import json
@@ -26,10 +26,11 @@ import pytest
 
 import inmanta.resources
 from inmanta import config, const, module
-from inmanta.ast import CompilerException, ExternalException
+from inmanta.ast import CompilerException, ExternalException, RuntimeException
 from inmanta.const import ResourceState
 from inmanta.data import Environment, Resource
 from inmanta.export import DependencyCycleException
+from inmanta.module import InmantaModuleRequirement
 from inmanta.server import SLICE_RESOURCE
 from inmanta.server.server import Server
 from utils import LogSequence
@@ -81,7 +82,7 @@ def test_attribute_mapping_export(snippetcompiler):
     assert resources == {
         "a": {
             "mapped": "mapped_value_a",
-            const.RESOURCE_ATTRIBUTE_SEND_EVENTS: False,
+            const.RESOURCE_ATTRIBUTE_SEND_EVENTS: True,
             const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS: True,
         },
         "b": {
@@ -330,7 +331,14 @@ a = exp::Test2(mydict={"a":"b"}, mylist=["a","b"])
 
 
 async def test_old_compiler(server, client, environment):
-    result = await client.put_version(tid=environment, version=123456, resources=[], unknowns=[], version_info={})
+    result = await client.put_version(
+        tid=environment,
+        version=123456,
+        resources=[],
+        unknowns=[],
+        version_info={},
+        module_version_info={},
+    )
     assert result.code == 400
 
 
@@ -529,7 +537,10 @@ exp::Test3(
     )
 
 
-@pytest.mark.parametrize("soft_delete", [True, False])
+@pytest.mark.parametrize(
+    "soft_delete",
+    [True, False],
+)
 async def test_resource_set(snippetcompiler, modules_dir: str, environment, client, agent, soft_delete: bool) -> None:
     """
     Test that resource sets are exported correctly, when a full compile or an incremental compile is done.
@@ -844,3 +855,26 @@ async def test_export_duplicate(resource_container, snippetcompiler):
         snippetcompiler.do_export()
 
     assert "exists more than once in the configuration model" in str(exc.value)
+
+
+async def test_resource_inherits_from_decorator(snippetcompiler, local_module_package_index):
+    """
+    Verify that a clear error message is shown to the user if a resource inherits
+    from the resource decorator instead of the Resource class.
+    """
+    requirement = InmantaModuleRequirement.parse("invalid_resource_def")
+    snippetcompiler.setup_for_snippet(
+        "import invalid_resource_def",
+        install_project=True,
+        index_url=local_module_package_index,
+        python_requires=[requirement.get_python_package_requirement()],
+        autostd=False,
+    )
+
+    with pytest.raises(RuntimeException) as exc:
+        snippetcompiler.do_export()
+
+    assert (
+        "Resource inmanta_plugins.invalid_resource_def.Test is inheriting from the inmanta.resources.resource decorator."
+        " Did you intend to inherit from inmanta.resources.Resource instead?"
+    ) in str(exc.value)

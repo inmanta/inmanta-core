@@ -1,19 +1,19 @@
 """
-    Copyright 2024 Inmanta
+Copyright 2024 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import abc
@@ -45,7 +45,7 @@ from inmanta.deploy.tasks import Deploy, DryRun, RefreshFact, Task
 from inmanta.deploy.work import TaskPriority
 from inmanta.protocol import Client
 from inmanta.resources import Id
-from inmanta.types import ResourceIdStr, ResourceType, ResourceVersionIdStr
+from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 
 LOGGER = logging.getLogger(__name__)
 NB_ITERATIONS_PASS_IO_LOOP: int = 100
@@ -63,6 +63,8 @@ class StaleResource(Exception):
 class ResourceVersionIntent:
     """
     Resource intent for a single resource at a specific version.
+
+    Includes model version and resource intent.
     """
 
     model_version: int
@@ -113,7 +115,7 @@ class ResourceRecord(typing.TypedDict):
     """
 
     resource_id: str
-    status: str
+    is_undefined: bool
     attributes: Mapping[str, object]
     attribute_hash: str
 
@@ -147,11 +149,7 @@ class ModelVersion:
                 }
                 for resource in resources
             },
-            undefined={
-                ResourceIdStr(resource["resource_id"])
-                for resource in resources
-                if const.ResourceState(resource["status"]) is const.ResourceState.undefined
-            },
+            undefined={ResourceIdStr(resource["resource_id"]) for resource in resources if resource["is_undefined"]},
         )
 
 
@@ -164,12 +162,6 @@ class TaskManager(abc.ABC):
     client: Client
     code_manager: CodeManager
     executor_manager: executor.ExecutorManager[executor.Executor]
-
-    @abstractmethod
-    def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
-        """
-        Returns a collection of all resource types that are known to live on a given agent.
-        """
 
     @abstractmethod
     async def get_resource_version_intent(
@@ -359,7 +351,7 @@ class ResourceScheduler(TaskManager):
 
         self.environment = environment
         self.client = client
-        self.code_manager = CodeManager(client)
+        self.code_manager = CodeManager()
         self.executor_manager = executor_manager
         self.state_update_manager = ToDbUpdateManager(client, environment)
 
@@ -463,14 +455,39 @@ class ResourceScheduler(TaskManager):
 
             environment: Optional[data.Environment] = await data.Environment.get_by_id(self.environment, connection=con)
             assert environment is not None
-            should_restore_state: bool = not typing.cast(
+            reset_deploy_progress: bool = typing.cast(
                 bool, await environment.get(data.RESET_DEPLOY_PROGRESS_ON_START, connection=con)
             )
+            if reset_deploy_progress:
+                await data.Scheduler._execute_query(
+                    f"""
+                    WITH latest_released_version AS (
+                        SELECT MAX(version) AS version
+                        FROM public.configurationmodel
+                        WHERE released IS TRUE
+                          AND environment=$1
+                    )
+                    UPDATE {data.ResourcePersistentState.table_name()} AS rps
+                    SET is_orphan=NOT EXISTS (
+                        SELECT 1
+                        FROM resource r
+                        JOIN latest_released_version lrv
+                          ON r.model=lrv.version
+                        WHERE r.resource_id=rps.resource_id
+                          AND r.environment=rps.environment
+                    )
+                    WHERE rps.environment=$1;
+
+                    """,
+                    self.environment,
+                    connection=con,
+                )
 
             # Check if we can restore the scheduler state from a previous run
             restored_state: Optional[ModelState] = (
-                await ModelState.create_from_db(self.environment, connection=con) if should_restore_state else None
+                await ModelState.create_from_db(self.environment, connection=con) if not reset_deploy_progress else None
             )
+
             if restored_state is not None:
                 # Restore scheduler state like it was before the scheduler went down
                 self._state = restored_state
@@ -479,65 +496,21 @@ class ResourceScheduler(TaskManager):
                     provides=self._state.requires.provides_view(),
                     new_agent_notify=self._create_agent,
                 )
-                restored_version: int = self._state.version
-                # Set running flag because we're ready to start accepting tasks.
-                # Set before scheduling first tasks because many methods (e.g. read_version) skip silently when not running
-                self._running = True
-                # All resources get a timer
-                await self.read_version(connection=con)
-                async with self._scheduler_lock:
-                    self._timer_manager.update_timers(self._state.intent.keys() - self._state.dirty)
+            initialized_version: int = self._state.version
+            # Set running flag because we're ready to start accepting tasks.
+            # Set before scheduling first tasks because many methods (e.g. read_version) skip silently when not running
+            self._running = True
+            # All resources get a timer
+            await self.read_version(connection=con)
+            async with self._scheduler_lock:
+                self._timer_manager.update_timers(self._state.intent.keys() - self._state.dirty)
 
-                if self._state.version == restored_version:
-                    # no new version was present. Simply trigger a deploy for everything that's not in a known good state
-                    await self.deploy(
-                        reason="Deploy was triggered because the resource scheduler was started",
-                        priority=TaskPriority.INTERVAL_DEPLOY,
-                    )
-            else:
-                # This case can occur in three different situations:
-                #   1 A model version has been released, but the scheduler didn't process any version yet.
-                #     In this case there is no scheduler state to restore.
-                #   2 The last processed version has been deleted since the scheduler was last running
-                #   3 We migrated the Inmanta server from an old version, that didn't have the resource state
-                #     tracking in the database, to a version that does. To cover this case, we rely on the
-                #     increment calculation to determine which resources have to be considered dirty and which
-                #     not. This migration code path can be removed in a later major version.
-                #
-                # In cases 1 and 2, all resources are expected to be in the increment (scheduler hasn't processed any versions
-                # means we haven't ever deployed anything yet), so those could be covered by simply reading in only the latest
-                # version, or by keeping state as is and calling into normal read_version() flow. However, while the migration
-                # path is still required for backwards compatibility (3) anyway, we unifi the three cases for simplicity.
-
-                # Set running flag because we're ready to start accepting tasks.
-                # Set before scheduling first tasks because many methods (e.g. read_version) skip silently when not running
-                self._running = True
-                await self._recover_scheduler_state_using_increments_calculation(connection=con)
-
-    async def _recover_scheduler_state_using_increments_calculation(self, *, connection: asyncpg.connection.Connection) -> None:
-        """
-        This method exists for backwards compatibility reasons. It initializes the scheduler state
-        by relying on the increments calculation logic. This method starts the deployment process.
-
-        :param connection: Connection to use for db operations. Should not be in a transaction context.
-        """
-        try:
-            model: ModelVersion = await self._get_single_model_version_from_db(connection=connection)
-        except KeyError:
-            # No model version has been released yet.
-            return
-        # Rely on the incremental calculation to determine which resources should be deployed and which not.
-        up_to_date_resources: Set[ResourceIdStr]
-        up_to_date_resources, last_deploy_time = await ConfigurationModel.get_last_deployed_and_neg_increment(
-            self.environment, model.version, connection=connection
-        )
-        await self._new_version(
-            [model],
-            up_to_date_resources=up_to_date_resources,
-            last_deploy_time=last_deploy_time,
-            reason="Deploy was triggered because the scheduler was started",
-            connection=connection,
-        )
+            if self._state.version == initialized_version:
+                # no new version was present. Simply trigger a deploy for everything that's not in a known good state
+                await self.deploy(
+                    reason="Deploy was triggered because the resource scheduler was started",
+                    priority=TaskPriority.INTERVAL_DEPLOY,
+                )
 
     async def deploy(
         self,
@@ -713,8 +686,7 @@ class ResourceScheduler(TaskManager):
             resources_by_version: Sequence[tuple[int, Sequence[Mapping[str, object]]]] = (
                 await data.Resource.get_resources_since_version_raw(
                     self.environment,
-                    since=self._state.version,
-                    projection=ResourceRecord.__required_keys__,
+                    since=self._state.version if self._state.version > 0 else None,
                     connection=con,
                 )
             )
@@ -1135,7 +1107,10 @@ class ResourceScheduler(TaskManager):
             resource_intent = self._get_resource_intent(resource)
             if resource_intent is None:
                 return None
-            return ResourceVersionIntent(model_version=self._state.version, intent=resource_intent)
+            return ResourceVersionIntent(
+                model_version=self._state.version,
+                intent=resource_intent,
+            )
 
     async def deploy_start(self, action_id: uuid.UUID, resource: ResourceIdStr) -> Optional[DeployIntent]:
         async with self._scheduler_lock:
@@ -1456,9 +1431,6 @@ class ResourceScheduler(TaskManager):
                     raise Exception(f"Failed to parse the resource state for {dep_id}: {resource_state_object}")
         return dependencies_state
 
-    def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
-        return list(self._state.types_per_agent[agent])
-
     async def get_resource_state(self) -> SchedulerStatusReport:
         """
         Check that the state of the resources in the DB corresponds
@@ -1611,7 +1583,7 @@ class ResourceScheduler(TaskManager):
                     return report_model_version_mismatch(latest_model.version)
 
                 resource_states_in_db: Mapping[ResourceIdStr, const.ResourceState]
-                latest_version, resource_states_in_db = await data.Resource.get_resource_states_latest_version(
+                latest_version, resource_states_in_db = await data.Resource.get_latest_resource_states(
                     env=self.environment, connection=connection
                 )
                 if latest_version != self._state.version:

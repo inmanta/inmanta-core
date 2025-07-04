@@ -1,19 +1,19 @@
 """
-    Copyright 2017 Inmanta
+Copyright 2017 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 from abc import abstractmethod
@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, Deque, Generic, List, Literal, NewType, Option
 
 import inmanta.ast
 import inmanta.ast.attribute  # noqa: F401 (pyflakes does not recognize partially qualified access ast.attribute)
-from inmanta import ast
+from inmanta import ast, references
 from inmanta.ast import (
     AttributeException,
     CompilerException,
@@ -38,7 +38,6 @@ from inmanta.ast import (
 from inmanta.ast.type import Type
 from inmanta.execute import dataflow
 from inmanta.execute.dataflow import DataflowGraph
-from inmanta.execute.tracking import Tracker
 from inmanta.execute.util import NoneValue, Unknown
 
 if TYPE_CHECKING:
@@ -909,44 +908,6 @@ class QueueScheduler:
     def remove_from_all(self, item: "Waiter") -> None:
         del self._allwaiters[item]
 
-    def get_tracker(self) -> Optional[Tracker]:
-        return None
-
-    def for_tracker(self, tracer: Tracker) -> "QueueScheduler":
-        return DelegateQueueScheduler(self, tracer)
-
-
-class DelegateQueueScheduler(QueueScheduler):
-    __slots__ = ("__delegate", "__tracker")
-
-    def __init__(self, delegate: QueueScheduler, tracker: Tracker):
-        self.__delegate = delegate
-        self.__tracker = tracker
-
-    def add_running(self, item: "Waiter") -> None:
-        self.__delegate.add_running(item)
-
-    def add_possible(self, rv: DelayedResultVariable) -> None:
-        self.__delegate.add_possible(rv)
-
-    def get_compiler(self) -> "Compiler":
-        return self.__delegate.get_compiler()
-
-    def get_types(self) -> dict[str, Type]:
-        return self.__delegate.get_types()
-
-    def add_to_all(self, item: "Waiter") -> None:
-        self.__delegate.add_to_all(item)
-
-    def remove_from_all(self, item: "Waiter") -> None:
-        self.__delegate.remove_from_all(item)
-
-    def get_tracker(self) -> Tracker:
-        return self.__tracker
-
-    def for_tracker(self, tracer: Tracker) -> QueueScheduler:
-        return DelegateQueueScheduler(self.__delegate, tracer)
-
 
 class Waiter:
     """
@@ -1248,7 +1209,7 @@ class ExecutionContext(Resolver):
 
 
 # also extends locatable
-class Instance(ExecutionContext):
+class Instance(ExecutionContext, references.MaybeReference):
     def set_location(self, location: Location) -> None:
         Locatable.set_location(self, location)
         self.locations.append(location)
@@ -1264,9 +1225,9 @@ class Instance(ExecutionContext):
         "type",
         "sid",
         "implementations",
-        "trackers",
         "locations",
         "instance_node",
+        "dataclass_self",
     )
 
     def __init__(
@@ -1308,13 +1269,19 @@ class Instance(ExecutionContext):
         self.sid = id(self)
         self.implementations: "set[Implementation]" = set()
 
-        # see inmanta.ast.execute.scheduler.QueueScheduler
-        self.trackers: list[Tracker] = []
-
         self.locations: list[Location] = []
+        # may also be a reference to a dataclass
+        self.dataclass_self: object | references.Reference[references.RefValue] | None = None
 
     def get_type(self) -> "Entity":
         return self.type
+
+    def unwrap_reference(self) -> Optional[references.Reference[references.RefValue]]:
+        return (
+            self.dataclass_self
+            if self.dataclass_self is not None and isinstance(self.dataclass_self, references.Reference)
+            else None
+        )
 
     def set_attribute(self, name: str, value: object, location: Location, recur: bool = True) -> None:
         if name not in self.slots:

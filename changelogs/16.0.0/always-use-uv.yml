@@ -1,0 +1,6 @@
+description: Always use uv in Makefile
+change-type: patch
+destination-branches:
+  - master
+  - iso8
+  - iso7

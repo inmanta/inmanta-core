@@ -1,33 +1,28 @@
 """
-    Copyright 2017 Inmanta
+Copyright 2017 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
-from typing import Optional, Tuple
+from typing import TYPE_CHECKING, Optional, Tuple
 
+import inmanta.ast.type as inmanta_type
 from inmanta.ast import CompilerException, Locatable, Location, RuntimeException, TypingException
-from inmanta.ast.type import NullableType, TypedList
 from inmanta.execute import runtime
 from inmanta.execute.util import Unknown
 from inmanta.stable_api import stable_api
-
-try:
-    from typing import TYPE_CHECKING
-except ImportError:
-    TYPE_CHECKING = False
 
 if TYPE_CHECKING:
     from inmanta.ast.entity import Entity  # noqa: F401
@@ -54,22 +49,36 @@ class Attribute(Locatable):
         self.__multi = multi
         self.__nullable = nullable
 
-        self.__type: Type = value_type
+        # The actual type
+        self.__type_internal: Type = value_type
         if multi:
-            self.__type = TypedList(self.__type)
+            self.__type_internal = inmanta_type.TypedList(self.__type_internal)
         if nullable:
-            self.__type = NullableType(self.__type)
+            self.__type_internal = inmanta_type.NullableType(self.__type_internal)
+
+        # Drop all reference for backward compatibility
+        self.__type: Type = self.__type_internal.get_no_reference()
 
         self.comment = None  # type: Optional[str]
         self.end: Optional[RelationAttribute] = None
 
     def get_type(self) -> "Type":
         """
-        Get the type of this attribute.
+        Get the declared type of this attribute.
         """
         return self.__type
 
     type: "Type" = property(get_type)
+
+    @property
+    def type_internal(self) -> "Type":
+        """
+        Get the actual type used by the compiler for type checking.
+
+        The externally visible type will never include references
+        The internal type may accommodate references
+        """
+        return self.__type_internal
 
     def get_name(self) -> str:
         """
@@ -104,11 +113,11 @@ class Attribute(Locatable):
         """
         if isinstance(value, Unknown):
             return
-        self.type.validate(value)
+        self.type_internal.validate(value)
 
     def get_new_result_variable(self, instance: "Instance", queue: "runtime.QueueScheduler") -> "runtime.ResultVariable":
         out: runtime.ResultVariable[object] = runtime.ResultVariable()
-        out.set_type(self.type)
+        out.set_type(self.type_internal)
         return out
 
     def is_optional(self) -> bool:
@@ -177,7 +186,7 @@ class RelationAttribute(Attribute):
             out = runtime.OptionVariable(self, instance, queue)
         else:
             out = runtime.ListVariable(self, instance, queue)
-        out.set_type(self.type)
+        out.set_type(self.type_internal)
         return out
 
     def is_optional(self) -> bool:

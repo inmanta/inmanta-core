@@ -1,19 +1,19 @@
 """
-    Copyright 2020 Inmanta
+Copyright 2020 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 """
@@ -124,7 +124,7 @@ def test_import_compiler(import_entry_point: Callable[[str], Optional[int]]) -> 
     assert import_entry_point("inmanta.compiler") == 0
 
 
-@pytest.mark.slow
+@pytest.mark.slowtest
 def test_import_server(import_entry_point: Callable[[str], Optional[int]]) -> None:
     assert import_entry_point("inmanta.server.extensions") == 0
     assert import_entry_point("inmanta.server.bootloader") == 0
@@ -134,7 +134,7 @@ def test_import_validation_type(import_entry_point: Callable[[str], Optional[int
     assert import_entry_point("inmanta.validation_type") == 0
 
 
-@pytest.mark.slow
+@pytest.mark.slowtest
 def test_import_server_services(import_entry_point: Callable[[str], Optional[int]]) -> None:
     assert import_entry_point("inmanta.server.compilerservice") == 0
     assert import_entry_point("inmanta.server.services.databaseservice") == 0
@@ -145,12 +145,17 @@ def test_import_server_services(import_entry_point: Callable[[str], Optional[int
     assert import_entry_point("inmanta.server.services.resourceservice") == 0
 
 
-@pytest.mark.slow
+@pytest.mark.slowtest
 def test_import_scheduler(import_entry_point: Callable[[str], Optional[int]]) -> None:
     assert import_entry_point("inmanta.deploy.scheduler") == 0
     assert import_entry_point("inmanta.deploy.state") == 0
 
 
-@pytest.mark.slow
-def test_import_aget(import_entry_point: Callable[[str], Optional[int]]) -> None:
+@pytest.mark.slowtest
+def test_import_agent(import_entry_point: Callable[[str], Optional[int]]) -> None:
     assert import_entry_point("inmanta.agent.agent") == 0
+
+
+@pytest.mark.slowtest
+def test_import_references(import_entry_point: Callable[[str], Optional[int]]) -> None:
+    assert import_entry_point("inmanta.references") == 0

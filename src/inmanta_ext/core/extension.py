@@ -1,21 +1,22 @@
 """
-    Copyright 2019 Inmanta
+Copyright 2019 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
+from inmanta.graphql.graphql import GraphQLSlice
 from inmanta.server import agentmanager, server
 from inmanta.server.extensions import ApplicationContext
 from inmanta.server.services import (
@@ -54,3 +55,4 @@ def setup(application: ApplicationContext) -> None:
     application.register_slice(notificationservice.NotificationService())
     application.register_slice(userservice.UserService())
     application.register_slice(environment_metrics_service.EnvironmentMetricsService())
+    application.register_slice(GraphQLSlice())

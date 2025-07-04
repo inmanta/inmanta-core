@@ -1,27 +1,26 @@
 """
-    Copyright 2023 Inmanta
+Copyright 2023 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
-import asyncio
 import datetime
 import logging
 import uuid
 from collections import abc, defaultdict
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Literal, Optional, cast
 
 import asyncpg
@@ -29,20 +28,24 @@ import asyncpg.connection
 import asyncpg.exceptions
 import pydantic
 
+import inmanta.exceptions
 import inmanta.util
 from inmanta import const, data, tracing
 from inmanta.const import ResourceState
 from inmanta.data import APILIMIT, AVAILABLE_VERSIONS_TO_KEEP, InvalidSort, ResourcePersistentState, RowLockMode
 from inmanta.data.dataview import DesiredStateVersionView
+from inmanta.data.model import AgentName, DesiredStateVersion
+from inmanta.data.model import InmantaModule as InmantaModuleDTO
 from inmanta.data.model import (
-    DesiredStateVersion,
+    InmantaModuleName,
+    InmantaModuleVersion,
     PipConfig,
     PromoteTriggerMethod,
     ResourceDiff,
     ResourceMinimal,
     SchedulerStatusReport,
 )
-from inmanta.db.util import ConnectionInTransaction
+from inmanta.data.sqlalchemy import AgentModules, InmantaModule
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
 from inmanta.protocol.exceptions import BadRequest, BaseHttpException, Conflict, NotFound, ServerError
@@ -68,6 +71,12 @@ PLOGGER = logging.getLogger("performance")
 
 PERFORM_CLEANUP: bool = True
 # Kill switch for cleanup, for use when working with historical data
+
+
+def get_printable_name_for_resource_set(native: str | None) -> str:
+    if native is None:
+        return "<SHARED>"
+    return native
 
 
 class CrossResourceSetDependencyError(Exception):
@@ -171,6 +180,7 @@ class PartialUpdateMerger:
         self.rids_in_partial_compile = rids_in_partial_compile
         self.updated_resource_sets = updated_resource_sets
         self.deleted_resource_sets = deleted_resource_sets
+        self.modified_resource_sets = updated_resource_sets | deleted_resource_sets
         self.updated_and_shared_resources_old = updated_and_shared_resources_old
         self.non_shared_resources_in_partial_update_old: abc.Mapping[ResourceIdStr, data.Resource] = {
             rid: r for rid, r in self.updated_and_shared_resources_old.items() if r.resource_set is not None
@@ -240,7 +250,9 @@ class PartialUpdateMerger:
         shared_resources = {r.resource_id: r for r in updated_and_shared_resources if r.resource_set is None}
         updated_resources = {r.resource_id: r for r in updated_and_shared_resources if r.resource_set is not None}
         shared_resources_merged = {r.resource_id: r for r in self._merge_shared_resources(shared_resources)}
-        result = {**updated_resources, **shared_resources_merged}
+        # Updated go last, so that in case of overlap, we get the updated one
+        # Validation on move is done later
+        result = {**shared_resources_merged, **updated_resources}
         self._validate_constraints(result)
         return result
 
@@ -256,10 +268,18 @@ class PartialUpdateMerger:
                 continue
             matching_resource_old_model = self.updated_and_shared_resources_old[res.resource_id]
 
-            if res.resource_set != matching_resource_old_model.resource_set:
+            if (
+                res.resource_set != matching_resource_old_model.resource_set
+                and matching_resource_old_model.resource_set not in self.modified_resource_sets
+            ):
+                # We can't move resource
+                # Unless between resource sets we are updating
+                # Shared set is never in modified_resource_sets, so no escape from there
                 raise BadRequest(
-                    f"A partial compile cannot migrate resources: trying to move {res.resource_id} from resource set"
-                    f" {matching_resource_old_model.resource_set} to {res.resource_set}."
+                    "A partial compile only migrate resources between resource set that are pushed together:"
+                    f" trying to move {res.resource_id} from resource set "
+                    f"{get_printable_name_for_resource_set(matching_resource_old_model.resource_set)} "
+                    f"to {get_printable_name_for_resource_set(res.resource_set)}."
                 )
 
             if res.resource_set is None and res.attribute_hash != matching_resource_old_model.attribute_hash:
@@ -567,6 +587,7 @@ class OrchestrationService(protocol.ServerSlice):
             # Populate status field
             if res_obj.resource_id in resource_state:
                 res_obj.status = const.ResourceState[resource_state[res_obj.resource_id]]
+                res_obj.is_undefined = const.ResourceState[resource_state[res_obj.resource_id]] == const.ResourceState.undefined
             # Populate resource_set field
             if res_obj.resource_id in resource_sets:
                 res_obj.resource_set = resource_sets[res_obj.resource_id]
@@ -651,6 +672,116 @@ class OrchestrationService(protocol.ServerSlice):
             work.extend(provides_tree[current])
         return list(skippeable - set(undeployable_ids))
 
+    async def _check_version_info(
+        self,
+        modules_version_in_current_export: Mapping[InmantaModuleName, InmantaModuleDTO],
+        registered_modules_version: Mapping[InmantaModuleName, InmantaModuleVersion],
+    ) -> None:
+        """
+        Make sure that modules used in this partial version are either new modules, or that the version
+        being used is the same as the registered version for the base compile.
+
+
+        :param modules_version_in_current_export: Inmanta modules used to deploy resources in
+            the current export.
+        :param registered_modules_version: All Inmanta module versions used in the base compile.
+        :raises BadRequest: Some module version in the current export differs from its
+            registered counterpart.
+        """
+
+        for inmanta_module_name, module_data in modules_version_in_current_export.items():
+
+            if inmanta_module_name not in registered_modules_version:
+                # This didn't exist in the previous version: nothing
+                # to check, we always allow new modules registration.
+                continue
+
+            registered_version = registered_modules_version[inmanta_module_name]
+            module_version = module_data.version
+            if registered_version != module_version:
+                raise BadRequest(
+                    f"Cannot perform partial export because the source code for module {inmanta_module_name} in this "
+                    "partial version is different from the currently registered source code. Consider running a full "
+                    "export instead. Alternatively, if you are sure the new code is compatible and want to forcefully "
+                    "update, you can bypass this version check with the `--allow-handler-code-update` CLI option."
+                )
+
+    async def _register_agent_code(
+        self,
+        partial_base_version: int | None,
+        version: int,
+        environment: uuid.UUID,
+        module_version_info: Mapping[InmantaModuleName, InmantaModuleDTO],
+        *,
+        allow_handler_code_update: bool = False,
+        connection: asyncpg.connection.Connection,
+    ) -> None:
+        """
+        Helper method for the _put_version method.
+
+        Register the relevant inmanta modules for all agents that need them for this version.
+        Use the `module_version_info` dict to populate the relevant tables
+        AgentModules, InmantaModule and ModuleFiles.
+
+        The `module_version_info` map contains inmanta modules used by resources that are
+        being exported in this version.
+
+        For partial compiles, this method makes sure that:
+            - the version of modules in this partial export is the same as the one used in the base version.
+                (this check can be exceptionally bypassed with the allow_handler_code_update flag)
+            - all other inmanta modules registered in the base version are registered again
+              for this version. (e.g. to be able to repair an existing resource that wasn't
+              exported in this partial compile)
+
+        :param partial_base_version: In case of a partial compile, base version it is based on.
+        :param version: Configuration model version.
+        :param environment: Environment this compile belongs to.
+        :param module_version_info: Inmanta module information about inmanta modules that are used by
+            resources exported in this version.
+        :param allow_handler_code_update: In case of a partial compile, this flag will disable the check
+            for source code consistency between the base version and the current partial version.
+        :param connection: DB connection expected to be managed by the caller method.
+        """
+
+        modules_to_register: dict[InmantaModuleName, InmantaModuleDTO] = {
+            module_name: inmanta_module
+            for module_name, inmanta_module in module_version_info.items()
+            if inmanta_module.for_agents
+        }
+        module_usage_info: dict[InmantaModuleName, tuple[InmantaModuleVersion, set[AgentName]]] = {}
+
+        if partial_base_version is not None:
+            module_usage_info = await AgentModules.get_registered_modules_data(
+                model_version=partial_base_version, environment=environment, connection=connection
+            )
+
+            if not allow_handler_code_update:
+                await self._check_version_info(
+                    modules_version_in_current_export=modules_to_register,
+                    registered_modules_version={
+                        module_name: module_data[0] for module_name, module_data in module_usage_info.items()
+                    },
+                )
+
+        for module_name, module in modules_to_register.items():
+            current_module_version = module.version
+            current_module_agent_set = set(module.for_agents)
+
+            if module_name in module_usage_info:
+                # This module was previously known: make sure we register agents
+                # that were already using it before in this model version
+                current_module_agent_set.update(module_usage_info[module_name][1])
+
+            module_usage_info[module_name] = (current_module_version, current_module_agent_set)
+
+        await InmantaModule.register_modules(environment=environment, modules=modules_to_register, connection=connection)
+        await AgentModules.register_modules_for_agents(
+            model_version=version,
+            environment=environment,
+            module_usage_info=module_usage_info,
+            connection=connection,
+        )
+
     async def _put_version(
         self,
         env: data.Environment,
@@ -664,6 +795,8 @@ class OrchestrationService(protocol.ServerSlice):
         pip_config: Optional[PipConfig] = None,
         *,
         connection: asyncpg.connection.Connection,
+        module_version_info: Mapping[InmantaModuleName, InmantaModuleDTO],
+        allow_handler_code_update: bool = False,
     ) -> None:
         """
         :param rid_to_resource: This parameter should contain all the resources when a full compile is done.
@@ -672,11 +805,16 @@ class OrchestrationService(protocol.ServerSlice):
         :param unknowns: This parameter should contain all the unknowns for all the resources in the new version of the model.
                          Also the unknowns for resources that are not present in rid_to_resource.
         :param partial_base_version: When a partial compile is done, this parameter contains the version of the
-                                     configurationmodel this partial compile was based on. Otherwise this parameter should be
+                                     configurationmodel this partial compile was based on. Otherwise, this parameter should be
                                      None.
         :param removed_resource_sets: When a partial compile is done, this parameter should indicate the names of the resource
                                       sets that are removed by the partial compile. When no resource sets are removed by
                                       a partial compile or when a full compile is done, this parameter can be set to None.
+        :param module_version_info: Mapping of module name to in-memory representation of a module. This represents all inmanta
+            modules that might be used during deployment of resources in the current [partial] version.
+        :param allow_handler_code_update: During partial compiles (i.e. partial_base_version is not None), a check is performed
+            to make sure the source code of modules in this partial version is identical to the source code in the base
+            version. Set this parameter to True to bypass this check.
 
         Pre-conditions:
             * The requires and provides relationships of the resources in rid_to_resource must be set correctly. For a
@@ -731,7 +869,7 @@ class OrchestrationService(protocol.ServerSlice):
 
         resource_set_validator = ResourceSetValidator(set(rid_to_resource.values()))
         undeployable_ids: abc.Sequence[ResourceIdStr] = [
-            res.resource_id for res in rid_to_resource.values() if res.status in const.UNDEPLOYABLE_STATES
+            res.resource_id for res in rid_to_resource.values() if res.is_undefined
         ]
         updated_resource_sets: abc.Set[str] = {sr for sr in resource_sets.values() if sr is not None}
         deleted_resource_sets_as_set: abc.Set[str] = set(removed_resource_sets)
@@ -798,7 +936,8 @@ class OrchestrationService(protocol.ServerSlice):
                             "a full compile is necessary for this process:\n"
                         )
                         msg += "\n".join(
-                            f"    {rid} moved from {rids_unchanged_resource_sets[rid]} to {resource_sets[rid]}"
+                            f"    {rid} moved from {get_printable_name_for_resource_set(rids_unchanged_resource_sets[rid])} "
+                            f"to {get_printable_name_for_resource_set(resource_sets.get(rid))}"
                             for rid in resources_that_moved_resource_sets
                         )
 
@@ -815,6 +954,15 @@ class OrchestrationService(protocol.ServerSlice):
 
             for agent in all_agents:
                 await self.agentmanager_service.ensure_agent_registered(env, agent, connection=connection)
+
+            await self._register_agent_code(
+                partial_base_version,
+                version,
+                env.id,
+                module_version_info,
+                allow_handler_code_update=allow_handler_code_update,
+                connection=connection,
+            )
 
             # Don't log ResourceActions without resource_version_ids, because
             # no API call exists to retrieve them.
@@ -887,6 +1035,7 @@ class OrchestrationService(protocol.ServerSlice):
         resource_state: dict[ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]],
         unknowns: list[dict[str, PrimitiveTypes]],
         version_info: JsonType,
+        module_version_info: Mapping[InmantaModuleName, InmantaModuleDTO],
         compiler_version: Optional[str] = None,
         resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
         pip_config: Optional[PipConfig] = None,
@@ -906,7 +1055,7 @@ class OrchestrationService(protocol.ServerSlice):
             raise BadRequest("Older compiler versions are no longer supported, please update your compiler")
 
         unknowns_objs = self._create_unknown_parameter_daos_from_api_unknowns(env.id, version, unknowns)
-        rid_to_resource = self._create_dao_resources_from_api_resources(
+        rid_to_resource: dict[ResourceIdStr, data.Resource] = self._create_dao_resources_from_api_resources(
             env_id=env.id,
             resources=resources,
             resource_state=resource_state,
@@ -928,6 +1077,7 @@ class OrchestrationService(protocol.ServerSlice):
                     resource_sets,
                     pip_config=pip_config,
                     connection=con,
+                    module_version_info=module_version_info or {},
                 )
             # This must be outside all transactions, as it relies on the result of _put_version
             # and it starts a background task, so it can't re-use this connection
@@ -946,6 +1096,8 @@ class OrchestrationService(protocol.ServerSlice):
         resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
         removed_resource_sets: Optional[list[str]] = None,
         pip_config: Optional[PipConfig] = None,
+        module_version_info: dict[str, InmantaModuleDTO] | None = None,
+        allow_handler_code_update: bool = False,
     ) -> ReturnValue[int]:
         """
         :param unknowns: dict with the following structure
@@ -1042,7 +1194,6 @@ class OrchestrationService(protocol.ServerSlice):
 
                 # add shared resources
                 merged_resources = partial_update_merger.merge_updated_and_shared_resources(list(rid_to_resource.values()))
-                await data.Code.copy_versions(env.id, base_version, version, connection=con)
 
                 merged_unknowns = await partial_update_merger.merge_unknowns(
                     unknowns_in_partial_compile=self._create_unknown_parameter_daos_from_api_unknowns(env.id, version, unknowns)
@@ -1059,6 +1210,8 @@ class OrchestrationService(protocol.ServerSlice):
                     removed_resource_sets=removed_resource_sets,
                     pip_config=pip_config,
                     connection=con,
+                    module_version_info=module_version_info or {},
+                    allow_handler_code_update=allow_handler_code_update,
                 )
 
             returnvalue: ReturnValue[int] = ReturnValue[int](200, response=version)
@@ -1080,101 +1233,35 @@ class OrchestrationService(protocol.ServerSlice):
         :param agents: agents that have to be notified by the push, defaults to all
         """
         async with data.ConfigurationModel.get_connection(connection) as connection:
-            version_run_ahead_lock = asyncio.Event()
-            async with connection.transaction(), inmanta.util.FinallySet(version_run_ahead_lock):
-                with ConnectionInTransaction(connection) as connection_holder:
-                    # explicit lock to allow patching of increments for stale failures
-                    # (locks out patching stage of deploy_done to avoid races)
-                    await env.acquire_release_version_lock(connection=connection)
-                    model = await data.ConfigurationModel.get_version_internal(
-                        env.id, version_id, connection=connection, lock=RowLockMode.FOR_NO_KEY_UPDATE
+            async with connection.transaction():
+                # explicit lock to prevent racing with this code itself.
+                await env.acquire_release_version_lock(connection=connection)
+                model = await data.ConfigurationModel.get_version_internal(
+                    env.id, version_id, connection=connection, lock=RowLockMode.FOR_NO_KEY_UPDATE
+                )
+                if model is None:
+                    return 404, {"message": "The request version does not exist."}
+
+                if model.released:
+                    raise Conflict(f"The version {version_id} on environment {env.id} is already released.")
+
+                latest_version = await data.ConfigurationModel.get_version_nr_latest_version(env.id, connection=connection)
+
+                # ensure we are the latest version
+                # this does introduce a race condition, with any OTHER release running concurrently on this environment
+                # We could lock the get_version_nr_latest_version for update to prevent this
+                if model.version < (latest_version or -1):
+                    raise Conflict(
+                        f"The version {version_id} on environment {env.id} "
+                        f"is older then the latest released version {latest_version}."
                     )
-                    if model is None:
-                        return 404, {"message": "The request version does not exist."}
 
-                    if model.released:
-                        raise Conflict(f"The version {version_id} on environment {env.id} is already released.")
+                # Ensure there is a record for every resource in the resource_persistent_state table.
+                await data.ResourcePersistentState.populate_for_version(env.id, version_id, connection=connection)
 
-                    latest_version = await data.ConfigurationModel.get_version_nr_latest_version(env.id, connection=connection)
-
-                    # ensure we are the latest version
-                    # this is required for the subsequent increment calculation to make sense
-                    # this does introduce a race condition, with any OTHER release running concurrently on this environment
-                    # We could lock the get_version_nr_latest_version for update to prevent this
-                    if model.version < (latest_version or -1):
-                        raise Conflict(
-                            f"The version {version_id} on environment {env.id} "
-                            f"is older then the latest released version {latest_version}."
-                        )
-
-                    # Ensure there is a record for every resource in the resource_persistent_state table.
-                    await data.ResourcePersistentState.populate_for_version(env.id, version_id, connection=connection)
-
-                    # # Already mark undeployable resources as deployed to create a better UX (change the version counters)
-                    undep = model.get_undeployable()
-                    now = datetime.datetime.now().astimezone()
-
-                    if undep:
-                        undep_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in undep]
-                        # not checking error conditions
-                        await self.resource_service.resource_action_update(
-                            env,
-                            undep_ids,
-                            action_id=uuid.uuid4(),
-                            started=now,
-                            finished=now,
-                            status=const.ResourceState.undefined,
-                            action=const.ResourceAction.deploy,
-                            changes={},
-                            messages=[],
-                            change=const.Change.nochange,
-                            send_events=False,
-                            connection=connection_holder,
-                        )
-
-                        skippable = model.get_skipped_for_undeployable()
-                        if skippable:
-                            skippable_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in skippable]
-                            # not checking error conditions
-                            await self.resource_service.resource_action_update(
-                                env,
-                                skippable_ids,
-                                action_id=uuid.uuid4(),
-                                started=now,
-                                finished=now,
-                                status=const.ResourceState.skipped_for_undefined,
-                                action=const.ResourceAction.deploy,
-                                changes={},
-                                messages=[],
-                                change=const.Change.nochange,
-                                send_events=False,
-                                connection=connection_holder,
-                            )
-
-                    if latest_version:
-                        (
-                            version,
-                            increment_ids,
-                            neg_increment,
-                            neg_increment_per_agent,
-                        ) = await self.resource_service.get_increment(
-                            env,
-                            version_id,
-                            connection=connection,
-                            run_ahead_lock=version_run_ahead_lock,
-                        )
-
-                        await self.resource_service.mark_deployed(
-                            env, neg_increment, now, version_id, connection=connection_holder
-                        )
-
-                    # Setting the model's released field to True is the trigger for the agents
-                    # to start pulling in the resources.
-                    # This has to be done after the resources outside of the increment have been marked as deployed.
-                    await model.update_fields(released=True, connection=connection)
-
-            if model.total == 0:
-                return 200, {"model": model}
+                # Setting the model's released field to True is the trigger for the agents
+                # to start pulling in the resources.
+                await model.update_fields(released=True, connection=connection)
 
             if connection.is_in_transaction():
                 raise RuntimeError(
@@ -1313,15 +1400,19 @@ class OrchestrationService(protocol.ServerSlice):
         self,
         env: data.Environment,
     ) -> SchedulerStatusReport:
+        if env.halted:
+            raise NotFound(message=f"No scheduler is running for environment {env.id}, because the environment is halted.")
         try:
             await self.autostarted_agent_manager._ensure_scheduler(env.id)
-        except Exception as e:
-            raise ServerError(f"Scheduler in env {env.id} failed to start.") from e
+        except inmanta.exceptions.EnvironmentNotFound:
+            raise NotFound(message=f"Environment {env.id} doesn't exist.")
+        except Exception:
+            raise ServerError(f"Scheduler in environment {env.id} failed to start.")
         else:
             client = self.agentmanager_service.get_agent_client(env.id, const.AGENT_SCHEDULER_ID)
 
             if client is None:
-                raise ServerError(f"Cannot retrieve session for scheduler in env {env.id}.")
+                raise NotFound(message=f"No scheduler is running for environment {env.id}.")
 
             status = await client.trigger_get_status(env.id)
 

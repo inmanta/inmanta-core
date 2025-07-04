@@ -1,26 +1,30 @@
 """
-    Copyright 2024 Inmanta
+Copyright 2024 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import datetime
+import typing
 import uuid
 
 import utils
-from inmanta import const, data
+from inmanta import const, data, util
+from inmanta.agent import executor
+from inmanta.deploy import persistence, state
+from inmanta.resources import Id
 
 
 async def test_consistent_resource_state_reporting(
@@ -32,7 +36,6 @@ async def test_consistent_resource_state_reporting(
     client,
 ) -> None:
     """Doesn't work for new scheduler, as every release is a deploy"""
-    agent = agent_no_state_check  # updating the resources via the server makes the scheduler out of date
     env = await data.Environment.get_by_id(uuid.UUID(environment))
     await env.set(data.AUTO_DEPLOY, False)
     await env.set(data.AUTOSTART_AGENT_DEPLOY_INTERVAL, 0)
@@ -42,7 +45,7 @@ async def test_consistent_resource_state_reporting(
     rid = "test::Resource[agent1,key=key1]"
     rid2 = "test::Resource[agent1,key=key2]"
 
-    async def _put_version(version: int) -> None:
+    async def _put_version(version: int) -> list[dict[str, typing.Any]]:
         resources = [
             {
                 "key": "key1",
@@ -66,9 +69,10 @@ async def test_consistent_resource_state_reporting(
             },
         ]
         await clienthelper.put_version_simple(resources, version)
+        return resources
 
     version1 = await clienthelper.get_version()
-    await _put_version(version1)
+    resources = await _put_version(version1)
 
     version2 = await clienthelper.get_version()
     await _put_version(version2)
@@ -80,17 +84,31 @@ async def test_consistent_resource_state_reporting(
     result = await client.release_version(environment, version2, push=False)
     assert result.code == 200
 
-    result = await agent._client.resource_action_update(
-        tid=environment,
-        resource_ids=[f"{rid},v={version1}"],
-        action_id=uuid.uuid4(),
-        action=const.ResourceAction.deploy,
-        started=datetime.datetime.now().astimezone(),
-        finished=datetime.datetime.now().astimezone(),
-        messages=[],
-        status=const.ResourceState.failed,
+    env = uuid.UUID(environment)
+    update_manager = persistence.ToDbUpdateManager(client, env)
+    action_id = uuid.uuid4()
+    rvid = Id.parse_id(f"{rid},v={version1}")
+    now = datetime.datetime.now()
+    await update_manager.send_in_progress(action_id, rvid)
+    await update_manager.send_deploy_done(
+        attribute_hash=util.make_attribute_hash(resource_id=rvid.resource_str(), attributes=resources[0]),
+        result=executor.DeployReport(
+            rvid=rvid.resource_version_str(),
+            action_id=action_id,
+            resource_state=const.HandlerResourceState.failed,
+            messages=[],
+            changes={},
+            change=const.Change.created,
+        ),
+        state=state.ResourceState(
+            compliance=state.Compliance.NON_COMPLIANT,
+            last_deploy_result=state.DeployResult.FAILED,
+            blocked=state.Blocked.NOT_BLOCKED,
+            last_deployed=now,
+        ),
+        started=now,
+        finished=now,
     )
-    assert result.code == 200
 
     result = await client.resource_list(tid=environment)
     assert result.code == 200

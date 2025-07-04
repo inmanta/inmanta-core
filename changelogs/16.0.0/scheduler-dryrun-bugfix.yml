@@ -1,0 +1,7 @@
+description: Bugfix in dryrun code loading
+change-type: patch
+sections:
+  bugfix: Make sure dry-runs load the appropriate handler code for their version
+destination-branches:
+  - master
+  - iso8

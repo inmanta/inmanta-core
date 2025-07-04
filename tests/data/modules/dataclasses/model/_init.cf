@@ -1,0 +1,19 @@
+
+entity Virtualmachine extends std::Dataclass:
+    string name
+    dict os
+    int? ram
+    dict cpus
+    int[] disk
+    int[]? slots
+end
+
+implement Virtualmachine using std::none
+
+
+entity DataclassABC extends std::Dataclass: end
+
+entity SimpleDC extends DataclassABC:
+    int n
+end
+implement SimpleDC using std::none

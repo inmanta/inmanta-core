@@ -90,7 +90,8 @@ authentication is enabled all other components require a valid token.
 
 In the server configuration multiple token providers (issuers) can be configured (See :ref:`auth-config`). Inmanta requires at
 least one issuer with the HS256 algorithm. The server uses this to sign tokens it issues itself. This provider is indicated with
-sign set to true. Inmanta issues tokens for compilers the servers runs itself and for autostarted agents.
+sign set to true. Inmanta issues tokens for compilers the servers runs itself and for autostarted agents. Make sure you set
+:inmanta.config:option:`server.bind-address` to ``127.0.0.1``.
 
 Compilers, cli and agents that are not started by the server itself, require a token in their transport configuration. This
 token is configured with the ``token`` option in the groups :inmanta.config:group:`agent_rest_transport`,
@@ -107,7 +108,8 @@ the settings page.
    Generating a new token in the web-console.
 
 
-Setup the built-in authentication provider of the Inmanta server (See :ref:`auth-int`) or configure an external issuer (See :ref:`auth-ext`) for web-console access to bootstrap access to the create token api call.
+Setup the built-in authentication provider of the Inmanta server (See :ref:`auth-int`) or configure an external issuer 
+(See :ref:`auth-ext`) for web-console access to bootstrap access to the create token api call.
 When no external issuer is available and web-console access is not required, the ``inmanta-cli token bootstrap`` command
 can be used to create a token that has access to everything. However, it expires after 3600s for security reasons.
 
@@ -144,7 +146,7 @@ An example configuration is:
     [auth_jwt_default]
     algorithm=HS256
     sign=true
-    client_types=agent,compiler
+    client_types=agent,compiler,api
     key=rID3kG4OwGpajIsxnGDhat4UFcMkyFZQc1y3oKQTPRs
     expire=0
     issuer=https://localhost:8888/
@@ -244,7 +246,7 @@ External authentication providers
 ---------------------------------
 
 Inmanta supports all external authentication providers that support JWT tokens with RS256 or HS256. These providers need to
-add a claims that indicate the allowed client type (``urn:inmanta:ct``). Currently, the web-console only has support for keycloak.
+add a claim that indicates the allowed client type (``urn:inmanta:ct``). Currently, the web-console only has support for keycloak.
 However, each provider that can insert custom (private) claims should work. The web-console now relies on the keycloak js library
 to implement the OAuth2 implicit flow, required to obtain a JWT.
 
@@ -450,8 +452,8 @@ The example above configures the server to validate Cloudflare ZTNA JWT tokens. 
 application.
 
 Some providers do not supply the JWT in the Authorization header but in an alternative header. This can be controlled using the
-:inmanta.config:option:`server.auth-additional-header` setting. For cloudflare it needs to be set to `Cf-Access-Jwt-Assertion`. In case of an alternative
-header we expect the plain token and not a bearer token.
+:inmanta.config:option:`server.auth-additional-header` setting. For cloudflare it needs to be set to `Cf-Access-Jwt-Assertion`. 
+In case of an alternative header we expect the plain token and not a bearer token.
 
 
 .. code-block:: ini
@@ -464,39 +466,3 @@ By default the `sub` claim is used to indicate the user that is logged in. Cloud
 claim. By setting jwt_username_claim to email in the auth section (see the example) you can change the claim that is used for
 the username. The username is used for example for logging and the username in the web console.
 
-
-Custom claims
--------------
-
-Access to the orchestrator can be controlled using claim match expressions. In the section of the identity provider that
-you want to restrict you can configure the ``claims`` options. This is a multiline option where each line contains a match
-expression. There are two operators available:
-
-- ``in`` for exact string match on a claim that contains a list of string values
-- ``is`` for exact string match on a claim that is a string
-
-You can use them as follows, for example each user gets two additional claims:
-
-- ``my:environments`` which is a list of network environments the user is allowed to access. For example: lab and prod
-- ``my:scope`` which indicates the scope of automation the orchestrator does. For example: network and dc
-
-A user is allowed to have multiple environments but they can only have one scope. So that is why the environments is a list and
-scope is single string value.
-
-On the lab orchestrator for the datacenter we can then configure it as follows:
-
-.. code-block:: ini
-
-   [auth_jwt_keycloak]
-   algorithm=RS256
-   sign=false
-   client_types=api
-   issuer=http://localhost:8080/realms/inmanta
-   audience=inmantaso
-   jwks_uri=http://keycloak:8080/realms/inmanta/protocol/openid-connect/certs
-   validate_cert=false
-   claims=
-     lab in my:environments
-     my:scope is dc
-
-This will only allow users with ``lab`` in the ``my:environments`` claim and ``my:scope`` equal to ``dc``.

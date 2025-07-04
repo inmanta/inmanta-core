@@ -1,19 +1,19 @@
 """
-    Copyright 2018 Inmanta
+Copyright 2018 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 from typing import Union
@@ -161,6 +161,25 @@ std::print(test_string_2)
 world
 single hello
 world
+"""
+    compiler.do_compile()
+    out, err = capsys.readouterr()
+    assert expected == out
+
+
+def test_escaping_rules_fstrings(snippetcompiler, capsys):
+    """
+    Check that new line characters are correctly interpreted in f-strings
+    """
+    snippetcompiler.setup_for_snippet(
+        r"""
+a = 1
+std::print(f"test\ntest{a}")
+""",
+        ministd=True,
+    )
+    expected = r"""test
+test1
 """
     compiler.do_compile()
     out, err = capsys.readouterr()

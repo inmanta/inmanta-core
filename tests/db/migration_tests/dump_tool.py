@@ -1,22 +1,22 @@
 """
-    Copyright 2021 Inmanta
+Copyright 2021 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 
 
-    Tool to populate the database and dump it for database update testing
+Tool to populate the database and dump it for database update testing
 """
 
 import asyncio
@@ -153,9 +153,7 @@ async def test_dump_db(
     versions = await wait_for_version(client, env_id_1, env_1_version, compile_timeout=40)
     v1 = versions["versions"][0]["version"]
 
-    check_result(
-        await client.release_version(env_id_1, v1, push=True, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy)
-    )
+    check_result(await client.release_version(env_id_1, v1))
 
     await wait_until_deployment_finishes(client, env_id_1, timeout=20)
 
@@ -172,11 +170,7 @@ async def test_dump_db(
     env_1_version += 1
     await wait_for_version(client, env_id_1, env_1_version)
 
-    check_result(
-        await client.release_version(
-            env_id_1, env_1_version, push=True, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
-        )
-    )
+    check_result(await client.release_version(env_id_1, env_1_version))
 
     await wait_until_deployment_finishes(client, env_id_1, timeout=20)
 
@@ -185,11 +179,7 @@ async def test_dump_db(
 
     env_1_version += 1
     await wait_for_version(client, env_id_1, env_1_version)
-    check_result(
-        await client.release_version(
-            env_id_1, env_1_version, push=False, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
-        )
-    )
+    check_result(await client.release_version(env_id_1, env_1_version))
 
     await populate_facts_and_parameters(client, env_id_1)
 
@@ -199,7 +189,7 @@ async def test_dump_db(
     await wait_for_version(client, env_id_1, env_1_version)
     check_result(await client.notify_change(id=env_id_1))
     env_1_version += 1
-    await wait_for_version(client, env_id_1, env_1_version)
+    await wait_for_version(client, env_id_1, env_1_version, compile_timeout=50)
 
     # Partial compile
     rid2 = "test::Resource[agent2,key=key2]"
@@ -223,6 +213,7 @@ async def test_dump_db(
             unknowns=[],
             version_info=None,
             resource_sets=resource_sets,
+            module_version_info={},
         )
     )
 
@@ -309,11 +300,10 @@ async def test_dump_db(
             "test::Resource[agent1,key=key6]": const.ResourceState.available,
         },
         compiler_version=util.get_compiler_version(),
+        module_version_info={},
     )
     assert res.code == 200
-    res = await client.release_version(
-        env_id_3, id=1, push=True, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
-    )
+    res = await client.release_version(env_id_3, id=1)
     assert res.code == 200
     await wait_until_deployment_finishes(client, env_id_3)
 
@@ -345,11 +335,10 @@ async def test_dump_db(
             "test::Resource[agent1,key=key7]": const.ResourceState.available,
         },
         compiler_version=util.get_compiler_version(),
+        module_version_info={},
     )
     assert res.code == 200
-    res = await client.release_version(
-        env_id_3, id=2, push=True, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
-    )
+    res = await client.release_version(env_id_3, id=2)
     assert res.code == 200
     await wait_until_deployment_finishes(client, env_id_3)
 
@@ -393,6 +382,7 @@ async def test_dump_db(
             "test::Resource[agent1,key=key8]": const.ResourceState.available,
         },
         compiler_version=util.get_compiler_version(),
+        module_version_info={},
     )
     assert res.code == 200
 

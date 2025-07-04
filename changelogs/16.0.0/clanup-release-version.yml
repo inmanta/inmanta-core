@@ -1,0 +1,8 @@
+---
+description: Cleanup redundant logic on release version.
+change-type: patch
+destination-branches: [master]
+sections:
+  other-note: |
+    Removed resource events and logs when resources are marked as undefined or skipped_for_undefined
+    and when they are marked as deployed due to known good status

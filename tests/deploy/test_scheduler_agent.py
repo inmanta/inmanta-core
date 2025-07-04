@@ -1,21 +1,21 @@
 """
-    Copyright 2024 Inmanta
+Copyright 2024 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 
-    This file is intended to contain test that use the agent/scheduler combination in isolation: no server, no executor
+This file is intended to contain test that use the agent/scheduler combination in isolation: no server, no executor
 """
 
 import datetime
@@ -25,7 +25,7 @@ import json
 import logging
 import typing
 import uuid
-from collections.abc import Awaitable, Callable, Set
+from collections.abc import Awaitable, Callable, Collection, Set
 from concurrent.futures import ThreadPoolExecutor
 from typing import Mapping, Optional, Sequence
 
@@ -36,7 +36,7 @@ from deploy.scheduler_mocks import FAIL_DEPLOY, DummyExecutor, ManagedExecutor, 
 from inmanta import const, util
 from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
-from inmanta.agent.executor import ResourceDetails, ResourceInstallSpec
+from inmanta.agent.executor import ModuleInstallSpec, ResourceDetails
 from inmanta.config import Config
 from inmanta.deploy import state, tasks
 from inmanta.deploy.scheduler import ModelVersion, ResourceScheduler
@@ -96,13 +96,12 @@ async def config(inmanta_config, tmp_path):
     Config.set("config", "log-dir", str(tmp_path / "logs"))
     Config.set("server", "agent-timeout", "2")
     Config.set("agent", "agent-repair-interval", "0")
-    Config.set("agent", "executor-mode", "forking")
     Config.set("agent", "executor-venv-retention-time", "60")
     Config.set("agent", "executor-retention-time", "10")
 
 
 @pytest.fixture
-async def agent(environment, config, monkeypatch):
+async def agent(environment, config):
     """
     Provide a new agent, with a scheduler that uses the dummy executor
 
@@ -137,6 +136,10 @@ def make_resource_minimal(environment):
         return state.ResourceIntent(resource_id=rid, attributes=attributes, attribute_hash=attribute_hash)
 
     return make_resource_minimal
+
+
+def get_resources_for_agent(scheduler: ResourceScheduler, agent: str) -> Collection[ResourceIdStr]:
+    return list(scheduler._state.resources_by_agent[agent])
 
 
 async def test_basic_deploy(agent: TestAgent, make_resource_minimal):
@@ -1541,7 +1544,7 @@ async def test_removal(agent: TestAgent, make_resource_minimal):
         [ModelVersion(version=5, resources=resources, requires=make_requires(resources), undefined=set())]
     )
 
-    assert len(agent.scheduler.get_types_for_agent("agent1")) == 2
+    assert len(get_resources_for_agent(agent.scheduler, "agent1")) == 2
 
     resources = {
         ResourceIdStr(rid1): make_resource_minimal(rid1, {"value": "a"}, []),
@@ -1551,11 +1554,11 @@ async def test_removal(agent: TestAgent, make_resource_minimal):
         [ModelVersion(version=6, resources=resources, requires=make_requires(resources), undefined=set())]
     )
 
-    assert len(agent.scheduler.get_types_for_agent("agent1")) == 1
+    assert len(get_resources_for_agent(agent.scheduler, "agent1")) == 1
     assert len(agent.scheduler._state.intent) == 1
 
 
-async def test_dryrun(agent: TestAgent, make_resource_minimal, monkeypatch):
+async def test_dryrun(agent: TestAgent, make_resource_minimal):
     """
     Ensure the simples deploy scenario works: 2 dependant resources
     """
@@ -1666,7 +1669,7 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
     )
     await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
     assert len(agent.scheduler._state.intent) == 7
-    assert len(agent.scheduler.get_types_for_agent("agent1")) == 1
+    assert len(get_resources_for_agent(agent.scheduler, "agent1")) == 7
 
     # rid1: transitively blocked on rid4
     # rid2: deployed
@@ -1895,7 +1898,7 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
     )
     await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
     assert len(agent.scheduler._state.intent) == 2
-    assert len(agent.scheduler.get_types_for_agent("agent1")) == 1
+    assert len(get_resources_for_agent(agent.scheduler, "agent1")) == 2
 
     assert_resource_state(
         rid8,
@@ -1927,7 +1930,7 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
     )
     await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
     assert len(agent.scheduler._state.intent) == 2
-    assert len(agent.scheduler.get_types_for_agent("agent1")) == 1
+    assert len(get_resources_for_agent(agent.scheduler, "agent1")) == 2
 
     assert_resource_state(
         rid8,
@@ -2453,9 +2456,7 @@ class BrokenDummyManager(executor.ExecutorManager[executor.Executor]):
     A broken dummy ExecutorManager that fails on get_executor to test failure paths
     """
 
-    async def get_executor(
-        self, agent_name: str, agent_uri: str, code: typing.Collection[ResourceInstallSpec]
-    ) -> DummyExecutor:
+    async def get_executor(self, agent_name: str, agent_uri: str, code: typing.Collection[ModuleInstallSpec]) -> DummyExecutor:
         raise Exception()
 
     async def stop_for_agent(self, agent_name: str) -> list[DummyExecutor]:
@@ -2796,7 +2797,6 @@ async def test_multiple_versions_intent_changes(agent: TestAgent, make_resource_
     ) -> ModelVersion:
         requires = requires if requires is not None else {}
         undefined = undefined if undefined is not None else set()
-        global model_version
         result: ModelVersion = ModelVersion(
             version=len(all_models) + 1,
             resources=resources,

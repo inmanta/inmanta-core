@@ -1,19 +1,19 @@
 """
-    Copyright 2024 Inmanta
+Copyright 2024 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import abc
@@ -24,14 +24,13 @@ import traceback
 import uuid
 from dataclasses import dataclass
 
-import pyformance
-
 from inmanta import data, resources
 from inmanta.agent import executor
-from inmanta.agent.executor import DeployReport
+from inmanta.agent.executor import DeployReport, ModuleLoadingException
 from inmanta.data.model import AttributeStateChange
 from inmanta.deploy import scheduler, state
-from inmanta.types import ResourceIdStr, ResourceType
+from inmanta.types import ResourceIdStr
+from inmanta.vendor import pyformance
 
 LOGGER = logging.getLogger(__name__)
 
@@ -72,29 +71,28 @@ class Task(abc.ABC):
         )
 
     async def get_executor(
-        self, task_manager: "scheduler.TaskManager", agent: str, resource_type: ResourceType, version: int
+        self,
+        *,
+        task_manager: "scheduler.TaskManager",
+        agent_name: str,
+        version: int,
     ) -> executor.Executor:
-        """Helper method to produce the executor"""
-        code, invalid_resources = await task_manager.code_manager.get_code(
-            environment=task_manager.environment,
-            version=version,
-            resource_types=task_manager.get_types_for_agent(agent),
-        )
+        """
+        Helper method to produce the executor
 
-        # Bail out if this failed
-        if resource_type in invalid_resources:
-            raise invalid_resources[resource_type]
+        :param task_manager: A reference to the task manager instance.
+        :param agent_name: agent name.
+        :param version: The version of the code to load on the executor.
+        """
+
+        code = await task_manager.code_manager.get_code(
+            environment=task_manager.environment, model_version=version, agent_name=agent_name
+        )
 
         # Get executor
         my_executor: executor.Executor = await task_manager.executor_manager.get_executor(
-            agent_name=agent, agent_uri="NO_URI", code=code
+            agent_name=agent_name, agent_uri="NO_URI", code=code
         )
-        failed_resources = my_executor.failed_resources
-
-        # Bail out if this failed
-        if resource_type in failed_resources:
-            raise failed_resources[resource_type]
-
         return my_executor
 
 
@@ -149,26 +147,37 @@ class Deploy(Task):
 
                 # Get executor
                 try:
-                    # FIXME: code loading interface is not nice like this,
-                    #   - we may want to track modules per agent, instead of types
-                    #   - we may also want to track the module version vs the model version
-                    #       as it avoid the problem of fast chanfing model versions
-
                     my_executor: executor.Executor = await self.get_executor(
-                        task_manager, agent, executor_resource_details.id.entity_type, version
+                        task_manager=task_manager,
+                        agent_name=agent,
+                        version=version,
                     )
+                except ModuleLoadingException as e:
+                    e.log_resource_action_to_scheduler_log(
+                        agent=agent, rid=executor_resource_details.rvid, include_exception_info=True
+                    )
+                    log_line_for_web_console = e.create_log_line_for_failed_modules(
+                        agent=agent, level=logging.ERROR, verbose_message=False
+                    )
+                    deploy_report = DeployReport.undeployable(
+                        executor_resource_details.rvid, action_id, log_line_for_web_console
+                    )
+                    return
+
                 except Exception as e:
                     log_line = data.LogLine.log(
                         logging.ERROR,
-                        "All resources of type `%(res_type)s` failed to load handler code or install handler code "
+                        "All resources of type `%(res_type)s` failed to install handler code "
                         "dependencies: `%(error)s`\n%(traceback)s",
                         res_type=executor_resource_details.id.entity_type,
                         error=str(e),
                         traceback="".join(traceback.format_tb(e.__traceback__)),
                     )
+
                     # Not attached to ctx, needs to be flushed to logger explicitly
                     log_line.write_to_logger_for_resource(agent, executor_resource_details.rvid, exc_info=True)
                     deploy_report = DeployReport.undeployable(executor_resource_details.rvid, action_id, log_line)
+
                     return
 
                 assert reason is not None  # Should always be set for deploy
@@ -225,7 +234,9 @@ class DryRun(Task):
         started = datetime.datetime.now().astimezone()
         try:
             my_executor: executor.Executor = await self.get_executor(
-                task_manager, agent, executor_resource_details.id.entity_type, self.version
+                task_manager=task_manager,
+                agent_name=agent,
+                version=self.version,
             )
         except Exception:
             logger_for_agent(agent).error(
@@ -279,7 +290,11 @@ class RefreshFact(Task):
 
         executor_resource_details: executor.ResourceDetails = self.get_executor_resource_details(version, resource_intent)
         try:
-            my_executor = await self.get_executor(task_manager, agent, self.id.entity_type, version)
+            my_executor = await self.get_executor(
+                task_manager=task_manager,
+                agent_name=agent,
+                version=version,
+            )
         except Exception:
             logger_for_agent(agent).warning(
                 "Cannot retrieve fact for %s because resource is undeployable or code could not be loaded",

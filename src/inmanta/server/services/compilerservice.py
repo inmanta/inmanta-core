@@ -1,19 +1,19 @@
 """
-    Copyright 2022 Inmanta
+Copyright 2022 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import abc
@@ -51,7 +51,7 @@ from inmanta.env import PipCommandBuilder, PythonEnvironment, VenvActivationFail
 from inmanta.protocol import encode_token, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, NotFound
-from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_ENVIRONMENT, SLICE_SERVER, SLICE_TRANSPORT
+from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_ENVIRONMENT, SLICE_GRAPHQL, SLICE_SERVER, SLICE_TRANSPORT
 from inmanta.server import config as opt
 from inmanta.server.protocol import ServerSlice
 from inmanta.server.services import environmentservice
@@ -447,7 +447,6 @@ class CompileRun:
                 if stage_result and (stage_result.returncode is None or stage_result.returncode > 0):
                     return False, None
 
-            server_address = opt.server_address.get()
             server_port = opt.server_bind_port.get()
 
             app_cli_args = ["-vvv"]
@@ -466,7 +465,7 @@ class CompileRun:
                 "-e",
                 str(environment_id),
                 "--server_address",
-                server_address,
+                "localhost",
                 "--server_port",
                 str(server_port),
                 "--metadata",
@@ -631,7 +630,7 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
         return [SLICE_DATABASE]
 
     def get_depended_by(self) -> list[str]:
-        return [SLICE_ENVIRONMENT, SLICE_SERVER, SLICE_TRANSPORT]
+        return [SLICE_ENVIRONMENT, SLICE_SERVER, SLICE_TRANSPORT, SLICE_GRAPHQL]
 
     async def prestart(self, server: server.protocol.Server) -> None:
         await super().prestart(server)
@@ -711,6 +710,7 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
         connection: Optional[Connection] = None,
         soft_delete: bool = False,
         mergeable_env_vars: Optional[Mapping[str, str]] = None,
+        links: Optional[dict[str, list[str]]] = None,
     ) -> tuple[Optional[uuid.UUID], Warnings]:
         """
         Recompile an environment in a different thread and taking wait time into account.
@@ -729,6 +729,9 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
             they contain resources that are being exported.
         :param mergeable_env_vars: a set of env vars that can be compacted over multiple compiles.
             If multiple values are compacted, they will be joined using spaces.
+        :param links: An object that contains relevant links to this compile.
+            It is a dictionary where the key is something that identifies one or more links
+            and the value is a list of urls. i.e. {"instances": ["link-1',"link-2"], "compiles": ["link-3"]}
         :return: the compile id of the requested compile and any warnings produced during the request
         """
         if in_db_transaction and not connection:
@@ -745,6 +748,8 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
             env_vars = {}
         if mergeable_env_vars is None:
             mergeable_env_vars = {}
+        if links is None:
+            links = {}
 
         server_compile: bool = bool(await env.get(data.SERVER_COMPILE))
         if not server_compile:
@@ -775,6 +780,7 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
             notify_failed_compile=notify_failed_compile,
             failed_compile_message=failed_compile_message,
             soft_delete=soft_delete,
+            links=links,
         )
         if not in_db_transaction:
             async with self._queue_count_cache_lock:
@@ -950,9 +956,12 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
         """
         await self._process_next_compile_in_queue(environment=environment)
 
+    def is_environment_compiling(self, environment_id: uuid.UUID) -> bool:
+        return environment_id in self._env_to_compile_task
+
     @protocol.handle(methods.is_compiling, environment_id="id")
     async def is_compiling(self, environment_id: uuid.UUID) -> Apireturn:
-        if environment_id in self._env_to_compile_task:
+        if self.is_environment_compiling(environment_id):
             return 200
         return 204
 

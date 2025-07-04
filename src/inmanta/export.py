@@ -1,42 +1,41 @@
 """
-    Copyright 2017 Inmanta
+Copyright 2017 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import argparse
 import base64
+import itertools
 import logging
 import time
-import uuid
 from collections.abc import Sequence
 from typing import Any, Callable, Optional, Union
 
 import pydantic
 
-from inmanta import const, loader, protocol
+from inmanta import const, loader, protocol, references
 from inmanta.agent.handler import Commander
 from inmanta.ast import CompilerException, Namespace, UnknownException
 from inmanta.ast.entity import Entity
 from inmanta.config import Option, is_list, is_uuid_opt
 from inmanta.const import ResourceState
 from inmanta.data.model import PipConfig
-from inmanta.execute.proxy import DynamicProxy
+from inmanta.execute.proxy import DynamicProxy, ProxyContext, ProxyMode
 from inmanta.execute.runtime import Instance
 from inmanta.module import Project
-from inmanta.protocol import Result
 from inmanta.resources import Id, IgnoreResourceException, Resource, resource, to_id
 from inmanta.stable_api import stable_api
 from inmanta.types import ResourceVersionIdStr
@@ -78,7 +77,7 @@ class DependencyCycleException(Exception):
         return "Cycle in dependencies: %s" % self.cycle
 
 
-def upload_code(conn: protocol.SyncClient, tid: uuid.UUID, version: int, code_manager: loader.CodeManager) -> None:
+def upload_code(conn: protocol.SyncClient, code_manager: loader.CodeManager) -> None:
     res = conn.stat_files(list(code_manager.get_file_hashes()))
     if res is None or res.code != 200:
         raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
@@ -88,28 +87,6 @@ def upload_code(conn: protocol.SyncClient, tid: uuid.UUID, version: int, code_ma
         res = conn.upload_file(id=file, content=base64.b64encode(content).decode("ascii"))
         if res is None or res.code != 200:
             raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
-
-    # Example of what a source_map may look like:
-    # Type Name: mymodule::Mytype"
-    # Source Files:
-    #   /path/to/__init__.py (hash: 'abc123', module: 'inmanta_plugins.mymodule.Mytype')
-    #   /path/to/utils.py (hash: 'def456', module: 'inmanta_plugins.mymodule.Mytype')
-    #
-    # source_map = {
-    #    "mymodule::Mytype": {
-    #      'abc123': ('/path/to/__init__.py', 'inmanta_plugins.mymodule.Mytype', <requirements if any>),
-    #      'def456': ('/path/to/utils.py', 'inmanta_plugins.mymodule.Mytype', <requirements if any>)
-    #    },
-    # ...other types would be included as well
-    # }
-    source_map = {
-        resource_name: {source.hash: (source.path, source.module_name, source.requires) for source in sources}
-        for resource_name, sources in code_manager.get_types()
-    }
-
-    res = conn.upload_code_batched(tid=tid, id=version, resources=source_map)
-    if res is None or res.code != 200:
-        raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
 
 
 class Exporter:
@@ -168,7 +145,10 @@ class Exporter:
         proxies: dict[str, Sequence[ProxiedType]] = {}
         for t in types:
             if self.types is not None and t in self.types:
-                proxies[t] = [DynamicProxy.return_value(i) for i in self.types[t].get_all_instances()]
+                proxies[t] = [
+                    DynamicProxy.return_value(i, context=ProxyContext(path=f"<{i}>", mode=ProxyMode.EXPORT))
+                    for i in self.types[t].get_all_instances()
+                ]
             else:
                 proxies[t] = []
 
@@ -192,7 +172,13 @@ class Exporter:
             if len(instances) > 0:
                 for instance in instances:
                     try:
-                        res = Resource.create_from_model(self, resource_type, DynamicProxy.return_value(instance))
+                        res = Resource.create_from_model(
+                            self,
+                            resource_type,
+                            DynamicProxy.return_value(
+                                instance, context=ProxyContext(path=f"<{instance}>", mode=ProxyMode.EXPORT)
+                            ),
+                        )
                         resource_mapping[instance] = res
                         self.add_resource(res)
                     except UnknownException:
@@ -389,6 +375,7 @@ class Exporter:
         export_plugin: Optional[str] = None,
         partial_compile: bool = False,
         resource_sets_to_remove: Optional[Sequence[str]] = None,
+        allow_handler_code_update: bool = False,
     ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, ResourceState]]]:
         """
         Run the export functions. Return value for partial json export uses 0 as version placeholder.
@@ -437,6 +424,7 @@ class Exporter:
         if self.options and self.options.json:
             with open(self.options.json, "wb+") as fd:
                 fd.write(protocol.json_encode(resources).encode("utf-8"))
+
         elif (not self.failed or len(self._resources) > 0) and not no_commit:
             self._version = self.commit_resources(
                 self._version,
@@ -445,6 +433,7 @@ class Exporter:
                 partial_compile,
                 list(self._removed_resource_sets),
                 Project.get().metadata.pip,
+                allow_handler_code_update=allow_handler_code_update,
             )
             LOGGER.info("Committed resources with version %d" % self._version)
 
@@ -487,6 +476,8 @@ class Exporter:
         else:
             self._resource_state[resource.id.resource_str()] = const.ResourceState.available
 
+        resource.is_undefined = is_undefined
+
         self._resources[resource.id] = resource
 
     def resources_to_list(self) -> list[dict[str, Any]]:
@@ -500,24 +491,34 @@ class Exporter:
 
         return resources
 
-    def deploy_code(self, conn: protocol.SyncClient, tid: uuid.UUID, version: Optional[int] = None) -> None:
+    def register_code(
+        self,
+        conn: protocol.SyncClient,
+        code_manager: loader.CodeManager,
+    ) -> None:
         """Deploy code to the server"""
-        if version is None:
-            version = int(time.time())
 
-        code_manager = loader.CodeManager()
         LOGGER.info("Sending resources and handler source to server")
+
+        types = set()
 
         # Load both resource definition and handlers
         for type_name, resource_definition in resource.get_resources():
             code_manager.register_code(type_name, resource_definition)
+            types.add(type_name)
 
         for type_name, handler_definition in Commander.get_providers():
             code_manager.register_code(type_name, handler_definition)
+            types.add(type_name)
 
-        LOGGER.info("Uploading source files")
+        # Register all reference and mutator code to all resources. This is very coarse grained and can be optimized once
+        # usage patterns have been established.
+        for resource_type in types:
+            for type_name, obj in itertools.chain(references.reference.get_references(), references.mutator.get_mutators()):
+                if not type_name.startswith("core::"):
+                    code_manager.register_code(resource_type, obj)
 
-        upload_code(conn, tid, version, code_manager)
+        upload_code(conn, code_manager)
 
     def commit_resources(
         self,
@@ -527,6 +528,7 @@ class Exporter:
         partial_compile: bool,
         resource_sets_to_remove: list[str],
         pip_config: PipConfig,
+        allow_handler_code_update: bool = False,
     ) -> int:
         """
         Commit the entire list of resources to the configuration server.
@@ -543,9 +545,10 @@ class Exporter:
 
         conn = protocol.SyncClient("compiler")
 
-        # partial exports use the same code as the version they're based on
-        if not partial_compile:
-            self.deploy_code(conn, tid, version)
+        code_manager = loader.CodeManager()
+        code_manager.build_agent_map(self._resources)
+
+        self.register_code(conn, code_manager)
 
         LOGGER.info("Uploading %d files" % len(self._file_store))
 
@@ -584,7 +587,7 @@ class Exporter:
                 else:
                     LOGGER.debug("  %s not in any resource set", rid)
 
-        def do_put(**kwargs: object) -> Result:
+        def do_put(**kwargs: object) -> protocol.Result:
             if partial_compile:
                 result = conn.put_partial(
                     tid=tid,
@@ -594,6 +597,8 @@ class Exporter:
                     resource_state=self._resource_state,
                     version_info=version_info,
                     removed_resource_sets=resource_sets_to_remove,
+                    module_version_info=code_manager.get_module_version_info(),
+                    allow_handler_code_update=allow_handler_code_update,
                     **kwargs,
                 )
             else:
@@ -606,6 +611,7 @@ class Exporter:
                     resource_state=self._resource_state,
                     version_info=version_info,
                     compiler_version=get_compiler_version(),
+                    module_version_info=code_manager.get_module_version_info(),
                     **kwargs,
                 )
             return result

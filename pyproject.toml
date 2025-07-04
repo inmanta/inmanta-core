@@ -70,3 +70,6 @@ concurrency = ["thread"]
 parallel = true
 sigterm = true
 branch = false
+
+[tool.mypy-baseline]
+sort_baseline = true

@@ -1,29 +1,31 @@
 """
-    Copyright 2017 Inmanta
+Copyright 2017 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 # pylint: disable-msg=W0613
+import builtins
 import typing
 from collections import abc
 from itertools import chain
 from string import Formatter
-from typing import Optional, TypeVar
+from typing import TYPE_CHECKING, Optional, TypeVar
 
 import inmanta.execute.dataflow as dataflow
+from inmanta import references
 from inmanta.ast import (
     AttributeException,
     DuplicateException,
@@ -35,6 +37,7 @@ from inmanta.ast import (
     RuntimeException,
     TypeAnchor,
     TypingException,
+    UnexpectedReference,
 )
 from inmanta.ast.attribute import RelationAttribute
 from inmanta.ast.statements import (
@@ -61,12 +64,6 @@ from inmanta.execute.runtime import (
 from inmanta.execute.util import Unknown
 
 from . import ReferenceStatement
-
-try:
-    from typing import TYPE_CHECKING
-except ImportError:
-    TYPE_CHECKING = False
-
 
 if TYPE_CHECKING:
     from inmanta.ast.statements.generator import WrappedKwargs  # noqa: F401
@@ -257,7 +254,7 @@ class SetAttribute(AssignStatement, Resumer):
         instance = self.instance.execute(requires, resolver, queue)
         if not isinstance(instance, Instance):
             raise TypingException(
-                self, f"The object at {self.instance} is not an Entity but a {type(instance)} with value {instance}"
+                self, f"The object at {self.instance} is not an Entity but a {builtins.type(instance)} with value {instance}"
             )
         var = instance.get_attribute(self.attribute_name)
         if self.list_only and not var.is_multi():
@@ -537,7 +534,7 @@ class ShortIndexLookup(IndexLookup):
                 self, "short index lookup is only possible on bi-drectional relations, %s is unidirectional" % relation
             )
 
-        self.type = relation.type
+        self.type = relation.type_internal
 
         self.type.lookup_index(
             list(
@@ -573,6 +570,31 @@ class FormattedString(ReferenceStatement):
         super().__init__(variables)
         self._format_string = format_string
 
+    def _resolve_value(
+        self,
+        name: str,
+        expression: "Reference",
+        requires: dict[object, object],
+        resolver: Resolver,
+        queue: QueueScheduler,
+    ) -> object | Unknown:
+        """
+        Resolve value expression, then validate and optionally coerce value.
+        """
+        value: object = expression.execute(requires, resolver, queue)
+        if isinstance(value, Unknown):
+            return Unknown(self)
+        reference: Optional[references.Reference] = references.unwrap_reference(value)
+        if reference is not None:
+            raise UnexpectedReference(
+                stmt=self,
+                reference=reference,
+                message=(f"Encountered reference in string format for variable `{name}`. This is not supported."),
+            )
+        if isinstance(value, float) and (value - int(value)) == 0:
+            return int(value)
+        return value
+
     def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
         return dataflow.NodeStub("StringFormat.get_node() placeholder for %s" % self).reference()
 
@@ -594,12 +616,9 @@ class StringFormat(FormattedString):
     def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         result_string = self._format_string
         for _var, str_id in self._variables:
-            value = _var.execute(requires, resolver, queue)
+            value: object | Unknown = self._resolve_value(str_id, _var, requires, resolver, queue)
             if isinstance(value, Unknown):
-                return Unknown(self)
-            if isinstance(value, float) and (value - int(value)) == 0:
-                value = int(value)
-
+                return value
             result_string = result_string.replace(str_id, str(value))
 
         return result_string
@@ -648,11 +667,9 @@ class StringFormatV2(FormattedString):
 
         kwargs = {}
         for _var, full_name in self._variables.items():
-            value = _var.execute(requires, resolver, queue)
+            value: object | Unknown = self._resolve_value(full_name, _var, requires, resolver, queue)
             if isinstance(value, Unknown):
-                return Unknown(self)
-            if isinstance(value, float) and (value - int(value)) == 0:
-                value = int(value)
+                return value
             kwargs[full_name] = value
 
         try:

@@ -1,19 +1,19 @@
 """
-    Copyright 2023 Inmanta
+Copyright 2023 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import asyncio
@@ -317,12 +317,6 @@ class Scheduler:
         """
         Add task that is currently executing to `self._executing_tasks`.
         """
-        # requires: RequiresProvidesMapping = dataclasses.field(default_factory=RequiresProvidesMapping)
-        # # types per agent keeps track of which resource types live on which agent by doing a reference count
-        # # the dict is agent_name -> resource_type -> resource_count
-        # types_per_agent: dict[str, dict["ResourceType", int]] = dataclasses.field(
-        #     default_factory=lambda: defaultdict(lambda: defaultdict(lambda: 0))
-        # )
         if action in self._executing_tasks and self._executing_tasks[action]:
             LOGGER.warning("Multiple instances of background task %s are executing simultaneously", action.__name__)
         self._executing_tasks[action].append(task)
@@ -559,7 +553,7 @@ def _custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
 
     from inmanta.data.model import BaseModel
 
-    if isinstance(o, BaseModel):
+    if isinstance(o, (BaseModel, pydantic.BaseModel)):
         return o.model_dump(by_alias=True)
 
     if dataclasses.is_dataclass(o) and not isinstance(o, type):
@@ -845,7 +839,7 @@ def ensure_event_loop() -> asyncio.AbstractEventLoop:
     """
     try:
         # nothing needs to be done if this thread already has an event loop
-        return asyncio.get_event_loop()
+        return asyncio.get_running_loop()
     except RuntimeError:
         # asyncio.set_event_loop sets the event loop for this thread only
         new_loop = asyncio.new_event_loop()

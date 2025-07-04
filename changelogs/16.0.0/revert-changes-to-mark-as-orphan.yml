@@ -1,0 +1,4 @@
+---
+description: Revert changes to ResourcePersistentState.mark_as_orphan
+change-type: patch
+destination-branches: [master]
