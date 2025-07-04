@@ -53,6 +53,8 @@ from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes, HandlerType, JsonType, MethodType, ReturnTypes
 
 if TYPE_CHECKING:
+    from inmanta.protocol.rest.client import RESTClient
+
     from .endpoints import CallTarget
 
 
@@ -1101,7 +1103,7 @@ class Result:
     A result of a method call
     """
 
-    def __init__(self, code: int = 0, result: Optional[JsonType] = None, client=None) -> None:
+    def __init__(self, client: "RESTClient" | None = None, code: int = 0, result: Optional[JsonType] = None) -> None:
         self._result = result
         self.code = code
         self._client = client
@@ -1147,11 +1149,14 @@ class Result:
         """
         self._callback = fnc
 
-    async def all(self, client, env, envelope_key="data") -> AsyncIterator[types.JsonType]:
+    async def all(self, env: str, envelope_key: str = "data") -> AsyncIterator[types.JsonType]:
         result = self
         while result.code == 200:
             if not result.result:
                 return
+
+            if not self._client:
+                raise Exception("Panic!")
 
             page = result.result.get(envelope_key, [])
             for item in page:
@@ -1162,10 +1167,10 @@ class Result:
             if not next_link_url:
                 return
 
-            server_url = client._transport_instance._get_client_config()
+            server_url = self._client._get_client_config()
             url = server_url + next_link_url
             request = HTTPRequest(url=url, method="GET", headers={"X-Inmanta-tid": env})
-            result = client._transport_instance._decode_response(await client._transport_instance.client.fetch(request), client)
+            result = self._client._decode_response(await self._client.client.fetch(request))
 
 
 class SessionManagerInterface:

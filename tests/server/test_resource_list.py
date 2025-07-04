@@ -623,11 +623,10 @@ async def test_client_all_pages(server, client, env_with_resources):
     all_resources = result.result["data"]
     assert len(all_resources) == 6
 
-    page_size = 4
-    result = await client.resource_list(tid=env.id, limit=page_size)
+    result = await client.resource_list(tid=env.id, limit=2)
 
     idx = 0
-    async for item in result.all(client, env=str(env.id)):
+    async for item in result.all(env=str(env.id)):
         assert item == all_resources[idx]
         idx += 1
     assert idx == len(all_resources)
