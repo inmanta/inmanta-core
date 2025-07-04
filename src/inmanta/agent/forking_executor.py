@@ -72,6 +72,7 @@ import os
 import pathlib
 import socket
 import threading
+import traceback
 import typing
 import uuid
 from asyncio import Future, transports
@@ -97,7 +98,7 @@ import inmanta.types
 import inmanta.util
 from inmanta import const, tracing
 from inmanta.agent import executor, resourcepool
-from inmanta.agent.executor import DeployReport, FailedInmantaModules, GetFactReport
+from inmanta.agent.executor import DeployReport, FailedInmantaModules, GetFactReport, ModuleLoadingException
 from inmanta.agent.resourcepool import PoolManager, PoolMember
 from inmanta.const import LOGGER_NAME_EXECUTOR
 from inmanta.protocol.ipc_light import (
@@ -443,7 +444,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
             except Exception as e:
                 logger.info("Failed to import source: %s", module_source.metadata.name, exc_info=True)
                 inmanta_module_name = module_source.get_inmanta_module_name()
-                failed[inmanta_module_name][module_source.metadata.name] = e
+                failed[inmanta_module_name][module_source.metadata.name] = ModuleImportException(e, module_source.metadata.name)
 
         return failed
 
@@ -602,9 +603,6 @@ class MPProcess(PoolManager[executor.ExecutorId, executor.ExecutorId, "MPExecuto
         # Pure for debugging purpose
         self.executor_virtual_env = venv
 
-        # Set by init, keeps state for the underlying executors
-        self._failed_modules: FailedInmantaModules
-
         # threadpool for cleanup jobs
         self.worker_threadpool = worker_threadpool
 
@@ -748,9 +746,6 @@ class MPExecutor(executor.Executor, resourcepool.PoolMember[executor.ExecutorId]
 
         # close_task
         self.stop_task: Awaitable[None]
-
-        # Set by init and parent class
-        self.failed_modules: FailedInmantaModules = process._failed_modules
 
     async def call(self, method: IPCMethod[ExecutorContext, ReturnType]) -> ReturnType:
         try:
@@ -932,15 +927,22 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
                     venv_touch_interval=self.venv_checkup_interval,
                 )
             )
+            if failed_modules:
+                raise ModuleLoadingException(
+                    failed_modules=failed_modules,
+                )
             LOGGER.debug(
                 "Child initialized (pid: %s) for %s",
                 executor.process.pid,
                 self.render_id(blueprint),
             )
-            executor._failed_modules = failed_modules
             return executor
+        except ModuleLoadingException:
+            # Make sure to clean up the executor process if its initialization fails.
+            await executor.request_shutdown()
+            raise
         except Exception:
-            # Make sure to cleanup the executor process if its initialization fails.
+            # Make sure to clean up the executor process if its initialization fails.
             await executor.request_shutdown()
             raise Exception(
                 f"Failed to initialize scheduler process (pid: {executor.process.pid}) for {self.render_id(blueprint)}"
@@ -1051,6 +1053,7 @@ class MPManager(
             which resource types it can act on and all necessary information to install the relevant
             handler code in its venv. Must have at least one element.
         :return: An Executor instance
+        :raise ModuleLoadingException: If the executor couldn't successfully load all plugin code.
         """
         if not code:
             raise ValueError(f"{self.__class__.__name__}.get_executor() expects at least one resource install specification")
@@ -1059,10 +1062,7 @@ class MPManager(
         executor_id = executor.ExecutorId(agent_name, agent_uri, blueprint)
 
         # Use pool manager
-        my_executor = await self.get(executor_id)
-
-        # FIXME: recovery. If loading failed, we currently never rebuild https://github.com/inmanta/inmanta-core/issues/7695
-        return my_executor
+        return await self.get(executor_id)
 
     async def create_member(self, executor_id: executor.ExecutorId) -> MPExecutor:
         try:
@@ -1120,3 +1120,13 @@ class MPManager(
         children = list(self.agent_map[agent_name])
         await asyncio.gather(*(child.request_shutdown() for child in children))
         return children
+
+
+class ModuleImportException(Exception):
+    def __init__(self, base_exception: Exception, module_name: str):
+        self.message = f"Failed to import module source {module_name}:\n{str(base_exception)}.\n"
+        self.tb = "".join(traceback.format_tb(base_exception.__traceback__))
+        self.__cause__ = base_exception
+
+    def __str__(self) -> str:
+        return self.message + self.tb + "\n"

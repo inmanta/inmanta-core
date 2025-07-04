@@ -51,14 +51,7 @@ import inmanta.protocol
 import inmanta.types
 from crontab import CronTab
 from inmanta import const, resources, util
-from inmanta.const import (
-    DATETIME_MIN_UTC,
-    NAME_RESOURCE_ACTION_LOGGER,
-    UNDEPLOYABLE_NAMES,
-    AgentStatus,
-    LogLevel,
-    ResourceState,
-)
+from inmanta.const import NAME_RESOURCE_ACTION_LOGGER, AgentStatus, LogLevel, ResourceState
 from inmanta.data import model as m
 from inmanta.data import schema
 from inmanta.data.model import AuthMethod, BaseModel, PagingBoundaries, PipConfig, api_boundary_datetime_normalizer
@@ -3305,7 +3298,7 @@ class Agent(BaseDocument):
     :param name: The name of this agent
     :param last_failover: Moment at which the primary was last changed
     :param paused: is this agent paused (if so, skip it)
-    :param primary: what is the current active instance (if none, state is down)
+    :param primary: what is the current active instance (if none, state is down). Only relevant for the $__scheduler agent.
     :param unpause_on_resume: whether this agent should be unpaused when resuming from environment-wide halt. Used to
         persist paused state when halting.
     """
@@ -3956,7 +3949,7 @@ class LogLine(DataDocument):
         - msg: the message to write to logs (value type: str)
         - args: the args that can be passed to the logger (value type: list)
         - level: the log level of the message (value type: str, example: "CRITICAL")
-        - kwargs: the key-word args that where used to generated the log (value type: list)
+        - kwargs: the key-word args that were used to generate the log (value type: list)
         - timestamp: the time at which the LogLine was created (value type: datetime.datetime)
     """
 
@@ -4985,27 +4978,42 @@ class Resource(BaseDocument):
         cls,
         environment: uuid.UUID,
         *,
-        since: int,
-        projection: Optional[Collection[typing.LiteralString]],
+        since: Optional[int],
         connection: Optional[Connection] = None,
     ) -> list[tuple[int, list[dict[str, object]]]]:
         """
         Returns all released model versions with associated resources since (excluding) the given model version.
         Returns resources as raw dicts with the requested fields
+        :param since: The boundary version (excluding). If None, returns only the latest released version.
         """
-        resource_columns: typing.LiteralString = ", ".join(f"r.{c}" for c in projection) if projection is not None else "r.*"
+
+        boundary_query: typing.LiteralString = (
+            "SELECT $2::int AS version"
+            if since is not None
+            else f""" \
+                            SELECT MAX(version) AS version
+                            FROM {ConfigurationModel.table_name()}
+                            WHERE released=TRUE AND environment=$1
+                            """
+        )
+
         query: typing.LiteralString = f"""
-            SELECT m.version, {resource_columns}
+            WITH boundary AS (
+                {boundary_query}
+            )
+            SELECT m.version, r.resource_id, r.attributes, r.attribute_hash, r.is_undefined
             FROM {ConfigurationModel.table_name()} as m
             LEFT JOIN {cls.table_name()} as r
-                ON m.environment = r.environment AND m.version = r.model
-            WHERE m.environment = $1 AND m.version > $2 AND m.released=true
+                ON m.environment=r.environment AND m.version=r.model
+            WHERE m.environment=$1
+                AND m.version > (SELECT version FROM boundary) - 1
+                AND m.released is TRUE
             ORDER BY m.version ASC
         """
+        query_values = [cls._get_value(environment), since] if since is not None else [cls._get_value(environment)]
         resource_records = await cls._fetch_query(
             query,
-            cls._get_value(environment),
-            cls._get_value(since),
+            *query_values,
             connection=connection,
         )
         result: list[tuple[int, list[dict[str, object]]]] = []
@@ -5016,8 +5024,6 @@ class Resource(BaseDocument):
                     # left join produced no resources
                     continue
                 resource: dict[str, object] = dict(raw_resource)
-                if projection is not None:
-                    assert set(projection) <= resource.keys()
                 parsed_resources.append(resource)
             result.append((version, parsed_resources))
         return result
@@ -5849,207 +5855,6 @@ class ConfigurationModel(BaseDocument):
         """
         return self.skipped_for_undeployable
 
-    @classmethod
-    async def get_last_deployed_and_neg_increment(
-        cls, environment: uuid.UUID, version: int, *, connection: Optional[Connection] = None
-    ) -> tuple[set[ResourceIdStr], dict[ResourceIdStr, datetime.datetime]]:
-        outset, negative, last_deployed = await cls.get_increment_and_last_deployed(environment, version, connection=connection)
-        return negative, last_deployed
-
-    @classmethod
-    async def get_increment(
-        cls, environment: uuid.UUID, version: int, *, connection: Optional[Connection] = None
-    ) -> tuple[set[ResourceIdStr], set[ResourceIdStr]]:
-        outset, negative, last_deployed = await cls.get_increment_and_last_deployed(environment, version, connection=connection)
-        return outset, negative
-
-    @classmethod
-    async def get_increment_and_last_deployed(
-        cls, environment: uuid.UUID, version: int, *, connection: Optional[Connection] = None
-    ) -> tuple[set[ResourceIdStr], set[ResourceIdStr], dict[ResourceIdStr, datetime.datetime]]:
-        """
-        Find resources incremented by this version compared to deployment state transitions per resource
-
-        available -> next version
-        not present -> increment
-        skipped -> increment
-        unavailable -> increment
-        error -> increment
-        Deployed and same hash -> not increment
-        deployed and different hash -> increment
-
-        We return a lot of data to not have to repeat the main query for different datapaths as a triple consisting of:
-        - outset: resources that require a deploy (e.g. different hash / responding to an event...)
-        - negative: resources that do not require a deploy
-        - last_deployed: mapping of rid -> last_deploy
-        """
-        # Depends on deploying
-        projection_a_resource: list[typing.LiteralString] = [
-            "resource_id",
-            "attribute_hash",
-            "status",
-        ]
-        projection_a_state: list[typing.LiteralString] = [
-            "last_success",
-            "last_produced_events",
-            "last_deployed_attribute_hash",
-            "last_non_deploying_status",
-            "last_deploy",
-        ]
-        projection_a_attributes: list[typing.LiteralString] = ["requires", const.RESOURCE_ATTRIBUTE_SEND_EVENTS]
-        projection: list[typing.LiteralString] = ["resource_id", "status", "attribute_hash"]
-
-        # get resources for agent
-        resources = await Resource.get_resources_for_version_raw_with_persistent_state(
-            environment,
-            version,
-            projection=projection_a_resource,
-            projection_persistent=projection_a_state,
-            project_attributes=projection_a_attributes,
-            connection=connection,
-        )
-
-        # to increment
-        increment: list[abc.Mapping[str, object]] = []
-        not_increment: list[abc.Mapping[str, object]] = []
-        # todo in this version
-        work: list[abc.Mapping[str, object]] = [r for r in resources if r["status"] not in UNDEPLOYABLE_NAMES]
-
-        # start with outstanding events
-        id_to_resource = {r["resource_id"]: r for r in resources}
-        id_to_resources_all = id_to_resource
-        next: list[abc.Mapping[str, object]] = []
-        for resource in work:
-            in_increment = False
-            status = resource["last_non_deploying_status"]
-            if status in [const.ResourceState.failed.name, ResourceState.skipped.name]:
-                # Shortcut on easy includes
-                increment.append(resource)
-                continue
-            # Now outstanding events
-            last_success = resource["last_success"] or DATETIME_MIN_UTC
-            for req in resource["requires"]:
-                req_res = id_to_resource[req]
-                assert req_res is not None  # todo
-                last_produced_events = req_res["last_produced_events"]
-                if (
-                    last_produced_events is not None
-                    and last_produced_events > last_success
-                    and req_res[const.RESOURCE_ATTRIBUTE_SEND_EVENTS]
-                ):
-                    in_increment = True
-                    break
-
-            if in_increment:
-                increment.append(resource)
-            else:
-                next.append(resource)
-        work = next
-
-        # get versions
-        query = f"SELECT version FROM {cls.table_name()} WHERE environment=$1 AND released=true ORDER BY version DESC"
-        values = [cls._get_value(environment)]
-        version_records = await cls._fetch_query(query, *values, connection=connection)
-
-        versions = [record["version"] for record in version_records]
-
-        for version in versions:
-            # todo in next version
-            next = []
-
-            vresources = await Resource.get_resources_for_version_raw(environment, version, projection, connection=connection)
-            id_to_resource = {r["resource_id"]: r for r in vresources}
-
-            for res in work:
-                # not present -> increment
-                if res["resource_id"] not in id_to_resource:
-                    increment.append(res)
-                    continue
-
-                ores = id_to_resource[res["resource_id"]]
-
-                status = ores["status"]
-                # available -> next version
-                if status == ResourceState.available.name:
-                    next.append(res)
-
-                # deploying
-                # same hash -> next version
-                # different hash -> increment
-                elif status == ResourceState.deploying.name:
-                    if res["attribute_hash"] == ores["attribute_hash"]:
-                        next.append(res)
-                    else:
-                        increment.append(res)
-
-                # -> increment
-                elif status in [
-                    ResourceState.failed.name,
-                    ResourceState.cancelled.name,
-                    ResourceState.skipped_for_undefined.name,
-                    ResourceState.undefined.name,
-                    ResourceState.skipped.name,
-                    ResourceState.unavailable.name,
-                ]:
-                    increment.append(res)
-
-                elif status == ResourceState.deployed.name:
-                    if res["attribute_hash"] == ores["attribute_hash"]:
-                        #  Deployed and same hash -> not increment
-                        not_increment.append(res)
-                    else:
-                        # Deployed and different hash -> increment
-                        increment.append(res)
-                else:
-                    LOGGER.warning("Resource in unexpected state: %s, %s", ores["status"], ores["resource_version_id"])
-                    increment.append(res)
-
-            work = next
-            if not work:
-                break
-        if work:
-            increment.extend(work)
-
-        negative: set[ResourceIdStr] = {res["resource_id"] for res in not_increment}
-
-        # patch up the graph
-        # 1-include stuff for send-events.
-        # 2-adapt requires/provides to get closured set
-
-        outset: set[ResourceIdStr] = {res["resource_id"] for res in increment}
-        original_provides: dict[str, list[ResourceIdStr]] = defaultdict(list)
-        send_events: set[ResourceIdStr] = set()
-
-        # build lookup tables
-        for res in resources:
-            for req in res["requires"]:
-                original_provides[req].append(res["resource_id"])
-            if res[const.RESOURCE_ATTRIBUTE_SEND_EVENTS]:
-                send_events.add(res["resource_id"])
-
-        # recursively include stuff potentially receiving events from nodes in the increment
-        increment_work: list[ResourceIdStr] = list(outset)
-        done: set[ResourceIdStr] = set()
-        while increment_work:
-            current: ResourceIdStr = increment_work.pop()
-            if current not in send_events:
-                # not sending events, so no receivers
-                continue
-
-            if current in done:
-                continue
-            done.add(current)
-
-            provides = original_provides[current]
-            increment_work.extend(provides)
-            outset.update(provides)
-            negative.difference_update(provides)
-
-        last_deployed: dict[ResourceIdStr, datetime.datetime] = {
-            rid: r["last_deploy"] for rid, r in id_to_resources_all.items()
-        }
-        return outset, negative, last_deployed
-
     async def recalculate_total(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
         Make the total field of this ConfigurationModel in-line with the number
@@ -6289,6 +6094,7 @@ class User(BaseDocument):
     username: str
     password_hash: str
     auth_method: AuthMethod
+    is_admin: bool = False
 
     @classmethod
     def table_name(cls) -> str:
@@ -6298,7 +6104,47 @@ class User(BaseDocument):
         return "inmanta_user"
 
     def to_dao(self) -> m.User:
-        return m.User(username=self.username, auth_method=self.auth_method)
+        return m.User(username=self.username, auth_method=self.auth_method, is_admin=self.is_admin)
+
+    @classmethod
+    async def set_is_admin(cls, username: str, is_admin: bool) -> None:
+        query = f"UPDATE {cls.table_name()} SET is_admin=$1 WHERE username=$2 RETURNING 1"
+        result = await cls._fetch_query(query, is_admin, username)
+        if not result:
+            # No user exists with the given username
+            raise KeyError()
+
+    @classmethod
+    async def list_users_with_roles(cls) -> list[m.UserWithRoles]:
+        query = f"""
+            SELECT
+                u.username,
+                u.auth_method,
+                u.is_admin,
+                role_a.environment AS role_environment,
+                r.name AS role_name
+            FROM {cls.table_name()} AS u
+                LEFT JOIN role_assignment AS role_a ON role_a.user_id=u.id
+                LEFT JOIN {Role.table_name()} AS r ON r.id=role_a.role_id
+            ORDER BY u.username ASC, role_a.environment ASC, r.name ASC
+        """
+        async with cls.get_connection() as con:
+            records = await con.fetch(query)
+        result = {}
+        for username, group_elem_iterator in itertools.groupby(records, lambda r: r["username"]):
+            records_for_group = list(group_elem_iterator)
+            roles = [
+                m.RoleAssignment(environment=record["role_environment"], role=record["role_name"])
+                for record in records_for_group
+                if record["role_environment"] is not None and record["role_name"] is not None
+            ]
+            result[username] = m.UserWithRoles(
+                username=records_for_group[0]["username"],
+                auth_method=records_for_group[0]["auth_method"],
+                is_admin=records_for_group[0]["is_admin"],
+                roles=roles,
+            )
+        return list(result.values())
 
 
 class RoleStillAssignedException(Exception):
@@ -6334,7 +6180,7 @@ class Role(BaseDocument):
             )
         """
         try:
-            await cls._execute_query(assign_role_query, username, role_assignment.environment, role_assignment.name)
+            await cls._execute_query(assign_role_query, username, role_assignment.environment, role_assignment.role)
         except (asyncpg.NotNullViolationError, asyncpg.ForeignKeyViolationError):
             raise CannotAssignRoleException()
 
@@ -6350,7 +6196,7 @@ class Role(BaseDocument):
                   AND role_id=(SELECT id FROM {cls.table_name()} WHERE name=$3)
             RETURNING *
         """
-        result = await cls._fetchrow(unassign_role_query, username, role_assignment.environment, role_assignment.name)
+        result = await cls._fetchrow(unassign_role_query, username, role_assignment.environment, role_assignment.role)
         if result is None:
             raise KeyError()
 
@@ -6364,7 +6210,7 @@ class Role(BaseDocument):
             WHERE u.username=$1
             ORDER BY ras.environment, rol.name
         """
-        return [m.RoleAssignment(environment=r["environment"], name=r["name"]) for r in await cls._fetch_query(query, username)]
+        return [m.RoleAssignment(environment=r["environment"], role=r["name"]) for r in await cls._fetch_query(query, username)]
 
     @classmethod
     async def ensure_roles(cls, roles: Sequence[str]) -> None:

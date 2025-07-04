@@ -29,7 +29,7 @@ import utils
 from inmanta import config, const, data
 from inmanta.data.model import AuthMethod, RoleAssignment
 from inmanta.protocol import common, rest
-from inmanta.protocol.auth import decorators, policy_engine, providers
+from inmanta.protocol.auth import auth, decorators, policy_engine, providers
 from inmanta.protocol.decorators import handle, method, typedmethod
 from inmanta.server import config as server_config
 from inmanta.server import protocol
@@ -78,34 +78,45 @@ async def server_with_test_slice(
     policy_engine.path_opa_executable.set(path_policy_engine_executable)
 
     # Define the TestSlice and its API endpoints
-    @decorators.auth(auth_label="test", read_only=True)
-    @typedmethod(path="/read-only", operation="GET", client_types=["api", "compiler"])
+    @decorators.auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=True)
+    @typedmethod(path="/read-only", operation="GET", client_types=[const.ClientType.api, const.ClientType.compiler])
     def read_only_method() -> None:  # NOQA
         pass
 
-    @decorators.auth(auth_label="test", read_only=False, environment_param="env")
-    @typedmethod(path="/environment-scoped", operation="POST", client_types=["api"])
+    @decorators.auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False, environment_param="env")
+    @typedmethod(path="/environment-scoped", operation="POST", client_types=[const.ClientType.api])
     def environment_scoped_method(env: uuid.UUID) -> None:  # NOQA
         pass
 
-    @decorators.auth(auth_label="user", read_only=False, environment_param="env")
-    @typedmethod(path="/user-endpoint", operation="POST", client_types=["api"])
+    @decorators.auth(auth_label=const.CoreAuthorizationLabel.TEST_2, read_only=False, environment_param="env")
+    @typedmethod(path="/user-endpoint", operation="POST", client_types=[const.ClientType.api])
     def user_method(env: uuid.UUID) -> None:  # NOQA
         pass
 
-    @decorators.auth(auth_label="admin", read_only=False)
-    @typedmethod(path="/admin-only", operation="POST", client_types=["api"])
+    @decorators.auth(auth_label=const.CoreAuthorizationLabel.TEST_3, read_only=False)
+    @typedmethod(path="/admin-only", operation="POST", client_types=[const.ClientType.api])
     def admin_only_method() -> None:  # NOQA
         pass
 
-    @decorators.auth(auth_label="test", read_only=False)
-    @typedmethod(path="/enforce-auth-disabled", operation="GET", client_types=["api"], enforce_auth=False)
+    @decorators.auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+    @typedmethod(path="/enforce-auth-disabled", operation="GET", client_types=[const.ClientType.api], enforce_auth=False)
     def enforce_auth_disabled_method() -> None:  # NOQA
         pass
 
-    @decorators.auth(auth_label="test", read_only=False)
-    @typedmethod(path="/method-with-call-context", operation="GET", client_types=["api"])
-    def call_context_method(arg1: uuid.UUID, arg2: str) -> None:  # NOQA
+    async def _idempotent_getter(val: uuid.UUID, metadata: dict) -> uuid.UUID:
+        """
+        Getter that can be passed to the ArgOption constructor that doesn't alter the value.
+        """
+        return val
+
+    @decorators.auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+    @typedmethod(
+        path="/method-with-call-context",
+        operation="GET",
+        client_types=[const.ClientType.api],
+        arg_options={"tid": common.ArgOption(header=const.INMANTA_MT_HEADER, reply_header=True, getter=_idempotent_getter)},
+    )
+    def call_context_method(tid: uuid.UUID, arg1: uuid.UUID, arg2: str) -> None:  # NOQA
         pass
 
     class TestSlice(protocol.ServerSlice):
@@ -131,7 +142,7 @@ async def server_with_test_slice(
 
         @handle(call_context_method, test="arg1")
         async def handle_call_context_method(
-            self, call_context: common.CallContext, test: uuid.UUID, arg2: str
+            self, call_context: common.CallContext, tid: uuid.UUID, test: uuid.UUID, arg2: str
         ) -> None:  # NOQA
             return
 
@@ -146,6 +157,17 @@ async def server_with_test_slice(
     # Stop the server
     await test_slice.stop()
     await rs.stop()
+
+
+async def create_client_for_user(client, username: str, password: str) -> protocol.Client:
+    """
+    Create a client for the given user that uses a token containing the roles
+    the user has at the moment this method is called.
+    """
+    result = await client.login(username=username, password=password)
+    assert result.code == 200
+    config.Config.set("client_rest_transport", "token", result.result["data"]["token"])
+    return protocol.Client("client")
 
 
 @pytest.mark.parametrize(
@@ -174,15 +196,15 @@ async def server_with_test_slice(
         # they have the read-write role on that environment.
         allow if {
             request_environment != null
-            input.token["urn:inmanta:roles"][request_environment] == "read-write"
+            "read-write" in input.token["urn:inmanta:roles"][request_environment]
         }
 
-        # Users with the user role in a given environment can execute API endpoints
-        # with auth_label="user" in that environment.
+        # Users with the test2 role in a given environment can execute API endpoints
+        # with auth_label="test2" in that environment.
         allow if {
-            endpoint_data.auth_label == "user"
+            endpoint_data.auth_label == "test2"
             request_environment != null
-            input.token["urn:inmanta:roles"][request_environment] == "user"
+            "user" in input.token["urn:inmanta:roles"][request_environment]
         }
 
         # Users marked as is-admin can execute any API endpoint.
@@ -198,7 +220,7 @@ async def test_policy_evaluation(server_with_test_slice: protocol.Server) -> Non
     """
     env_id = "11111111-1111-1111-1111-111111111111"
 
-    client = utils.get_auth_client(env_to_role_dct={env_id: "read-only"}, is_admin=False)
+    client = utils.get_auth_client(env_to_role_dct={env_id: ["read-only"]}, is_admin=False)
     result = await client.read_only_method()
     assert result.code == 200
     result = await client.environment_scoped_method(env_id)
@@ -208,7 +230,7 @@ async def test_policy_evaluation(server_with_test_slice: protocol.Server) -> Non
     result = await client.admin_only_method()
     assert result.code == 403
 
-    client = utils.get_auth_client(env_to_role_dct={env_id: "read-write"}, is_admin=False)
+    client = utils.get_auth_client(env_to_role_dct={env_id: ["read-write"]}, is_admin=False)
     result = await client.read_only_method()
     assert result.code == 200
     result = await client.environment_scoped_method(env_id)
@@ -218,7 +240,7 @@ async def test_policy_evaluation(server_with_test_slice: protocol.Server) -> Non
     result = await client.admin_only_method()
     assert result.code == 403
 
-    client = utils.get_auth_client(env_to_role_dct={env_id: "user"}, is_admin=False)
+    client = utils.get_auth_client(env_to_role_dct={env_id: ["user"]}, is_admin=False)
     result = await client.read_only_method()
     assert result.code == 200
     result = await client.environment_scoped_method(env_id)
@@ -347,7 +369,7 @@ async def test_input_for_policy_engine(server_with_test_slice: protocol.Server, 
     monkeypatch.setattr(policy_engine.PolicyEngine, "does_satisfy_access_policy", save_input_data)
 
     env_id = "11111111-1111-1111-1111-111111111111"
-    client = utils.get_auth_client(env_to_role_dct={env_id: "read-write"}, is_admin=False)
+    client = utils.get_auth_client(env_to_role_dct={env_id: ["read-write"]}, is_admin=False)
     result = await client.environment_scoped_method(env_id)
     assert result.code == 200
     assert input_policy_engine is not None
@@ -363,7 +385,7 @@ async def test_input_for_policy_engine(server_with_test_slice: protocol.Server, 
     assert "token" in input_policy_engine["input"]
     token = input_policy_engine["input"]["token"]
     assert token["urn:inmanta:ct"] == ["api"]
-    assert token[const.INMANTA_ROLES_URN] == {env_id: "read-write"}
+    assert token[const.INMANTA_ROLES_URN] == {env_id: ["read-write"]}
     assert token[const.INMANTA_IS_ADMIN_URN] is False
 
     client = utils.get_auth_client(env_to_role_dct={}, is_admin=True)
@@ -390,18 +412,18 @@ async def test_policy_engine_data() -> None:
     authorization metadata about the endpoints, is correct.
     """
 
-    @decorators.auth(auth_label="test", read_only=True)
-    @typedmethod(path="/read-only", operation="GET", client_types=["api"])
+    @decorators.auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=True)
+    @typedmethod(path="/read-only", operation="GET", client_types=[const.ClientType.api])
     def test_read_only() -> None:  # NOQA
         pass
 
-    @decorators.auth(auth_label="other-test", read_only=False, environment_param="tid")
-    @typedmethod(path="/read-write", operation="POST", client_types=["api", "agent"])
+    @decorators.auth(auth_label=const.CoreAuthorizationLabel.TEST_2, read_only=False, environment_param="tid")
+    @typedmethod(path="/read-write", operation="POST", client_types=[const.ClientType.api, const.ClientType.agent])
     def test_read_write(tid: uuid.UUID) -> None:  # NOQA
         pass
 
-    @decorators.auth(auth_label="other-test2", read_only=False, environment_param="tid")
-    @typedmethod(path="/read-write2/<tid>", operation="POST", client_types=["api", "agent"])
+    @decorators.auth(auth_label=const.CoreAuthorizationLabel.TEST_3, read_only=False, environment_param="tid")
+    @typedmethod(path="/read-write2/<tid>", operation="POST", client_types=[const.ClientType.api, const.ClientType.agent])
     def test_param(tid: uuid.UUID) -> None:  # NOQA
         pass
 
@@ -417,7 +439,7 @@ async def test_policy_engine_data() -> None:
     endpoint_id = "POST /api/v1/read-write"
     assert endpoint_id in data["endpoints"]
     read_write_method_metadata = data["endpoints"][endpoint_id]
-    assert read_write_method_metadata["auth_label"] == "other-test"
+    assert read_write_method_metadata["auth_label"] == "test2"
     assert read_write_method_metadata["read_only"] is False
     assert read_write_method_metadata["client_types"] == ["api", "agent"]
     assert read_write_method_metadata["environment_param"] == "tid"
@@ -425,7 +447,7 @@ async def test_policy_engine_data() -> None:
     endpoint_id = "POST /api/v1/read-write2/<tid>"
     assert endpoint_id in data["endpoints"]
     read_write_method_metadata = data["endpoints"][endpoint_id]
-    assert read_write_method_metadata["auth_label"] == "other-test2"
+    assert read_write_method_metadata["auth_label"] == "test3"
     assert read_write_method_metadata["read_only"] is False
     assert read_write_method_metadata["client_types"] == ["api", "agent"]
     assert read_write_method_metadata["environment_param"] == "tid"
@@ -507,48 +529,48 @@ async def test_auth_annotation() -> None:
     Validate whether the logic behind the @auth annotation works correctly.
     """
 
-    @decorators.auth(auth_label="label1", read_only=True, environment_param="id")
+    @decorators.auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=True, environment_param="id")
     @method(path="/test1/<id>", operation="GET")
     def method_1(id: str) -> None:
         pass
 
-    @decorators.auth(auth_label="label2", read_only=False)
+    @decorators.auth(auth_label=const.CoreAuthorizationLabel.TEST_2, read_only=False)
     @method(path="/test2", operation="POST", client_types=[const.ClientType.api, const.ClientType.agent])
     def method_2(id: str) -> None:
         pass
 
-    @decorators.auth(auth_label="label3", read_only=True, environment_param="id")
+    @decorators.auth(auth_label=const.CoreAuthorizationLabel.TEST_3, read_only=True, environment_param="id")
     @typedmethod(path="/test3/<id>", operation="GET")
     def method_3(id: str) -> None:
         pass
 
-    @decorators.auth(auth_label="label4", read_only=False)
+    @decorators.auth(auth_label=const.CoreAuthorizationLabel.TEST_4, read_only=False)
     @typedmethod(path="/test4", operation="POST", client_types=[const.ClientType.api, const.ClientType.agent])
     def method_4(id: str) -> None:
         pass
 
     data: dict[str, object] = common.MethodProperties.get_open_policy_agent_data()
     assert data["endpoints"]["GET /api/v1/test1/<id>"] == {
-        "client_types": [const.ClientType.api],
-        "auth_label": "label1",
+        "client_types": ["api"],
+        "auth_label": "test",
         "read_only": True,
         "environment_param": "id",
     }
     assert data["endpoints"]["POST /api/v1/test2"] == {
-        "client_types": [const.ClientType.api, const.ClientType.agent],
-        "auth_label": "label2",
+        "client_types": ["api", "agent"],
+        "auth_label": "test2",
         "read_only": False,
         "environment_param": None,
     }
     assert data["endpoints"]["GET /api/v1/test3/<id>"] == {
-        "client_types": [const.ClientType.api],
-        "auth_label": "label3",
+        "client_types": ["api"],
+        "auth_label": "test3",
         "read_only": True,
         "environment_param": "id",
     }
     assert data["endpoints"]["POST /api/v1/test4"] == {
-        "client_types": [const.ClientType.api, const.ClientType.agent],
-        "auth_label": "label4",
+        "client_types": ["api", "agent"],
+        "auth_label": "test4",
         "read_only": False,
         "environment_param": None,
     }
@@ -591,18 +613,19 @@ async def test_get_input_for_policy_engine(capture_input_for_policy_engine: Capt
     Verify that the input, provided to the policy engine, looks as expected.
     """
     env_id = str(uuid.uuid4())
-    client = utils.get_auth_client(env_to_role_dct={env_id: "test"}, is_admin=False, client_types=[const.ClientType.api])
+    client = utils.get_auth_client(env_to_role_dct={env_id: ["test"]}, is_admin=False, client_types=[const.ClientType.api])
 
+    tid = uuid.uuid4()
     arg1 = uuid.uuid4()
     arg2 = "test"
     assert capture_input_for_policy_engine.value is None
-    result = await client.call_context_method(arg1, arg2)
+    result = await client.call_context_method(tid=tid, arg1=arg1, arg2=arg2)
     assert result.code == 200
     pe_input = capture_input_for_policy_engine.value
     assert pe_input["input"]["request"]["endpoint_id"] == "GET /api/v1/method-with-call-context"
-    assert pe_input["input"]["request"]["parameters"] == {"arg1": arg1, "arg2": arg2}
+    assert pe_input["input"]["request"]["parameters"] == {const.INMANTA_MT_HEADER: tid, "arg1": arg1, "arg2": arg2}
     assert pe_input["input"]["token"]["urn:inmanta:ct"] == ["api"]
-    assert pe_input["input"]["token"][const.INMANTA_ROLES_URN] == {env_id: "test"}
+    assert pe_input["input"]["token"][const.INMANTA_ROLES_URN] == {env_id: ["test"]}
     assert pe_input["input"]["token"][const.INMANTA_IS_ADMIN_URN] is False
 
 
@@ -625,7 +648,7 @@ async def test_get_input_for_policy_engine(capture_input_for_policy_engine: Capt
 
         # Allow access if the user has the role a_role.
         allow if {
-            input.token["urn:inmanta:roles"][request_environment] == "a_role"
+            "a_role" in input.token["urn:inmanta:roles"][request_environment]
         }
 
         # Allow access to admin user.
@@ -665,21 +688,26 @@ async def test_role_assignment(server: protocol.Server, client) -> None:
         )
         await user.insert()
 
-    async def create_client_for_user(username: str, password: str) -> protocol.Client:
-        """
-        Create a client for the given user that uses a token containing the roles
-        the user has at the moment this method is called.
-        """
-        result = await client.login(username=username, password=password)
-        assert result.code == 200
-        config.Config.set("client_rest_transport", "token", result.result["data"]["token"])
-        return protocol.Client("client")
-
     async def verify_role_assignment(username: str, expected_assignments: list[RoleAssignment]) -> None:
         result = await admin_client.list_roles_for_user(username=username)
         assert result.code == 200
-        actual_assignments = [RoleAssignment(environment=r["environment"], name=r["name"]) for r in result.result["data"]]
+        actual_assignments = [RoleAssignment(environment=r["environment"], role=r["role"]) for r in result.result["data"]]
         assert actual_assignments == expected_assignments
+
+    async def verify_roles_on_list_user(expected_assignments: dict[str, list[RoleAssignment]]) -> None:
+        """
+        Assert that the role assignments returned by the list_users API endpoint correspond to the
+        role assignments given in expected_assignments.
+
+        :param expected_assignments: The expected role assignments. Maps the username to the list of role assignments.
+        """
+        result = await admin_client.list_users()
+        assert result.code == 200
+        actual_assignments = {
+            user["username"]: [RoleAssignment(environment=uuid.UUID(r["environment"]), role=r["role"]) for r in user["roles"]]
+            for user in result.result["data"]
+        }
+        assert expected_assignments == actual_assignments
 
     # Verify initial state
     for username in [username1, username2]:
@@ -687,9 +715,9 @@ async def test_role_assignment(server: protocol.Server, client) -> None:
         assert result.code == 200
         assert not result.result["data"]
 
-        client = await create_client_for_user(username, password)
+        client_for_user = await create_client_for_user(client, username, password)
         for env_id in [env1_id, env2_id]:
-            result = await client.environment_get(env_id)
+            result = await client_for_user.environment_get(env_id)
             assert result.code == 403
 
     result = await admin_client.list_roles()
@@ -714,18 +742,21 @@ async def test_role_assignment(server: protocol.Server, client) -> None:
 
     # Verify role assignment
     expected_role_assignments_username1 = [
-        RoleAssignment(environment=env1_id, name="a_role"),
-        RoleAssignment(environment=env2_id, name="a_role"),
+        RoleAssignment(environment=env1_id, role="a_role"),
+        RoleAssignment(environment=env2_id, role="a_role"),
     ]
     await verify_role_assignment(username=username1, expected_assignments=expected_role_assignments_username1)
-    expected_role_assignments_username2 = [RoleAssignment(environment=env1_id, name="a_role")]
+    expected_role_assignments_username2 = [RoleAssignment(environment=env1_id, role="a_role")]
     await verify_role_assignment(username=username2, expected_assignments=expected_role_assignments_username2)
+    await verify_roles_on_list_user(
+        expected_assignments={username1: expected_role_assignments_username1, username2: expected_role_assignments_username2}
+    )
 
-    user1_client = await create_client_for_user(username=username1, password=password)
+    user1_client = await create_client_for_user(client, username=username1, password=password)
     for env_id in [env1_id, env2_id]:
         result = await user1_client.list_notifications(tid=env_id)
         assert result.code == 200
-    user2_client = await create_client_for_user(username=username2, password=password)
+    user2_client = await create_client_for_user(client, username=username2, password=password)
     for env_id in [env1_id, env2_id]:
         result = await user2_client.list_notifications(tid=env_id)
         assert result.code == (200 if env_id == env1_id else 403)
@@ -737,20 +768,23 @@ async def test_role_assignment(server: protocol.Server, client) -> None:
     assert result.code == 200
 
     # Verify role assignment
-    expected_role_assignments_username1 = [RoleAssignment(environment=env1_id, name="a_role")]
+    expected_role_assignments_username1 = [RoleAssignment(environment=env1_id, role="a_role")]
     await verify_role_assignment(username=username1, expected_assignments=expected_role_assignments_username1)
     expected_role_assignments_username2 = []
     await verify_role_assignment(username=username2, expected_assignments=expected_role_assignments_username2)
+    await verify_roles_on_list_user(
+        expected_assignments={username1: expected_role_assignments_username1, username2: expected_role_assignments_username2}
+    )
 
     result = await admin_client.list_roles()
     assert result.code == 200
     assert result.result["data"] == ["a_role"]
 
-    user1_client = await create_client_for_user(username=username1, password=password)
+    user1_client = await create_client_for_user(client, username=username1, password=password)
     for env_id in [env1_id, env2_id]:
         result = await user1_client.list_notifications(tid=env_id)
         assert result.code == (200 if env_id == env1_id else 403)
-    user2_client = await create_client_for_user(username=username2, password=password)
+    user2_client = await create_client_for_user(client, username=username2, password=password)
     for env_id in [env1_id, env2_id]:
         result = await user2_client.list_notifications(tid=env_id)
         assert result.code == 403
@@ -765,6 +799,63 @@ async def test_role_assignment(server: protocol.Server, client) -> None:
     result = await admin_client.list_roles()
     assert result.code == 200
     assert not result.result["data"]
+
+
+@pytest.mark.parametrize("authentication_method", [AuthMethod.database])
+@pytest.mark.parametrize("enable_auth", [True])
+async def test_multiple_roles_assigned(server: protocol.Server, client) -> None:
+    """
+    Verify that all roles are correctly set into the token.
+    """
+    env_id = uuid.UUID("11111111-1111-1111-1111-111111111111")
+    # Create client with admin privileges, that can update role assignment.
+    admin_client = utils.get_auth_client(env_to_role_dct={}, is_admin=True)
+
+    result = await admin_client.project_create(name="proj")
+    assert result.code == 200
+    project_id = result.result["data"]["id"]
+    result = await admin_client.environment_create(project_id=project_id, name="env", environment_id=env_id)
+    assert result.code == 200
+
+    # Create users
+    username = "username"
+    password = "password"
+    user = data.User(
+        username=username,
+        password_hash=nacl.pwhash.str(password.encode()).decode(),
+        auth_method=AuthMethod.database,
+    )
+    await user.insert()
+
+    result = await admin_client.create_role(name="role1")
+    assert result.code == 200
+    result = await admin_client.create_role(name="role2")
+    assert result.code == 200
+
+    result = await admin_client.assign_role(username=username, environment=env_id, role="role1")
+    assert result.code == 200
+    result = await admin_client.assign_role(username=username, environment=env_id, role="role2")
+    assert result.code == 200
+
+    result = await client.login(username=username, password=password)
+    assert result.code == 200
+    token = result.result["data"]["token"]
+    claims, _ = auth.decode_token(token)
+    assert set(claims[const.INMANTA_ROLES_URN][str(env_id)]) == {"role1", "role2"}
+    assert not claims[const.INMANTA_IS_ADMIN_URN]
+
+    # Verify roles returned by the list_users API endpoint
+    result = await admin_client.list_users()
+    assert result.code == 200
+    assert len(result.result["data"]) == 1
+    actual_role_assignments = [
+        RoleAssignment(environment=r["environment"], role=r["role"]) for r in result.result["data"][0]["roles"]
+    ]
+    expected_role_assignments = [
+        RoleAssignment(environment=env_id, role="role1"),
+        RoleAssignment(environment=env_id, role="role2"),
+    ]
+    assert actual_role_assignments == expected_role_assignments
 
 
 @pytest.mark.parametrize("enable_auth", [True])
@@ -895,6 +986,59 @@ async def test_synchronization_roles_with_db(server: protocol.Server, client, as
     result = await client.list_roles()
     assert result.code == 200
     assert result.result["data"] == ["role_a", "role_b", "role_c"]
+
+
+@pytest.mark.parametrize(
+    "access_policy",
+    [
+        """
+        package policy
+
+        default allow := false
+
+        # Users marked as is-admin can execute any API endpoint.
+        allow if {
+            input.token["urn:inmanta:is_admin"]
+        }
+        """.strip()
+    ],
+)
+@pytest.mark.parametrize("authentication_method", [AuthMethod.database])
+@pytest.mark.parametrize("enable_auth", [True])
+async def test_is_admin_role(server: protocol.Server, client: protocol.Client) -> None:
+    admin_user = "admin"
+    regular_user = "user"
+    for username in [admin_user, regular_user]:
+        user = data.User(
+            username=username,
+            password_hash=nacl.pwhash.str(username.encode()).decode(),
+            auth_method=AuthMethod.database,
+            is_admin=(username == "admin"),
+        )
+        await user.insert()
+
+    admin_client = await create_client_for_user(client, username=admin_user, password=admin_user)
+
+    user_client = await create_client_for_user(client, username=regular_user, password=regular_user)
+    result = await user_client.environment_list()
+    assert result.code == 403
+
+    result = await admin_client.set_is_admin(username=regular_user, is_admin=True)
+    assert result.code == 200
+
+    user_client = await create_client_for_user(client, username=regular_user, password=regular_user)
+    result = await user_client.environment_list()
+    assert result.code == 200
+
+    result = await admin_client.set_is_admin(username=regular_user, is_admin=False)
+    assert result.code == 200
+
+    user_client = await create_client_for_user(client, username=regular_user, password=regular_user)
+    result = await user_client.environment_list()
+    assert result.code == 403
+
+    result = await admin_client.set_is_admin(username="non_existing_user", is_admin=True)
+    assert result.code == 400
 
 
 @pytest.mark.parametrize("authentication_method", [AuthMethod.database])

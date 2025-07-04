@@ -29,7 +29,6 @@ from threading import Condition
 from tornado.httpclient import AsyncHTTPClient
 
 import _pytest.logging
-import inmanta
 import inmanta.deploy.state
 import requests
 import toml
@@ -131,11 +130,9 @@ from typing import Any, Callable, Dict, Generic, Optional, Union
 import asyncpg
 import psutil
 import py
-import pyformance
 import pytest
 from asyncpg.exceptions import DuplicateDatabaseError
 from click import testing
-from pyformance.registry import MetricsRegistry
 from tornado import netutil
 
 import inmanta
@@ -165,6 +162,8 @@ from inmanta.server.protocol import Server, SliceStartupException
 from inmanta.server.services import orchestrationservice
 from inmanta.server.services.compilerservice import CompilerService, CompileRun
 from inmanta.types import JsonType, ResourceIdStr
+from inmanta.vendor import pyformance
+from inmanta.vendor.pyformance import MetricsRegistry
 from inmanta.warnings import WarningsManager
 from libpip2pi.commands import dir2pi
 from packaging.version import Version
@@ -571,7 +570,6 @@ def clean_reset_session():
 
 def reset_all_objects():
     resources.resource.reset()
-    asyncio.set_child_watcher(None)
     reset_metrics()
     # No dynamic loading of commands at the moment, so no need to reset/reload
     # command.Commander.reset()
@@ -954,7 +952,7 @@ DISABLE_STATE_CHECK = False
 
 
 @pytest.fixture(scope="function")
-async def agent_factory(server, monkeypatch) -> AsyncIterator[Callable[[uuid.UUID], Awaitable[Agent]]]:
+async def agent_factory(server, client, monkeypatch) -> AsyncIterator[Callable[[uuid.UUID], Awaitable[Agent]]]:
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     agents: list[Agent] = []
 
@@ -999,6 +997,11 @@ async def agent_factory(server, monkeypatch) -> AsyncIterator[Callable[[uuid.UUI
     global DISABLE_STATE_CHECK
     try:
         if not DISABLE_STATE_CHECK:
+            # Set data.RESET_DEPLOY_PROGRESS_ON_START back to False in all of the environments of the created agents
+            # Because this teardown asserts that the state is correct on restart and this setting breaks that assertion
+            all_environments = {agent.environment for agent in agents}
+            for environment in all_environments:
+                await client.set_setting(environment, data.RESET_DEPLOY_PROGRESS_ON_START, False)
             for agent in agents:
                 await agent.stop_working()
                 the_state = copy.deepcopy(dict(agent.scheduler._state.resource_state))

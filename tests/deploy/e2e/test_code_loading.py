@@ -443,7 +443,7 @@ async def test_logging_on_code_loading_failure_missing_code(server, client, envi
     result = await client.get_resource_actions(tid=environment, resource_type="test::Test", agent="agent", log_severity="ERROR")
     assert result.code == 200
     assert any(
-        "All resources of type `test::Test` failed to load handler code or install handler code dependencies" in log_line["msg"]
+        "All resources of type `test::Test` failed to install handler code dependencies" in log_line["msg"]
         for resource_action in result.result["data"]
         for log_line in resource_action["messages"]
     )
@@ -515,12 +515,7 @@ async def test_logging_on_code_loading_error(server, client, environment, client
 
     await wait_until_deployment_finishes(client, environment, version=version, timeout=10)
 
-    resourceAAA_failure_message = (
-        "All resources of type `test::ResourceAAA` failed to load handler code or install handler code dependencies: "
-    )
-    resourceBBB_failure_message = (
-        "All resources of type `test::ResourceBBB` failed to load handler code or install handler code dependencies: "
-    )
+    expected_error_message = "Agent agent1 failed to load the following modules: test."
 
     def check_for_message(data, must_be_present: str) -> None:
         """
@@ -540,13 +535,13 @@ async def test_logging_on_code_loading_error(server, client, environment, client
         tid=environment, resource_type="test::ResourceAAA", agent="agent1", log_severity="ERROR"
     )
     assert result.code == 200
-    check_for_message(data=result.result["data"], must_be_present=resourceAAA_failure_message)
+    check_for_message(data=result.result["data"], must_be_present=expected_error_message)
 
     result = await client.get_resource_actions(
         tid=environment, resource_type="test::ResourceBBB", agent="agent1", log_severity="ERROR"
     )
     assert result.code == 200
-    check_for_message(data=result.result["data"], must_be_present=resourceBBB_failure_message)
+    check_for_message(data=result.result["data"], must_be_present=expected_error_message)
 
 
 @pytest.mark.parametrize("auto_start_agent", [True])
@@ -563,12 +558,16 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
 
     4) Make sure we can provide during a partial export new agents with already registered code
 
+    5) Make sure we can provide during a partial export new or existing agents with new modules
+
+    6) Make sure we can bypass module version check during partial export with the allow_handler_code_update option
+
 
     """
     codemanager = CodeManager()
 
     async def check_code_for_version(
-        version: int, environment: str, agent_names: Sequence[str], expected_source: bytes = b"#The code"
+        version: int, environment: str, agent_names: Sequence[str], module_name: str, expected_source: bytes = b"#The code"
     ):
         """
         Helper method to check that all agents get the same code
@@ -578,9 +577,13 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
             module_install_specs = await codemanager.get_code(
                 environment=environment, model_version=version, agent_name=agent_name
             )
-            assert len(module_install_specs) == 1
-            assert len(module_install_specs[0].blueprint.sources) == 1
-            assert module_install_specs[0].blueprint.sources[0].source == expected_source
+            for module in module_install_specs:
+                if module.module_name == module_name:
+                    assert len(module.blueprint.sources) == 1
+                    assert module.blueprint.sources[0].source == expected_source
+                    break
+            else:
+                assert False, f"Module {module_name} is not registered in version {version}."
 
     version = await clienthelper.get_version()
     resources = [
@@ -637,7 +640,9 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
 
     assert result.code == 200
 
-    await check_code_for_version(version=1, environment=environment, agent_names=["agent_X", "agent_Y"])
+    await check_code_for_version(
+        version=1, environment=environment, agent_names=["agent_X", "agent_Y"], module_name="test", expected_source=b"#The code"
+    )
 
     resources = [
         {
@@ -662,7 +667,9 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
         module_version_info=module_version_info,
     )
     assert result.code == 200
-    await check_code_for_version(version=2, environment=environment, agent_names=["agent_X", "agent_Y"])
+    await check_code_for_version(
+        version=2, environment=environment, agent_names=["agent_X", "agent_Y"], module_name="test", expected_source=b"#The code"
+    )
 
     # 3) Partial export using different module version from the base version should raise an exception:
 
@@ -697,17 +704,18 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
         resource_sets=resource_sets,
         module_version_info=mismatched_module_version_info,
     )
-    # Version check is temporarily disabled
 
-    # assert result.code == 400
-    # assert result.result["message"] == (
-    #     "Invalid request: Cannot perform partial export because of version mismatch " "for module test."
-    # )
-    assert result.code == 200
-    await check_code_for_version(
-        version=3, environment=environment, agent_names=["agent_X"], expected_source=b"#The OTHER code"
+    assert result.code == 400
+    assert result.result["message"] == (
+        "Invalid request: Cannot perform partial export because the source code for module test in this partial version is "
+        "different from the currently registered source code. Consider running a full export instead. Alternatively, if you "
+        "are sure the new code is compatible and want to forcefully update, you can bypass this version check with the "
+        "`--allow-handler-code-update` CLI option."
     )
-    await check_code_for_version(version=3, environment=environment, agent_names=["agent_Y"], expected_source=b"#The code")
+
+    await check_code_for_version(
+        version=2, environment=environment, agent_names=["agent_X", "agent_Y"], module_name="test", expected_source=b"#The code"
+    )
 
     # 4) Make sure we can provide new agents with already registered code:
     module_version_info = {
@@ -745,8 +753,109 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
     assert result.code == 200
 
     await check_code_for_version(
-        version=4, environment=environment, agent_names=["agent_Y", "agent_Z"], expected_source=b"#The code"
+        version=3,
+        environment=environment,
+        agent_names=["agent_X", "agent_Y", "agent_Z"],
+        module_name="test",
+        expected_source=b"#The code",
+    )
+
+    # 5) Make sure we can provide agents with new modules:
+
+    content = "#Yet some other code"
+    sha1sum = hashlib.new("sha1")
+    sha1sum.update(content.encode())
+    hv3: str = sha1sum.hexdigest()
+    await client.upload_file(hv3, content=base64.b64encode(content.encode()).decode("ascii"))
+
+    module_source_metadata3 = ModuleSourceMetadata(
+        name="inmanta_plugins.new_module",
+        hash_value=hv3,
+        is_byte_code=False,
+    )
+
+    module_version_info = {
+        "new_module": InmantaModuleDTO(
+            name="new_module",
+            version="0.0.0",
+            files_in_module=[module_source_metadata3],
+            requirements=[],
+            for_agents=["agent_Z", "agent_A"],
+        )
+    }
+    resources = [
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": "test::ResType_A[agent_Z,key=key1],v=0",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": "test::ResType_A[agent_A,key=key1],v=0",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+    ]
+    resource_sets = {
+        "test::ResType_A[agent_Z,key=key1]": "set-b",
+    }
+
+    result = await client.put_partial(
+        tid=environment,
+        resources=resources,
+        resource_state={},
+        unknowns=[],
+        version_info={},
+        resource_sets=resource_sets,
+        module_version_info=module_version_info,
+    )
+    assert result.code == 200
+
+    await check_code_for_version(
+        version=4,
+        environment=environment,
+        agent_names=["agent_X", "agent_Y", "agent_Z"],
+        module_name="test",
+        expected_source=b"#The code",
     )
     await check_code_for_version(
-        version=4, environment=environment, agent_names=["agent_X"], expected_source=b"#The OTHER code"
+        version=4,
+        environment=environment,
+        agent_names=["agent_Z", "agent_A"],
+        module_name="new_module",
+        expected_source=b"#Yet some other code",
+    )
+
+    # 6) Make sure we can force code update via the allow_handler_code_update option
+
+    result = await client.put_partial(
+        tid=environment,
+        resources=resources,
+        resource_state={},
+        unknowns=[],
+        version_info={},
+        resource_sets=resource_sets,
+        module_version_info=mismatched_module_version_info,
+        allow_handler_code_update=True,
+    )
+    assert result.code == 200
+    await check_code_for_version(
+        version=5,
+        environment=environment,
+        agent_names=["agent_X", "agent_Y", "agent_Z"],
+        module_name="test",
+        expected_source=b"#The OTHER code",
+    )
+
+    await check_code_for_version(
+        version=5,
+        environment=environment,
+        agent_names=["agent_Z", "agent_A"],
+        module_name="new_module",
+        expected_source=b"#Yet some other code",
     )

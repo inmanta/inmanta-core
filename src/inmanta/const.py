@@ -437,18 +437,29 @@ ALL_LOG_CONTEXT_VARS = [LOG_CONTEXT_VAR_ENVIRONMENT]
 LOGGER_NAME_EXECUTOR = "inmanta.executor"
 
 
-class AuthorizationLabel(str, Enum):
+class AuthorizationLabel(Enum):
+    """
+    Base class for AuthorizationLabel enums, so that extensions
+    can create their own AuthorizationLabel enums that are compatible
+    with the API of core.
+    """
+
+    pass
+
+
+class CoreAuthorizationLabel(AuthorizationLabel):
     AGENT_READ = "agent.read"
     AGENT_WRITE = "agent.write"
-    AUTH_ADMIN = "auth.admin"
-    AUTH_CHANGE_PASSWORD = "auth.change-password"
-    COMPILEREPORT_READ = "compilereport.read"
+    USER_READ = "user.read"
+    USER_WRITE = "user.write"
+    USER_CHANGE_PASSWORD = "user.change-password"
+    COMPILE_REPORT_READ = "compile-report.read"
     COMPILER_EXECUTE = "compiler.execute"
     COMPILER_STATUS_READ = "compiler.status.read"
     DEPLOY = "deploy"
     DESIRED_STATE_READ = "desired-state.read"
     DESIRED_STATE_WRITE = "desired-state.write"
-    DISCOVERED_RESOURCES_READ = "discovered_resources.read"
+    DISCOVERED_RESOURCES_READ = "discovered-resources.read"
     DOCS_READ = "docs.read"
     DRYRUN_READ = "dryrun.read"
     DRYRUN_WRITE = "dryrun.write"
@@ -459,27 +470,33 @@ class AuthorizationLabel(str, Enum):
     ENVIRONMENT_MODIFY = "environment.modify"
     ENVIRONMENT_DELETE = "environment.delete"
     ENVIRONMENT_CLEAR = "environment.clear"
-    ENVIRONMENT_SETTINGS_READ = "environment.settings.read"
-    ENVIRONMENT_SETTINGS_WRITE = "environment.settings.write"
+    ENVIRONMENT_SETTING_READ = "environment.setting.read"
+    ENVIRONMENT_SETTING_WRITE = "environment.setting.write"
     FACT_READ = "fact.read"
     FACT_WRITE = "fact.write"
-    FILES_READ = "files.read"
-    FILES_WRITE = "files.write"
+    FILE_READ = "file.read"
+    FILE_WRITE = "file.write"
     GRAPHQL_READ = "graphql.read"
     METRICS_READ = "metrics.read"
     NOTIFICATION_READ = "notification.read"
     NOTIFICATION_WRITE = "notification.write"
     PARAMETER_READ = "parameter.read"
     PARAMETER_WRITE = "parameter.write"
-    PIP_CONFIG_READ = "pip_config.read"
+    PIP_CONFIG_READ = "pip-config.read"
     PROJECT_READ = "project.read"
     PROJECT_CREATE = "project.create"
     PROJECT_MODIFY = "project.modify"
     PROJECT_DELETE = "project.delete"
-    RESOURCES_READ = "resources.read"
+    RESOURCE_READ = "resource.read"
     STATUS_READ = "status.read"
     TOKEN = "token"
-    ROLES_READ = "roles.read"
-    ROLES_WRITE = "roles.write"
-    ROLE_ASSIGNMENT_READ = "role_assignment.read"
-    ROLE_ASSIGNMENT_WRITE = "role_assignment.write"
+    ROLE_READ = "role.read"
+    ROLE_WRITE = "role.write"
+    ROLE_ASSIGNMENT_READ = "role-assignment.read"
+    ROLE_ASSIGNMENT_WRITE = "role-assignment.write"
+    ROLE_IS_ADMIN = "role.is-admin"
+    # These labels should only be used in tests
+    TEST = "test"
+    TEST_2 = "test2"
+    TEST_3 = "test3"
+    TEST_4 = "test4"

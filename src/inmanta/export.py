@@ -33,7 +33,7 @@ from inmanta.ast.entity import Entity
 from inmanta.config import Option, is_list, is_uuid_opt
 from inmanta.const import ResourceState
 from inmanta.data.model import PipConfig
-from inmanta.execute.proxy import DynamicProxy
+from inmanta.execute.proxy import DynamicProxy, ProxyContext, ProxyMode
 from inmanta.execute.runtime import Instance
 from inmanta.module import Project
 from inmanta.resources import Id, IgnoreResourceException, Resource, resource, to_id
@@ -145,7 +145,10 @@ class Exporter:
         proxies: dict[str, Sequence[ProxiedType]] = {}
         for t in types:
             if self.types is not None and t in self.types:
-                proxies[t] = [DynamicProxy.return_value(i) for i in self.types[t].get_all_instances()]
+                proxies[t] = [
+                    DynamicProxy.return_value(i, context=ProxyContext(path=f"<{i}>", mode=ProxyMode.EXPORT))
+                    for i in self.types[t].get_all_instances()
+                ]
             else:
                 proxies[t] = []
 
@@ -169,7 +172,13 @@ class Exporter:
             if len(instances) > 0:
                 for instance in instances:
                     try:
-                        res = Resource.create_from_model(self, resource_type, DynamicProxy.return_value(instance))
+                        res = Resource.create_from_model(
+                            self,
+                            resource_type,
+                            DynamicProxy.return_value(
+                                instance, context=ProxyContext(path=f"<{instance}>", mode=ProxyMode.EXPORT)
+                            ),
+                        )
                         resource_mapping[instance] = res
                         self.add_resource(res)
                     except UnknownException:
@@ -366,6 +375,7 @@ class Exporter:
         export_plugin: Optional[str] = None,
         partial_compile: bool = False,
         resource_sets_to_remove: Optional[Sequence[str]] = None,
+        allow_handler_code_update: bool = False,
     ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, ResourceState]]]:
         """
         Run the export functions. Return value for partial json export uses 0 as version placeholder.
@@ -423,6 +433,7 @@ class Exporter:
                 partial_compile,
                 list(self._removed_resource_sets),
                 Project.get().metadata.pip,
+                allow_handler_code_update=allow_handler_code_update,
             )
             LOGGER.info("Committed resources with version %d" % self._version)
 
@@ -484,8 +495,6 @@ class Exporter:
         self,
         conn: protocol.SyncClient,
         code_manager: loader.CodeManager,
-        *,
-        do_upload: bool,
     ) -> None:
         """Deploy code to the server"""
 
@@ -509,8 +518,7 @@ class Exporter:
                 if not type_name.startswith("core::"):
                     code_manager.register_code(resource_type, obj)
 
-        if do_upload:
-            upload_code(conn, code_manager)
+        upload_code(conn, code_manager)
 
     def commit_resources(
         self,
@@ -520,6 +528,7 @@ class Exporter:
         partial_compile: bool,
         resource_sets_to_remove: list[str],
         pip_config: PipConfig,
+        allow_handler_code_update: bool = False,
     ) -> int:
         """
         Commit the entire list of resources to the configuration server.
@@ -539,8 +548,7 @@ class Exporter:
         code_manager = loader.CodeManager()
         code_manager.build_agent_map(self._resources)
 
-        # partial exports use the same code as the version they're based on
-        self.register_code(conn, code_manager, do_upload=not partial_compile)
+        self.register_code(conn, code_manager)
 
         LOGGER.info("Uploading %d files" % len(self._file_store))
 
@@ -590,6 +598,7 @@ class Exporter:
                     version_info=version_info,
                     removed_resource_sets=resource_sets_to_remove,
                     module_version_info=code_manager.get_module_version_info(),
+                    allow_handler_code_update=allow_handler_code_update,
                     **kwargs,
                 )
             else:

@@ -22,7 +22,6 @@ requires = [
     "pip>=21.3",
     "ply~=3.0",
     "pydantic~=2.5,!=2.9.2",
-    "pyformance~=0.4",
     "PyJWT~=2.0",
     "pynacl~=1.5",
     "python-dateutil~=2.0",
@@ -37,7 +36,7 @@ requires = [
     "toml~=0.10 ",
     "setproctitle~=1.3",
     "SQLAlchemy~=2.0",
-    "strawberry-sqlalchemy-mapper==0.6.2",
+    "strawberry-sqlalchemy-mapper==0.6.3",
 ]
 
 
@@ -48,7 +47,7 @@ with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
 
 # This version is managed by bumpversion. Should you ever update it manually, make sure to consistently update it everywhere
 # (See the bumpversion.cfg file for relevant locations).
-version = "16.0.0"
+version = "16.0.1"
 
 setup(
     version=version,

@@ -35,6 +35,7 @@ from inmanta.protocol import common, exceptions
 from inmanta.protocol.auth import auth, providers
 from inmanta.protocol.common import ReturnValue
 from inmanta.server import config as server_config
+from inmanta.stable_api import stable_api
 from inmanta.types import Apireturn, JsonType
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
@@ -75,7 +76,7 @@ class CallArguments:
         self._argspec: inspect.FullArgSpec = inspect.getfullargspec(self._properties.function)
 
         self._call_args: JsonType = {}
-        self._method_call_args: JsonType = {}
+        self._policy_engine_call_args: JsonType = {}
         self._headers: dict[str, str] = {}
         self._metadata: dict[str, object] = {}
         self._auth_token: Optional[auth.claim_type] = None
@@ -106,14 +107,15 @@ class CallArguments:
         return self._call_args
 
     @property
-    def method_call_args(self) -> dict[str, object]:
+    def policy_engine_call_args(self) -> dict[str, object]:
         """
-        The call arguments formatted according to the signature of the @method method of the API endpoint.
+        The call arguments formatted according to what the policy engine needs as input,
+        i.e. the name of every parameter is the name of the parameter or header on the API.
         """
         if not self._processed:
             raise Exception("Process call first before accessing property")
 
-        return self._method_call_args
+        return self._policy_engine_call_args
 
     @property
     def auth_username(self) -> Optional[str]:
@@ -314,7 +316,15 @@ class CallArguments:
                 "request contains fields %s that are not declared in method and no kwargs argument is provided." % all_fields
             )
 
-        self._method_call_args = copy.deepcopy(call_args)
+        # Populate self._policy_engine_call_args
+        self._policy_engine_call_args = copy.deepcopy(call_args)
+        for arg_name, arg_opt in self._properties.arg_options.items():
+            if arg_opt.header and arg_name in self._policy_engine_call_args:
+                # Make sure we use the name of the header if the parameter was set using a header.
+                # The data in the access policy needs to be structured like on the API, because
+                # that is the structure that end-users know.
+                self._policy_engine_call_args[arg_opt.header] = self._policy_engine_call_args[arg_name]
+                del self._policy_engine_call_args[arg_name]
 
         for arg, value in call_args.items():
             # run getters
@@ -537,7 +547,7 @@ class CallArguments:
 
         # Try to get token from header
         if token is None:
-            token = self._get_auth_token_from_header()
+            token = self.get_auth_token_from_header(self._request_headers)
 
         if token is None:
             return None
@@ -547,16 +557,18 @@ class CallArguments:
         if cfg.jwt_username_claim in self._auth_token:
             self._auth_username = str(self._auth_token[cfg.jwt_username_claim])
 
-    def _get_auth_token_from_header(self) -> str | None:
+    @stable_api
+    @classmethod
+    def get_auth_token_from_header(cls, request_headers: Mapping[str, str]) -> str | None:
         header_value: Optional[str] = None
 
         if additional_header := server_config.server_additional_auth_header.get():
-            if additional_header in self._request_headers:
-                header_value = self._request_headers[additional_header]
+            if additional_header in request_headers:
+                header_value = request_headers[additional_header]
 
-        if header_value is None and "Authorization" in self._request_headers:
+        if header_value is None and "Authorization" in request_headers:
             # In Authorization it is parsed as a bearer token
-            parts = self._request_headers["Authorization"].split(" ")
+            parts = request_headers["Authorization"].split(" ")
 
             if len(parts) != 2 or parts[0].lower() != "bearer":
                 logging.getLogger(__name__).warning(

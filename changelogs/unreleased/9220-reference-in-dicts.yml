@@ -1,0 +1,6 @@
+description: Add support for references in dicts or lists in references
+issue-nr: 9220
+change-type: minor
+destination-branches: [master, iso8]
+sections:
+  minor-improvement: "{{description}}"

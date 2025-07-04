@@ -148,6 +148,9 @@ class PolicyEngineAuthorizationProvider(AuthorizationProvider):
             # On a login call the authorization is done using the provided username and password.
             # No need to authorize the token.
             return
+        if call_arguments.method_properties.function == methods_v2.health:
+            # For ease of use, the health endpoint should be accessible without authentication.
+            return
         if call_arguments.auth_token is None:
             raise exceptions.UnauthorizedException()
         if call_arguments.is_service_request():
@@ -169,7 +172,7 @@ class PolicyEngineAuthorizationProvider(AuthorizationProvider):
             "input": {
                 "request": {
                     "endpoint_id": f"{method_properties.operation} {method_properties.get_full_path()}",
-                    "parameters": call_arguments.method_call_args,
+                    "parameters": call_arguments.policy_engine_call_args,
                 },
                 "token": call_arguments.auth_token,
             }

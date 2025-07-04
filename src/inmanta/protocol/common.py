@@ -477,7 +477,7 @@ class MethodProperties:
     def get_open_policy_agent_data(cls) -> dict[str, object]:
         """
         Return the information about the different endpoints that exist
-        in the format used as input to Open Policy Agent.
+        in the format used as data to Open Policy Agent.
         """
         endpoints = {}
         for method_properties_list in cls.methods.values():
@@ -486,13 +486,34 @@ class MethodProperties:
                 if auth_metadata is None:
                     continue
                 endpoint_id = f"{method_properties.operation} {method_properties.get_full_path()}"
+                environment_param = (
+                    method_properties._get_argument_name_for_policy_engine(auth_metadata.environment_param)
+                    if auth_metadata.environment_param
+                    else None
+                )
                 endpoints[endpoint_id] = {
-                    "client_types": method_properties.client_types,
-                    "auth_label": auth_metadata.auth_label,
+                    "client_types": [c.value for c in method_properties.client_types],
+                    "auth_label": auth_metadata.auth_label.value,
                     "read_only": auth_metadata.read_only,
-                    "environment_param": auth_metadata.environment_param,
+                    "environment_param": environment_param,
                 }
         return {"endpoints": endpoints}
+
+    def _get_argument_name_for_policy_engine(self, arg_name: str) -> str:
+        """
+        Return the name for the given argument as it should be fed into the access policy.
+
+        :param arg_name: The name of the argument as mentioned in the method annotated with @method or @typedmethod.
+        """
+        if arg_name in self.arg_options and self.arg_options[arg_name].header:
+            # Make sure we use the name of the header if the parameter was set using a header.
+            # The data in the access policy needs to be structured like on the API, because
+            # that is the structure that end-users know.
+            header_name = self.arg_options[arg_name].header
+            assert header_name is not None  # Make mypy happy
+            return header_name
+        else:
+            return arg_name
 
     def is_external_interface(self) -> bool:
         """

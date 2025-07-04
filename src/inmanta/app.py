@@ -64,6 +64,7 @@ from inmanta.config import Config, Option
 from inmanta.const import ALL_LOG_CONTEXT_VARS, EXIT_START_FAILED, LOG_CONTEXT_VAR_ENVIRONMENT
 from inmanta.export import cfg_env
 from inmanta.logging import InmantaLoggerConfig, _is_on_tty
+from inmanta.protocol import common
 from inmanta.server import config as opt
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.services.databaseservice import initialize_database_connection_pool
@@ -454,10 +455,21 @@ def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Se
         "--partial",
         dest="partial_compile",
         help=(
-            "Execute a partial export. Does not upload new Python code to the server: it is assumed to be unchanged since the"
-            " last full export. Multiple partial exports for disjunct resource sets may be performed concurrently but not"
-            " concurrent with a full export. When used in combination with the ``--json`` option, 0 is used as a placeholder "
-            "for the model version."
+            "Execute a partial export. All code used in this partial version will be checked against the code used in the"
+            " base version to make sure it remained unchanged. Multiple partial exports for disjunct resource sets may be"
+            " performed concurrently but not concurrent with a full export. When used in combination with the"
+            " ``--json`` option, 0 is used as a placeholder for the model version."
+        ),
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
+        "--allow-handler-code-update",
+        dest="allow_handler_code_update",
+        help=(
+            "[Expert] Allow handler code update during partial compile. This is otherwise only allowed for full compiles. "
+            "Use with extreme caution, and only when confident that all code is compatible with previous versions. "
+            "This option will be ignored if it is not set along with the --partial option."
         ),
         action="store_true",
         default=False,
@@ -582,6 +594,7 @@ def export(options: argparse.Namespace) -> None:
                 export_plugin=options.export_plugin,
                 partial_compile=options.partial_compile,
                 resource_sets_to_remove=list(resource_sets_to_remove),
+                allow_handler_code_update=options.allow_handler_code_update,
             )
 
         if not summary_reporter.is_failure() and options.deploy:
@@ -970,6 +983,22 @@ def default_logging_config(options: argparse.Namespace) -> None:
         # Revert this env var back to its original state
         if original_force_tty is None:
             del os.environ[const.ENVIRON_FORCE_TTY]
+
+
+def policy_engine_config_parser(parser: ArgumentParser, parent_parsers: abc.Sequence[ArgumentParser]) -> None:
+    subparser = parser.add_subparsers(title="subcommand", dest="cmd")
+    subparser.add_parser(
+        "print-endpoint-data",
+        help="Print the authorization-related metadata about the endpoints that is made available"
+        " in the access policy using the 'data' variable.",
+        parents=parent_parsers,
+    )
+
+
+@command("policy-engine", help_msg="Policy-engine related operations", parser_config=policy_engine_config_parser)
+def policy_engine(options: argparse.Namespace) -> None:
+    open_policy_agent_data = common.MethodProperties.get_open_policy_agent_data()
+    print(json.dumps(open_policy_agent_data, indent=4, sort_keys=True))
 
 
 def print_versions_installed_components_and_exit() -> None:

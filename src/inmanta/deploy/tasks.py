@@ -24,14 +24,13 @@ import traceback
 import uuid
 from dataclasses import dataclass
 
-import pyformance
-
 from inmanta import data, resources
 from inmanta.agent import executor
-from inmanta.agent.executor import DeployReport
+from inmanta.agent.executor import DeployReport, ModuleLoadingException
 from inmanta.data.model import AttributeStateChange
 from inmanta.deploy import scheduler, state
 from inmanta.types import ResourceIdStr
+from inmanta.vendor import pyformance
 
 LOGGER = logging.getLogger(__name__)
 
@@ -94,20 +93,6 @@ class Task(abc.ABC):
         my_executor: executor.Executor = await task_manager.executor_manager.get_executor(
             agent_name=agent_name, agent_uri="NO_URI", code=code
         )
-
-        # Bail out if the current task's resource needs code
-        # that failed to load/install:
-        inmanta_module_name = self.id.get_inmanta_module()
-
-        if inmanta_module_name in my_executor.failed_modules:
-            raise ExceptionGroup(
-                """
-                    The following modules cannot be loaded: %s.
-                """
-                % ", ".join([e for e in my_executor.failed_modules[inmanta_module_name].keys()]),
-                [e for e in my_executor.failed_modules[inmanta_module_name].values()],
-            )
-
         return my_executor
 
 
@@ -167,19 +152,32 @@ class Deploy(Task):
                         agent_name=agent,
                         version=version,
                     )
+                except ModuleLoadingException as e:
+                    e.log_resource_action_to_scheduler_log(
+                        agent=agent, rid=executor_resource_details.rvid, include_exception_info=True
+                    )
+                    log_line_for_web_console = e.create_log_line_for_failed_modules(
+                        agent=agent, level=logging.ERROR, verbose_message=False
+                    )
+                    deploy_report = DeployReport.undeployable(
+                        executor_resource_details.rvid, action_id, log_line_for_web_console
+                    )
+                    return
 
                 except Exception as e:
                     log_line = data.LogLine.log(
                         logging.ERROR,
-                        "All resources of type `%(res_type)s` failed to load handler code or install handler code "
+                        "All resources of type `%(res_type)s` failed to install handler code "
                         "dependencies: `%(error)s`\n%(traceback)s",
                         res_type=executor_resource_details.id.entity_type,
                         error=str(e),
                         traceback="".join(traceback.format_tb(e.__traceback__)),
                     )
+
                     # Not attached to ctx, needs to be flushed to logger explicitly
                     log_line.write_to_logger_for_resource(agent, executor_resource_details.rvid, exc_info=True)
                     deploy_report = DeployReport.undeployable(executor_resource_details.rvid, action_id, log_line)
+
                     return
 
                 assert reason is not None  # Should always be set for deploy
