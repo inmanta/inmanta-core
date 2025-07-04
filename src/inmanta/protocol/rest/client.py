@@ -161,7 +161,7 @@ class RESTClient(RESTBase):
                 LOGGER.exception("Failed to send request")
                 return common.Result(code=500, result={"message": str(e)})
 
-        return self._decode_response(response)
+        return self._decode_response(response, self.client)
 
     def close(self):
         """
@@ -170,18 +170,18 @@ class RESTClient(RESTBase):
         if self.forced_instance:
             self.client.close()
 
-    def _decode_response(self, response: HTTPResponse) -> common.Result:
+    def _decode_response(self, response: HTTPResponse, clt) -> common.Result:
         content_type = response.headers.get(common.CONTENT_TYPE, None)
 
         if content_type is None or content_type == common.JSON_CONTENT:
-            return common.Result(code=response.code, result=self._decode(response.body))
+            return common.Result(code=response.code, result=self._decode(response.body), client=clt)
         elif content_type == common.HTML_CONTENT:
-            return common.Result(code=response.code, result=response.body.decode(common.HTML_ENCODING))
+            return common.Result(code=response.code, result=response.body.decode(common.HTML_ENCODING), client=clt)
         elif content_type == common.HTML_CONTENT_WITH_UTF8_CHARSET:
-            return common.Result(code=response.code, result=response.body.decode(common.UTF8_ENCODING))
+            return common.Result(code=response.code, result=response.body.decode(common.UTF8_ENCODING), client=clt)
         else:
             # Any other content-type will leave the encoding unchanged
-            return common.Result(code=response.code, result=response.body)
+            return common.Result(code=response.code, result=response.body, client=clt)
 
     def get_authorization_provider(self) -> providers.AuthorizationProvider | None:
         # We are not running on the server, so there is no authorization provider.

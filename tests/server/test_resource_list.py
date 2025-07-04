@@ -669,6 +669,22 @@ async def test_client_all_pages(server, client, env_with_resources):
         idx += page_size
 
 
+async def test_client_all_pages_v2(server, client, env_with_resources):
+    env = env_with_resources
+    result = await client.resource_list(tid=env.id)
+    assert result.code == 200
+    all_resources = result.result["data"]
+    assert len(all_resources) == 6
+
+    page_size = 4
+    # coro =
+    result = await client.resource_list(tid=env.id, limit=page_size)
+
+    idx = 0
+    async for item in result.all():
+        assert item == all_resources[idx]
+        idx += 1
+
 @pytest.mark.parametrize(
     "sort, expected_status",
     [

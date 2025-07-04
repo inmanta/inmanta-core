@@ -32,7 +32,7 @@ from datetime import datetime
 from enum import Enum
 from functools import partial
 from inspect import Parameter
-from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar, Union, cast, get_type_hints
+from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar, Union, cast, get_type_hints, AsyncIterator
 from urllib import parse
 
 import docstring_parser
@@ -1100,9 +1100,10 @@ class Result:
     A result of a method call
     """
 
-    def __init__(self, code: int = 0, result: Optional[JsonType] = None) -> None:
+    def __init__(self, code: int = 0, result: Optional[JsonType] = None, client=None) -> None:
         self._result = result
         self.code = code
+        self._client = client
         """
         The result code of the method call.
         """
@@ -1144,6 +1145,33 @@ class Result:
         Set a callback function that is to be called when the result is ready.
         """
         self._callback = fnc
+
+    def all(self) -> AsyncIterator[types.JsonType]:
+        pass
+        print(self.result)
+        return [1, 2, 43]
+        # result = await coro
+        # while result.code == 200:
+        #     if not result.result:
+        #         return
+        #
+        #     page = result.result.get(envelope_key, [])
+        #     if iterate_per_item:
+        #         for item in page:
+        #             yield item
+        #     else:
+        #         yield page
+        #
+        #     next_link_url = result.result.get("links", {}).get("next")
+        #
+        #     if not next_link_url:
+        #         return
+        #
+        #     server_url = self._transport_instance._get_client_config()
+        #     url = server_url + next_link_url
+        #     request = HTTPRequest(url=url, method="GET", headers={
+        #         "X-Inmanta-tid": env})
+        #     result = self._transport_instance._decode_response(await self._transport_instance.client.fetch(request))
 
 
 class SessionManagerInterface:
