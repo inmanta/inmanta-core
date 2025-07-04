@@ -1103,7 +1103,7 @@ class Result:
     A result of a method call
     """
 
-    def __init__(self, client: "RESTClient" | None = None, code: int = 0, result: Optional[JsonType] = None) -> None:
+    def __init__(self, client: Optional["RESTClient"] = None, code: int = 0, result: Optional[JsonType] = None) -> None:
         self._result = result
         self.code = code
         self._client = client
