@@ -39,7 +39,6 @@ from inmanta.stable_api import stable_api
 from inmanta.types import Apireturn, JsonType
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
-INMANTA_MT_HEADER = "X-Inmanta-tid"
 
 """
 

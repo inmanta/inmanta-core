@@ -478,14 +478,6 @@ class SessionClient(Client):
         return result
 
 
-# todo add ?
-class TypedPagedClient(Client):
-    pass
-
-
-# todo make sure it works with the typedclient
-
-
 class TypedClient(Client):
     """A client that returns typed data instead of JSON"""
 

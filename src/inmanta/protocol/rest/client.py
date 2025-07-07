@@ -27,6 +27,7 @@ from tornado.httpclient import AsyncHTTPClient, HTTPError, HTTPRequest, HTTPResp
 
 from inmanta import config as inmanta_config
 from inmanta import tracing
+from inmanta.const import INMANTA_MT_HEADER
 from inmanta.protocol import common
 from inmanta.protocol.auth import providers
 from inmanta.protocol.rest import RESTBase
@@ -121,6 +122,8 @@ class RESTClient(RESTBase):
             if zipped:
                 headers["Content-Encoding"] = "gzip"
 
+        environment = headers[INMANTA_MT_HEADER]
+
         ca_certs = inmanta_config.Config.get(self.id, "ssl_ca_cert_file", None)
         LOGGER.debug("Calling server %s %s", properties.operation, url)
 
@@ -161,7 +164,7 @@ class RESTClient(RESTBase):
                 LOGGER.exception("Failed to send request")
                 return common.Result(code=500, result={"message": str(e)})
 
-        return self._decode_response(response)
+        return self._decode_response(response, properties, environment)
 
     def close(self):
         """
@@ -170,18 +173,38 @@ class RESTClient(RESTBase):
         if self.forced_instance:
             self.client.close()
 
-    def _decode_response(self, response: HTTPResponse) -> common.Result:
+    def _decode_response(self, response: HTTPResponse, properties: common.MethodProperties, environment: str) -> common.Result:
         content_type = response.headers.get(common.CONTENT_TYPE, None)
 
         if content_type is None or content_type == common.JSON_CONTENT:
-            return common.Result(code=response.code, result=self._decode(response.body), client=self)
+            return common.Result(
+                code=response.code,
+                result=self._decode(response.body),
+                client=self,
+                method_properties=properties,
+                environment=environment,
+            )
         elif content_type == common.HTML_CONTENT:
-            return common.Result(code=response.code, result=response.body.decode(common.HTML_ENCODING), client=self)
+            return common.Result(
+                code=response.code,
+                result=response.body.decode(common.HTML_ENCODING),
+                client=self,
+                method_properties=properties,
+                environment=environment,
+            )
         elif content_type == common.HTML_CONTENT_WITH_UTF8_CHARSET:
-            return common.Result(code=response.code, result=response.body.decode(common.UTF8_ENCODING), client=self)
+            return common.Result(
+                code=response.code,
+                result=response.body.decode(common.UTF8_ENCODING),
+                client=self,
+                method_properties=properties,
+                environment=environment,
+            )
         else:
             # Any other content-type will leave the encoding unchanged
-            return common.Result(code=response.code, result=response.body, client=self)
+            return common.Result(
+                code=response.code, result=response.body, client=self, method_properties=properties, environment=environment
+            )
 
     def get_authorization_provider(self) -> providers.AuthorizationProvider | None:
         # We are not running on the server, so there is no authorization provider.

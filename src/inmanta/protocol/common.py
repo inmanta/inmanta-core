@@ -1103,14 +1103,28 @@ class Result:
     A result of a method call
     """
 
-    def __init__(self, client: Optional["RESTClient"] = None, code: int = 0, result: Optional[JsonType] = None) -> None:
-        self._result = result
-        self.code = code
-        self._client = client
+    def __init__(
+        self,
+        code: int = 0,
+        result: Optional[JsonType] = None,
+        client: Optional["RESTClient"] = None,
+        *,
+        method_properties: Optional[MethodProperties] = None,
+        environment: Optional[str] = None,
+    ) -> None:
         """
         The result code of the method call.
         """
+        self._result = result
+        self.code = code
+        self._client = client
+
+        # Carry the env as well (if possible) might be retrievable from the method properties
+        # and method properties  for the envelope key
+
         self._callback: Optional[Callable[["Result"], None]] = None
+        self._method_properties: Optional[MethodProperties] = method_properties
+        self._environment = environment or ""
 
     def get_result(self) -> Optional[JsonType]:
         """
@@ -1149,16 +1163,16 @@ class Result:
         """
         self._callback = fnc
 
-    async def all(self, env: str, envelope_key: str = "data") -> AsyncIterator[types.JsonType]:
+    async def all(self) -> AsyncIterator[types.JsonType]:
         result = self
         while result.code == 200:
             if not result.result:
                 return
 
-            if not self._client:
+            if not (self._client and self._method_properties):
                 raise Exception("Panic!")
 
-            page = result.result.get(envelope_key, [])
+            page = result.result.get(self._method_properties.envelope_key, [])
             for item in page:
                 yield item
 
@@ -1169,8 +1183,10 @@ class Result:
 
             server_url = self._client._get_client_config()
             url = server_url + next_link_url
-            request = HTTPRequest(url=url, method="GET", headers={"X-Inmanta-tid": env})
-            result = self._client._decode_response(await self._client.client.fetch(request))
+            request = HTTPRequest(url=url, method="GET", headers={"X-Inmanta-tid": self._environment})
+            result = self._client._decode_response(
+                await self._client.client.fetch(request), self._method_properties, self._environment
+            )
 
 
 class SessionManagerInterface:
