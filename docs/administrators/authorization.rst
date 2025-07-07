@@ -132,6 +132,7 @@ The access policy is written in the `Rego query language <https://www.openpolicy
         input.token.role == "user"
     }
 
+.. _authorization-default-access-policy:
 
 Default access policy
 ^^^^^^^^^^^^^^^^^^^^^
@@ -148,7 +149,7 @@ The Inmanta server comes with a default policy that is defined in ``/etc/inmanta
 
 2. Global admin role: A user with this role can execute any API endpoint on the Inmanta server.
 
-The default policy makes the following assumptions about the content of the access token:
+The default policy makes the following assumptions about the content of the access token. This has to be configured correctly when using a third-party authorization provider:
 
 * The ``sub`` claim is present and contains the username of the user the token is for.
 * Environment-scoped roles are defined in the ``urn:inmanta:roles`` claim of the access token. The value must be a dictionary that maps the ID of the environment to a list of roles the user has in that environment.
@@ -186,7 +187,7 @@ Enable the policy-engine authorization provider
 
 1. Set the :inmanta.config:option:`server.authorization-provider` config option to ``policy-engine``.
 2. Modify the default policy at ``/etc/inmanta/authorization/policy.rego`` if desired. More information about writing your own access policy is available :ref:`here<authorization-writing-own-policy>`.
-3. If a 3rd party auth broker is used, it must be configured to correctly set all claims required by the access policy.
+3. If a 3rd party auth broker is used, it must be configured to correctly set all claims required by the access policy. See :ref:`here<authorization-default-access-policy>` for claims required by the default policy.
 4. Restart the inmanta server to activate the configuration changes.
 
 
