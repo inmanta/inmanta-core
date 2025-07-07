@@ -40,7 +40,7 @@ from inmanta.server.services.compilerservice import CompilerService
 if __file__ and os.path.dirname(__file__).split("/")[-2] == "inmanta_tests":
     from inmanta_tests.utils import wait_for_version, wait_until_deployment_finishes  # noqa: F401
 else:
-    from utils import wait_for_version, wait_until_deployment_finishes
+    from utils import wait_for_version, wait_until_deployment_finishes, retry_limited
 
 
 def check_result(result: inmanta.protocol.Result) -> bool:
@@ -385,6 +385,21 @@ async def test_dump_db(
         module_version_info={},
     )
     assert res.code == 200
+
+    result = await client.create_environment(project_id=project_id, name="dev-4")
+    assert result.code == 200
+    env_id_4 = result.result["environment"]["id"]
+    project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["server"], str(env_id_4), "compiler")
+    # Make dir read-only so that the compile service fails on it
+    os.makedirs(project_dir, exist_ok=True)
+    os.chmod(project_dir, 0o445)
+    check_result(await client.notify_change(id=env_id_4))
+
+    async def has_compile_finished(env_id: uuid.UUID) -> bool:
+        result = await client.is_compiling(env_id)
+        return result.code == 204
+
+    await retry_limited(has_compile_finished, timeout=10, env_id=env_id_4)
 
     proc = await asyncio.create_subprocess_exec(
         "pg_dump", "-h", "127.0.0.1", "-p", str(postgres_db.port), "-f", outfile, "-O", "-U", postgres_db.user, database_name

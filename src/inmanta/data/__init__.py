@@ -6007,6 +6007,7 @@ class Notification(BaseDocument):
     message: str
     severity: const.NotificationSeverity = const.NotificationSeverity.message
     uri: Optional[str] = None
+    compile_id: Optional[uuid.UUID] = None
     read: bool = False
     cleared: bool = False
 
