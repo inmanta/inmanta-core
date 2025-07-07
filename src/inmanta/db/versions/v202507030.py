@@ -22,7 +22,7 @@ from asyncpg import Connection
 async def update(connection: Connection) -> None:
     """
     * Add foreign key from the notification to the compile table.
-    * Remove notification that have a reference to a compile that was removed.
+    * Remove notifications that have a reference to a compile that was removed.
     """
     schema = """
     -- Add compile_id column to notification table.

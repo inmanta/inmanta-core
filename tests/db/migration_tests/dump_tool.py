@@ -386,6 +386,8 @@ async def test_dump_db(
     )
     assert res.code == 200
 
+    # Create an environment that contains a compile report with a notification
+    # associated with it about the fact that the compile failed.
     result = await client.create_environment(project_id=project_id, name="dev-4")
     assert result.code == 200
     env_id_4 = result.result["environment"]["id"]
