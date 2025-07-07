@@ -16,14 +16,15 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import uuid
 import os
 import re
+import uuid
 from collections import abc
-from inmanta import data
 
 import asyncpg
 import pytest
+
+from inmanta import data
 
 file_name_regex = re.compile("test_v([0-9]{9})_to_v[0-9]{9}")
 part = file_name_regex.match(__name__)[1]
@@ -48,4 +49,3 @@ async def test_foreign_key_notification_to_compile(
     assert len(result) == 1
     assert result[0].uri == f"/api/v2/compilereport/{compile_id}"
     assert result[0].compile_id == compile_id
-

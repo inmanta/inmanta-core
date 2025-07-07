@@ -40,7 +40,7 @@ from inmanta.server.services.compilerservice import CompilerService
 if __file__ and os.path.dirname(__file__).split("/")[-2] == "inmanta_tests":
     from inmanta_tests.utils import wait_for_version, wait_until_deployment_finishes  # noqa: F401
 else:
-    from utils import wait_for_version, wait_until_deployment_finishes, retry_limited
+    from utils import retry_limited, wait_for_version, wait_until_deployment_finishes
 
 
 def check_result(result: inmanta.protocol.Result) -> bool:
