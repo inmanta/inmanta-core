@@ -473,7 +473,7 @@ async def test_resource_history_paging(server, client, order_by_column, order, e
     assert result.code == 200
     full_history = result.result["data"]
 
-    result = await client.resource_history(env.id, resource_with_long_history, sort=f"{order_by_column}.{order}")
+    result = await client.resource_history(env.id, resource_with_long_history, sort=f"{order_by_column}.{order}", limit=2)
 
     idx = 0
     async for item in result.all(env=str(env.id)):
