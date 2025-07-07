@@ -30,7 +30,7 @@ Data sources for policy engine
 As mentioned above, the policy engine relies on three pieces of information to determine whether an API call is authorized:
 
 * Authorization-related metadata about each API endpoint on the server
-* The data in the specific API request done by the client
+* The data in the specific API request made by the client
 * The access policy
 
 The sections below discuss each of these three elements in more detail.
@@ -74,7 +74,7 @@ The ``inmanta policy-engine print-endpoint-data`` command prints the full datast
 Data in API request
 """""""""""""""""""
 
-The parameters of the specific API call being done and the decoded access token are available in the access policy using respectively
+The parameters of the specific API call being processed and the decoded access token are available in the access policy using respectively
 the ``input.request`` and ``input.token`` variable. The snippet below provides an example about what this datastructure looks like.
 
 .. code-block:: rego
@@ -163,7 +163,7 @@ The default policy integrates seamlessly with database authentication.
 * The admin user created using the ``/opt/inmanta/bin/inmanta-initial-user-setup`` command will have the ``urn:inmanta:is_admin`` claim set to true.
 * The web-console provides support to manage users and role assignments.
 
-If the policy contains a ``roles`` variable that contains a list role names, the Inmanta server will create these roles automatically when the server starts. The default policy defines this variable for the roles it can handle. Like that there is no need to create roles by hand. The snippet below provides an example. Removing a role from this list will not remove that role when the server starts. That should be done manually.
+If the policy contains a ``roles`` variable that contains a list role names, the Inmanta server will create these roles automatically when the server starts. The default policy defines this variable for the roles it can handle. That way there is no need to create roles by hand. The snippet below provides an example. Removing a role from this list will not remove that role when the server starts. That should be done manually.
 
 
 .. code-block:: rego
