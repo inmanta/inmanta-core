@@ -8,17 +8,17 @@ click-plugins==1.1.1.2
 colorlog==6.9.0
 cookiecutter==2.6.0
 crontab==1.0.4
-cryptography==45.0.4
+cryptography==45.0.5
 docstring-parser==0.16
 # documentation
 email-validator==2.2.0
 furo==2024.8.6
 graphviz==0.21
-inmanta-dev-dependencies==2.169.0
+inmanta-dev-dependencies==2.170.0
 inmanta-module-std
 inmanta-sphinx==2.3.0
 jinja2==3.1.6
-logfire==3.21.2
+logfire==3.22.0
 more-itertools==10.7.0
 myst-parser==4.0.1
 openapi_spec_validator==0.7.2
