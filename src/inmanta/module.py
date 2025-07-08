@@ -1531,6 +1531,8 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
     ] = []
     agent_install_dependency_modules: bool = True
     pip: ProjectPipConfig = ProjectPipConfig()
+    # TODO: DOCUMENT SETTING
+    environment_settings: dict[str, inmanta.data.model.EnvSettingType] | None = None
 
     @field_validator("modulepath", mode="before")
     @classmethod
