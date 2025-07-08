@@ -27,12 +27,12 @@ from typing import Any, Callable, Optional, Union
 import pydantic
 
 from inmanta import const, loader, protocol, references
-from inmanta.data import model
 from inmanta.agent.handler import Commander
 from inmanta.ast import CompilerException, Namespace, UnknownException
 from inmanta.ast.entity import Entity
 from inmanta.config import Option, is_list, is_uuid_opt
 from inmanta.const import ResourceState
+from inmanta.data import model
 from inmanta.data.model import PipConfig
 from inmanta.execute.proxy import DynamicProxy, ProxyContext, ProxyMode
 from inmanta.execute.runtime import Instance

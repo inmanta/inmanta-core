@@ -28,4 +28,3 @@ async def update(connection: Connection) -> None:
         ADD COLUMN export_environment_settings BOOL NOT NULL DEFAULT FALSE;
     """
     await connection.execute(schema)
-
