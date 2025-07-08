@@ -419,8 +419,8 @@ class Exporter:
         resources = self.resources_to_list()
 
         # Export environment settings to server
-        if project.environment_settings:
-            self._export_environment_settings(project.environment_settings)
+        if export_environment_settings:
+            self._export_environment_settings(project.metadata.environment_settings)
 
         export_done = time.time()
         LOGGER.debug("Generating resources from the compiled model took %0.03f seconds", export_done - start)
@@ -452,7 +452,9 @@ class Exporter:
 
         return exported_version, self._resources
 
-    def _export_environment_settings(self, environment_settings: dict[str, model.EnvSettingType]) -> None:
+    def _export_environment_settings(self, environment_settings: dict[str, model.EnvSettingType] | None) -> None:
+        if not environment_settings:
+            return
         for setting_name, value in environment_settings.items():
             result = self.client.environment_settings_set(tid=self.get_environment_id(), id=setting_name, value=value)
             if result.code != 200:
