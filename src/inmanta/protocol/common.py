@@ -1108,7 +1108,7 @@ class Result:
         code: int = 0,
         result: Optional[JsonType] = None,
         *,
-        client: "rest_client.RESTClient",
+        client: "RESTClient",
         method_properties: MethodProperties,
         environment: str = "",
     ) -> None:
@@ -1121,7 +1121,7 @@ class Result:
         """
         self._result = result
         self.code = code
-        self._client: "rest_client.RESTClient" = client
+        self._client: "RESTClient" = client
 
         self._callback: Optional[Callable[["Result"], None]] = None
         self._method_properties: MethodProperties = method_properties
