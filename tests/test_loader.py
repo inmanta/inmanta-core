@@ -368,7 +368,7 @@ def test_venv_path(tmpdir: py.path.local, projects_dir: str, deactive_venv):
         project: Project = Project(project_dir, venv_path=venv_path)
         Project.set(project)
         # don't load full project, only AST so we don't have to deal with module finder cleanup
-        project.load_module_recursive(install=True)
+        project.install_modules()
 
     # Use non-default venv dir
     non_default_venv_dir = os.path.join(project_dir, "non-default-venv-dir")

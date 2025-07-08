@@ -267,20 +267,20 @@ def test_module_v2_source_path_for_v1(snippetcompiler) -> None:
     """
     Make sure ModuleV2Source.path_for does not include modules loaded by the v1 module loader.
     """
-    # install and load std as v1
-    snippetcompiler.setup_for_snippet("import dummy_module")
+    # load tests module
+    snippetcompiler.setup_for_snippet("import tests")
     module.Project.get().load_plugins()
 
     # make sure the v1 module finder is configured and discovered by env.process_env
     assert PluginModuleFinder.MODULE_FINDER is not None
-    module_info: Optional[tuple[Optional[str], Loader]] = env.process_env.get_module_file("inmanta_plugins.dummy_module")
+    module_info: Optional[tuple[Optional[str], Loader]] = env.process_env.get_module_file("inmanta_plugins.tests")
     assert module_info is not None
     path, loader = module_info
     assert path is not None
     assert isinstance(loader, PluginModuleLoader)
 
     source: module.ModuleV2Source = module.ModuleV2Source()
-    assert source.path_for("dummy_module") is None
+    assert source.path_for("tests") is None
 
 
 def test_module_v2_from_v1_path(

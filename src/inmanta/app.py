@@ -313,10 +313,7 @@ def compile_project(options: argparse.Namespace) -> None:
     if options.dataflow_graphic is True:
         Config.set("compiler", "dataflow_graphic_enable", "true")
 
-    strict_deps_check = moduletool.get_strict_deps_check(
-        no_strict_deps_check=options.no_strict_deps_check, strict_deps_check=options.strict_deps_check
-    )
-    module.Project.get(options.main_file, strict_deps_check=strict_deps_check)
+    module.Project.get(options.main_file)
 
     with tracing.span("compile"):
         summary_reporter = CompileSummaryReporter()
@@ -553,10 +550,7 @@ def export(options: argparse.Namespace) -> None:
     if "type" not in metadata:
         metadata["type"] = "manual"
 
-    strict_deps_check = moduletool.get_strict_deps_check(
-        no_strict_deps_check=options.no_strict_deps_check, strict_deps_check=options.strict_deps_check
-    )
-    module.Project.get(options.main_file, strict_deps_check=strict_deps_check)
+    module.Project.get(options.main_file)
 
     from inmanta.export import Exporter  # noqa: H307
 
