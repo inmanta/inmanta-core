@@ -1114,7 +1114,7 @@ class Result:
     ) -> None:
         """
         :param code: HTTP response code.
-        :param result: HTTP Response as a dictionary.
+        :param result: HTTP response as a dictionary.
         :param client: A client that can perform HTTP requests.
         :param method_properties: The MethodProperties of the method called initially to produce this result.
         :param environment: The environment in which the initial call was performed, if any.
