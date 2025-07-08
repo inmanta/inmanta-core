@@ -148,21 +148,21 @@ class RESTClient(RESTBase):
                     if length > 65000:
                         LOGGER.exception("Failed to send request, header is too long (estimated size %d)", length)
                         return common.Result(
-                            code=e.code, result={"message": f"{e.message} header is too long (estimated size {length})"}
+                            code=e.code, result={"message": f"{e.message} header is too long (estimated size {length})"}, client=self, method_properties=properties
                         )
                 if e.response is not None and e.response.body is not None and len(e.response.body) > 0:
                     try:
                         result = self._decode(e.response.body)
                     except ValueError:
                         result = {}
-                    return common.Result(code=e.code, result=result)
+                    return common.Result(code=e.code, result=result, client=self, method_properties=properties)
 
-                return common.Result(code=e.code, result={"message": str(e)})
+                return common.Result(code=e.code, result={"message": str(e)}, client=self, method_properties=properties)
             except CancelledError:
                 raise
             except Exception as e:
                 LOGGER.exception("Failed to send request")
-                return common.Result(code=500, result={"message": str(e)})
+                return common.Result(code=500, result={"message": str(e)}, client=self, method_properties=properties)
 
         return self._decode_response(response, properties, environment)
 

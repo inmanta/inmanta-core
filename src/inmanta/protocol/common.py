@@ -1108,8 +1108,8 @@ class Result:
         code: int = 0,
         result: Optional[JsonType] = None,
         *,
-        client: Optional["RESTClient"] = None,
-        method_properties: Optional[MethodProperties] = None,
+        client: "rest_client.RESTClient",
+        method_properties: MethodProperties,
         environment: str = "",
     ) -> None:
         """
@@ -1121,10 +1121,10 @@ class Result:
         """
         self._result = result
         self.code = code
-        self._client = client
+        self._client: "rest_client.RESTClient" = client
 
         self._callback: Optional[Callable[["Result"], None]] = None
-        self._method_properties: Optional[MethodProperties] = method_properties
+        self._method_properties: MethodProperties = method_properties
         self._environment = environment
 
     def get_result(self) -> Optional[JsonType]:
@@ -1174,9 +1174,6 @@ class Result:
             if not result.result:
                 return
 
-            if not self._method_properties:
-                raise Exception("Panic!")
-
             page = result.result.get(self._method_properties.envelope_key, [])
             for item in page:
                 yield item
@@ -1185,12 +1182,6 @@ class Result:
 
             if not next_link_url:
                 return
-
-            if not self._client:
-                raise Exception(
-                    "Missing client: the unpage() method requires a client to follow paging links."
-                    "Cannot fetch results beyond the first page."
-                )
 
             server_url = self._client._get_client_config()
             url = server_url + next_link_url
