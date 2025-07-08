@@ -34,7 +34,6 @@ part = file_name_regex.match(__name__)[1]
 async def test_foreign_key_notification_to_compile(
     postgresql_client: asyncpg.Connection,
     migrate_db_from: abc.Callable[[], abc.Awaitable[None]],
-    get_tables_in_db: abc.Callable[[], abc.Awaitable[list[str]]],
 ) -> None:
     compile_id = uuid.UUID("331580a4-eb11-4eb1-ace4-19e1ffc3271c")
     result = await data.Notification.get_list(connection=postgresql_client)
