@@ -18,7 +18,6 @@ Contact: code@inmanta.com
 
 import logging
 import os
-import re
 import shutil
 from collections.abc import Iterator
 from datetime import datetime
