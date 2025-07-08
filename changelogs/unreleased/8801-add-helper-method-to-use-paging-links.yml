@@ -1,0 +1,4 @@
+description: Add helper method to use paging links
+issue-nr: 8801
+change-type: minor
+destination-branches: [master, iso8]
