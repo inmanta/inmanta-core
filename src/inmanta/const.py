@@ -326,9 +326,6 @@ EXTENSION_MODULE = "extension"
 # Default envelope key
 ENVELOPE_KEY = "data"
 
-# Max number of attempts when updating modules
-MAX_UPDATE_ATTEMPT = 5
-
 # Minimum password length
 MIN_PASSWORD_LENGTH = 8
 
@@ -397,6 +394,7 @@ MODULE_CHANGELOG_FILE = "CHANGELOG.md"
 DATETIME_MIN_UTC = datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
 
 MODULE_PKG_NAME_PREFIX = "inmanta-module-"
+STD_PACKAGE = f"{MODULE_PKG_NAME_PREFIX}std"
 
 TRACEPARENT = "traceparent"
 
