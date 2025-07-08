@@ -38,7 +38,7 @@ from inmanta.server import SLICE_COMPILER, SLICE_SERVER
 from inmanta.server.services.compilerservice import CompilerService
 
 if __file__ and os.path.dirname(__file__).split("/")[-2] == "inmanta_tests":
-    from inmanta_tests.utils import wait_for_version, wait_until_deployment_finishes  # noqa: F401
+    from inmanta_tests.utils import retry_limited, wait_for_version, wait_until_deployment_finishes  # noqa: F401
 else:
     from utils import retry_limited, wait_for_version, wait_until_deployment_finishes
 
