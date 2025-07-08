@@ -1376,7 +1376,6 @@ class SnippetCompilationTest(KeepOnFail):
         python_requires: Optional[list[Requirement]] = None,
         install_mode: Optional[InstallMode] = None,
         relation_precedence_rules: Optional[list[RelationPrecedenceRule]] = None,
-        strict_deps_check: Optional[bool] = None,
         use_pip_config_file: bool = False,
         index_url: Optional[str] = None,
         extra_index_url: list[str] = [],
@@ -1398,7 +1397,6 @@ class SnippetCompilationTest(KeepOnFail):
                              no install mode is set explicitly in the project.yml file.
         :param relation_precedence_policy: The relation precedence policy that should be stored in the project.yml file of the
                                            Inmanta project.
-        :param strict_deps_check: True iff the returned project should have strict dependency checking enabled.
         :param use_pip_config_file: True iff the pip config file should be used and no source is required for v2 to work
                                     False if a package source is needed for v2 modules to work
         :param main_file: Path to the .cf file to use as main entry point. A relative or an absolute path can be provided.
@@ -1428,7 +1426,6 @@ class SnippetCompilationTest(KeepOnFail):
             autostd or ministd,
             install_project,
             install_v2_modules,
-            strict_deps_check=strict_deps_check,
             main_file=main_file,
             dirty_venv=dirty_venv,
         )
@@ -1439,13 +1436,10 @@ class SnippetCompilationTest(KeepOnFail):
         install_project: bool,
         install_v2_modules: Optional[list[LocalPackagePath]] = None,
         main_file: str = "main.cf",
-        strict_deps_check: Optional[bool] = None,
         dirty_venv: bool = True,
     ):
         loader.PluginModuleFinder.reset()
-        self.project = Project(
-            self.project_dir, autostd=autostd, main_file=main_file, venv_path=self.venv, strict_deps_check=strict_deps_check
-        )
+        self.project = Project(self.project_dir, autostd=autostd, main_file=main_file, venv_path=self.venv)
         Project.set(self.project)
 
         if dirty_venv:
