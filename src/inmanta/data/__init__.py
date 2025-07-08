@@ -6039,6 +6039,7 @@ class Notification(BaseDocument):
             cleared=self.cleared,
             uri=self.uri,
             environment=self.environment,
+            compile_id=self.compile_id,
         )
 
 
