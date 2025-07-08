@@ -476,7 +476,7 @@ async def test_resource_history_paging(server, client, order_by_column, order, e
     result = await client.resource_history(env.id, resource_with_long_history, sort=f"{order_by_column}.{order}", limit=2)
 
     idx = 0
-    async for item in result.all():
+    async for item in result.unpage():
         assert item == full_history[idx]
         idx += 1
 

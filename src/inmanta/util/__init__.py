@@ -64,7 +64,6 @@ from packaging.utils import NormalizedName
 if TYPE_CHECKING:
     from inmanta.data.model import ResourceId
 
-
 LOGGER = logging.getLogger(__name__)
 SALT_SIZE = 16
 HASH_ROUNDS = 100000

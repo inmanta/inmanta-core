@@ -1107,24 +1107,25 @@ class Result:
         self,
         code: int = 0,
         result: Optional[JsonType] = None,
-        client: Optional["RESTClient"] = None,
         *,
+        client: Optional["RESTClient"] = None,
         method_properties: Optional[MethodProperties] = None,
-        environment: Optional[str] = None,
+        environment: str = "",
     ) -> None:
         """
-        The result code of the method call.
+        :param code: HTTP response code.
+        :param result: HTTP Response as a dictionary.
+        :param client: A client that can perform HTTP requests.
+        :param method_properties: The MethodProperties of the method called initially to produce this result.
+        :param environment: The environment in which the initial call was performed, if any.
         """
         self._result = result
         self.code = code
         self._client = client
 
-        # Carry the env as well (if possible) might be retrievable from the method properties
-        # and method properties  for the envelope key
-
         self._callback: Optional[Callable[["Result"], None]] = None
         self._method_properties: Optional[MethodProperties] = method_properties
-        self._environment = environment or ""
+        self._environment = environment
 
     def get_result(self) -> Optional[JsonType]:
         """
@@ -1163,13 +1164,17 @@ class Result:
         """
         self._callback = fnc
 
-    async def all(self) -> AsyncIterator[types.JsonType]:
+    async def unpage(self) -> AsyncIterator[types.JsonType]:
+        """
+        Helper method to iterate over all individual items in this result object.
+        This method will start at the first page and follow paging links.
+        """
         result = self
         while result.code == 200:
             if not result.result:
                 return
 
-            if not (self._client and self._method_properties):
+            if not self._method_properties:
                 raise Exception("Panic!")
 
             page = result.result.get(self._method_properties.envelope_key, [])
@@ -1180,6 +1185,12 @@ class Result:
 
             if not next_link_url:
                 return
+
+            if not self._client:
+                raise Exception(
+                    "Missing client: the unpage() method requires a client to follow paging links."
+                    "Cannot fetch results beyond the first page."
+                )
 
             server_url = self._client._get_client_config()
             url = server_url + next_link_url
