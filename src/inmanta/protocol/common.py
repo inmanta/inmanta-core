@@ -32,7 +32,7 @@ from datetime import datetime
 from enum import Enum
 from functools import partial
 from inspect import Parameter
-from typing import TYPE_CHECKING, Any, AsyncIterator, Callable, Optional, TypeVar, Union, cast, get_type_hints
+from typing import TYPE_CHECKING, Any, AsyncIterator, Callable, Generic, Optional, TypeVar, Union, cast, get_type_hints
 from urllib import parse
 
 import docstring_parser
@@ -173,7 +173,7 @@ class Request:
 T_co = TypeVar("T_co", bound=Union[None, ArgumentTypes], covariant=True)
 
 
-class ReturnValue[T_co]:
+class ReturnValue(Generic[T_co]):
     """
     An object that handlers can return to provide a response to a method call.
     """
