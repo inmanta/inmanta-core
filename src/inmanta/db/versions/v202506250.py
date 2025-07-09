@@ -21,7 +21,7 @@ from asyncpg import Connection
 
 async def update(connection: Connection) -> None:
     """
-    Add is_admin column to table inmanta_user.
+    Drop column 'status' from resource table.
     """
     schema = """
     ALTER TABLE public.resource

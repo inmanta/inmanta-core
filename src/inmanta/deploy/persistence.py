@@ -129,36 +129,26 @@ class ToDbUpdateManager(StateUpdateManager):
         """
         Update the db to reflect that deployment has started for a given resource.
         """
+        log_line = data.LogLine.log(
+            logging.INFO,
+            "Resource deploy started on agent %(agent)s, setting status to deploying",
+            agent=resource_id.agent_name,
+        )
+        # Not in Handler context, need to flush explicitly
+        log_line.write_to_logger_for_resource(resource_id.agent_name, resource_id.resource_version_str(), False)
 
+        resource_action = data.ResourceAction(
+            environment=self.environment,
+            version=resource_id.version,
+            resource_version_ids=[resource_id.resource_version_str()],
+            action_id=action_id,
+            action=const.ResourceAction.deploy,
+            started=datetime.datetime.now().astimezone(),
+            messages=[log_line],
+            status=const.ResourceState.deploying,
+        )
         async with data.Resource.get_connection() as connection:
             async with connection.transaction():
-                # This check is made in an overabundance of caution and can probably be dropped
-                resource = await data.Resource.get_one(
-                    connection=connection,
-                    environment=self.environment,
-                    resource_id=resource_id.resource_str(),
-                    model=resource_id.version,
-                )
-                assert resource is not None, f"Resource {resource_id} does not exists in the database, this should not happen"
-
-                log_line = data.LogLine.log(
-                    logging.INFO,
-                    "Resource deploy started on agent %(agent)s, setting status to deploying",
-                    agent=resource_id.agent_name,
-                )
-                # Not in Handler context, need to flush explicitly
-                log_line.write_to_logger_for_resource(resource_id.agent_name, resource_id.resource_version_str(), False)
-
-                resource_action = data.ResourceAction(
-                    environment=self.environment,
-                    version=resource_id.version,
-                    resource_version_ids=[resource_id.resource_version_str()],
-                    action_id=action_id,
-                    action=const.ResourceAction.deploy,
-                    started=datetime.datetime.now().astimezone(),
-                    messages=[log_line],
-                    status=const.ResourceState.deploying,
-                )
                 try:
                     await resource_action.insert(connection=connection)
                 except UniqueViolationError:
