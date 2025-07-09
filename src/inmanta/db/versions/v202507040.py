@@ -31,15 +31,15 @@ async def update(connection: Connection) -> None:
         revision integer NOT NULL,
         PRIMARY KEY (name, environment, model, revision),
         FOREIGN KEY (environment, model)
-            REFERENCES public.configurationmodel(environment, version) ON DELETE CASCADE,
+            REFERENCES public.configurationmodel(environment, version) ON DELETE CASCADE
     );
 
     INSERT INTO public.resource_set (name, environment, model, revision)
     SELECT DISTINCT
-        resource.resource_set AS name,
-        resource.environment,
-        resource.model,
-        resource.model AS revision
+        r.resource_set AS name,
+        r.environment,
+        r.model,
+        r.model AS revision
     FROM public.resource AS r
     WHERE NOT EXISTS (
         SELECT 1

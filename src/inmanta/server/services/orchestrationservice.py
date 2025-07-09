@@ -591,6 +591,7 @@ class OrchestrationService(protocol.ServerSlice):
             if res_obj.resource_id in resource_sets:
                 res_obj.resource_set = resource_sets[res_obj.resource_id]
 
+
             # Populate attributes field of resources
             attributes = {}
             for field, value in res_dict.items():

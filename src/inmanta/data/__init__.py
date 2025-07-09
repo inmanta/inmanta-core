@@ -4684,6 +4684,7 @@ class Resource(BaseDocument):
                            used to determine if a resource describes the same state across versions
     :param is_undefined: If the desired state for resource is undefined
     :param resource_set: The resource set this resource belongs to. Used when doing partial compiles.
+    :param revision: The revision of the resource set this resource belongs to.
     """
 
     __primary_key__ = ("environment", "model", "resource_id")
@@ -4704,6 +4705,7 @@ class Resource(BaseDocument):
     is_undefined: bool = False
 
     resource_set: Optional[str] = None
+    revision: int
 
     # internal field to handle cross agent dependencies
     # if this resource is updated, it must notify all RV's in this list
@@ -5129,6 +5131,7 @@ class Resource(BaseDocument):
             resource_type=vid.entity_type,
             agent=vid.agent_name,
             resource_id_value=vid.attribute_value,
+            revision=vid.version
         )
 
         attr.update(kwargs)
@@ -5151,6 +5154,7 @@ class Resource(BaseDocument):
             attribute_hash=self.attribute_hash,
             is_undefined=self.is_undefined,
             resource_set=self.resource_set,
+            revision=self.revision,
             provides=self.provides,
         )
 
