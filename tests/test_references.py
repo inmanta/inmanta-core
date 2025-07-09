@@ -23,7 +23,7 @@ import os
 import re
 import typing
 from logging import DEBUG
-from typing import Iterator, Optional
+from typing import Iterator, Optional, Tuple
 from uuid import UUID
 
 import pytest
@@ -40,7 +40,8 @@ from inmanta.ast import (
 )
 from inmanta.data.model import ReleasedResourceDetails, ReleasedResourceState
 from inmanta.export import ResourceDict
-from inmanta.references import Reference, ReferenceCycleException, reference
+from inmanta.references import JsonArgument, Reference, ReferenceCycleException, reference
+from inmanta.resources import Resource
 from inmanta.util.dict_path import Mapping, MutableMapping
 from utils import ClientHelper, log_contains
 
@@ -75,6 +76,7 @@ def round_trip_resource(resource):
     data = json.dumps(serialized, default=util.api_boundary_json_encoder)
     r = resources.Resource.deserialize(json.loads(data))
     r.resolve_all_references(PythonLogger(logging.getLogger("test.refs")))
+    return r
 
 
 def round_trip_ref(reference: Reference):
@@ -167,7 +169,20 @@ def test_undeclared_reference_in_map(
         """,
         install_v2_modules=[env.LocalPackagePath(path=refs_module)],
     )
-    snippetcompiler.do_export()
+    _, resources = snippetcompiler.do_export()
+
+    # Find the resource
+    rbykey = {str(k): v for k, v in resources.items()}
+    r = rbykey["refs::DeepResourceNoReferences[test,name=test]"]
+
+    # ensure we have the nastiest path possible.
+    assert r.mutators[0].args[2].value == "value.'inner.something'[0]"
+
+    # make it resolve!
+    r = round_trip_resource(r)
+
+    # ensure it did resolve
+    assert r.value["inner.something"][0] == "test"
 
 
 async def test_deploy_end_to_end(
@@ -268,7 +283,7 @@ async def test_deploy_end_to_end(
     assert details.status == ReleasedResourceState.deployed
     result = await client.resource_logs(environment, "refs::DeepResource[test,name=test4]")
     assert result.code == 200
-    assert [msg for msg in result.result["data"] if "Observed value: {'inner.something': 'TESTX'}" in msg["msg"]]
+    assert [msg for msg in result.result["data"] if "Observed value: {'inner.something': ['TESTX']}" in msg["msg"]]
 
 
 def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:

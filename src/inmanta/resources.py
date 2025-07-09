@@ -257,7 +257,7 @@ class ReferenceSubCollector:
 
             case dict() | proxy.DictProxy():
                 return {
-                    key: self.collect_references(value, f"{path}.{dict_path.NormalValue(key).escape()}")
+                    key: self.collect_references(value, f"{path}.'{key.replace("'", "\\'")}'")
                     for key, value in allow_references(value).items()
                 }
 
@@ -577,12 +577,20 @@ class Resource(metaclass=ResourceMeta):
         self._references: dict[uuid.UUID, references.Reference[references.RefValue]] = {}
         self._resolved = False
 
+    def get(self, key: str, default=None) -> object:
+        if key in self.fields:
+            return getattr(self, key)
+        return default
+
     def __getitem__(self, key: str) -> object:
         """Support dict like access on the resource"""
         if key in self.fields:
             return getattr(self, key)
 
         raise KeyError()
+
+    def __contains__(self, item: str) -> object:
+        return item in self.fields
 
     def __setitem__(self, key: str, value: object) -> None:
         """Support dict like access on the resource. It is not possible to create new
