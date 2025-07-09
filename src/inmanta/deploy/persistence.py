@@ -225,7 +225,10 @@ class ToDbUpdateManager(StateUpdateManager):
             async with connection.transaction():
 
                 resource_action = await data.ResourceAction.get_one(
-                    connection=connection, lock=data.RowLockMode.FOR_UPDATE, environment=self.environment, action_id=action_id
+                    connection=connection,
+                    lock=data.RowLockMode.FOR_NO_KEY_UPDATE,
+                    environment=self.environment,
+                    action_id=action_id,
                 )
                 if resource_action is None:
                     raise ValueError(
