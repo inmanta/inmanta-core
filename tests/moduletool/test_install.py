@@ -1161,14 +1161,14 @@ def test_constraints_logging_v2(modules_v2_dir, tmpdir, caplog, snippetcompiler_
     )
 
     expected_log_messages = [
-        "Installing module module_a (v2) (with constraints module_a<9.9.9 module_a>1.1.1 module_a<10.10.10 module_a>=0.0.0).",
-        "Installing module module_b (v2) (with no version constraints)",
+        "inmanta-module-module-a<9.9.9",
+        "inmanta-module-module-a>1.1.1",
     ]
 
     for log_message in expected_log_messages:
         log_contains(
             caplog,
-            "inmanta.module",
+            "inmanta.pip",
             logging.DEBUG,
             log_message,
         )
