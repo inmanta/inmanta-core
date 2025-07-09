@@ -3,6 +3,6 @@ description: "A notification is now deleted when the associated compile report i
 issue-nr: 9092
 issue-repo: inmanta-core
 change-type: minor
-destination-branches: [master, iso8]
+destination-branches: [iso8]
 sections:
   minor-improvement: "{{description}}"
