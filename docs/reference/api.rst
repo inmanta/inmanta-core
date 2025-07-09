@@ -377,7 +377,7 @@ end and last_id
     These parameters define the upper limit for the page
     (only one of the (`start`, `first_id`), (`end`, `last_id`) pairs should be specified at the same time).
 
-.. _helper_method_for_paging
+.. _helper_method_for_paging:
 
 .. note::
 
