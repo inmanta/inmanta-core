@@ -177,9 +177,9 @@ class TimerManager:
             environment = await data.Environment.get_by_id(self._resource_scheduler.environment, connection=connection)
             assert environment is not None
             deploy_timer = await environment.get(data.AUTOSTART_AGENT_DEPLOY_INTERVAL, connection=connection)
-            assert isinstance(deploy_timer, str) or isinstance(deploy_timer, int)  # make mypy happy
+            assert isinstance(deploy_timer, str)  # make mypy happy
             repair_timer = await environment.get(data.AUTOSTART_AGENT_REPAIR_INTERVAL, connection=connection)
-            assert isinstance(repair_timer, str) or isinstance(repair_timer, int)  # make mypy happy
+            assert isinstance(repair_timer, str)  # make mypy happy
 
         new_deploy_cron: str | None
         new_periodic_deploy_interval: int | None
