@@ -36,7 +36,7 @@ from inmanta import logging as inmanta_logging
 from inmanta.agent.handler import CRUDHandler, HandlerContext, ResourceHandler, SkipResource, TResource, provider
 from inmanta.agent.write_barier_executor import WriteBarierExecutorManager
 from inmanta.config import log_dir
-from inmanta.data.model import AuthMethod
+from inmanta.data.model import AuthMethod, EnvSettingType
 from inmanta.db.util import PGRestore
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.protocol.auth import auth
@@ -1487,6 +1487,7 @@ class SnippetCompilationTest(KeepOnFail):
         extra_index_url: list[str] = [],
         main_file: str = "main.cf",
         ministd: bool = False,
+        environment_settings: dict[str, EnvSettingType] | None = None
     ) -> None:
         add_to_module_path = add_to_module_path if add_to_module_path is not None else []
         python_package_sources = python_package_sources if python_package_sources is not None else []
@@ -1534,6 +1535,9 @@ class SnippetCompilationTest(KeepOnFail):
                     f"""                extra_index_url: [{", ".join(url for url in extra_index_url)}]
 """
                 )
+            if environment_settings:
+                cfg.write("\n            environment_settings:\n")
+                cfg.write("\n".join(f"                {name}: {value}" for name, value in environment_settings.items()))
         with open(os.path.join(self.project_dir, "requirements.txt"), "w", encoding="utf-8") as fd:
             fd.write("\n".join(str(req) for req in python_requires))
         self.main = os.path.join(self.project_dir, main_file)

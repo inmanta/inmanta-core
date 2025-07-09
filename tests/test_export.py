@@ -25,7 +25,7 @@ from typing import Optional
 import pytest
 
 import inmanta.resources
-from inmanta import config, const, module
+from inmanta import config, const, module, data
 from inmanta.ast import CompilerException, ExternalException, RuntimeException
 from inmanta.const import ResourceState
 from inmanta.data import Environment, Resource
@@ -320,6 +320,10 @@ import exp
 a = exp::Test2(mydict={"a":"b"}, mylist=["a","b"])
 """,
         autostd=True,
+        environment_settings={
+            # TODO
+            data.AUTO_DEPLOY: False,
+        }
     )
 
     await snippetcompiler.do_export_and_deploy()
