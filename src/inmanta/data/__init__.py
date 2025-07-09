@@ -2484,8 +2484,8 @@ class Environment(BaseDocument):
             typ="str",
             default="600",
             doc=(
-                "Set the frequency and the granularity of deploy runs (i.e. only trigger a deploy for resources that have a "
-                "known divergence with their desired state). "
+                "Set the frequency of deploy runs (i.e. only trigger a deploy for resources that are not "
+                "compliant as far as we know). "
                 "When specified as an integer, this will set the wait time (in seconds) before attempting to redeploy a "
                 "resource after an unsuccessful deployment, on a per-resource basis. "
                 "When specified as a cron-like expression, a global deploy (i.e. for all resources that have a known "
@@ -2503,7 +2503,7 @@ class Environment(BaseDocument):
             typ="str",
             default="86400",
             doc=(
-                "Set the frequency and the granularity of repair runs (i.e. trigger a deploy regardless of the assumed "
+                "Set the frequency of repair runs (i.e. trigger a deploy regardless of the assumed "
                 "state of the resource(s)). When specified as an integer, this will set the wait time (in seconds) before "
                 "re-scheduling a resource for deployment after the previous deployment has ended, regardless of success or "
                 "failure, on a per-resource basis. When specified as a cron-like expression, a global repair (i.e. a full "
