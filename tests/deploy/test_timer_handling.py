@@ -31,7 +31,6 @@ import pytest
 from deploy.scheduler_mocks import FAIL_DEPLOY, DummyManager, TestScheduler
 from deploy.test_scheduler_agent import retry_limited_fast
 from inmanta import const, data
-from inmanta.agent import config
 from inmanta.deploy import state
 from inmanta.deploy.scheduler import ModelVersion
 from inmanta.deploy.timers import ResourceTimer, TimerManager
@@ -189,7 +188,6 @@ async def test_config_update(inmanta_config, make_resource_minimal, environment,
     assert result.code == 200
     result = await client.set_setting(environment, data.AUTOSTART_AGENT_REPAIR_INTERVAL, "3600")
     assert result.code == 200
-
 
     tm = MockTimerManager(env_id)
     scheduler: TestScheduler = tm._resource_scheduler
