@@ -239,7 +239,7 @@ async def test_agents_paging(server, client, env_with_agents: None, environment:
     result = await client.get_agents(environment)
 
     idx = 0
-    async for item in result.unpage():
+    async for item in result.all():
         assert item == all_agents[idx]
         idx += 1
     assert idx == len(all_agents)

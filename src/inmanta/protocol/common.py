@@ -1110,7 +1110,7 @@ class Result:
         *,
         client: "RESTClient",
         method_properties: MethodProperties,
-        environment: str = "",
+        environment: Optional[str] = None,
     ) -> None:
         """
         :param code: HTTP response code.
@@ -1164,7 +1164,7 @@ class Result:
         """
         self._callback = fnc
 
-    async def unpage(self) -> AsyncIterator[types.JsonType]:
+    async def all(self) -> AsyncIterator[types.JsonType]:
         """
         Helper method to iterate over all individual items in this result object.
         This method will start at the first page and follow paging links.
@@ -1185,7 +1185,8 @@ class Result:
 
             server_url = self._client._get_client_config()
             url = server_url + next_link_url
-            request = HTTPRequest(url=url, method="GET", headers={"X-Inmanta-tid": self._environment})
+            headers = {"X-Inmanta-tid": self._environment} if self._environment else None
+            request = HTTPRequest(url=url, method="GET", headers=headers)
             result = self._client._decode_response(
                 await self._client.client.fetch(request), self._method_properties, self._environment
             )
