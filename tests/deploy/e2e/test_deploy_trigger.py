@@ -22,8 +22,7 @@ from uuid import UUID
 
 import pytest
 
-from inmanta import const
-from inmanta.config import Config
+from inmanta import const, data
 from inmanta.const import AgentAction
 from utils import get_resource, log_contains, log_doesnt_contain, resource_action_consistency_check, retry_limited
 
@@ -134,16 +133,18 @@ async def test_spontaneous_deploy(
 ):
     """
     Test that a deploy run is executed every 2 seconds in the new agent
-     as specified in the agent_repair_interval (using a cron or not)
+     as specified in the agent_deploy_interval (using a cron or not)
     """
     with caplog.at_level(logging.DEBUG):
         resource_container.Provider.reset()
 
         env_id = UUID(environment)
 
-        Config.set("config", "agent-deploy-interval", agent_deploy_interval)
+        result = await client.set_setting(environment, data.AUTOSTART_AGENT_DEPLOY_INTERVAL, agent_deploy_interval)
+        assert result.code == 200
         # Disable repairs
-        Config.set("config", "agent-repair-interval", "0")
+        result = await client.set_setting(environment, data.AUTOSTART_AGENT_REPAIR_INTERVAL, 0)
+        assert result.code == 200
 
         timer_manager = agent.scheduler._timer_manager
         await timer_manager.initialize()
@@ -210,9 +211,12 @@ async def test_spontaneous_repair(server, client, agent, resource_container, env
     """
     resource_container.Provider.reset()
     env_id = environment
-    Config.set("config", "agent-repair-interval", agent_repair_interval)
+
+    result = await client.set_setting(environment, data.AUTOSTART_AGENT_REPAIR_INTERVAL, agent_repair_interval)
+    assert result.code == 200
     # Disable deploys
-    Config.set("config", "agent-deploy-interval", "0")
+    result = await client.set_setting(environment, data.AUTOSTART_AGENT_DEPLOY_INTERVAL, 0)
+    assert result.code == 200
 
     timer_manager = agent.scheduler._timer_manager
     await timer_manager.initialize()
