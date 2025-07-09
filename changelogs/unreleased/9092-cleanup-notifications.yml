@@ -1,0 +1,8 @@
+---
+description: "A notification is now deleted when the associated compile report is removed."
+issue-nr: 9092
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [master, iso8]
+sections:
+  minor-improvement: "{{description}}"
