@@ -25,7 +25,7 @@ from collections.abc import Collection
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
-from inmanta import util, data
+from inmanta import data, util
 from inmanta.deploy.state import Blocked, Compliance, ResourceState
 from inmanta.deploy.work import TaskPriority
 from inmanta.types import ResourceIdStr
@@ -176,27 +176,33 @@ class TimerManager:
             assert self._resource_scheduler.environment is not None
             environment = await data.Environment.get_by_id(self._resource_scheduler.environment, connection=connection)
             assert environment is not None
-            deploy_timer: int | str = await environment.get(data.AUTOSTART_AGENT_DEPLOY_INTERVAL, connection=connection)
-            assert deploy_timer is not None  # make mypy happy
-            repair_timer: int | str = await environment.get(data.AUTOSTART_AGENT_REPAIR_INTERVAL, connection=connection)
-            assert repair_timer is not None  # make mypy happy
+            deploy_timer = await environment.get(data.AUTOSTART_AGENT_DEPLOY_INTERVAL, connection=connection)
+            assert isinstance(deploy_timer, str) or isinstance(deploy_timer, int)  # make mypy happy
+            repair_timer = await environment.get(data.AUTOSTART_AGENT_REPAIR_INTERVAL, connection=connection)
+            assert isinstance(repair_timer, str) or isinstance(repair_timer, int)  # make mypy happy
+
+        new_deploy_cron: str | None
+        new_periodic_deploy_interval: int | None
+        new_repair_cron: str | None
+        new_periodic_repair_interval: int | None
 
         try:
             deploy_timer = int(deploy_timer)
             new_deploy_cron = None
             new_periodic_deploy_interval = deploy_timer if deploy_timer > 0 else None
         except ValueError:
-            new_deploy_cron: str | None = deploy_timer
-            new_periodic_deploy_interval: int | None = None
+            assert isinstance(deploy_timer, str)  # make mypy happy
+            new_deploy_cron = deploy_timer
+            new_periodic_deploy_interval = None
 
         try:
             repair_timer = int(repair_timer)
             new_repair_cron = None
             new_periodic_repair_interval = repair_timer if repair_timer > 0 else None
         except ValueError:
-            new_repair_cron: str | None = repair_timer
-            new_periodic_repair_interval: int | None = None
-
+            assert isinstance(repair_timer, str)  # make mypy happy
+            new_repair_cron = repair_timer
+            new_periodic_repair_interval = None
 
         if not new_periodic_repair_interval and not new_periodic_deploy_interval:
             self.periodic_repair_interval = new_periodic_repair_interval
