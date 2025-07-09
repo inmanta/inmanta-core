@@ -161,6 +161,10 @@ class Agent(SessionEndpoint):
         """
         Load environment settings into local settings
         """
+        # Called
+        # - on @protocol.handle(methods.set_state)
+        # - on on_reconnect (e.g. in heartbeat)
+        # - on @protocol.handle(methods_v2.notify_timer_update, ...)
         async with data.Environment.get_connection() as connection:
             assert self.environment is not None
             environment = await data.Environment.get_by_id(self.environment, connection=connection)
