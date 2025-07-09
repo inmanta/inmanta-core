@@ -81,6 +81,7 @@ class NotificationService(protocol.ServerSlice, CompileStateListener):
                     message=compile.failed_compile_message,
                     severity=const.NotificationSeverity.error,
                     uri=f"/api/v2/compilereport/{compile.id}",
+                    compile_id=compile.id,
                 )
             elif failed_pull_stage:
                 await self.notify(
@@ -89,6 +90,7 @@ class NotificationService(protocol.ServerSlice, CompileStateListener):
                     message=failed_pull_stage["errstream"],
                     severity=const.NotificationSeverity.error,
                     uri=f"/api/v2/compilereport/{compile.id}",
+                    compile_id=compile.id,
                 )
             elif compile.do_export:
                 await self.notify(
@@ -97,6 +99,7 @@ class NotificationService(protocol.ServerSlice, CompileStateListener):
                     message="An exporting compile has failed",
                     severity=const.NotificationSeverity.error,
                     uri=f"/api/v2/compilereport/{compile.id}",
+                    compile_id=compile.id,
                 )
             elif compile.notify_failed_compile:
                 # Send notification with generic message as fallback
@@ -106,6 +109,7 @@ class NotificationService(protocol.ServerSlice, CompileStateListener):
                     message="A compile has failed",
                     severity=const.NotificationSeverity.error,
                     uri=f"/api/v2/compilereport/{compile.id}",
+                    compile_id=compile.id,
                 )
 
     async def notify(
@@ -116,6 +120,7 @@ class NotificationService(protocol.ServerSlice, CompileStateListener):
         uri: Optional[str] = None,
         severity: const.NotificationSeverity = const.NotificationSeverity.message,
         connection: Optional[Connection] = None,
+        compile_id: uuid.UUID | None = None,
     ) -> None:
         """Internal API to create a new notification
         :param environment: The environment this notification belongs to
@@ -125,6 +130,8 @@ class NotificationService(protocol.ServerSlice, CompileStateListener):
         :param uri: A link to an api endpoint of the server, that is relevant to the message,
                     and can be used to get further information about the problem.
                     For example a compile related problem should have the uri: `/api/v2/compilereport/<compile_id>`
+        :param compile_id: The id of the compile that is associated with this notification or None
+                           if the notification is not associated with a compile.
         """
         await data.Notification(
             environment=environment,
@@ -133,6 +140,7 @@ class NotificationService(protocol.ServerSlice, CompileStateListener):
             uri=uri,
             severity=severity,
             created=datetime.datetime.now().astimezone(),
+            compile_id=compile_id,
         ).insert(connection)
 
     @handle(methods_v2.list_notifications, env="tid")
