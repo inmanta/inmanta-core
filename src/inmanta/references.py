@@ -36,7 +36,6 @@ import jsonpath_ng
 import typing_extensions
 from inmanta import util
 from inmanta.types import JsonType, ResourceIdStr, StrictJson
-from inmanta.util import dict_path
 
 ReferenceType = typing.Annotated[str, pydantic.StringConstraints(pattern="^([a-z0-9_]+::)+[A-Z][A-z0-9_-]*$")]
 PrimitiveTypes = str | float | int | bool | None

@@ -29,7 +29,6 @@ from inmanta import const, references
 from inmanta.execute import proxy, util
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, ResourceIdStr, ResourceVersionIdStr
-from inmanta.util import dict_path
 
 if TYPE_CHECKING:
     from inmanta import export
@@ -577,7 +576,7 @@ class Resource(metaclass=ResourceMeta):
         self._references: dict[uuid.UUID, references.Reference[references.RefValue]] = {}
         self._resolved = False
 
-    def get(self, key: str, default=None) -> object:
+    def get(self, key: str, default: object = None) -> object:
         if key in self.fields:
             return getattr(self, key)
         return default

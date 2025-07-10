@@ -23,7 +23,7 @@ import os
 import re
 import typing
 from logging import DEBUG
-from typing import Iterator, Optional, Tuple
+from typing import Iterator, Optional
 from uuid import UUID
 
 import pytest
@@ -40,8 +40,7 @@ from inmanta.ast import (
 )
 from inmanta.data.model import ReleasedResourceDetails, ReleasedResourceState
 from inmanta.export import ResourceDict
-from inmanta.references import JsonArgument, Reference, ReferenceCycleException, reference
-from inmanta.resources import Resource
+from inmanta.references import Reference, ReferenceCycleException, reference
 from inmanta.util.dict_path import Mapping, MutableMapping
 from utils import ClientHelper, log_contains
 
