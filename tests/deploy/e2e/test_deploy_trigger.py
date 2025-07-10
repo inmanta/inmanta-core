@@ -17,8 +17,6 @@ Contact: code@inmanta.com
 """
 
 import logging
-import time
-from uuid import UUID
 
 import pytest
 
