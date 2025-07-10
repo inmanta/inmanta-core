@@ -1,0 +1,5 @@
+description: 'fixed two instances of pydantic dict->model-dump'
+change-type: patch
+destination-branches:
+  - master
+  - iso8
