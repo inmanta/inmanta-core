@@ -56,7 +56,7 @@ from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
 from inmanta.agent.executor import ExecutorBlueprint, ModuleInstallSpec
 from inmanta.const import AGENT_SCHEDULER_ID
-from inmanta.data.model import LEGACY_PIP_DEFAULT, AuthMethod, PipConfig, SchedulerStatusReport
+from inmanta.data.model import LEGACY_PIP_DEFAULT, AuthMethod, PipConfig, ResourceId, SchedulerStatusReport
 from inmanta.deploy import state
 from inmanta.deploy.scheduler import ResourceScheduler
 from inmanta.deploy.state import ResourceIntent
@@ -68,7 +68,7 @@ from inmanta.server.config import AuthorizationProviderName, server_auth_method
 from inmanta.server.extensions import ProductMetadata
 from inmanta.server.services.compilerservice import CompilerService
 from inmanta.types import Apireturn, ResourceIdStr
-from inmanta.util import get_compiler_version, hash_file
+from inmanta.util import get_compiler_version, hash_file, make_attribute_hash
 from libpip2pi.commands import dir2pi
 
 T = TypeVar("T")
@@ -1224,3 +1224,14 @@ def read_file(file_name: str) -> str:
     """
     with open(file_name, "r") as fh:
         return fh.read()
+
+
+def make_attribute_hash_no_id(resource_id: ResourceId, attributes: Mapping[str, object]) -> str:
+    """
+    Calls make_attribute_hash without the `id` in the attributes.
+    The hash that is calculated in put_version and put_partial does not contain the `id` in the attributes,
+    so when we call util.make_attribute_hash and provide that hash to `send_deploy_done` it will be a different one.
+    That will result in the resource being in the `available` status instead of our desired status because
+    current_intent_attribute_hash != last_deployed_attribute_hash.
+    """
+    return make_attribute_hash(resource_id, {k: v for k, v in attributes.items() if k != "id"})

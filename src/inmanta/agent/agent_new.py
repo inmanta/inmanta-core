@@ -20,7 +20,7 @@ import logging
 import os
 import uuid
 from concurrent.futures.thread import ThreadPoolExecutor
-from typing import Any, Optional
+from typing import Optional
 
 import inmanta.server.config as opt
 from inmanta import config, const, data, protocol
@@ -32,7 +32,7 @@ from inmanta.data.model import DataBaseReport, SchedulerStatusReport
 from inmanta.deploy import scheduler
 from inmanta.protocol import SessionEndpoint, methods, methods_v2
 from inmanta.server.services.databaseservice import DatabaseMonitor
-from inmanta.types import Apireturn
+from inmanta.types import Apireturn, ResourceIdStr
 from inmanta.util import ensure_directory_exist, join_threadpools
 
 LOGGER = logging.getLogger("inmanta.scheduler")
@@ -235,12 +235,11 @@ class Agent(SessionEndpoint):
         return 200
 
     @protocol.handle(methods.get_parameter, env="tid")
-    async def get_facts(self, env: uuid.UUID, agent: str, resource: dict[str, Any]) -> Apireturn:
-        # FIXME: this api is very inefficient: it sends the entire resource, we only need the id now
+    async def get_facts(self, env: uuid.UUID, agent: str, resource_id: ResourceIdStr) -> Apireturn:
         assert env == self.environment
         assert agent == AGENT_SCHEDULER_ID
-        LOGGER.info("Agent %s got a trigger to run get_facts for resource %s in environment %s", agent, resource.get("id"), env)
-        await self.scheduler.get_facts(resource)
+        LOGGER.info("Agent %s got a trigger to run get_facts for resource %s in environment %s", agent, resource_id, env)
+        await self.scheduler.get_facts(resource_id)
         return 200
 
     @protocol.handle(methods.get_status)

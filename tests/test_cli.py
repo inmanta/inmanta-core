@@ -26,8 +26,8 @@ from inmanta import const, data
 from inmanta.agent import executor
 from inmanta.deploy import persistence, state
 from inmanta.resources import Id
-from inmanta.util import get_compiler_version, make_attribute_hash
-from utils import get_resource
+from inmanta.util import get_compiler_version
+from utils import get_resource, make_attribute_hash_no_id
 
 
 async def test_project(server, client, cli):
@@ -385,7 +385,7 @@ async def test_list_actionlog(server, environment, client, cli, null_agent, clie
     await update_manager.send_in_progress(action_id, rid1)
 
     await update_manager.send_deploy_done(
-        attribute_hash=make_attribute_hash(resource_id=rid1.resource_str(), attributes=resource1),
+        attribute_hash=make_attribute_hash_no_id(resource_id=rid1.resource_str(), attributes=resource1),
         result=executor.DeployReport(
             rvid=rid1.resource_version_str(),
             action_id=action_id,
@@ -411,7 +411,7 @@ async def test_list_actionlog(server, environment, client, cli, null_agent, clie
     rid2 = Id.parse_id(resource2["id"])
     await update_manager.send_in_progress(action_id, rid2)
     await update_manager.send_deploy_done(
-        attribute_hash=make_attribute_hash(resource_id=rid2.resource_str(), attributes=resource2),
+        attribute_hash=make_attribute_hash_no_id(resource_id=rid2.resource_str(), attributes=resource2),
         result=executor.DeployReport(
             rvid=rid2.resource_version_str(),
             action_id=action_id,
@@ -479,7 +479,7 @@ async def test_show_messages_actionlog(server, environment, client, cli, null_ag
         data.LogLine.log(level=const.LogLevel.INFO, msg="Deployed successfully", timestamp=now),
     ]
     await update_manager.send_deploy_done(
-        attribute_hash=make_attribute_hash(resource_id=res1_id.resource_str(), attributes=resource1),
+        attribute_hash=make_attribute_hash_no_id(resource_id=res1_id.resource_str(), attributes=resource1),
         result=executor.DeployReport(
             rvid=res1_id.resource_version_str(),
             action_id=action_id,

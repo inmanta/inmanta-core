@@ -596,10 +596,10 @@ class ResourceScheduler(TaskManager):
                 priority=TaskPriority.DRYRUN,
             )
 
-    async def get_facts(self, resource: dict[str, object]) -> None:
+    async def get_facts(self, resource_id: ResourceIdStr) -> None:
         if not self._running:
             return
-        rid = Id.parse_id(resource["id"]).resource_str()
+        rid = Id.parse_id(resource_id).resource_str()
         self._work.agent_queues.queue_put_nowait(
             RefreshFact(resource=rid),
             priority=TaskPriority.FACT_REFRESH,
@@ -1093,6 +1093,8 @@ class ResourceScheduler(TaskManager):
         Always expected to be called under lock
         """
         try:
+            if self._state.resource_state[resource].blocked is Blocked.BLOCKED:
+                return None
             return self._state.intent[resource]
         except KeyError:
             # Stale resource
@@ -1116,7 +1118,7 @@ class ResourceScheduler(TaskManager):
         async with self._scheduler_lock:
             # fetch resource intent under lock
             resource_intent = self._get_resource_intent(resource)
-            if resource_intent is None or self._state.resource_state[resource].blocked is Blocked.BLOCKED:
+            if resource_intent is None:
                 # We are trying to deploy a stale resource.
                 return None
             dependencies = await self._get_last_non_deploying_state_for_dependencies(resource=resource)

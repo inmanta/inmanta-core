@@ -1148,12 +1148,42 @@ async def test_model_get_resources_for_version(init_dataclasses_and_load_schema)
             attributes={"path": "motd", "purge_on_delete": True, "purged": False},
         )
         await res.insert()
-        return res.resource_version_id
+        return Id.parse_id(res.resource_version_id)
 
     d = await make_with_status(1)
     s = await make_with_status(2)
     su = await make_with_status(3)
     u = await make_with_status(4, is_undefined=True)
+
+    # Populate rps for version 3
+    await data.ResourcePersistentState.populate_for_version(environment=env.id, model_version=3)
+
+    # Make deployed
+    rps_d = await data.ResourcePersistentState.get_one(environment=env.id, resource_id=d.resource_str())
+    assert rps_d
+    await rps_d.update_fields(
+        last_non_deploying_status=const.NonDeployingResourceState.deployed,
+        current_intent_attribute_hash="dummy-hash",
+        last_deployed_attribute_hash="dummy-hash",
+    )
+
+    # Make skipped
+    rps_s = await data.ResourcePersistentState.get_one(environment=env.id, resource_id=s.resource_str())
+    assert rps_s
+    await rps_s.update_fields(last_non_deploying_status=const.NonDeployingResourceState.skipped)
+
+    # Make skipped for undefined
+    rps_su = await data.ResourcePersistentState.get_one(environment=env.id, resource_id=su.resource_str())
+    assert rps_su
+    await rps_su.update_fields(blocked=state.Blocked.BLOCKED)
+
+    # Assert state of resources
+    version, states = await data.Resource.get_latest_resource_states(env.id)
+    assert version == 3
+    assert states[d.resource_str()] == const.ResourceState.deployed
+    assert states[s.resource_str()] == const.ResourceState.skipped
+    assert states[su.resource_str()] == const.ResourceState.skipped_for_undefined
+    assert states[u.resource_str()] == const.ResourceState.undefined
 
     resources = await data.Resource.get_resources_for_version(env.id, 1)
     assert len(resources) == 10
@@ -1166,7 +1196,9 @@ async def test_model_get_resources_for_version(init_dataclasses_and_load_schema)
 
     resources = await data.Resource.get_resources_for_version(env.id, 3)
     assert len(resources) == 4
-    assert sorted([x.resource_version_id for x in resources]) == sorted([d, s, su, u])
+    assert sorted([x.resource_version_id for x in resources]) == sorted(
+        [d.resource_version_str(), s.resource_version_str(), u.resource_version_str(), su.resource_version_str()]
+    )
 
 
 async def test_get_resources_in_latest_version(init_dataclasses_and_load_schema):

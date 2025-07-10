@@ -4648,7 +4648,11 @@ class ResourcePersistentState(BaseDocument):
         query = f"UPDATE public.resource_persistent_state SET {','.join(query_parts)} WHERE environment=$1 and resource_id=$2"
 
         result = await cls._execute_query(query, environment, resource_id, *args.args, connection=connection)
-        assert result == "UPDATE 1"
+        if result == "UPDATE 0":
+            raise NotFound(
+                "Unable to find an entry in the resource_persistent_state table "
+                f"for resource with id {resource_id} in environment {environment}"
+            )
 
     def get_compliance_status(self) -> Optional[state.Compliance]:
         """

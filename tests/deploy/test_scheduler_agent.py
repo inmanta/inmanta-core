@@ -1595,7 +1595,7 @@ async def test_get_facts(agent: TestAgent, make_resource_minimal):
         [ModelVersion(version=5, resources=resources, requires=make_requires(resources), undefined=set())]
     )
 
-    await agent.scheduler.get_facts({"id": rid1})
+    await agent.scheduler.get_facts(rid1)
 
     await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
 
@@ -1981,7 +1981,7 @@ async def test_scheduler_priority(agent: TestAgent, environment, make_resource_m
 
     # The same is true if a task with lesser priority is added first
     # Add a fact refresh task to the queue
-    await agent.scheduler.get_facts({"id": rid1})
+    await agent.scheduler.get_facts(rid1)
 
     # Then add an interval deploy task to the queue
     agent.scheduler._state.dirty.add(rid1)
