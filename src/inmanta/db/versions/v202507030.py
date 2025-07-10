@@ -27,7 +27,7 @@ async def update(connection: Connection) -> None:
     schema = """
     -- Add compile_id column to notification table.
     ALTER TABLE public.notification
-        ADD COLUMN compile_id UUID REFERENCES public.compile(id) ON DELETE CASCADE;
+        ADD COLUMN compile_id UUID;
 
     -- Populate compile_id column.
     UPDATE public.notification
@@ -42,5 +42,9 @@ async def update(connection: Connection) -> None:
         FROM public.compile AS c
         WHERE c.id=n.compile_id
     );
+
+    -- Add back the foreign key constraint now that the update + delete are done
+    ALTER TABLE public.notification ADD CONSTRAINT compile_id_fk FOREIGN KEY (compile_id) REFERENCES public.compile(id) ON DELETE CASCADE;
+
     """
     await connection.execute(schema)
