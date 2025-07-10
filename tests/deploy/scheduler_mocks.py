@@ -372,9 +372,6 @@ class TestAgent(Agent):
         self.executor_manager = DummyManager()
         self.scheduler = TestScheduler(self.scheduler.environment, self.executor_manager, self.scheduler.client)
 
-    async def load_environment_settings(self) -> None:
-        pass
-
 
 class DummyDatabaseConnection:
 

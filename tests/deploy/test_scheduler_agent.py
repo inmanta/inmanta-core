@@ -2485,9 +2485,6 @@ class BadTestAgent(Agent):
         self.executor_manager = BrokenDummyManager()
         self.scheduler = TestScheduler(self.scheduler.environment, self.executor_manager, self.scheduler.client)
 
-    async def load_environment_settings(self) -> None:
-        pass
-
 
 @pytest.fixture
 async def bad_agent(environment, config):
