@@ -5131,7 +5131,7 @@ class Resource(BaseDocument):
             resource_type=vid.entity_type,
             agent=vid.agent_name,
             resource_id_value=vid.attribute_value,
-            revision=vid.version
+            revision=vid.version,
         )
 
         attr.update(kwargs)
@@ -5411,6 +5411,7 @@ class Resource(BaseDocument):
             is_undefined=self.is_undefined,
             resource_id_value=self.resource_id_value,
             resource_set=self.resource_set,
+            revision=self.revision,
         )
 
 
