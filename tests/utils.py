@@ -1234,4 +1234,4 @@ def make_attribute_hash_no_id(resource_id: ResourceId, attributes: Mapping[str, 
     That will result in the resource being in the `available` status instead of our desired status because
     current_intent_attribute_hash != last_deployed_attribute_hash.
     """
-    return make_attribute_hash(resource_id, {k: v for k, v in attributes if k != "id"})
+    return make_attribute_hash(resource_id, {k: v for k, v in attributes.items() if k != "id"})
