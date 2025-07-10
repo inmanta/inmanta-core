@@ -20,6 +20,7 @@ import base64
 import logging
 import typing
 from typing import TypeVar
+from unittest.mock import Mock
 
 import pytest
 
@@ -43,7 +44,7 @@ class MockSessionClient(SessionClient):
         content = b""
         if self.return_code != 404:
             content = base64.b64encode(self.content)
-        return common.Result(self.return_code, result={"content": content})
+        return common.Result(self.return_code, result={"content": content}, client=Mock(), method_properties=Mock())
 
 
 class MockGetFileResourceHandler(ResourceHandler):
