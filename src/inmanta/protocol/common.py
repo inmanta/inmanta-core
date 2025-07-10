@@ -1172,9 +1172,9 @@ class Result:
 
         if self._method_properties is None or self._client is None:
             raise Exception(
-                "The all() cannot be called on this Result object. Make sure you "
+                "The all() method cannot be called on this Result object. Make sure you "
                 "set the client and method_properties parameters when constructing "
-                "a Result object manually (e.g. outside of an regular API call)."
+                "a Result object manually (e.g. outside of a regular API call)."
             )
 
         result = self
