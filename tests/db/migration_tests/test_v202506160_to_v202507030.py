@@ -35,7 +35,6 @@ async def test_foreign_key_notification_to_compile(
     postgresql_client: asyncpg.Connection,
     migrate_db_from: abc.Callable[[], abc.Awaitable[None]],
 ) -> None:
-    compile_id = uuid.UUID("c571c8e6-97d2-40a7-87d3-8dbe27a3b940")
     result = await data.Notification.get_list(connection=postgresql_client)
     assert len(result) == 2
     assert all(r.compile_id is None for r in result)
@@ -43,6 +42,9 @@ async def test_foreign_key_notification_to_compile(
     # Run migration script
     await migrate_db_from()
 
+    # * One notification was removed because the associated compile not longer exists.
+    # * The other notification was update to reference the compile_id using a foreign key.
+    compile_id = uuid.UUID("e8e5d3bd-7fee-4fb4-87a9-744f1c84b321")
     result = await data.Notification.get_list(connection=postgresql_client)
     assert len(result) == 1
     assert result[0].uri == f"/api/v2/compilereport/{compile_id}"
