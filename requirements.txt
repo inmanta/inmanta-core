@@ -7,7 +7,7 @@ click==8.2.1
 click-plugins==1.1.1.2
 colorlog==6.9.0
 cookiecutter==2.6.0
-crontab==1.0.4
+crontab==1.0.5
 cryptography==45.0.5
 docstring-parser==0.16
 # documentation
