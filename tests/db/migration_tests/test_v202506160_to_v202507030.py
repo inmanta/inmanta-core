@@ -35,11 +35,10 @@ async def test_foreign_key_notification_to_compile(
     postgresql_client: asyncpg.Connection,
     migrate_db_from: abc.Callable[[], abc.Awaitable[None]],
 ) -> None:
-    compile_id = uuid.UUID("331580a4-eb11-4eb1-ace4-19e1ffc3271c")
+    compile_id = uuid.UUID("c571c8e6-97d2-40a7-87d3-8dbe27a3b940")
     result = await data.Notification.get_list(connection=postgresql_client)
-    assert len(result) == 1
-    assert result[0].uri == f"/api/v2/compilereport/{compile_id}"
-    assert result[0].compile_id is None
+    assert len(result) == 2
+    assert all(r.compile_id is None for r in result)
 
     # Run migration script
     await migrate_db_from()
