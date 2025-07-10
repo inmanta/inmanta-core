@@ -23,9 +23,6 @@ from collections import abc
 import asyncpg
 import pytest
 
-from inmanta import const, data
-from inmanta.types import ResourceIdStr
-
 file_name_regex = re.compile("test_v([0-9]{9})_to_v[0-9]{9}")
 part = file_name_regex.match(__name__)[1]
 

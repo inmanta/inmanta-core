@@ -36,7 +36,7 @@ async def update(connection: Connection) -> None:
 
     INSERT INTO public.resource_set (name, environment, model, revision)
     SELECT DISTINCT
-        r.resource_set AS name,
+        COALESCE(r.resource_set, '') AS name,
         r.environment,
         r.model,
         r.model AS revision
@@ -44,7 +44,7 @@ async def update(connection: Connection) -> None:
     WHERE NOT EXISTS (
         SELECT 1
         FROM public.resource_set rs
-        WHERE rs.name=r.resource_set
+        WHERE rs.name=COALESCE(r.resource_set, '')
           AND rs.environment=r.environment
           AND rs.model=r.model
           AND rs.revision=r.model
