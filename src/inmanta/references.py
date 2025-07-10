@@ -191,6 +191,11 @@ class MutatedJsonArgument(Argument):
         start_value: JsonType = self.value
         for destination, valueref in self.references.items():
             value = valueref.get_arg_value(resource, logger)
+
+            # backward compat between 8.2 and higher
+            # jsonpath_ng does not allow starting with ., dictpath does
+            if destination.startswith("."):
+                destination = "$" + destination
             jsonpath_expr = jsonpath_ng.parse(destination)
             jsonpath_expr.update(start_value, value)
         return start_value

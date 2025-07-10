@@ -28,7 +28,7 @@ from uuid import UUID
 
 import pytest
 
-from inmanta import env, references, resources, util
+from inmanta import compiler, env, references, resources, util
 from inmanta.agent.handler import PythonLogger
 from inmanta.ast import (
     ExternalException,
@@ -284,6 +284,98 @@ async def test_deploy_end_to_end(
     result = await client.resource_logs(environment, "refs::DeepResource[test,name=test4]")
     assert result.code == 200
     assert [msg for msg in result.result["data"] if "Observed value: {'inner.something': ['TESTX']}" in msg["msg"]]
+
+
+def test_decoding_legacy_resources(snippetcompiler, modules_v2_dir):
+    """The encoding for paths in mutable json changed after iso8.2.0 this test backward compat"""
+
+    refs_module = os.path.join(modules_v2_dir, "refs")
+
+    # set up project
+    snippetcompiler.setup_for_snippet(
+        "import refs",
+        install_v2_modules=[env.LocalPackagePath(path=refs_module)],
+        autostd=True,
+    )
+
+    compiler.do_compile()
+
+    old_resource = r"""
+        {
+        "references": [
+            {
+                "type": "refs::DictMade",
+                "args": [
+                    {
+                        "type": "mjson",
+                        "name": "name",
+                        "value": {
+                            "name": null
+                        },
+                        "references": {
+                            ".name": {
+                                "type": "reference",
+                                "name": ".name",
+                                "id": "187fdec1-d0e8-3652-b672-e098be97a2d1"
+                            }
+                        }
+                    }
+                ],
+                "id": "83a1981c-59d1-36d9-aa07-3351b5430732"
+            },
+            {
+                "type": "refs::String",
+                "args": [
+                    {
+                        "type": "literal",
+                        "name": "name",
+                        "value": "TESTX"
+                    }
+                ],
+                "id": "187fdec1-d0e8-3652-b672-e098be97a2d1"
+            }
+        ],
+        "purged": false,
+        "value": {
+            "inner": null
+        },
+        "name": "test4",
+        "agentname": "test",
+        "mutators": [
+            {
+                "type": "core::Replace",
+                "args": [
+                    {
+                        "type": "resource",
+                        "name": "resource",
+                        "id": "refs::DeepResource[test,name=test4]"
+                    },
+                    {
+                        "type": "reference",
+                        "name": "value",
+                        "id": "83a1981c-59d1-36d9-aa07-3351b5430732"
+                    },
+                    {
+                        "type": "literal",
+                        "name": "destination",
+                        "value": "value.inner"
+                    }
+                ]
+            }
+        ],
+        "send_event": false,
+        "managed": true,
+        "purge_on_delete": false,
+        "receive_events": true,
+        "requires": [],
+        "version": 1,
+        "id": "refs::DeepResource[test,name=test4],v=1"
+    }
+        """
+
+    r = resources.Resource.deserialize(json.loads(old_resource))
+    r.resolve_all_references(PythonLogger(logging.getLogger("test.refs")))
+    return r
 
 
 def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
