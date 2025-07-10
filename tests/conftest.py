@@ -33,6 +33,7 @@ import inmanta.deploy.state
 import requests
 import toml
 from inmanta import logging as inmanta_logging
+from inmanta import data
 from inmanta.agent.handler import CRUDHandler, HandlerContext, ResourceHandler, SkipResource, TResource, provider
 from inmanta.agent.write_barier_executor import WriteBarierExecutorManager
 from inmanta.config import log_dir
@@ -388,6 +389,7 @@ async def postgresql_client(postgres_db, database_name_internal):
         password=postgres_db.password,
         database=database_name_internal,
     )
+    await data.asyncpg_on_connect(client)
     yield client
     await client.close()
 

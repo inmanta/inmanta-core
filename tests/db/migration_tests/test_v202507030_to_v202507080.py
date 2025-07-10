@@ -37,4 +37,4 @@ async def test_add_export_environment_settings_column(
 
     result = await data.Compile.get_list(connection=postgresql_client)
     assert len(result) > 0
-    assert all(r["export_environment_settings"] is False for r in result)
+    assert all(r.export_environment_settings is False for r in result)

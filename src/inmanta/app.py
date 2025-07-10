@@ -493,7 +493,8 @@ def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Se
     parser.add_argument(
         "--export-environment-settings",
         dest="export_environment_settings",
-        help="If set, this command updates the environment settings on the server as mentioned in the project.yml file.",
+        help="If set, this command updates the environment settings on the server as mentioned in the"
+             " export_environment_settings section of the project.yml file.",
         action="store_true",
         default=False,
     )
