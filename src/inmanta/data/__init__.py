@@ -5297,6 +5297,7 @@ class Resource(BaseDocument):
                 attributes,
                 attribute_hash,
                 resource_set,
+                revision,
                 provides
             )(
                 SELECT
@@ -5310,6 +5311,7 @@ class Resource(BaseDocument):
                     r.attributes AS attributes,
                     r.attribute_hash,
                     r.resource_set,
+                    r.revision,
                     r.provides
                 FROM {cls.table_name()} AS r
                 WHERE r.environment=$1 AND r.model=$2 AND r.resource_set IS NOT NULL AND NOT r.resource_set=ANY($4)
