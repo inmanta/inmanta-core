@@ -377,7 +377,25 @@ end and last_id
     These parameters define the upper limit for the page
     (only one of the (`start`, `first_id`), (`end`, `last_id`) pairs should be specified at the same time).
 
-.. note:: The return value of these methods contain a `links` tag, with the urls of the `next` and `prev` pages, so for simply going through the pages a client only needs to follow these links.
+
+.. _helper_method_for_paging:
+
+.. note::
+
+    The return value of these methods that support paging contains a ``links`` tag, with the urls of the ``next`` and
+    ``prev`` pages. To iterate over all the results, the client can follow these links, or alternatively call the
+    ``all()`` method on the result:
+
+    .. code-block:: python
+
+        # Iterate over all results by fetching pages of size 20
+
+        result = await client.resource_list(tid=env.id, limit=20)
+
+        async for item in result.all():
+            ...
+
+
 
 filter
     The `filter` parameter is used for filtering the result set.
