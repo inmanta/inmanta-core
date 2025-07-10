@@ -1108,8 +1108,8 @@ class Result:
         code: int = 0,
         result: Optional[JsonType] = None,
         *,
-        client: "RESTClient",
-        method_properties: MethodProperties,
+        client: Optional["RESTClient"] = None,
+        method_properties: Optional[MethodProperties] = None,
         environment: Optional[str] = None,
     ) -> None:
         """
@@ -1121,10 +1121,10 @@ class Result:
         """
         self._result = result
         self.code = code
-        self._client: "RESTClient" = client
+        self._client: Optional["RESTClient"] = client
 
         self._callback: Optional[Callable[["Result"], None]] = None
-        self._method_properties: MethodProperties = method_properties
+        self._method_properties: Optional[MethodProperties] = method_properties
         self._environment = environment
 
     def get_result(self) -> Optional[JsonType]:
@@ -1169,6 +1169,14 @@ class Result:
         Helper method to iterate over all individual items in this result object.
         This method will start at the first page and follow paging links.
         """
+
+        if self._method_properties is None or self._client is None:
+            raise Exception(
+                "The all() method cannot be called on this Result object. Make sure you "
+                "set the client and method_properties parameters when constructing "
+                "a Result object manually (e.g. outside of a regular API call)."
+            )
+
         result = self
         while result.code == 200:
             if not result.result:
