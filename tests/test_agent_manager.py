@@ -71,9 +71,7 @@ async def api_call_future(*args, **kwargs) -> Result:
     """
     Mock implementation of Client methods
     """
-    client = Mock()
-    method_properties = Mock()
-    return Result(200, "X", client=client, method_properties=method_properties)
+    return Result(200, "X")
 
 
 class MockSession:

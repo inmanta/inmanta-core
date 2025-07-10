@@ -32,7 +32,7 @@ from datetime import datetime
 from enum import Enum
 from functools import partial
 from inspect import Parameter
-from typing import TYPE_CHECKING, Any, AsyncIterator, Callable, Generic, Optional, TypeVar, Union, cast, get_type_hints
+from typing import TYPE_CHECKING, Any, Callable, Generic, Optional, TypeVar, Union, cast, get_type_hints
 from urllib import parse
 
 import docstring_parser
@@ -41,7 +41,6 @@ import typing_inspect
 from pydantic import ValidationError
 from pydantic.main import create_model
 from tornado import web
-from tornado.httpclient import HTTPRequest
 
 from inmanta import const, execute, types, util
 from inmanta.data.model import BaseModel, DateTimeNormalizerModel
@@ -52,8 +51,6 @@ from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes, HandlerType, JsonType, MethodType, ReturnTypes
 
 if TYPE_CHECKING:
-    from inmanta.protocol.rest.client import RESTClient
-
     from .endpoints import CallTarget
 
 
@@ -1035,29 +1032,13 @@ class Result:
     A result of a method call
     """
 
-    def __init__(
-        self,
-        code: int = 0,
-        result: Optional[JsonType] = None,
-        *,
-        client: "RESTClient",
-        method_properties: MethodProperties,
-        environment: Optional[str] = None,
-    ) -> None:
-        """
-        :param code: HTTP response code.
-        :param result: HTTP response as a dictionary.
-        :param client: A client that can perform HTTP requests.
-        :param method_properties: The MethodProperties of the method called initially to produce this result.
-        :param environment: The environment in which the initial call was performed, if any.
-        """
+    def __init__(self, code: int = 0, result: Optional[JsonType] = None) -> None:
         self._result = result
         self.code = code
-        self._client: "RESTClient" = client
-
+        """
+        The result code of the method call.
+        """
         self._callback: Optional[Callable[["Result"], None]] = None
-        self._method_properties: MethodProperties = method_properties
-        self._environment = environment
 
     def get_result(self) -> Optional[JsonType]:
         """
@@ -1095,33 +1076,6 @@ class Result:
         Set a callback function that is to be called when the result is ready.
         """
         self._callback = fnc
-
-    async def all(self) -> AsyncIterator[types.JsonType]:
-        """
-        Helper method to iterate over all individual items in this result object.
-        This method will start at the first page and follow paging links.
-        """
-        result = self
-        while result.code == 200:
-            if not result.result:
-                return
-
-            page = result.result.get(self._method_properties.envelope_key, [])
-            for item in page:
-                yield item
-
-            next_link_url = result.result.get("links", {}).get("next")
-
-            if not next_link_url:
-                return
-
-            server_url = self._client._get_client_config()
-            url = server_url + next_link_url
-            headers = {"X-Inmanta-tid": self._environment} if self._environment else None
-            request = HTTPRequest(url=url, method="GET", headers=headers)
-            result = self._client._decode_response(
-                await self._client.client.fetch(request), self._method_properties, self._environment
-            )
 
 
 class SessionManagerInterface:
