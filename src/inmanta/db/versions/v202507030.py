@@ -44,7 +44,7 @@ async def update(connection: Connection) -> None:
     );
 
     -- Add back the foreign key constraint now that the update + delete are done
-    ALTER TABLE public.notification ADD CONSTRAINT compile_id_fk FOREIGN KEY (compile_id) REFERENCES public.compile(id) ON DELETE CASCADE;
+    ALTER TABLE public.notification ADD CONSTRAINT notification_compile_id_fkey FOREIGN KEY (compile_id) REFERENCES public.compile(id) ON DELETE CASCADE;
 
     """
     await connection.execute(schema)
