@@ -1008,10 +1008,12 @@ src/inmanta/protocol/rest/client.py:0: error: Argument "result" to "Result" has 
 src/inmanta/protocol/rest/client.py:0: error: Argument "result" to "Result" has incompatible type "str"; expected "dict[str, Any] | None"  [arg-type]
 src/inmanta/protocol/rest/client.py:0: error: Argument "result" to "Result" has incompatible type "str"; expected "dict[str, Any] | None"  [arg-type]
 src/inmanta/protocol/rest/client.py:0: error: Function is missing a return type annotation  [no-untyped-def]
+src/inmanta/protocol/rest/client.py:0: error: Function is missing a return type annotation  [no-untyped-def]
 src/inmanta/protocol/rest/client.py:0: error: Incompatible types in assignment (expression has type "bytes | str", variable has type "dict[str, Any] | None")  [assignment]
 src/inmanta/protocol/rest/client.py:0: error: Incompatible types in assignment (expression has type "str | None", variable has type "str")  [assignment]
 src/inmanta/protocol/rest/client.py:0: error: Incompatible types in assignment (expression has type "str | int | None", variable has type "int")  [assignment]
 src/inmanta/protocol/rest/client.py:0: error: Incompatible types in assignment (expression has type "str | int | None", variable has type "int")  [assignment]
+src/inmanta/protocol/rest/client.py:0: error: Returning Any from function declared to return "Result"  [no-any-return]
 src/inmanta/protocol/rest/client.py:0: error: Value expression in dictionary comprehension has incompatible type "str"; expected type "bytes"  [misc]
 src/inmanta/protocol/rest/client.py:0: note: Use "-> None" if function does not return a value
 src/inmanta/protocol/rest/server.py:0: error: Argument 1 to "get_global_url_map" of "RESTServer" has incompatible type "Sequence[CallTarget]"; expected "list[CallTarget]"  [arg-type]

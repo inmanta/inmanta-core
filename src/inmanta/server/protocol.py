@@ -96,19 +96,9 @@ class ReturnClient(Client):
                 else:
                     return_value = await self.session.put_call(call_spec, expect_reply=expect_reply)
             except asyncio.CancelledError:
-                return common.Result(
-                    code=500,
-                    result={"message": "Call timed out"},
-                    client=self._transport_instance,
-                    method_properties=method_properties,
-                )
+                return common.Result(code=500, result={"message": "Call timed out"})
 
-            return common.Result(
-                code=return_value["code"],
-                result=return_value["result"],
-                client=self._transport_instance,
-                method_properties=method_properties,
-            )
+            return common.Result(code=return_value["code"], result=return_value["result"])
 
 
 # Server Side
@@ -896,12 +886,4 @@ class LocalClient(TypedClient):
         spec = method_properties.build_call(args, kwargs)
         method_config = self._get_op_mapping(spec.url, spec.method)
         response = await self._server._transport._execute_call(method_config, spec.body, spec.headers)
-        return self._process_response(
-            method_properties,
-            common.Result(
-                code=response.status_code,
-                result=response.body,
-                client=self._transport_instance,
-                method_properties=method_properties,
-            ),
-        )
+        return self._process_response(method_properties, common.Result(code=response.status_code, result=response.body))
