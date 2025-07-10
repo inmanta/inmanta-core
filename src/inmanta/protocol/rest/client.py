@@ -122,7 +122,7 @@ class RESTClient(RESTBase):
             if zipped:
                 headers["Content-Encoding"] = "gzip"
 
-        environment = headers.get(INMANTA_MT_HEADER, "")
+        environment = headers.get(INMANTA_MT_HEADER, None)
 
         ca_certs = inmanta_config.Config.get(self.id, "ssl_ca_cert_file", None)
         LOGGER.debug("Calling server %s %s", properties.operation, url)
