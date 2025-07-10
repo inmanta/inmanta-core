@@ -24,13 +24,13 @@ import uuid
 from asyncio import Event
 from datetime import timedelta
 from typing import Optional, Union
+from uuid import UUID
 
 import pytest
 
 from deploy.scheduler_mocks import FAIL_DEPLOY, DummyManager, TestScheduler
 from deploy.test_scheduler_agent import retry_limited_fast
-from inmanta import const
-from inmanta.agent import config
+from inmanta import const, data
 from inmanta.deploy import state
 from inmanta.deploy.scheduler import ModelVersion
 from inmanta.deploy.timers import ResourceTimer, TimerManager
@@ -149,12 +149,12 @@ async def test_time_manager_basics():
 
 
 @pytest.fixture
-def environment() -> uuid.UUID:
+def environment_mock() -> uuid.UUID:
     return uuid.UUID("83d604a0-691a-11ef-ae04-c8f750463317")
 
 
 @pytest.fixture
-def make_resource_minimal(environment):
+def make_resource_minimal(environment_mock):
     def make_resource_minimal(
         rid: ResourceIdStr,
         values: dict[str, object],
@@ -178,14 +178,18 @@ def make_resource_minimal(environment):
     return make_resource_minimal
 
 
-async def test_config_update(inmanta_config, make_resource_minimal, environment):
+async def test_config_update(inmanta_config, make_resource_minimal, environment, server, client):
     """
     Test that the TimerManager correctly responds to changes to the config for deploy and repair timers.
     """
-    config.agent_deploy_interval.set("60")
-    config.agent_repair_interval.set("3600")
+    env_id = UUID(environment)
 
-    tm = MockTimerManager(environment)
+    result = await client.set_setting(environment, data.AUTOSTART_AGENT_DEPLOY_INTERVAL, "60")
+    assert result.code == 200
+    result = await client.set_setting(environment, data.AUTOSTART_AGENT_REPAIR_INTERVAL, "3600")
+    assert result.code == 200
+
+    tm = MockTimerManager(env_id)
     scheduler: TestScheduler = tm._resource_scheduler
 
     await scheduler.start()
@@ -248,8 +252,10 @@ async def test_config_update(inmanta_config, make_resource_minimal, environment)
     is_disabled(rid3)
 
     # Updated timers
-    config.agent_deploy_interval.set("600")
-    config.agent_repair_interval.set("36000")
+    result = await client.set_setting(environment, data.AUTOSTART_AGENT_DEPLOY_INTERVAL, "600")
+    assert result.code == 200
+    result = await client.set_setting(environment, data.AUTOSTART_AGENT_REPAIR_INTERVAL, "36000")
+    assert result.code == 200
     await tm.reload_config()
 
     assert tm.global_periodic_repair_task is None
@@ -259,8 +265,10 @@ async def test_config_update(inmanta_config, make_resource_minimal, environment)
     is_disabled(rid3)
 
     # Repair on cron job
-    config.agent_deploy_interval.set("60")
-    config.agent_repair_interval.set("* * * * *")
+    result = await client.set_setting(environment, data.AUTOSTART_AGENT_DEPLOY_INTERVAL, "60")
+    assert result.code == 200
+    result = await client.set_setting(environment, data.AUTOSTART_AGENT_REPAIR_INTERVAL, "* * * * *")
+    assert result.code == 200
     await tm.reload_config()
 
     assert tm.global_periodic_repair_task.schedule == CronSchedule("* * * * *")
@@ -270,8 +278,10 @@ async def test_config_update(inmanta_config, make_resource_minimal, environment)
     is_disabled(rid3)
 
     # Deploy on cron job
-    config.agent_deploy_interval.set("* * * * 1")
-    config.agent_repair_interval.set("360")
+    result = await client.set_setting(environment, data.AUTOSTART_AGENT_DEPLOY_INTERVAL, "* * * * 1")
+    assert result.code == 200
+    result = await client.set_setting(environment, data.AUTOSTART_AGENT_REPAIR_INTERVAL, "360")
+    assert result.code == 200
     await tm.reload_config()
 
     assert tm.global_periodic_repair_task is None
@@ -281,8 +291,10 @@ async def test_config_update(inmanta_config, make_resource_minimal, environment)
     is_disabled(rid3)
 
     # All on cron
-    config.agent_deploy_interval.set("* * * * 1")
-    config.agent_repair_interval.set("* * * * 2")
+    result = await client.set_setting(environment, data.AUTOSTART_AGENT_DEPLOY_INTERVAL, "* * * * 1")
+    assert result.code == 200
+    result = await client.set_setting(environment, data.AUTOSTART_AGENT_REPAIR_INTERVAL, "* * * * 2")
+    assert result.code == 200
     await tm.reload_config()
     assert tm.global_periodic_repair_task.schedule == CronSchedule("* * * * 2")
     assert tm.global_periodic_deploy_task.schedule == CronSchedule("* * * * 1")
@@ -291,8 +303,10 @@ async def test_config_update(inmanta_config, make_resource_minimal, environment)
     is_disabled(rid3)
 
     # back to start
-    config.agent_deploy_interval.set("600")
-    config.agent_repair_interval.set("36000")
+    result = await client.set_setting(environment, data.AUTOSTART_AGENT_DEPLOY_INTERVAL, "600")
+    assert result.code == 200
+    result = await client.set_setting(environment, data.AUTOSTART_AGENT_REPAIR_INTERVAL, "36000")
+    assert result.code == 200
     await tm.reload_config()
 
     assert tm.global_periodic_repair_task is None

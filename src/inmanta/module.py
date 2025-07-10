@@ -1239,7 +1239,7 @@ class ModuleV1Metadata(ModuleMetadata, MetadataFieldRequires):
         return packaging.version.Version(self.version)
 
     def to_v2(self) -> "ModuleV2Metadata":
-        values = self.dict()
+        values = self.model_dump()
         if values["description"] is not None:
             values["description"] = values["description"].replace("\n", " ")
         del values["compiler_version"]
@@ -1357,7 +1357,7 @@ class ModuleV2Metadata(ModuleMetadata):
 
         if not out.has_section("metadata"):
             out.add_section("metadata")
-        for k, v in self.dict(exclude_none=True, exclude={"install_requires", "version_tag"}).items():
+        for k, v in self.model_dump(exclude_none=True, exclude={"install_requires", "version_tag"}).items():
             out.set("metadata", k, str(v))
 
         if self.version_tag:
