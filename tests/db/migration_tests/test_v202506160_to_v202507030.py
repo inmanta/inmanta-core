@@ -43,7 +43,7 @@ async def test_foreign_key_notification_to_compile(
     await migrate_db_from()
 
     # * One notification was removed because the associated compile not longer exists.
-    # * The other notification was update to reference the compile_id using a foreign key.
+    # * The other notification was updated to reference the compile_id using a foreign key.
     compile_id = uuid.UUID("e8e5d3bd-7fee-4fb4-87a9-744f1c84b321")
     result = await data.Notification.get_list(connection=postgresql_client)
     assert len(result) == 1
