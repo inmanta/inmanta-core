@@ -43,7 +43,7 @@ from inmanta import logging as inmanta_logging
 from inmanta import tracing
 from inmanta.agent import config as agent_cfg
 from inmanta.config import Config, config_map_to_str, scheduler_log_config
-from inmanta.const import AGENT_SCHEDULER_ID, UNDEPLOYABLE_NAMES, AgentAction, AgentStatus
+from inmanta.const import AGENT_SCHEDULER_ID, AgentAction, AgentStatus
 from inmanta.data import APILIMIT, Environment, InvalidSort, model
 from inmanta.data.model import DataBaseReport
 from inmanta.protocol import encode_token, handle, methods, methods_v2
@@ -915,19 +915,6 @@ class AgentManager(ServerSlice, SessionListener):
             if env is None:
                 raise NotFound(f"Environment with {env_id} does not exist.")
 
-            # get a resource version
-            res = await data.Resource.get_latest_version(env_id, resource_id)
-
-            if res is None:
-                return 404, {"message": "The resource has no recent version."}
-
-            if res.status in UNDEPLOYABLE_NAMES:
-                LOGGER.debug(
-                    "Ignore fact request for %s, resource is in an undeployable state.",
-                    resource_id,
-                )
-                return 503, {"message": "The resource is in an undeployable state."}
-
             # only request facts of a resource every _fact_resource_block time
             now = time.time()
             if (
@@ -938,7 +925,7 @@ class AgentManager(ServerSlice, SessionListener):
                 agent = const.AGENT_SCHEDULER_ID
                 client = self.get_agent_client(env_id, agent)
                 if client is not None:
-                    await client.get_parameter(str(env_id), agent, res.to_dict())
+                    await client.get_parameter(str(env_id), agent, resource_id)
 
                 self._fact_resource_block_set[resource_id] = now
 
