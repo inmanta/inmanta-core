@@ -7,3 +7,7 @@ repo:
     - https://github.com/inmanta/
 pip:
     use-system-config: true
+environment_settings:
+    environment_metrics_retention: 100
+    notification_retention: 200
+

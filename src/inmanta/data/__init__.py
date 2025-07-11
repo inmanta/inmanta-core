@@ -3646,6 +3646,7 @@ class Compile(BaseDocument):
 
     soft_delete: bool = False
     links: dict[str, list[str]] = {}
+    update_environment_settings: bool = False
 
     @classmethod
     async def get_substitute_by_id(cls, compile_id: uuid.UUID, connection: Optional[Connection] = None) -> Optional["Compile"]:
