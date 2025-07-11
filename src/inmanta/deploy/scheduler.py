@@ -1089,7 +1089,7 @@ class ResourceScheduler(TaskManager):
 
     def _get_resource_intent(self, resource: ResourceIdStr) -> Optional[ResourceIntent]:
         """
-        Get intent of a given resource.
+        Get intent of a given resource. Returns None for stale or blocked resources.
         Always expected to be called under lock
         """
         try:
