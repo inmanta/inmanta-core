@@ -168,7 +168,7 @@ async def test_export(
     result = await client.environment_settings_set(tid=environment, id=AUTO_DEPLOY, value=True)
     assert result.code == 200
 
-    # Put settings in-place to test the --export-environment-settings option of the export command.
+    # Put settings in-place to test the --update-environment-settings option of the export command.
     result = await client.environment_settings_set(tid=environment, id=RESOURCE_ACTION_LOGS_RETENTION, value=5)
     assert result.code == 200
     result = await client.environment_setting_get(tid=environment, id=ENVIRONMENT_METRICS_RETENTION)
@@ -230,7 +230,7 @@ std::testing::NullResource(name="test", agentname="non_existing_agent")
         "export",
         "-e",
         str(env_id),
-        "--export-environment-settings",
+        "--update-environment-settings",
     ]
     if set_port:
         args.extend(["--server_port", str(server_port)])

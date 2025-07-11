@@ -750,10 +750,20 @@ async def test_server_partial_compile(server, client, environment, monkeypatch):
 
 @pytest.mark.slowtest
 @pytest.mark.parametrize("no_agent", [True])
-async def test_server_recompile(server, client, environment, monkeypatch):
+@pytest.mark.parametrize("update_environment_settings", [True, False])
+async def test_server_recompile(server, client, environment, monkeypatch, update_environment_settings: bool):
     """
     Test a recompile on the server and verify recompile triggers
     """
+    # Put settings in-place to test the update_environment_settings parameter of the notify_change endpoint.
+    result = await client.environment_settings_set(tid=environment, id=data.RESOURCE_ACTION_LOGS_RETENTION, value=5)
+    assert result.code == 200
+    result = await client.environment_setting_get(tid=environment, id=data.ENVIRONMENT_METRICS_RETENTION)
+    assert result.code == 200
+    assert result.result["data"]["settings"][data.ENVIRONMENT_METRICS_RETENTION] == 336
+    result = await client.environment_setting_get(tid=environment, id=data.NOTIFICATION_RETENTION)
+    assert result.code == 200
+    assert result.result["data"]["settings"][data.NOTIFICATION_RETENTION] == 365
 
     project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["server"], str(environment), "compiler")
     project_source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "project")
@@ -784,13 +794,25 @@ async def test_server_recompile(server, client, environment, monkeypatch):
         )
 
     logger.info("request a compile")
-    result = await client.notify_change(environment)
+    result = await client.notify_change(environment, update_environment_settings=update_environment_settings)
     assert result.code == 200
 
     logger.info("wait for 1")
     versions = await wait_for_version(client, environment, 1, compile_timeout=40)
     assert versions["versions"][0]["total"] == 1
     assert versions["versions"][0]["version_info"]["export_metadata"]["type"] == "api"
+
+    # Verify that the environment settings were updated correctly
+    result = await client.environment_setting_get(tid=environment, id=data.RESOURCE_ACTION_LOGS_RETENTION)
+    assert result.code == 200
+    # This setting is not present in the project.yml file, so it should be changed.
+    assert result.result["data"]["settings"][data.RESOURCE_ACTION_LOGS_RETENTION] == 5
+    result = await client.environment_setting_get(tid=environment, id=data.ENVIRONMENT_METRICS_RETENTION)
+    assert result.code == 200
+    assert result.result["data"]["settings"][data.ENVIRONMENT_METRICS_RETENTION] == (100 if update_environment_settings else 336)
+    result = await client.environment_setting_get(tid=environment, id=data.NOTIFICATION_RETENTION)
+    assert result.code == 200
+    assert result.result["data"]["settings"][data.NOTIFICATION_RETENTION] == (200 if update_environment_settings else 365)
 
     # get compile reports and make sure the environment variables are not logged
     reports = await client.get_reports(environment)

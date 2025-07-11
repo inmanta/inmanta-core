@@ -21,10 +21,10 @@ from asyncpg import Connection
 
 async def update(connection: Connection) -> None:
     """
-    Add the export_environment_settings column to the compile table.
+    Add the update_environment_settings column to the compile table.
     """
     schema = """
     ALTER TABLE public.compile
-        ADD COLUMN export_environment_settings BOOL NOT NULL DEFAULT FALSE;
+        ADD COLUMN update_environment_settings BOOL NOT NULL DEFAULT FALSE;
     """
     await connection.execute(schema)

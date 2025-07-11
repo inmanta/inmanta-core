@@ -29,7 +29,7 @@ part = file_name_regex.match(__name__)[1]
 
 
 @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), f"dumps/v{part}.sql"))
-async def test_add_export_environment_settings_column(
+async def test_add_update_environment_settings_column(
     migrate_db_from: abc.Callable[[], abc.Awaitable[None]], postgresql_client
 ) -> None:
     # Run migration script
@@ -37,4 +37,4 @@ async def test_add_export_environment_settings_column(
 
     result = await data.Compile.get_list(connection=postgresql_client)
     assert len(result) > 0
-    assert all(r.export_environment_settings is False for r in result)
+    assert all(r.update_environment_settings is False for r in result)

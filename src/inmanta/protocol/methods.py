@@ -666,8 +666,8 @@ def notify_change(id: uuid.UUID, update: bool = True, metadata: dict = {}, updat
     :param id: The id of the environment
     :param update: Optional. Update the model code and modules. Default value is true
     :param metadata: Optional. The metadata that indicates the source of the compilation trigger.
-    :param export_environment_settings: True iff the environment settings mentioned in the project.yml
-                                        file will be exported to the server.
+    :param update_environment_settings: True iff the environment settings mentioned in the project.yml
+                                        file will be updated to the server.
     """
 
 

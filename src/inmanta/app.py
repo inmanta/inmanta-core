@@ -491,10 +491,10 @@ def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Se
         default=False,
     )
     parser.add_argument(
-        "--export-environment-settings",
-        dest="export_environment_settings",
+        "--update-environment-settings",
+        dest="update_environment_settings",
         help="If set, this command updates the environment settings on the server as mentioned in the"
-             " export_environment_settings section of the project.yml file.",
+             " environment_settings section of the project.yml file.",
         action="store_true",
         default=False,
     )
@@ -603,7 +603,7 @@ def export(options: argparse.Namespace) -> None:
                 partial_compile=options.partial_compile,
                 resource_sets_to_remove=list(resource_sets_to_remove),
                 allow_handler_code_update=options.allow_handler_code_update,
-                export_environment_settings=options.export_environment_settings,
+                update_environment_settings=options.update_environment_settings,
             )
 
         if not summary_reporter.is_failure() and options.deploy:
