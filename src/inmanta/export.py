@@ -457,7 +457,13 @@ class Exporter:
             return
         for setting_name, value in environment_settings.items():
             result = self.client.environment_settings_set(tid=self.get_environment_id(), id=setting_name, value=value)
-            if result.code != 200:
+            if result.code == 404:
+                LOGGER.warning(
+                    "Not updating environment setting %s, because no environment setting with this name"
+                    " is defined on the server.",
+                    setting_name,
+                )
+            elif result.code != 200:
                 raise Exception("Failed to set environment setting %s=%s (%s)", setting_name, str(value), result.result)
 
     def add_resource(self, resource: Resource) -> None:
