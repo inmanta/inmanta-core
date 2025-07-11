@@ -1127,6 +1127,7 @@ class NotificationsView(DataView[NotificationOrder, model.Notification]):
                 cleared=notification["cleared"],
                 uri=notification["uri"],
                 environment=notification["environment"],
+                compile_id=notification["compile_id"],
             )
             for notification in records
         ]

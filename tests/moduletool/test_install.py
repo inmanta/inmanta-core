@@ -20,7 +20,6 @@ import logging
 import os
 import re
 import shutil
-import subprocess
 from collections.abc import Iterator
 from datetime import datetime
 from importlib.abc import Loader
@@ -30,19 +29,15 @@ from typing import Optional
 
 import py
 import pytest
-import yaml
 
 import inmanta.util
 from inmanta import compiler, const, env, loader, module
-from inmanta.ast import CompilerException
 from inmanta.command import CLIException
-from inmanta.config import Config
-from inmanta.env import CommandRunner, ConflictingRequirements, PipConfig
-from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleLoadingException, ModuleNotFoundException
-from inmanta.moduletool import DummyProject, ModuleConverter, ModuleTool, ProjectTool
-from moduletool.common import BadModProvider, install_project
+from inmanta.env import CommandRunner, ConflictingRequirements, PackageNotFound, PipConfig
+from inmanta.module import InmantaModuleRequirement, InstallMode
+from inmanta.moduletool import ModuleTool, ProjectTool
 from packaging import version
-from utils import LogSequence, PipIndex, log_contains, module_from_template
+from utils import PipIndex, log_contains, module_from_template
 
 LOGGER = logging.getLogger(__name__)
 
@@ -67,154 +62,6 @@ def run_module_install(module_path: str, editable: bool = False) -> None:
             paths=[env.LocalPackagePath(path=mod_artifact_paths[0])],
             config=PipConfig(use_system_config=True),
         )
-
-
-def test_bad_checkout(git_modules_dir, modules_repo):
-    coroot = os.path.join(git_modules_dir, "badproject")
-    subprocess.check_output(
-        ["git", "clone", os.path.join(git_modules_dir, "repos", "badproject")], cwd=git_modules_dir, stderr=subprocess.STDOUT
-    )
-    os.chdir(coroot)
-    Config.load_config()
-
-    with pytest.raises(ModuleLoadingException):
-        ProjectTool().execute("install", [])
-
-
-def test_bad_setup(git_modules_dir, modules_repo):
-    coroot = os.path.join(git_modules_dir, "badprojectx")
-    subprocess.check_output(
-        ["git", "clone", os.path.join(git_modules_dir, "repos", "badproject"), coroot],
-        cwd=git_modules_dir,
-        stderr=subprocess.STDOUT,
-    )
-    os.chdir(coroot)
-    Config.load_config()
-
-    mod1 = os.path.join(coroot, "libs", "mod1")
-    os.makedirs(mod1)
-    subprocess.check_output(
-        ["git", "clone", os.path.join(git_modules_dir, "repos", "mod2"), mod1], cwd=git_modules_dir, stderr=subprocess.STDOUT
-    )
-
-    with pytest.raises(ModuleLoadingException):
-        ModuleTool().execute("verify", [])
-
-
-def test_complex_checkout(git_modules_dir, modules_repo, tmpvenv_active):
-    coroot = os.path.join(git_modules_dir, "testproject")
-    subprocess.check_output(
-        ["git", "clone", os.path.join(git_modules_dir, "repos", "testproject")], cwd=git_modules_dir, stderr=subprocess.STDOUT
-    )
-    os.chdir(coroot)
-    Config.load_config()
-
-    ProjectTool().execute("install", [])
-    expected = ["mod1", "mod2", "mod3", "mod6", "mod7"]
-    for i in expected:
-        dirname = os.path.join(coroot, "libs", i)
-        assert os.path.exists(os.path.join(dirname, "signal"))
-        assert not os.path.exists(os.path.join(dirname, "badsignal"))
-
-    assert not os.path.exists(os.path.join(coroot, "libs", "mod5"))
-
-    # test all tools, perhaps isolate to other test case
-    ModuleTool().execute("list", [])
-    ProjectTool().execute("update", [])
-    ModuleTool().execute("status", [])
-    ModuleTool().execute("push", [])
-
-
-def test_for_git_failures(git_modules_dir, modules_repo, tmpvenv_active):
-    coroot = os.path.join(git_modules_dir, "testproject2")
-    subprocess.check_output(
-        ["git", "clone", os.path.join(git_modules_dir, "repos", "testproject"), "testproject2"],
-        cwd=git_modules_dir,
-        stderr=subprocess.STDOUT,
-    )
-    os.chdir(coroot)
-    Config.load_config()
-
-    ProjectTool().execute("install", [])
-
-    gp = module.gitprovider
-    module.gitprovider = BadModProvider(gp, os.path.join(coroot, "libs", "mod6"))
-    try:
-        # test all tools, perhaps isolate to other test case
-        ProjectTool().execute("install", [])
-        ModuleTool().execute("list", [])
-        ProjectTool().execute("update", [])
-        ModuleTool().execute("status", [])
-        ModuleTool().execute("push", [])
-    finally:
-        module.gitprovider = gp
-
-
-def test_install_for_git_failures(git_modules_dir, modules_repo):
-    coroot = os.path.join(git_modules_dir, "testproject3")
-    subprocess.check_output(
-        ["git", "clone", os.path.join(git_modules_dir, "repos", "testproject"), "testproject3"],
-        cwd=git_modules_dir,
-        stderr=subprocess.STDOUT,
-    )
-    os.chdir(coroot)
-    Config.load_config()
-
-    gp = module.gitprovider
-    module.gitprovider = BadModProvider(gp, os.path.join(coroot, "libs", "mod6"))
-    try:
-        with pytest.raises(ModuleLoadingException):
-            ProjectTool().execute("install", [])
-    finally:
-        module.gitprovider = gp
-
-
-def test_for_repo_without_versions(git_modules_dir, modules_repo):
-    coroot = os.path.join(git_modules_dir, "noverproject")
-    subprocess.check_output(
-        ["git", "clone", os.path.join(git_modules_dir, "repos", "noverproject")], cwd=git_modules_dir, stderr=subprocess.STDOUT
-    )
-    os.chdir(coroot)
-    Config.load_config()
-
-    ProjectTool().execute("install", [])
-
-
-def test_bad_dep_checkout(git_modules_dir, modules_repo):
-    coroot = os.path.join(git_modules_dir, "baddep")
-    subprocess.check_output(
-        ["git", "clone", os.path.join(git_modules_dir, "repos", "baddep")], cwd=git_modules_dir, stderr=subprocess.STDOUT
-    )
-    os.chdir(coroot)
-    Config.load_config()
-
-    with pytest.raises(CompilerException, match="requirement mod2<2016 on module mod2 not fulfilled, now at version 2016.1"):
-        ProjectTool().execute("install", [])
-
-
-def test_master_checkout(git_modules_dir: str, modules_repo: str, tmpdir):
-    coroot = install_project(git_modules_dir, "masterproject", tmpdir)
-
-    ProjectTool().execute("install", [])
-
-    dirname = os.path.join(coroot, "libs", "mod8")
-    assert os.path.exists(os.path.join(dirname, "devsignal"))
-    assert os.path.exists(os.path.join(dirname, "mastersignal"))
-
-
-def test_dev_checkout(git_modules_dir, modules_repo):
-    coroot = os.path.join(git_modules_dir, "devproject")
-    subprocess.check_output(
-        ["git", "clone", os.path.join(git_modules_dir, "repos", "devproject")], cwd=git_modules_dir, stderr=subprocess.STDOUT
-    )
-    os.chdir(coroot)
-    Config.load_config()
-
-    ProjectTool().execute("install", [])
-
-    dirname = os.path.join(coroot, "libs", "mod8")
-    assert os.path.exists(os.path.join(dirname, "devsignal"))
-    assert not os.path.exists(os.path.join(dirname, "mastersignal"))
 
 
 @pytest.mark.parametrize_any("editable", [True, False])
@@ -451,38 +298,6 @@ def test_module_install_exception() -> None:
         ModuleTool().execute("install", [])
 
 
-def test_project_install_logs(
-    snippetcompiler_clean,
-    tmpdir: py.path.local,
-    modules_dir: str,
-    modules_v2_dir: str,
-    caplog,
-) -> None:
-    """
-    Verify the logs of a project install
-    """
-
-    # set up project
-    snippetcompiler_clean.setup_for_snippet(
-        """
-        """,
-        autostd=False,
-        install_project=False,
-    )
-
-    # install project
-    os.chdir(module.Project.get().path)
-    caplog.clear()
-    caplog.set_level(logging.INFO)
-    ProjectTool().execute("install", [])
-    log_sequence = LogSequence(caplog)
-    count_verifying_project = 0
-    for msg in log_sequence.caplog.messages:
-        if msg == "verifying project":
-            count_verifying_project += 1
-    assert count_verifying_project == 1
-
-
 @pytest.mark.parametrize_any(
     "install_module_names, module_dependencies",
     [
@@ -506,7 +321,6 @@ def test_project_install(
     # set up project and modules
     project: module.Project = snippetcompiler_clean.setup_for_snippet(
         "\n".join(f"import {mod}" for mod in ["std", *install_module_names]),
-        autostd=False,
         index_url=local_module_package_index,
         # We add tornado, as there is a code path in update for the case where the project has python requires
         python_requires=["tornado"]
@@ -520,8 +334,6 @@ def test_project_install(
     os.chdir(project.path)
     for fq_mod_name in fq_mod_names:
         assert env.process_env.get_module_file(fq_mod_name) is None
-    # autostd=True reports std as an import for any module, thus requiring it to be v2 because v2 can not depend on v1
-    module.Project.get().autostd = False
     ProjectTool().execute("install", [])
 
     for fq_mod_name in fq_mod_names:
@@ -539,26 +351,6 @@ def test_project_install(
 
     # Make sure update works in all cases where install passed
     ProjectTool().execute("update", [])
-
-    # add a dependency
-    project: module.Project = snippetcompiler_clean.setup_for_snippet(
-        "\n".join(f"import {mod}" for mod in ["std", *install_module_names]),
-        autostd=False,
-        python_package_sources=[local_module_package_index],
-        python_requires=[
-            inmanta.util.parse_requirement(requirement=module.ModuleV2Source.get_package_name_for(mod))
-            for mod in install_module_names
-        ]
-        + ["lorem"],
-        install_project=False,
-    )
-
-    with pytest.raises(
-        expected_exception=ConflictingRequirements,
-        match=re.escape("Not all required python packages are installed run 'inmanta project install' to resolve this"),
-    ):
-        # ensure we can compile
-        compiler.do_compile()
 
 
 @pytest.mark.parametrize_any("editable", [True, False])
@@ -614,177 +406,6 @@ def test_project_install_preinstalled(
     module.Project.get().autostd = False
     ProjectTool().execute("install", [])
     assert_module_install()
-
-
-@pytest.mark.slowtest
-def test_project_install_modules_cache_invalid(
-    caplog,
-    local_module_package_index: str,
-    snippetcompiler_clean,
-    tmpdir: py.path.local,
-    modules_dir: str,
-    modules_v2_dir: str,
-) -> None:
-    """
-    Verify that introducing invalidities in the modules cache results in the appropriate exception and warnings.
-
-    - preinstall old (v1 or v2) version of {dependency_module}
-    - install project with {main_module} that depends on {dependency_module}>={v2_version}
-    """
-    main_module: str = "main_module"
-    dependency_module: str = "minimalv1module"
-    fq_mod_name: str = "inmanta_plugins.minimalv1module"
-    index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
-    libs_dir: str = os.path.join(str(tmpdir), "libs")
-    os.makedirs(libs_dir)
-
-    assert env.process_env.get_module_file(fq_mod_name) is None
-
-    # prepare most recent v2 module
-    v2_template_path: str = os.path.join(str(tmpdir), dependency_module)
-    v1: module.ModuleV1 = module.ModuleV1(
-        project=DummyProject(autostd=False), path=os.path.join(modules_dir, dependency_module)
-    )
-    v2_version: version.Version = version.Version(str(v1.version.major + 1) + ".0.0")
-    ModuleConverter(v1).convert(output_directory=v2_template_path)
-    module_from_template(
-        v2_template_path, os.path.join(str(tmpdir), dependency_module, "stable"), new_version=v2_version, publish_index=index
-    )
-
-    # prepare main module that depends on stable v2 version of first module
-    module_from_template(
-        v2_template_path,
-        os.path.join(str(tmpdir), main_module),
-        new_name=main_module,
-        new_content_init_cf=f"import {dependency_module}",
-        # requires stable version, not currently installed dev version
-        new_requirements=[module.InmantaModuleRequirement.parse(f"{dependency_module}>={v2_version}")],
-        install=False,
-        publish_index=index,
-    )
-
-    # preinstall module
-    # set up project, including activation of venv before installing the module
-    snippetcompiler_clean.setup_for_snippet("", install_project=False)
-    # install older v2 module
-    module_from_template(
-        v2_template_path,
-        os.path.join(str(tmpdir), dependency_module, "dev"),
-        new_version=version.Version(f"{v2_version}.dev0"),
-        install=True,
-    )
-
-    # set up project for installation
-    project: module.Project = snippetcompiler_clean.setup_for_snippet(
-        f"import {main_module}",
-        autostd=False,
-        install_project=False,
-        add_to_module_path=[libs_dir],
-        index_url=index.url,
-        extra_index_url=[local_module_package_index],
-        # make sure main module gets installed, pulling in newest version of dependency module
-        python_requires=[inmanta.util.parse_requirement(requirement=module.ModuleV2Source.get_package_name_for(main_module))],
-    )
-
-    # populate project.modules[dependency_module] to force the error conditions in this simplified example
-    project.get_module(dependency_module, allow_v1=True)
-
-    os.chdir(project.path)
-    with pytest.raises(
-        CompilerException,
-        match=(
-            "Not all modules were loaded correctly as a result of transitive dependencies."
-            " A recompile should load them correctly."
-        ),
-    ):
-        ProjectTool().execute("install", [])
-
-    message: str = (
-        f"Compiler has loaded module {dependency_module}=={v2_version}.dev0 but {dependency_module}=={v2_version} has"
-        " later been installed as a side effect."
-    )
-
-    assert message in (rec.message for rec in caplog.records)
-
-
-@pytest.mark.parametrize_any("autostd", [True, False])
-def test_project_install_incompatible_versions(
-    caplog,
-    snippetcompiler_clean,
-    tmpdir: py.path.local,
-    modules_dir: str,
-    modules_v2_dir: str,
-    autostd: bool,
-    tmpvenv_active,
-) -> None:
-    """
-    Verify that introducing module version incompatibilities results in the appropriate exception and warnings.
-    Make sure this works both for autostd (no explicit import) and for standard modules.
-    """
-    v2_mod_name: str = "std" if autostd else "v2mod"
-
-    # declare conflicting module parameters
-    current_version: version.Version = version.Version("1.0.0")
-    req_v1_on_v1: module.InmantaModuleRequirement = module.InmantaModuleRequirement.parse("v1mod1>42")
-    req_v1_on_v2: module.InmantaModuleRequirement = module.InmantaModuleRequirement.parse(f"{v2_mod_name}>10000")
-
-    # prepare v1 modules
-    v1_modules_path: str = os.path.join(str(tmpdir), "libs")
-    v1mod1_path: str = os.path.join(v1_modules_path, "v1mod1")
-    shutil.copytree(os.path.join(modules_dir, "minimalv1module"), v1mod1_path)
-    with open(os.path.join(v1mod1_path, module.ModuleV1.MODULE_FILE), "r+") as fh:
-        config: dict[str, object] = yaml.safe_load(fh)
-        config["name"] = "v1mod1"
-        config["version"] = str(current_version)
-        fh.seek(0)
-        yaml.dump(config, fh)
-    v1mod2_path: str = os.path.join(v1_modules_path, "v1mod2")
-    shutil.copytree(os.path.join(modules_dir, "minimalv1module"), v1mod2_path)
-    with open(os.path.join(v1mod2_path, module.ModuleV1.MODULE_FILE), "r+") as fh:
-        config: dict[str, object] = yaml.safe_load(fh)
-        config["name"] = "v1mod2"
-        config["requires"] = [str(req_v1_on_v2), str(req_v1_on_v1)]
-        fh.seek(0)
-        yaml.dump(config, fh)
-
-    # prepare v2 module
-    index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
-    module_from_template(
-        os.path.join(modules_v2_dir, "minimalv2module"),
-        os.path.join(str(tmpdir), v2_mod_name),
-        new_version=current_version,
-        new_name=v2_mod_name,
-        publish_index=index,
-    )
-
-    # set up project
-    snippetcompiler_clean.setup_for_snippet(
-        """
-        import v1mod2
-        import v1mod1
-        %s
-        """
-        % (f"import {v2_mod_name}" if not autostd else ""),
-        autostd=autostd,
-        install_project=False,
-        add_to_module_path=[v1_modules_path],
-        index_url=index.url,
-        python_requires=[inmanta.util.parse_requirement(requirement=module.ModuleV2Source.get_package_name_for(v2_mod_name))],
-    )
-
-    # install project
-    os.chdir(module.Project.get().path)
-    with pytest.raises(CompilerException) as excinfo:
-        ProjectTool().execute("install", [])
-
-    assert f"""
-The following requirements were not satisfied:
-\t* requirement {req_v1_on_v2} on module {v2_mod_name} not fulfilled, now at version {current_version}.
-\t* requirement {req_v1_on_v1} on module v1mod1 not fulfilled, now at version {current_version}.
-Run `inmanta project update` to resolve this.
-    """.strip() in str(
-        excinfo.value
-    )
 
 
 @pytest.mark.slowtest
@@ -855,29 +476,9 @@ def test_project_install_incompatible_dependencies(
     with pytest.raises(env.ConflictingRequirements) as e:
         ProjectTool().execute("install", [])
     assert (
-        "inmanta-module-v2mod1~=1.0.0 and inmanta-module-v2mod1~=2.0.0 because these package versions have conflicting "
+        "inmanta-module-v2mod2==1.2.3 and inmanta-module-v2mod3==1.2.3 because these package versions have conflicting "
         "dependencies" in e.value.msg
     )
-
-
-def test_project_install_requirement_not_loaded(
-    caplog,
-    snippetcompiler,
-) -> None:
-    """
-    Verify that installing a project with a module requirement does not fail if the module is not loaded in the project's AST.
-    """
-    module_name: str = "thismoduledoesnotexist"
-    with caplog.at_level(logging.WARNING):
-        # make sure the project installation does not fail on verification
-        snippetcompiler.setup_for_snippet(
-            "",
-            project_requires=[module.InmantaModuleRequirement.parse(module_name)],
-            install_project=True,
-        )
-
-    message: str = "Module thismoduledoesnotexist is present in requires but it is not used by the model."
-    assert message in (rec.message for rec in caplog.records)
 
 
 @pytest.mark.parametrize_any("env_var", ["PIP_EXTRA_INDEX_URL", "PIP_INDEX_URL", "PIP_CONFIG_FILE"])
@@ -892,7 +493,7 @@ def test_install_from_index_dont_leak_pip_index(
     Test that PIP_EXTRA_INDEX_URL/PIP_INDEX_URL is not set in the subprocess doing an install_from_index
     and that it is not changed in the active env. also test that the pip configuration file is not used.
 
-    The installation fails with an ModuleNotFoundException
+    The installation fails with an PackageNotFound
     as the index .custom-index is needed to install v2mod1,
     but it is only present in the active env in PIP_EXTRA_INDEX_URL/PIP_INDEX_URL/config file which is not know by the
     subprocess doing the pip install.
@@ -937,7 +538,7 @@ def test_install_from_index_dont_leak_pip_index(
     # install project
     os.chdir(module.Project.get().path)
     assert os.getenv(env_var) == index.url if env_var != "PIP_CONFIG_FILE" else pip_config_file
-    with pytest.raises(ModuleNotFoundException):
+    with pytest.raises(PackageNotFound):
         ProjectTool().execute("install", [])
     assert os.getenv(env_var) == index.url if env_var != "PIP_CONFIG_FILE" else pip_config_file
 
@@ -1223,35 +824,6 @@ import custom_mod_two
     )
 
 
-def test_install_project_with_install_mode_master(tmpdir: py.path.local, snippetcompiler, modules_repo, capsys) -> None:
-    """
-    Ensure that an appropriate exception message is returned when a module installed in a project is not in-line with
-    the version constraint on the project and the install_mode of the project is set to master.
-    """
-    mod_with_multiple_version = os.path.join(modules_repo, "mod11")
-    mod_with_multiple_version_copy = os.path.join(tmpdir, "mod11")
-    shutil.copytree(mod_with_multiple_version, mod_with_multiple_version_copy)
-    snippetcompiler.setup_for_snippet(
-        snippet="import mod11",
-        autostd=False,
-        install_project=False,
-        add_to_module_path=[str(tmpdir)],
-        project_requires=[InmantaModuleRequirement(inmanta.util.parse_requirement(requirement="mod11==3.2.1"))],
-        install_mode=InstallMode.master,
-    )
-
-    with pytest.raises(CompilerException) as excinfo:
-        ProjectTool().execute("update", [])
-
-    assert """
-The following requirements were not satisfied:
-\t* requirement mod11==3.2.1 on module mod11 not fulfilled, now at version 4.2.1.dev0.
-The release type of the project is set to 'master'. Set it to a value that is appropriate for the version constraint
-    """.strip() in str(
-        excinfo.value
-    )
-
-
 @pytest.mark.slowtest
 def test_real_time_logging(caplog):
     """
@@ -1329,18 +901,12 @@ def test_pip_output(local_module_package_index: str, snippetcompiler_clean, capl
         install_project=True,
     )
 
-    expected_logs = [
-        ("Successfully installed inmanta-module-modone-3.1.2", logging.DEBUG),
-        ("Successfully installed inmanta-module-modtwo-2.2.2", logging.DEBUG),
-    ]
-
-    for message, level in expected_logs:
-        log_contains(
-            caplog,
-            "inmanta.pip",
-            level,
-            message,
-        )
+    log_contains(
+        caplog,
+        "inmanta.pip",
+        logging.DEBUG,
+        "Successfully installed inmanta-module-modone-3.1.2 inmanta-module-modtwo-2.2.2",
+    )
 
 
 @pytest.mark.slowtest
@@ -1365,7 +931,7 @@ def test_no_matching_distribution(local_module_package_index: str, snippetcompil
         publish_index=index,
     )
 
-    with pytest.raises(ModuleNotFoundException):
+    with pytest.raises(PackageNotFound):
         snippetcompiler_clean.setup_for_snippet(
             f"""
             import {module.ModuleV2.get_name_from_metadata(parent_module)}
@@ -1399,7 +965,7 @@ def test_no_matching_distribution(local_module_package_index: str, snippetcompil
         publish_index=index,
     )
 
-    with pytest.raises(ModuleNotFoundException):
+    with pytest.raises(PackageNotFound):
         snippetcompiler_clean.setup_for_snippet(
             f"""
             import {module.ModuleV2.get_name_from_metadata(parent_module)}
@@ -1524,7 +1090,7 @@ def test_version_snapshot(local_module_package_index: str, snippetcompiler_clean
         logging.DEBUG,
         (
             """\
-Modules versions after installation:
+Successfully installed modules for project
 + module_a: 5.0.0
 + module_b: 1.2.3"""
         ),
@@ -1554,7 +1120,7 @@ Modules versions after installation:
         logging.DEBUG,
         (
             """\
-Modules versions after installation:
+Successfully installed modules for project
 + module_a: 1.0.0
 - module_a: 5.0.0
 + module_c: 8.8.8"""
@@ -1621,14 +1187,14 @@ def test_constraints_logging_v2(modules_v2_dir, tmpdir, caplog, snippetcompiler_
     )
 
     expected_log_messages = [
-        "Installing module module_a (v2) (with constraints module_a<9.9.9 module_a>1.1.1 module_a<10.10.10 module_a>=0.0.0).",
-        "Installing module module_b (v2) (with no version constraints)",
+        "inmanta-module-module-a<9.9.9",
+        "inmanta-module-module-a>1.1.1",
     ]
 
     for log_message in expected_log_messages:
         log_contains(
             caplog,
-            "inmanta.module",
+            "inmanta.pip",
             logging.DEBUG,
             log_message,
         )

@@ -1730,6 +1730,12 @@ async def test_notification_on_failed_exporting_compile(
     compile_failed_notification = next((item for item in result.result["data"] if item["title"] == "Compilation failed"), None)
     assert compile_failed_notification
     assert str(compile_id) in compile_failed_notification["uri"]
+    assert compile_id == uuid.UUID(compile_failed_notification["compile_id"])
+
+    result = await client.get_notification(tid=env.id, notification_id=compile_failed_notification["id"])
+    assert result.code == 200
+    assert str(compile_id) in result.result["data"]["uri"]
+    assert compile_id == uuid.UUID(result.result["data"]["compile_id"])
 
 
 async def test_notification_on_failed_pull_during_compile(

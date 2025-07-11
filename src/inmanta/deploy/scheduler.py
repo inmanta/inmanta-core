@@ -596,10 +596,10 @@ class ResourceScheduler(TaskManager):
                 priority=TaskPriority.DRYRUN,
             )
 
-    async def get_facts(self, resource_id: ResourceIdStr) -> None:
+    async def get_facts(self, resource_id: Id) -> None:
         if not self._running:
             return
-        rid = Id.parse_id(resource_id).resource_str()
+        rid = resource_id.resource_str()
         self._work.agent_queues.queue_put_nowait(
             RefreshFact(resource=rid),
             priority=TaskPriority.FACT_REFRESH,
@@ -1089,7 +1089,7 @@ class ResourceScheduler(TaskManager):
 
     def _get_resource_intent(self, resource: ResourceIdStr) -> Optional[ResourceIntent]:
         """
-        Get intent of a given resource.
+        Get intent of a given resource. Returns None for stale or blocked resources.
         Always expected to be called under lock
         """
         try:
