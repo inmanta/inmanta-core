@@ -45,8 +45,8 @@ from inmanta.server.services.environment_metrics_service import (
     ResourceCountMetricsCollector,
 )
 from inmanta.types import ResourceIdStr
-from inmanta.util import get_compiler_version, make_attribute_hash, parse_timestamp
-from utils import ClientHelper, wait_until_version_is_released
+from inmanta.util import get_compiler_version, parse_timestamp
+from utils import ClientHelper, make_attribute_hash_no_id, wait_until_version_is_released
 
 env_uuid = uuid.uuid4()
 
@@ -504,7 +504,7 @@ async def test_resource_count_metric(clienthelper, client, agent):
     await update_manager.send_in_progress(action_id, rvid)
 
     await update_manager.send_deploy_done(
-        attribute_hash=make_attribute_hash(resource_id=rvid.resource_str(), attributes=resources_env1_v2[0]),
+        attribute_hash=make_attribute_hash_no_id(resource_id=rvid.resource_str(), attributes=resources_env1_v2[0]),
         result=executor.DeployReport(
             rvid=rvid.resource_version_str(),
             action_id=action_id,
@@ -756,11 +756,11 @@ async def test_agent_count_metric(clienthelper, client, server):
     model2 = data.ConfigurationModel(environment=env2.id, version=1, released=True, is_suitable_for_partial_compiles=False)
     await model2.insert()
     resource1 = data.Resource(
-        environment=env1.id, model=1, agent="agent1", resource_id="", resource_type="", resource_id_value=""
+        environment=env1.id, model=1, agent="agent1", resource_id="", resource_type="", resource_id_value="", revision=1
     )
     await resource1.insert()
     resource2 = data.Resource(
-        environment=env2.id, model=1, agent="agent2", resource_id="", resource_type="", resource_id_value=""
+        environment=env2.id, model=1, agent="agent2", resource_id="", resource_type="", resource_id_value="", revision=1
     )
     await resource2.insert()
 

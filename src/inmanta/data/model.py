@@ -362,6 +362,7 @@ class Resource(BaseModel):
     attributes: JsonType
     is_undefined: bool
     resource_set: Optional[str] = None
+    revision: int
 
 
 class ResourceAction(BaseModel):

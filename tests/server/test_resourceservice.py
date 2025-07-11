@@ -22,10 +22,11 @@ from datetime import timezone
 
 import pytest
 
-from inmanta import const, data, resources, util
+from inmanta import const, data, resources
 from inmanta.agent import executor
 from inmanta.deploy import persistence, state
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
+from utils import make_attribute_hash_no_id
 
 
 @pytest.fixture
@@ -112,9 +113,9 @@ async def test_events_api_endpoints_basic_case(server, client, environment, clie
         {"name": "file2", "id": rvid_r2_v1, "requires": [], "purged": False, "send_event": False},
         {"name": "file3", "id": rvid_r3_v1, "requires": [], "purged": False, "send_event": False},
     ]
-    attribute_has_r1 = util.make_attribute_hash(rid_r1_v1, resources[0])
-    attribute_has_r2 = util.make_attribute_hash(rid_r2_v1, resources[1])
-    attribute_has_r3 = util.make_attribute_hash(rid_r3_v1, resources[2])
+    attribute_has_r1 = make_attribute_hash_no_id(rid_r1_v1, resources[0])
+    attribute_has_r2 = make_attribute_hash_no_id(rid_r2_v1, resources[1])
+    attribute_has_r3 = make_attribute_hash_no_id(rid_r3_v1, resources[2])
 
     await clienthelper.put_version_simple(resources, version, wait_for_released=True)
 
@@ -217,9 +218,9 @@ async def test_events_api_endpoints_increment(server, client, environment, clien
             {"name": "file2", "id": rvid_r2_v1, "requires": [], "purged": False, "send_event": True},
             {"name": "file3", "id": rvid_r3_v1, "requires": [], "purged": False, "send_event": True},
         ]
-        rid_r1_attribute_hash = util.make_attribute_hash(resource_id=rid_r1, attributes=resources[0])
-        rid_r2_attribute_hash = util.make_attribute_hash(resource_id=rid_r2, attributes=resources[1])
-        rid_r3_attribute_hash = util.make_attribute_hash(resource_id=rid_r3, attributes=resources[2])
+        rid_r1_attribute_hash = make_attribute_hash_no_id(resource_id=rid_r1, attributes=resources[0])
+        rid_r2_attribute_hash = make_attribute_hash_no_id(resource_id=rid_r2, attributes=resources[1])
+        rid_r3_attribute_hash = make_attribute_hash_no_id(resource_id=rid_r3, attributes=resources[2])
 
         await clienthelper.put_version_simple(resources, version)
         result = await client.release_version(
@@ -342,7 +343,7 @@ async def test_events_api_endpoints_events_across_versions(
 
     # Deploy
     await resource_deployer.deploy_resource(
-        rvid=rvid_r2_v1, attribute_hash=util.make_attribute_hash(rid_r2, attributes=resources[1])
+        rvid=rvid_r2_v1, attribute_hash=make_attribute_hash_no_id(rid_r2, attributes=resources[1])
     )
 
     # Version 2
@@ -363,10 +364,10 @@ async def test_events_api_endpoints_events_across_versions(
 
     # Deploy
     await resource_deployer.deploy_resource(
-        rvid=rvid_r2_v2, attribute_hash=util.make_attribute_hash(resource_id=rid_r2, attributes=resources[1])
+        rvid=rvid_r2_v2, attribute_hash=make_attribute_hash_no_id(resource_id=rid_r2, attributes=resources[1])
     )
     await resource_deployer.deploy_resource(
-        rvid=rvid_r3_v2, attribute_hash=util.make_attribute_hash(resource_id=rid_r3, attributes=resources[2])
+        rvid=rvid_r3_v2, attribute_hash=make_attribute_hash_no_id(resource_id=rid_r3, attributes=resources[2])
     )
 
     # Version 3
@@ -384,7 +385,7 @@ async def test_events_api_endpoints_events_across_versions(
     # Deploy
     await resource_deployer.deploy_resource(
         rvid=rvid_r3_v3,
-        attribute_hash=util.make_attribute_hash(resource_id=rid_v3_v3, attributes=resources[1]),
+        attribute_hash=make_attribute_hash_no_id(resource_id=rid_v3_v3, attributes=resources[1]),
         status=const.HandlerResourceState.failed,
     )
     action_id = await resource_deployer.start_deployment(rvid=rvid_r1_v3)
@@ -407,7 +408,7 @@ async def test_events_api_endpoints_events_across_versions(
     # Mark deployment r1 as done
     await resource_deployer.deployment_finished(
         rvid=rvid_r1_v3,
-        attribute_hash=util.make_attribute_hash(resource_id=rid_r1_v3, attributes=resources[0]),
+        attribute_hash=make_attribute_hash_no_id(resource_id=rid_r1_v3, attributes=resources[0]),
         action_id=action_id,
     )
 
@@ -514,7 +515,7 @@ async def test_last_non_deploying_status_field_on_resource(
         rvid=rvid_r1_v1,
         action_id=action_id_r1,
         status=const.HandlerResourceState.deployed,
-        attribute_hash=util.make_attribute_hash(resource_id=rid_r1, attributes=resources[0]),
+        attribute_hash=make_attribute_hash_no_id(resource_id=rid_r1, attributes=resources[0]),
         deployment_result=state.DeployResult.DEPLOYED,
     )
     action_id_r2 = await resource_deployer.start_deployment(rvid=rvid_r2_v1)
@@ -530,7 +531,7 @@ async def test_last_non_deploying_status_field_on_resource(
     await resource_deployer.deployment_finished(
         rvid=rvid_r2_v1,
         action_id=action_id_r2,
-        attribute_hash=util.make_attribute_hash(resource_id=rid_r2, attributes=resources[1]),
+        attribute_hash=make_attribute_hash_no_id(resource_id=rid_r2, attributes=resources[1]),
         status=const.HandlerResourceState.skipped,
         deployment_result=state.DeployResult.SKIPPED,
     )
@@ -546,7 +547,7 @@ async def test_last_non_deploying_status_field_on_resource(
         rvid=rvid_r1_v1,
         action_id=action_id_r1,
         status=const.HandlerResourceState.failed,
-        attribute_hash=util.make_attribute_hash(resource_id=rid_r1, attributes=resources[0]),
+        attribute_hash=make_attribute_hash_no_id(resource_id=rid_r1, attributes=resources[0]),
         deployment_result=state.DeployResult.FAILED,
     )
     await resource_deployer.start_deployment(rvid=rvid_r2_v1)
