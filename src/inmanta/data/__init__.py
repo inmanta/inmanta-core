@@ -4679,6 +4679,10 @@ class ResourceSet(BaseDocument):
     revision: int
 
     @classmethod
+    def table_name(cls) -> str:
+        return "resource_set"
+
+    @classmethod
     async def copy_unchanged_resource_sets(
         cls,
         environment: uuid.UUID,
@@ -4688,8 +4692,89 @@ class ResourceSet(BaseDocument):
         deleted_resource_sets: abc.Set[str],
         *,
         connection: Optional[asyncpg.connection.Connection] = None,
-    ):
-        pass
+    ) -> None:
+        """
+        Copies any resource set that was not changed (or deleted) and bumps the version to the destination version.
+        """
+        query = f"""
+            INSERT INTO {cls.table_name()}(
+                name,
+                environment,
+                revision,
+                model,
+            )(
+                SELECT
+                    rs.name,
+                    rs.environment,
+                    rs.revision,
+                    $3
+                FROM {cls.table_name()} AS rs
+                WHERE rs.environment=$1 AND rs.model=$2 AND NOT rs.name=ANY($4)
+            )
+            """
+        await cls._execute_query(
+            query,
+            environment,
+            source_version,
+            destination_version,
+            updated_resource_sets | deleted_resource_sets,
+            connection=connection,
+        )
+
+    @classmethod
+    async def bump_resource_sets(
+        cls,
+        environment: uuid.UUID,
+        destination_version: int,
+        resource_sets: abc.Set[str],
+        *,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> None:
+        """
+        Copy each resource_set that was updated and is present in the source_version and:
+            - bump its model to the target version
+            - bump its revision by 1
+        If the resource set is not present, create it and set its revision to 1
+        """
+        query = f"""
+        -- Table with the resource sets that we want to bump/create
+            WITH input_resource_sets(name) AS (
+              SELECT UNNEST($1::text[])
+            ),
+        -- Get the latest revision of the resource set (0 if it is new)
+            max_revisions AS (
+              SELECT
+                i.name,
+                $2::uuid AS environment,
+                COALESCE(MAX(rs.revision), 0) AS max_revision
+              FROM input_resource_sets i
+              LEFT JOIN {cls.table_name()} rs
+                ON rs.name=i.name
+                AND rs.environment=environment
+              GROUP BY i.name
+            )
+        -- Insert the resource sets into the table with updated values of revision and model
+            INSERT INTO {cls.table_name()}(
+                name,
+                environment,
+                revision,
+                model
+            )(
+                SELECT
+                    mr.name,
+                    mr.environment,
+                    mr.max_revision + 1,
+                    $3
+                FROM max_revisions AS mr
+            )
+            """
+        await cls._execute_query(
+            query,
+            resource_sets,
+            environment,
+            destination_version,
+            connection=connection,
+        )
 
 
 @stable_api

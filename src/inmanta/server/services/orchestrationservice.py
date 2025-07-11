@@ -955,11 +955,10 @@ class OrchestrationService(protocol.ServerSlice):
                     all_ids |= {Id.parse_id(rid, version) for rid in rids_unchanged_resource_sets.keys()}
 
                 await data.Resource.insert_many(list(rid_to_resource.values()), connection=connection)
-                await data.ResourceSet.insert_many(
-                    [
-                        data.ResourceSet(environment=env.id, name=name, model=version, revision=version)
-                        for name in updated_resource_sets
-                    ],
+                await data.ResourceSet.bump_resource_sets(
+                    environment=env.id,
+                    destination_version=version,
+                    resource_sets=updated_resource_sets,
                     connection=connection,
                 )
                 await cm.recalculate_total(connection=connection)
