@@ -1287,19 +1287,12 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
 
         privatestatedir: str = self._get_state_dir_for_agent_in_env(env.id)
 
-        agent_deploy_interval: str = cast(str, await env.get(data.AUTOSTART_AGENT_DEPLOY_INTERVAL, connection=connection))
-
-        agent_repair_interval: str = cast(str, await env.get(data.AUTOSTART_AGENT_REPAIR_INTERVAL, connection=connection))
-
         # generate config file
         config = f"""[config]
 state-dir=%(statedir)s
 log-dir={global_config.log_dir.get()}
 
 environment=%(env_id)s
-
-agent-deploy-interval=%(agent_deploy_interval)s
-agent-repair-interval=%(agent_repair_interval)s
 
 [agent]
 executor-cap={agent_cfg.agent_executor_cap.get()}
@@ -1312,8 +1305,6 @@ host=localhost
             "env_id": environment_id,
             "port": port,
             "statedir": privatestatedir,
-            "agent_deploy_interval": agent_deploy_interval,
-            "agent_repair_interval": agent_repair_interval,
         }
 
         if server_config.server_enable_auth.get():

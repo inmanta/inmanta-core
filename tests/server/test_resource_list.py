@@ -43,6 +43,8 @@ from inmanta.resources import Id
 from inmanta.server import config
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 
+LOGGER: logging.Logger = logging.getLogger(__name__)
+
 
 async def test_resource_list_no_released_version(server, client):
     """Test that if there are no released versions of a resource, the result set is empty"""
@@ -614,6 +616,22 @@ async def test_none_resources_paging(server, client, env_with_resources):
     assert len(actual_result_asc_next.result["data"]) == 2
 
 
+async def test_client_all_pages(server, client, env_with_resources):
+    env = env_with_resources
+    result = await client.resource_list(tid=env.id)
+    assert result.code == 200
+    all_resources = result.result["data"]
+    assert len(all_resources) == 6
+
+    result = await client.resource_list(tid=env.id, limit=2)
+
+    idx = 0
+    async for item in result.all():
+        assert item == all_resources[idx]
+        idx += 1
+    assert idx == len(all_resources)
+
+
 @pytest.mark.parametrize(
     "sort, expected_status",
     [
@@ -848,7 +866,7 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, mo
     for iteration in [0, 1]:
         for tenant in range(instances):
             resources = await make_resource_set(tenant, iteration)
-            logging.getLogger(__name__).warning("deploys: %d, tenant: %d, iteration: %d", deploy_counter, tenant, iteration)
+            LOGGER.warning("deploys: %d, tenant: %d, iteration: %d", deploy_counter, tenant, iteration)
             # Since we are using null_agent we need to manually mark orphans
             if iteration == 0:
                 first_iteration_resources[tenant] = {Id.parse_id(res["id"]).resource_str() for res in resources}
@@ -950,6 +968,4 @@ async def test_resources_paging_performance(client, environment, very_big_env: i
             latency_page2, links = await time_page(links, "next")
             latency_page3, links = await time_page(links, "next")
 
-            logging.getLogger(__name__).warning(
-                "Timings %s %s %d %d %d", filter, order, latency_page1, latency_page2, latency_page3
-            )
+            LOGGER.warning("Timings %s %s %d %d %d", filter, order, latency_page1, latency_page2, latency_page3)

@@ -369,7 +369,7 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
         try:
             handler = ResourceView(env, limit, first_id, last_id, start, end, filter, sort, deploy_summary)
 
-            out = await handler.execute()
+            out: ReturnValueWithMeta[Sequence[LatestReleasedResource]] = await handler.execute()
             if deploy_summary:
                 out.metadata["deploy_summary"] = await data.Resource.get_resource_deploy_summary(env.id)
             return out
