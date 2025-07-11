@@ -33,7 +33,6 @@ import inmanta.deploy.state
 import requests
 import toml
 from inmanta import logging as inmanta_logging
-from inmanta import data
 from inmanta.agent.handler import CRUDHandler, HandlerContext, ResourceHandler, SkipResource, TResource, provider
 from inmanta.agent.write_barier_executor import WriteBarierExecutorManager
 from inmanta.config import log_dir
@@ -1489,7 +1488,7 @@ class SnippetCompilationTest(KeepOnFail):
         extra_index_url: list[str] = [],
         main_file: str = "main.cf",
         ministd: bool = False,
-        environment_settings: dict[str, EnvSettingType] | None = None
+        environment_settings: dict[str, EnvSettingType] | None = None,
     ) -> None:
         add_to_module_path = add_to_module_path if add_to_module_path is not None else []
         python_package_sources = python_package_sources if python_package_sources is not None else []

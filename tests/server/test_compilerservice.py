@@ -809,7 +809,9 @@ async def test_server_recompile(server, client, environment, monkeypatch, update
     assert result.result["data"]["settings"][data.RESOURCE_ACTION_LOGS_RETENTION] == 5
     result = await client.environment_setting_get(tid=environment, id=data.ENVIRONMENT_METRICS_RETENTION)
     assert result.code == 200
-    assert result.result["data"]["settings"][data.ENVIRONMENT_METRICS_RETENTION] == (100 if update_environment_settings else 336)
+    assert result.result["data"]["settings"][data.ENVIRONMENT_METRICS_RETENTION] == (
+        100 if update_environment_settings else 336
+    )
     result = await client.environment_setting_get(tid=environment, id=data.NOTIFICATION_RETENTION)
     assert result.code == 200
     assert result.result["data"]["settings"][data.NOTIFICATION_RETENTION] == (200 if update_environment_settings else 365)
