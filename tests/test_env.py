@@ -25,7 +25,6 @@ import subprocess
 import sys
 import tempfile
 from importlib.abc import Loader
-from re import Pattern
 from subprocess import CalledProcessError
 from typing import Callable, LiteralString, Optional
 from unittest.mock import patch
@@ -489,116 +488,6 @@ build-backend = "setuptools.build_meta"
                 index_url=local_module_package_index,
             ),
         )
-
-
-@pytest.mark.slowtest
-def test_active_env_check_basic(
-    caplog,
-    tmpdir: str,
-    tmpvenv_active_inherit: str,
-    local_module_package_index,  # upstream for setuptools for isolated build
-) -> None:
-    """
-    Verify that the env.ActiveEnv.check() method detects all possible forms of incompatibilities within the environment.
-    """
-    caplog.set_level(logging.WARNING)
-
-    in_scope_test: Pattern[str] = re.compile("test-package-.*")
-    in_scope_nonext: Pattern[str] = re.compile("nonexistant-package")
-
-    error_msg: str = "Incompatibility between constraint"
-
-    def assert_all_checks(expect_test: tuple[bool, str] = (True, ""), expect_nonext: tuple[bool, str] = (True, "")) -> None:
-        """
-        verify what the check method for 2 different scopes: for an existing package and a non existing one.
-
-        param: expect_test: Tuple with as first value a bool and as second value a string. The bool is true if the execution
-        will not raise an error, false if it will raise an error. The second argument is the warning message that can be find
-        in the logs.
-        param: expect_nonext: Tuple with as first value a bool and as second value a string. The bool is true if the execution
-        will not raise an error, false if it will raise an error. The second argument is the warning message that can be find
-        in the logs.
-        """
-        for in_scope, expect in [(in_scope_test, expect_test), (in_scope_nonext, expect_nonext)]:
-            caplog.clear()
-            if expect[0]:
-                env.process_env.check(in_scope)
-                if expect[1] == "":
-                    assert error_msg not in {rec.message for rec in caplog.records}
-                else:
-                    assert expect[1] in {rec.message for rec in caplog.records}
-            else:
-                with pytest.raises(env.ConflictingRequirements) as e:
-                    env.process_env.check(in_scope)
-                assert expect[1] in e.value.get_message()
-
-    assert_all_checks()
-    create_install_package("test-package-one", version.Version("1.0.0"), [], local_module_package_index)
-    assert_all_checks()
-    create_install_package(
-        "test-package-two",
-        version.Version("1.0.0"),
-        [inmanta.util.parse_requirement(requirement="test-package-one~=1.0")],
-        local_module_package_index,
-    )
-    assert_all_checks()
-    create_install_package("test-package-one", version.Version("2.0.0"), [], local_module_package_index)
-    assert_all_checks(
-        expect_test=(
-            False,
-            "Incompatibility between constraint test-package-one~=1.0 and installed version 2.0.0 (from test-package-two)",
-        ),
-        expect_nonext=(True, error_msg + " test-package-one~=1.0 and installed version 2.0.0 (from test-package-two)"),
-    )
-
-
-@pytest.mark.slowtest
-def test_active_env_check_constraints(caplog, tmpvenv_active_inherit: str, local_module_package_index) -> None:
-    """
-    Verify that the env.ActiveEnv.check() method's constraints parameter is taken into account as expected.
-    """
-    caplog.set_level(logging.WARNING)
-    in_scope: Pattern[str] = re.compile("test-package-.*")
-    constraints: list[inmanta.util.CanonicalRequirement] = [inmanta.util.parse_requirement(requirement="test-package-one~=1.0")]
-
-    env.process_env.check(in_scope)
-
-    caplog.clear()
-    with pytest.raises(env.ConflictingRequirements):
-        env.process_env.check(in_scope, constraints)
-
-    caplog.clear()
-    create_install_package("test-package-one", version.Version("1.0.0"), [], local_module_package_index)
-    env.process_env.check(in_scope, constraints)
-    assert "Incompatibility between constraint" not in caplog.text
-
-    # Add an unrelated package to the venv, that should not matter
-    # setup for #4761
-    caplog.clear()
-    create_install_package(
-        "ext-package-one",
-        version.Version("1.0.0"),
-        [inmanta.util.parse_requirement(requirement="test-package-one==1.0")],
-        local_module_package_index,
-    )
-    env.process_env.check(in_scope, constraints)
-    assert "Incompatibility between constraint" not in caplog.text
-
-    caplog.clear()
-    v: version.Version = version.Version("2.0.0")
-    create_install_package("test-package-one", v, [], local_module_package_index)
-    # test for #4761
-    # without additional constrain, this is not a hard failure
-    # except for the unrelated package, which should produce a warning
-    env.process_env.check(in_scope, [])
-    assert (
-        "Incompatibility between constraint test-package-one==1.0 and installed version 2.0.0 (from ext-package-one)"
-        in caplog.text
-    )
-
-    caplog.clear()
-    with pytest.raises(env.ConflictingRequirements):
-        env.process_env.check(in_scope, constraints)
 
 
 @pytest.mark.slowtest

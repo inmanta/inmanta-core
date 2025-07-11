@@ -63,6 +63,7 @@ async def install_project(python_env: env.PythonEnvironment, project_dir: py.pat
         python_env.python_path,
         "-m",
         "inmanta.app",
+        "-Xvvv",  # for assert failure messages
         "project",
         "install",
     ]

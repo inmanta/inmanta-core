@@ -44,41 +44,6 @@ server_timeout = Option(
     is_time,
 )
 
-agent_deploy_interval: Option[int | str] = Option(
-    "config",
-    "agent-deploy-interval",
-    0,
-    "Set the frequency and the granularity of deploy runs (i.e. only trigger a deploy for resources that have a "
-    " known divergence with their desired state)."
-    " When specified as an integer, this will set the wait time (in seconds) before attempting to redeploy a resource"
-    " after an unsuccessful deployment, on a per-resource basis."
-    " When specified as a cron-like expression, a global deploy (i.e. for all resources that have a known divergence with their"
-    " desired state) will be run following a cron-like time-to-run specification,"
-    " interpreted in UTC. The expected format is ``[sec] min hour dom month dow [year]`` (If only 6 values are provided, they"
-    " are interpreted as ``min hour dom month dow year``)."
-    " A deploy will be requested at the scheduled time."
-    " Set this to 0 to disable the scheduled deploy runs.",
-    is_time_or_cron,
-)
-
-agent_repair_interval = Option(
-    "config",
-    "agent-repair-interval",
-    600,
-    "Set the frequency and the granularity of repair runs (i.e. trigger a deploy regardless of the assumed"
-    " state of the resource(s))."
-    " When specified as an integer, this will set the wait time (in seconds) before re-scheduling a resource for deployment"
-    " after the previous deployment has ended, regardless of success or failure, on a per-resource basis."
-    " When specified as a cron-like expression, a global repair (i.e. a full deploy for all resources, regardless of their"
-    " assumed desired state and regardless of their actual state) will be run following a cron-like"
-    " time-to-run specification,"
-    " interpreted in UTC. The expected format is `[sec] min hour dom month dow [year]` ( If only 6 values are provided, they"
-    " are interpreted as `min hour dom month dow year`)."
-    " A repair will be requested at the scheduled time."
-    " Setting this to 0 to disable the scheduled repair runs.",
-    is_time_or_cron,
-)
-
 executor_venv_retention_time: Option[int] = Option(
     "agent",
     "executor-venv-retention-time",

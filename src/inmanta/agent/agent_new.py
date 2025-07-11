@@ -115,7 +115,6 @@ class Agent(SessionEndpoint):
         if self.working:
             return
         self.working = True
-        await self.load_environment_settings()
         await self.executor_manager.start()
         await self.scheduler.start()
         LOGGER.info("Scheduler started for environment %s", self.environment)
@@ -157,21 +156,6 @@ class Agent(SessionEndpoint):
             else:
                 await self.scheduler.refresh_agent_state_from_db(name=agent)
                 return 200, f"Agent `{agent}` has been notified!"
-
-    async def load_environment_settings(self) -> None:
-        """
-        Load environment settings into local settings
-        """
-        async with data.Environment.get_connection() as connection:
-            assert self.environment is not None
-            environment = await data.Environment.get_by_id(self.environment, connection=connection)
-            assert environment is not None
-            agent_deploy_interval = await environment.get(data.AUTOSTART_AGENT_DEPLOY_INTERVAL, connection=connection)
-            assert agent_deploy_interval is not None and isinstance(agent_deploy_interval, str)  # make mypy happy
-            agent_repair_interval = await environment.get(data.AUTOSTART_AGENT_REPAIR_INTERVAL, connection=connection)
-            assert agent_repair_interval is not None and isinstance(agent_repair_interval, str)  # make mypy happy
-            cfg.agent_repair_interval.set(agent_repair_interval)
-            cfg.agent_deploy_interval.set(agent_deploy_interval)
 
     async def on_reconnect(self) -> None:
         result = await self._client.get_state(tid=self._env_id, sid=self.sessionid, agent=AGENT_SCHEDULER_ID)
@@ -257,7 +241,6 @@ class Agent(SessionEndpoint):
     @protocol.handle(methods_v2.notify_timer_update, env="tid")
     async def notify_timer_update(self, env: data.Environment) -> None:
         assert env == self.environment
-        await self.load_environment_settings()
         await self.scheduler.load_timer_settings()
 
     @protocol.handle(methods_v2.get_db_status)

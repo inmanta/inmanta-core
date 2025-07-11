@@ -723,6 +723,7 @@ class Notification(BaseModel):
     :param uri: A link to an api endpoint of the server, that is relevant to the message,
                 and can be used to get further information about the problem.
                 For example a compile related problem should have the uri: `/api/v2/compilereport/<compile_id>`
+    :param compile_id: The id of the compile that is associated with this notification.
     :param read: Whether the notification was read or not
     :param cleared: Whether the notification was cleared or not
     """
@@ -734,6 +735,7 @@ class Notification(BaseModel):
     message: str
     severity: const.NotificationSeverity
     uri: Optional[str] = None
+    compile_id: uuid.UUID | None = None
     read: bool
     cleared: bool
 
