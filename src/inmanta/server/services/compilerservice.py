@@ -736,7 +736,7 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
         :param links: An object that contains relevant links to this compile.
             It is a dictionary where the key is something that identifies one or more links
             and the value is a list of urls. i.e. {"instances": ["link-1',"link-2"], "compiles": ["link-3"]}
-        :param update_environment_settings: True iff the --update-environment-settings will be set on the export command.
+        :param update_environment_settings: True iff the --update-environment-settings option will be set on the export command.
         :return: the compile id of the requested compile and any warnings produced during the request
         """
         if in_db_transaction and not connection:
