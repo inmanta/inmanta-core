@@ -21,13 +21,11 @@ import logging
 import os
 import re
 import shutil
-import subprocess
 
 import py
 import pytest
 from pytest import MonkeyPatch
 
-import inmanta.util
 import toml
 from inmanta import moduletool
 from inmanta.command import CLIException
