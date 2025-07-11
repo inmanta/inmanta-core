@@ -4672,6 +4672,26 @@ class ResourcePersistentState(BaseDocument):
             return state.Compliance.NON_COMPLIANT
 
 
+class ResourceSet(BaseDocument):
+    environment: uuid.UUID
+    name: str
+    model: int
+    revision: int
+
+    @classmethod
+    async def copy_unchanged_resource_sets(
+        cls,
+        environment: uuid.UUID,
+        source_version: int,
+        destination_version: int,
+        updated_resource_sets: abc.Set[str],
+        deleted_resource_sets: abc.Set[str],
+        *,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ):
+        pass
+
+
 @stable_api
 class Resource(BaseDocument):
     """

@@ -840,6 +840,9 @@ class OrchestrationService(protocol.ServerSlice):
         if resource_sets is None:
             resource_sets = {}
 
+        # Add default resource set
+        resource_sets.update({rid: "" for rid in rid_to_resource if rid not in resource_sets})
+
         if removed_resource_sets is None:
             removed_resource_sets = []
 
@@ -928,6 +931,14 @@ class OrchestrationService(protocol.ServerSlice):
                             connection=connection,
                         )
                     )
+                    await data.ResourceSet.copy_unchanged_resource_sets(
+                        environment=env.id,
+                        source_version=partial_base_version,
+                        destination_version=version,
+                        updated_resource_sets=updated_resource_sets,
+                        deleted_resource_sets=deleted_resource_sets_as_set,
+                        connection=connection,
+                    )
                     resources_that_moved_resource_sets = rids_unchanged_resource_sets.keys() & rid_to_resource.keys()
                     if resources_that_moved_resource_sets:
                         msg = (
@@ -944,6 +955,13 @@ class OrchestrationService(protocol.ServerSlice):
                     all_ids |= {Id.parse_id(rid, version) for rid in rids_unchanged_resource_sets.keys()}
 
                 await data.Resource.insert_many(list(rid_to_resource.values()), connection=connection)
+                await data.ResourceSet.insert_many(
+                    [
+                        data.ResourceSet(environment=env.id, name=name, model=version, revision=version)
+                        for name in updated_resource_sets
+                    ],
+                    connection=connection,
+                )
                 await cm.recalculate_total(connection=connection)
 
             await data.UnknownParameter.insert_many(unknowns, connection=connection)
