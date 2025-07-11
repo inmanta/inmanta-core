@@ -1,0 +1,8 @@
+---
+description: "Added support to set the environment settings, required by an Inmanta project, in the project.yml file and update them on the server using the `inmanta export --update-environment-settings` command."
+issue-nr: 7654
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [master, iso8]
+sections:
+  minor-improvement: "{{description}}"
