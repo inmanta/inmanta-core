@@ -25,7 +25,7 @@ from collections import abc
 from typing import Optional
 
 import utils
-from inmanta import const, data
+from inmanta import const, data, util
 from inmanta.agent import executor
 from inmanta.data.model import ModuleSourceMetadata
 from inmanta.deploy import persistence, state
@@ -1528,7 +1528,7 @@ async def test_put_partial_with_resource_state_set(server, client, environment, 
     rvid3 = Id.parse_id(f"test::Resource[agent1,key=key3],v={version}")
     await update_manager.send_in_progress(action_id=action_id, resource_id=rvid3)
     await update_manager.send_deploy_done(
-        attribute_hash=utils.make_attribute_hash_no_id(rvid3.resource_str(), attributes=resources[2]),
+        attribute_hash=util.make_attribute_hash(rvid3.resource_str(), attributes=resources[2]),
         result=executor.DeployReport(
             rvid=rvid3.resource_version_str(),
             action_id=action_id,
