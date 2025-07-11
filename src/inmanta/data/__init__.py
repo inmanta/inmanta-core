@@ -4717,7 +4717,7 @@ class ResourceSet(BaseDocument):
                 name,
                 environment,
                 revision,
-                model,
+                model
             )(
                 SELECT
                     rs.name,
@@ -4791,6 +4791,7 @@ class ResourceSet(BaseDocument):
             destination_version,
             connection=connection,
         )
+
 
 
 @stable_api
