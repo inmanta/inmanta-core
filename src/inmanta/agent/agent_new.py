@@ -31,6 +31,7 @@ from inmanta.const import AGENT_SCHEDULER_ID
 from inmanta.data.model import DataBaseReport, SchedulerStatusReport
 from inmanta.deploy import scheduler
 from inmanta.protocol import SessionEndpoint, methods, methods_v2
+from inmanta.resources import Id
 from inmanta.server.services.databaseservice import DatabaseMonitor
 from inmanta.types import Apireturn, ResourceIdStr
 from inmanta.util import ensure_directory_exist, join_threadpools
@@ -239,7 +240,8 @@ class Agent(SessionEndpoint):
         assert env == self.environment
         assert agent == AGENT_SCHEDULER_ID
         LOGGER.info("Agent %s got a trigger to run get_facts for resource %s in environment %s", agent, resource_id, env)
-        await self.scheduler.get_facts(resource_id)
+        id = Id.parse_id(resource_id)
+        await self.scheduler.get_facts(id)
         return 200
 
     @protocol.handle(methods.get_status)
