@@ -29,7 +29,7 @@ from enum import Enum, StrEnum
 from typing import ClassVar, Mapping, Optional, Self, Union
 
 import pydantic.schema
-from pydantic import ConfigDict, Field, computed_field, field_validator, model_validator
+from pydantic import ConfigDict, Field, SerializationInfo, computed_field, field_serializer, field_validator, model_validator
 
 import inmanta
 import inmanta.ast.export as ast_export
@@ -784,6 +784,14 @@ class RoleAssignment(BaseModel):
     role: str
 
 
+class RoleAssignmentsPerEnvironment(BaseModel):
+    assignments: dict[uuid.UUID, list[str]]
+
+    @field_serializer("assignments")
+    def serialize_assignments(self, assignments: dict[uuid.UUID, list[str]], _info: SerializationInfo) -> dict[str, list[str]]:
+        return {str(k): v for k, v in assignments.items()}
+
+
 class User(BaseModel):
     """A user"""
 
@@ -793,7 +801,11 @@ class User(BaseModel):
 
 
 class UserWithRoles(User):
-    roles: list[RoleAssignment]
+    roles: dict[uuid.UUID, list[str]]
+
+    @field_serializer("roles")
+    def serialize_roles(self, roles: dict[uuid.UUID, list[str]], _info: SerializationInfo) -> dict[str, list[str]]:
+        return {str(k): v for k, v in roles.items()}
 
 
 class CurrentUser(BaseModel):
