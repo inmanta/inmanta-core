@@ -23,6 +23,8 @@ from collections import abc
 import asyncpg
 import pytest
 
+from inmanta import data
+
 file_name_regex = re.compile("test_v([0-9]{9})_to_v[0-9]{9}")
 part = file_name_regex.match(__name__)[1]
 
@@ -31,6 +33,15 @@ part = file_name_regex.match(__name__)[1]
 async def test_add_resource_set_table(
     postgresql_client: asyncpg.Connection, migrate_db_from: abc.Callable[[], abc.Awaitable[None]]
 ) -> None:
-    # Migration script only drops a column.
 
     await migrate_db_from()
+    # Check if resource_set table is populated correctly
+    res_sets_raw = await data.ResourceSet.get_list()
+    assert len(res_sets_raw) != 0
+    res_sets = {(r.environment, r.name, r.model, r.revision) for r in res_sets_raw}
+    assert len(res_sets_raw) == len(res_sets)
+    resources = await data.Resource.get_list()
+    resource_set_info = {
+        (r.environment, r.resource_set if r.resource_set is not None else "", r.model, r.revision) for r in resources
+    }
+    assert res_sets == resource_set_info
