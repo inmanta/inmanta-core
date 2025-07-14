@@ -494,7 +494,9 @@ def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Se
         "--update-environment-settings",
         dest="update_environment_settings",
         help="If set, this command updates the environment settings on the server as mentioned in the"
-        " environment_settings section of the project.yml file.",
+        " environment_settings section of the project.yml file. After doing this, it will no longer be possible to update these"
+        " environment settings via the API, until a new export is done with the --update-environment-settings option set"
+        " where that setting is no longer present in the environment_setting section of the project.yml file.",
         action="store_true",
         default=False,
     )
