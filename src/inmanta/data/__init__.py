@@ -4793,7 +4793,6 @@ class ResourceSet(BaseDocument):
         )
 
 
-
 @stable_api
 class Resource(BaseDocument):
     """
