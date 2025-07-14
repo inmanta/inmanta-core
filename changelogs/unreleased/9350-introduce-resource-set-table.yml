@@ -1,0 +1,7 @@
+---
+description: Introduce ResourceSet table
+issue-nr: 9350
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [master]
+sections: {}
