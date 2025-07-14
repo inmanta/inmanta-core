@@ -4394,10 +4394,10 @@ class ResourceAction(BaseDocument):
             )
             assert resource_state is not None  # resource state must exist if resource exists
 
-            if resource.status != const.ResourceState.deploying:
+            if not resource_state.is_deploying:
                 raise BadRequest(
                     "Fetching resource events only makes sense when the resource is currently deploying. Current deploy state"
-                    f" for resource {resource_version_id_str} is {resource.status}."
+                    f" for resource {resource_version_id_str} is {resource_state.last_non_deploying_status}."
                 )
 
             # Step 2:
@@ -4610,14 +4610,13 @@ class ResourcePersistentState(BaseDocument):
                 r.agent,
                 r.resource_id_value,
                 r.attribute_hash,
-                r.status = 'undefined'::public.resourcestate,
+                r.is_undefined,
                 FALSE,
                 FALSE,
                 'NEW',
                 CASE
                     WHEN
-                        r.status = 'undefined'::public.resourcestate
-                        OR r.status = 'skipped_for_undefined'::public.resourcestate
+                        r.is_undefined
                     THEN 'BLOCKED'
                     ELSE 'NOT_BLOCKED'
                 END
@@ -4629,6 +4628,48 @@ class ResourcePersistentState(BaseDocument):
             model_version,
             connection=connection,
         )
+
+    @classmethod
+    async def update_persistent_state(
+        cls,
+        environment: uuid.UUID,
+        resource_id: ResourceIdStr,
+        is_deploying: bool | None = None,
+        last_deploy: datetime.datetime | None = None,
+        last_deployed_version: int | None = None,
+        last_non_deploying_status: Optional[const.NonDeployingResourceState] = None,
+        last_success: Optional[datetime.datetime] = None,
+        last_produced_events: Optional[datetime.datetime] = None,
+        last_deployed_attribute_hash: Optional[str] = None,
+        connection: Optional[asyncpg.connection.Connection] = None,
+        # TODO[#8541]: accept state.ResourceState and write blocked status as well
+        last_deploy_result: Optional[state.DeployResult] = None,
+    ) -> None:
+        """Update the data in the resource_persistent_state table"""
+        args = ArgumentCollector(2)
+
+        invalues = {
+            "is_deploying": is_deploying,
+            "last_deploy": last_deploy,
+            "last_non_deploying_status": last_non_deploying_status,
+            "last_success": last_success,
+            "last_produced_events": last_produced_events,
+            "last_deployed_attribute_hash": last_deployed_attribute_hash,
+            "last_deployed_version": last_deployed_version,
+        }
+        query_parts = [f"{k}={args(v)}" for k, v in invalues.items() if v is not None]
+        if last_deploy_result:
+            query_parts.append(f"last_deploy_result={args(last_deploy_result.name)}")
+        if not query_parts:
+            return
+        query = f"UPDATE public.resource_persistent_state SET {','.join(query_parts)} WHERE environment=$1 and resource_id=$2"
+
+        result = await cls._execute_query(query, environment, resource_id, *args.args, connection=connection)
+        if result == "UPDATE 0":
+            raise NotFound(
+                "Unable to find an entry in the resource_persistent_state table "
+                f"for resource with id {resource_id} in environment {environment}"
+            )
 
     def get_compliance_status(self) -> Optional[state.Compliance]:
         """
@@ -4662,7 +4703,6 @@ class Resource(BaseDocument):
     :param attributes: The desired state for this version of the resource as a dict of attributes
     :param attribute_hash: hash of the attributes, excluding requires, provides and version,
                            used to determine if a resource describes the same state across versions
-    :param status: The state of this resource, used e.g. in scheduling
     :param is_undefined: If the desired state for resource is undefined
     :param resource_set: The resource set this resource belongs to. Used when doing partial compiles.
     """
@@ -4682,7 +4722,6 @@ class Resource(BaseDocument):
     # State related
     attributes: dict[str, object] = {}
     attribute_hash: Optional[str]
-    status: const.ResourceState = const.ResourceState.available
     is_undefined: bool = False
 
     resource_set: Optional[str] = None
@@ -4719,7 +4758,6 @@ class Resource(BaseDocument):
         # version field is present in the attributes dictionary served out via the API.
         record["attributes"]["version"] = version
         record["provides"] = [resources.Id.set_version_in_id(id, version) for id in record["provides"]]
-        del record["status"]
 
     @classmethod
     async def get_last_non_deploying_state_for_dependencies(
@@ -4851,24 +4889,6 @@ class Resource(BaseDocument):
         :param connection: The connection to use
         """
 
-        # FIXME: When we remove the status from the Resource table, this can go.
-        update_resource_query = f"""
-            UPDATE {Resource.table_name()} r
-            SET status=rps.last_non_deploying_status::TEXT::resourcestate
-            FROM {ResourcePersistentState.table_name()} rps
-            WHERE r.resource_id=rps.resource_id
-                AND r.environment=rps.environment
-                AND r.status='deploying'
-                AND r.environment=$1
-                AND r.model=(
-                    SELECT version
-                    FROM {ConfigurationModel.table_name()}
-                    WHERE environment=$1
-                        AND released=true
-                    ORDER BY version DESC
-                    LIMIT 1
-                )
-        """
         update_rps_query = f"""
             UPDATE {ResourcePersistentState.table_name()} rps
             SET is_deploying=FALSE
@@ -4877,7 +4897,6 @@ class Resource(BaseDocument):
         values = [cls._get_value(environment)]
         async with cls.get_connection(connection) as connection:
             await connection.execute(update_rps_query, *values)
-            await connection.execute(update_resource_query, *values)
 
     @classmethod
     async def get_resources_in_latest_version(
@@ -5151,7 +5170,6 @@ class Resource(BaseDocument):
             agent=self.agent,
             attributes=self.attributes.copy(),
             attribute_hash=self.attribute_hash,
-            status=ResourceState.undefined if self.is_undefined else ResourceState.available,
             is_undefined=self.is_undefined,
             resource_set=self.resource_set,
             provides=self.provides,
@@ -5292,7 +5310,6 @@ class Resource(BaseDocument):
                 resource_type,
                 resource_id_value,
                 agent,
-                status,
                 is_undefined,
                 attributes,
                 attribute_hash,
@@ -5306,12 +5323,6 @@ class Resource(BaseDocument):
                     r.resource_type,
                     r.resource_id_value,
                     r.agent,
-                    (
-                        CASE WHEN r.status='undefined'::resourcestate
-                        THEN 'undefined'::resourcestate
-                        ELSE 'available'::resourcestate
-                        END
-                    ) AS status,
                     r.is_undefined,
                     r.attributes AS attributes,
                     r.attribute_hash,
@@ -5414,46 +5425,10 @@ class Resource(BaseDocument):
             resource_version_id=resources.Id.set_version_in_id(self.resource_id, self.model),
             agent=self.agent,
             attributes=attributes,
-            status=self.status,
             is_undefined=self.is_undefined,
             resource_id_value=self.resource_id_value,
             resource_set=self.resource_set,
         )
-
-    async def update_persistent_state(
-        self,
-        is_deploying: bool | None = None,
-        last_deploy: datetime.datetime | None = None,
-        last_deployed_version: int | None = None,
-        last_non_deploying_status: Optional[const.NonDeployingResourceState] = None,
-        last_success: Optional[datetime.datetime] = None,
-        last_produced_events: Optional[datetime.datetime] = None,
-        last_deployed_attribute_hash: Optional[str] = None,
-        connection: Optional[asyncpg.connection.Connection] = None,
-        # TODO[#8541]: accept state.ResourceState and write blocked status as well
-        last_deploy_result: Optional[state.DeployResult] = None,
-    ) -> None:
-        """Update the data in the resource_persistent_state table"""
-        args = ArgumentCollector(2)
-
-        invalues = {
-            "is_deploying": is_deploying,
-            "last_deploy": last_deploy,
-            "last_non_deploying_status": last_non_deploying_status,
-            "last_success": last_success,
-            "last_produced_events": last_produced_events,
-            "last_deployed_attribute_hash": last_deployed_attribute_hash,
-            "last_deployed_version": last_deployed_version,
-        }
-        query_parts = [f"{k}={args(v)}" for k, v in invalues.items() if v is not None]
-        if last_deploy_result:
-            query_parts.append(f"last_deploy_result={args(last_deploy_result.name)}")
-        if not query_parts:
-            return
-        query = f"UPDATE public.resource_persistent_state SET {','.join(query_parts)} WHERE environment=$1 and resource_id=$2"
-
-        result = await self._execute_query(query, self.environment, self.resource_id, *args.args, connection=connection)
-        assert result == "UPDATE 1"
 
 
 @stable_api

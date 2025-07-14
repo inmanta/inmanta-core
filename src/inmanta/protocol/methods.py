@@ -30,7 +30,7 @@ from inmanta.protocol import exceptions
 from inmanta.protocol.auth.decorators import auth
 from inmanta.protocol.common import ArgOption
 from inmanta.protocol.decorators import method, typedmethod
-from inmanta.types import JsonType, PrimitiveTypes
+from inmanta.types import JsonType, PrimitiveTypes, ResourceIdStr
 
 
 async def convert_environment(env: uuid.UUID, metadata: dict) -> "data.Environment":
@@ -814,7 +814,7 @@ def set_parameters(tid: uuid.UUID, parameters: list):
     reply=False,
     enforce_auth=False,
 )
-def get_parameter(tid: uuid.UUID, agent: str, resource: dict):
+def get_parameter(tid: uuid.UUID, agent: str, resource_id: ResourceIdStr):
     """
     Get all parameters/facts known by the agents for the given resource
 
@@ -824,7 +824,7 @@ def get_parameter(tid: uuid.UUID, agent: str, resource: dict):
 
     :param tid: The environment
     :param agent: The agent to get the parameters from
-    :param resource: The resource to query the parameters from
+    :param resource_id: The id of the resource to query the parameters from
     """
 
 

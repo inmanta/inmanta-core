@@ -123,14 +123,12 @@ async def test_has_only_one_version_from_resource(server, client):
         environment=env.id,
         resource_version_id=res1_key + ",v=%d" % version,
         attributes={"name": res1_name},
-        status=ResourceState.deploying,
     )
     await res1_v2.insert()
     res2_v2 = data.Resource.new(
         environment=env.id,
         resource_version_id=res2_key + ",v=%d" % version,
         attributes={"name": res2_name},
-        status=ResourceState.deploying,
     )
     await res2_v2.insert()
 
@@ -139,7 +137,6 @@ async def test_has_only_one_version_from_resource(server, client):
         environment=env.id,
         resource_version_id=res1_key + ",v=%d" % version,
         attributes={"name": res1_name},
-        status=ResourceState.deployed,
     )
     await res1_v3.insert()
 
@@ -151,10 +148,11 @@ async def test_has_only_one_version_from_resource(server, client):
         environment=env.id,
         resource_version_id=res1_key + ",v=%d" % version,
         attributes={"name": res1_name, "new_attr": 123, "requires": ["abc"]},
-        status=ResourceState.deployed,
     )
     await res1_v4.insert()
-    await res1_v4.update_persistent_state(last_non_deploying_status=ResourceState.deployed)
+    await data.ResourcePersistentState.update_persistent_state(
+        environment=env.id, resource_id=res1_v4.resource_id, last_non_deploying_status=ResourceState.deployed
+    )
 
     result = await client.resource_list(env.id, sort="status.asc")
     assert result.code == 200
@@ -202,7 +200,7 @@ async def env_with_resources(server, client):
                 environment=environment,
                 resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),
                 attributes={"path": path, "version": version},
-                status=status,
+                is_undefined=status is ResourceState.undefined,
             )
             await res.insert()
         # Populate RPS
@@ -212,8 +210,9 @@ async def env_with_resources(server, client):
         if orphan:
             await data.ResourcePersistentState.mark_as_orphan(environment=environment, resource_ids={ResourceIdStr(key)})
 
-        res = await data.Resource.get_one(resource_id=key)
-        await res.update_persistent_state(
+        await data.ResourcePersistentState.update_persistent_state(
+            environment=environment,
+            resource_id=ResourceIdStr(key),
             last_deploy=datetime.now(tz=UTC),
             last_non_deploying_status=(
                 status
@@ -878,7 +877,6 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, mo
     return instances
 
 
-@pytest.mark.slowtest
 @pytest.mark.parametrize("instances", [2])  # set the size
 @pytest.mark.parametrize("trace", [False])  # make it analyze the queries
 async def test_resources_paging_performance(client, environment, very_big_env: int, trace: bool, async_finalizer):
