@@ -789,6 +789,8 @@ class RoleAssignmentsPerEnvironment(BaseModel):
 
     @field_serializer("assignments")
     def serialize_assignments(self, assignments: dict[uuid.UUID, list[str]], _info: SerializationInfo) -> dict[str, list[str]]:
+        # Serialize uuid keys in dict to string. The json.dumps() doesn't use the custom serializer for that.
+        # https://github.com/python/cpython/issues/63020
         return {str(k): v for k, v in assignments.items()}
 
 
@@ -805,6 +807,8 @@ class UserWithRoles(User):
 
     @field_serializer("roles")
     def serialize_roles(self, roles: dict[uuid.UUID, list[str]], _info: SerializationInfo) -> dict[str, list[str]]:
+        # Serialize uuid keys in dict to string. The json.dumps() doesn't use the custom serializer for that.
+        # https://github.com/python/cpython/issues/63020
         return {str(k): v for k, v in roles.items()}
 
 

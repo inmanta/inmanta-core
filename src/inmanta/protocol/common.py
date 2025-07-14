@@ -1074,11 +1074,7 @@ def attach_warnings(code: int, value: Optional[JsonType], warnings: Optional[lis
 def json_encode(value: object, tz_aware: bool = True) -> str:
     """Our json encode is able to also serialize other types than a dict."""
     # see json_encode in tornado.escape
-    try:
-        return json.dumps(value, default=partial(custom_json_encoder, tz_aware=tz_aware)).replace("</", "<\\/")
-    except Exception:
-        breakpoint()
-        raise
+    return json.dumps(value, default=partial(custom_json_encoder, tz_aware=tz_aware)).replace("</", "<\\/")
 
 
 def gzipped_json(value: JsonType) -> tuple[bool, Union[bytes, str]]:
