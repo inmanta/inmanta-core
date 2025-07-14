@@ -4704,13 +4704,18 @@ class ResourceSet(BaseDocument):
         environment: uuid.UUID,
         source_version: int,
         destination_version: int,
-        updated_resource_sets: abc.Set[str],
-        deleted_resource_sets: abc.Set[str],
+        changed_resource_sets: abc.Set[str],
         *,
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> None:
         """
         Copies any resource set that was not changed (or deleted) and bumps the version to the destination version.
+
+        :param environment: The environment that the resource sets belong to
+        :param source_version: The version that the partial compile is based on
+        :param destination_version: The version that we are moving to
+        :param changed_resource_sets: The resource sets that were changed (updated or deleted)
+        :param connection: The connection to use
         """
         query = f"""
             INSERT INTO {cls.table_name()}(
@@ -4733,7 +4738,7 @@ class ResourceSet(BaseDocument):
             environment,
             source_version,
             destination_version,
-            updated_resource_sets | deleted_resource_sets,
+            changed_resource_sets,
             connection=connection,
         )
 
@@ -4751,6 +4756,11 @@ class ResourceSet(BaseDocument):
             - bump its model to the target version
             - bump its revision by 1
         If the resource set is not present, create it and set its revision to 1
+
+        :param environment: The environment that the resource sets belong to
+        :param destination_version: The version that we are moving to
+        :param resource_sets: The resource sets that we want to bump (or add)
+        :param connection: The connection to use
         """
         query = f"""
         -- Table with the resource sets that we want to bump/create

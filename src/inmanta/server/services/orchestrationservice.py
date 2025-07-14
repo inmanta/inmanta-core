@@ -840,7 +840,7 @@ class OrchestrationService(protocol.ServerSlice):
         if resource_sets is None:
             resource_sets = {}
 
-        # Add default resource set
+        # Add default resource set if required
         resource_sets.update({rid: "" for rid in rid_to_resource if rid not in resource_sets})
 
         if removed_resource_sets is None:
@@ -935,8 +935,7 @@ class OrchestrationService(protocol.ServerSlice):
                         environment=env.id,
                         source_version=partial_base_version,
                         destination_version=version,
-                        updated_resource_sets=updated_resource_sets,
-                        deleted_resource_sets=deleted_resource_sets_as_set,
+                        changed_resource_sets=updated_resource_sets | deleted_resource_sets_as_set,
                         connection=connection,
                     )
                     resources_that_moved_resource_sets = rids_unchanged_resource_sets.keys() & rid_to_resource.keys()
