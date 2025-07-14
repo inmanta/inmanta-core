@@ -42,7 +42,7 @@ from inmanta.server import config as opt
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 from inmanta.util import get_compiler_version
-from utils import log_contains, log_doesnt_contain, make_attribute_hash_no_id, retry_limited
+from utils import log_contains, log_doesnt_contain, retry_limited
 
 LOGGER = logging.getLogger(__name__)
 
@@ -356,7 +356,7 @@ async def test_resource_update(postgresql_client, client, clienthelper, server, 
     for res, action_id in deploy_ids:
         rid = Id.parse_id(res["id"])
         await update_manager.send_deploy_done(
-            attribute_hash=make_attribute_hash_no_id(resource_id=rid.resource_str(), attributes=res),
+            attribute_hash=util.make_attribute_hash(resource_id=rid.resource_str(), attributes=res),
             result=executor.DeployReport(
                 rvid=rid.resource_version_str(),
                 action_id=action_id,
@@ -1122,7 +1122,7 @@ async def test_send_deploy_done(server, client, environment, null_agent, caplog,
             data.LogLine.log(level=const.LogLevel.INFO, msg="test", timestamp=now),
         ]
         await update_manager.send_deploy_done(
-            attribute_hash=make_attribute_hash_no_id(resource_id=rid_r1, attributes=attributes_r1),
+            attribute_hash=util.make_attribute_hash(resource_id=rid_r1, attributes=attributes_r1),
             result=executor.DeployReport(
                 rvid=rvid_r1_v1,
                 action_id=action_id,
@@ -1196,7 +1196,7 @@ async def test_send_deploy_done(server, client, environment, null_agent, caplog,
     # A new send_deploy_done call for the same action_id should result in a ValueError
     with pytest.raises(ValueError):
         await update_manager.send_deploy_done(
-            attribute_hash=make_attribute_hash_no_id(resource_id=rid_r1, attributes=attributes_r1),
+            attribute_hash=util.make_attribute_hash(resource_id=rid_r1, attributes=attributes_r1),
             result=executor.DeployReport(
                 rvid=rvid_r1_v1,
                 action_id=action_id,

@@ -21,7 +21,7 @@ import typing
 import uuid
 
 import utils
-from inmanta import const, data
+from inmanta import const, data, util
 from inmanta.agent import executor
 from inmanta.deploy import persistence, state
 from inmanta.resources import Id
@@ -91,7 +91,7 @@ async def test_consistent_resource_state_reporting(
     now = datetime.datetime.now()
     await update_manager.send_in_progress(action_id, rvid)
     await update_manager.send_deploy_done(
-        attribute_hash=utils.make_attribute_hash_no_id(resource_id=rvid.resource_str(), attributes=resources[0]),
+        attribute_hash=util.make_attribute_hash(resource_id=rvid.resource_str(), attributes=resources[0]),
         result=executor.DeployReport(
             rvid=rvid.resource_version_str(),
             action_id=action_id,
