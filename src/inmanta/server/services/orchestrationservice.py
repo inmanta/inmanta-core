@@ -933,8 +933,8 @@ class OrchestrationService(protocol.ServerSlice):
                     )
                     await data.ResourceSet.copy_unchanged_resource_sets(
                         environment=env.id,
-                        source_version=partial_base_version,
-                        destination_version=version,
+                        source_model=partial_base_version,
+                        destination_model=version,
                         changed_resource_sets=updated_resource_sets | deleted_resource_sets_as_set,
                         connection=connection,
                     )
@@ -956,11 +956,9 @@ class OrchestrationService(protocol.ServerSlice):
                 updated_resources = list(rid_to_resource.values())
                 await data.Resource.insert_many(updated_resources, connection=connection)
                 # bump all resource sets if we are doing a full compile otherwise, bump only the updated resource sets
-                if not is_partial_update:
-                    updated_resource_sets = {r.resource_set if r.resource_set is not None else "" for r in updated_resources}
-                await data.ResourceSet.bump_resource_sets(
+                await data.ResourceSet.create_new_revisions_for_resource_sets(
                     environment=env.id,
-                    destination_version=version,
+                    destination_model=version,
                     resource_sets=updated_resource_sets,
                     connection=connection,
                 )

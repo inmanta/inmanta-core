@@ -42,6 +42,10 @@ async def test_add_resource_set_table(
     assert len(res_sets_raw) == len(res_sets)
     resources = await data.Resource.get_list()
     resource_set_info = {
-        (r.environment, r.resource_set if r.resource_set is not None else "", r.model, r.revision) for r in resources
+        (r.environment, r.resource_set if r.resource_set is not None else "", r.model, r.resource_set_revision)
+        for r in resources
     }
     assert res_sets == resource_set_info
+    resource_set_names = {r.resource_set for r in resources}
+    assert None in resource_set_names
+    assert "set-a" in resource_set_names

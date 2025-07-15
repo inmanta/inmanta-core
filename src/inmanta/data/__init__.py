@@ -4689,6 +4689,15 @@ class ResourcePersistentState(BaseDocument):
 
 
 class ResourceSet(BaseDocument):
+    """
+    A set of resources
+
+    :param environment: The environment this resource set belongs to
+    :param name: The name of this resource set
+    :param model: The version of the model that this resource set belongs to
+    :param revision: The revision of this resource set. It is increased only if changes were made to the resources in this set
+    """
+
     environment: uuid.UUID
     name: str
     model: int
@@ -4702,8 +4711,8 @@ class ResourceSet(BaseDocument):
     async def copy_unchanged_resource_sets(
         cls,
         environment: uuid.UUID,
-        source_version: int,
-        destination_version: int,
+        source_model: int,
+        destination_model: int,
         changed_resource_sets: abc.Set[str],
         *,
         connection: Optional[asyncpg.connection.Connection] = None,
@@ -4712,8 +4721,8 @@ class ResourceSet(BaseDocument):
         Copies any resource set that was not changed (or deleted) and bumps the version to the destination version.
 
         :param environment: The environment that the resource sets belong to
-        :param source_version: The version that the partial compile is based on
-        :param destination_version: The version that we are moving to
+        :param source_model: The version that the partial compile is based on
+        :param destination_model: The version that we are moving to
         :param changed_resource_sets: The resource sets that were changed (updated or deleted)
         :param connection: The connection to use
         """
@@ -4730,23 +4739,23 @@ class ResourceSet(BaseDocument):
                     rs.revision,
                     $3
                 FROM {cls.table_name()} AS rs
-                WHERE rs.environment=$1 AND rs.model=$2 AND NOT rs.name=ANY($4)
+                WHERE rs.environment=$1 AND rs.model=$2 AND rs.name!=ANY($4)
             )
             """
         await cls._execute_query(
             query,
             environment,
-            source_version,
-            destination_version,
+            source_model,
+            destination_model,
             changed_resource_sets,
             connection=connection,
         )
 
     @classmethod
-    async def bump_resource_sets(
+    async def create_new_revisions_for_resource_sets(
         cls,
         environment: uuid.UUID,
-        destination_version: int,
+        destination_model: int,
         resource_sets: abc.Set[str],
         *,
         connection: Optional[asyncpg.connection.Connection] = None,
@@ -4758,7 +4767,7 @@ class ResourceSet(BaseDocument):
         If the resource set is not present, create it and set its revision to 1
 
         :param environment: The environment that the resource sets belong to
-        :param destination_version: The version that we are moving to
+        :param destination_model: The version that we are moving to
         :param resource_sets: The resource sets that we want to bump (or add)
         :param connection: The connection to use
         """
@@ -4771,12 +4780,11 @@ class ResourceSet(BaseDocument):
             max_revisions AS (
               SELECT
                 i.name,
-                $2::uuid AS environment,
                 COALESCE(MAX(rs.revision), 0) AS max_revision
               FROM input_resource_sets i
               LEFT JOIN {cls.table_name()} rs
                 ON rs.name=i.name
-                AND rs.environment=environment
+                AND rs.environment=$2
               GROUP BY i.name
             )
         -- Insert the resource sets into the table with updated values of revision and model
@@ -4788,7 +4796,7 @@ class ResourceSet(BaseDocument):
             )(
                 SELECT
                     mr.name,
-                    mr.environment,
+                    $2,
                     mr.max_revision + 1,
                     $3
                 FROM max_revisions AS mr
@@ -4798,7 +4806,7 @@ class ResourceSet(BaseDocument):
             query,
             resource_sets,
             environment,
-            destination_version,
+            destination_model,
             connection=connection,
         )
 
@@ -4819,7 +4827,7 @@ class Resource(BaseDocument):
                            used to determine if a resource describes the same state across versions
     :param is_undefined: If the desired state for resource is undefined
     :param resource_set: The resource set this resource belongs to. Used when doing partial compiles.
-    :param revision: The revision of the resource set this resource belongs to.
+    :param resource_set_revision: The revision of the resource set this resource belongs to.
     """
 
     __primary_key__ = ("environment", "model", "resource_id")
@@ -4840,7 +4848,7 @@ class Resource(BaseDocument):
     is_undefined: bool = False
 
     resource_set: Optional[str] = None
-    revision: int
+    resource_set_revision: int
 
     # internal field to handle cross agent dependencies
     # if this resource is updated, it must notify all RV's in this list
@@ -5033,14 +5041,22 @@ class Resource(BaseDocument):
         """
         values = [cls._get_value(environment)]
         query = f"""
-            SELECT *
-            FROM {Resource.table_name()} AS r1
-            WHERE r1.environment=$1 AND r1.model=(SELECT MAX(cm.version)
-                                                  FROM {ConfigurationModel.table_name()} AS cm
-                                                  WHERE cm.environment=$1)
+            WITH latest_resource_sets AS (
+                SELECT *
+                FROM {ResourceSet.table_name()} AS rs
+                WHERE rs.environment=$1 AND rs.model=(SELECT MAX(cm.version)
+                                                      FROM {ConfigurationModel.table_name()} AS cm
+                                                       WHERE cm.environment=$1)
+            )
+            SELECT r.*
+            FROM {Resource.table_name()} AS r
+            JOIN latest_resource_sets lrs
+              ON COALESCE(r.resource_set, '')=lrs.name
+             AND r.environment=lrs.environment
+             AND r.resource_set_revision=lrs.revision
         """
         if resource_type:
-            query += " AND r1.resource_type=$2"
+            query += " WHERE r1.resource_type=$2"
             values.append(cls._get_value(resource_type))
 
         result = []
@@ -5266,7 +5282,7 @@ class Resource(BaseDocument):
             resource_type=vid.entity_type,
             agent=vid.agent_name,
             resource_id_value=vid.attribute_value,
-            revision=vid.version,
+            resource_set_revision=vid.version,
         )
 
         attr.update(kwargs)
@@ -5289,7 +5305,7 @@ class Resource(BaseDocument):
             attribute_hash=self.attribute_hash,
             is_undefined=self.is_undefined,
             resource_set=self.resource_set,
-            revision=self.revision,
+            resource_set_revision=self.resource_set_revision,
             provides=self.provides,
         )
 
@@ -5432,7 +5448,7 @@ class Resource(BaseDocument):
                 attributes,
                 attribute_hash,
                 resource_set,
-                revision,
+                resource_set_revision,
                 provides
             )(
                 SELECT
@@ -5446,7 +5462,7 @@ class Resource(BaseDocument):
                     r.attributes AS attributes,
                     r.attribute_hash,
                     r.resource_set,
-                    r.revision,
+                    r.resource_set_revision,
                     r.provides
                 FROM {cls.table_name()} AS r
                 WHERE r.environment=$1 AND r.model=$2 AND r.resource_set IS NOT NULL AND NOT r.resource_set=ANY($4)
@@ -5548,7 +5564,7 @@ class Resource(BaseDocument):
             is_undefined=self.is_undefined,
             resource_id_value=self.resource_id_value,
             resource_set=self.resource_set,
-            revision=self.revision,
+            resource_set_revision=self.resource_set_revision,
         )
 
 

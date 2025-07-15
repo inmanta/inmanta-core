@@ -25,39 +25,32 @@ async def update(connection: Connection) -> None:
     """
     schema = """
     CREATE TABLE public.resource_set (
-        name character varying NOT NULL,
         environment uuid NOT NULL,
         model integer NOT NULL,
+        name character varying NOT NULL,
         revision integer NOT NULL,
-        PRIMARY KEY (name, environment, model, revision),
+        PRIMARY KEY (environment, name, model, revision),
         FOREIGN KEY (environment, model)
             REFERENCES public.configurationmodel(environment, version) ON DELETE CASCADE
     );
 
-    INSERT INTO public.resource_set (name, environment, model, revision)
+    INSERT INTO public.resource_set (environment, model, name, revision)
     SELECT DISTINCT
-        COALESCE(r.resource_set, '') AS name,
         r.environment,
         r.model,
+        COALESCE(r.resource_set, '') AS name,
         r.model AS revision
-    FROM public.resource AS r
-    WHERE NOT EXISTS (
-        SELECT 1
-        FROM public.resource_set rs
-        WHERE rs.name=COALESCE(r.resource_set, '')
-          AND rs.environment=r.environment
-          AND rs.model=r.model
-          AND rs.revision=r.model
-    );
+    FROM public.resource AS r;
 
-    ALTER TABLE ONLY public.resource
-        ADD COLUMN revision integer;
+
+    ALTER TABLE public.resource
+        ADD COLUMN resource_set_revision integer;
 
     UPDATE public.resource
-        SET revision=model;
+        SET resource_set_revision=model;
 
-    ALTER TABLE ONLY public.resource
-        ALTER COLUMN revision SET NOT NULL;
+    ALTER TABLE public.resource
+        ALTER COLUMN resource_set_revision SET NOT NULL;
 
     """
     await connection.execute(schema)
