@@ -841,7 +841,7 @@ class OrchestrationService(protocol.ServerSlice):
             resource_sets = {}
 
         # Add default resource set if required
-        resource_sets.update({rid: "" for rid in rid_to_resource if rid not in resource_sets})
+        resource_sets.update({rid: "" for rid, res in rid_to_resource.items() if res.resource_set is None})
 
         if removed_resource_sets is None:
             removed_resource_sets = []

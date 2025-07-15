@@ -4693,14 +4693,14 @@ class ResourceSet(BaseDocument):
     A set of resources
 
     :param environment: The environment this resource set belongs to
-    :param name: The name of this resource set
     :param model: The version of the model that this resource set belongs to
+    :param name: The name of this resource set
     :param revision: The revision of this resource set. It is increased only if changes were made to the resources in this set
     """
 
     environment: uuid.UUID
-    name: str
     model: int
+    name: str
     revision: int
 
     @classmethod
