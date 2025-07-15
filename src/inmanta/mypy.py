@@ -3,6 +3,8 @@ from mypy import typevars
 from mypy.plugin import AttributeContext, MethodContext, Plugin
 from mypy.types import AnyType, NoneType, Type
 
+# TODO: some type / syntax errors in the codebase cause mypy to raise an import error for this file, on this import line.
+#           => double check if the import is required
 from inmanta.protocol import methods, methods_v2
 
 
@@ -19,8 +21,11 @@ class ClientMethodsPlugin(Plugin):
                 name
                 for prefix in (
                     # TODO: typed & sync clients?
+                    # TODO: detect inheritance instead, because get_attr_hook uses top level while get_method_hook uses concrete
+                    #   type, which may lead to inconsistencies
                     # TODO: SessionClient injects sid
                     "inmanta.protocol.endpoints.Client.",
+                    "inmanta.server.protocol.ReturnClient.",
                     "inmanta.protocol.endpoints.SessionClient.",
                 )
                 if (name := fullname.removeprefix(prefix)) != fullname

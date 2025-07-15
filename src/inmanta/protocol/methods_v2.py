@@ -20,6 +20,7 @@ Module defining the v2 rest api
 
 import datetime
 import uuid
+from collections.abc import Mapping, Sequence
 from typing import Any, Literal, Optional, Union
 
 import inmanta.types
@@ -46,11 +47,11 @@ from inmanta.types import PrimitiveTypes, ResourceIdStr
 )
 def put_partial(
     tid: uuid.UUID,
-    module_version_info: dict[str, model.InmantaModule],
-    resource_state: Optional[dict[ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]]] = None,
-    unknowns: Optional[list[dict[str, PrimitiveTypes]]] = None,
-    resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
-    removed_resource_sets: Optional[list[str]] = None,
+    module_version_info: Mapping[str, model.InmantaModule],
+    resource_state: Optional[Mapping[ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]]] = None,
+    unknowns: Optional[Sequence[Mapping[str, PrimitiveTypes]]] = None,
+    resource_sets: Optional[Mapping[ResourceIdStr, Optional[str]]] = None,
+    removed_resource_sets: Optional[Sequence[str]] = None,
     pip_config: Optional[PipConfig] = None,
     allow_handler_code_update: bool = False,
     **kwargs: object,  # bypass the type checking for the resources and version_info argument
@@ -309,7 +310,7 @@ def environment_clear(id: uuid.UUID) -> None:
     client_types=[ClientType.api, ClientType.compiler],
     api_version=2,
 )
-def environment_create_token(tid: uuid.UUID, client_types: list[str], idempotent: bool = True) -> str:
+def environment_create_token(tid: uuid.UUID, client_types: Sequence[str], idempotent: bool = True) -> str:
     """
     Create or get a new token for the given client types. Tokens generated with this call are scoped to the current
     environment.
@@ -530,7 +531,7 @@ def get_agents(
     end: Optional[Union[datetime.datetime, bool, str]] = None,
     first_id: Optional[str] = None,
     last_id: Optional[str] = None,
-    filter: Optional[dict[str, list[str]]] = None,
+    filter: Optional[Mapping[str, Sequence[str]]] = None,
     sort: str = "name.asc",
 ) -> list[model.Agent]:
     """
@@ -613,7 +614,7 @@ def get_resource_actions(
     action_id: Optional[uuid.UUID] = None,
     first_timestamp: Optional[datetime.datetime] = None,
     last_timestamp: Optional[datetime.datetime] = None,
-    exclude_changes: Optional[list[Change]] = None,
+    exclude_changes: Optional[Sequence[Change]] = None,
 ) -> ReturnValue[list[model.ResourceAction]]:
     """
     Return resource actions matching the search criteria.
@@ -710,7 +711,7 @@ def resource_list(
     last_id: Optional[inmanta.types.ResourceVersionIdStr] = None,
     start: Optional[str] = None,
     end: Optional[str] = None,
-    filter: Optional[dict[str, list[str]]] = None,
+    filter: Optional[Mapping[str, Sequence[str]]] = None,
     sort: str = "resource_type.desc",
     deploy_summary: bool = False,
 ) -> list[model.LatestReleasedResource]:
@@ -824,7 +825,7 @@ def resource_logs(
     limit: Optional[int] = None,
     start: Optional[datetime.datetime] = None,
     end: Optional[datetime.datetime] = None,
-    filter: Optional[dict[str, list[str]]] = None,
+    filter: Optional[Mapping[str, Sequence[str]]] = None,
     sort: str = "timestamp.desc",
 ) -> list[model.ResourceLog]:
     """
@@ -918,7 +919,7 @@ def get_compile_reports(
     last_id: Optional[uuid.UUID] = None,
     start: Optional[datetime.datetime] = None,
     end: Optional[datetime.datetime] = None,
-    filter: Optional[dict[str, list[str]]] = None,
+    filter: Optional[Mapping[str, Sequence[str]]] = None,
     sort: str = "requested.desc",
 ) -> list[model.CompileReport]:
     """
@@ -993,7 +994,7 @@ def list_desired_state_versions(
     limit: Optional[int] = None,
     start: Optional[int] = None,
     end: Optional[int] = None,
-    filter: Optional[dict[str, list[str]]] = None,
+    filter: Optional[Mapping[str, Sequence[str]]] = None,
     sort: str = "version.desc",
 ) -> list[model.DesiredStateVersion]:
     """
@@ -1052,7 +1053,7 @@ def get_resources_in_version(
     last_id: Optional[inmanta.types.ResourceVersionIdStr] = None,
     start: Optional[str] = None,
     end: Optional[str] = None,
-    filter: Optional[dict[str, list[str]]] = None,
+    filter: Optional[Mapping[str, Sequence[str]]] = None,
     sort: str = "resource_type.desc",
 ) -> list[model.VersionedResource]:
     """
@@ -1150,7 +1151,7 @@ def get_parameters(
     last_id: Optional[uuid.UUID] = None,
     start: Optional[Union[datetime.datetime, str]] = None,
     end: Optional[Union[datetime.datetime, str]] = None,
-    filter: Optional[dict[str, list[str]]] = None,
+    filter: Optional[Mapping[str, Sequence[str]]] = None,
     sort: str = "name.asc",
 ) -> list[model.Parameter]:
     """
@@ -1194,7 +1195,7 @@ def set_parameter(
     name: str,
     source: ParameterSource,
     value: str,
-    metadata: Optional[dict[str, str]] = None,
+    metadata: Optional[Mapping[str, str]] = None,
     recompile: bool = False,
 ) -> ReturnValue[model.Parameter]:
     """
@@ -1225,7 +1226,7 @@ def get_all_facts(
     last_id: Optional[uuid.UUID] = None,
     start: Optional[str] = None,
     end: Optional[str] = None,
-    filter: Optional[dict[str, list[str]]] = None,
+    filter: Optional[Mapping[str, Sequence[str]]] = None,
     sort: str = "name.asc",
 ) -> list[model.Fact]:
     """
@@ -1269,7 +1270,7 @@ def set_fact(
     source: ParameterSource,
     value: str,
     resource_id: str,
-    metadata: Optional[dict[str, str]] = None,
+    metadata: Optional[Mapping[str, str]] = None,
     recompile: bool = False,
     expires: Optional[bool] = True,
 ) -> ReturnValue[model.Fact]:
@@ -1357,7 +1358,7 @@ def list_notifications(
     last_id: Optional[uuid.UUID] = None,
     start: Optional[datetime.datetime] = None,
     end: Optional[datetime.datetime] = None,
-    filter: Optional[dict[str, list[str]]] = None,
+    filter: Optional[Mapping[str, Sequence[str]]] = None,
     sort: str = "created.desc",
 ) -> list[model.Notification]:
     """
@@ -1470,7 +1471,7 @@ def get_pip_config(tid: uuid.UUID, version: int) -> Optional[model.PipConfig]:
 )
 def get_environment_metrics(
     tid: uuid.UUID,
-    metrics: list[str],
+    metrics: Sequence[str],
     start_interval: datetime.datetime,
     end_interval: datetime.datetime,
     nb_datapoints: int,
@@ -1679,7 +1680,7 @@ def discovered_resource_create(
     client_types=[ClientType.agent],
     api_version=2,
 )
-def discovered_resource_create_batch(tid: uuid.UUID, discovered_resources: list[LinkedDiscoveredResource]) -> None:
+def discovered_resource_create_batch(tid: uuid.UUID, discovered_resources: Sequence[LinkedDiscoveredResource]) -> None:
     """
     create multiple discovered resource in the DB
     :param tid: The id of the environment this resource belongs to
@@ -1718,7 +1719,7 @@ def discovered_resources_get_batch(
     start: Optional[str] = None,
     end: Optional[str] = None,
     sort: str = "discovered_resource_id.asc",
-    filter: Optional[dict[str, list[str]]] = None,
+    filter: Optional[Mapping[str, Sequence[str]]] = None,
 ) -> list[model.DiscoveredResource]:
     """
     Get a list of discovered resources.

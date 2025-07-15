@@ -45,9 +45,9 @@ from tornado.httpclient import HTTPRequest
 
 from inmanta import const, execute, types, util
 from inmanta.data.model import BaseModel, DateTimeNormalizerModel
+from inmanta.protocol import exceptions
 from inmanta.protocol.auth import auth
 from inmanta.protocol.auth.decorators import AuthorizationMetadata
-from inmanta.protocol.exceptions import BadRequest, BaseHttpException
 from inmanta.protocol.openapi import model as openapi_model
 from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes, HandlerType, JsonType, MethodType, ReturnTypes
@@ -555,7 +555,7 @@ class MethodProperties:
         except ValidationError as e:
             error_msg = f"Failed to validate argument\n{str(e)}"
             LOGGER.exception(error_msg)
-            raise BadRequest(error_msg, {"validation_errors": e.errors()})
+            raise exceptions.BadRequest(error_msg, {"validation_errors": e.errors()})
 
     def arguments_to_pydantic(self) -> type[pydantic.BaseModel]:
         """
@@ -709,8 +709,10 @@ class MethodProperties:
             assert orig is not None  # Make mypy happy
             is_literal_type: bool = typing_inspect.is_literal_type(orig)
 
-            if not is_literal_type and not types.issubclass(orig, (list, dict)):
-                raise InvalidMethodDefinition(f"Type {arg_type} of argument {arg} can only be generic List, Dict or Literal")
+            if not is_literal_type and not orig in (list, dict, Sequence, Mapping):
+                raise InvalidMethodDefinition(
+                    f"Type {arg_type} of argument {arg} can only be generic list / Sequence, dict / Mapping or Literal"
+                )
 
             args = typing_inspect.get_args(arg_type, evaluate=True)
             if len(args) == 0:
@@ -724,7 +726,7 @@ class MethodProperties:
             elif len(args) == 1:  # A generic list
                 unsubscripted_arg = typing_inspect.get_origin(args[0]) if typing_inspect.get_origin(args[0]) else args[0]
                 assert unsubscripted_arg is not None  # Make mypy happy
-                if in_url and (types.issubclass(unsubscripted_arg, dict) or types.issubclass(unsubscripted_arg, list)):
+                if in_url and (unsubscripted_arg in (list, dict, Sequence, Mapping)):
                     raise InvalidMethodDefinition(
                         f"Type {arg_type} of argument {arg} is not allowed for {self.operation}, "
                         f"lists of dictionaries and lists of lists are not supported for GET requests"
@@ -740,7 +742,7 @@ class MethodProperties:
                     typing_inspect.get_origin(args[1]) if typing_inspect.get_origin(args[1]) else args[1]
                 )
                 assert unsubscripted_dict_value_arg is not None  # Make mypy happy
-                if in_url and (typing_inspect.is_union_type(args[1]) or types.issubclass(unsubscripted_dict_value_arg, dict)):
+                if in_url and (typing_inspect.is_union_type(args[1]) or unsubscripted_dict_value_arg in (dict, Mapping)):
                     raise InvalidMethodDefinition(
                         f"Type {arg_type} of argument {arg} is not allowed for {self.operation}, "
                         f"nested dictionaries and union types for dictionary values are not supported for GET requests"
@@ -856,7 +858,7 @@ class MethodProperties:
         try:
             module = importlib.import_module(module_path)
             cls = module.__getattribute__(cls_name)
-            if not inspect.isclass(cls) or BaseHttpException not in cls.mro():
+            if not inspect.isclass(cls) or exceptions.BaseHttpException not in cls.mro():
                 return 500
             cls_instance = cls()
             return cls_instance.to_status()
@@ -1184,6 +1186,13 @@ class Result:
         next_link_url = self.result.get("links", {}).get("next")
         if not next_link_url:
             return
+
+        if self._method_properties is None or self._client is None:
+            raise Exception(
+                "The next_page() method cannot be called on this Result object. Make sure you "
+                "set the client and method_properties parameters when constructing "
+                "a Result object manually (e.g. outside of a regular API call)."
+            )
 
         server_url = self._client._get_client_config()
         url = server_url + next_link_url

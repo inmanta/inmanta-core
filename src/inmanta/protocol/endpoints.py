@@ -361,7 +361,7 @@ class Client(Endpoint):
 
     def _call(
         self, method_properties: common.MethodProperties, args: Sequence[object], kwargs: Mapping[str, object]
-    ) -> common.ClientCall:
+    ) -> common.ClientCall[object, object]:
         """
         Execute a call and return the result
         """
@@ -467,7 +467,7 @@ class SessionClient(Client):
     # TODO
     def _call(
         self, method_properties: common.MethodProperties, args: list[object], kwargs: dict[str, object]
-    ) -> common.ClientCall:
+    ) -> common.ClientCall[object, object]:
         """
         Execute the rpc call
         """
