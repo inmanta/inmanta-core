@@ -19,6 +19,7 @@ Contact: code@inmanta.com
 import logging
 import re
 from asyncio import CancelledError
+from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any, AnyStr, Optional
 from urllib.parse import unquote
 
@@ -102,7 +103,7 @@ class RESTClient(RESTBase):
         return "%s://%s:%d" % (protocol, host, port)
 
     async def call(
-        self, properties: common.MethodProperties, args: list[object], kwargs: Optional[dict[str, Any]] = None
+        self, properties: common.MethodProperties, args: Sequence[object], kwargs: Optional[Mapping[str, object]] = None
     ) -> common.Result:
         if kwargs is None:
             kwargs = {}

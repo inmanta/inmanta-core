@@ -27,12 +27,12 @@ import re
 import time
 import uuid
 from collections import defaultdict
-from collections.abc import Coroutine, Iterable, MutableMapping
+from collections.abc import Awaitable, AsyncIterator, Callable, Coroutine, Generator, Iterable, Mapping, MutableMapping, Sequence
 from datetime import datetime
 from enum import Enum
 from functools import partial
 from inspect import Parameter
-from typing import TYPE_CHECKING, Any, AsyncIterator, Callable, Generic, Optional, TypeVar, Union, cast, get_type_hints
+from typing import TYPE_CHECKING, Any, Generic, Optional, TypeVar, Union, cast, get_type_hints
 from urllib import parse
 
 import docstring_parser
@@ -918,7 +918,7 @@ class MethodProperties:
         url = "/%s/v%d" % (self._api_prefix, self._api_version)
         return url + self._path.generate_path({k: parse.quote(str(v), safe="") for k, v in msg.items()})
 
-    def build_call(self, args: list[object], kwargs: dict[str, object] = {}) -> Request:
+    def build_call(self, args: Sequence[object], kwargs: Mapping[str, object] = {}) -> Request:
         """
         Build a call from the given arguments. This method returns the url, headers, and body for the call.
         """
@@ -1165,39 +1165,112 @@ class Result:
         self._callback = fnc
 
     async def all(self) -> AsyncIterator[types.JsonType]:
+        # TODO: docstring
         """
         Helper method to iterate over all individual items in this result object.
-        This method will start at the first page and follow paging links.
+        This method will start at this result's page and follow paging links.
         """
 
-        if self._method_properties is None or self._client is None:
-            raise Exception(
-                "The all() method cannot be called on this Result object. Make sure you "
-                "set the client and method_properties parameters when constructing "
-                "a Result object manually (e.g. outside of a regular API call)."
+        # TODO: consider making ClientCall() accept either Result or Awaitable[Result]
+        async def get_self():
+            return self
+
+        return await ClientCall(get_self()).all()
+
+    async def next_page(self) -> Optional["Result"]:
+        if not self.result:
+            return
+
+        next_link_url = self.result.get("links", {}).get("next")
+        if not next_link_url:
+            return
+
+        server_url = self._client._get_client_config()
+        url = server_url + next_link_url
+        headers = {"X-Inmanta-tid": self._environment} if self._environment else None
+        request = HTTPRequest(url=url, method="GET", headers=headers)
+        return self._client._decode_response(
+            await self._client.client.fetch(request), self._method_properties, self._environment
+        )
+
+
+# TODO: implement stacking of options??? Perhaps not worth it? Consider SyncClient
+# TODO: implement sync
+# TODO: ReturnTypes / MethodReturn / Apireturn?
+# TODO: R too restrictive: should allow dicst but not sequences
+class ClientCall[R: types.ReturnTypes, V: types.SimpleTypes](Awaitable[Result], AsyncIterator[V]):
+    def __init__(self, result: Awaitable[Result]) -> None:
+        # TODO: consider use cases. Do we need to cache first page? If not, add exception when used twice?
+        self._first_result: Awaitable[Result] = result
+
+    def __await__(self) -> Generator[Any, Any, Result]:
+        return self._first_result.__await__()
+
+    async def _pages(self) -> AsyncIterator[Result]:
+        result = await self._first_result
+        while result is not None:
+            yield result
+            result = await result.next_page()
+
+    # TODO: name
+    async def unwrap(self) -> R:
+        # TODO: better way to call anext?
+        return self._unwrap_result(await self._first_result)
+
+    # TODO: call this one from Result.all(). Not sure how to construct the pages iterator though. May need to move it out of Client
+    # => BACK TO Result._next_page(). THEN REFACTOR THIS CLASS TO USE IT. CONSTRUCTOR TAKES ONE Awaitable[Result]
+    async def all(self) -> AsyncIterator[V]:
+        page: Result
+        async for page in self._pages():
+            unwrapped: R = self._unwrap_result(page)
+            # TODO: can we use method metadata instead?
+            # TODO: dicts are also sequences?
+            if isinstance(unwrapped, Sequence):
+                for item in unwrapped:
+                    yield item
+            else:
+                yield unwrapped
+
+    # TODO: process warnings?
+    # TODO: use generic types
+    def _unwrap_result(self, result: Result) -> R:
+        # TODO: docstring
+        """
+        Convert the response into a proper type and restore exception if any
+        """
+        if result.code != 200:
+            exc_mapping: Mapping[int, type[exceptions.BaseHttpException]] = {
+                400: exceptions.BadRequest,
+                401: exceptions.UnauthorizedException,
+                403: exceptions.Forbidden,
+                404: exceptions.NotFound,
+                409: exceptions.Conflict,
+                500: exceptions.ServerError,
+                503: exceptions.ShutdownInProgress,
+            }
+            exception: type[exceptions.BaseHttpException] = exc_mapping.get(result.code, exceptions.ServerError)
+
+            raise (
+                exception(result.result.get("message", None), result.result.get("error_details", None))
+                if result.result is not None
+                else exception()
             )
 
-        result = self
-        while result.code == 200:
-            if not result.result:
-                return
+        # TODO: make method_properties non-private?
+        # typed methods always require an envelope key
+        if result.result is None or result._method_properties.envelope_key not in result.result:
+            # TODO: better message
+            raise exceptions.BadRequest("No data was provided in the body. Make sure to only use typed methods.")
 
-            page = result.result.get(self._method_properties.envelope_key, [])
-            for item in page:
-                yield item
+        if result._method_properties.return_type is None:
+            return None
 
-            next_link_url = result.result.get("links", {}).get("next")
+        try:
+            ta = pydantic.TypeAdapter(result._method_properties.return_type)
+        except InvalidMethodDefinition:
+            raise exceptions.BadRequest("Typed client can only be used with typed methods.")
 
-            if not next_link_url:
-                return
-
-            server_url = self._client._get_client_config()
-            url = server_url + next_link_url
-            headers = {"X-Inmanta-tid": self._environment} if self._environment else None
-            request = HTTPRequest(url=url, method="GET", headers=headers)
-            result = self._client._decode_response(
-                await self._client.client.fetch(request), self._method_properties, self._environment
-            )
+        return ta.validate_python(result.result[result._method_properties.envelope_key])
 
 
 class SessionManagerInterface:

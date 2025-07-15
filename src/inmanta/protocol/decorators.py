@@ -17,7 +17,8 @@ Contact: code@inmanta.com
 """
 
 import inspect
-from typing import Callable, Optional, TypeVar, Union
+from collections.abc import Callable
+from typing import Optional, TypeVar, Union
 
 from inmanta import const
 from inmanta.types import Apireturn, HandlerType, MethodType
@@ -129,7 +130,7 @@ def method(
     return wrapper
 
 
-def typedmethod(
+def typedmethod[C: Callable](
     path: Union[str, list[str]],
     operation: str = "POST",
     reply: bool = True,
@@ -147,7 +148,7 @@ def typedmethod(
     enforce_auth: bool = True,
     varkw: bool = False,
     token_param: str | None = None,
-) -> Callable[..., Callable]:
+) -> Callable[[C], C]:
     """
     Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
     and model the protocol.
