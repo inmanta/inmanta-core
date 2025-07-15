@@ -1211,9 +1211,16 @@ class ClientCall[R: types.ReturnTypes, V: types.SimpleTypes](Awaitable[Result], 
     def __init__(self, result: Awaitable[Result]) -> None:
         # TODO: consider use cases. Do we need to cache first page? If not, add exception when used twice?
         self._first_result: Awaitable[Result] = result
+        self._iterator: Optional[AsyncIterator[V]] = None
 
     def __await__(self) -> Generator[Any, Any, Result]:
         return self._first_result.__await__()
+
+    # TODO: consider this implementation. This calls all. Should it be turned around?
+    async def __anext__(self) -> V:
+        if self._iterator is None:
+            self._iterator = self.all()
+        return await anext(self._iterator)
 
     async def _pages(self) -> AsyncIterator[Result]:
         result = await self._first_result
