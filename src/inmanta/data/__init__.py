@@ -5041,22 +5041,14 @@ class Resource(BaseDocument):
         """
         values = [cls._get_value(environment)]
         query = f"""
-            WITH latest_resource_sets AS (
-                SELECT *
-                FROM {ResourceSet.table_name()} AS rs
-                WHERE rs.environment=$1 AND rs.model=(SELECT MAX(cm.version)
-                                                      FROM {ConfigurationModel.table_name()} AS cm
-                                                       WHERE cm.environment=$1)
-            )
-            SELECT r.*
-            FROM {Resource.table_name()} AS r
-            JOIN latest_resource_sets lrs
-              ON COALESCE(r.resource_set, '')=lrs.name
-             AND r.environment=lrs.environment
-             AND r.resource_set_revision=lrs.revision
+            SELECT *
+            FROM {Resource.table_name()} AS r1
+            WHERE r1.environment=$1 AND r1.model=(SELECT MAX(cm.version)
+                                                  FROM {ConfigurationModel.table_name()} AS cm
+                                                  WHERE cm.environment=$1)
         """
         if resource_type:
-            query += " WHERE r1.resource_type=$2"
+            query += " AND r1.resource_type=$2"
             values.append(cls._get_value(resource_type))
 
         result = []
