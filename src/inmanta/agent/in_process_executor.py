@@ -250,7 +250,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         ctx = handler.HandlerContext(resource, action_id=action_id, logger=self.resource_action_logger)
 
         ctx.debug(
-            "Start run for resource %(resource)s because %(reason)s",
+            "Start run for resource %(resource)s. %(reason)s",
             resource=str(resource_details.rvid),
             deploy_id=gid,
             agent=self.name,
