@@ -190,10 +190,10 @@ class Agent(SessionEndpoint):
 
         if incremental_deploy:
             LOGGER.info("%s got a trigger to run deploy in environment %s", agent_id, env)
-            await self.scheduler.deploy(reason="Deploy was triggered because user has requested a deploy", agent=agent)
+            await self.scheduler.deploy(reason="user has requested a deploy.", agent=agent)
         else:
             LOGGER.info("%s got a trigger to run repair in environment %s", agent_id, env)
-            await self.scheduler.repair(reason="Deploy was triggered because user has requested a repair", agent=agent)
+            await self.scheduler.repair(reason="user has requested a repair.", agent=agent)
         return 200
 
     @protocol.handle(methods.trigger_read_version, env="tid", agent="id")
