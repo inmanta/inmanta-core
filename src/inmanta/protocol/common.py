@@ -1223,18 +1223,14 @@ class ClientCall[R: types.ReturnTypes, V: types.SimpleTypes](Awaitable[Result], 
 
     # TODO: name
     async def unwrap(self) -> R:
-        # TODO: better way to call anext?
         return self._unwrap_result(await self._first_result)
 
-    # TODO: call this one from Result.all(). Not sure how to construct the pages iterator though. May need to move it out of Client
-    # => BACK TO Result._next_page(). THEN REFACTOR THIS CLASS TO USE IT. CONSTRUCTOR TAKES ONE Awaitable[Result]
     async def all(self) -> AsyncIterator[V]:
         page: Result
         async for page in self._pages():
             unwrapped: R = self._unwrap_result(page)
-            # TODO: can we use method metadata instead?
-            # TODO: dicts are also sequences?
-            if isinstance(unwrapped, Sequence):
+            # TODO: can we use method metadata instead? Make sure to remain consistent in the mypy plugin
+            if isinstance(unwrapped, list):
                 for item in unwrapped:
                     yield item
             else:
