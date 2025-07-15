@@ -906,4 +906,4 @@ class LocalClient(TypedClient):
                 method_properties=method_properties,
             )
 
-        return await common.ClientCall(result()).unwrap()
+        return await common.ClientCall(result()).value()

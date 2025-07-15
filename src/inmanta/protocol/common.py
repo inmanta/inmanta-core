@@ -1208,31 +1208,35 @@ class Result:
 # TODO: ReturnTypes / MethodReturn / Apireturn?
 # TODO: R too restrictive: should allow dicst but not sequences
 class ClientCall[R: types.ReturnTypes, V: types.SimpleTypes](Awaitable[Result], AsyncIterator[V]):
+    # TODO: docstring
     def __init__(self, result: Awaitable[Result]) -> None:
         # TODO: consider use cases. Do we need to cache first page? If not, add exception when used twice?
         self._first_result: Awaitable[Result] = result
         self._iterator: Optional[AsyncIterator[V]] = None
 
-    def __await__(self) -> Generator[Any, Any, Result]:
-        return self._first_result.__await__()
+    # TODO: R and V are tightly coupled but can not be expressed in typing?
+    # TODO: R is tighly coupled with method properties but can not be expressed in typing
+    #       Or can it? e.g. by making MethodProperties generic in R?
 
-    # TODO: consider this implementation. This calls all. Should it be turned around?
-    async def __anext__(self) -> V:
-        if self._iterator is None:
-            self._iterator = self.all()
-        return await anext(self._iterator)
+    async def value(self) -> R:
+        """
+        Returns the client call's result value for a single page (if paged). Returns the value as returned by the API method,
+        without wrapping it in a `Result` object.
 
-    async def _pages(self) -> AsyncIterator[Result]:
-        result = await self._first_result
-        while result is not None:
-            yield result
-            result = await result.next_page()
-
-    # TODO: name
-    async def unwrap(self) -> R:
+        Verifies return code and validates result type.
+        """
         return self._unwrap_result(await self._first_result)
 
     async def all(self) -> AsyncIterator[V]:
+        """
+        Returns an async iterator over all values returned by this call. Follows paging links if there are any.
+        Values are processed and validated as in `value()`, i.e. iterates over the value as returned by the API method,
+        without wrapping in a `Result` object. If there are pages, simply chains results from multiple pages after each other.
+
+        For non-list results, the iterator simply yields the single result.
+
+        Equivalent to using this object as async iterator directly.
+        """
         page: Result
         async for page in self._pages():
             unwrapped: R = self._unwrap_result(page)
@@ -1243,8 +1247,13 @@ class ClientCall[R: types.ReturnTypes, V: types.SimpleTypes](Awaitable[Result], 
             else:
                 yield unwrapped
 
+    async def _pages(self) -> AsyncIterator[Result]:
+        result = await self._first_result
+        while result is not None:
+            yield result
+            result = await result.next_page()
+
     # TODO: process warnings?
-    # TODO: use generic types
     def _unwrap_result(self, result: Result) -> R:
         # TODO: docstring
         """
@@ -1269,6 +1278,8 @@ class ClientCall[R: types.ReturnTypes, V: types.SimpleTypes](Awaitable[Result], 
             )
 
         # TODO: make method_properties non-private?
+
+        # TODO: what does this mean? Does it mean not all methods can be used with this?
         # typed methods always require an envelope key
         if result.result is None or result._method_properties.envelope_key not in result.result:
             # TODO: better message
@@ -1283,6 +1294,14 @@ class ClientCall[R: types.ReturnTypes, V: types.SimpleTypes](Awaitable[Result], 
             raise exceptions.BadRequest("Typed client can only be used with typed methods.")
 
         return ta.validate_python(result.result[result._method_properties.envelope_key])
+
+    def __await__(self) -> Generator[Any, Any, Result]:
+        return self._first_result.__await__()
+
+    async def __anext__(self) -> V:
+        if self._iterator is None:
+            self._iterator = self.all()
+        return await anext(self._iterator)
 
 
 class SessionManagerInterface:

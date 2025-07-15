@@ -485,4 +485,4 @@ class TypedClient(Client):
         self, method_properties: common.MethodProperties, args: list[object], kwargs: dict[str, object]
     ) -> types.ReturnTypes:
         """Execute a call and return the result"""
-        return await super()._call(method_properties, args, kwargs).unwrap()
+        return await super()._call(method_properties, args, kwargs).value()
