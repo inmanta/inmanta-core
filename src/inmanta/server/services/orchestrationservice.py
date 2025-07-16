@@ -931,13 +931,6 @@ class OrchestrationService(protocol.ServerSlice):
                             connection=connection,
                         )
                     )
-                    await data.ResourceSet.copy_unchanged_resource_sets(
-                        environment=env.id,
-                        source_model=partial_base_version,
-                        destination_model=version,
-                        changed_resource_sets=updated_resource_sets | deleted_resource_sets_as_set,
-                        connection=connection,
-                    )
                     resources_that_moved_resource_sets = rids_unchanged_resource_sets.keys() & rid_to_resource.keys()
                     if resources_that_moved_resource_sets:
                         msg = (
@@ -951,6 +944,13 @@ class OrchestrationService(protocol.ServerSlice):
                         )
 
                         raise BadRequest(msg)
+                    await data.ResourceSet.copy_unchanged_resource_sets(
+                        environment=env.id,
+                        source_model=partial_base_version,
+                        destination_model=version,
+                        changed_resource_sets=updated_resource_sets | deleted_resource_sets_as_set,
+                        connection=connection,
+                    )
                     all_ids |= {Id.parse_id(rid, version) for rid in rids_unchanged_resource_sets.keys()}
 
                 updated_resources = list(rid_to_resource.values())

@@ -4739,7 +4739,7 @@ class ResourceSet(BaseDocument):
                     rs.revision,
                     $3
                 FROM {cls.table_name()} AS rs
-                WHERE rs.environment=$1 AND rs.model=$2 AND rs.name!=ANY($4)
+                WHERE rs.environment=$1 AND rs.model=$2 AND NOT rs.name=ANY($4)
             )
             """
         await cls._execute_query(
