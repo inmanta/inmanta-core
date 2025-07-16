@@ -6127,11 +6127,13 @@ class User(BaseDocument):
         result = {}
         for username, group_elem_iterator in itertools.groupby(records, lambda r: r["username"]):
             records_for_group = list(group_elem_iterator)
-            roles = [
-                m.RoleAssignment(environment=record["role_environment"], role=record["role_name"])
-                for record in records_for_group
-                if record["role_environment"] is not None and record["role_name"] is not None
-            ]
+            roles: dict[uuid.UUID, list[str]] = {}
+            for record in records_for_group:
+                if record["role_environment"] is not None and record["role_name"] is not None:
+                    if record["role_environment"] in roles:
+                        roles[record["role_environment"]].append(record["role_name"])
+                    else:
+                        roles[record["role_environment"]] = [record["role_name"]]
             result[username] = m.UserWithRoles(
                 username=records_for_group[0]["username"],
                 auth_method=records_for_group[0]["auth_method"],
@@ -6161,7 +6163,7 @@ class Role(BaseDocument):
     name: str
 
     @classmethod
-    async def assign_role_to_user(cls, username: str, role_assignment: m.RoleAssignment) -> None:
+    async def assign_role_to_user(cls, username: str, environment: uuid.UUID, role: str) -> None:
         """
         Assign the given role to the given user.
         """
@@ -6174,12 +6176,12 @@ class Role(BaseDocument):
             )
         """
         try:
-            await cls._execute_query(assign_role_query, username, role_assignment.environment, role_assignment.role)
+            await cls._execute_query(assign_role_query, username, environment, role)
         except (asyncpg.NotNullViolationError, asyncpg.ForeignKeyViolationError):
             raise CannotAssignRoleException()
 
     @classmethod
-    async def unassign_role_from_user(cls, username: str, role_assignment: m.RoleAssignment) -> None:
+    async def unassign_role_from_user(cls, username: str, environment: uuid.UUID, role: str) -> None:
         """
         Unassign the given role from the given user.
         """
@@ -6190,12 +6192,12 @@ class Role(BaseDocument):
                   AND role_id=(SELECT id FROM {cls.table_name()} WHERE name=$3)
             RETURNING *
         """
-        result = await cls._fetchrow(unassign_role_query, username, role_assignment.environment, role_assignment.role)
+        result = await cls._fetchrow(unassign_role_query, username, environment, role)
         if result is None:
             raise KeyError()
 
     @classmethod
-    async def get_roles_for_user(cls, username: str) -> list[m.RoleAssignment]:
+    async def get_roles_for_user(cls, username: str) -> m.RoleAssignmentsPerEnvironment:
         query = f"""
             SELECT ras.environment, rol.name
             FROM {User.table_name()} AS u
@@ -6204,7 +6206,13 @@ class Role(BaseDocument):
             WHERE u.username=$1
             ORDER BY ras.environment, rol.name
         """
-        return [m.RoleAssignment(environment=r["environment"], role=r["name"]) for r in await cls._fetch_query(query, username)]
+        assignments: dict[uuid.UUID, list[str]] = {}
+        for record in await cls._fetch_query(query, username):
+            if record["environment"] in assignments:
+                assignments[record["environment"]].append(record["name"])
+            else:
+                assignments[record["environment"]] = [record["name"]]
+        return m.RoleAssignmentsPerEnvironment(assignments=assignments)
 
     @classmethod
     async def ensure_roles(cls, roles: Sequence[str]) -> None:

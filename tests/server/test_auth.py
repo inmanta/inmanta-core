@@ -27,7 +27,7 @@ import pytest
 import nacl.pwhash
 import utils
 from inmanta import config, const, data
-from inmanta.data.model import AuthMethod, RoleAssignment
+from inmanta.data.model import AuthMethod, RoleAssignmentsPerEnvironment
 from inmanta.protocol import common, rest
 from inmanta.protocol.auth import auth, decorators, policy_engine, providers
 from inmanta.protocol.decorators import handle, method, typedmethod
@@ -688,13 +688,14 @@ async def test_role_assignment(server: protocol.Server, client) -> None:
         )
         await user.insert()
 
-    async def verify_role_assignment(username: str, expected_assignments: list[RoleAssignment]) -> None:
+    async def verify_role_assignment(username: str, expected_assignments: RoleAssignmentsPerEnvironment) -> None:
         result = await admin_client.list_roles_for_user(username=username)
         assert result.code == 200
-        actual_assignments = [RoleAssignment(environment=r["environment"], role=r["role"]) for r in result.result["data"]]
-        assert actual_assignments == expected_assignments
+        assert {
+            uuid.UUID(env_id): roles for env_id, roles in result.result["data"]["assignments"].items()
+        } == expected_assignments.assignments
 
-    async def verify_roles_on_list_user(expected_assignments: dict[str, list[RoleAssignment]]) -> None:
+    async def verify_roles_on_list_user(expected_assignments: dict[str, RoleAssignmentsPerEnvironment]) -> None:
         """
         Assert that the role assignments returned by the list_users API endpoint correspond to the
         role assignments given in expected_assignments.
@@ -704,8 +705,7 @@ async def test_role_assignment(server: protocol.Server, client) -> None:
         result = await admin_client.list_users()
         assert result.code == 200
         actual_assignments = {
-            user["username"]: [RoleAssignment(environment=uuid.UUID(r["environment"]), role=r["role"]) for r in user["roles"]]
-            for user in result.result["data"]
+            user["username"]: RoleAssignmentsPerEnvironment(assignments=user["roles"]) for user in result.result["data"]
         }
         assert expected_assignments == actual_assignments
 
@@ -713,7 +713,7 @@ async def test_role_assignment(server: protocol.Server, client) -> None:
     for username in [username1, username2]:
         result = await admin_client.list_roles_for_user(username=username)
         assert result.code == 200
-        assert not result.result["data"]
+        assert not result.result["data"]["assignments"]
 
         client_for_user = await create_client_for_user(client, username, password)
         for env_id in [env1_id, env2_id]:
@@ -741,12 +741,9 @@ async def test_role_assignment(server: protocol.Server, client) -> None:
     assert result.code == 200
 
     # Verify role assignment
-    expected_role_assignments_username1 = [
-        RoleAssignment(environment=env1_id, role="a_role"),
-        RoleAssignment(environment=env2_id, role="a_role"),
-    ]
+    expected_role_assignments_username1 = RoleAssignmentsPerEnvironment(assignments={env1_id: ["a_role"], env2_id: ["a_role"]})
     await verify_role_assignment(username=username1, expected_assignments=expected_role_assignments_username1)
-    expected_role_assignments_username2 = [RoleAssignment(environment=env1_id, role="a_role")]
+    expected_role_assignments_username2 = RoleAssignmentsPerEnvironment(assignments={env1_id: ["a_role"]})
     await verify_role_assignment(username=username2, expected_assignments=expected_role_assignments_username2)
     await verify_roles_on_list_user(
         expected_assignments={username1: expected_role_assignments_username1, username2: expected_role_assignments_username2}
@@ -768,9 +765,9 @@ async def test_role_assignment(server: protocol.Server, client) -> None:
     assert result.code == 200
 
     # Verify role assignment
-    expected_role_assignments_username1 = [RoleAssignment(environment=env1_id, role="a_role")]
+    expected_role_assignments_username1 = RoleAssignmentsPerEnvironment(assignments={env1_id: ["a_role"]})
     await verify_role_assignment(username=username1, expected_assignments=expected_role_assignments_username1)
-    expected_role_assignments_username2 = []
+    expected_role_assignments_username2 = RoleAssignmentsPerEnvironment(assignments={})
     await verify_role_assignment(username=username2, expected_assignments=expected_role_assignments_username2)
     await verify_roles_on_list_user(
         expected_assignments={username1: expected_role_assignments_username1, username2: expected_role_assignments_username2}
@@ -848,13 +845,8 @@ async def test_multiple_roles_assigned(server: protocol.Server, client) -> None:
     result = await admin_client.list_users()
     assert result.code == 200
     assert len(result.result["data"]) == 1
-    actual_role_assignments = [
-        RoleAssignment(environment=r["environment"], role=r["role"]) for r in result.result["data"][0]["roles"]
-    ]
-    expected_role_assignments = [
-        RoleAssignment(environment=env_id, role="role1"),
-        RoleAssignment(environment=env_id, role="role2"),
-    ]
+    actual_role_assignments = {uuid.UUID(env_id): roles for env_id, roles in result.result["data"][0]["roles"].items()}
+    expected_role_assignments = {env_id: ["role1", "role2"]}
     assert actual_role_assignments == expected_role_assignments
 
 
