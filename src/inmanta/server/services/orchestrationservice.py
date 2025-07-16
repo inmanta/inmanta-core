@@ -840,6 +840,9 @@ class OrchestrationService(protocol.ServerSlice):
         if resource_sets is None:
             resource_sets = {}
 
+        # Add default resource set if required
+        resource_sets.update({rid: "" for rid, res in rid_to_resource.items() if res.resource_set is None})
+
         if removed_resource_sets is None:
             removed_resource_sets = []
 
@@ -941,9 +944,24 @@ class OrchestrationService(protocol.ServerSlice):
                         )
 
                         raise BadRequest(msg)
+                    await data.ResourceSet.copy_unchanged_resource_sets(
+                        environment=env.id,
+                        source_model=partial_base_version,
+                        destination_model=version,
+                        changed_resource_sets=updated_resource_sets | deleted_resource_sets_as_set,
+                        connection=connection,
+                    )
                     all_ids |= {Id.parse_id(rid, version) for rid in rids_unchanged_resource_sets.keys()}
 
-                await data.Resource.insert_many(list(rid_to_resource.values()), connection=connection)
+                updated_resources = list(rid_to_resource.values())
+                await data.Resource.insert_many(updated_resources, connection=connection)
+                # bump all resource sets if we are doing a full compile otherwise, bump only the updated resource sets
+                await data.ResourceSet.create_new_revisions_for_resource_sets(
+                    environment=env.id,
+                    destination_model=version,
+                    resource_sets=updated_resource_sets,
+                    connection=connection,
+                )
                 await cm.recalculate_total(connection=connection)
 
             await data.UnknownParameter.insert_many(unknowns, connection=connection)
