@@ -337,14 +337,14 @@ class TimerManager:
         def _setup_repair(repair_interval: int) -> None:
             self.resource_timers[resource].set_timer(
                 when=(last_deployed + timedelta(seconds=repair_interval)),
-                reason=("Individual repair triggered because last " f"repair happened more than {repair_interval}s ago."),
+                reason=f"Individual repair triggered because last repair happened more than {repair_interval}s ago.",
                 priority=(TaskPriority.INTERVAL_REPAIR),
             )
 
         def _setup_deploy(deploy_interval: int) -> None:
             self.resource_timers[resource].set_timer(
                 when=(last_deployed + timedelta(seconds=deploy_interval)),
-                reason=(f"Individual deploy triggered because last " f"deploy happened more than {deploy_interval}s ago."),
+                reason=f"Individual deploy triggered because last deploy happened more than {deploy_interval}s ago.",
                 priority=(TaskPriority.INTERVAL_DEPLOY),
             )
 
