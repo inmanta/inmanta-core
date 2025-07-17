@@ -339,7 +339,7 @@ class TimerManager:
                 when=(last_deployed + timedelta(seconds=repair_interval)),
                 reason=(
                     f"an individual repair has been triggered (More than {repair_interval}s "
-                    f"have elapsed since previous repair at {last_deployed})."
+                    f"have elapsed since previous repair)."
                 ),
                 priority=(TaskPriority.INTERVAL_REPAIR),
             )
@@ -349,7 +349,7 @@ class TimerManager:
                 when=(last_deployed + timedelta(seconds=deploy_interval)),
                 reason=(
                     f"an individual deploy has been triggered (More than {deploy_interval}s "
-                    f"have elapsed since previous deploy at {last_deployed})."
+                    f"have elapsed since previous deploy)."
                 ),
                 priority=(TaskPriority.INTERVAL_DEPLOY),
             )
