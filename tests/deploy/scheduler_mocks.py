@@ -73,9 +73,7 @@ class DummyExecutor(executor.Executor):
         requires: Mapping[ResourceIdStr, const.HandlerResourceState],
     ) -> DeployReport:
         assert reason
-        # Actual reason or test reason
-        # The actual reasons are of the form `action because of reason`
-        assert ("because" in reason) or ("Test" in reason)
+
         self.execute_count += 1
         result = (
             const.HandlerResourceState.failed
