@@ -508,7 +508,7 @@ class ResourceScheduler(TaskManager):
             if self._state.version == initialized_version:
                 # no new version was present. Simply trigger a deploy for everything that's not in a known good state
                 await self.deploy(
-                    reason="the resource scheduler was started.",
+                    reason="the resource scheduler was started",
                     priority=TaskPriority.INTERVAL_DEPLOY,
                 )
 
@@ -700,7 +700,7 @@ class ResourceScheduler(TaskManager):
 
             await self._new_version(
                 new_versions,
-                reason="a new version has been released.",
+                reason="a new version was released.",
                 connection=con,
             )
 

@@ -262,7 +262,7 @@ class TimerManager:
 
         async def _action() -> None:
             await self._resource_scheduler.deploy(
-                reason=f"Global deploy triggered because of cron expression for deploy interval: '{cron_expression}'",
+                reason=("a global deploy was triggered due to cron " f"expression for deploy interval: '{cron_expression}'"),
                 priority=TaskPriority.INTERVAL_DEPLOY,
             )
 
@@ -281,7 +281,7 @@ class TimerManager:
 
         async def _action() -> None:
             await self._resource_scheduler.repair(
-                reason=f"Global repair triggered because of cron expression for repair interval: '{cron_expression}'",
+                reason=("a global repair was triggered due to " f"cron expression for repair interval: '{cron_expression}'"),
                 priority=TaskPriority.INTERVAL_REPAIR,
             )
 
@@ -338,8 +338,7 @@ class TimerManager:
             self.resource_timers[resource].set_timer(
                 when=(last_deployed + timedelta(seconds=repair_interval)),
                 reason=(
-                    f"an individual repair has been triggered (More than {repair_interval}s "
-                    f"have elapsed since previous repair)."
+                    f"an individual repair was triggered (More than {repair_interval}s " "have elapsed since previous repair)"
                 ),
                 priority=(TaskPriority.INTERVAL_REPAIR),
             )
@@ -348,8 +347,7 @@ class TimerManager:
             self.resource_timers[resource].set_timer(
                 when=(last_deployed + timedelta(seconds=deploy_interval)),
                 reason=(
-                    f"an individual deploy has been triggered (More than {deploy_interval}s "
-                    f"have elapsed since previous deploy)."
+                    f"an individual deploy was triggered (More than {deploy_interval}s " "have elapsed since previous deploy)"
                 ),
                 priority=(TaskPriority.INTERVAL_DEPLOY),
             )
