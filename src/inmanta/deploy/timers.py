@@ -262,7 +262,7 @@ class TimerManager:
 
         async def _action() -> None:
             await self._resource_scheduler.deploy(
-                reason=("a global deploy was triggered due to cron " f"expression for deploy interval: '{cron_expression}'"),
+                reason=f"a global deploy was triggered due to cron expression for deploy interval: '{cron_expression}'",
                 priority=TaskPriority.INTERVAL_DEPLOY,
             )
 
@@ -281,7 +281,7 @@ class TimerManager:
 
         async def _action() -> None:
             await self._resource_scheduler.repair(
-                reason=("a global repair was triggered due to " f"cron expression for repair interval: '{cron_expression}'"),
+                reason=f"a global repair was triggered due to cron expression for repair interval: '{cron_expression}'",
                 priority=TaskPriority.INTERVAL_REPAIR,
             )
 
@@ -337,18 +337,14 @@ class TimerManager:
         def _setup_repair(repair_interval: int) -> None:
             self.resource_timers[resource].set_timer(
                 when=(last_deployed + timedelta(seconds=repair_interval)),
-                reason=(
-                    f"an individual repair was triggered (More than {repair_interval}s " "have elapsed since previous repair)"
-                ),
+                reason=(f"an individual repair was triggered. Previous repair happened more than {repair_interval}s ago"),
                 priority=(TaskPriority.INTERVAL_REPAIR),
             )
 
         def _setup_deploy(deploy_interval: int) -> None:
             self.resource_timers[resource].set_timer(
                 when=(last_deployed + timedelta(seconds=deploy_interval)),
-                reason=(
-                    f"an individual deploy was triggered (More than {deploy_interval}s " "have elapsed since previous deploy)"
-                ),
+                reason=(f"an individual deploy was triggered. Previous deploy happened more than {deploy_interval}s ago"),
                 priority=(TaskPriority.INTERVAL_DEPLOY),
             )
 

@@ -700,7 +700,7 @@ class ResourceScheduler(TaskManager):
 
             await self._new_version(
                 new_versions,
-                reason="a new version was released.",
+                reason="a new version was released",
                 connection=con,
             )
 
@@ -812,7 +812,7 @@ class ResourceScheduler(TaskManager):
         *,
         up_to_date_resources: Optional[Set[ResourceIdStr]] = None,
         last_deploy_time: Mapping[ResourceIdStr, datetime.datetime] | None = None,
-        reason: str = "a new version has been released.",
+        reason: str = "a new version was released",
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> None:
         """
@@ -1339,9 +1339,9 @@ class ResourceScheduler(TaskManager):
             self._work.deploy_with_context(
                 all_listeners,
                 reason=(
-                    f"a recovery event was received from {resource_id}."
+                    f"a recovery event was received from {resource_id}"
                     if recovered_from_failure
-                    else f"an event was received from {resource_id}."
+                    else f"an event was received from {resource_id}"
                 ),
                 priority=priority,
                 deploying=self._deploying_latest,

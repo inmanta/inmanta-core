@@ -1,4 +1,6 @@
-description: Improve deploy log messages.
+description: Improve resource action deploy log messages.
 issue-nr: 8812
 change-type: patch
 destination-branches: [master, iso8]
+sections:
+  minor-improvement: "{{description}}"
