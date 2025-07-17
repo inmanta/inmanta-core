@@ -25,6 +25,7 @@ import json
 import logging
 import re
 import time
+import typing
 import uuid
 from collections import defaultdict
 from collections.abc import Awaitable, AsyncIterator, Callable, Coroutine, Generator, Iterable, Mapping, MutableMapping, Sequence
@@ -32,7 +33,7 @@ from datetime import datetime
 from enum import Enum
 from functools import partial
 from inspect import Parameter
-from typing import TYPE_CHECKING, Any, Generic, Optional, TypeVar, Union, cast, get_type_hints
+from typing import TYPE_CHECKING, Any, Generic, Optional, Self, TypeVar, Union, cast, get_type_hints
 from urllib import parse
 
 import docstring_parser
@@ -604,6 +605,7 @@ class MethodProperties:
             raise InvalidMethodDefinition(f"token_param ({self.token_param}) is missing in parameters of method.")
 
         if not typed:
+            self._return_type = object
             return
 
         # now validate the arguments and return type
@@ -1166,7 +1168,8 @@ class Result:
         """
         self._callback = fnc
 
-    async def all(self) -> AsyncIterator[types.JsonType]:
+    # TODO: not JsonType, but typed
+    def all(self: Self) -> AsyncIterator[types.JsonType]:
         # TODO: docstring
         """
         Helper method to iterate over all individual items in this result object.
@@ -1174,10 +1177,17 @@ class Result:
         """
 
         # TODO: consider making ClientCall() accept either Result or Awaitable[Result]
-        async def get_self():
+        async def get_self() -> Self:
             return self
 
-        return await ClientCall(get_self()).all()
+        # TODO: the way it's constructed now, Result still needs properties. Can we get rid of that?
+        #   Or if it still needs it anyway, can we change the structure?
+        assert self._method_properties is not None  # TODO: bring this check back
+        client_call = ClientCall.construct(get_self(), properties=self._method_properties)
+        if not isinstance(client_call, ListClientCall):
+            # TODO
+            raise Exception("not a list")
+        return aiter(client_call)
 
     async def next_page(self) -> Optional["Result"]:
         if not self.result:
@@ -1205,18 +1215,21 @@ class Result:
 
 # TODO: implement stacking of options??? Perhaps not worth it? Consider SyncClient
 # TODO: implement sync
-# TODO: ReturnTypes / MethodReturn / Apireturn?
-# TODO: R too restrictive: should allow dicst but not sequences
-class ClientCall[R: types.ReturnTypes, V: types.SimpleTypes](Awaitable[Result], AsyncIterator[V]):
+# TODO: R constraint correct?
+class ClientCall[R: types.ReturnTypes](Awaitable[Result]):
     # TODO: docstring
-    def __init__(self, result: Awaitable[Result]) -> None:
+    def __init__(self, result: Awaitable[Result], *, properties: MethodProperties) -> None:
         # TODO: consider use cases. Do we need to cache first page? If not, add exception when used twice?
         self._first_result: Awaitable[Result] = result
-        self._iterator: Optional[AsyncIterator[V]] = None
+        self._properties: MethodProperties = properties
 
-    # TODO: R and V are tightly coupled but can not be expressed in typing?
-    # TODO: R is tighly coupled with method properties but can not be expressed in typing
-    #       Or can it? e.g. by making MethodProperties generic in R?
+    # TODO: name
+    @staticmethod
+    def construct(result: Awaitable[Result], *, properties: MethodProperties) -> "ClientCall[object]":
+        if properties.return_type is list or typing.get_origin(properties.return_type) is list:
+            return ListClientCall(result, properties=properties)
+        else:
+            return ClientCall(result, properties=properties)
 
     async def value(self) -> R:
         """
@@ -1226,32 +1239,6 @@ class ClientCall[R: types.ReturnTypes, V: types.SimpleTypes](Awaitable[Result], 
         Verifies return code and validates result type.
         """
         return self._unwrap_result(await self._first_result)
-
-    async def all(self) -> AsyncIterator[V]:
-        """
-        Returns an async iterator over all values returned by this call. Follows paging links if there are any.
-        Values are processed and validated as in `value()`, i.e. iterates over the value as returned by the API method,
-        without wrapping in a `Result` object. If there are pages, simply chains results from multiple pages after each other.
-
-        For non-list results, the iterator simply yields the single result.
-
-        Equivalent to using this object as async iterator directly.
-        """
-        page: Result
-        async for page in self._pages():
-            unwrapped: R = self._unwrap_result(page)
-            # TODO: can we use method metadata instead? Make sure to remain consistent in the mypy plugin
-            if isinstance(unwrapped, list):
-                for item in unwrapped:
-                    yield item
-            else:
-                yield unwrapped
-
-    async def _pages(self) -> AsyncIterator[Result]:
-        result = await self._first_result
-        while result is not None:
-            yield result
-            result = await result.next_page()
 
     # TODO: process warnings?
     def _unwrap_result(self, result: Result) -> R:
@@ -1279,7 +1266,6 @@ class ClientCall[R: types.ReturnTypes, V: types.SimpleTypes](Awaitable[Result], 
 
         # TODO: make method_properties non-private?
 
-        # TODO: what does this mean? Does it mean not all methods can be used with this?
         # typed methods always require an envelope key
         if result.result is None or result._method_properties.envelope_key not in result.result:
             # TODO: better message
@@ -1291,12 +1277,42 @@ class ClientCall[R: types.ReturnTypes, V: types.SimpleTypes](Awaitable[Result], 
         try:
             ta = pydantic.TypeAdapter(result._method_properties.return_type)
         except InvalidMethodDefinition:
+            # TODO: better message
             raise exceptions.BadRequest("Typed client can only be used with typed methods.")
 
         return ta.validate_python(result.result[result._method_properties.envelope_key])
 
     def __await__(self) -> Generator[Any, Any, Result]:
         return self._first_result.__await__()
+
+
+# TODO: type constraint correct?
+class ListClientCall[V: types.Simpletypes](ClientCall[list[V]], AsyncIterator[V]):
+    def __init__(self, result: Awaitable[Result], *, properties: MethodProperties) -> None:
+        ClientCall.__init__(self, result, properties=properties)
+        self._iterator: Optional[AsyncIterator[V]] = None
+
+    async def all(self) -> AsyncIterator[V]:
+        """
+        Returns an async iterator over all values returned by this call. Follows paging links if there are any.
+        Values are processed and validated as in `value()`, i.e. iterates over the value as returned by the API method,
+        without wrapping in a `Result` object. If there are pages, simply chains results from multiple pages after each other.
+
+        For non-list results, the iterator simply yields the single result.
+
+        Equivalent to using this object as async iterator directly.
+        """
+        page: Result
+        async for page in self._pages():
+            unwrapped: Sequence[V] = self._unwrap_result(page)
+            for item in unwrapped:
+                yield item
+
+    async def _pages(self) -> AsyncIterator[Result]:
+        result = await self._first_result
+        while result is not None:
+            yield result
+            result = await result.next_page()
 
     async def __anext__(self) -> V:
         if self._iterator is None:

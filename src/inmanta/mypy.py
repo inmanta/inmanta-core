@@ -56,17 +56,23 @@ class ClientMethodsPlugin(Plugin):
         method: Optional[object] = self._get_method(fullname)
         if method is None:
             return None
+
+        # TODO: clean up everything below
         client_call = self.lookup_fully_qualified("inmanta.protocol.common.ClientCall")
         client_call_generic = typevars.fill_typevars(client_call.node)
+        client_call_list = self.lookup_fully_qualified("inmanta.protocol.common.ListClientCall")
+        client_call_list_generic = typevars.fill_typevars(client_call_list.node)
 
         def hook(ctx):
-            element_type = (
-                ctx.default_return_type
+            is_list: bool = (
                 # TODO: better check and implementation
-                if isinstance(ctx.default_return_type, (AnyType, NoneType)) or ctx.default_return_type.type.fullname != "builtins.list"
-                else ctx.default_return_type.args[0]
+                not isinstance(ctx.default_return_type, (AnyType, NoneType))
+                and ctx.default_return_type.type.fullname == "builtins.list"
             )
-            return client_call_generic.copy_modified(args=[ctx.default_return_type, element_type])
+            if is_list:
+                return client_call_list_generic.copy_modified(args=[ctx.default_return_type.args[0]])
+            else:
+                return client_call_generic.copy_modified(args=[ctx.default_return_type])
 
         return hook
 

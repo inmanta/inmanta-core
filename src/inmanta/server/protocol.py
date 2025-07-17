@@ -864,6 +864,7 @@ class SessionManager(ServerSlice):
             return 500
 
 
+# TODO: consider how to evolve this one if TypedClient is deprecated
 class LocalClient(TypedClient):
     """A client that calls methods async on the server in the same process"""
 
@@ -897,13 +898,9 @@ class LocalClient(TypedClient):
         method_config = self._get_op_mapping(spec.url, spec.method)
         response = await self._server._transport._execute_call(method_config, spec.body, spec.headers)
 
-        # TODO: cleanup
-        async def result() -> common.Result:
-            return common.Result(
-                code=response.status_code,
-                result=response.body,
-                client=self._transport_instance,
-                method_properties=method_properties,
-            )
-
-        return await common.ClientCall(result()).value()
+        return common.Result(
+            code=response.status_code,
+            result=response.body,
+            client=self._transport_instance,
+            method_properties=method_properties,
+        )

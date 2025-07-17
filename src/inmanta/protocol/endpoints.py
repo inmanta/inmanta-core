@@ -22,8 +22,8 @@ import logging
 import socket
 import uuid
 from asyncio import CancelledError, run_coroutine_threadsafe, sleep
-from collections import abc, defaultdict
-from collections.abc import Coroutine, Mapping, Sequence
+from collections import defaultdict
+from collections.abc import Awaitable, Coroutine, Mapping, Sequence
 from enum import Enum
 from typing import Any, Callable, Optional
 from urllib import parse
@@ -359,12 +359,14 @@ class Client(Endpoint):
         """
         self._transport_instance.close()
 
-    def _call(
+    async def _call(
         self, method_properties: common.MethodProperties, args: Sequence[object], kwargs: Mapping[str, object]
-    ) -> common.ClientCall[object, object]:
+    ) -> common.Result:
         """
         Execute a call and return the result
         """
+        # TODO: keep this returning a `Result`, but wrap it in `__getattr__` instead -> simplifies child implementations
+        return await self._transport_instance.call(method_properties, args, kwargs)
         return common.ClientCall(self._transport_instance.call(method_properties, args, kwargs))
 
     def _select_method(self, name) -> Optional[common.MethodProperties]:
@@ -382,7 +384,7 @@ class Client(Endpoint):
 
         return None
 
-    def __getattr__(self, name: str) -> Callable[..., Coroutine[Any, Any, common.Result]]:
+    def __getattr__(self, name: str) -> Callable[..., common.ClientCall[object]]:
         """
         Return a function that will call self._call with the correct method properties associated
         """
@@ -391,10 +393,12 @@ class Client(Endpoint):
         if method is None:
             raise AttributeError("Method with name %s is not defined for this client" % name)
 
-        def wrap(*args: object, **kwargs: object) -> Coroutine[Any, Any, common.Result]:
+        def wrap(*args: object, **kwargs: object) -> common.ClientCall[object]:
             assert method
             method.function(*args, **kwargs)
-            return self._call(method_properties=method, args=args, kwargs=kwargs)
+            return common.ClientCall.construct(
+                self._call(method_properties=method, args=args, kwargs=kwargs), properties=method
+            )
 
         return wrap
 
@@ -439,8 +443,8 @@ class SyncClient:
 
     def __getattr__(self, name: str) -> Callable[..., common.Result]:
         def async_call(*args: list[object], **kwargs: dict[str, object]) -> common.Result:
-            method: Callable[..., abc.Awaitable[common.Result]] = getattr(self._client, name)
-            with_timeout: abc.Awaitable[common.Result] = asyncio.wait_for(method(*args, **kwargs), self.timeout)
+            method: Callable[..., Awaitable[common.Result]] = getattr(self._client, name)
+            with_timeout: Awaitable[common.Result] = asyncio.wait_for(method(*args, **kwargs), self.timeout)
 
             try:
                 if self._ioloop is None:
@@ -465,24 +469,21 @@ class SessionClient(Client):
         self._sid = sid
 
     # TODO
-    def _call(
+    async def _call(
         self, method_properties: common.MethodProperties, args: list[object], kwargs: dict[str, object]
-    ) -> common.ClientCall[object, object]:
+    ) -> common.Result:
         """
         Execute the rpc call
         """
         if "sid" not in kwargs:
             kwargs["sid"] = self._sid
 
-        return super()._call(method_properties, args, kwargs)
+        return await super()._call(method_properties, args, kwargs)
 
 
 # TODO: deprecate
 class TypedClient(Client):
     """A client that returns typed data instead of JSON"""
 
-    async def _call(
-        self, method_properties: common.MethodProperties, args: list[object], kwargs: dict[str, object]
-    ) -> types.ReturnTypes:
-        """Execute a call and return the result"""
-        return await super()._call(method_properties, args, kwargs).value()
+    def __getattr__(self, name: str) -> Callable[..., Awaitable[types.ReturnTypes]]:
+        return lambda *args, **kwargs: super().__getattr__(name)(*args, **kwargs).value()
