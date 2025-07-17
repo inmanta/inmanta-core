@@ -2414,6 +2414,36 @@ class Setting:
             allowed_values=self.allowed_values,
         )
 
+class ProtectedBy(enum.Enum):
+    """
+    An enum that hold the reasons why an environment setting can be protected.
+    """
+
+    # The environment setting is managed using the environment_settings property of the project.yml file.
+    project_yml: str = "project_yml"
+
+
+class EnvironmentSettingDetails(BaseModel):
+    """
+    An object that stores the value of an environment setting in the database.
+
+    :param value: The value of the environment setting.
+    :param protected: True iff the environment setting cannot be updated using the normal
+                      endpoints to update environment settings.
+    :param protected_by: This field indicates the cause of the environment protection.
+                         This field is set to None if the environment setting is not protected.
+    """
+    value: m.EnvSettingType
+    protected: bool = False
+    protected_by: ProtectedBy | None = None
+
+
+class EnvironmentSettingsContainer(BaseModel):
+    """
+    Container object that stores all the environment settings for a certain environment in the db.
+    """
+    settings: dict[str, EnvironmentSettingDetails] = {}
+
 
 @stable_api
 class Environment(BaseDocument):
@@ -2425,18 +2455,8 @@ class Environment(BaseDocument):
     :param project: The project this environment belongs to.
     :param repo_url: The repository url that contains the configuration model code for this environment.
     :param repo_branch: The repository branch that contains the configuration model code for this environment.
-    :param settings:
-
-        Key/value settings for this environment. This dictionary does not necessarily contain a key
-        for every environment setting known by the server. This is done for backwards compatibility reasons.
-        When a setting was renamed, we need to determine whether the old or the new setting has to be taken into
-        account. The logic to decide that is the following:
-
-        * When the name of the new setting is present in this settings dictionary or when the name of the old
-          setting is not present in the settings dictionary, use the new setting.
-
-        * Otherwise, use the setting with the old name.
-
+    :param settings: Key/value settings for this environment. This dictionary does not necessarily contain a key
+                     for every environment setting known by the server.
     :param last_version: The last version number that was reserved for this environment
     :param description: The description of the environment
     :param icon: An icon for the environment
@@ -2449,7 +2469,7 @@ class Environment(BaseDocument):
     project: uuid.UUID
     repo_url: str = ""
     repo_branch: str = ""
-    settings: dict[str, m.EnvSettingType] = {}
+    settings: EnvironmentSettingsContainer = EnvironmentSettingsContainer()
     last_version: int = 0
     halted: bool = False
     description: str = ""
@@ -2463,7 +2483,7 @@ class Environment(BaseDocument):
             project_id=self.project,
             repo_url=self.repo_url,
             repo_branch=self.repo_branch,
-            settings=self.settings,
+            settings={setting_name: setting.value for setting_name, setting in self.settings.settings.items()},
             halted=self.halted,
             is_marked_for_deletion=self.is_marked_for_deletion,
             description=self.description,
@@ -2622,14 +2642,14 @@ class Environment(BaseDocument):
             raise KeyError()
 
         if key in self.settings:
-            return self.settings[key]
+            return self.settings.settings[key].value
 
         default_value = self._settings[key].default
         if default_value is None:
             raise KeyError()
 
         await self.set(key, default_value, connection=connection, allow_override=False)
-        return self.settings[key]
+        return self.settings.settings[key].value
 
     async def set(
         self,
@@ -2657,20 +2677,23 @@ class Environment(BaseDocument):
         query = f"""
                 UPDATE {self.table_name()}
                 SET settings=(
-                        CASE WHEN $1 IS FALSE AND settings ? $2::text
-                        THEN settings
-                        ELSE jsonb_set(settings, $3::text[], to_jsonb($4::{type}), TRUE)
+                        CASE
+                            WHEN $1 IS FALSE AND (settings->'settings') ? $2::text
+                                THEN settings
+                            WHEN (settings->'settings') ? $2::text
+                                THEN jsonb_set(settings,  ARRAY['settings', $2, 'value'], to_jsonb($3::{type}), TRUE)
+                            ELSE jsonb_set(settings,  ARRAY['settings', $2], $4::jsonb, TRUE)
                         END
                     )
                 WHERE {filter_statement}
                 RETURNING settings
         """
-        values = [allow_override, self._get_value(key), self._get_value([key]), self._get_value(value)] + values
+        values = [allow_override, self._get_value(key), self._get_value(value), self._get_value(EnvironmentSettingDetails(value=value))] + values
         new_value = await self._fetchval(query, *values, connection=connection)
         new_value_parsed = cast(
-            dict[str, m.EnvSettingType], self.get_field_metadata()["settings"].from_db(name="settings", value=new_value)
+            EnvironmentSettingsContainer, self.get_field_metadata()["settings"].from_db(name="settings", value=new_value)
         )
-        self.settings[key] = new_value_parsed[key]
+        self.settings.settings[key] = new_value_parsed.settings[key]
 
     async def unset(self, key: str) -> None:
         """
@@ -2683,10 +2706,14 @@ class Environment(BaseDocument):
 
         if self._settings[key].default is None:
             (filter_statement, values) = self._get_composed_filter(name=self.name, project=self.project, offset=2)
-            query = "UPDATE " + self.table_name() + " SET settings=settings - $1" + " WHERE " + filter_statement
+            query = f"""
+                UPDATE {self.table_name()}
+                SET settings->'settings'=(settings->'settings') - $1
+                WHERE {filter_statement}
+            """
             values = [self._get_value(key)] + values
             await self._execute_query(query, *values)
-            del self.settings[key]
+            del self.settings.settings[key]
         else:
             await self.set(key, self._settings[key].default)
 
@@ -4231,7 +4258,7 @@ class ResourceAction(BaseDocument):
 
         query = f"""
             WITH non_halted_envs AS (
-                SELECT id, (COALESCE((settings->>'resource_action_logs_retention')::int, $1)) AS retention_days
+                SELECT id, (COALESCE((settings->'settings'->'resource_action_logs_retention'->>'value')::int, $1)) AS retention_days
                 FROM {Environment.table_name()}
                 WHERE NOT halted
             )
@@ -6009,7 +6036,7 @@ class Notification(BaseDocument):
         LOGGER.info("Cleaning up notifications")
         query = f"""
                    WITH non_halted_envs AS (
-                       SELECT id, (COALESCE((settings->>'notification_retention')::int, $1)) AS retention_days
+                       SELECT id, (COALESCE((settings->'settings'->'notification_retention'->>'value')::int, $1)) AS retention_days
                        FROM {Environment.table_name()}
                        WHERE NOT halted
                    )
