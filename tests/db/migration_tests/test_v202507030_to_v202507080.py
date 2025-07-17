@@ -32,9 +32,33 @@ part = file_name_regex.match(__name__)[1]
 async def test_add_update_environment_settings_column(
     migrate_db_from: abc.Callable[[], abc.Awaitable[None]], postgresql_client
 ) -> None:
+    # Fetch settings that exist in environment dev-1 before the migration
+    result = await postgresql_client.fetch(f"SELECT settings FROM {data.Environment.table_name()} WHERE name='dev-1'")
+    assert len(result) == 1
+    settings_before = result[0]["settings"]
+    assert len(settings_before) == 7
+
     # Run migration script
     await migrate_db_from()
 
+    # Validate initialization of update_environment_settings column
     result = await data.Compile.get_list(connection=postgresql_client)
     assert len(result) > 0
     assert all(r.update_environment_settings is False for r in result)
+
+    # Ensure correct migration of settings column of environment table
+    result = await data.Environment.get_list()
+    for r in result:
+        assert len(r.settings.settings) > 0
+        assert all(setting_name in data.Environment._settings for setting_name in r.settings.settings.keys())
+        assert all(s.protected is False for s in r.settings.settings.values())
+        assert all(s.protected_by is None for s in r.settings.settings.values())
+
+    # Validate that the values of the settings are correctly migrated
+    result = await data.Environment.get_one(name="dev-1")
+    # A setting may be added to the settings list by accessing that setting.
+    # Only assert >= to keep the test stable.
+    assert len(result.settings.settings) >= 7
+    for setting_name in settings_before:
+        assert result.settings.settings[setting_name].value == settings_before[setting_name]
+

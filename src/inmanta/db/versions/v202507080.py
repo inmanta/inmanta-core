@@ -24,7 +24,30 @@ async def update(connection: Connection) -> None:
     Add the update_environment_settings column to the compile table.
     """
     schema = """
+    -- Add update_environment_settings column to compile table
     ALTER TABLE public.compile
         ADD COLUMN update_environment_settings BOOL NOT NULL DEFAULT FALSE;
+
+    -- Migrate settings in environment table to new schema
+    UPDATE public.environment AS e
+    SET settings=(
+        jsonb_build_object(
+            'settings',
+            (
+                SELECT jsonb_object_agg(
+                    t.key,
+                    jsonb_build_object(
+                        'value',
+                        t.value,
+                        'protected',
+                        FALSE,
+                        'protected_by',
+                        NULL
+                    )
+                )
+                FROM jsonb_each(e.settings) AS t(key, value)
+            )
+        )
+    )
     """
     await connection.execute(schema)
