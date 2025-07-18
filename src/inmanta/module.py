@@ -1510,6 +1510,9 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
         on in transient scenarios like this.
     :param pip: A configuration section that holds information about the pip configuration that should be taken into account
                 when installing Python packages (See: :py:class:`inmanta.module.ProjectPipConfig` for more details).
+    :param environment_settings: The environment settings that need to be configured on the server for this project.
+                                 The environment settings can be updated on export by setting the
+                                 `--update-environment-settings` option on the `inmanta export` command.
     """
 
     _raw_parser: typing.ClassVar[type[YamlParser]] = YamlParser
@@ -1531,6 +1534,7 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
     ] = []
     agent_install_dependency_modules: bool = True
     pip: ProjectPipConfig = ProjectPipConfig()
+    environment_settings: dict[str, inmanta.data.model.EnvSettingType] | None = None
 
     @field_validator("modulepath", mode="before")
     @classmethod
