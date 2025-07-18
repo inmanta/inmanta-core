@@ -2431,7 +2431,7 @@ class EnvironmentSettingDetails(BaseModel):
     :param value: The value of the environment setting.
     :param protected: True iff the environment setting cannot be updated using the normal
                       endpoints to update environment settings.
-    :param protected_by: This field indicates the cause of the environment protection.
+    :param protected_by: This field indicates the reason why the environment setting is protected.
                          This field is set to None if the environment setting is not protected.
     """
 
@@ -2446,6 +2446,38 @@ class EnvironmentSettingsContainer(BaseModel):
     """
 
     settings: dict[str, EnvironmentSettingDetails] = {}
+
+    def has(self, settings_name: str) -> bool:
+        """
+        Return True iff the given setting_name is present in this settings container.
+        """
+        return setting_name in self.settings
+
+    def get_value(self, setting_name: str) -> m.EnvSettingType:
+        """
+        Return the value of the given setting in this settings container.
+        A KeyError is raised if the given setting is not present in this settings container.
+        """
+        return self.settings[setting_name].value
+
+    def set(self, setting_name: str, env_setting_details: EnvironmentSettingDetails) -> None:
+        """
+        Set the details for the given setting.
+        """
+        self.settings[setting_name] = env_setting_details
+
+    def remove(self, setting_name: str) -> None:
+        """
+        Remove the given setting from this settings container.
+        """
+        self.settings.remove(setting_name, None)
+
+    def get_all_setting_values(self) -> dict[str, m.EnvironmentSetting]:
+        """
+        Return a dictionary with as key the name of a setting and as value the value for that setting
+        in this settings container.
+        """
+        return {setting_name: setting_details.value for setting_name, setting_details in self.settings.items()}
 
 
 @stable_api
@@ -2486,7 +2518,7 @@ class Environment(BaseDocument):
             project_id=self.project,
             repo_url=self.repo_url,
             repo_branch=self.repo_branch,
-            settings={setting_name: setting.value for setting_name, setting in self.settings.settings.items()},
+            settings=self.settings.get_all_setting_values(),
             halted=self.halted,
             is_marked_for_deletion=self.is_marked_for_deletion,
             description=self.description,
@@ -2644,15 +2676,15 @@ class Environment(BaseDocument):
         if key not in self._settings:
             raise KeyError()
 
-        if key in self.settings.settings:
-            return self.settings.settings[key].value
+        if self.settings.has(key):
+            return self.settings.get_value(key)
 
         default_value = self._settings[key].default
         if default_value is None:
             raise KeyError()
 
         await self.set(key, default_value, connection=connection, allow_override=False)
-        return self.settings.settings[key].value
+        return self.settings.get_value(key)
 
     async def set(
         self,
@@ -2701,7 +2733,7 @@ class Environment(BaseDocument):
         new_value_parsed = cast(
             EnvironmentSettingsContainer, self.get_field_metadata()["settings"].from_db(name="settings", value=new_value)
         )
-        self.settings.settings[key] = new_value_parsed.settings[key]
+        self.settings.set(setting_name=key, env_setting_details=new_value_parsed.settings[key])
 
     async def unset(self, key: str) -> None:
         """
@@ -2721,7 +2753,7 @@ class Environment(BaseDocument):
             """
             values = [self._get_value(key)] + values
             await self._execute_query(query, *values)
-            del self.settings.settings[key]
+            self.settings.remove(key)
         else:
             await self.set(key, self._settings[key].default)
 
