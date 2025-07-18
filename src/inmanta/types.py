@@ -46,6 +46,12 @@ else:
 StrictNonIntBool = pydantic.StrictBool
 
 
+type AsyncioCoroutine[R] = Coroutine[object, None, R]
+"""
+Coroutine for use with asyncio, where we don't care about yield and send types.
+"""
+
+
 def issubclass(sub: type, super: Union[type, tuple[type, ...]]) -> bool:
     """
     Alternative issubclass implementation that interpretes instances of NewType for the first argument as their super type.

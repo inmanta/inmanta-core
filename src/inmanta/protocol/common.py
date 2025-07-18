@@ -29,7 +29,7 @@ import typing
 import typing_extensions
 import uuid
 from collections import defaultdict
-from collections.abc import Awaitable, AsyncIterator, Callable, Coroutine, Generator, Iterable, Mapping, MutableMapping, Sequence
+from collections.abc import Awaitable, AsyncIterator, Callable, Generator, Iterable, Mapping, MutableMapping, Sequence
 from datetime import datetime
 from enum import Enum
 from functools import partial
@@ -98,7 +98,7 @@ class ArgOption:
 
     def __init__(
         self,
-        getter: Callable[[Any, dict[str, str]], Coroutine[Any, Any, Any]],
+        getter: Callable[[Any, dict[str, str]], types.AsyncioCoroutine[Any]],
         # Type is Any to Any because it transforms from method to handler but in the current typing there is no link
         header: Optional[str] = None,
         reply_header: bool = True,
@@ -1310,7 +1310,7 @@ class ClientCall(Awaitable[Result[R]]):
 
         return ta.validate_python(result.result[result.method_properties.envelope_key])
 
-    def __await__(self) -> Generator[Any, Any, Result[R]]:
+    def __await__(self) -> Generator[object, None, Result[R]]:
         return self._first_result.__await__()
 
 

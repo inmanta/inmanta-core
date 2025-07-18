@@ -20,10 +20,11 @@ import asyncio
 import inspect
 import logging
 import socket
+import typing
 import uuid
 from asyncio import CancelledError, run_coroutine_threadsafe, sleep
 from collections import defaultdict
-from collections.abc import Awaitable, Coroutine, Mapping, Sequence
+from collections.abc import Awaitable, Mapping, Sequence
 from enum import Enum
 from typing import Any, Callable, Optional
 from urllib import parse
@@ -442,7 +443,7 @@ class SyncClient:
     def __getattr__(self, name: str) -> Callable[..., common.Result]:
         def async_call(*args: Sequence[object], **kwargs: Mapping[str, object]) -> common.Result:
             method: Callable[..., Awaitable[common.Result]] = getattr(self._client, name)
-            with_timeout: Awaitable[common.Result] = asyncio.wait_for(method(*args, **kwargs), self.timeout)
+            with_timeout: types.AsyncioCoroutine[common.Result] = asyncio.wait_for(method(*args, **kwargs), self.timeout)
 
             try:
                 if self._ioloop is None:
@@ -450,7 +451,6 @@ class SyncClient:
                     return util.ensure_event_loop().run_until_complete(with_timeout)
                 else:
                     # loop is running on different thread
-                    # TODO: this no longer gets a coroutine. That doesn't work. Can we safely wrap it in one?
                     return run_coroutine_threadsafe(with_timeout, self._ioloop).result()
             except TimeoutError:
                 raise ConnectionRefusedError()
