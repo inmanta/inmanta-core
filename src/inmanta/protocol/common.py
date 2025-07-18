@@ -26,6 +26,7 @@ import logging
 import re
 import time
 import typing
+import typing_extensions
 import uuid
 from collections import defaultdict
 from collections.abc import Awaitable, AsyncIterator, Callable, Coroutine, Generator, Iterable, Mapping, MutableMapping, Sequence
@@ -70,6 +71,9 @@ OCTET_STREAM_CONTENT = "application/octet-stream"
 ZIP_CONTENT = "application/zip"
 UTF8_CHARSET = "charset=UTF-8"
 HTML_CONTENT_WITH_UTF8_CHARSET = f"{HTML_CONTENT}; {UTF8_CHARSET}"
+
+
+R = typing_extensions.TypeVar("R", bound=types.MethodReturn, default=types.MethodReturn)
 
 
 class CallContext:
@@ -347,7 +351,7 @@ VALID_URL_ARG_TYPES = (Enum, uuid.UUID, str, float, int, bool, datetime)
 VALID_SIMPLE_ARG_TYPES = (BaseModel, Enum, uuid.UUID, str, float, int, bool, datetime, bytes, pydantic.AnyUrl)
 
 
-class MethodProperties:
+class MethodProperties(Generic[R]):
     """
     This class stores the information from a method definition
     """
@@ -379,7 +383,7 @@ class MethodProperties:
 
     def __init__(
         self,
-        function: MethodType,
+        function: Callable[..., R],
         path: str,
         operation: str,
         reply: bool,
@@ -457,7 +461,7 @@ class MethodProperties:
         self.function_name = function.__name__
         self._varkw: bool = varkw
         self._varkw_name: Optional[str] = None
-        self._return_type: Optional[type] = None
+        self._return_type: Optional[type[R]] = None
         self.token_param = token_param
 
         self._parsed_docstring = docstring_parser.parse(text=function.__doc__, style=docstring_parser.DocstringStyle.REST)
@@ -539,7 +543,7 @@ class MethodProperties:
         return self._enforce_auth
 
     @property
-    def return_type(self) -> type:
+    def return_type(self) -> type[R]:
         if self._return_type is None:
             raise InvalidMethodDefinition("Only typed methods have a return type")
         return self._return_type
@@ -605,7 +609,8 @@ class MethodProperties:
             raise InvalidMethodDefinition(f"token_param ({self.token_param}) is missing in parameters of method.")
 
         if not typed:
-            self._return_type = object
+            # TODO: consider this. Any or object? Where / how is this used?
+            self._return_type = typing.Any  # type: ignore
             return
 
         # now validate the arguments and return type
@@ -639,7 +644,7 @@ class MethodProperties:
 
         self._return_type = self._validate_return_type(type_hints["return"], strict=self.strict_typing)
 
-    def _validate_return_type(self, arg_type: type, *, strict: bool = True) -> type:
+    def _validate_return_type(self, arg_type: type, *, strict: bool = True) -> type[R]:
         """Validate the return type"""
         # Note: we cannot call issubclass on a generic type!
         arg = "return type"
@@ -1102,7 +1107,7 @@ def shorten(msg: str, max_len: int = 10) -> str:
 
 
 @stable_api
-class Result:
+class Result(Generic[R]):
     """
     A result of a method call
     """
@@ -1113,7 +1118,7 @@ class Result:
         result: Optional[JsonType] = None,
         *,
         client: Optional["RESTClient"] = None,
-        method_properties: Optional[MethodProperties] = None,
+        method_properties: Optional[MethodProperties[R]] = None,
         environment: Optional[str] = None,
     ) -> None:
         """
@@ -1127,9 +1132,19 @@ class Result:
         self.code = code
         self._client: Optional["RESTClient"] = client
 
-        self._callback: Optional[Callable[["Result"], None]] = None
-        self._method_properties: Optional[MethodProperties] = method_properties
+        self._callback: Optional[Callable[["Result[R]"], None]] = None
+        self._method_properties: Optional[MethodProperties[R]] = method_properties
         self._environment = environment
+
+    @property
+    def method_properties(self) -> MethodProperties[R]:
+        if self._method_properties is None:
+            raise Exception(
+                "This Result object does not support paging. Make sure you "
+                "set the client and method_properties parameters when constructing "
+                "a Result object manually (e.g. outside of a regular API call)."
+            )
+        return self._method_properties
 
     def get_result(self) -> Optional[JsonType]:
         """
@@ -1162,14 +1177,18 @@ class Result:
             time.sleep(0.1)
             count += 0.1
 
-    def callback(self, fnc: Callable[["Result"], None]) -> None:
+    def callback(self, fnc: Callable[["Result[R]"], None]) -> None:
         """
         Set a callback function that is to be called when the result is ready.
         """
         self._callback = fnc
 
-    # TODO: not JsonType, but typed
-    def all(self: Self) -> AsyncIterator[types.JsonType]:
+    # TODO: consider making ListResult to provide better type checking
+    @typing.overload
+    def all[T: types.SimpleTypes](self: "Result[list[T]]") -> AsyncIterator[T]: ...
+    @typing.overload
+    def all(self) -> typing.Never: ...
+    def all(self: Self) -> AsyncIterator[object]:
         # TODO: docstring
         """
         Helper method to iterate over all individual items in this result object.
@@ -1180,24 +1199,22 @@ class Result:
         async def get_self() -> Self:
             return self
 
-        # TODO: the way it's constructed now, Result still needs properties. Can we get rid of that?
-        #   Or if it still needs it anyway, can we change the structure?
-        assert self._method_properties is not None  # TODO: bring this check back
-        client_call = ClientCall.construct(get_self(), properties=self._method_properties)
+        # TODO: the way it's constructed now, Result still needs properties. Can we change the structure so that ClientCall doesn't?
+        client_call = ClientCall.construct(get_self(), properties=self.method_properties)
         if not isinstance(client_call, ListClientCall):
             # TODO
             raise Exception("not a list")
         return aiter(client_call)
 
-    async def next_page(self) -> Optional["Result"]:
+    async def next_page(self) -> Optional["Result[R]"]:
         if not self.result:
-            return
+            return None
 
         next_link_url = self.result.get("links", {}).get("next")
         if not next_link_url:
-            return
+            return None
 
-        if self._method_properties is None or self._client is None:
+        if self._client is None:
             raise Exception(
                 "The next_page() method cannot be called on this Result object. Make sure you "
                 "set the client and method_properties parameters when constructing "
@@ -1209,25 +1226,35 @@ class Result:
         headers = {"X-Inmanta-tid": self._environment} if self._environment else None
         request = HTTPRequest(url=url, method="GET", headers=headers)
         return self._client._decode_response(
-            await self._client.client.fetch(request), self._method_properties, self._environment
+            await self._client.client.fetch(request), self.method_properties, self._environment
         )
 
 
+# TODO: add type var defaults to ClientCall, Result, MethodProperties, then remove some explicits
 # TODO: implement stacking of options??? Perhaps not worth it? Consider SyncClient
 # TODO: implement sync
-# TODO: R constraint correct?
-class ClientCall[R: types.ReturnTypes](Awaitable[Result]):
+class ClientCall(Awaitable[Result[R]]):
     # TODO: docstring
-    def __init__(self, result: Awaitable[Result], *, properties: MethodProperties) -> None:
+    def __init__(self, result: Awaitable[Result[R]], *, properties: MethodProperties[R]) -> None:
         # TODO: consider use cases. Do we need to cache first page? If not, add exception when used twice?
-        self._first_result: Awaitable[Result] = result
-        self._properties: MethodProperties = properties
+        self._first_result: Awaitable[Result[R]] = result
+        self._properties: MethodProperties[R] = properties
 
     # TODO: name
+    @typing.overload
     @staticmethod
-    def construct(result: Awaitable[Result], *, properties: MethodProperties) -> "ClientCall[object]":
+    def construct[T: types.SimpleTypes](result: Awaitable[Result[list[T]]], *, properties: MethodProperties[list[T]]) -> "ListClientCall[T]": ...
+    @typing.overload
+    @staticmethod
+    def construct[T: types.MethodReturn](result: Awaitable[Result[T]], *, properties: MethodProperties[T]) -> "ClientCall[T]": ...
+    @staticmethod
+    def construct[T: types.MethodReturn](
+        result: Awaitable[Result[T]], *, properties: MethodProperties[T]
+    ) -> "ClientCall[T] | ListClientCall":
         if properties.return_type is list or typing.get_origin(properties.return_type) is list:
-            return ListClientCall(result, properties=properties)
+            return ListClientCall(
+                result, properties=properties  # type: ignore
+            )
         else:
             return ClientCall(result, properties=properties)
 
@@ -1241,7 +1268,7 @@ class ClientCall[R: types.ReturnTypes](Awaitable[Result]):
         return self._unwrap_result(await self._first_result)
 
     # TODO: process warnings?
-    def _unwrap_result(self, result: Result) -> R:
+    def _unwrap_result(self, result: Result[R]) -> R:
         # TODO: docstring
         """
         Convert the response into a proper type and restore exception if any
@@ -1259,7 +1286,7 @@ class ClientCall[R: types.ReturnTypes](Awaitable[Result]):
             exception: type[exceptions.BaseHttpException] = exc_mapping.get(result.code, exceptions.ServerError)
 
             raise (
-                exception(result.result.get("message", None), result.result.get("error_details", None))
+                exception(result.code, message=result.result.get("message", None), details=result.result.get("error_details", None))
                 if result.result is not None
                 else exception()
             )
@@ -1267,28 +1294,33 @@ class ClientCall[R: types.ReturnTypes](Awaitable[Result]):
         # TODO: make method_properties non-private?
 
         # typed methods always require an envelope key
-        if result.result is None or result._method_properties.envelope_key not in result.result:
+        if result.result is None or result.method_properties.envelope_key not in result.result:
             # TODO: better message
             raise exceptions.BadRequest("No data was provided in the body. Make sure to only use typed methods.")
 
-        if result._method_properties.return_type is None:
+        if result.method_properties.return_type is None:
             return None
 
         try:
-            ta = pydantic.TypeAdapter(result._method_properties.return_type)
+            # TODO: test this with ReturnValue method
+            ta = pydantic.TypeAdapter(result.method_properties.return_type)
         except InvalidMethodDefinition:
             # TODO: better message
             raise exceptions.BadRequest("Typed client can only be used with typed methods.")
 
-        return ta.validate_python(result.result[result._method_properties.envelope_key])
+        return ta.validate_python(result.result[result.method_properties.envelope_key])
 
-    def __await__(self) -> Generator[Any, Any, Result]:
+    def __await__(self) -> Generator[Any, Any, Result[R]]:
         return self._first_result.__await__()
 
 
+V = typing_extensions.TypeVar("V", bound=types.SimpleTypes, default=types.SimpleTypes)
+
+
+# TODO: name
 # TODO: type constraint correct?
-class ListClientCall[V: types.Simpletypes](ClientCall[list[V]], AsyncIterator[V]):
-    def __init__(self, result: Awaitable[Result], *, properties: MethodProperties) -> None:
+class ListClientCall(ClientCall[list[V]], AsyncIterator[V]):
+    def __init__(self, result: Awaitable[Result[list[V]]], *, properties: MethodProperties[list[V]]) -> None:
         ClientCall.__init__(self, result, properties=properties)
         self._iterator: Optional[AsyncIterator[V]] = None
 
@@ -1302,18 +1334,21 @@ class ListClientCall[V: types.Simpletypes](ClientCall[list[V]], AsyncIterator[V]
 
         Equivalent to using this object as async iterator directly.
         """
-        page: Result
-        async for page in self._pages():
+        page: Result[list[V]]
+        async for page in self.pages():
             unwrapped: Sequence[V] = self._unwrap_result(page)
             for item in unwrapped:
                 yield item
 
-    async def _pages(self) -> AsyncIterator[Result]:
-        result = await self._first_result
+    # TODO: should this be exposed as Result.pages() as well?
+    async def pages(self) -> AsyncIterator[Result[list[V]]]:
+        # TODO: docstring
+        result: Optional[Result[list[V]]] = await self._first_result
         while result is not None:
             yield result
             result = await result.next_page()
 
+    # TODO: proposal only had .all(), not aiter directly on call
     async def __anext__(self) -> V:
         if self._iterator is None:
             self._iterator = self.all()

@@ -353,23 +353,21 @@ class Client(Endpoint):
         self._version_match = version_match
         self._exact_version = exact_version
 
-    def close(self):
+    def close(self) -> None:
         """
         Closes the RESTclient instance manually. This is only needed when it is started with force_instance set to true
         """
         self._transport_instance.close()
 
-    async def _call(
-        self, method_properties: common.MethodProperties, args: Sequence[object], kwargs: Mapping[str, object]
-    ) -> common.Result:
+    async def _call[R: types.MethodReturn](
+        self, method_properties: common.MethodProperties[R], args: Sequence[object], kwargs: Mapping[str, object]
+    ) -> common.Result[R]:
         """
         Execute a call and return the result
         """
-        # TODO: keep this returning a `Result`, but wrap it in `__getattr__` instead -> simplifies child implementations
         return await self._transport_instance.call(method_properties, args, kwargs)
-        return common.ClientCall(self._transport_instance.call(method_properties, args, kwargs))
 
-    def _select_method(self, name) -> Optional[common.MethodProperties]:
+    def _select_method(self, name: str) -> Optional[common.MethodProperties]:
         if name not in common.MethodProperties.methods:
             return None
 
@@ -384,7 +382,7 @@ class Client(Endpoint):
 
         return None
 
-    def __getattr__(self, name: str) -> Callable[..., common.ClientCall[object]]:
+    def __getattr__(self, name: str) -> Callable[..., common.ClientCall]:
         """
         Return a function that will call self._call with the correct method properties associated
         """
@@ -393,7 +391,7 @@ class Client(Endpoint):
         if method is None:
             raise AttributeError("Method with name %s is not defined for this client" % name)
 
-        def wrap(*args: object, **kwargs: object) -> common.ClientCall[object]:
+        def wrap(*args: object, **kwargs: object) -> common.ClientCall:
             assert method
             method.function(*args, **kwargs)
             return common.ClientCall.construct(
@@ -442,7 +440,7 @@ class SyncClient:
             self._client = client
 
     def __getattr__(self, name: str) -> Callable[..., common.Result]:
-        def async_call(*args: list[object], **kwargs: dict[str, object]) -> common.Result:
+        def async_call(*args: Sequence[object], **kwargs: Mapping[str, object]) -> common.Result:
             method: Callable[..., Awaitable[common.Result]] = getattr(self._client, name)
             with_timeout: Awaitable[common.Result] = asyncio.wait_for(method(*args, **kwargs), self.timeout)
 
@@ -452,6 +450,7 @@ class SyncClient:
                     return util.ensure_event_loop().run_until_complete(with_timeout)
                 else:
                     # loop is running on different thread
+                    # TODO: this no longer gets a coroutine. That doesn't work. Can we safely wrap it in one?
                     return run_coroutine_threadsafe(with_timeout, self._ioloop).result()
             except TimeoutError:
                 raise ConnectionRefusedError()
@@ -485,5 +484,6 @@ class SessionClient(Client):
 class TypedClient(Client):
     """A client that returns typed data instead of JSON"""
 
-    def __getattr__(self, name: str) -> Callable[..., Awaitable[types.ReturnTypes]]:
-        return lambda *args, **kwargs: super().__getattr__(name)(*args, **kwargs).value()
+    def __getattr__(self, name: str) -> Callable[..., Awaitable[types.MethodReturn]]:
+        call: Callable[..., common.ClientCall] = super().__getattr__(name)
+        return lambda *args, **kwargs: call(*args, **kwargs).value()

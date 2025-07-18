@@ -27,7 +27,7 @@ import tornado.simple_httpclient
 from tornado.httpclient import AsyncHTTPClient, HTTPError, HTTPRequest, HTTPResponse
 
 from inmanta import config as inmanta_config
-from inmanta import tracing
+from inmanta import tracing, types
 from inmanta.const import INMANTA_MT_HEADER
 from inmanta.protocol import common
 from inmanta.protocol.auth import providers
@@ -102,9 +102,9 @@ class RESTClient(RESTBase):
 
         return "%s://%s:%d" % (protocol, host, port)
 
-    async def call(
-        self, properties: common.MethodProperties, args: Sequence[object], kwargs: Optional[Mapping[str, object]] = None
-    ) -> common.Result:
+    async def call[R: types.MethodReturn](
+        self, properties: common.MethodProperties[R], args: Sequence[object], kwargs: Optional[Mapping[str, object]] = None
+    ) -> common.Result[R]:
         if kwargs is None:
             kwargs = {}
 
@@ -177,9 +177,9 @@ class RESTClient(RESTBase):
         if self.forced_instance:
             self.client.close()
 
-    def _decode_response(
-        self, response: HTTPResponse, properties: common.MethodProperties, environment: str | None
-    ) -> common.Result:
+    def _decode_response[R](
+        self, response: HTTPResponse, properties: common.MethodProperties[R], environment: str | None
+    ) -> common.Result[R]:
         content_type = response.headers.get(common.CONTENT_TYPE, None)
 
         if content_type is None or content_type == common.JSON_CONTENT:

@@ -34,7 +34,7 @@ class BaseHttpException(web.HTTPError):
 
     def __init__(self, status_code: int = 500, message: Optional[str] = None, details: Optional[JsonType] = None) -> None:
         super().__init__(status_code, message)
-        self.details = details
+        self.details = detailsjk
 
     def to_body(self) -> dict[str, Any]:
         """
