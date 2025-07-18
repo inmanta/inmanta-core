@@ -481,15 +481,15 @@ async def test_last_non_deploying_status_field_on_resource(
         r2_status: const.ResourceState,
         r2_last_non_deploying_status: const.NonDeployingResourceState,
     ) -> None:
-        db_resources = await data.Resource.get_list(environment=environment)
-        rvid_to_resources = {res.resource_version_id: res for res in db_resources}
+        res_1_state = await data.Resource.get_current_resource_state(rid=rid_r1, env=environment)
+        res_2_state = await data.Resource.get_current_resource_state(rid=rid_r2, env=environment)
 
         db_resource_state = await data.ResourcePersistentState.get_list(environment=environment)
         rid_to_resource_state = {res.resource_id: res for res in db_resource_state}
 
-        assert rvid_to_resources[rvid_r1_v1].status is r1_status
+        assert res_1_state is r1_status
         assert rid_to_resource_state[rid_r1].last_non_deploying_status is r1_last_non_deploying_status
-        assert rvid_to_resources[rvid_r2_v1].status is r2_status
+        assert res_2_state is r2_status
         assert rid_to_resource_state[rid_r2].last_non_deploying_status is r2_last_non_deploying_status
 
     # All resources in available state
