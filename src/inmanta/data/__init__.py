@@ -2414,13 +2414,14 @@ class Setting:
             allowed_values=self.allowed_values,
         )
 
+
 class ProtectedBy(enum.Enum):
     """
-    An enum that hold the reasons why an environment setting can be protected.
+    An enum that indicates the reason why an environment setting can be protected.
     """
 
     # The environment setting is managed using the environment_settings property of the project.yml file.
-    project_yml: str = "project_yml"
+    project_yml = "project_yml"
 
 
 class EnvironmentSettingDetails(BaseModel):
@@ -2433,6 +2434,7 @@ class EnvironmentSettingDetails(BaseModel):
     :param protected_by: This field indicates the cause of the environment protection.
                          This field is set to None if the environment setting is not protected.
     """
+
     value: m.EnvSettingType
     protected: bool = False
     protected_by: ProtectedBy | None = None
@@ -2442,6 +2444,7 @@ class EnvironmentSettingsContainer(BaseModel):
     """
     Container object that stores all the environment settings for a certain environment in the db.
     """
+
     settings: dict[str, EnvironmentSettingDetails] = {}
 
 
@@ -2641,7 +2644,7 @@ class Environment(BaseDocument):
         if key not in self._settings:
             raise KeyError()
 
-        if key in self.settings:
+        if key in self.settings.settings:
             return self.settings.settings[key].value
 
         default_value = self._settings[key].default
@@ -2688,7 +2691,12 @@ class Environment(BaseDocument):
                 WHERE {filter_statement}
                 RETURNING settings
         """
-        values = [allow_override, self._get_value(key), self._get_value(value), self._get_value(EnvironmentSettingDetails(value=value))] + values
+        values = [
+            allow_override,
+            self._get_value(key),
+            self._get_value(value),
+            self._get_value(EnvironmentSettingDetails(value=value)),
+        ] + values
         new_value = await self._fetchval(query, *values, connection=connection)
         new_value_parsed = cast(
             EnvironmentSettingsContainer, self.get_field_metadata()["settings"].from_db(name="settings", value=new_value)
@@ -3673,7 +3681,6 @@ class Compile(BaseDocument):
 
     soft_delete: bool = False
     links: dict[str, list[str]] = {}
-    update_environment_settings: bool = False
 
     @classmethod
     async def get_substitute_by_id(cls, compile_id: uuid.UUID, connection: Optional[Connection] = None) -> Optional["Compile"]:
@@ -4258,7 +4265,11 @@ class ResourceAction(BaseDocument):
 
         query = f"""
             WITH non_halted_envs AS (
-                SELECT id, (COALESCE((settings->'settings'->'resource_action_logs_retention'->>'value')::int, $1)) AS retention_days
+                SELECT
+                    id,
+                    (
+                        COALESCE((settings->'settings'->'resource_action_logs_retention'->>'value')::int, $1)
+                    ) AS retention_days
                 FROM {Environment.table_name()}
                 WHERE NOT halted
             )
@@ -6036,7 +6047,11 @@ class Notification(BaseDocument):
         LOGGER.info("Cleaning up notifications")
         query = f"""
                    WITH non_halted_envs AS (
-                       SELECT id, (COALESCE((settings->'settings'->'notification_retention'->>'value')::int, $1)) AS retention_days
+                       SELECT
+                           id,
+                           (
+                               COALESCE((settings->'settings'->'notification_retention'->>'value')::int, $1)
+                           ) AS retention_days
                        FROM {Environment.table_name()}
                        WHERE NOT halted
                    )

@@ -21,13 +21,9 @@ from asyncpg import Connection
 
 async def update(connection: Connection) -> None:
     """
-    Add the update_environment_settings column to the compile table.
+    Update the schema of the environment.settings column.
     """
     schema = """
-    -- Add update_environment_settings column to compile table
-    ALTER TABLE public.compile
-        ADD COLUMN update_environment_settings BOOL NOT NULL DEFAULT FALSE;
-
     -- Migrate settings in environment table to new schema
     UPDATE public.environment AS e
     SET settings=(

@@ -750,12 +750,11 @@ async def test_server_partial_compile(server, client, environment, monkeypatch):
 
 @pytest.mark.slowtest
 @pytest.mark.parametrize("no_agent", [True])
-@pytest.mark.parametrize("update_environment_settings", [True, False])
-async def test_server_recompile(server, client, environment, monkeypatch, update_environment_settings: bool):
+async def test_server_recompile(server, client, environment, monkeypatch):
     """
     Test a recompile on the server and verify recompile triggers
     """
-    # Put settings in-place to test the update_environment_settings parameter of the notify_change endpoint.
+    # Put settings in-place to test the feature that updates the environment_settings set in the project.yml file.
     result = await client.environment_settings_set(tid=environment, id=data.RESOURCE_ACTION_LOGS_RETENTION, value=5)
     assert result.code == 200
     result = await client.environment_setting_get(tid=environment, id=data.ENVIRONMENT_METRICS_RETENTION)
@@ -794,7 +793,7 @@ async def test_server_recompile(server, client, environment, monkeypatch, update
         )
 
     logger.info("request a compile")
-    result = await client.notify_change(environment, update_environment_settings=update_environment_settings)
+    result = await client.notify_change(environment)
     assert result.code == 200
 
     logger.info("wait for 1")
@@ -809,12 +808,10 @@ async def test_server_recompile(server, client, environment, monkeypatch, update
     assert result.result["data"]["settings"][data.RESOURCE_ACTION_LOGS_RETENTION] == 5
     result = await client.environment_setting_get(tid=environment, id=data.ENVIRONMENT_METRICS_RETENTION)
     assert result.code == 200
-    assert result.result["data"]["settings"][data.ENVIRONMENT_METRICS_RETENTION] == (
-        100 if update_environment_settings else 336
-    )
+    assert result.result["data"]["settings"][data.ENVIRONMENT_METRICS_RETENTION] == 100
     result = await client.environment_setting_get(tid=environment, id=data.NOTIFICATION_RETENTION)
     assert result.code == 200
-    assert result.result["data"]["settings"][data.NOTIFICATION_RETENTION] == (200 if update_environment_settings else 365)
+    assert result.result["data"]["settings"][data.NOTIFICATION_RETENTION] == 200
 
     # get compile reports and make sure the environment variables are not logged
     reports = await client.get_reports(environment)

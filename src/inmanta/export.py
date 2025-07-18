@@ -377,7 +377,6 @@ class Exporter:
         partial_compile: bool = False,
         resource_sets_to_remove: Optional[Sequence[str]] = None,
         allow_handler_code_update: bool = False,
-        update_environment_settings: bool = False,
     ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, ResourceState]]]:
         """
         Run the export functions. Return value for partial json export uses 0 as version placeholder.
@@ -419,8 +418,7 @@ class Exporter:
         resources = self.resources_to_list()
 
         # Update the environment settings, mentioned in the project.yml file, on the server.
-        if update_environment_settings:
-            self._update_environment_settings(project.metadata.environment_settings)
+        self._update_environment_settings(project.metadata.environment_settings)
 
         export_done = time.time()
         LOGGER.debug("Generating resources from the compiled model took %0.03f seconds", export_done - start)

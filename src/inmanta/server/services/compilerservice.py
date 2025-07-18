@@ -510,9 +510,6 @@ class CompileRun:
                 export_command.append("--ssl-ca-cert")
                 export_command.append(ssl_ca_cert)
 
-            if self.request.update_environment_settings:
-                export_command.append("--update-environment-settings")
-
             self.tail_stdout = ""
 
             # Make mypy happy
@@ -714,7 +711,6 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
         soft_delete: bool = False,
         mergeable_env_vars: Optional[Mapping[str, str]] = None,
         links: Optional[dict[str, list[str]]] = None,
-        update_environment_settings: bool = False,
     ) -> tuple[Optional[uuid.UUID], Warnings]:
         """
         Recompile an environment in a different thread and taking wait time into account.
@@ -736,7 +732,6 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
         :param links: An object that contains relevant links to this compile.
             It is a dictionary where the key is something that identifies one or more links
             and the value is a list of urls. i.e. {"instances": ["link-1',"link-2"], "compiles": ["link-3"]}
-        :param update_environment_settings: True iff the --update-environment-settings option will be set on the export command.
         :return: the compile id of the requested compile and any warnings produced during the request
         """
         if in_db_transaction and not connection:
@@ -786,7 +781,6 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
             failed_compile_message=failed_compile_message,
             soft_delete=soft_delete,
             links=links,
-            update_environment_settings=update_environment_settings,
         )
         if not in_db_transaction:
             async with self._queue_count_cache_lock:
@@ -830,7 +824,6 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
                 "do_export",
                 "requested_environment_variables",
                 "partial",
-                "update_environment_settings",
             },
         )
 

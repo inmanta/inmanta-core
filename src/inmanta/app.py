@@ -490,16 +490,6 @@ def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Se
         action="store_true",
         default=False,
     )
-    parser.add_argument(
-        "--update-environment-settings",
-        dest="update_environment_settings",
-        help="If set, this command updates the environment settings on the server as mentioned in the"
-        " environment_settings section of the project.yml file. After doing this, it will no longer be possible to update these"
-        " environment settings via the API, until a new export is done with the --update-environment-settings option set"
-        " where that setting is no longer present in the environment_setting section of the project.yml file.",
-        action="store_true",
-        default=False,
-    )
     moduletool.add_deps_check_arguments(parser)
 
 
@@ -605,7 +595,6 @@ def export(options: argparse.Namespace) -> None:
                 partial_compile=options.partial_compile,
                 resource_sets_to_remove=list(resource_sets_to_remove),
                 allow_handler_code_update=options.allow_handler_code_update,
-                update_environment_settings=options.update_environment_settings,
             )
 
         if not summary_reporter.is_failure() and options.deploy:

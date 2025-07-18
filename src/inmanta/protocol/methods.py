@@ -659,15 +659,13 @@ def notify_change_get(id: uuid.UUID, update: bool = True):
     arg_options={"id": ArgOption(getter=convert_environment)},
     client_types=[const.ClientType.api],
 )
-def notify_change(id: uuid.UUID, update: bool = True, metadata: dict = {}, update_environment_settings: bool = False):
+def notify_change(id: uuid.UUID, update: bool = True, metadata: dict = {}):
     """
     Notify the server that the repository of the environment with the given id, has changed.
 
     :param id: The id of the environment
     :param update: Optional. Update the model code and modules. Default value is true
     :param metadata: Optional. The metadata that indicates the source of the compilation trigger.
-    :param update_environment_settings: True iff the environment settings mentioned in the project.yml
-                                        file will be applied on the environment.
     """
 
 

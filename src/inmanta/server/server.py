@@ -100,9 +100,7 @@ class Server(protocol.ServerSlice):
         return result
 
     @handle(methods.notify_change, env="id")
-    async def notify_change(
-        self, env: data.Environment, update: bool, metadata: JsonType, update_environment_settings: bool = False
-    ) -> Apireturn:
+    async def notify_change(self, env: data.Environment, update: bool, metadata: JsonType) -> Apireturn:
         LOGGER.info("Received change notification for environment %s", env.id)
         if "type" not in metadata:
             metadata["type"] = "api"
@@ -110,12 +108,7 @@ class Server(protocol.ServerSlice):
         if "message" not in metadata:
             metadata["message"] = "Recompile trigger through API call"
 
-        warnings = await self._async_recompile(
-            env,
-            update,
-            metadata=metadata,
-            update_environment_settings=update_environment_settings,
-        )
+        warnings = await self._async_recompile(env, update, metadata=metadata)
 
         return attach_warnings(200, None, warnings)
 
@@ -124,7 +117,6 @@ class Server(protocol.ServerSlice):
         env: data.Environment,
         update_repo: bool,
         metadata: JsonType = {},
-        update_environment_settings: bool = False,
     ) -> Warnings:
         """
         Recompile an environment in a different thread and taking wait time into account.
@@ -135,7 +127,6 @@ class Server(protocol.ServerSlice):
             do_export=True,
             remote_id=uuid.uuid4(),
             metadata=metadata,
-            update_environment_settings=update_environment_settings,
         )
         return warnings
 
