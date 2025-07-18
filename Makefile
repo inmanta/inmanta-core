@@ -2,7 +2,7 @@
 PYTHON := python3
 ISO_VERSION :=
 PIP_INDEX :=
-TESTS := tests/test_last_fail_build_option.py
+TESTS := tests
 PYTEST_EXTRA_ARGS :=
 #PYTEST_EXTRA_ARGS := --last-failed --last-failed-no-failures=all --maxfail=2
 
