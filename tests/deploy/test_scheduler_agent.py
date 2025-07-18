@@ -1244,7 +1244,7 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     # verify that rid3 got the event and is waiting for rid2
     assert agent.scheduler._work._waiting.keys() == {rid3}
     assert agent.scheduler._work._waiting[rid3].blocked_on == {rid2}
-    assert agent.scheduler._work._waiting[rid3].reason == f"Deploying because an event was received from {rid1}"
+    assert agent.scheduler._work._waiting[rid3].reason == f"an event was received from {rid1}"
 
     # finish rid2 deploy, assert end condition
     executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
