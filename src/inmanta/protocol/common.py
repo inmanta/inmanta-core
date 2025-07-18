@@ -1258,6 +1258,7 @@ class ClientCall(Awaitable[Result[R]]):
         else:
             return ClientCall(result, properties=properties)
 
+    # TODO: also add this as a sync method on `Result`
     async def value(self) -> R:
         """
         Returns the client call's result value for a single page (if paged). Returns the value as returned by the API method,
@@ -1302,7 +1303,7 @@ class ClientCall(Awaitable[Result[R]]):
             return None
 
         try:
-            # TODO: test this with ReturnValue method
+            # TODO: test this with method that returns `ReturnValue`
             ta = pydantic.TypeAdapter(result.method_properties.return_type)
         except InvalidMethodDefinition:
             # TODO: better message
@@ -1319,7 +1320,7 @@ V = typing_extensions.TypeVar("V", bound=types.SimpleTypes, default=types.Simple
 
 # TODO: name
 # TODO: type constraint correct?
-class ListClientCall(ClientCall[list[V]], AsyncIterator[V]):
+class ListClientCall(ClientCall[list[V]], Generic[V]):
     def __init__(self, result: Awaitable[Result[list[V]]], *, properties: MethodProperties[list[V]]) -> None:
         ClientCall.__init__(self, result, properties=properties)
         self._iterator: Optional[AsyncIterator[V]] = None
@@ -1335,24 +1336,16 @@ class ListClientCall(ClientCall[list[V]], AsyncIterator[V]):
         Equivalent to using this object as async iterator directly.
         """
         page: Result[list[V]]
-        async for page in self.pages():
+        async for page in self._pages():
             unwrapped: Sequence[V] = self._unwrap_result(page)
             for item in unwrapped:
                 yield item
 
-    # TODO: should this be exposed as Result.pages() as well?
-    async def pages(self) -> AsyncIterator[Result[list[V]]]:
-        # TODO: docstring
+    async def _pages(self) -> AsyncIterator[Result[list[V]]]:
         result: Optional[Result[list[V]]] = await self._first_result
         while result is not None:
             yield result
             result = await result.next_page()
-
-    # TODO: proposal only had .all(), not aiter directly on call
-    async def __anext__(self) -> V:
-        if self._iterator is None:
-            self._iterator = self.all()
-        return await anext(self._iterator)
 
 
 class SessionManagerInterface:
