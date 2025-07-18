@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 @pytest.fixture(scope="function")
 def force_success():
-    return True
+    return False
 
 
 def test_always_fail(force_success):
