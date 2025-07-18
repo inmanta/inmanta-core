@@ -34,7 +34,7 @@ from configparser import RawConfigParser
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from itertools import chain
 from re import Pattern
-from typing import Generic, NewType, Optional, TypeVar, Union, cast, overload
+from typing import Generic, NewType, Optional, TypeVar, Union, cast, overload, assert_never
 from uuid import UUID
 
 import asyncpg
@@ -2423,6 +2423,16 @@ class ProtectedBy(enum.Enum):
     # The environment setting is managed using the environment_settings property of the project.yml file.
     project_yml = "project_yml"
 
+    def get_detailed_description(self) -> str:
+        """
+        Return a string that explains in details why the environment setting is protected.
+        """
+        match self:
+            case ProtectedBy.project_yml:
+                return "Setting is managed by the project.yml file of the Inmanta project."
+            case _ as unreachable:
+                 assert_never(unreachable)
+
 
 class EnvironmentSettingDetails(BaseModel):
     """
@@ -2478,6 +2488,22 @@ class EnvironmentSettingsContainer(BaseModel):
         in this settings container.
         """
         return {setting_name: setting_details.value for setting_name, setting_details in self.settings.items()}
+
+    def is_protected(self, settings_name: str) -> bool:
+        """
+        Return True iff the given setting is protected.
+        """
+        return setting_name in self.settings and self.settings[setting_name].protected
+
+    def get_protected_by_description(self, setting_name: str) -> str | None:
+        """
+        Returns a detail description about why the given setting is protected.
+        Or None, if the given setting is not protected.
+        """
+        try:
+            return self.settings[setting_name].protected_by.get_detailed_description()
+        except KeyError:
+            return None
 
 
 @stable_api

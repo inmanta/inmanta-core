@@ -280,6 +280,11 @@ class EnvironmentService(protocol.ServerSlice):
 
     @handle(methods.set_setting, env="tid", key="id")
     async def set_setting(self, env: data.Environment, key: str, value: model.EnvSettingType) -> Apireturn:
+        if env.settings.is_protected(key):
+            raise BadRequest(
+                f"Cannot update environment setting {key} because it's protected"
+                f" (reason={env.settings.get_protected_by_description()})."
+            )
         try:
             original_env = env.to_dto()
             await env.set(key, value)
@@ -531,6 +536,11 @@ class EnvironmentService(protocol.ServerSlice):
 
     @handle(methods_v2.environment_settings_set, env="tid", key="id")
     async def environment_settings_set(self, env: data.Environment, key: str, value: model.EnvSettingType) -> ReturnValue[None]:
+        if env.settings.is_protected(key):
+            raise BadRequest(
+                f"Cannot update environment setting {key} because it's protected"
+                f" (reason={env.settings.get_protected_by_description()})."
+            )
         try:
             original_env = env.to_dto()
             await env.set(key, value)
