@@ -9,7 +9,7 @@ colorlog==6.9.0
 cookiecutter==2.6.0
 crontab==1.0.5
 cryptography==45.0.5
-docstring-parser==0.16
+docstring-parser==0.17.0
 # documentation
 email-validator==2.2.0
 furo==2025.7.19
