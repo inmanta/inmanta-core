@@ -102,7 +102,7 @@ class RESTClient(RESTBase):
 
         return "%s://%s:%d" % (protocol, host, port)
 
-    async def call[R: types.MethodReturn](
+    async def call[R: types.ReturnTypes](
         self, properties: common.MethodProperties[R], args: Sequence[object], kwargs: Optional[Mapping[str, object]] = None
     ) -> common.Result[R]:
         if kwargs is None:
@@ -177,7 +177,7 @@ class RESTClient(RESTBase):
         if self.forced_instance:
             self.client.close()
 
-    def _decode_response[R](
+    def _decode_response[R: types.ReturnTypes](
         self, response: HTTPResponse, properties: common.MethodProperties[R], environment: str | None
     ) -> common.Result[R]:
         content_type = response.headers.get(common.CONTENT_TYPE, None)

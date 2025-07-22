@@ -73,7 +73,7 @@ UTF8_CHARSET = "charset=UTF-8"
 HTML_CONTENT_WITH_UTF8_CHARSET = f"{HTML_CONTENT}; {UTF8_CHARSET}"
 
 
-R = typing_extensions.TypeVar("R", bound=types.MethodReturn, default=types.MethodReturn)
+R = typing_extensions.TypeVar("R", bound=types.ReturnTypes, covariant=True, default=types.ReturnTypes)
 
 
 class CallContext:
@@ -383,7 +383,7 @@ class MethodProperties(Generic[R]):
 
     def __init__(
         self,
-        function: Callable[..., R],
+        function: Callable[..., R | ReturnValue[R]],
         path: str,
         operation: str,
         reply: bool,
@@ -660,7 +660,7 @@ class MethodProperties(Generic[R]):
         if is_return_value_type(arg_type):
             return_type = typing_inspect.get_args(arg_type, evaluate=True)[0]
             self._validate_type_arg(arg, return_type, strict=strict, allow_none_type=True)
-            return return_type
+            return return_type  # type: ignore
 
         elif (
             not typing_inspect.is_generic_type(arg_type)
@@ -1183,6 +1183,7 @@ class Result(Generic[R]):
         """
         self._callback = fnc
 
+    # TODO: mypy complains about this one. TODO below this one may provide a solution
     # TODO: consider making ListResult to provide better type checking
     @typing.overload
     def all[T: types.SimpleTypes](self: "Result[list[T]]") -> AsyncIterator[T]: ...
@@ -1246,9 +1247,9 @@ class ClientCall(Awaitable[Result[R]]):
     def construct[T: types.SimpleTypes](result: Awaitable[Result[list[T]]], *, properties: MethodProperties[list[T]]) -> "ListClientCall[T]": ...
     @typing.overload
     @staticmethod
-    def construct[T: types.MethodReturn](result: Awaitable[Result[T]], *, properties: MethodProperties[T]) -> "ClientCall[T]": ...
+    def construct[T: types.ReturnTypes](result: Awaitable[Result[T]], *, properties: MethodProperties[T]) -> "ClientCall[T]": ...
     @staticmethod
-    def construct[T: types.MethodReturn](
+    def construct[T: types.ReturnTypes](
         result: Awaitable[Result[T]], *, properties: MethodProperties[T]
     ) -> "ClientCall[T] | ListClientCall":
         if properties.return_type is list or typing.get_origin(properties.return_type) is list:
@@ -1269,7 +1270,8 @@ class ClientCall(Awaitable[Result[R]]):
         return self._unwrap_result(await self._first_result)
 
     # TODO: process warnings?
-    def _unwrap_result(self, result: Result[R]) -> R:
+    @classmethod
+    def _unwrap_result[R: types.ReturnTypes](cls, result: Result[R]) -> R:
         # TODO: docstring
         """
         Convert the response into a proper type and restore exception if any

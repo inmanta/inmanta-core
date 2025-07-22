@@ -360,8 +360,8 @@ class Client(Endpoint):
         """
         self._transport_instance.close()
 
-    async def _call[R: types.MethodReturn](
-        self, method_properties: common.MethodProperties[R], args: Sequence[object], kwargs: Mapping[str, object]
+    async def _call[R: types.ReturnTypes](
+        self, method_properties: common.MethodProperties[R], args: Sequence[object], kwargs: dict[str, object]
     ) -> common.Result[R]:
         """
         Execute a call and return the result
@@ -467,10 +467,9 @@ class SessionClient(Client):
         super().__init__(name, timeout, force_instance=force_instance)
         self._sid = sid
 
-    # TODO
-    async def _call(
-        self, method_properties: common.MethodProperties, args: list[object], kwargs: dict[str, object]
-    ) -> common.Result:
+    async def _call[R: types.ReturnTypes](
+        self, method_properties: common.MethodProperties[R], args: Sequence[object], kwargs: dict[str, object]
+    ) -> common.Result[R]:
         """
         Execute the rpc call
         """
@@ -484,6 +483,6 @@ class SessionClient(Client):
 class TypedClient(Client):
     """A client that returns typed data instead of JSON"""
 
-    def __getattr__(self, name: str) -> Callable[..., Awaitable[types.MethodReturn]]:
+    def __getattr__(self, name: str) -> Callable[..., Awaitable[types.ReturnTypes]]:
         call: Callable[..., common.ClientCall] = super().__getattr__(name)
         return lambda *args, **kwargs: call(*args, **kwargs).value()
