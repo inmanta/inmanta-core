@@ -234,6 +234,7 @@ class WildDictPath(abc.ABC):
     # Special characters should be escaped in data elements of the dict path
     # to prevent incorrect interpretation of the dict path.
     SPECIAL_CHARACTERS: list[str] = ["\\", "[", "]", ".", "*", "="]
+    # SPECIAL_CHARACTERS: list[str] = ["\\", "[", "]", "*", "="]
     REGEX_SPECIAL_CHARACTER = rf"([{re.escape(''.join(SPECIAL_CHARACTERS))}])"
     PATTERN_SPECIAL_CHARACTER = re.compile(REGEX_SPECIAL_CHARACTER)
     REGEX_ESCAPED_SPECIAL_CHARACTER = rf"\\([{re.escape(''.join(SPECIAL_CHARACTERS))}])"
@@ -479,8 +480,11 @@ class WildKeyedList(WildDictPath):
     REGEX_KEY_ATTRIBUTE = (
         rf"(?P<key_attribute>({WildDictPath.REGEX_NORMAL_CHARACTER}|{WildDictPath.REGEX_ESCAPED_SPECIAL_CHARACTER})+|\*)"
     )
+    # REGEX_KEY_VALUE = (
+    #     rf"(?P<key_value>({WildDictPath.REGEX_NORMAL_CHARACTER}|{WildDictPath.REGEX_ESCAPED_SPECIAL_CHARACTER})*|\*|\\0)"
+    # )
     REGEX_KEY_VALUE = (
-        rf"(?P<key_value>({WildDictPath.REGEX_NORMAL_CHARACTER}|{WildDictPath.REGEX_ESCAPED_SPECIAL_CHARACTER})*|\*|\\0)"
+        rf"(?P<key_value>({WildDictPath.REGEX_NORMAL_CHARACTER}|{WildDictPath.REGEX_ESCAPED_SPECIAL_CHARACTER}|\.)*|\*|\\0)"
     )
     KEY_VALUE_PAIR = rf"\[{REGEX_KEY_ATTRIBUTE}={REGEX_KEY_VALUE}]"
 
@@ -710,7 +714,8 @@ class WildComposedPath(WildDictPath):
     """
 
     element_types: Sequence[type[WildDictPath]] = [WildInDict, WildKeyedList]
-    COMPOSED_DICT_PATH_PATTERN = re.compile(r"(?:[^.\\]|\\.)+")
+    # COMPOSED_DICT_PATH_PATTERN = re.compile(r"(?:[^.\\]|\\.)+")
+    COMPOSED_DICT_PATH_PATTERN = re.compile(r"(?:[^.\\]*\[.*?\])|(?:[^.\\]|\\.)+")
 
     def __init__(self, path_str: Optional[str] = None, path: Optional[Sequence[WildDictPath]] = None) -> None:
         if (path_str is None) == (path is None):
