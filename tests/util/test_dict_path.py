@@ -321,16 +321,16 @@ def test_parsing_keyed_list_error() -> None:
 @pytest.mark.parametrize(
     "dict_path_str, valid_path, key",
     [
-        # (r"abc", True, NormalValue(r"abc")),
-        # (r"abc\.def", True, NormalValue(r"abc.def")),
-        # (r"abc\\\.def", True, NormalValue(r"abc\.def")),
-        # (r"*", True, WildCardValue()),
-        # (r"\*", True, NormalValue("*")),
-        # (r"**", False, None),
-        # (r"a\[b\=c\.d\*e\]f", True, NormalValue(r"a[b=c.d*e]f")),
+        (r"abc", True, NormalValue(r"abc")),
+        (r"abc\.def", True, NormalValue(r"abc.def")),
+        (r"abc\\\.def", True, NormalValue(r"abc\.def")),
+        (r"*", True, WildCardValue()),
+        (r"\*", True, NormalValue("*")),
+        (r"**", False, None),
+        (r"a\[b\=c\.d\*e\]f", True, NormalValue(r"a[b=c.d*e]f")),
         (r"abc.def", False, None),
-        # (r"abc\\.def", False, None),
-        # (r"abc*def", False, None),
+        (r"abc\\.def", False, None),
+        (r"abc*def", False, None),
     ],
 )
 def test_parsing_in_dict(dict_path_str: str, valid_path: bool, key: Optional[DictPathValue]) -> None:
