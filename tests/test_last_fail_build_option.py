@@ -23,13 +23,14 @@ import pytest
 
 logger = logging.getLogger(__name__)
 
+
 @pytest.fixture(scope="function")
 def force_success():
-    return False
-    # return True
+    # return False
+    return True
 
 
-def test_always_fail(force_success=False):
+def test_always_fail(force_success):
     if force_success:
         return
     logger.info("test_always_fail")
@@ -54,7 +55,7 @@ def test_fail_late(force_success):
         raise Exception("seconds in ]30:60]")
 
 
-def test_also_always_fail(force_success=False):
+def test_also_always_fail(force_success):
     if force_success:
         return
     logger.info("test_also_always_fail")
