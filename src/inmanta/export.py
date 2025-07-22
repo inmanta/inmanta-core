@@ -21,9 +21,9 @@ import base64
 import itertools
 import logging
 import time
+import uuid
 from collections.abc import Sequence
 from typing import Any, Callable, Optional, Union
-import uuid
 
 import pydantic
 
@@ -432,9 +432,7 @@ class Exporter:
                 protected_by=model.ProtectedBy.project_yml,
             )
             if result.code != 200:
-                raise Exception(
-                    "Failed to update the environment settings, defined in the project.yml file, on the server."
-                )
+                raise Exception("Failed to update the environment settings, defined in the project.yml file, on the server.")
 
         export_done = time.time()
         LOGGER.debug("Generating resources from the compiled model took %0.03f seconds", export_done - start)

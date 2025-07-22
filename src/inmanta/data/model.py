@@ -26,7 +26,7 @@ import uuid
 from collections import abc
 from collections.abc import Sequence
 from enum import Enum, StrEnum
-from typing import ClassVar, Mapping, Optional, Self, Union
+from typing import ClassVar, Mapping, Optional, Self, Union, assert_never
 
 import pydantic.schema
 from pydantic import ConfigDict, Field, SerializationInfo, computed_field, field_serializer, field_validator, model_validator
@@ -1139,5 +1139,4 @@ class ProtectedBy(str, Enum):
             case ProtectedBy.project_yml:
                 return "Setting is managed by the project.yml file of the Inmanta project."
             case _ as unreachable:
-                 assert_never(unreachable)
-
+                assert_never(unreachable)

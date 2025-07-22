@@ -34,7 +34,7 @@ from configparser import RawConfigParser
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from itertools import chain
 from re import Pattern
-from typing import Generic, NewType, Optional, TypeVar, Union, cast, overload, assert_never
+from typing import Generic, NewType, Optional, TypeVar, Union, cast, overload
 from uuid import UUID
 
 import asyncpg
@@ -2503,7 +2503,7 @@ class EnvironmentSettingsContainer(BaseModel):
     def set_and_protect(
         self,
         protected_settings: dict[str, m.EnvSettingType],
-        protected_by: model.ProtectedBy,
+        protected_by: m.ProtectedBy,
     ) -> None:
         """
         Set the values for the given environment settings and mark them as protected.
@@ -2810,7 +2810,7 @@ class Environment(BaseDocument):
     async def set_protected_environment_settings(
         self,
         protected_settings: dict[str, m.EnvSettingType],
-        protected_by: model.ProtectedBy,
+        protected_by: m.ProtectedBy,
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> None:
         # Make sure our settings are up-to-date

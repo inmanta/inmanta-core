@@ -272,9 +272,7 @@ class EnvironmentService(protocol.ServerSlice):
     @handle(methods.list_settings, env="tid")
     async def list_settings(self, env: data.Environment) -> Apireturn:
         settings = {
-            k: env.settings.get_value(k)
-            for k in sorted(env.settings.settings.keys())
-            if k in data.Environment._settings.keys()
+            k: env.settings.get_value(k) for k in sorted(env.settings.settings.keys()) if k in data.Environment._settings.keys()
         }
         return 200, {"settings": settings, "metadata": dict(sorted(data.Environment._settings.items()))}
 
