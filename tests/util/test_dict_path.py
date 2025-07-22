@@ -170,6 +170,8 @@ def test_dots_in_dict_path_predicate():
     )
 
     path = to_path("neighbors[ip=2.2.2.2].prefix")
+    assert path.get_element(d) == "b"
+
 
 @pytest.mark.parametrize(
     "escaped, unescaped",
@@ -187,34 +189,29 @@ def test_escape_and_un_escape(escaped: str, unescaped: str) -> None:
 @pytest.mark.parametrize(
     "dict_path, value_to_parse, expected",
     [
-        # (r"a.b\.c.d", {"a": {"b.c": {"d": "value"}}}, "value"),
-        # (r"one\\.two", {"one\\": {"two": "value"}}, "value"),
-        # (r"a.b\.\[\\c\]", {"a": {r"b.[\c]": "value"}, "b": "other"}, "value"),
+        (r"a.b\.c.d", {"a": {"b.c": {"d": "value"}}}, "value"),
+        (r"one\\.two", {"one\\": {"two": "value"}}, "value"),
+        (r"a.b\.\[\\c\]", {"a": {r"b.[\c]": "value"}, "b": "other"}, "value"),
         (
             r"a[k\=e\.y=t\[e\]st]",
-            {
-                "a": [
-                    {"k=e.y": "other", "c": "d"},
-                    {"k=e.y": "t[e]st", "e": "f"}
-                ]
-            },
+            {"a": [{"k=e.y": "other", "c": "d"}, {"k=e.y": "t[e]st", "e": "f"}]},
             {"k=e.y": "t[e]st", "e": "f"},
         ),
-        # (
-        #     r"a[k\.e\[y\]=valu\=e]",
-        #     {"a": [{"k.e[y]": "other", "c": "d"}, {"k.e[y]": "valu=e", "e": "f"}]},
-        #     {"k.e[y]": "valu=e", "e": "f"},
-        # ),
-        # (
-        #     r"a[key=\*]",
-        #     {"a": [{"key": "other", "c": "d"}, {"key": "*", "e": "f"}]},
-        #     {"key": "*", "e": "f"},
-        # ),
-        # (
-        #     r"\*",
-        #     {"a": "b", "*": "d"},
-        #     "d",
-        # ),
+        (
+            r"a[k\.e\[y\]=valu\=e]",
+            {"a": [{"k.e[y]": "other", "c": "d"}, {"k.e[y]": "valu=e", "e": "f"}]},
+            {"k.e[y]": "valu=e", "e": "f"},
+        ),
+        (
+            r"a[key=\*]",
+            {"a": [{"key": "other", "c": "d"}, {"key": "*", "e": "f"}]},
+            {"key": "*", "e": "f"},
+        ),
+        (
+            r"\*",
+            {"a": "b", "*": "d"},
+            "d",
+        ),
     ],
 )
 def test_parsing_special_characters(dict_path: str, value_to_parse: dict, expected: object) -> None:
@@ -413,10 +410,7 @@ WILD_PATH_TEST_CONTAINER = {
 }
 
 
-@pytest.mark.parametrize_any("wild_path", [
-    True,
-    False
-])  # verify consistent behavior for both types
+@pytest.mark.parametrize_any("wild_path", [True, False])  # verify consistent behavior for both types
 @pytest.mark.parametrize(
     "container, dict_path, result, wild_only",
     [
@@ -560,18 +554,10 @@ def test_dict_path_get_paths(
 @pytest.mark.parametrize(
     "container, dict_path, result",
     [
-        (
-            None,
-            "three",
-            {**WILD_PATH_TEST_CONTAINER, "three": {}}
-        ),
+        (None, "three", {**WILD_PATH_TEST_CONTAINER, "three": {}}),
         (None, "three.nested.values", {**WILD_PATH_TEST_CONTAINER, "three": {"nested": {"values": {}}}}),
         ({"l": [{"k": 1, "v": 1}, {"k": 2, "v": 2}]}, "l[k=1].new", {"l": [{"k": 1, "v": 1, "new": {}}, {"k": 2, "v": 2}]}),
-        (
-            {"l": [{"k": 1}]},
-            "l[k=1].new[k=10]",
-            {"l": [{"k": 1, "new": [{"k": "10"}]}]}
-        ),
+        ({"l": [{"k": 1}]}, "l[k=1].new[k=10]", {"l": [{"k": 1, "new": [{"k": "10"}]}]}),
         ({"l": [{"k": 1}]}, "l[k=1].new[k=10][k2=20].field", {"l": [{"k": 1, "new": [{"k": "10", "k2": "20", "field": {}}]}]}),
     ],
 )
