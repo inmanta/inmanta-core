@@ -590,7 +590,7 @@ class EnvironmentService(protocol.ServerSlice):
             raise NotFound()
 
     @handle(methods_v2.protected_environment_settings_set_batch, env="tid")
-    def protected_environment_settings_set_batch(
+    async def protected_environment_settings_set_batch(
         self, env: data.Environment, settings: dict[str, model.EnvSettingType], protected_by: model.ProtectedBy
     ) -> None:
         await env.set_protected_environment_settings(protected_settings=settings, protected_by=protected_by)

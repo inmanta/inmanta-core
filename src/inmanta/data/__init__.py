@@ -2438,7 +2438,7 @@ class EnvironmentSettingsContainer(BaseModel):
 
     settings: dict[str, EnvironmentSettingDetails] = {}
 
-    def has(self, settings_name: str) -> bool:
+    def has(self, setting_name: str) -> bool:
         """
         Return True iff the given setting_name is present in this settings container.
         """
@@ -2470,7 +2470,7 @@ class EnvironmentSettingsContainer(BaseModel):
         """
         return {setting_name: setting_details.value for setting_name, setting_details in self.settings.items()}
 
-    def is_protected(self, settings_name: str) -> bool:
+    def is_protected(self, setting_name: str) -> bool:
         """
         Return True iff the given setting is protected.
         """
@@ -2511,7 +2511,7 @@ class EnvironmentSettingsContainer(BaseModel):
         have their protection status cleared.
         """
         # Update settings and mark as protected
-        for settings_name, setting_value in protected_settings.items():
+        for setting_name, setting_value in protected_settings.items():
             if self.has(setting_name):
                 self.settings[setting_name].value = setting_value
             else:
@@ -2818,7 +2818,7 @@ class Environment(BaseDocument):
         # Perform update in-memory without altering self
         result.settings.set_and_protect(protected_settings, protected_by)
         # Update the database
-        await self.update_fields(settings=result.settings.get_all_setting_values(), connection=connection)
+        await self.update_fields(settings=result.settings, connection=connection)
         # The database update succeeded -> we can update self
         self.settings = result.settings
 

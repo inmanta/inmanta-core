@@ -1123,7 +1123,7 @@ class InmantaModule(BaseModel):
     for_agents: list[AgentName]
 
 
-class ProtectedBy(str, enum.Enum):
+class ProtectedBy(str, Enum):
     """
     An enum that indicates the reason why an environment setting can be protected.
     """

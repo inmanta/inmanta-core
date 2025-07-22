@@ -1620,6 +1620,7 @@ class SnippetCompilationTest(KeepOnFail):
             include_status=include_status,
             partial_compile=partial_compile,
             resource_sets_to_remove=resource_sets_to_remove,
+            export_env_var_settings=deploy,
         )
 
     async def do_export_and_deploy(

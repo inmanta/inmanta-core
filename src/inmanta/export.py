@@ -23,6 +23,7 @@ import logging
 import time
 from collections.abc import Sequence
 from typing import Any, Callable, Optional, Union
+import uuid
 
 import pydantic
 
@@ -377,9 +378,15 @@ class Exporter:
         partial_compile: bool = False,
         resource_sets_to_remove: Optional[Sequence[str]] = None,
         allow_handler_code_update: bool = False,
+        export_env_var_settings: bool = True,
     ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, ResourceState]]]:
         """
         Run the export functions. Return value for partial json export uses 0 as version placeholder.
+
+        :param export_env_var_settings: True iff the environment settings, defined in the project.yml file,
+                                        will be updated on the server. This argument is used by the test suite
+                                        to make sure we don't connect to the server if the test itself doesn't
+                                        need a server at all.
         """
         start = time.time()
         if not partial_compile and resource_sets_to_remove:
@@ -418,15 +425,16 @@ class Exporter:
         resources = self.resources_to_list()
 
         # Update the environment settings, mentioned in the project.yml file, on the server.
-        result = await client.protected_environment_settings_set_batch(
-            tid=self._get_env_id(),
-            settings=project.metadata.environment_settings,
-            protected_by=model.ProtectedBy.project_yml,
-        )
-        if result.code != 200:
-            raise Exception(
-                "Failed to update the environment settings, defined in the project.yml file, on the server."
+        if export_env_var_settings:
+            result = self.client.protected_environment_settings_set_batch(
+                tid=self._get_env_id(),
+                settings=project.metadata.environment_settings or {},
+                protected_by=model.ProtectedBy.project_yml,
             )
+            if result.code != 200:
+                raise Exception(
+                    "Failed to update the environment settings, defined in the project.yml file, on the server."
+                )
 
         export_done = time.time()
         LOGGER.debug("Generating resources from the compiled model took %0.03f seconds", export_done - start)

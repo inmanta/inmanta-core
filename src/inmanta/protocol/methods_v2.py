@@ -402,7 +402,7 @@ def environment_setting_delete(tid: uuid.UUID, id: str) -> ReturnValue[None]:
 
 
 @typedmethod(
-    path="/protected_environment_settings/<id>",
+    path="/protected_environment_settings",
     operation="POST",
     arg_options=methods.ENV_OPTS,
     api=True,
