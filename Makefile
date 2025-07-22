@@ -2,9 +2,9 @@
 PYTHON := python3
 ISO_VERSION :=
 PIP_INDEX :=
-TESTS := tests
+TESTS := tests/test_last_fail_build_option.py
 PYTEST_EXTRA_ARGS :=
-#PYTEST_EXTRA_ARGS := --last-failed --last-failed-no-failures=all --maxfail=2
+#PYTEST_EXTRA_ARGS := --last-failed --last-failed-no-failures all --maxfail=20 --cache-clear
 
 .DEFAULT_GOAL := all
 isort = isort src tests $(wildcard tests_common)
