@@ -62,22 +62,23 @@ def issubclass(sub: type, super: Union[type, tuple[type, ...]]) -> bool:
 
 
 PrimitiveTypes = Optional[uuid.UUID | bool | int | float | datetime | str]
-SimpleTypes = Union["BaseModel", PrimitiveTypes]
+type SimpleTypes = BaseModel | PrimitiveTypes
 
 JsonType = dict[str, Any]
 ReturnTupple = tuple[int, Optional[JsonType]]
 type StrictJson = dict[str, StrictJson] | list[StrictJson] | str | int | float | bool | None
 
 
-ArgumentTypes = Union[SimpleTypes, Sequence[SimpleTypes], Mapping[str, SimpleTypes]]
+type StrMapping[T] = Mapping[str, T] | Mapping[ResourceIdStr, T] | Mapping[ResourceVersionIdStr, T]
+type ArgumentTypes = SimpleTypes | Sequence[SimpleTypes] | StrMapping[ArgumentTypes]
 
-ReturnTypes = Optional[ArgumentTypes]
-MethodReturn = Union[ReturnTypes, "ReturnValue[ReturnTypes]"]
-MethodType = Callable[..., MethodReturn]
+type ReturnTypes = Optional[ArgumentTypes]
+type MethodReturn = ReturnTypes | ReturnValue[ReturnTypes]
+type MethodType = Callable[..., MethodReturn]
 
-Apireturn = Union[int, ReturnTupple, "ReturnValue[ReturnTypes]", "ReturnValue[None]", ReturnTypes]
-Warnings = Optional[list[str]]
-HandlerType = Callable[..., Coroutine[Any, Any, Apireturn]]
+type Apireturn = int | ReturnTupple | ReturnValue[ReturnTypes] | ReturnValue[None] | ReturnTypes
+type Warnings = Optional[list[str]]
+type HandlerType = Callable[..., AsyncioCoroutine[Apireturn]]
 
 
 ResourceVersionIdStr = NewType("ResourceVersionIdStr", str)  # Part of the stable API

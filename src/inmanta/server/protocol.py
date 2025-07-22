@@ -32,14 +32,13 @@ from typing import TYPE_CHECKING, Callable, Mapping, Optional, Union
 from tornado import gen, queues, routing, web
 
 import inmanta.protocol.endpoints
-from inmanta import tracing
+from inmanta import tracing, types
 from inmanta.data.model import ExtensionStatus, ReportedStatus, SliceStatus
 from inmanta.protocol import Client, Result, TypedClient, common, endpoints, handle, methods, methods_v2
 from inmanta.protocol.exceptions import ShutdownInProgress
 from inmanta.protocol.rest import server
 from inmanta.server import SLICE_SESSION_MANAGER, SLICE_TRANSPORT
 from inmanta.server import config as opt
-from inmanta.types import ArgumentTypes, JsonType
 from inmanta.util import (
     CronSchedule,
     CycleException,
@@ -81,9 +80,9 @@ class ReturnClient(Client):
         super().__init__(name, with_rest_client=False)
         self.session = session
 
-    async def _call(
-        self, method_properties: common.MethodProperties, args: list[object], kwargs: dict[str, object]
-    ) -> common.Result:
+    async def _call[R: types.ReturnTypes](
+        self, method_properties: common.MethodProperties[R], args: Sequence[object], kwargs: dict[str, object]
+    ) -> common.Result[R]:
         with tracing.span(f"return_rpc.{method_properties.function.__name__}"):
             call_spec = method_properties.build_call(args, kwargs)
             call_spec.headers.update(tracing.get_context())
@@ -457,7 +456,7 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler[Result | No
                 result[ext_status.name] = ext_status
         return list(result.values())
 
-    async def get_status(self) -> Mapping[str, ArgumentTypes | Mapping[str, ArgumentTypes]]:
+    async def get_status(self) -> Mapping[str, types.ArgumentTypes | Mapping[str, types.ArgumentTypes]]:
         """
         Get the status of this slice.
         """
@@ -641,7 +640,7 @@ class Session:
         except gen.TimeoutError:
             return None
 
-    def set_reply(self, reply_id: uuid.UUID, data: JsonType) -> None:
+    def set_reply(self, reply_id: uuid.UUID, data: types.JsonType) -> None:
         LOGGER.log(3, "Received Reply: %s", reply_id)
         if reply_id in self._replies:
             future: asyncio.Future = self._replies[reply_id]
@@ -717,7 +716,7 @@ class TransportSlice(ServerSlice):
         await super().stop()
         await self.server._transport.join()
 
-    async def get_status(self) -> Mapping[str, ArgumentTypes]:
+    async def get_status(self) -> Mapping[str, types.ArgumentTypes]:
         def format_socket(sock: socket.socket) -> str:
             sname = sock.getsockname()
             return f"{sname[0]}:{sname[1]}"
@@ -764,7 +763,7 @@ class SessionManager(ServerSlice):
         # Listeners
         self.listeners: list[SessionListener] = []
 
-    async def get_status(self) -> Mapping[str, ArgumentTypes]:
+    async def get_status(self) -> Mapping[str, types.ArgumentTypes]:
         return {"hangtime": self.hangtime, "interval": self.interval, "sessions": len(self._sessions)}
 
     def add_listener(self, listener: SessionListener) -> None:
@@ -853,7 +852,7 @@ class SessionManager(ServerSlice):
 
     @handle(methods.heartbeat_reply)
     async def heartbeat_reply(
-        self, sid: uuid.UUID, reply_id: uuid.UUID, data: JsonType
+        self, sid: uuid.UUID, reply_id: uuid.UUID, data: types.JsonType
     ) -> Union[int, tuple[int, dict[str, str]]]:
         try:
             env = self._sessions[sid]
@@ -891,9 +890,9 @@ class LocalClient(TypedClient):
 
         raise Exception(f"No handler defined for {method} {url}")
 
-    async def _call(
-        self, method_properties: common.MethodProperties, args: list[object], kwargs: dict[str, object]
-    ) -> common.Result:
+    async def _call[R: types.ReturnTypes](
+        self, method_properties: common.MethodProperties[R], args: Sequence[object], kwargs: dict[str, object]
+    ) -> common.Result[R]:
         spec = method_properties.build_call(args, kwargs)
         method_config = self._get_op_mapping(spec.url, spec.method)
         response = await self._server._transport._execute_call(method_config, spec.body, spec.headers)

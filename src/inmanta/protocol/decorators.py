@@ -20,12 +20,11 @@ import inspect
 from collections.abc import Callable
 from typing import Optional, TypeVar, Union
 
-from inmanta import const
-from inmanta.types import Apireturn, HandlerType, MethodType
+from inmanta import const, types
 
 from . import common
 
-FuncT = TypeVar("FuncT", bound=HandlerType)
+FuncT = TypeVar("FuncT", bound=types.HandlerType)
 
 
 class handle:
@@ -36,7 +35,7 @@ class handle:
     :param kwargs: Map arguments in the message from one name to an other
     """
 
-    def __init__(self, method: Callable[..., Apireturn], api_version: Optional[int] = None, **kwargs: str) -> None:
+    def __init__(self, method: Callable[..., types.MethodReturn], api_version: Optional[int] = None, **kwargs: str) -> None:
         self.method = method
         self.mapping: dict[str, str] = kwargs
         self._api_version = api_version
@@ -54,7 +53,7 @@ class handle:
         return function
 
 
-MethodT = TypeVar("MethodT", bound=MethodType)
+MethodT = TypeVar("MethodT", bound=types.MethodType)
 
 
 def method(
