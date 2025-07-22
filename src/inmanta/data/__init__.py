@@ -2415,25 +2415,6 @@ class Setting:
         )
 
 
-class ProtectedBy(enum.Enum):
-    """
-    An enum that indicates the reason why an environment setting can be protected.
-    """
-
-    # The environment setting is managed using the environment_settings property of the project.yml file.
-    project_yml = "project_yml"
-
-    def get_detailed_description(self) -> str:
-        """
-        Return a string that explains in details why the environment setting is protected.
-        """
-        match self:
-            case ProtectedBy.project_yml:
-                return "Setting is managed by the project.yml file of the Inmanta project."
-            case _ as unreachable:
-                 assert_never(unreachable)
-
-
 class EnvironmentSettingDetails(BaseModel):
     """
     An object that stores the value of an environment setting in the database.
@@ -2447,7 +2428,7 @@ class EnvironmentSettingDetails(BaseModel):
 
     value: m.EnvSettingType
     protected: bool = False
-    protected_by: ProtectedBy | None = None
+    protected_by: m.ProtectedBy | None = None
 
 
 class EnvironmentSettingsContainer(BaseModel):
@@ -2495,6 +2476,12 @@ class EnvironmentSettingsContainer(BaseModel):
         """
         return setting_name in self.settings and self.settings[setting_name].protected
 
+    def get_protected_by(self, setting_name: str) -> m.ProtectedBy | None:
+        try:
+            return self.settings[setting_name].protected_by
+        except KeyError:
+            return None
+
     def get_protected_by_description(self, setting_name: str) -> str | None:
         """
         Returns a detail description about why the given setting is protected.
@@ -2504,6 +2491,42 @@ class EnvironmentSettingsContainer(BaseModel):
             return self.settings[setting_name].protected_by.get_detailed_description()
         except KeyError:
             return None
+
+    def _clear_protection(self, setting_name: str) -> None:
+        """
+        Mark the given environent setting as unprotected.
+        """
+        if setting_name in self.settings:
+            self.setting[setting_name].protected = False
+            self.setting[setting_name].protected_by = None
+
+    def set_and_protect(
+        self,
+        protected_settings: dict[str, m.EnvSettingType],
+        protected_by: model.ProtectedBy,
+    ) -> None:
+        """
+        Set the values for the given environment settings and mark them as protected.
+        All other environment settings protected by the same ProtectedBy marker will
+        have their protection status cleared.
+        """
+        # Update settings and mark as protected
+        for settings_name, setting_value in protected_settings.items():
+            if self.has(setting_name):
+                self.settings[setting_name].value = setting_value
+            else:
+                self.set(
+                    setting_name,
+                    EnvironmentSettingDetails(
+                        value=setting_value,
+                        protected=True,
+                        protected_by=protected_by,
+                    ),
+                )
+        # Remove protection status other settings
+        for setting_name in self.settings.keys() - protected_settings.keys():
+            if self.is_protected(setting_name) and self.get_protected_by(setting_name) is protected_by:
+                self._clear_protection(setting_name)
 
 
 @stable_api
@@ -2743,7 +2766,8 @@ class Environment(BaseDocument):
                                 THEN settings
                             WHEN (settings->'settings') ? $2::text
                                 THEN jsonb_set(settings,  ARRAY['settings', $2, 'value'], to_jsonb($3::{type}), TRUE)
-                            ELSE jsonb_set(settings,  ARRAY['settings', $2], $4::jsonb, TRUE)
+                            ELSE
+                                jsonb_set(settings,  ARRAY['settings', $2], $4::jsonb, TRUE)
                         END
                     )
                 WHERE {filter_statement}
@@ -2782,6 +2806,21 @@ class Environment(BaseDocument):
             self.settings.remove(key)
         else:
             await self.set(key, self._settings[key].default)
+
+    async def set_protected_environment_settings(
+        self,
+        protected_settings: dict[str, m.EnvSettingType],
+        protected_by: model.ProtectedBy,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> None:
+        # Make sure our settings are up-to-date
+        result = await Environment.get_by_id(self.id)
+        # Perform update in-memory without altering self
+        result.settings.set_and_protect(protected_settings, protected_by)
+        # Update the database
+        await self.update_fields(settings=result.settings.get_all_setting_values(), connection=connection)
+        # The database update succeeded -> we can update self
+        self.settings = result.settings
 
     async def mark_for_deletion(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """Mark an environment as being in the process of deletion."""

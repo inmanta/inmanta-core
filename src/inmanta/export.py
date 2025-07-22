@@ -418,7 +418,15 @@ class Exporter:
         resources = self.resources_to_list()
 
         # Update the environment settings, mentioned in the project.yml file, on the server.
-        self._update_environment_settings(project.metadata.environment_settings)
+        result = await client.protected_environment_settings_set_batch(
+            tid=self._get_env_id(),
+            settings=project.metadata.environment_settings,
+            protected_by=model.ProtectedBy.project_yml,
+        )
+        if result.code != 200:
+            raise Exception(
+                "Failed to update the environment settings, defined in the project.yml file, on the server."
+            )
 
         export_done = time.time()
         LOGGER.debug("Generating resources from the compiled model took %0.03f seconds", export_done - start)
@@ -449,20 +457,6 @@ class Exporter:
         LOGGER.debug("Committing resources took %0.03f seconds", time.time() - export_done)
 
         return exported_version, self._resources
-
-    def _update_environment_settings(self, environment_settings: dict[str, model.EnvSettingType] | None) -> None:
-        if not environment_settings:
-            return
-        for setting_name, value in environment_settings.items():
-            result = self.client.environment_settings_set(tid=self.get_environment_id(), id=setting_name, value=value)
-            if result.code == 404:
-                LOGGER.warning(
-                    "Not updating environment setting %s, because no environment setting with this name"
-                    " is defined on the server.",
-                    setting_name,
-                )
-            elif result.code != 200:
-                raise Exception("Failed to set environment setting %s=%s (%s)", setting_name, str(value), result.result)
 
     def add_resource(self, resource: Resource) -> None:
         """
@@ -538,6 +532,13 @@ class Exporter:
 
         upload_code(self.client, code_manager)
 
+    def _get_env_id(self) -> uuid.UUID:
+        tid = cfg_env.get()
+        if tid is None:
+            LOGGER.error("The environment for this model should be set!")
+            raise Exception("The environment for this model should be set!")
+        return tid
+
     def commit_resources(
         self,
         version: Optional[int],
@@ -553,10 +554,7 @@ class Exporter:
 
         :return: The version for which resources were committed.
         """
-        tid = cfg_env.get()
-        if tid is None:
-            LOGGER.error("The environment for this model should be set!")
-            raise Exception("The environment for this model should be set!")
+        tid = self._get_env_id()
 
         if version is None and not partial_compile:
             raise Exception("Full export requires version to be set")

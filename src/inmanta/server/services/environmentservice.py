@@ -281,7 +281,7 @@ class EnvironmentService(protocol.ServerSlice):
     @handle(methods.set_setting, env="tid", key="id")
     async def set_setting(self, env: data.Environment, key: str, value: model.EnvSettingType) -> Apireturn:
         if env.settings.is_protected(key):
-            raise BadRequest(
+            raise Forbidden(
                 f"Cannot update environment setting {key} because it's protected"
                 f" (reason={env.settings.get_protected_by_description()})."
             )
@@ -303,6 +303,11 @@ class EnvironmentService(protocol.ServerSlice):
 
     @handle(methods.delete_setting, env="tid", key="id")
     async def delete_setting(self, env: data.Environment, key: str) -> Apireturn:
+        if env.settings.is_protected(key):
+            raise Forbidden(
+                f"Cannot delete environment setting {key} because it's protected"
+                f" (reason={env.settings.get_protected_by_description()})."
+            )
         try:
             original_env = env.to_dto()
             await env.unset(key)
@@ -537,7 +542,7 @@ class EnvironmentService(protocol.ServerSlice):
     @handle(methods_v2.environment_settings_set, env="tid", key="id")
     async def environment_settings_set(self, env: data.Environment, key: str, value: model.EnvSettingType) -> ReturnValue[None]:
         if env.settings.is_protected(key):
-            raise BadRequest(
+            raise Forbidden(
                 f"Cannot update environment setting {key} because it's protected"
                 f" (reason={env.settings.get_protected_by_description()})."
             )
@@ -567,6 +572,11 @@ class EnvironmentService(protocol.ServerSlice):
 
     @handle(methods_v2.environment_setting_delete, env="tid", key="id")
     async def environment_setting_delete(self, env: data.Environment, key: str) -> ReturnValue[None]:
+        if env.settings.is_protected(key):
+            raise Forbidden(
+                f"Cannot delete environment setting {key} because it's protected"
+                f" (reason={env.settings.get_protected_by_description()})."
+            )
         try:
             original_env = env.to_dto()
             await env.unset(key)
@@ -578,6 +588,12 @@ class EnvironmentService(protocol.ServerSlice):
             return result
         except KeyError:
             raise NotFound()
+
+    @handle(methods_v2.protected_environment_settings_set_batch, env="tid")
+    def protected_environment_settings_set_batch(
+        self, env: data.Environment, settings: dict[str, model.EnvSettingType], protected_by: model.ProtectedBy
+    ) -> None:
+        await env.set_protected_environment_settings(protected_settings=settings, protected_by=protected_by)
 
     def register_listener_for_multiple_actions(
         self, current_listener: EnvironmentListener, actions: Set[EnvironmentAction]

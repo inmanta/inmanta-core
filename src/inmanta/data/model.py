@@ -1121,3 +1121,23 @@ class InmantaModule(BaseModel):
     files_in_module: list[ModuleSourceMetadata]
     requirements: list[str]
     for_agents: list[AgentName]
+
+
+class ProtectedBy(str, enum.Enum):
+    """
+    An enum that indicates the reason why an environment setting can be protected.
+    """
+
+    # The environment setting is managed using the environment_settings property of the project.yml file.
+    project_yml = "project_yml"
+
+    def get_detailed_description(self) -> str:
+        """
+        Return a string that explains in detail why the environment setting is protected.
+        """
+        match self:
+            case ProtectedBy.project_yml:
+                return "Setting is managed by the project.yml file of the Inmanta project."
+            case _ as unreachable:
+                 assert_never(unreachable)
+
