@@ -2461,9 +2461,9 @@ class EnvironmentSettingsContainer(BaseModel):
         """
         Remove the given setting from this settings container.
         """
-        self.settings.remove(setting_name, None)
+        self.settings.pop(setting_name, None)
 
-    def get_all_setting_values(self) -> dict[str, m.EnvironmentSetting]:
+    def get_all_setting_values(self) -> dict[str, m.EnvSettingType]:
         """
         Return a dictionary with as key the name of a setting and as value the value for that setting
         in this settings container.
@@ -2487,18 +2487,20 @@ class EnvironmentSettingsContainer(BaseModel):
         Returns a detail description about why the given setting is protected.
         Or None, if the given setting is not protected.
         """
-        try:
-            return self.settings[setting_name].protected_by.get_detailed_description()
-        except KeyError:
+        if setting_name not in self.settings:
             return None
+        setting = self.settings[setting_name]
+        if setting.protected_by:
+            return setting.protected_by.get_detailed_description()
+        return None
 
     def _clear_protection(self, setting_name: str) -> None:
         """
         Mark the given environent setting as unprotected.
         """
         if setting_name in self.settings:
-            self.setting[setting_name].protected = False
-            self.setting[setting_name].protected_by = None
+            self.settings[setting_name].protected = False
+            self.settings[setting_name].protected_by = None
 
     def set_and_protect(
         self,
@@ -2813,14 +2815,13 @@ class Environment(BaseDocument):
         protected_by: m.ProtectedBy,
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> None:
-        # Make sure our settings are up-to-date
-        result = await Environment.get_by_id(self.id)
         # Perform update in-memory without altering self
-        result.settings.set_and_protect(protected_settings, protected_by)
+        settings_copy = self.settings.model_copy(deep=True)
+        settings_copy.set_and_protect(protected_settings, protected_by)
         # Update the database
-        await self.update_fields(settings=result.settings, connection=connection)
+        await self.update_fields(settings=settings_copy, connection=connection)
         # The database update succeeded -> we can update self
-        self.settings = result.settings
+        self.settings = settings_copy
 
     async def mark_for_deletion(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """Mark an environment as being in the process of deletion."""

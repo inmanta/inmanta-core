@@ -281,7 +281,7 @@ class EnvironmentService(protocol.ServerSlice):
         if env.settings.is_protected(key):
             raise Forbidden(
                 f"Cannot update environment setting {key} because it's protected"
-                f" (reason={env.settings.get_protected_by_description()})."
+                f" (reason={env.settings.get_protected_by_description(key)})."
             )
         try:
             original_env = env.to_dto()
@@ -304,7 +304,7 @@ class EnvironmentService(protocol.ServerSlice):
         if env.settings.is_protected(key):
             raise Forbidden(
                 f"Cannot delete environment setting {key} because it's protected"
-                f" (reason={env.settings.get_protected_by_description()})."
+                f" (reason={env.settings.get_protected_by_description(key)})."
             )
         try:
             original_env = env.to_dto()
@@ -542,7 +542,7 @@ class EnvironmentService(protocol.ServerSlice):
         if env.settings.is_protected(key):
             raise Forbidden(
                 f"Cannot update environment setting {key} because it's protected"
-                f" (reason={env.settings.get_protected_by_description()})."
+                f" (reason={env.settings.get_protected_by_description(key)})."
             )
         try:
             original_env = env.to_dto()
@@ -573,7 +573,7 @@ class EnvironmentService(protocol.ServerSlice):
         if env.settings.is_protected(key):
             raise Forbidden(
                 f"Cannot delete environment setting {key} because it's protected"
-                f" (reason={env.settings.get_protected_by_description()})."
+                f" (reason={env.settings.get_protected_by_description(key)})."
             )
         try:
             original_env = env.to_dto()
