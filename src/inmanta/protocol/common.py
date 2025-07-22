@@ -1204,7 +1204,7 @@ class Result(Generic[R]):
         if not isinstance(client_call, ListClientCall):
             # TODO
             raise Exception("not a list")
-        return aiter(client_call)
+        return client_call.all()
 
     async def next_page(self) -> Optional["Result[R]"]:
         if not self.result:
