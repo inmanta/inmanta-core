@@ -18,7 +18,6 @@ Contact: code@inmanta.com
 
 import logging
 import uuid
-from collections import defaultdict
 from collections.abc import Mapping
 
 import asyncpg
@@ -122,14 +121,11 @@ class UserService(server_protocol.ServerSlice):
         except nacl.exceptions.InvalidkeyError:
             raise exceptions.UnauthorizedException(message=invalid_username_password_msg, no_prefix=True)
 
-        role_assignments: list[model.RoleAssignment] = await data.Role.get_roles_for_user(username)
-        env_to_roles_dct: dict[str, list[str]] = defaultdict(list)
-        for assignment in role_assignments:
-            env_to_roles_dct[str(assignment.environment)].append(assignment.role)
+        role_assignments: model.RoleAssignmentsPerEnvironment = await data.Role.get_roles_for_user(username)
 
         custom_claims: Mapping[str, str | bool | Mapping[str, list[str]]] = {
             "sub": username,
-            const.INMANTA_ROLES_URN: env_to_roles_dct,
+            const.INMANTA_ROLES_URN: {str(env_id): roles for env_id, roles in role_assignments.assignments.items()},
             const.INMANTA_IS_ADMIN_URN: user.is_admin,
         }
         token = auth.encode_token([str(const.ClientType.api.value)], expire=None, custom_claims=custom_claims)
@@ -171,14 +167,14 @@ class UserService(server_protocol.ServerSlice):
             raise exceptions.BadRequest(f"Role {name} doesn't exist.")
 
     @protocol.handle(protocol.methods_v2.list_roles_for_user)
-    async def list_roles_for_user(self, username: str) -> list[model.RoleAssignment]:
+    async def list_roles_for_user(self, username: str) -> model.RoleAssignmentsPerEnvironment:
         return await data.Role.get_roles_for_user(username)
 
     @protocol.handle(protocol.methods_v2.assign_role)
     async def assign_role(self, username: str, environment: uuid.UUID, role: str) -> None:
         verify_authentication_enabled()
         try:
-            await data.Role.assign_role_to_user(username, model.RoleAssignment(environment=environment, role=role))
+            await data.Role.assign_role_to_user(username, environment=environment, role=role)
         except data.CannotAssignRoleException:
             raise exceptions.BadRequest(
                 f"Cannot assign role {role} to user {username}."
@@ -189,7 +185,7 @@ class UserService(server_protocol.ServerSlice):
     async def unassign_role(self, username: str, environment: uuid.UUID, role: str) -> None:
         verify_authentication_enabled()
         try:
-            await data.Role.unassign_role_from_user(username, model.RoleAssignment(environment=environment, role=role))
+            await data.Role.unassign_role_from_user(username, environment=environment, role=role)
         except KeyError:
             raise exceptions.BadRequest(f"Role {role} (environment={environment}) is not assigned to user {username}")
 

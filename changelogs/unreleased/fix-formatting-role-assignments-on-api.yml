@@ -1,0 +1,4 @@
+---
+description: Change the format of the datastructure, used to return RoleAssignments on the API, to make it more usable on the web-console.
+change-type: patch
+destination-branches: [master]
