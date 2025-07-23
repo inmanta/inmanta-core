@@ -394,6 +394,12 @@ async def test_protect_environment_settings(environment, server, client):
     # Verify protected setting cannot be updated
     result = await client.environment_settings_set(tid=environment, id=data.AUTO_DEPLOY, value=True)
     assert result.code == 403
+    result = await client.environment_setting_delete(tid=environment, id=data.AUTO_DEPLOY)
+    assert result.code == 403
+    result = await client.set_setting(tid=environment, id=data.AUTO_DEPLOY, value=True)
+    assert result.code == 403
+    result = await client.delete_setting(tid=environment, id=data.AUTO_DEPLOY)
+    assert result.code == 403
     # Verify that the value of the setting hasn't changed and that the setting is still protected
     result = await client.environment_setting_get(tid=environment, id=data.AUTO_DEPLOY)
     assert result.code == 200
