@@ -34,6 +34,7 @@ from inmanta.compiler.config import feature_compiler_cache
 from inmanta.config import Config
 from inmanta.const import INMANTA_REMOVED_SET_ID
 from inmanta.data import AUTO_DEPLOY, ENVIRONMENT_METRICS_RETENTION, NOTIFICATION_RETENTION, RESOURCE_ACTION_LOGS_RETENTION
+from inmanta.data import model
 from utils import v1_module_from_template
 
 
@@ -168,7 +169,7 @@ async def test_export(
     result = await client.environment_settings_set(tid=environment, id=AUTO_DEPLOY, value=True)
     assert result.code == 200
 
-    # Put settings in-place to test the --update-environment-settings option of the export command.
+    # Put settings in-place to test the export of the environment settings in the project.yml file
     result = await client.environment_settings_set(tid=environment, id=RESOURCE_ACTION_LOGS_RETENTION, value=5)
     assert result.code == 200
     result = await client.environment_setting_get(tid=environment, id=ENVIRONMENT_METRICS_RETENTION)
@@ -230,7 +231,6 @@ std::testing::NullResource(name="test", agentname="non_existing_agent")
         "export",
         "-e",
         str(env_id),
-        "--update-environment-settings",
     ]
     if set_port:
         args.extend(["--server_port", str(server_port)])
@@ -267,6 +267,14 @@ std::testing::NullResource(name="test", agentname="non_existing_agent")
     result = await client.environment_setting_get(tid=environment, id=NOTIFICATION_RETENTION)
     assert result.code == 200
     assert result.result["data"]["settings"][NOTIFICATION_RETENTION] == 200
+    result = await client.environment_settings_list(tid=environment)
+    for setting_name, s in result.result["data"]["settings_v2"].items():
+        if setting_name in {ENVIRONMENT_METRICS_RETENTION, NOTIFICATION_RETENTION}:
+            assert s["protected"]
+            assert model.ProtectedBy(s["protected_by"]) == model.ProtectedBy.project_yml
+        else:
+            assert not s["protected"]
+            assert s["protected_by"] is None
 
     shutil.rmtree(workspace)
 
