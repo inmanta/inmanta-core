@@ -712,7 +712,6 @@ class WildComposedPath(WildDictPath):
     element_types: Sequence[type[WildDictPath]] = [WildInDict, WildKeyedList]
     COMPOSED_DICT_PATH_PATTERN = re.compile(r"(?:[^.\\]*(?<!\\)(?:\[.*?(?<!\\)\])+)|(?:[^.\\]|\\.)+")
 
-
     def __init__(self, path_str: Optional[str] = None, path: Optional[Sequence[WildDictPath]] = None) -> None:
         if (path_str is None) == (path is None):
             raise ValueError("Either path or path_str should be set")

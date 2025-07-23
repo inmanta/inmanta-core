@@ -205,7 +205,6 @@ def test_dots_in_dict_path_predicate():
     path = to_path("neighbors[ip=1.1.1.1].nested[ip=3.3.3.3][prefix=aa].prefix")
     assert path.get_element(container) == "aa"
 
-
     container = dict(
         neighbors=[
             dict(
