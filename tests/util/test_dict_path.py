@@ -161,16 +161,47 @@ def test_wild_null_path() -> None:
 
 
 def test_dots_in_dict_path_predicate():
-    d = dict(
+    container = dict(
         neighbors=[
             dict(ip="1.1.1.1", prefix="a"),
             dict(ip="2.2.2.2", prefix="b"),
         ],
-        foo="bar",
     )
 
     path = to_path("neighbors[ip=2.2.2.2].prefix")
-    assert path.get_element(d) == "b"
+    assert path.get_element(container) == "b"
+
+    container = dict(
+        neighbors=[
+            dict(
+                ip="1.1.1.1",
+                nested=[
+                    dict(ip="3.3.3.3", prefix="aa"),
+                    dict(ip="4.4.4.4", prefix="ab"),
+                ],
+            ),
+            dict(ip="2.2.2.2", prefix="b"),
+        ],
+    )
+
+    path = to_path("neighbors[ip=1.1.1.1].nested[ip=3.3.3.3].prefix")
+    assert path.get_element(container) == "aa"
+
+    container = dict(
+        neighbors=[
+            dict(
+                ip="1.[",
+                nested=[
+                    dict(ip="3.]", prefix="aa"),
+                    dict(ip="4.4.4.4", prefix="ab"),
+                ],
+            ),
+            dict(ip="2.2.2.2", prefix="b"),
+        ],
+    )
+
+    path = to_path(r"neighbors[ip=1.\[].nested[ip=3.\]].prefix")
+    assert path.get_element(container) == "aa"
 
 
 @pytest.mark.parametrize(

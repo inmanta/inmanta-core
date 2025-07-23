@@ -731,8 +731,14 @@ class WildComposedPath(WildDictPath):
 
     @classmethod
     def split_on_dots(cls, path_str: str) -> list[str]:
-        """
-        Split the given `path_str` on dot characters if they are not escaped with a backslash.
+        r"""
+        Split the given `path_str` into a list of individual items.
+
+        The '.' character is used as the separator when it is not backslash escaped
+        and when it is outside a list item selector.
+
+        e.g. "neighbors[ip=2.2.2.2].pre\.fix"  ==>  [ "neighbors[ip=2.2.2.2], "pre\.fix" ]
+
         """
         match = cls.COMPOSED_DICT_PATH_PATTERN.findall(path_str)
         if not match:
