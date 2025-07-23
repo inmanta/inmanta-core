@@ -710,7 +710,8 @@ class WildComposedPath(WildDictPath):
     """
 
     element_types: Sequence[type[WildDictPath]] = [WildInDict, WildKeyedList]
-    COMPOSED_DICT_PATH_PATTERN = re.compile(r"(?:[^.\\]*(?<!\\)(?:\[.*?(?<!\\)\])+)|(?:[^.\\]|\\.)+")
+    KEYED_LIST_FILTER = r"(?:[^.\\]+(?<!\\)(?:\[.*?(?<!\\)\])+)"
+    COMPOSED_DICT_PATH_PATTERN = re.compile(rf"{KEYED_LIST_FILTER}|(?:[^.\\]|\\.)+")
 
     def __init__(self, path_str: Optional[str] = None, path: Optional[Sequence[WildDictPath]] = None) -> None:
         if (path_str is None) == (path is None):
