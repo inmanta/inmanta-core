@@ -2498,17 +2498,14 @@ class EnvironmentSettingsContainer(BaseModel):
         """
         # Update settings and mark as protected
         for setting_name, setting_value in protected_settings.items():
-            if self.has(setting_name):
-                self.settings[setting_name].value = setting_value
-            else:
-                self.set(
-                    setting_name,
-                    m.EnvironmentSettingDetails(
-                        value=setting_value,
-                        protected=True,
-                        protected_by=protected_by,
-                    ),
-                )
+            self.set(
+                setting_name,
+                m.EnvironmentSettingDetails(
+                    value=setting_value,
+                    protected=True,
+                    protected_by=protected_by,
+                ),
+            )
         # Remove protection status other settings
         for setting_name in self.settings.keys() - protected_settings.keys():
             if self.is_protected(setting_name) and self.get_protected_by(setting_name) is protected_by:

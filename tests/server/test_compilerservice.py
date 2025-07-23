@@ -763,6 +763,12 @@ async def test_server_recompile(server, client, environment, monkeypatch):
     result = await client.environment_setting_get(tid=environment, id=data.NOTIFICATION_RETENTION)
     assert result.code == 200
     assert result.result["data"]["settings"][data.NOTIFICATION_RETENTION] == 365
+    # Assert no protected environment settings
+    result = await client.environment_settings_list(tid=environment)
+    assert result.code == 200
+    for s in result.result["data"]["settings_v2"].values():
+        assert not s["protected"]
+        assert s["protected_by"] is None
 
     project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["server"], str(environment), "compiler")
     project_source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "project")
@@ -812,6 +818,16 @@ async def test_server_recompile(server, client, environment, monkeypatch):
     result = await client.environment_setting_get(tid=environment, id=data.NOTIFICATION_RETENTION)
     assert result.code == 200
     assert result.result["data"]["settings"][data.NOTIFICATION_RETENTION] == 200
+    # Assert protection
+    result = await client.environment_settings_list(tid=environment)
+    assert result.code == 200
+    for setting_name, s in result.result["data"]["settings_v2"].items():
+        if setting_name in {data.ENVIRONMENT_METRICS_RETENTION, data.NOTIFICATION_RETENTION}:
+            assert s["protected"]
+            assert model.ProtectedBy(s["protected_by"]) == model.ProtectedBy.project_yml
+        else:
+            assert not s["protected"]
+            assert s["protected_by"] is None
 
     # get compile reports and make sure the environment variables are not logged
     reports = await client.get_reports(environment)
