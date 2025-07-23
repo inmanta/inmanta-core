@@ -117,14 +117,12 @@ async def test_resource_sets_via_put_version(server, client, environment, client
     expected_resource_sets = {**resource_sets, "test::Resource[agent1,key=key4]": None}
     assert resource_sets_from_db == expected_resource_sets
 
-    res_sets = await data.ResourceSet.get_list(environment=environment, model=version)
+    env_id = uuid.UUID(environment)
+    res_sets = await data.ResourceSet.get_resource_sets_in_version(environment=env_id, version=version)
     assert len(res_sets) == 3
-    assert sorted([r.name for r in res_sets]) == ["", "set-a", "set-b"]
-    # Assert that all the resource sets have revision == 1
-    assert len([r.revision for r in res_sets if r.revision == 1]) == 3
+    assert set([rs.name for rs in res_sets]).issubset(set(resource_sets_from_db.values()))
 
-    # Check to see if the revision on all resource sets is bumped on a full compile
-    # and if new resource sets are added with revision = 1
+    # Check to see if new resource sets are added and the old ones are present in this version
     version = await clienthelper.get_version()
     result = await client.put_version(
         tid=environment,
@@ -139,12 +137,9 @@ async def test_resource_sets_via_put_version(server, client, environment, client
     )
     assert result.code == 200
 
-    res_sets = await data.ResourceSet.get_list(environment=environment, model=version)
+    res_sets = await data.ResourceSet.get_resource_sets_in_version(environment=env_id, version=version)
     assert len(res_sets) == 4
-    assert sorted([r.name for r in res_sets]) == ["", "set-a", "set-b", "set-c"]
-    # Assert that all the resource sets have revision == 2 except for set-c
-    assert len([r.revision for r in res_sets[:-1] if r.revision == 2]) == 3
-    assert res_sets[3].revision == 1
+    assert set([rs.name for rs in res_sets]) == {None, "set-a", "set-b", "set-c"}
 
     # also assert pip config can be None on put_version
     pip_config_result = await client.get_pip_config(
@@ -497,13 +492,10 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
         module_version_info={},
     )
     assert result.code == 200
-
-    res_sets = await data.ResourceSet.get_list(environment=environment, model=version)
-    res_sets.sort(key=lambda x: x.name)
-    assert len(res_sets) == 2
-    assert [r.name for r in res_sets] == ["set-a-old", "set-b-old"]
-    assert res_sets[0].revision == 1
-    assert res_sets[1].revision == 1
+    env_id = uuid.UUID(environment)
+    res_sets_1 = await data.ResourceSet.get_resource_sets_in_version(environment=env_id, version=version)
+    assert len(res_sets_1) == 2
+    assert {r.name for r in res_sets_1} == {"set-a-old", "set-b-old"}
 
     resources_partial = [
         {
@@ -557,12 +549,12 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
 
     assert result.code == 200, result.result
 
-    res_sets = await data.ResourceSet.get_list(environment=environment, model=version + 1)
-    assert len(res_sets) == 2
-    res_sets.sort(key=lambda x: x.name)
-    assert [r.name for r in res_sets] == ["set-a-old", "set-b-old"]
-    assert res_sets[0].revision == 2
-    assert res_sets[1].revision == 2
+    res_sets_2 = await data.ResourceSet.get_resource_sets_in_version(environment=env_id, version=version + 1)
+    assert len(res_sets_2) == 2
+    assert {r.name for r in res_sets_1} == {"set-a-old", "set-b-old"}
+
+    # Assert that the ids of the resource sets are different because both of them had changes
+    assert {r.id for r in res_sets_1}.isdisjoint({r.id for r in res_sets_2})
 
     # Swap the new sets and removal of the old one
     result = await client.put_partial(
@@ -578,12 +570,9 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
 
     assert result.code == 200, result.result
 
-    res_sets = await data.ResourceSet.get_list(environment=environment, model=version + 2)
+    res_sets = await data.ResourceSet.get_resource_sets_in_version(environment=env_id, version=version + 2)
     assert len(res_sets) == 2
-    res_sets.sort(key=lambda x: x.name)
-    assert [r.name for r in res_sets] == ["set-a-new", "set-b-new"]
-    assert res_sets[0].revision == 1
-    assert res_sets[1].revision == 1
+    assert {r.name for r in res_sets} == {"set-a-new", "set-b-new"}
 
     # Allow move into shared
     result = await client.put_partial(
@@ -599,13 +588,9 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
 
     assert result.code == 200, result.result
 
-    res_sets = await data.ResourceSet.get_list(environment=environment, model=version + 3)
+    res_sets = await data.ResourceSet.get_resource_sets_in_version(environment=env_id, version=version + 3)
     assert len(res_sets) == 2
-    res_sets.sort(key=lambda x: x.name)
-    assert [r.name for r in res_sets] == ["", "set-a-new"]
-    assert res_sets[0].revision == 1
-    # Partial compile triggered for this resource so we bump the revision
-    assert res_sets[1].revision == 2
+    assert {r.name for r in res_sets} == {"set-a-new", None}
 
     resource_list = await data.Resource.get_resources_in_latest_version(uuid.UUID(environment))
     resource_sets_from_db = {resource.resource_id: resource.resource_set for resource in resource_list}
@@ -694,7 +679,7 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
     )
     assert result.code == 200
 
-    res_sets = await data.ResourceSet.get_list(environment=environment, model=version)
+    res_sets = await data.ResourceSet.get_resource_sets_in_version(environment=env_id, version=version)
     assert len(res_sets) == 1
     assert res_sets[0].name == "set-a-old"
 

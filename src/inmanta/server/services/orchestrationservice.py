@@ -969,10 +969,12 @@ class OrchestrationService(protocol.ServerSlice):
                 await data.Resource.insert_many(updated_resources, connection=connection)
                 await data.ResourceSet.update_resource_set_version_mapping(
                     environment=env.id,
-                    base_version=partial_base_version or version - 1,
                     current_version=version,
-                    deleted_resource_set_names=deleted_resource_sets_as_set,
                     updated_resource_set_ids=updated_resource_set_ids,
+                    base_version=partial_base_version,
+                    outdated_resource_set_names=(
+                        deleted_resource_sets_as_set | updated_resource_sets if is_partial_update else None
+                    ),
                     connection=connection,
                 )
                 await cm.recalculate_total(connection=connection)

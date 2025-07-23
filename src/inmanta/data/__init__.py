@@ -4706,131 +4706,61 @@ class ResourceSet(BaseDocument):
         return "resource_set"
 
     @classmethod
-    async def copy_unchanged_resource_sets(
-        cls,
-        environment: uuid.UUID,
-        source_model: int,
-        destination_model: int,
-        changed_resource_sets: abc.Set[str],
-        *,
-        connection: Optional[asyncpg.connection.Connection] = None,
-    ) -> None:
-        """
-        Copies any resource set that was not changed (or deleted) and bumps the version to the destination version.
-
-        :param environment: The environment that the resource sets belong to
-        :param source_model: The version that the partial compile is based on
-        :param destination_model: The version that we are moving to
-        :param changed_resource_sets: The resource sets that were changed (updated or deleted)
-        :param connection: The connection to use
-        """
-        query = f"""
-            INSERT INTO {cls.table_name()}(
-                name,
-                environment,
-                model
-            )(
-                SELECT
-                    rs.name,
-                    rs.environment,
-                    $3
-                FROM {cls.table_name()} AS rs
-                WHERE rs.environment=$1 AND rs.model=$2 AND NOT rs.name=ANY($4)
-            )
-            """
-        await cls._execute_query(
+    async def get_resource_sets_in_version(
+        cls, environment: uuid.UUID, version: int, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> list["ResourceSet"]:
+        query = """
+            SELECT rs.*
+            FROM public.resource_set_configuration_model rscm
+            INNER JOIN public.resource_set rs
+                ON rs.id=rscm.resource_set_id
+            WHERE rscm.environment=$1 AND rscm.model=$2
+                """
+        query_result = await cls._fetch_query(
             query,
             environment,
-            source_model,
-            destination_model,
-            changed_resource_sets,
+            version,
             connection=connection,
         )
-
-    @classmethod
-    async def create_new_revisions_for_resource_sets(
-        cls,
-        environment: uuid.UUID,
-        destination_model: int,
-        resource_sets: abc.Set[str],
-        *,
-        connection: Optional[asyncpg.connection.Connection] = None,
-    ) -> None:
-        """
-        Copy each resource_set that was updated and is present in the source_version and:
-            - bump its model to the target version
-            - bump its revision by 1
-        If the resource set is not present, create it and set its revision to 1
-
-        :param environment: The environment that the resource sets belong to
-        :param destination_model: The version that we are moving to
-        :param resource_sets: The resource sets that we want to bump (or add)
-        :param connection: The connection to use
-        """
-        query = f"""
-        -- Table with the resource sets that we want to bump/create
-            WITH input_resource_sets(name) AS (
-              SELECT UNNEST($1::text[])
-            ),
-        -- Get the latest revision of the resource set (0 if it is new)
-            max_revisions AS (
-              SELECT
-                i.name,
-                COALESCE(MAX(rs.revision), 0) AS max_revision
-              FROM input_resource_sets i
-              LEFT JOIN {cls.table_name()} rs
-                ON rs.name=i.name
-                AND rs.environment=$2
-              GROUP BY i.name
-            )
-        -- Insert the resource sets into the table with updated values of revision and model
-            INSERT INTO {cls.table_name()}(
-                name,
-                environment,
-                revision,
-                model
-            )(
-                SELECT
-                    mr.name,
-                    $2,
-                    mr.max_revision + 1,
-                    $3
-                FROM max_revisions AS mr
-            )
-            """
-        await cls._execute_query(
-            query,
-            resource_sets,
-            environment,
-            destination_model,
-            connection=connection,
-        )
+        return [cls(from_postgres=True, **record) for record in query_result]
 
     @classmethod
     async def update_resource_set_version_mapping(
         cls,
         environment: uuid.UUID,
-        base_version: int,
         current_version: int,
-        deleted_resource_set_names: Set[str],
         updated_resource_set_ids: Set[uuid.UUID],
+        base_version: Optional[int] = None,
+        outdated_resource_set_names: Optional[Set[str]] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> None:
-        query = """
-        WITH resource_sets_to_bump AS (
-            SELECT rs.id
-            FROM public.resource_set_configuration_model AS rscm
-            INNER JOIN public.resource_set rs
-                ON rs.environment=rscm.environment
-                AND rs.id=rscm.resource_set_id
-            WHERE rscm.environment=$1
-                AND rscm.model=$2
-                AND NOT rs.name=ANY($4)
-        ),
-        resource_sets_in_latest_version(id) AS (
-          SELECT UNNEST($5::uuid[])
-          UNION DISTINCT SELECT id from resource_sets_to_bump
-        )
+        values = [environment, current_version, updated_resource_set_ids]
+        if base_version:
+            pre_query = """
+            WITH resource_sets_to_bump AS (
+                SELECT rs.id
+                FROM public.resource_set_configuration_model AS rscm
+                INNER JOIN public.resource_set rs
+                    ON rs.environment=rscm.environment
+                    AND rs.id=rscm.resource_set_id
+                WHERE rscm.environment=$1
+                    AND rscm.model=$4
+                    AND NOT rs.name=ANY($5)
+            ),
+            resource_sets_in_latest_version(id) AS (
+              SELECT UNNEST($3::uuid[])
+              UNION DISTINCT SELECT id from resource_sets_to_bump
+            )
+            """
+            values.extend([base_version, outdated_resource_set_names])
+        else:
+            pre_query = """
+            WITH resource_sets_in_latest_version(id) AS (
+              SELECT UNNEST($3::uuid[])
+            )
+            """
+        query = f"""
+        {pre_query}
         INSERT INTO public.resource_set_configuration_model(
             environment,
             model,
@@ -4838,18 +4768,14 @@ class ResourceSet(BaseDocument):
         )(
             SELECT
                 $1,
-                $3,
+                $2,
                 rslv.id
             FROM resource_sets_in_latest_version AS rslv
         )
         """
         await cls._execute_query(
             query,
-            environment,
-            base_version,
-            current_version,
-            deleted_resource_set_names,
-            updated_resource_set_ids,
+            *values,
             connection=connection,
         )
 
