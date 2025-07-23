@@ -2415,28 +2415,12 @@ class Setting:
         )
 
 
-class EnvironmentSettingDetails(BaseModel):
-    """
-    An object that stores the value of an environment setting in the database.
-
-    :param value: The value of the environment setting.
-    :param protected: True iff the environment setting cannot be updated using the normal
-                      endpoints to update environment settings.
-    :param protected_by: This field indicates the reason why the environment setting is protected.
-                         This field is set to None if the environment setting is not protected.
-    """
-
-    value: m.EnvSettingType
-    protected: bool = False
-    protected_by: m.ProtectedBy | None = None
-
-
 class EnvironmentSettingsContainer(BaseModel):
     """
     Container object that stores all the environment settings for a certain environment in the db.
     """
 
-    settings: dict[str, EnvironmentSettingDetails] = {}
+    settings: dict[str, m.EnvironmentSettingDetails] = {}
 
     def has(self, setting_name: str) -> bool:
         """
@@ -2451,7 +2435,7 @@ class EnvironmentSettingsContainer(BaseModel):
         """
         return self.settings[setting_name].value
 
-    def set(self, setting_name: str, env_setting_details: EnvironmentSettingDetails) -> None:
+    def set(self, setting_name: str, env_setting_details: m.EnvironmentSettingDetails) -> None:
         """
         Set the details for the given setting.
         """
@@ -2519,7 +2503,7 @@ class EnvironmentSettingsContainer(BaseModel):
             else:
                 self.set(
                     setting_name,
-                    EnvironmentSettingDetails(
+                    m.EnvironmentSettingDetails(
                         value=setting_value,
                         protected=True,
                         protected_by=protected_by,
@@ -2779,7 +2763,7 @@ class Environment(BaseDocument):
             allow_override,
             self._get_value(key),
             self._get_value(value),
-            self._get_value(EnvironmentSettingDetails(value=value)),
+            self._get_value(m.EnvironmentSettingDetails(value=value)),
         ] + values
         new_value = await self._fetchval(query, *values, connection=connection)
         new_value_parsed = cast(

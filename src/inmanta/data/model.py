@@ -320,8 +320,50 @@ class EnvironmentSetting(BaseModel):
     allowed_values: Optional[list[EnvSettingType]] = None
 
 
+class ProtectedBy(str, Enum):
+    """
+    An enum that indicates the reason why an environment setting can be protected.
+    """
+
+    # The environment setting is managed using the environment_settings property of the project.yml file.
+    project_yml = "project_yml"
+
+    def get_detailed_description(self) -> str:
+        """
+        Return a string that explains in detail why the environment setting is protected.
+        """
+        match self:
+            case ProtectedBy.project_yml:
+                return "Setting is managed by the project.yml file of the Inmanta project."
+            case _ as unreachable:
+                assert_never(unreachable)
+
+
+class EnvironmentSettingDetails(BaseModel):
+    """
+    A class that stores the value and other metadata about an environment setting.
+
+    :param value: The value of the environment setting.
+    :param protected: True iff the environment setting cannot be updated using the normal
+                      endpoints to update environment settings.
+    :param protected_by: This field indicates the reason why the environment setting is protected.
+                         This field is set to None if the environment setting is not protected.
+    """
+
+    value: EnvSettingType
+    protected: bool = False
+    protected_by: ProtectedBy | None = None
+
+
 class EnvironmentSettingsReponse(BaseModel):
+    """
+    :param settings_v2: This attribute aims to replace the `settings` attribute. Next to the value
+                        of the setting this field contains additional information such as whether
+                        the setting is protected or not.
+    """
+
     settings: dict[str, EnvSettingType]
+    settings_v2: dict[str, EnvironmentSettingDetails]
     definition: dict[str, EnvironmentSetting]
 
 
@@ -1121,22 +1163,3 @@ class InmantaModule(BaseModel):
     files_in_module: list[ModuleSourceMetadata]
     requirements: list[str]
     for_agents: list[AgentName]
-
-
-class ProtectedBy(str, Enum):
-    """
-    An enum that indicates the reason why an environment setting can be protected.
-    """
-
-    # The environment setting is managed using the environment_settings property of the project.yml file.
-    project_yml = "project_yml"
-
-    def get_detailed_description(self) -> str:
-        """
-        Return a string that explains in detail why the environment setting is protected.
-        """
-        match self:
-            case ProtectedBy.project_yml:
-                return "Setting is managed by the project.yml file of the Inmanta project."
-            case _ as unreachable:
-                assert_never(unreachable)

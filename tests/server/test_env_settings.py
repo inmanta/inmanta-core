@@ -17,12 +17,13 @@ Contact: code@inmanta.com
 """
 
 import logging
+from typing import Mapping
 from uuid import UUID
 
 import pytest
 
 from inmanta import data
-from inmanta.data import Environment, Setting, convert_boolean
+from inmanta.data import Environment, Setting, convert_boolean, model
 from inmanta.util import get_compiler_version
 from utils import log_contains
 
@@ -31,13 +32,22 @@ def get_environment_setting_default(setting: str) -> object:
     return data.Environment._settings[setting].default
 
 
-def check_only_contains_default_setting(settings_dict: dict[str, object]) -> None:
+def check_only_contains_default_setting(settings_dict: Mapping[str, object]) -> None:
     """
     Depending on when the background cleanup processes are run, it is possible that environment settings are set, independently
     of the tests below. This method ensures these settings are properly set with their default values.
     """
     for setting_name, setting_value in settings_dict.items():
         assert setting_value == get_environment_setting_default(setting_name)
+
+
+def assert_not_protected(settings_dict: Mapping[str, model.EnvironmentSettingDetails]) -> None:
+    """
+    Assert that the environment settings, in the given settings_dict, are not protected.
+    """
+    for value in settings_dict.values():
+        assert not value.protected
+        assert value.protected_by is None
 
 
 async def test_api_return_type(client, server, environment):
@@ -121,7 +131,11 @@ async def test_environment_settings_v2(client_v2, server, environment_default):
     assert "settings" in response.result["data"]
     assert "definition" in response.result["data"]
     assert "auto_deploy" in response.result["data"]["definition"]
-    check_only_contains_default_setting(response.result["data"]["settings"])
+    settings_dict = response.result["data"]["settings"]
+    settings_v2_dict = response.result["data"]["settings_v2"]
+    assert settings_dict.keys() == settings_v2_dict.keys()
+    check_only_contains_default_setting(settings_dict)
+    assert_not_protected({key: model.EnvironmentSettingDetails(**value) for key, value in settings_v2_dict.items()})
 
     response = await client_v2.environment_settings_set(tid=environment_default, id="auto_deploy", value=False)
     assert response.code == 200

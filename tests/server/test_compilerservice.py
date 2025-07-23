@@ -804,7 +804,7 @@ async def test_server_recompile(server, client, environment, monkeypatch):
     # Verify that the environment settings were updated correctly
     result = await client.environment_setting_get(tid=environment, id=data.RESOURCE_ACTION_LOGS_RETENTION)
     assert result.code == 200
-    # This setting is not present in the project.yml file, so it should be changed.
+    # This setting is not present in the project.yml file, so it should not be changed.
     assert result.result["data"]["settings"][data.RESOURCE_ACTION_LOGS_RETENTION] == 5
     result = await client.environment_setting_get(tid=environment, id=data.ENVIRONMENT_METRICS_RETENTION)
     assert result.code == 200
