@@ -38,9 +38,11 @@ async def env_with_logs(client, server, environment: str):
     for i in range(1, 10):
         cm_times.append(datetime.datetime.strptime(f"2021-07-07T10:1{i}:00.0", "%Y-%m-%dT%H:%M:%S.%f"))
     cm_time_idx = 0
+    env_id = uuid.UUID(environment)
+    resource_set_per_version: dict[int, data.ResourceSet] = {}
     for i in range(1, 10):
         cm = data.ConfigurationModel(
-            environment=uuid.UUID(environment),
+            environment=env_id,
             version=i,
             date=cm_times[cm_time_idx],
             total=1,
@@ -50,6 +52,11 @@ async def env_with_logs(client, server, environment: str):
         )
         cm_time_idx += 1
         await cm.insert()
+
+        resource_set = data.ResourceSet(environment=env_id, id=uuid.uuid4())
+        await resource_set.insert()
+        resource_set_per_version[i] = resource_set
+
     msg_timings = []
     for i in range(1, 30):
         msg_timings.append(
@@ -61,21 +68,23 @@ async def env_with_logs(client, server, environment: str):
     for i in range(1, 10):
         action_id = uuid.uuid4()
         res1 = data.Resource.new(
-            environment=uuid.UUID(environment),
+            environment=env_id,
             resource_version_id=f"{resource_id_a},v={i}",
+            resource_set=resource_set_per_version[i],
             attributes={"name": "file2"},
         )
         await res1.insert()
 
         res2 = data.Resource.new(
-            environment=uuid.UUID(environment),
+            environment=env_id,
             resource_version_id=f"std::testing::NullResource[agent1,name=dir2],v={i}",
+            resource_set=resource_set_per_version[i],
             attributes={"name": "dir2"},
         )
         await res2.insert()
 
         resource_action = data.ResourceAction(
-            environment=uuid.UUID(environment),
+            environment=env_id,
             version=i,
             resource_version_ids=[
                 f"{resource_id_a},v={i}",
@@ -297,8 +306,9 @@ async def test_filter_validation(server, client, filter, expected_status, env_wi
 
 
 async def test_log_without_kwargs(server, client, environment: str):
+    env_id = uuid.UUID(environment)
     await data.ConfigurationModel(
-        environment=uuid.UUID(environment),
+        environment=env_id,
         version=1,
         date=datetime.datetime.now(),
         total=1,
@@ -307,22 +317,26 @@ async def test_log_without_kwargs(server, client, environment: str):
         is_suitable_for_partial_compiles=False,
     ).insert()
 
+    resource_set = data.ResourceSet(environment=env_id, id=uuid.uuid4())
+    await resource_set.insert()
     res1 = data.Resource.new(
-        environment=uuid.UUID(environment),
+        environment=env_id,
         resource_version_id=f"{resource_id_a},v=1",
+        resource_set=resource_set,
         attributes={"path": "/etc/file2"},
     )
     await res1.insert()
 
     res2 = data.Resource.new(
-        environment=uuid.UUID(environment),
+        environment=env_id,
         resource_version_id="std::testing::NullResource[agent1,name=dir2],v=1",
+        resource_set=resource_set,
         attributes={"path": "/etc/file2"},
     )
     await res2.insert()
 
     resource_action = data.ResourceAction(
-        environment=uuid.UUID(environment),
+        environment=env_id,
         version=1,
         resource_version_ids=[
             f"{resource_id_a},v=1",
@@ -350,8 +364,9 @@ async def test_log_without_kwargs(server, client, environment: str):
 
 
 async def test_log_nested_kwargs(server, client, environment: str):
+    env_id = uuid.UUID(environment)
     await data.ConfigurationModel(
-        environment=uuid.UUID(environment),
+        environment=env_id,
         version=1,
         date=datetime.datetime.now(),
         total=1,
@@ -360,9 +375,12 @@ async def test_log_nested_kwargs(server, client, environment: str):
         is_suitable_for_partial_compiles=False,
     ).insert()
 
+    resource_set = data.ResourceSet(environment=env_id, id=uuid.uuid4())
+    await resource_set.insert()
     res1 = data.Resource.new(
-        environment=uuid.UUID(environment),
+        environment=env_id,
         resource_version_id=f"{resource_id_a},v=1",
+        resource_set=resource_set,
         attributes={"name": "file2"},
     )
     await res1.insert()
@@ -370,6 +388,7 @@ async def test_log_nested_kwargs(server, client, environment: str):
     res2 = data.Resource.new(
         environment=uuid.UUID(environment),
         resource_version_id="std::testing::NullResource[agent1,name=dir2],v=1",
+        resource_set=resource_set,
         attributes={"name": "file2"},
     )
     await res2.insert()

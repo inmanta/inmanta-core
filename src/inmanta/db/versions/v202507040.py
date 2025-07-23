@@ -24,33 +24,75 @@ async def update(connection: Connection) -> None:
     Create resource_set table
     """
     schema = """
+    -- add and populate resource_set table --
+
     CREATE TABLE public.resource_set (
         environment uuid NOT NULL,
-        model integer NOT NULL,
-        name character varying NOT NULL,
-        revision integer NOT NULL,
-        PRIMARY KEY (environment, name, model, revision),
-        FOREIGN KEY (environment, model)
-            REFERENCES public.configurationmodel(environment, version) ON DELETE CASCADE
+        id uuid NOT NULL,
+        name character varying,
+        PRIMARY KEY (environment, id),
+        FOREIGN KEY (environment) REFERENCES public.environment(id) ON DELETE CASCADE
     );
 
-    INSERT INTO public.resource_set (environment, model, name, revision)
-    SELECT DISTINCT
+    -- create a temp table to store the relation between the resource set id and the model --
+    -- this is helpful to correctly fill the resource_set, resource and the resource_set_configuration_model tables --
+
+    CREATE TEMP TABLE temp_unique_sets_with_id AS
+    SELECT DISTINCT ON (
+            r.environment,
+            r.resource_set,
+            r.model
+            )
         r.environment,
+        r.resource_set,
         r.model,
-        COALESCE(r.resource_set, '') AS name,
-        r.model AS revision
-    FROM public.resource AS r;
+        gen_random_uuid() AS id
+    FROM public.resource r;
 
+
+    INSERT INTO public.resource_set (environment, id, name)
+    SELECT
+        us.environment,
+        us.id,
+        us.resource_set
+    FROM temp_unique_sets_with_id AS us;
+
+
+    -- add and populate resource_set_id on the resource table --
 
     ALTER TABLE public.resource
-        ADD COLUMN resource_set_revision integer;
+        ADD COLUMN resource_set_id uuid;
 
-    UPDATE public.resource
-        SET resource_set_revision=model;
+    UPDATE public.resource r
+    SET resource_set_id=us.id
+    FROM temp_unique_sets_with_id us
+    WHERE
+        r.environment=us.environment AND
+        r.resource_set IS NOT DISTINCT FROM us.resource_set AND
+        r.model=us.model;
 
     ALTER TABLE public.resource
-        ALTER COLUMN resource_set_revision SET NOT NULL;
+    ADD CONSTRAINT resource_resource_set_id_fkey
+        FOREIGN KEY (resource_set_id, environment) REFERENCES public.resource_set(id, environment) ON DELETE CASCADE;
 
+
+    -- relational table between resource set and configuration model
+
+    CREATE TABLE public.resource_set_configuration_model (
+      environment uuid NOT NULL,
+      model integer NOT NULL,
+      resource_set_id uuid NOT NULL,
+      PRIMARY KEY (environment, model, resource_set_id),
+      FOREIGN KEY (environment, model) REFERENCES public.configurationmodel(environment, version) ON DELETE CASCADE,
+      FOREIGN KEY (environment, resource_set_id) REFERENCES public.resource_set(environment, id) ON DELETE CASCADE
+    );
+
+    UPDATE public.resource_set_configuration_model rscm
+    SET environment=us.environment,
+        model=us.model,
+        resource_set_id=us.id
+    FROM temp_unique_sets_with_id us;
+
+    DROP TABLE temp_unique_sets_with_id;
     """
     await connection.execute(schema)

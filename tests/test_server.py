@@ -816,9 +816,12 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
             is_suitable_for_partial_compiles=False,
         )
         await cm.insert()
+        resource_set = data.ResourceSet(environment=env.id, id=uuid.uuid4())
+        await resource_set.insert()
         res1 = data.Resource.new(
             environment=env.id,
             resource_version_id="std::testing::NullResource[agent1,name=motd],v=%s" % str(i),
+            resource_set=resource_set,
             attributes={"attr": [{"a": 1, "b": "c"}], "path": "/etc/motd"},
         )
         await res1.insert()
@@ -955,9 +958,12 @@ async def test_send_in_progress(server, client, environment, agent):
         attributes: dict[str, object],
         version: int,
     ) -> None:
+        resource_set = data.ResourceSet(environment=env_id, id=uuid.uuid4())
+        await resource_set.insert()
         r1 = data.Resource.new(
             environment=env_id,
             resource_version_id=resource_version_id,
+            resource_set=resource_set,
             attributes=attributes,
         )
         await r1.insert()
@@ -1030,9 +1036,12 @@ async def test_send_in_progress_action_id_conflict(server, client, environment, 
     model_version = 1
     rvid_r1_v1 = ResourceVersionIdStr(f"std::testing::NullResource[agent1,name=file1],v={model_version}")
 
+    resource_set = data.ResourceSet(environment=env_id, id=uuid.uuid4())
+    await resource_set.insert()
     await data.Resource.new(
         environment=env_id,
         resource_version_id=rvid_r1_v1,
+        resource_set=resource_set,
         attributes={"purge_on_delete": False, "requires": []},
     ).insert()
 
@@ -1233,10 +1242,13 @@ async def test_send_deploy_done_error_handling(server, client, environment, agen
 
     rvid_r1_v1 = ResourceVersionIdStr(f"std::testing::NullResource[agent1,name=file1],v={model_version}")
 
+    resource_set = data.ResourceSet(environment=env_id, id=uuid.uuid4())
+    await resource_set.insert()
     # Create resource
     await data.Resource.new(
         environment=env_id,
         resource_version_id=rvid_r1_v1,
+        resource_set=resource_set,
         attributes={"purge_on_delete": False, "requires": []},
     ).insert()
 
@@ -1340,8 +1352,13 @@ async def test_cleanup_old_agents(server, client, env1_halted, env2_halted):
     name = "file1"
     resource_id = f"std::testing::NullResource[agent4,name={name}]"
 
+    resource_set = data.ResourceSet(environment=env1.id, id=uuid.uuid4())
+    await resource_set.insert()
     await data.Resource.new(
-        environment=env1.id, resource_version_id=ResourceVersionIdStr(f"{resource_id},v={version}"), attributes={"name": name}
+        environment=env1.id,
+        resource_version_id=ResourceVersionIdStr(f"{resource_id},v={version}"),
+        resource_set=resource_set,
+        attributes={"name": name},
     ).insert()
 
     # should get purged

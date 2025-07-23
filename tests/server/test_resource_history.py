@@ -40,6 +40,8 @@ LOGGER: logging.Logger = logging.getLogger(__name__)
 class ResourceFactory:
     """Helper to construct resources and keep track of them"""
 
+    resource_set_per_version: dict[int, data.ResourceSet] = {}
+
     def __init__(self, environment: UUID) -> None:
         # Resources, as rid -> version -> resource
         # Only tracks the default environment
@@ -65,9 +67,15 @@ class ResourceFactory:
         if environment is None:
             environment = self.env
         key = f"{resource_type}[{agent},name={name}]"
+        if version not in self.resource_set_per_version:
+            resource_set = data.ResourceSet(environment=environment, id=uuid.uuid4())
+            await resource_set.insert()
+            self.resource_set_per_version[version] = resource_set
+
         res = data.Resource.new(
             environment=environment,
             resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),
+            resource_set=self.resource_set_per_version[version],
             attributes={**attributes, **{"name": name}, "version": version},
             is_undefined=status is ResourceState.undefined,
         )

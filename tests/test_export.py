@@ -812,6 +812,31 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
         },
     )
 
+    # Partial compile
+    await export_model(
+        model="""
+        import test_resources
+
+
+        a = test_resources::Resource(value="A2", agent="A", key="the_resource_a")
+        c2 = test_resources::Resource(value="A", agent="A", key="the_resource_c2")
+        f = test_resources::Resource(value="A", agent="A", key="the_resource_f")
+        std::ResourceSet(name="resource_set_1", resources=[a,c2])
+        std::ResourceSet(name="resource_set_4", resources=[f])
+        std::ResourceSet(name="resource_set_3", resources=[])
+                """,
+        partial_compile=True,
+    )
+    await assert_resource_set_assignment(
+        environment,
+        assignment={
+            "the_resource_a": "resource_set_1",
+            "the_resource_c2": "resource_set_1",
+            "the_resource_f": "resource_set_4",
+            "the_resource_z": None,
+        },
+    )
+
 
 def test_attribute_value_of_id_has_str_type(snippetcompiler):
     """

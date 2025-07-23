@@ -4693,15 +4693,13 @@ class ResourceSet(BaseDocument):
     A set of resources
 
     :param environment: The environment this resource set belongs to
-    :param model: The version of the model that this resource set belongs to
-    :param name: The name of this resource set
-    :param revision: The revision of this resource set. It is increased only if changes were made to the resources in this set
+    :param id: The id of this resource set. Unique per combination of name, revision and environment.
+    :param name: The name of this resource set, None if it is the default set
     """
 
     environment: uuid.UUID
-    model: int
-    name: str
-    revision: int
+    id: uuid.UUID
+    name: Optional[str]
 
     @classmethod
     def table_name(cls) -> str:
@@ -4730,13 +4728,11 @@ class ResourceSet(BaseDocument):
             INSERT INTO {cls.table_name()}(
                 name,
                 environment,
-                revision,
                 model
             )(
                 SELECT
                     rs.name,
                     rs.environment,
-                    rs.revision,
                     $3
                 FROM {cls.table_name()} AS rs
                 WHERE rs.environment=$1 AND rs.model=$2 AND NOT rs.name=ANY($4)
@@ -4810,6 +4806,53 @@ class ResourceSet(BaseDocument):
             connection=connection,
         )
 
+    @classmethod
+    async def update_resource_set_version_mapping(
+        cls,
+        environment: uuid.UUID,
+        base_version: int,
+        current_version: int,
+        deleted_resource_set_names: Set[str],
+        updated_resource_set_ids: Set[uuid.UUID],
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> None:
+        query = """
+        WITH resource_sets_to_bump AS (
+            SELECT rs.id
+            FROM public.resource_set_configuration_model AS rscm
+            INNER JOIN public.resource_set rs
+                ON rs.environment=rscm.environment
+                AND rs.id=rscm.resource_set_id
+            WHERE rscm.environment=$1
+                AND rscm.model=$2
+                AND NOT rs.name=ANY($4)
+        ),
+        resource_sets_in_latest_version(id) AS (
+          SELECT UNNEST($5::uuid[])
+          UNION DISTINCT SELECT id from resource_sets_to_bump
+        )
+        INSERT INTO public.resource_set_configuration_model(
+            environment,
+            model,
+            resource_set_id
+        )(
+            SELECT
+                $1,
+                $3,
+                rslv.id
+            FROM resource_sets_in_latest_version AS rslv
+        )
+        """
+        await cls._execute_query(
+            query,
+            environment,
+            base_version,
+            current_version,
+            deleted_resource_set_names,
+            updated_resource_set_ids,
+            connection=connection,
+        )
+
 
 @stable_api
 class Resource(BaseDocument):
@@ -4827,7 +4870,7 @@ class Resource(BaseDocument):
                            used to determine if a resource describes the same state across versions
     :param is_undefined: If the desired state for resource is undefined
     :param resource_set: The resource set this resource belongs to. Used when doing partial compiles.
-    :param resource_set_revision: The revision of the resource set this resource belongs to.
+    :param resource_set_id: The id of the resource set this resource belongs to.
     """
 
     __primary_key__ = ("environment", "model", "resource_id")
@@ -4848,7 +4891,7 @@ class Resource(BaseDocument):
     is_undefined: bool = False
 
     resource_set: Optional[str] = None
-    resource_set_revision: int
+    resource_set_id: uuid.UUID
 
     # internal field to handle cross agent dependencies
     # if this resource is updated, it must notify all RV's in this list
@@ -5264,7 +5307,9 @@ class Resource(BaseDocument):
         return value
 
     @classmethod
-    def new(cls, environment: uuid.UUID, resource_version_id: ResourceVersionIdStr, **kwargs: object) -> "Resource":
+    def new(
+        cls, environment: uuid.UUID, resource_version_id: ResourceVersionIdStr, resource_set: ResourceSet, **kwargs: object
+    ) -> "Resource":
         vid = resources.Id.parse_id(resource_version_id)
 
         attr = dict(
@@ -5274,7 +5319,8 @@ class Resource(BaseDocument):
             resource_type=vid.entity_type,
             agent=vid.agent_name,
             resource_id_value=vid.attribute_value,
-            resource_set_revision=vid.version,
+            resource_set=resource_set.name,
+            resource_set_id=resource_set.id,
         )
 
         attr.update(kwargs)
@@ -5297,7 +5343,7 @@ class Resource(BaseDocument):
             attribute_hash=self.attribute_hash,
             is_undefined=self.is_undefined,
             resource_set=self.resource_set,
-            resource_set_revision=self.resource_set_revision,
+            resource_set_id=self.resource_set_id,
             provides=self.provides,
         )
 
@@ -5440,7 +5486,7 @@ class Resource(BaseDocument):
                 attributes,
                 attribute_hash,
                 resource_set,
-                resource_set_revision,
+                resource_set_id,
                 provides
             )(
                 SELECT
@@ -5454,7 +5500,7 @@ class Resource(BaseDocument):
                     r.attributes AS attributes,
                     r.attribute_hash,
                     r.resource_set,
-                    r.resource_set_revision,
+                    r.resource_set_id,
                     r.provides
                 FROM {cls.table_name()} AS r
                 WHERE r.environment=$1 AND r.model=$2 AND r.resource_set IS NOT NULL AND NOT r.resource_set=ANY($4)
@@ -5556,7 +5602,7 @@ class Resource(BaseDocument):
             is_undefined=self.is_undefined,
             resource_id_value=self.resource_id_value,
             resource_set=self.resource_set,
-            resource_set_revision=self.resource_set_revision,
+            resource_set_id=self.resource_set_id,
         )
 
 
@@ -5597,6 +5643,10 @@ class ConfigurationModel(BaseDocument):
     # cached state for release
     undeployable: list[ResourceIdStr] = []
     skipped_for_undeployable: list[ResourceIdStr] = []
+
+    resource_set_ids: list[uuid.UUID] = []
+
+    __ignore_fields__ = ("resource_set_ids",)
 
     def __init__(self, **kwargs: object) -> None:
         super().__init__(**kwargs)
