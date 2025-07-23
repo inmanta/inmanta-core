@@ -2462,21 +2462,24 @@ class EnvironmentSettingsContainer(BaseModel):
 
     def get_protected_by(self, setting_name: str) -> m.ProtectedBy | None:
         try:
-            return self.settings[setting_name].protected_by
+            protected_by = self.settings[setting_name].protected_by
         except KeyError:
             return None
+        else:
+            if protected_by is None:
+                return None
+            else:
+                return m.ProtectedBy(protected_by)
 
     def get_protected_by_description(self, setting_name: str) -> str | None:
         """
         Returns a detail description about why the given setting is protected.
         Or None, if the given setting is not protected.
         """
-        if setting_name not in self.settings:
+        protected_by: m.ProtectedBy | None = self.get_protected_by(setting_name)
+        if not protected_by:
             return None
-        setting = self.settings[setting_name]
-        if setting.protected_by:
-            return setting.protected_by.get_detailed_description()
-        return None
+        return protected_by.get_detailed_description()
 
     def _clear_protection(self, setting_name: str) -> None:
         """

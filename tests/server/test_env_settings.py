@@ -359,3 +359,65 @@ async def test_resume_marked_for_delete(environment, server, client, caplog):
     result = await client.resume_environment(environment)
     assert result.code == 400
     assert result.result["message"] == "Invalid request: Cannot resume an environment that is marked for deletion."
+
+
+async def test_protect_environment_settings(environment, server, client):
+    """
+    Test the `protected_environment_settings_set_batch` endpoint.
+    """
+
+    async def assert_protected_settings(protected_settings: set[str]) -> None:
+        """
+        Assert that the given set of settings is protected and the others are not.
+        """
+        result = await client.environment_settings_list(tid=environment)
+        assert result.code == 200
+        for setting_name, setting_details in result.result["data"]["settings_v2"].items():
+            if setting_name in protected_settings:
+                assert setting_details["protected"]
+                assert model.ProtectedBy(setting_details["protected_by"]) is model.ProtectedBy.project_yml
+            else:
+                assert not setting_details["protected"]
+                assert setting_details["protected_by"] is None
+
+    # Mark settings are protected
+    result = await client.protected_environment_settings_set_batch(
+        tid=environment,
+        settings={data.AUTO_DEPLOY: False, data.RESOURCE_ACTION_LOGS_RETENTION: 12},
+        protected_by=model.ProtectedBy.project_yml,
+    )
+    assert result.code == 200
+
+    # Verify protection status
+    await assert_protected_settings(protected_settings={data.AUTO_DEPLOY, data.RESOURCE_ACTION_LOGS_RETENTION})
+
+    # Verify protected setting cannot be updated
+    result = await client.environment_settings_set(tid=environment, id=data.AUTO_DEPLOY, value=True)
+    assert result.code == 403
+    # Verify that the value of the setting hasn't changed and that the setting is still protected
+    result = await client.environment_setting_get(tid=environment, id=data.AUTO_DEPLOY)
+    assert result.code == 200
+    setting_details = result.result["data"]["settings_v2"][data.AUTO_DEPLOY]
+    assert setting_details["value"] is False
+    assert setting_details["protected"] is True
+    assert model.ProtectedBy(setting_details["protected_by"]) is model.ProtectedBy.project_yml
+
+    # Update set of protected settings
+    result = await client.protected_environment_settings_set_batch(
+        tid=environment,
+        settings={data.RESOURCE_ACTION_LOGS_RETENTION: 12, data.AVAILABLE_VERSIONS_TO_KEEP: 5},
+        protected_by=model.ProtectedBy.project_yml,
+    )
+    assert result.code == 200
+
+    await assert_protected_settings(protected_settings={data.RESOURCE_ACTION_LOGS_RETENTION, data.AVAILABLE_VERSIONS_TO_KEEP})
+
+    # Verify that we can update the AUTO_DEPLOY setting again
+    result = await client.environment_settings_set(tid=environment, id=data.AUTO_DEPLOY, value=True)
+    assert result.code == 200
+    # Verify that the value of the setting hasn't changed and that the setting is still protected
+    result = await client.environment_setting_get(tid=environment, id=data.AUTO_DEPLOY)
+    assert result.code == 200
+    assert result.result["data"]["settings_v2"][data.AUTO_DEPLOY]["value"] is True
+    assert result.result["data"]["settings_v2"][data.AUTO_DEPLOY]["protected"] is False
+    assert result.result["data"]["settings_v2"][data.AUTO_DEPLOY]["protected_by"] is None
