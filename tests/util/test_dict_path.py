@@ -163,12 +163,27 @@ def test_wild_null_path() -> None:
 def test_dots_in_dict_path_predicate():
     container = dict(
         neighbors=[
-            dict(ip="1.1.1.1", prefix="a"),
-            dict(ip="2.2.2.2", prefix="b"),
+            dict(ip="1.1.1.1", prefix="a", ip2="2.2.2.2"),
+            dict(ip="2.2.2.2", prefix="b", ip2="2.2.2.2"),
         ],
     )
 
     path = to_path("neighbors[ip=2.2.2.2].prefix")
+    assert path.get_element(container) == "b"
+
+    path = to_path("neighbors[prefix=a][ip=1.1.1.1].prefix")
+    assert path.get_element(container) == "a"
+
+    path = to_path("neighbors[ip=1.1.1.1][prefix=a].prefix")
+    assert path.get_element(container) == "a"
+
+    path = to_path("neighbors[ip=1.1.1.1][ip2=2.2.2.2].prefix")
+    assert path.get_element(container) == "a"
+
+    path = to_path("neighbors[ip2=2.2.2.2][ip=1.1.1.1].prefix")
+    assert path.get_element(container) == "a"
+
+    path = to_path("neighbors[ip2=2.2.2.2][ip=2.2.2.2].prefix")
     assert path.get_element(container) == "b"
 
     container = dict(
@@ -186,6 +201,10 @@ def test_dots_in_dict_path_predicate():
 
     path = to_path("neighbors[ip=1.1.1.1].nested[ip=3.3.3.3].prefix")
     assert path.get_element(container) == "aa"
+
+    path = to_path("neighbors[ip=1.1.1.1].nested[ip=3.3.3.3][prefix=aa].prefix")
+    assert path.get_element(container) == "aa"
+
 
     container = dict(
         neighbors=[
