@@ -534,14 +534,7 @@ class EnvironmentService(protocol.ServerSlice):
         settings: dict[str, model.EnvSettingType] = env.settings.get_all_setting_values()
         return model.EnvironmentSettingsReponse(
             settings=dict(sorted(settings.items())),
-            settings_v2={
-                setting_name: model.EnvironmentSettingDetails(
-                    value=v.value,
-                    protected=v.protected,
-                    protected_by=v.protected_by,
-                )
-                for setting_name, v in sorted(env.settings.settings.items())
-            },
+            settings_v2=dict(sorted(env.settings.settings.items())),
             definition={k: v.to_dto() for k, v in sorted(data.Environment._settings.items())},
         )
 
@@ -572,13 +565,7 @@ class EnvironmentService(protocol.ServerSlice):
             value = await env.get(key)
             return model.EnvironmentSettingsReponse(
                 settings={key: value},
-                settings_v2={
-                    key: model.EnvironmentSettingDetails(
-                        value=value,
-                        protected=env.settings.is_protected(key),
-                        protected_by=env.settings.get_protected_by(key),
-                    )
-                },
+                settings_v2={key: env.settings.settings[key]},
                 definition={k: v.to_dto() for k, v in data.Environment._settings.items()},
             )
         except KeyError:
