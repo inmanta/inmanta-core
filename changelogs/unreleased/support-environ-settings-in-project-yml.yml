@@ -5,4 +5,4 @@ issue-repo: inmanta-core
 change-type: minor
 destination-branches: [master, iso8]
 sections:
-  minor-improvement: "{{description}}"
+  feature: "{{description}}"
