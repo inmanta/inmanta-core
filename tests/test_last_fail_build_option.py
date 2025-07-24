@@ -55,7 +55,7 @@ def test_fail_late(force_success):
         raise Exception("seconds in ]30:60]")
 
 
-def test_also_always_fail(force_success):
+def test_also_always_fail(force_success=False):
     if force_success:
         return
     logger.info("test_also_always_fail")
