@@ -2747,15 +2747,21 @@ class Environment(BaseDocument):
         query = f"""
                 UPDATE {self.table_name()}
                 SET settings=(
-                        CASE
-                            WHEN $1 IS FALSE AND (settings->'settings') ? $2::text
-                                THEN settings
-                            WHEN (settings->'settings') ? $2::text
-                                THEN jsonb_set(settings,  ARRAY['settings', $2, 'value'], to_jsonb($3::{type}), TRUE)
-                            ELSE
-                                jsonb_set(settings,  ARRAY['settings', $2], $4::jsonb, TRUE)
-                        END
-                    )
+                    CASE
+                        WHEN $1 IS FALSE AND (settings->'settings') ? $2::text
+                            -- The name of the setting is present in the settings dictionary,
+                            -- but allow_override is disabled -> Don't change it
+                            THEN settings
+                        WHEN (settings->'settings') ? $2::text
+                            -- The name of the setting is present in the settings dictionary.
+                            -- -> Only update the value field.
+                            THEN jsonb_set(settings,  ARRAY['settings', $2, 'value'], to_jsonb($3::{type}), TRUE)
+                        ELSE
+                            -- The name of the setting is not present in the settings dictionary.
+                            -- Put a full EnvironmentSettingsDetails dictionary in place.
+                            jsonb_set(settings,  ARRAY['settings', $2], $4::jsonb, TRUE)
+                    END
+                )
                 WHERE {filter_statement}
                 RETURNING settings
         """
