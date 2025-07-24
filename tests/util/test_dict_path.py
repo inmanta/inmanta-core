@@ -160,6 +160,68 @@ def test_wild_null_path() -> None:
     assert incp == incp + np, f"{np + incp} != {incp}"
 
 
+def test_dots_in_dict_path_predicate():
+    container = dict(
+        neighbors=[
+            dict(ip="1.1.1.1", prefix="a", ip2="2.2.2.2"),
+            dict(ip="2.2.2.2", prefix="b", ip2="2.2.2.2"),
+        ],
+    )
+
+    path = to_path("neighbors[ip=2.2.2.2].prefix")
+    assert path.get_element(container) == "b"
+
+    path = to_path("neighbors[prefix=a][ip=1.1.1.1].prefix")
+    assert path.get_element(container) == "a"
+
+    path = to_path("neighbors[ip=1.1.1.1][prefix=a].prefix")
+    assert path.get_element(container) == "a"
+
+    path = to_path("neighbors[ip=1.1.1.1][ip2=2.2.2.2].prefix")
+    assert path.get_element(container) == "a"
+
+    path = to_path("neighbors[ip2=2.2.2.2][ip=1.1.1.1].prefix")
+    assert path.get_element(container) == "a"
+
+    path = to_path("neighbors[ip2=2.2.2.2][ip=2.2.2.2].prefix")
+    assert path.get_element(container) == "b"
+
+    container = dict(
+        neighbors=[
+            dict(
+                ip="1.1.1.1",
+                nested=[
+                    dict(ip="3.3.3.3", prefix="aa"),
+                    dict(ip="4.4.4.4", prefix="ab"),
+                ],
+            ),
+            dict(ip="2.2.2.2", prefix="b"),
+        ],
+    )
+
+    path = to_path("neighbors[ip=1.1.1.1].nested[ip=3.3.3.3].prefix")
+    assert path.get_element(container) == "aa"
+
+    path = to_path("neighbors[ip=1.1.1.1].nested[ip=3.3.3.3][prefix=aa].prefix")
+    assert path.get_element(container) == "aa"
+
+    container = dict(
+        neighbors=[
+            dict(
+                ip="1.[",
+                nested=[
+                    dict(ip="3.]", prefix="aa"),
+                    dict(ip="4.4.4.4", prefix="ab"),
+                ],
+            ),
+            dict(ip="2.2.2.2", prefix="b"),
+        ],
+    )
+
+    path = to_path(r"neighbors[ip=1.\[].nested[ip=3.\]].prefix")
+    assert path.get_element(container) == "aa"
+
+
 @pytest.mark.parametrize(
     "escaped, unescaped",
     [(r"a\.b\=\[\\\*", r"a.b=[\*"), (r"a\.\.\.b", "a...b")],
