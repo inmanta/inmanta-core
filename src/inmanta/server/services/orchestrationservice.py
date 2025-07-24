@@ -562,9 +562,13 @@ class OrchestrationService(protocol.ServerSlice):
         set_version: Optional[int] = None,
     ) -> tuple[dict[ResourceIdStr, data.Resource], dict[ResourceIdStr, data.ResourceSet]]:
         """
-        This method converts the resources sent to the put_version or put_partial endpoint to dao Resource objects.
+        This method converts the resources sent to the put_version or put_partial endpoint
+            to dao Resource and ResourceSet objects.
         The resulting resource objects will have their provides set up correctly for cross agent dependencies
         and the version field of these resources will be set to set_version if provided.
+
+        We will create the ResourceSet objects here as well, one for each different resource set name on the resource list.
+        A uuid is generated for each one.
 
         An exception will be raised when the one of the following constraints is not satisfied:
             * A resource present in the resource_sets parameter is not present in the resources dictionary.
@@ -848,12 +852,6 @@ class OrchestrationService(protocol.ServerSlice):
         """
         is_partial_update = partial_base_version is not None
 
-        # if resource_sets is None:
-        #     resource_sets = {}
-        #
-        # # Add default resource set if required
-        # resource_sets.update({rid: "" for rid, res in rid_to_resource.items() if res.resource_set is None})
-
         if removed_resource_sets is None:
             removed_resource_sets = []
 
@@ -963,13 +961,14 @@ class OrchestrationService(protocol.ServerSlice):
                         raise BadRequest(msg)
 
                     all_ids |= {Id.parse_id(rid, version) for rid in rids_unchanged_resource_sets.keys()}
-
                 updated_resources = list(rid_to_resource.values())
+                # Insert resource sets and resources
                 await data.ResourceSet.insert_many(list(set(resource_sets.values())), connection=connection)
                 await data.Resource.insert_many(updated_resources, connection=connection)
+                # Link resource sets to this version
                 await data.ResourceSet.update_resource_set_version_mapping(
                     environment=env.id,
-                    current_version=version,
+                    latest_version=version,
                     updated_resource_set_ids=updated_resource_set_ids,
                     base_version=partial_base_version,
                     outdated_resource_set_names=(

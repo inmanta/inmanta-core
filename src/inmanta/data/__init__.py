@@ -4709,6 +4709,9 @@ class ResourceSet(BaseDocument):
     async def get_resource_sets_in_version(
         cls, environment: uuid.UUID, version: int, connection: Optional[asyncpg.connection.Connection] = None
     ) -> list["ResourceSet"]:
+        """
+        Returns the resource sets in the given version.
+        """
         query = """
             SELECT rs.*
             FROM public.resource_set_configuration_model rscm
@@ -4722,20 +4725,44 @@ class ResourceSet(BaseDocument):
             version,
             connection=connection,
         )
-        return [cls(from_postgres=True, **record) for record in query_result]
+        result = [cls(from_postgres=True, **record) for record in query_result]
+        # Could not express this constraint in the database
+        assert len({rs.name for rs in result}) == len(
+            result
+        ), "Inconsistency in the database, a resource set cannot be present more than once in the same model version"
+        return result
 
     @classmethod
     async def update_resource_set_version_mapping(
         cls,
         environment: uuid.UUID,
-        current_version: int,
+        latest_version: int,
         updated_resource_set_ids: Set[uuid.UUID],
         base_version: Optional[int] = None,
         outdated_resource_set_names: Optional[Set[str]] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> None:
-        values = [environment, current_version, updated_resource_set_ids]
-        if base_version:
+        """
+        Persists the relation between the configuration model and its corresponding resource sets.
+        Behaves differently for partial compile and full compile.
+        On full compile:
+            - Links every resource_set in updated_resource_set_ids to this version of the model
+        On partial compile:
+            - Links every resource_set in the previous version of the model to this version of the model
+                iff it is not part of the outdated_resource_set_names
+            - Also links every newly added resource_set
+
+        :param environment: The environment of the configuration model and resource sets
+        :param latest_version: The version of the configuration model
+        :param updated_resource_set_ids: The resource sets to link to this version of the model
+        :param base_version: The version that this partial compile is based on. None for full compile
+        :param outdated_resource_set_names: The resource sets to not include in this version of the model
+        :param connection: The used connection
+        """
+
+        is_partial = base_version is not None
+        values = [environment, latest_version, updated_resource_set_ids]
+        if is_partial:
             pre_query = """
             WITH resource_sets_to_bump AS (
                 SELECT rs.id
@@ -5569,10 +5596,6 @@ class ConfigurationModel(BaseDocument):
     # cached state for release
     undeployable: list[ResourceIdStr] = []
     skipped_for_undeployable: list[ResourceIdStr] = []
-
-    resource_set_ids: list[uuid.UUID] = []
-
-    __ignore_fields__ = ("resource_set_ids",)
 
     def __init__(self, **kwargs: object) -> None:
         super().__init__(**kwargs)
