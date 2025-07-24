@@ -4712,10 +4712,10 @@ class ResourceSet(BaseDocument):
         """
         Returns the resource sets in the given version.
         """
-        query = """
+        query = f"""
             SELECT rs.*
             FROM public.resource_set_configuration_model rscm
-            INNER JOIN public.resource_set rs
+            INNER JOIN {cls.table_name()} rs
                 ON rs.id=rscm.resource_set_id
             WHERE rscm.environment=$1 AND rscm.model=$2
                 """
@@ -4763,11 +4763,11 @@ class ResourceSet(BaseDocument):
         is_partial = base_version is not None
         values = [environment, latest_version, updated_resource_set_ids]
         if is_partial:
-            pre_query = """
+            pre_query = f"""
             WITH resource_sets_to_bump AS (
                 SELECT rs.id
                 FROM public.resource_set_configuration_model AS rscm
-                INNER JOIN public.resource_set rs
+                INNER JOIN {cls.table_name()} rs
                     ON rs.environment=rscm.environment
                     AND rs.id=rscm.resource_set_id
                 WHERE rscm.environment=$1
