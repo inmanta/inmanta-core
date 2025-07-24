@@ -112,12 +112,21 @@ class Server(protocol.ServerSlice):
 
         return attach_warnings(200, None, warnings)
 
-    async def _async_recompile(self, env: data.Environment, update_repo: bool, metadata: JsonType = {}) -> Warnings:
+    async def _async_recompile(
+        self,
+        env: data.Environment,
+        update_repo: bool,
+        metadata: JsonType = {},
+    ) -> Warnings:
         """
         Recompile an environment in a different thread and taking wait time into account.
         """
         _, warnings = await self.compiler.request_recompile(
-            env=env, force_update=update_repo, do_export=True, remote_id=uuid.uuid4(), metadata=metadata
+            env=env,
+            force_update=update_repo,
+            do_export=True,
+            remote_id=uuid.uuid4(),
+            metadata=metadata,
         )
         return warnings
 
