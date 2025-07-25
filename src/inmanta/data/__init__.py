@@ -4778,7 +4778,12 @@ class ResourceSet(BaseDocument):
                     AND rs.id=rscm.resource_set_id
                 WHERE rscm.environment=$1
                     AND rscm.model=$4
-                    AND NOT rs.name=ANY($5)
+                    AND NOT EXISTS (
+                    -- extra hoop to make comparison with null names --
+                      SELECT 1
+                      FROM UNNEST($5::text[]) AS outdated_resource_set_names(name)
+                      WHERE outdated_resource_set_names.name IS NOT DISTINCT FROM rs.name
+                    )
             ),
             resource_sets_in_latest_version(id) AS (
               SELECT UNNEST($3::uuid[])
