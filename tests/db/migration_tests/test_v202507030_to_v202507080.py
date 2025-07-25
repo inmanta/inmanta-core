@@ -16,9 +16,9 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import json
 import os
 import re
-import json
 from collections import abc
 
 import pytest
