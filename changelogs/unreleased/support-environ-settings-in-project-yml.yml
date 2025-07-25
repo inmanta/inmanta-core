@@ -3,6 +3,6 @@ description: "Added support to set environment settings, required by an Inmanta 
 issue-nr: 7654
 issue-repo: inmanta-core
 change-type: minor
-destination-branches: [master, iso8]
+destination-branches: [iso8]
 sections:
   feature: "{{description}}"
