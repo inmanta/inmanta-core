@@ -68,8 +68,13 @@ async def test_resource_list_no_released_version(server, client):
 
     name = "file1"
     key = f"std::testing::NullResource[agent1,name={name}]"
+    resource_set = data.ResourceSet(environment=env.id, id=uuid.uuid4())
+    await resource_set.insert()
     res1_v1 = data.Resource.new(
-        environment=env.id, resource_version_id=ResourceVersionIdStr(f"{key},v={version}"), attributes={"name": name}
+        environment=env.id,
+        resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),
+        resource_set=resource_set,
+        attributes={"name": name},
     )
     await res1_v1.insert()
 
@@ -107,35 +112,50 @@ async def test_has_only_one_version_from_resource(server, client):
     res2_key = "std::testing::NullResource[agent1,name=" + res2_name + "]"
 
     version = 1
+    resource_set = data.ResourceSet(environment=env.id, id=uuid.uuid4())
+    await resource_set.insert()
     res1_v1 = data.Resource.new(
-        environment=env.id, resource_version_id=res1_key + ",v=%d" % version, attributes={"name": res1_name}
+        environment=env.id,
+        resource_version_id=res1_key + ",v=%d" % version,
+        resource_set=resource_set,
+        attributes={"name": res1_name},
     )
     await res1_v1.insert()
     res2_v1 = data.Resource.new(
-        environment=env.id, resource_version_id=res2_key + ",v=%d" % version, attributes={"name": res2_name}
+        environment=env.id,
+        resource_version_id=res2_key + ",v=%d" % version,
+        resource_set=resource_set,
+        attributes={"name": res2_name},
     )
     await res2_v1.insert()
     # This version has both resources so we can populate just this version
     await data.ResourcePersistentState.populate_for_version(environment=env.id, model_version=version)
 
+    resource_set = data.ResourceSet(environment=env.id, id=uuid.uuid4())
+    await resource_set.insert()
     version = 2
     res1_v2 = data.Resource.new(
         environment=env.id,
         resource_version_id=res1_key + ",v=%d" % version,
+        resource_set=resource_set,
         attributes={"name": res1_name},
     )
     await res1_v2.insert()
     res2_v2 = data.Resource.new(
         environment=env.id,
         resource_version_id=res2_key + ",v=%d" % version,
+        resource_set=resource_set,
         attributes={"name": res2_name},
     )
     await res2_v2.insert()
 
+    resource_set = data.ResourceSet(environment=env.id, id=uuid.uuid4())
+    await resource_set.insert()
     version = 3
     res1_v3 = data.Resource.new(
         environment=env.id,
         resource_version_id=res1_key + ",v=%d" % version,
+        resource_set=resource_set,
         attributes={"name": res1_name},
     )
     await res1_v3.insert()
@@ -143,10 +163,13 @@ async def test_has_only_one_version_from_resource(server, client):
     # This will mark res2 as an orphan since it is not on version 3
     await data.ResourcePersistentState.mark_as_orphan(environment=env.id, resource_ids={ResourceIdStr(res2_key)})
 
+    resource_set = data.ResourceSet(environment=env.id, id=uuid.uuid4())
+    await resource_set.insert()
     version = 4
     res1_v4 = data.Resource.new(
         environment=env.id,
         resource_version_id=res1_key + ",v=%d" % version,
+        resource_set=resource_set,
         attributes={"name": res1_name, "new_attr": 123, "requires": ["abc"]},
     )
     await res1_v4.insert()
@@ -196,9 +219,12 @@ async def env_with_resources(server, client):
     ):
         key = f"{resource_type}[{agent},path={path}]"
         for version in versions:
+            resource_set = data.ResourceSet(environment=environment, id=uuid.uuid4())
+            await resource_set.insert()
             res = data.Resource.new(
                 environment=environment,
                 resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),
+                resource_set=resource_set,
                 attributes={"path": path, "version": version},
                 is_undefined=status is ResourceState.undefined,
             )

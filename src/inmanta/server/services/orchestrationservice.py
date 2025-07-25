@@ -21,7 +21,7 @@ import logging
 import uuid
 from collections import abc, defaultdict
 from collections.abc import Mapping, Sequence
-from typing import Literal, Optional, cast
+from typing import Literal, Optional, Set, cast
 
 import asyncpg
 import asyncpg.connection
@@ -299,6 +299,10 @@ class PartialUpdateMerger:
         :param shared_resources_new: The set of shared resources present in the partial compile.
         :returns: The set of shared resources that should be present in the new version of the model.
         """
+        # Fetch the newly allocated resource set id if any shared resource was updated
+        new_resource_set_id = (
+            next(iter(shared_resources_new.values())).resource_set_id if len(shared_resources_new) > 0 else None
+        )
         all_rids_shared_resources = set(self.shared_resources_old.keys()) | set(shared_resources_new.keys())
         result = []
         for rid_shared_resource in all_rids_shared_resources:
@@ -315,6 +319,10 @@ class PartialUpdateMerger:
                 res_old = self.shared_resources_old[rid_shared_resource]
                 res = res_old.copy_for_partial_compile(new_version=self.version)
                 res = self._clean_requires_provides_old_shared_resource(res)
+                # Bump resource_set_id to that of the created/updated shared resources
+                if new_resource_set_id:
+                    res.resource_set_id = new_resource_set_id
+
             result.append(res)
         return result
 
@@ -560,11 +568,15 @@ class OrchestrationService(protocol.ServerSlice):
         resource_state: dict[ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]],
         resource_sets: dict[ResourceIdStr, Optional[str]],
         set_version: Optional[int] = None,
-    ) -> dict[ResourceIdStr, data.Resource]:
+    ) -> tuple[dict[ResourceIdStr, data.Resource], dict[ResourceIdStr, data.ResourceSet]]:
         """
-        This method converts the resources sent to the put_version or put_partial endpoint to dao Resource objects.
+        This method converts the resources sent to the put_version or put_partial endpoint
+            to dao Resource and ResourceSet objects.
         The resulting resource objects will have their provides set up correctly for cross agent dependencies
         and the version field of these resources will be set to set_version if provided.
+
+        We will create the ResourceSet objects here as well, one for each different resource set name on the resource list.
+        A uuid is generated for each one.
 
         An exception will be raised when the one of the following constraints is not satisfied:
             * A resource present in the resource_sets parameter is not present in the resources dictionary.
@@ -575,21 +587,32 @@ class OrchestrationService(protocol.ServerSlice):
         all_requires: set[ResourceIdStr] = set()
         # list of all resources which have a cross agent dependency, as a tuple, (dependant,requires)
         cross_agent_dep: list[tuple[data.Resource, Id]] = []
+        # Resource Set cache. These are the resource sets that will be updated
+        resource_set_cache: dict[Optional[str], data.ResourceSet] = {}
+        rid_to_resource_set: dict[ResourceIdStr, data.ResourceSet] = {}
         for res_dict in resources:
             # Verify that the version field and the version in the resource version id field match
-            version_part_of_resource_id = Id.parse_id(res_dict["id"]).version
+            raw_id = res_dict["id"]
+            res_id = Id.parse_id(raw_id)
+            version_part_of_resource_id = res_id.version
             if "version" in res_dict and res_dict["version"] != version_part_of_resource_id:
                 raise BadRequest(
                     f"Invalid resource: The version in the id field ({res_dict['id']}) doesn't match the version in the"
                     f" version field ({res_dict['version']})."
                 )
-            res_obj = data.Resource.new(env_id, res_dict["id"])
+            res_set_name = resource_sets.get(res_id.resource_str(), None)
+            resource_sets[res_id.resource_str()] = res_set_name
+            if res_set_name not in resource_set_cache:
+                resource_set_cache[res_set_name] = data.ResourceSet(
+                    environment=env_id,
+                    id=uuid.uuid4(),
+                    name=res_set_name,
+                )
+            rid_to_resource_set[res_id.resource_str()] = resource_set_cache[res_set_name]
+            res_obj = data.Resource.new(env_id, res_dict["id"], resource_set_cache[res_set_name])
             # Populate is_undefined field
             if res_obj.resource_id in resource_state:
                 res_obj.is_undefined = const.ResourceState[resource_state[res_obj.resource_id]] == const.ResourceState.undefined
-            # Populate resource_set field
-            if res_obj.resource_id in resource_sets:
-                res_obj.resource_set = resource_sets[res_obj.resource_id]
 
             # Populate attributes field of resources
             attributes = {}
@@ -641,7 +664,7 @@ class OrchestrationService(protocol.ServerSlice):
                 f" {all_requires - rids}"
             )
 
-        return rid_to_resource
+        return rid_to_resource, rid_to_resource_set
 
     def _get_skipped_for_undeployable(
         self, resources: abc.Sequence[data.Resource], undeployable_ids: abc.Sequence[ResourceIdStr]
@@ -787,8 +810,8 @@ class OrchestrationService(protocol.ServerSlice):
         version: int,
         rid_to_resource: dict[ResourceIdStr, data.Resource],
         unknowns: abc.Sequence[data.UnknownParameter],
+        resource_sets: dict[ResourceIdStr, data.ResourceSet],
         version_info: Optional[JsonType] = None,
-        resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
         partial_base_version: Optional[int] = None,
         removed_resource_sets: Optional[list[str]] = None,
         pip_config: Optional[PipConfig] = None,
@@ -837,9 +860,6 @@ class OrchestrationService(protocol.ServerSlice):
         """
         is_partial_update = partial_base_version is not None
 
-        if resource_sets is None:
-            resource_sets = {}
-
         if removed_resource_sets is None:
             removed_resource_sets = []
 
@@ -870,7 +890,13 @@ class OrchestrationService(protocol.ServerSlice):
         undeployable_ids: abc.Sequence[ResourceIdStr] = [
             res.resource_id for res in rid_to_resource.values() if res.is_undefined
         ]
-        updated_resource_sets: abc.Set[str] = {sr for sr in resource_sets.values() if sr is not None}
+        updated_resource_sets: Set[str] = set()
+        updated_resource_set_ids: Set[uuid.UUID] = set()
+        for rs in resource_sets.values():
+            # create_for_partial_compile still excludes the empty set, deal with this
+            if rs.name is not None:
+                updated_resource_sets.add(rs.name)
+            updated_resource_set_ids.add(rs.id)
         deleted_resource_sets_as_set: abc.Set[str] = set(removed_resource_sets)
         async with connection.transaction():
             try:
@@ -936,14 +962,28 @@ class OrchestrationService(protocol.ServerSlice):
                         )
                         msg += "\n".join(
                             f"    {rid} moved from {get_printable_name_for_resource_set(rids_unchanged_resource_sets[rid])} "
-                            f"to {get_printable_name_for_resource_set(resource_sets.get(rid))}"
+                            f"to {get_printable_name_for_resource_set(resource_sets[rid].name)}"
                             for rid in resources_that_moved_resource_sets
                         )
 
                         raise BadRequest(msg)
-                    all_ids |= {Id.parse_id(rid, version) for rid in rids_unchanged_resource_sets.keys()}
 
-                await data.Resource.insert_many(list(rid_to_resource.values()), connection=connection)
+                    all_ids |= {Id.parse_id(rid, version) for rid in rids_unchanged_resource_sets.keys()}
+                updated_resources = list(rid_to_resource.values())
+                # Insert resource sets and resources
+                await data.ResourceSet.insert_many(list(set(resource_sets.values())), connection=connection)
+                await data.Resource.insert_many(updated_resources, connection=connection)
+                # Link resource sets to this version
+                await data.ResourceSet.update_resource_set_version_mapping(
+                    environment=env.id,
+                    latest_version=version,
+                    updated_resource_set_ids=updated_resource_set_ids,
+                    base_version=partial_base_version,
+                    outdated_resource_set_names=(
+                        deleted_resource_sets_as_set | updated_resource_sets if is_partial_update else None
+                    ),
+                    connection=connection,
+                )
                 await cm.recalculate_total(connection=connection)
 
             await data.UnknownParameter.insert_many(unknowns, connection=connection)
@@ -1054,7 +1094,7 @@ class OrchestrationService(protocol.ServerSlice):
             raise BadRequest("Older compiler versions are no longer supported, please update your compiler")
 
         unknowns_objs = self._create_unknown_parameter_daos_from_api_unknowns(env.id, version, unknowns)
-        rid_to_resource: dict[ResourceIdStr, data.Resource] = self._create_dao_resources_from_api_resources(
+        rid_to_resource, rid_to_resource_set = self._create_dao_resources_from_api_resources(
             env_id=env.id,
             resources=resources,
             resource_state=resource_state,
@@ -1072,8 +1112,8 @@ class OrchestrationService(protocol.ServerSlice):
                     version,
                     rid_to_resource,
                     unknowns_objs,
-                    version_info,
-                    resource_sets,
+                    rid_to_resource_set,
+                    version_info=version_info,
                     pip_config=pip_config,
                     connection=con,
                     module_version_info=module_version_info or {},
@@ -1172,7 +1212,7 @@ class OrchestrationService(protocol.ServerSlice):
                             base_version,
                         )
 
-                rid_to_resource: dict[ResourceIdStr, data.Resource] = self._create_dao_resources_from_api_resources(
+                rid_to_resource, rid_to_resource_set = self._create_dao_resources_from_api_resources(
                     env_id=env.id,
                     resources=resources,
                     resource_state=resource_state,
@@ -1203,8 +1243,8 @@ class OrchestrationService(protocol.ServerSlice):
                     version,
                     merged_resources,
                     merged_unknowns,
-                    version_info,
-                    resource_sets,
+                    rid_to_resource_set,
+                    version_info=version_info,
                     partial_base_version=base_version,
                     removed_resource_sets=removed_resource_sets,
                     pip_config=pip_config,
