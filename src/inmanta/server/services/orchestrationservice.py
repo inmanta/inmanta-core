@@ -320,7 +320,8 @@ class PartialUpdateMerger:
                 res = res_old.copy_for_partial_compile(new_version=self.version)
                 res = self._clean_requires_provides_old_shared_resource(res)
                 # Bump resource_set_id to that of the created/updated shared resources
-                res.resource_set_id = new_resource_set_id
+                if new_resource_set_id:
+                    res.resource_set_id = new_resource_set_id
 
             result.append(res)
         return result
