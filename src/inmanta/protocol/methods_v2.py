@@ -395,7 +395,6 @@ def protected_environment_settings_set_batch(
     """
 
 
-@auth(auth_label=const.CoreAuthorizationLabel.DESIRED_STATE_WRITE, read_only=False, environment_param="tid")
 @typedmethod(
     path="/reserve_version", operation="POST", arg_options=methods.ENV_OPTS, client_types=[ClientType.compiler], api_version=2
 )
