@@ -18,6 +18,7 @@ Contact: code@inmanta.com
 
 import os
 import re
+import json
 from collections import abc
 
 import pytest
@@ -36,7 +37,7 @@ async def test_schema_update_settings_column(migrate_db_from: abc.Callable[[], a
     # Fetch settings that exist in environment dev-1 before the migration
     result = await postgresql_client.fetch(f"SELECT settings FROM {data.Environment.table_name()} WHERE name='dev-1'")
     assert len(result) == 1
-    settings_before = result[0]["settings"]
+    settings_before = json.loads(result[0]["settings"])
     assert len(settings_before) == 7
 
     # Run migration script
