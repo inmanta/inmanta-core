@@ -208,7 +208,14 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         async with Environment.get_connection() as con:
             query = f"""
             WITH env_and_retention_time_in_hours AS (
-                SELECT id, (CASE WHEN e.settings ? $1 THEN (e.settings->>$1)::integer ELSE $2 END) AS retention_time_in_hours
+                SELECT
+                    id,
+                    (
+                        CASE
+                            WHEN e.settings->'settings' ? $1 THEN (e.settings->'settings'->$1->>'value')::integer
+                            ELSE $2
+                        END
+                    ) AS retention_time_in_hours
                 FROM {Environment.table_name()} AS e
                 WHERE e.halted IS FALSE
             ), env_and_delete_before_timestamp AS (
