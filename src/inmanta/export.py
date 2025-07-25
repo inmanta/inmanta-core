@@ -425,7 +425,7 @@ class Exporter:
         resources = self.resources_to_list()
 
         # Update the environment settings, mentioned in the project.yml file, on the server.
-        if export_env_var_settings:
+        if not self.failed and not no_commit and export_env_var_settings:
             result = self.client.protected_environment_settings_set_batch(
                 tid=self._get_env_id(),
                 settings=project.metadata.environment_settings or {},
