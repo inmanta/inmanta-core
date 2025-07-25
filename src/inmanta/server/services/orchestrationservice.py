@@ -965,6 +965,17 @@ class OrchestrationService(protocol.ServerSlice):
                 # Insert resource sets and resources
                 await data.ResourceSet.insert_many(list(set(resource_sets.values())), connection=connection)
                 await data.Resource.insert_many(updated_resources, connection=connection)
+                shared_resource_set = {rid: r for rid, r in rid_to_resource.items() if r.resource_set is None}
+                if len(shared_resource_set) > 0 and partial_base_version is not None:
+                    shared_resource_set_id = next(iter(shared_resource_set.values())).resource_set_id
+                    await data.Resource.copy_unchanged_resources_from_shared_resource_set(
+                        environment=env.id,
+                        source_version=partial_base_version,
+                        target_version=version,
+                        changed_shared_resources=list(shared_resource_set.keys()),
+                        shared_resource_set_id=shared_resource_set_id,
+                        connection=connection,
+                    )
                 # Link resource sets to this version
                 await data.ResourceSet.update_resource_set_version_mapping(
                     environment=env.id,
