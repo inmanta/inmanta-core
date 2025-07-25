@@ -380,7 +380,6 @@ async def postgresql_client(postgres_db, database_name):
         password=postgres_db.password,
         database=database_name,
     )
-    await data.asyncpg_on_connect(client)
     yield client
     await client.close()
 
