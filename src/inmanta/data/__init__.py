@@ -4260,17 +4260,11 @@ class ResourceAction(BaseDocument):
         exclude_changes: Optional[list[const.Change]] = None,
     ) -> list["ResourceAction"]:
         query = """SELECT DISTINCT ra.*
-                    FROM public.configurationmodel as cm
-                    LEFT JOIN public.resource_set_configuration_model as rscm
-                        ON cm.environment=rscm.environment
-                        AND cm.version=rscm.model
-                    LEFT JOIN public.resource as r
-                        ON r.resource_set_id=rscm.resource_set_id
-                        AND r.environment=rscm.environment
+                    FROM public.resource as r
                     INNER JOIN public.resourceaction_resource as jt
                         ON r.environment = jt.environment
                         AND r.resource_id = jt.resource_id
-                        AND rscm.model = jt.resource_version
+                        AND r.model = jt.resource_version
                     INNER JOIN public.resourceaction as ra
                         ON ra.action_id = jt.resource_action_id
                         WHERE r.environment=$1 AND ra.environment=$1"""
@@ -5042,22 +5036,15 @@ class Resource(BaseDocument):
         :param attributes: The resource should contain these key-value pairs in its attributes list.
         """
         values = [cls._get_value(environment)]
-        # DISTINCT can go away when we remove copy_resources_from_unchanged_resource_set
         query = f"""
-            WITH resource_sets_in_latest_version AS (
-                SELECT rscm.resource_set_id
-                FROM resource_set_configuration_model AS rscm
-                WHERE rscm.environment=$1 AND rscm.model=(SELECT MAX(cm.version)
+            SELECT *
+            FROM {Resource.table_name()} AS r1
+            WHERE r1.environment=$1 AND r1.model=(SELECT MAX(cm.version)
                                                   FROM {ConfigurationModel.table_name()} AS cm
                                                   WHERE cm.environment=$1)
-            )
-            SELECT DISTINCT ON (r.resource_id) r.*
-            FROM {Resource.table_name()} AS r
-            JOIN resource_sets_in_latest_version AS rsv
-                ON r.resource_set_id=rsv.resource_set_id
-            WHERE r.environment=$1"""
+        """
         if resource_type:
-            query += " AND r.resource_type=$2"
+            query += " AND r1.resource_type=$2"
             values.append(cls._get_value(resource_type))
 
         result = []
@@ -5172,10 +5159,8 @@ class Resource(BaseDocument):
             )
             SELECT m.version, r.resource_id, r.attributes, r.attribute_hash, r.is_undefined
             FROM {ConfigurationModel.table_name()} as m
-            LEFT JOIN public.resource_set_configuration_model as rscm
-                ON m.environment=rscm.environment AND m.version=rscm.model
             LEFT JOIN {cls.table_name()} as r
-                ON rscm.resource_set_id=r.resource_set_id
+                ON m.environment=r.environment AND m.version=r.model
             WHERE m.environment=$1
                 AND m.version > (SELECT version FROM boundary) - 1
                 AND m.released is TRUE
@@ -5515,18 +5500,6 @@ class Resource(BaseDocument):
 
     async def insert(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         self.make_hash()
-        query = f"""
-        INSERT INTO public.resource_set_configuration_model(
-            environment,
-            resource_set_id,
-            model
-        ) VALUES (
-            $1,
-            $2,
-            $3
-        ) ON CONFLICT DO NOTHING;
-        """
-        await self._execute_query(query, self.environment, self.resource_set_id, self.model)
         await super().insert(connection=connection)
 
     @classmethod
