@@ -1,0 +1,62 @@
+"""
+Copyright 2025 Inmanta
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+Contact: code@inmanta.com
+"""
+
+import datetime
+import logging
+
+import pytest
+
+logger = logging.getLogger(__name__)
+
+
+@pytest.fixture(scope="function")
+def force_success():
+    # return False
+    return True
+
+
+def test_always_fail(force_success):
+    if force_success:
+        return
+    logger.info("test_always_fail")
+    raise Exception("Test can't succeed")
+
+
+def test_fail_early(force_success):
+    if force_success:
+        return
+    now = datetime.datetime.now()
+    logger.info(f"test_fail_early {now.second=}")
+    if now.second <= 30:
+        raise Exception("seconds in [0:30]")
+
+
+def test_fail_late(force_success):
+    if force_success:
+        return
+    now = datetime.datetime.now()
+    logger.info(f"test_fail_late {now.second=}")
+    if now.second > 30:
+        raise Exception("seconds in ]30:60]")
+
+
+def test_also_always_fail(force_success=False):
+    if force_success:
+        return
+    logger.info("test_also_always_fail")
+    raise Exception("Test can't succeed")
