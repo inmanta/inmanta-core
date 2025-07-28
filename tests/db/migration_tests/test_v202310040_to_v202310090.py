@@ -16,6 +16,7 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import json
 import os
 from collections import abc
 
@@ -34,7 +35,7 @@ async def test_type_change(
             SELECT * FROM public.environment WHERE name='dev-1';
         """
     )
-    settings = result[0]["settings"]
+    settings = json.loads(result[0]["settings"])
     assert isinstance(settings[data.AUTOSTART_AGENT_DEPLOY_INTERVAL], int)
     assert isinstance(settings[data.AUTOSTART_AGENT_REPAIR_INTERVAL], int)
 
@@ -45,6 +46,6 @@ async def test_type_change(
             SELECT * FROM public.environment WHERE name='dev-1';
         """
     )
-    settings = result[0]["settings"]
+    settings = json.loads(result[0]["settings"])
     assert isinstance(settings["settings"][data.AUTOSTART_AGENT_DEPLOY_INTERVAL]["value"], str)
     assert isinstance(settings["settings"][data.AUTOSTART_AGENT_REPAIR_INTERVAL]["value"], str)
