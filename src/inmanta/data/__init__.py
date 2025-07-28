@@ -4710,7 +4710,7 @@ class ResourceSet(BaseDocument):
         cls, environment: uuid.UUID, version: int, connection: Optional[asyncpg.connection.Connection] = None
     ) -> list["ResourceSet"]:
         """
-        Returns the resource sets in the given version.
+        Returns the resource sets in the given version. Only meant for testing.
         """
         query = f"""
             SELECT rs.*
