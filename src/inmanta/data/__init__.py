@@ -5560,7 +5560,6 @@ class Resource(BaseDocument):
             is_undefined=self.is_undefined,
             resource_id_value=self.resource_id_value,
             resource_set=self.resource_set,
-            resource_set_id=self.resource_set_id,
         )
 
 
