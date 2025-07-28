@@ -4693,7 +4693,7 @@ class ResourceSet(BaseDocument):
     A set of resources
 
     :param environment: The environment this resource set belongs to
-    :param id: The id of this resource set. Unique per combination of name, revision and environment.
+    :param id: The id of this resource set. Unique per environment.
     :param name: The name of this resource set, None if it is the default set
     """
 

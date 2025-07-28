@@ -37,12 +37,13 @@ async def update(connection: Connection) -> None:
     -- create a temp table to store the relation between the resource set id and the model --
     -- this is helpful to correctly fill the resource_set, resource and the resource_set_configuration_model tables --
 
-    CREATE TEMP TABLE temp_unique_sets_with_id AS
+    CREATE TEMP TABLE temp_unique_sets_with_id
+    ON COMMIT DROP AS
     SELECT DISTINCT ON (
             r.environment,
             r.resource_set,
             r.model
-            )
+        )
         r.environment,
         r.resource_set,
         r.model,
