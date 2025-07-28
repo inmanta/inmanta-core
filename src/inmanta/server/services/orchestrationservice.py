@@ -890,7 +890,7 @@ class OrchestrationService(protocol.ServerSlice):
         undeployable_ids: abc.Sequence[ResourceIdStr] = [
             res.resource_id for res in rid_to_resource.values() if res.is_undefined
         ]
-        updated_resource_sets: Set[str] = set()
+        updated_resource_sets = set()
         updated_resource_set_ids: Set[uuid.UUID] = set()
         for rs in resource_sets.values():
             # create_for_partial_compile still excludes the empty set, deal with this

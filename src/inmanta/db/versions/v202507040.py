@@ -28,7 +28,7 @@ async def update(connection: Connection) -> None:
 
     CREATE TABLE public.resource_set (
         environment uuid NOT NULL,
-        id uuid NOT NULL,
+        id uuid NOT NULL DEFAULT gen_random_uuid(),
         name character varying,
         PRIMARY KEY (environment, id),
         FOREIGN KEY (environment) REFERENCES public.environment(id) ON DELETE CASCADE
@@ -46,14 +46,13 @@ async def update(connection: Connection) -> None:
         r.environment,
         r.resource_set,
         r.model,
-        gen_random_uuid() AS id
-    FROM public.resource r;
+    FROM public.resource r
+    ON COMMIT DROP;
 
 
-    INSERT INTO public.resource_set (environment, id, name)
+    INSERT INTO public.resource_set (environment, name)
     SELECT
         us.environment,
-        us.id,
         us.resource_set
     FROM temp_unique_sets_with_id AS us;
 
@@ -93,6 +92,5 @@ async def update(connection: Connection) -> None:
         resource_set_id=us.id
     FROM temp_unique_sets_with_id us;
 
-    DROP TABLE temp_unique_sets_with_id;
     """
     await connection.execute(schema)
