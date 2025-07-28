@@ -5107,6 +5107,26 @@ class ResourceSet(BaseDocument):
                 connection=connection,
             )
 
+    async def insert_with_link_to_configuration_model(self, versions: list[int] | None = None, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+        """
+        Inserts the ResourceSet into the database and creates a link to the configuration models in the versions argument.
+        :param versions: The versions of the configuration model this ResourceSet belongs to
+        """
+        async with self.get_connection(connection) as con:
+            await self.insert(con)
+            if versions is not None and len(versions) > 0:
+                query = """
+                INSERT INTO public.resource_set_configuration_model(
+                    environment,
+                    resource_set_id,
+                    model
+                )
+                SELECT $1, $2, UNNEST($3::int[])
+                ON CONFLICT DO NOTHING;
+                """
+                await self._execute_query(query, self.environment, self.id, versions, connection=con)
+
+
 
 @stable_api
 class Resource(BaseDocument):
@@ -5800,18 +5820,6 @@ class Resource(BaseDocument):
 
     async def insert(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         self.make_hash()
-        query = f"""
-        INSERT INTO public.resource_set_configuration_model(
-            environment,
-            resource_set_id,
-            model
-        ) VALUES (
-            $1,
-            $2,
-            $3
-        ) ON CONFLICT DO NOTHING;
-        """
-        await self._execute_query(query, self.environment, self.resource_set_id, self.model)
         await super().insert(connection=connection)
 
     @classmethod
