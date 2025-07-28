@@ -16,8 +16,8 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import os
 import json
+import os
 from collections import abc
 
 import asyncpg
