@@ -47,11 +47,11 @@ async def update(connection: Connection) -> None:
         r.environment,
         r.resource_set,
         r.model,
-    FROM public.resource r
-    ON COMMIT DROP;
+        gen_random_uuid() AS id
+    FROM public.resource r;
 
 
-    INSERT INTO public.resource_set (environment, name)
+    INSERT INTO public.resource_set (environment, id, name)
     SELECT
         us.environment,
         us.id,
