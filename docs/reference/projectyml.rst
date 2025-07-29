@@ -56,7 +56,7 @@ The code snippet below provides an example of a complete ``project.yml`` file:
         use-system-config: false
     environment_settings:
         auto_deploy: true
-        protected_environment: true
+        server_compile: true
 
 
 .. _specify_location_pip:
