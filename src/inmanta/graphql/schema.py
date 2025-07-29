@@ -18,6 +18,7 @@ import uuid
 
 import inmanta.data.sqlalchemy as models
 import strawberry
+from inmanta.data import model
 from inmanta.data import get_session, get_session_factory
 from inmanta.server.services.compilerservice import CompilerService
 from sqlalchemy import Select, asc, desc, select
@@ -156,10 +157,9 @@ def get_expert_mode(root: "Environment") -> bool:
     Checks settings of environment to figure out if expert mode is enabled or not
     """
     assert hasattr(root, "settings")  # Make mypy happy
-    is_expert_mode = root.settings.get("enable_lsm_expert_mode", False)
-    if isinstance(is_expert_mode, str) and is_expert_mode.lower() == "false":
+    if "enable_lsm_expert_mode" not in root.settings["settings"]:
         return False
-    return bool(is_expert_mode)
+    return root.settings["settings"]["enable_lsm_expert_mode"]["value"]
 
 
 def get_is_compiling(root: "Environment", info: strawberry.Info) -> bool:
