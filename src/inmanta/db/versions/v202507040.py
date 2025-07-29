@@ -104,7 +104,5 @@ async def update(connection: Connection) -> None:
         model,
         id
     FROM temp_unique_sets_with_id;
-
-    DROP TABLE temp_unique_sets_with_id;
     """
     await connection.execute(schema)
