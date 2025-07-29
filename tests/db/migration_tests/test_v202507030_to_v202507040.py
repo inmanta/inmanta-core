@@ -46,3 +46,13 @@ async def test_add_resource_set_table(
     resource_set_names = {r.resource_set for r in resources}
     assert None in resource_set_names
     assert "set-a" in resource_set_names
+
+    records = await postgresql_client.fetch(
+        """
+        SELECT * FROM public.resource_set_configuration_model AS rscm
+        INNER JOIN public.resource_set AS rs
+            ON rs.environment=rscm.environment AND rs.id=rscm.resource_set_id
+        """
+    )
+    # there should be no duplicates
+    assert all(record["count"] == 1 for record in records)
