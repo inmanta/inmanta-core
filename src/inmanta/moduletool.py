@@ -31,6 +31,7 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import gzip
 import tempfile
 import zipfile
 from argparse import ArgumentParser, RawTextHelpFormatter
@@ -53,7 +54,7 @@ import inmanta.warnings
 import packaging.requirements
 import toml
 from build.env import DefaultIsolatedEnv
-from inmanta import const
+from inmanta import const, env
 from inmanta.command import CLIException, ShowUsageException
 from inmanta.const import CF_CACHE_DIR
 from inmanta.module import (
@@ -626,6 +627,66 @@ When a development release is done using the \--dev option, this command:
             "this message will also be used as the commit message.",
         )
         release.add_argument("-a", "--all", dest="commit_all", help="Use commit -a", action="store_true")
+        download = subparser.add_parser(
+            "download",
+            help="Download an Inmanta module from a Python package repository and convert it to its source format.",
+            parents=parent_parsers,
+        )
+        download.add_argument(
+            "module_req",
+            help="The name of the module, optionally with a version constraint.",
+        )
+        download.add_argument(
+            "--install",
+            dest="install",
+            help="Install the downloaded module in editable mode into the active Python environment.",
+            action="store_true",
+        )
+        download.add_argument(
+            "-d",
+            "--directory",
+            dest="directory",
+            help="Download the module in this directory instead of the current working directory.",
+        )
+
+    def download(self, module_req: str, install: bool, directory: str | None) -> None:
+        if directory is None:
+            directory = os.getcwd()
+        module_requirement = InmantaModuleRequirement.parse(module_req)
+        with tempfile.TemporaryDirectory() as path_tmp_dir:
+            # Download the python package
+            download_dir = os.path.join(path_tmp_dir, "download")
+            os.mkdir(download_dir)
+            subprocess.check_call(
+                [
+                    "pip",
+                    "download",
+                    "--no-deps",
+                    "--no-binary",
+                    ":all:",
+                    str(module_requirement.get_python_package_requirement()),
+                ],
+                cwd=download_dir,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            files_download_dir = os.listdir(download_dir)
+            assert len(files_download_dir) == 1
+            path_python_source_package = os.path.join(download_dir, files_download_dir[0])
+            # Extract the package
+            extract_dir = os.path.join(path_tmp_dir, "extract")
+            os.mkdir(extract_dir)
+            with gzip.open(filename=path_python_source_package, mode="rb") as tar_file_obj:
+                with tarfile.TarFile(mode="r", fileobj=tar_file_obj) as tar:
+                    tar.extractall(path=extract_dir, filter="data")
+            files_extract_dir = os.listdir(extract_dir)
+            assert len(files_extract_dir) == 1
+            path_extracted_pkg = os.path.join(extract_dir, files_extract_dir[0])
+            destination_dir = os.path.join(directory, module_requirement.name)
+            shutil.copytree(src=path_extracted_pkg, dst=destination_dir)
+            # Install in editable mode if requested
+            if install:
+                env.process_env.install_from_source(paths=[env.LocalPackagePath(path=destination_dir, editable=True)])
 
     def add(self, module_req: str, v2: bool = True, override: bool = False) -> None:
         """
