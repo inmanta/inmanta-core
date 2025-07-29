@@ -15,8 +15,8 @@ Contact: code@inmanta.com
 import dataclasses
 import typing
 import uuid
-
 from typing import cast
+
 import inmanta.data.sqlalchemy as models
 import strawberry
 from inmanta.data import get_session, get_session_factory, model
