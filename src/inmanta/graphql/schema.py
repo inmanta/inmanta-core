@@ -18,8 +18,7 @@ import uuid
 
 import inmanta.data.sqlalchemy as models
 import strawberry
-from inmanta.data import model
-from inmanta.data import get_session, get_session_factory
+from inmanta.data import get_session, get_session_factory, model
 from inmanta.server.services.compilerservice import CompilerService
 from sqlalchemy import Select, asc, desc, select
 from strawberry import relay
