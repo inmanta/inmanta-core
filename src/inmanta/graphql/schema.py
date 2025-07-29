@@ -19,7 +19,7 @@ from typing import cast
 
 import inmanta.data.sqlalchemy as models
 import strawberry
-from inmanta.data import get_session, get_session_factory, model
+from inmanta.data import get_session, get_session_factory
 from inmanta.server.services.compilerservice import CompilerService
 from sqlalchemy import Select, asc, desc, select
 from strawberry import relay
