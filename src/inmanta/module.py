@@ -1511,8 +1511,9 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
     :param pip: A configuration section that holds information about the pip configuration that should be taken into account
                 when installing Python packages (See: :py:class:`inmanta.module.ProjectPipConfig` for more details).
     :param environment_settings: The environment settings that need to be configured on the server for this project.
-                                 The environment settings can be updated on export by setting the
-                                 `--update-environment-settings` option on the `inmanta export` command.
+                                 The settings will be applied on the server when the `inmanta export` command is run.
+                                 Environment settings specified here cannot be updated via the regular API endpoints
+                                 to update environment settings as long as they are in this list.
     """
 
     _raw_parser: typing.ClassVar[type[YamlParser]] = YamlParser
