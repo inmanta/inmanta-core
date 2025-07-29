@@ -16,6 +16,7 @@ import dataclasses
 import typing
 import uuid
 
+from typing import cast
 import inmanta.data.sqlalchemy as models
 import strawberry
 from inmanta.data import get_session, get_session_factory, model
@@ -158,7 +159,7 @@ def get_expert_mode(root: "Environment") -> bool:
     assert hasattr(root, "settings")  # Make mypy happy
     if "enable_lsm_expert_mode" not in root.settings["settings"]:
         return False
-    return root.settings["settings"]["enable_lsm_expert_mode"]["value"]
+    return cast(bool, root.settings["settings"]["enable_lsm_expert_mode"]["value"])
 
 
 def get_is_compiling(root: "Environment", info: strawberry.Info) -> bool:
