@@ -37,12 +37,13 @@ async def update(connection: Connection) -> None:
     -- create a temp table to store the relation between the resource set id and the model --
     -- this is helpful to correctly fill the resource_set, resource and the resource_set_configuration_model tables --
 
-    CREATE TEMP TABLE temp_unique_sets_with_id AS
+    CREATE TEMP TABLE temp_unique_sets_with_id
+    ON COMMIT DROP AS
     SELECT DISTINCT ON (
             r.environment,
             r.resource_set,
             r.model
-            )
+        )
         r.environment,
         r.resource_set,
         r.model,
@@ -71,8 +72,11 @@ async def update(connection: Connection) -> None:
         r.model=us.model;
 
     ALTER TABLE public.resource
-    ADD CONSTRAINT resource_resource_set_id_fkey
+    ADD CONSTRAINT resource_resource_set_id_environment_fkey
         FOREIGN KEY (resource_set_id, environment) REFERENCES public.resource_set(id, environment) ON DELETE CASCADE;
+
+
+    CREATE INDEX resource_environment_resource_set_id_index ON public.resource (environment, resource_set_id);
 
 
     -- relational table between resource set and configuration model
@@ -86,11 +90,19 @@ async def update(connection: Connection) -> None:
       FOREIGN KEY (environment, resource_set_id) REFERENCES public.resource_set(environment, id) ON DELETE CASCADE
     );
 
-    UPDATE public.resource_set_configuration_model rscm
-    SET environment=us.environment,
-        model=us.model,
-        resource_set_id=us.id
-    FROM temp_unique_sets_with_id us;
+    CREATE INDEX resource_set_configuration_model_environment_resource_set_id_index
+        ON public.resource_set_configuration_model (environment, resource_set_id);
+
+    INSERT INTO public.resource_set_configuration_model (
+        environment,
+        model,
+        resource_set_id
+    )
+    SELECT
+        environment,
+        model,
+        id
+    FROM temp_unique_sets_with_id;
 
     """
     await connection.execute(schema)

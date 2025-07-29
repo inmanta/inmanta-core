@@ -18,7 +18,7 @@ Contact: code@inmanta.com
 
 import os
 import re
-from collections import abc
+from collections import abc, defaultdict
 
 import asyncpg
 import pytest
@@ -46,3 +46,39 @@ async def test_add_resource_set_table(
     resource_set_names = {r.resource_set for r in resources}
     assert None in resource_set_names
     assert "set-a" in resource_set_names
+
+    records = await postgresql_client.fetch(
+        """
+        SELECT rs.name, rscm.* FROM public.resource_set_configuration_model AS rscm
+        LEFT JOIN public.resource_set AS rs
+            ON rs.environment=rscm.environment AND rs.id=rscm.resource_set_id
+        ORDER BY rs.name
+        """
+    )
+    assert len(records) == 14
+    env_1 = await data.Environment.get_one(name="dev-1")
+    assert env_1
+
+    env_3 = await data.Environment.get_one(name="dev-3")
+    assert env_3
+
+    expected_result = {
+        (env_1.id, 1): [None],
+        (env_1.id, 2): [None],
+        (env_1.id, 3): [None],
+        (env_1.id, 4): [None],
+        (env_1.id, 5): [None],
+        (env_1.id, 6): [None],
+        (env_1.id, 7): ["set-a", "set-b", None],
+        (env_1.id, 8): ["set-a", None],
+        (env_3.id, 1): [None],
+        (env_3.id, 2): [None],
+        (env_3.id, 3): [None],
+    }
+    actual_result = defaultdict(list)
+    for record in records:
+        key = (record["environment"], record["model"])
+        value = record["name"]
+        actual_result[key].append(value)
+
+    assert expected_result == dict(actual_result)

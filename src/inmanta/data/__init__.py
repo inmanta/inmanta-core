@@ -4699,7 +4699,7 @@ class ResourceSet(BaseDocument):
     A set of resources
 
     :param environment: The environment this resource set belongs to
-    :param id: The id of this resource set. Unique per combination of name, revision and environment.
+    :param id: The id of this resource set. Unique per environment.
     :param name: The name of this resource set, None if it is the default set
     """
 
@@ -4716,7 +4716,7 @@ class ResourceSet(BaseDocument):
         cls, environment: uuid.UUID, version: int, connection: Optional[asyncpg.connection.Connection] = None
     ) -> list["ResourceSet"]:
         """
-        Returns the resource sets in the given version.
+        Returns the resource sets in the given version. Only meant for testing.
         """
         query = f"""
             SELECT rs.*
@@ -5595,7 +5595,6 @@ class Resource(BaseDocument):
             is_undefined=self.is_undefined,
             resource_id_value=self.resource_id_value,
             resource_set=self.resource_set,
-            resource_set_id=self.resource_set_id,
         )
 
 

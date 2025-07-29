@@ -362,7 +362,6 @@ class Resource(BaseModel):
     attributes: JsonType
     is_undefined: bool
     resource_set: Optional[str] = None
-    resource_set_id: uuid.UUID
 
 
 class ResourceAction(BaseModel):
