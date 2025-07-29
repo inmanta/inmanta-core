@@ -1,0 +1,6 @@
+---
+description: "Added documentation regarding the `environment_settings` option in the project.yml file"
+issue-nr: 7654
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso8]
