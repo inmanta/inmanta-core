@@ -653,22 +653,14 @@ When a development release is done using the \--dev option, this command:
         if directory is None:
             directory = os.getcwd()
         module_requirement = InmantaModuleRequirement.parse(module_req)
+        module_name = module_requirement.name
         with tempfile.TemporaryDirectory() as path_tmp_dir:
             # Download the python package
             download_dir = os.path.join(path_tmp_dir, "download")
             os.mkdir(download_dir)
-            subprocess.check_call(
-                [
-                    "pip",
-                    "download",
-                    "--no-deps",
-                    "--no-binary",
-                    ":all:",
-                    str(module_requirement.get_python_package_requirement()),
-                ],
-                cwd=download_dir,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+            env.process_env.download_python_package(
+                pkg_requirement=module_requirement.get_python_package_requirement(),
+                output_directory=download_dir,
             )
             files_download_dir = os.listdir(download_dir)
             assert len(files_download_dir) == 1
@@ -682,7 +674,20 @@ When a development release is done using the \--dev option, this command:
             files_extract_dir = os.listdir(extract_dir)
             assert len(files_extract_dir) == 1
             path_extracted_pkg = os.path.join(extract_dir, files_extract_dir[0])
-            destination_dir = os.path.join(directory, module_requirement.name)
+            # Convert to source format
+            model_dir = os.path.join(path_extracted_pkg, "inmanta_plugins", module_name, "model")
+            templates_dir = os.path.join(path_extracted_pkg, "inmanta_plugins", module_name, "templates")
+            files_dir = os.path.join(path_extracted_pkg, "inmanta_plugins", module_name, "files")
+            setup_cfg_file = os.path.join(path_extracted_pkg, "inmanta_plugins", module_name, "setup.cfg")
+            try:
+                os.remove(os.path.join(path_extracted_pkg, "setup.cfg"))
+            except FileNotFoundError:
+                pass
+            for file_or_dir in [model_dir, templates_dir, files_dir, setup_cfg_file]:
+                if os.path.exists(file_or_dir):
+                    shutil.move(src=file_or_dir, dst=path_extracted_pkg)
+            # Move to desired output directory
+            destination_dir = os.path.join(directory, module_name)
             shutil.copytree(src=path_extracted_pkg, dst=destination_dir)
             # Install in editable mode if requested
             if install:

@@ -360,6 +360,21 @@ class PipCommandBuilder:
         return [python_path, "-m", "pip", "uninstall", "-y", *pkg_names]
 
     @classmethod
+    def compose_download_command(
+        cls, python_path: str, pkg_requirement: inmanta.util.CanonicalRequirement, no_deps: bool, no_binary: str | None
+    ) -> list[str]:
+        """
+        Returns the pip command to download a module as a python package.
+        """
+        command = [python_path, "-m", "pip", "download"]
+        if no_deps:
+            command.append("--no-deps")
+        if no_binary:
+            command.extend(["--no-binary", no_binary])
+        command.append(str(pkg_requirement))
+        return command
+
+    @classmethod
     def compose_list_command(
         cls, python_path: str, format: Optional[PipListFormat] = None, only_editable: bool = False
     ) -> list[str]:
@@ -827,6 +842,15 @@ import sys
         cmd = PipCommandBuilder.compose_list_command(self.python_path, format=PipListFormat.json, only_editable=only_editable)
         output = CommandRunner(LOGGER_PIP).run_command_and_log_output(cmd, stderr=subprocess.DEVNULL, env=os.environ.copy())
         return {canonicalize_name(r["name"]): packaging.version.Version(r["version"]) for r in json.loads(output)}
+
+    def download_python_package(self, pkg_requirement: inmanta.util.CanonicalRequirement, output_directory: str) -> None:
+        """
+        Download the python package that satisfies the constraint pkg_requirement as a source distributin package.
+        """
+        cmd = PipCommandBuilder.compose_download_command(
+            python_path=self.python_path, pkg_requirement=pkg_requirement, no_deps=True, no_binary=pkg_requirement.name
+        )
+        CommandRunner(LOGGER_PIP).run_command_and_log_output(cmd, env=os.environ.copy(), cwd=output_directory)
 
     def install_for_config(
         self,
