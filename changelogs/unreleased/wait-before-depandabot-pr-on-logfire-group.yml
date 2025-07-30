@@ -1,0 +1,5 @@
+description: Wait before creating dependabot pr on logfire group
+change-type: patch
+destination-branches:
+  - master
+  - iso8

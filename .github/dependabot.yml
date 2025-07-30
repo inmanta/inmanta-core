@@ -14,6 +14,11 @@ updates:
       patterns:
         - "logfire"
         - "opentelemetry*"
+  cooldown:
+    include:
+      - "logfire"
+      - "opentelemetry*"
+    default-days: 1
   ignore:
     # #6668
     - dependency-name: "pytest-inmanta-extensions"
@@ -38,6 +43,11 @@ updates:
       patterns:
         - "logfire"
         - "opentelemetry*"
+  cooldown:
+    include:
+      - "logfire"
+      - "opentelemetry*"
+    default-days: 1
   ignore:
     # #6668
     - dependency-name: "pytest-inmanta-extensions"
