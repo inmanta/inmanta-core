@@ -676,17 +676,16 @@ When a development release is done using the \--dev option, this command:
             assert len(files_extract_dir) == 1
             path_extracted_pkg = os.path.join(extract_dir, files_extract_dir[0])
             # Convert to source format
-            model_dir = os.path.join(path_extracted_pkg, "inmanta_plugins", module_name, "model")
-            templates_dir = os.path.join(path_extracted_pkg, "inmanta_plugins", module_name, "templates")
-            files_dir = os.path.join(path_extracted_pkg, "inmanta_plugins", module_name, "files")
-            setup_cfg_file = os.path.join(path_extracted_pkg, "inmanta_plugins", module_name, "setup.cfg")
             try:
+                # Remove this file as it will be replace by the one present in the inmanta_plugins/<mod-name> directory.
                 os.remove(os.path.join(path_extracted_pkg, "setup.cfg"))
             except FileNotFoundError:
                 pass
-            for file_or_dir in [model_dir, templates_dir, files_dir, setup_cfg_file]:
-                if os.path.exists(file_or_dir):
-                    shutil.move(src=file_or_dir, dst=path_extracted_pkg)
+            files_and_dirs_to_move = ["model", "templates", "files", "setup.cfg"]
+            for file_or_dir in files_and_dirs_to_move:
+                fq_path = os.path.join(path_extracted_pkg, "inmanta_plugins", module_name, file_or_dir)
+                if os.path.exists(fq_path):
+                    shutil.move(src=fq_path, dst=path_extracted_pkg)
             # Move to desired output directory
             destination_dir = os.path.join(directory, module_name)
             shutil.copytree(src=path_extracted_pkg, dst=destination_dir)
