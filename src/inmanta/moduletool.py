@@ -20,6 +20,7 @@ import argparse
 import configparser
 import datetime
 import enum
+import gzip
 import inspect
 import itertools
 import logging
@@ -31,7 +32,6 @@ import shutil
 import subprocess
 import sys
 import tarfile
-import gzip
 import tempfile
 import zipfile
 from argparse import ArgumentParser, RawTextHelpFormatter

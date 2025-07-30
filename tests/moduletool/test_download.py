@@ -15,19 +15,21 @@ limitations under the License.
 
 Contact: code@inmanta.com
 """
-import pytest
+
 import os
 import shutil
-from packaging import version
-import packaging.utils
-from libpip2pi.commands import dir2pi
-import sys
 import subprocess
+import sys
 import tempfile
 
-from inmanta import moduletool, module, env
+import pytest
 
+import packaging.utils
+from inmanta import env, module, moduletool
+from libpip2pi.commands import dir2pi
+from packaging import version
 from utils import module_from_template
+
 
 @pytest.fixture(scope="session")
 def pip_index(modules_v2_dir: str) -> str:
@@ -64,9 +66,7 @@ def pip_index(modules_v2_dir: str) -> str:
             shutil.rmtree(module_dir)
 
         # The setuptools and wheel packages are required by `pip download`
-        subprocess.check_call(
-            [sys.executable, "-m", "pip", "download", "setuptools", "wheel"], cwd=build_dir
-        )
+        subprocess.check_call([sys.executable, "-m", "pip", "download", "setuptools", "wheel"], cwd=build_dir)
         dir2pi(argv=["dir2pi", build_dir])
         yield index_dir
 
@@ -105,9 +105,7 @@ def assert_files_in_module(
         ("templates", has_templates_dir),
         ("setup.cfg", True),
     ]:
-        assert not os.path.exists(
-            os.path.join(module_dir, "inmanta_plugins", module_name, file_or_dir)
-        )
+        assert not os.path.exists(os.path.join(module_dir, "inmanta_plugins", module_name, file_or_dir))
         assert os.path.exists(os.path.join(module_dir, file_or_dir)) == must_exist_in_root_dir
 
 
@@ -121,7 +119,7 @@ def test_module_download_no_optional_files(tmpdir, monkeypatch, tmpvenv_active, 
     download_dir = os.path.join(tmpdir, "download")
 
     os.mkdir(download_dir)
-    mod: ModuleV2 = execute_inmanta_download(module_req="minimalv2module", install=False, download_dir=download_dir)
+    mod: module.ModuleV2 = execute_inmanta_download(module_req="minimalv2module", install=False, download_dir=download_dir)
     assert_files_in_module(
         module_dir=mod.path, module_name="elaboratev2module", has_files_dir=False, has_templates_dir=False, has_tests_dir=False
     )
@@ -135,7 +133,7 @@ def test_download_module_req(tmpdir, monkeypatch, tmpvenv_active, pip_index: str
 
     # Test download package without constraint
     os.mkdir(download_dir)
-    mod: ModuleV2 = execute_inmanta_download(module_req="elaboratev2module", install=False, download_dir=download_dir)
+    mod: module.ModuleV2 = execute_inmanta_download(module_req="elaboratev2module", install=False, download_dir=download_dir)
     assert_files_in_module(
         module_dir=mod.path, module_name="elaboratev2module", has_files_dir=True, has_templates_dir=True, has_tests_dir=True
     )
@@ -144,7 +142,9 @@ def test_download_module_req(tmpdir, monkeypatch, tmpvenv_active, pip_index: str
 
     # Test download package with constraint
     os.mkdir(download_dir)
-    mod: ModuleV2 = execute_inmanta_download(module_req="elaboratev2module~=1.2.0", install=False, download_dir=download_dir)
+    mod: module.ModuleV2 = execute_inmanta_download(
+        module_req="elaboratev2module~=1.2.0", install=False, download_dir=download_dir
+    )
     assert_files_in_module(
         module_dir=mod.path, module_name="elaboratev2module", has_files_dir=True, has_templates_dir=True, has_tests_dir=True
     )
@@ -154,7 +154,7 @@ def test_download_module_req(tmpdir, monkeypatch, tmpvenv_active, pip_index: str
     # Test download package with --pre
     os.mkdir(download_dir)
     monkeypatch.setenv("PIP_PRE", "true")
-    mod: ModuleV2 = execute_inmanta_download(module_req="elaboratev2module", install=False, download_dir=download_dir)
+    mod: module.ModuleV2 = execute_inmanta_download(module_req="elaboratev2module", install=False, download_dir=download_dir)
     assert_files_in_module(
         module_dir=mod.path, module_name="elaboratev2module", has_files_dir=True, has_templates_dir=True, has_tests_dir=True
     )
@@ -171,10 +171,11 @@ def test_download_cwd(tmpdir, monkeypatch, tmpvenv_active, pip_index: str):
     download_dir = os.path.join(tmpdir, "download")
     os.mkdir(download_dir)
     monkeypatch.chdir(download_dir)
-    mod: ModuleV2 = execute_inmanta_download(module_req="elaboratev2module", install=False, download_dir=None)
+    mod: module.ModuleV2 = execute_inmanta_download(module_req="elaboratev2module", install=False, download_dir=None)
     assert_files_in_module(
         module_dir=mod.path, module_name="elaboratev2module", has_files_dir=True, has_templates_dir=True, has_tests_dir=True
     )
+
 
 def test_download_install(tmpdir, monkeypatch, tmpvenv_active, pip_index: str):
     """
@@ -189,8 +190,7 @@ def test_download_install(tmpdir, monkeypatch, tmpvenv_active, pip_index: str):
     pkgs_installed_in_editable_mode: dict[packaging.utils.NormalizedName, version.Version]
     pkgs_installed_in_editable_mode = env.process_env.get_installed_packages(only_editable=True)
     assert pkg_name not in pkgs_installed_in_editable_mode
-    mod: ModuleV2 = execute_inmanta_download(module_req="minimalv2module", install=True, download_dir=download_dir)
+    execute_inmanta_download(module_req="minimalv2module", install=True, download_dir=download_dir)
     pkgs_installed_in_editable_mode = env.process_env.get_installed_packages(only_editable=True)
     assert pkg_name in pkgs_installed_in_editable_mode
     assert pkgs_installed_in_editable_mode[pkg_name] == version.Version("1.1.1")
-
