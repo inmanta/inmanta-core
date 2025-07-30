@@ -364,7 +364,7 @@ class PipCommandBuilder:
         cls, python_path: str, pkg_requirement: inmanta.util.CanonicalRequirement, no_deps: bool, no_binary: str | None
     ) -> list[str]:
         """
-        Returns the pip command to download a module as a python package.
+        Returns the pip command to download a python package.
         """
         command = [python_path, "-m", "pip", "download"]
         if no_deps:
