@@ -629,7 +629,8 @@ When a development release is done using the \--dev option, this command:
         release.add_argument("-a", "--all", dest="commit_all", help="Use commit -a", action="store_true")
         download = subparser.add_parser(
             "download",
-            help="Download an Inmanta module from a Python package repository and convert it to its source format.",
+            help="Download the source distribution of an Inmanta module from a Python package repository,"
+                 " extract it and convert it to its source format.",
             parents=parent_parsers,
         )
         download.add_argument(
