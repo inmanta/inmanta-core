@@ -73,8 +73,8 @@ def pip_index(modules_v2_dir: str) -> str:
 
 def execute_inmanta_download(module_req: str, install: bool, download_dir: str | None) -> str:
     """
-    Execute the `inmanta download` command and returns the ModuleV2 object for the downloaded module.
-    This method assumes that the downloaded package is elaboratev2module.
+    Executes the `inmanta module download` command and returns the ModuleV2 object for the
+    downloaded module.
     """
     if download_dir is None:
         download_dir = os.getcwd()
@@ -109,24 +109,10 @@ def assert_files_in_module(
         assert os.path.exists(os.path.join(module_dir, file_or_dir)) == must_exist_in_root_dir
 
 
-def test_module_download_no_optional_files(tmpdir, monkeypatch, tmpvenv_active, pip_index: str):
+def test_download_module(tmpdir, monkeypatch, tmpvenv_active, pip_index: str):
     """
-    Test the `inmanta module download` command on a module that doesn't have any of the optional
-    files/directories (e.g. templates, files, tests).
+    Test the `inmanta module download` command with a version constraint.
     """
-    monkeypatch.setenv("PIP_INDEX_URL", pip_index)
-    monkeypatch.setenv("PIP_PRE", "false")
-    download_dir = os.path.join(tmpdir, "download")
-
-    os.mkdir(download_dir)
-    mod: module.ModuleV2 = execute_inmanta_download(module_req="minimalv2module", install=False, download_dir=download_dir)
-    assert_files_in_module(
-        module_dir=mod.path, module_name="elaboratev2module", has_files_dir=False, has_templates_dir=False, has_tests_dir=False
-    )
-    assert mod.version == version.Version("1.1.1")
-
-
-def test_download_module_req(tmpdir, monkeypatch, tmpvenv_active, pip_index: str):
     monkeypatch.setenv("PIP_INDEX_URL", pip_index)
     monkeypatch.setenv("PIP_PRE", "false")
     download_dir = os.path.join(tmpdir, "download")
@@ -160,6 +146,17 @@ def test_download_module_req(tmpdir, monkeypatch, tmpvenv_active, pip_index: str
     )
     assert mod.version.base_version == "2.3.5"
     assert mod.version.is_prerelease
+    shutil.rmtree(download_dir)
+
+    # Test downloading a package that doesn't have any of the optional directories
+    # (e.g. files, templates, tests).
+    monkeypatch.setenv("PIP_PRE", "false")
+    os.mkdir(download_dir)
+    mod: module.ModuleV2 = execute_inmanta_download(module_req="minimalv2module", install=False, download_dir=download_dir)
+    assert_files_in_module(
+        module_dir=mod.path, module_name="minimalv2module", has_files_dir=False, has_templates_dir=False, has_tests_dir=False
+    )
+    assert mod.version == version.Version("1.1.1")
 
 
 def test_download_cwd(tmpdir, monkeypatch, tmpvenv_active, pip_index: str):
@@ -184,9 +181,8 @@ def test_download_install(tmpdir, monkeypatch, tmpvenv_active, pip_index: str):
     monkeypatch.setenv("PIP_INDEX_URL", pip_index)
     monkeypatch.setenv("PIP_PRE", "false")
     download_dir = os.path.join(tmpdir, "download")
-    pkg_name = "inmanta-module-minimalv2module"
-
     os.mkdir(download_dir)
+    pkg_name = "inmanta-module-minimalv2module"
     pkgs_installed_in_editable_mode: dict[packaging.utils.NormalizedName, version.Version]
     pkgs_installed_in_editable_mode = env.process_env.get_installed_packages(only_editable=True)
     assert pkg_name not in pkgs_installed_in_editable_mode
