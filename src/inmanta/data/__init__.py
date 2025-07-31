@@ -4815,6 +4815,130 @@ class ResourcePersistentState(BaseDocument):
             return state.Compliance.NON_COMPLIANT
 
 
+class ResourceSet(BaseDocument):
+    """
+    A set of resources
+
+    :param environment: The environment this resource set belongs to
+    :param id: The id of this resource set. Unique per environment.
+    :param name: The name of this resource set, None if it is the default set
+    """
+
+    environment: uuid.UUID
+    id: uuid.UUID
+    name: Optional[str]
+
+    @classmethod
+    def table_name(cls) -> str:
+        return "resource_set"
+
+    @classmethod
+    async def get_resource_sets_in_version(
+        cls, environment: uuid.UUID, version: int, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> list["ResourceSet"]:
+        """
+        Returns the resource sets in the given version. Only meant for testing.
+        """
+        query = f"""
+            SELECT rs.*
+            FROM public.resource_set_configuration_model rscm
+            INNER JOIN {cls.table_name()} rs
+                ON rs.id=rscm.resource_set_id
+            WHERE rscm.environment=$1 AND rscm.model=$2
+                """
+        query_result = await cls._fetch_query(
+            query,
+            environment,
+            version,
+            connection=connection,
+        )
+        result = [cls(from_postgres=True, **record) for record in query_result]
+        # Could not express this constraint in the database
+        assert len({rs.name for rs in result}) == len(
+            result
+        ), "Inconsistency in the database, a resource set cannot be present more than once in the same model version"
+        return result
+
+    @classmethod
+    async def update_resource_set_version_mapping(
+        cls,
+        environment: uuid.UUID,
+        latest_version: int,
+        updated_resource_set_ids: Set[uuid.UUID],
+        base_version: Optional[int] = None,
+        outdated_resource_set_names: Optional[Set[str]] = None,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> None:
+        """
+        Persists the relation between the configuration model and its corresponding resource sets.
+        Behaves differently for partial compile and full compile.
+        On full compile:
+            - Links every resource_set in updated_resource_set_ids to this version of the model
+        On partial compile:
+            - Links every resource_set in the previous version of the model to this version of the model
+                iff it is not part of the outdated_resource_set_names
+            - Also links every newly added resource_set
+
+        :param environment: The environment of the configuration model and resource sets
+        :param latest_version: The version of the configuration model
+        :param updated_resource_set_ids: The resource sets to link to this version of the model
+        :param base_version: The version that this partial compile is based on. None for full compile
+        :param outdated_resource_set_names: The resource sets to not include in this version of the model
+        :param connection: The used connection
+        """
+
+        is_partial = base_version is not None
+        values = [environment, latest_version, updated_resource_set_ids]
+        if is_partial:
+            pre_query = f"""
+            WITH resource_sets_to_bump AS (
+                SELECT rs.id
+                FROM public.resource_set_configuration_model AS rscm
+                INNER JOIN {cls.table_name()} rs
+                    ON rs.environment=rscm.environment
+                    AND rs.id=rscm.resource_set_id
+                WHERE rscm.environment=$1
+                    AND rscm.model=$4
+                    AND NOT EXISTS (
+                    -- extra hoop to make comparison with null names --
+                      SELECT 1
+                      FROM UNNEST($5::text[]) AS outdated_resource_set_names(name)
+                      WHERE outdated_resource_set_names.name IS NOT DISTINCT FROM rs.name
+                    )
+            ),
+            resource_sets_in_latest_version(id) AS (
+              SELECT UNNEST($3::uuid[])
+              UNION DISTINCT SELECT id from resource_sets_to_bump
+            )
+            """
+            values.extend([base_version, outdated_resource_set_names])
+        else:
+            pre_query = """
+            WITH resource_sets_in_latest_version(id) AS (
+              SELECT UNNEST($3::uuid[])
+            )
+            """
+        query = f"""
+        {pre_query}
+        INSERT INTO public.resource_set_configuration_model(
+            environment,
+            model,
+            resource_set_id
+        )(
+            SELECT
+                $1,
+                $2,
+                rslv.id
+            FROM resource_sets_in_latest_version AS rslv
+        )
+        """
+        await cls._execute_query(
+            query,
+            *values,
+            connection=connection,
+        )
+
+
 @stable_api
 class Resource(BaseDocument):
     """
@@ -4831,6 +4955,7 @@ class Resource(BaseDocument):
                            used to determine if a resource describes the same state across versions
     :param is_undefined: If the desired state for resource is undefined
     :param resource_set: The resource set this resource belongs to. Used when doing partial compiles.
+    :param resource_set_id: The id of the resource set this resource belongs to.
     """
 
     __primary_key__ = ("environment", "model", "resource_id")
@@ -4851,6 +4976,7 @@ class Resource(BaseDocument):
     is_undefined: bool = False
 
     resource_set: Optional[str] = None
+    resource_set_id: uuid.UUID
 
     # internal field to handle cross agent dependencies
     # if this resource is updated, it must notify all RV's in this list
@@ -5266,7 +5392,9 @@ class Resource(BaseDocument):
         return value
 
     @classmethod
-    def new(cls, environment: uuid.UUID, resource_version_id: ResourceVersionIdStr, **kwargs: object) -> "Resource":
+    def new(
+        cls, environment: uuid.UUID, resource_version_id: ResourceVersionIdStr, resource_set: ResourceSet, **kwargs: object
+    ) -> "Resource":
         vid = resources.Id.parse_id(resource_version_id)
 
         attr = dict(
@@ -5276,6 +5404,8 @@ class Resource(BaseDocument):
             resource_type=vid.entity_type,
             agent=vid.agent_name,
             resource_id_value=vid.attribute_value,
+            resource_set=resource_set.name,
+            resource_set_id=resource_set.id,
         )
 
         attr.update(kwargs)
@@ -5298,6 +5428,7 @@ class Resource(BaseDocument):
             attribute_hash=self.attribute_hash,
             is_undefined=self.is_undefined,
             resource_set=self.resource_set,
+            resource_set_id=self.resource_set_id,
             provides=self.provides,
         )
 
@@ -5440,6 +5571,7 @@ class Resource(BaseDocument):
                 attributes,
                 attribute_hash,
                 resource_set,
+                resource_set_id,
                 provides
             )(
                 SELECT
@@ -5453,6 +5585,7 @@ class Resource(BaseDocument):
                     r.attributes AS attributes,
                     r.attribute_hash,
                     r.resource_set,
+                    r.resource_set_id,
                     r.provides
                 FROM {cls.table_name()} AS r
                 WHERE r.environment=$1 AND r.model=$2 AND r.resource_set IS NOT NULL AND NOT r.resource_set=ANY($4)
@@ -6479,6 +6612,7 @@ _classes = [
     Resource,
     ResourceAction,
     ResourcePersistentState,
+    ResourceSet,
     ConfigurationModel,
     Parameter,
     DryRun,
