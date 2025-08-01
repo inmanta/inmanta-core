@@ -3046,13 +3046,13 @@ class Parameter(BaseDocument):
             INNER JOIN {ResourceSet.table_name()} AS rs
                 ON rs.environment=rscm.environment
                 AND rs.id=rscm.resource_set_id
-            INNER JOIN {cls.table_name()} AS r
+            INNER JOIN {Resource.table_name()} AS r
                 ON r.environment=rs.environment
                 AND r.resource_set_id=rs.id
             WHERE rscm.model=(
                     SELECT max(c.version)
                     FROM {ConfigurationModel.table_name()} AS c
-                    WHERE c.environment=p.environment AND c.released
+                    WHERE c.released
                 )
         )
         SELECT p.*

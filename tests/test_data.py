@@ -39,9 +39,9 @@ from inmanta.resources import Id
 from inmanta.types import ResourceVersionIdStr
 
 
-async def make_resource_set(environment: uuid.UUID, version: int) -> data.ResourceSet:
+async def make_resource_set(environment: uuid.UUID, version: list[int]) -> data.ResourceSet:
     resource_set = data.ResourceSet(environment=environment, id=uuid.uuid4())
-    await resource_set.insert_with_link_to_configuration_model(versions=[version])
+    await resource_set.insert_with_link_to_configuration_model(versions=version)
     return resource_set
 
 
@@ -205,7 +205,7 @@ async def test_project_cascade_delete(init_dataclasses_and_load_schema):
         version = int(time.time())
         cm = data.ConfigurationModel(version=version, environment=env.id, is_suitable_for_partial_compiles=False)
         await cm.insert()
-        resource_set = await make_resource_set(env.id, version)
+        resource_set = await make_resource_set(env.id, [version])
 
         resource_ids = []
         for i in range(5):
@@ -317,7 +317,7 @@ async def test_environment_cascade_content_only(init_dataclasses_and_load_schema
     version = int(time.time())
     cm = data.ConfigurationModel(version=version, environment=env.id, is_suitable_for_partial_compiles=False)
     await cm.insert()
-    resource_set = await make_resource_set(env.id, version)
+    resource_set = await make_resource_set(env.id, [version])
 
     resource_ids = []
     for i in range(5):
@@ -776,7 +776,7 @@ async def test_config_model(init_dataclasses_and_load_schema):
         is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
-    resource_set = await make_resource_set(env.id, version)
+    resource_set = await make_resource_set(env.id, [version])
 
     # create resources
     key = "std::testing::NullResource[agent1,name=motd]"
@@ -879,7 +879,7 @@ async def test_model_get_list(init_dataclasses_and_load_schema):
                 is_suitable_for_partial_compiles=False,
             )
             await cm.insert()
-            resource_set = await make_resource_set(env.id, i)
+            resource_set = await make_resource_set(env.id, [i])
 
             for r in range(3):
                 res = data.Resource.new(
@@ -914,7 +914,7 @@ async def test_model_serialization(init_dataclasses_and_load_schema):
     )
     await cm.insert()
 
-    resource_set = await make_resource_set(env.id, version)
+    resource_set = await make_resource_set(env.id, [version])
 
     name = "file"
     key = "std::testing::NullResource[agent1,name=" + name + "]"
@@ -955,7 +955,7 @@ async def test_model_delete_cascade(init_dataclasses_and_load_schema):
 
     name = "file"
     key = "std::testing::NullResource[agent1,name=" + name + "]"
-    resource_set = await make_resource_set(env.id, version)
+    resource_set = await make_resource_set(env.id, [version])
 
     resource = data.Resource.new(
         environment=env.id, resource_version_id=key + ",v=%d" % version, resource_set=resource_set, attributes={"name": name}
@@ -1028,7 +1028,7 @@ async def test_get_latest_resource(init_dataclasses_and_load_schema):
         is_suitable_for_partial_compiles=False,
     )
     await cm2.insert()
-    resource_set = await make_resource_set(env.id, version)
+    resource_set = await make_resource_set(env.id, [version])
 
     res11 = data.Resource.new(
         environment=env.id,
@@ -1050,7 +1050,7 @@ async def test_get_latest_resource(init_dataclasses_and_load_schema):
     )
     await cm2.insert()
 
-    resource_set = await make_resource_set(env.id, version)
+    resource_set = await make_resource_set(env.id, [version])
 
     res12 = data.Resource.new(
         environment=env.id,
@@ -1095,7 +1095,7 @@ async def test_get_resources(init_dataclasses_and_load_schema):
     )
     await cm1.insert()
 
-    resource_set = await make_resource_set(env.id, version)
+    resource_set = await make_resource_set(env.id, [version])
 
     resource_ids = []
     for i in range(1, 11):
@@ -1138,7 +1138,7 @@ async def test_model_get_resources_for_version(init_dataclasses_and_load_schema)
         is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
-    resource_set = await make_resource_set(env.id, version)
+    resource_set = await make_resource_set(env.id, [version])
 
     for i in range(1, 11):
         res = data.Resource.new(
@@ -1163,7 +1163,7 @@ async def test_model_get_resources_for_version(init_dataclasses_and_load_schema)
     )
     await cm.insert()
 
-    resource_set = await make_resource_set(env.id, version)
+    resource_set = await make_resource_set(env.id, [version])
 
     for i in range(11, 21):
         res = data.Resource.new(
@@ -1187,7 +1187,7 @@ async def test_model_get_resources_for_version(init_dataclasses_and_load_schema)
         )
         await cm.insert()
 
-    resource_set = await make_resource_set(env.id, version)
+    resource_set = await make_resource_set(env.id, [1, 2, 3, 4])
 
     async def make_with_status(i, is_undefined=False):
         res = data.Resource.new(
@@ -1269,7 +1269,7 @@ async def test_get_resources_in_latest_version(init_dataclasses_and_load_schema)
             is_suitable_for_partial_compiles=False,
         )
         await cm.insert()
-        resource_set = await make_resource_set(env.id, version)
+        resource_set = await make_resource_set(env.id, [version])
 
         for i in range(1, 3):
             res = data.Resource.new(
@@ -1329,7 +1329,7 @@ async def test_model_get_resources_for_version_optional_args(init_dataclasses_an
     )
     await cm.insert()
 
-    resource_set = await make_resource_set(env.id, version)
+    resource_set = await make_resource_set(env.id, [version])
 
     async def insert_resource(env_id, version, agent_name, name, is_undefined):
         resource_version_id = f"std::testing::NullResource[{agent_name},name={name}],v={version}"
@@ -1381,7 +1381,7 @@ async def test_escaped_resources(init_dataclasses_and_load_schema):
         is_suitable_for_partial_compiles=False,
     )
     await cm1.insert()
-    resource_set = await make_resource_set(env.id, version)
+    resource_set = await make_resource_set(env.id, [version])
 
     routes = {"8.0.0.0/8": "1.2.3.4", "0.0.0.0/0": "127.0.0.1"}
     res = data.Resource.new(
@@ -1421,19 +1421,19 @@ async def test_resource_hash(init_dataclasses_and_load_schema):
     res1 = data.Resource.new(
         environment=env.id,
         resource_version_id="std::testing::NullResource[agent1,name=file1],v=1",
-        resource_set=await make_resource_set(env.id, 1),
+        resource_set=await make_resource_set(env.id, [1]),
         attributes={"name": "file1", "purge_on_delete": True, "purged": False},
     )
     res2 = data.Resource.new(
         environment=env.id,
         resource_version_id="std::testing::NullResource[agent1,name=file1],v=2",
-        resource_set=await make_resource_set(env.id, 2),
+        resource_set=await make_resource_set(env.id, [2]),
         attributes={"name": "file1", "purge_on_delete": True, "purged": False},
     )
     res3 = data.Resource.new(
         environment=env.id,
         resource_version_id="std::testing::NullResource[agent1,name=file1],v=3",
-        resource_set=await make_resource_set(env.id, 3),
+        resource_set=await make_resource_set(env.id, [3]),
         attributes={"name": "file1", "purge_on_delete": True, "purged": True},
     )
     await res1.insert()
@@ -1488,7 +1488,7 @@ async def test_get_resource_type_count_for_latest_version(init_dataclasses_and_l
     )
     await cm1.insert()
 
-    resource_set = await make_resource_set(env.id, version)
+    resource_set = await make_resource_set(env.id, [version])
     res1_1 = data.Resource.new(
         environment=env.id,
         resource_version_id="std::testing::NullResource[agent1,name=file1],v=%s" % version,
@@ -1521,7 +1521,7 @@ async def test_get_resource_type_count_for_latest_version(init_dataclasses_and_l
     )
     await cm2.insert()
 
-    resource_set = await make_resource_set(env.id, version)
+    resource_set = await make_resource_set(env.id, [version])
     res2_2 = data.Resource.new(
         environment=env.id,
         resource_version_id="std::testing::NullResource[agent1,name=file2],v=%s" % version,
@@ -1565,7 +1565,7 @@ async def test_resource_action(init_dataclasses_and_load_schema):
     )
     await cm.insert()
 
-    resource_set = await make_resource_set(env.id, version)
+    resource_set = await make_resource_set(env.id, [version])
 
     res1 = data.Resource.new(
         environment=env.id,
@@ -1652,7 +1652,7 @@ async def test_resource_action_get_logs(init_dataclasses_and_load_schema):
     )
     await cm.insert()
 
-    resource_set = await make_resource_set(env.id, version)
+    resource_set = await make_resource_set(env.id, [version])
     rv_id = f"std::testing::NullResource[agent1,name=motd],v={version}"
     res1 = data.Resource.new(
         environment=env.id,
@@ -1746,7 +1746,7 @@ async def test_data_document_recursion(init_dataclasses_and_load_schema):
     )
     await cm.insert()
 
-    resource_set = await make_resource_set(env.id, version)
+    resource_set = await make_resource_set(env.id, [version])
     res1 = data.Resource.new(
         environment=env.id,
         resource_version_id="std::testing::NullResource[agent1,name=file1],v=1",
@@ -1790,7 +1790,7 @@ async def test_get_updated_before_active_env(init_dataclasses_and_load_schema, h
     )
     await cm1.insert()
 
-    resource_set = await make_resource_set(env.id, version)
+    resource_set = await make_resource_set(env.id, [version])
     res = data.Resource.new(
         environment=env.id,
         resource_version_id=f"test::SetExpiringFact[agent1,key=key1],v={version}",
@@ -2122,7 +2122,7 @@ async def test_purgelog_test(init_dataclasses_and_load_schema, env1_halted, env2
             is_suitable_for_partial_compiles=False,
         )
         await cm.insert()
-        resource_set = await make_resource_set(env.id, version)
+        resource_set = await make_resource_set(env.id, [version])
 
         res1 = data.Resource.new(
             environment=env.id,
@@ -2223,7 +2223,7 @@ async def test_resources_json(init_dataclasses_and_load_schema):
     )
     await cm.insert()
 
-    resource_set = await make_resource_set(env.id, version)
+    resource_set = await make_resource_set(env.id, [version])
     res1 = data.Resource.new(
         environment=env.id,
         resource_version_id="std::testing::NullResource[agent1,name=file1],v=%s" % version,
@@ -2296,7 +2296,7 @@ async def test_query_resource_actions_simple(init_dataclasses_and_load_schema):
         res1 = data.Resource.new(
             environment=env.id,
             resource_version_id=f"std::testing::NullResource[agent1,name={name}],v={version}",
-            resource_set=await make_resource_set(env.id, version),
+            resource_set=await make_resource_set(env.id, [version]),
             attributes={"attr": [{"a": 1, "b": "c"}], "name": name},
         )
         await res1.insert()
@@ -2320,7 +2320,7 @@ async def test_query_resource_actions_simple(init_dataclasses_and_load_schema):
 
     # Add resource for file
     resource_ids = []
-    resource_set = await make_resource_set(env.id, version)
+    resource_set = await make_resource_set(env.id, [version])
     for i in range(5):
         name = "file" + str(i)
         key = "std::testing::NullResource[agent1,name=" + name + "]"
@@ -2498,7 +2498,7 @@ async def test_query_resource_actions_non_unique_timestamps(init_dataclasses_and
         res1 = data.Resource.new(
             environment=env.id,
             resource_version_id="std::testing::NullResource[agent1,name=motd],v=%s" % str(i),
-            resource_set=await make_resource_set(env.id, i),
+            resource_set=await make_resource_set(env.id, [i]),
             attributes={"attr": [{"a": 1, "b": "c"}], "name": "motd"},
         )
         await res1.insert()
@@ -2669,7 +2669,7 @@ async def test_get_last_non_deploying_state_for_dependencies(init_dataclasses_an
             last_non_deploying_status=last_non_deploying_status,
         )
 
-    resource_set_v1 = await make_resource_set(env.id, 1)
+    resource_set_v1 = await make_resource_set(env.id, [1])
 
     await make_resource_with_last_non_deploying_status(
         last_non_deploying_status=const.NonDeployingResourceState.available,
@@ -2719,7 +2719,7 @@ async def test_get_last_non_deploying_state_for_dependencies(init_dataclasses_an
     rvid_r4_v2 = cast(ResourceVersionIdStr, "std::testing::NullResource[agent1,name=file4],v=2")
     rvid_r5_v2 = cast(ResourceVersionIdStr, "std::testing::NullResource[agent1,name=file5],v=2")
 
-    resource_set_v2 = await make_resource_set(env.id, 2)
+    resource_set_v2 = await make_resource_set(env.id, [2])
 
     await make_resource_with_last_non_deploying_status(
         last_non_deploying_status=const.NonDeployingResourceState.skipped,
