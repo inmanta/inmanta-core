@@ -54,7 +54,7 @@ import inmanta.warnings
 import packaging.requirements
 import toml
 from build.env import DefaultIsolatedEnv
-from inmanta import const, env
+from inmanta import const, env, util
 from inmanta.command import CLIException, ShowUsageException
 from inmanta.const import CF_CACHE_DIR
 from inmanta.module import (
@@ -654,44 +654,12 @@ When a development release is done using the \--dev option, this command:
         if directory is None:
             directory = os.getcwd()
         module_requirement = InmantaModuleRequirement.parse(module_req)
-        module_name = module_requirement.name
-        with tempfile.TemporaryDirectory() as path_tmp_dir:
-            # Download the python package
-            download_dir = os.path.join(path_tmp_dir, "download")
-            os.mkdir(download_dir)
-            env.process_env.download_python_package(
-                pkg_requirement=module_requirement.get_python_package_requirement(),
-                output_directory=download_dir,
-            )
-            files_download_dir = os.listdir(download_dir)
-            assert len(files_download_dir) == 1
-            path_python_source_package = os.path.join(download_dir, files_download_dir[0])
-            # Extract the package
-            extract_dir = os.path.join(path_tmp_dir, "extract")
-            os.mkdir(extract_dir)
-            with gzip.open(filename=path_python_source_package, mode="rb") as tar_file_obj:
-                with tarfile.TarFile(mode="r", fileobj=tar_file_obj) as tar:
-                    tar.extractall(path=extract_dir, filter="data")
-            files_extract_dir = os.listdir(extract_dir)
-            assert len(files_extract_dir) == 1
-            path_extracted_pkg = os.path.join(extract_dir, files_extract_dir[0])
-            # Convert to source format
-            try:
-                # Remove this file as it will be replace by the one present in the inmanta_plugins/<mod-name> directory.
-                os.remove(os.path.join(path_extracted_pkg, "setup.cfg"))
-            except FileNotFoundError:
-                pass
-            files_and_dirs_to_move = ["model", "templates", "files", "setup.cfg"]
-            for file_or_dir in files_and_dirs_to_move:
-                fq_path = os.path.join(path_extracted_pkg, "inmanta_plugins", module_name, file_or_dir)
-                if os.path.exists(fq_path):
-                    shutil.move(src=fq_path, dst=path_extracted_pkg)
-            # Move to desired output directory
-            destination_dir = os.path.join(directory, module_name)
-            shutil.copytree(src=path_extracted_pkg, dst=destination_dir)
-            # Install in editable mode if requested
-            if install:
-                env.process_env.install_from_source(paths=[env.LocalPackagePath(path=destination_dir, editable=True)])
+        module_downloader = ModuleDownloader()
+        paths_module_sources = module_downloader.download_in_source_format(module_requirement, output_dir=directory)
+        assert len(paths_module_sources) == 1
+        # Install in editable mode if requested
+        if install:
+            env.process_env.install_from_source(paths=[env.LocalPackagePath(path=paths_module_sources[0], editable=True)])
 
     def add(self, module_req: str, v2: bool = True, override: bool = False) -> None:
         """
@@ -1887,3 +1855,79 @@ graft inmanta_plugins/{self._module.name}/templates
         config["options.packages.find"]["include"] = "inmanta_plugins*"
 
         return config
+
+
+class ModuleDownloader:
+    """
+    A class that offers support to download modules in source format
+    from a Python package repository.
+    """
+
+    def download_in_source_format(self, module_requirement: InmantaModuleRequirement, output_dir: str) -> list[str]:
+        """
+        This method:
+            * Download the source distribution packages for the given
+              Inmanta packages from a Python package repository.
+            * Extracts them.
+            * Converts them into their source format.
+        """
+        result = []
+        with tempfile.TemporaryDirectory() as path_tmp_dir:
+            # Download the python package
+            download_dir = os.path.join(path_tmp_dir, "download")
+            os.mkdir(download_dir)
+            paths_source_packages: list[str] = self._download_source_packages(module_requirement, download_dir)
+            # Extract the packages and convert to source format
+            extract_dir = os.path.join(path_tmp_dir, "extract")
+            os.mkdir(extract_dir)
+            for path_current_package in paths_source_packages:
+                inmanta_module_name: str = util.get_inmanta_module_name(path_source_distribution_pkg=path_current_package)
+                path_extracted_pkg = self._extract_source_package(path_current_package, extract_dir)
+                self._convert_to_source_format(path_extracted_pkg, inmanta_module_name)
+                # Move to desired output directory
+                path_pkg_in_output_dir = os.path.join(output_dir, inmanta_module_name)
+                assert not os.path.exists(path_pkg_in_output_dir)
+                shutil.move(src=path_extracted_pkg, dst=path_pkg_in_output_dir)
+                result.append(path_pkg_in_output_dir)
+        return result
+
+    def _download_source_packages(self, module_requirement: InmantaModuleRequirement, download_dir: str) -> list[str]:
+        """
+        Download the source distribution packages for the given requirements into the download_dir.
+
+        :return: A list of path to the source distribution packages that were downloaded.
+        """
+        assert not os.listdir(download_dir)
+        env.process_env.download_python_package(
+            pkg_requirement=module_requirement.get_python_package_requirement(),
+            output_directory=download_dir,
+        )
+        return [os.path.join(download_dir, filename) for filename in os.listdir(download_dir)]
+
+    def _extract_source_package(self, path_source_package: str, extract_dir: str) -> str:
+        """
+        Extract the given source distribution package into the given extract_dir directory.
+        """
+        assert not os.listdir(extract_dir)
+        with gzip.open(filename=path_source_package, mode="rb") as tar_file_obj:
+            with tarfile.TarFile(mode="r", fileobj=tar_file_obj) as tar:
+                tar.extractall(path=extract_dir, filter="data")
+
+        files_extract_dir = os.listdir(extract_dir)
+        assert len(files_extract_dir) == 1
+        return os.path.join(extract_dir, files_extract_dir[0])
+
+    def _convert_to_source_format(self, path_extracted_pkg: str, module_name: str) -> None:
+        """
+        Move the files from the extracted Python package into their location on the source code repository.
+        """
+        try:
+            # Remove this file as it will be replaced by the one present in the inmanta_plugins/<mod-name> directory.
+            os.remove(os.path.join(path_extracted_pkg, "setup.cfg"))
+        except FileNotFoundError:
+            pass
+        files_and_dirs_to_move = ["model", "templates", "files", "setup.cfg"]
+        for file_or_dir in files_and_dirs_to_move:
+            fq_path = os.path.join(path_extracted_pkg, "inmanta_plugins", module_name, file_or_dir)
+            if os.path.exists(fq_path):
+                shutil.move(src=fq_path, dst=path_extracted_pkg)

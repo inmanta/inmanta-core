@@ -1006,3 +1006,14 @@ def make_attribute_hash(resource_id: "ResourceId", attributes: Mapping[str, obje
     m.update(resource_id.encode("utf-8"))
     m.update(character.encode("utf-8"))
     return m.hexdigest()
+
+
+def get_inmanta_module_name(path_source_distribution_pkg: str) -> str:
+    """
+    Returns the name of the Inmanta module that belongs to the given python
+    source distribution package for an Inmanta module.
+    """
+    filename_source_distribution_pkg = os.path.basename(path_source_distribution_pkg)
+    assert filename_source_distribution_pkg.endswith("tar.gz")
+    python_package_name = filename_source_distribution_pkg.split("-", maxsplit=1)[0]
+    return python_package_name[len("inmanta_module_") :]
