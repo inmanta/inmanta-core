@@ -125,7 +125,7 @@ async def env_with_resources(server, client):
 
         if (environment, version) not in resource_set_per_version:
             resource_set = data.ResourceSet(environment=environment, id=uuid4())
-            await resource_set.insert()
+            await resource_set.insert_with_link_to_configuration_model(versions=[version])
             resource_set_per_version[(environment, version)] = resource_set
 
         res = data.Resource.new(
