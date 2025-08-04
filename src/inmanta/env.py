@@ -871,6 +871,9 @@ import sys
             pkg_requirement=pkg_requirement,
             path_requirements_file=path_requirements_file,
             no_deps=True,
+            # Setting no_binary to :all: would imply that `pip download` downloads all dependencies
+            # of these modules in source format as well. This would make the command fail if
+            # these dependencies are not available in a source distribution package.
             no_binary=(",".join(r.name for r in requirements) if requirements else None),
         )
 

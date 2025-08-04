@@ -219,9 +219,7 @@ def test_project_download(pip_index: str, snippetcompiler_clean, install: bool):
     assert len(os.listdir(downloadpath)) == 2
     pkgs_installed_in_editable_mode = env.process_env.get_installed_packages(only_editable=True)
     if install:
-        assert ("inmanta-module-minimalv2module" in pkgs_installed_in_editable_mode) == install
         assert pkgs_installed_in_editable_mode["inmanta-module-minimalv2module"] == version.Version("1.1.1")
-        assert ("inmanta-module-elaboratev2module" in pkgs_installed_in_editable_mode) == install
         assert pkgs_installed_in_editable_mode["inmanta-module-elaboratev2module"] == version.Version("2.3.4")
     else:
         assert "inmanta-module-minimalv2module" not in pkgs_installed_in_editable_mode

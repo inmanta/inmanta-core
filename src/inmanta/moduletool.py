@@ -324,7 +324,7 @@ compatible with the dependencies specified by the updated modules.
             "download",
             help="Download all dependencies of the Inmanta project from the pip index, extract them and convert them into"
             " their source format. The extracted modules will be stored in the directory indicated by the downloadpath"
-            " option in the project.yml file.",
+            " option in the project.yml file or into <project-dir>/libs if the downloadpath option was not defined.",
             parents=parent_parsers,
         )
         download.add_argument(
@@ -1910,7 +1910,7 @@ class PythonPackageToSourceConverter:
     ) -> list[str]:
         """
         This method:
-            * Download the source distribution packages for the given
+            * Downloads the source distribution packages for the given
               Inmanta packages from a Python package repository.
             * Extracts them.
             * Converts them into their source format.
@@ -1947,7 +1947,7 @@ class PythonPackageToSourceConverter:
         """
         Download the source distribution packages for the given requirements into the download_dir.
 
-        :return: A list of path to the source distribution packages that were downloaded.
+        :return: A list of paths to the source distribution packages that were downloaded.
         """
         assert not os.listdir(download_dir)
         env.process_env.download_source_distributions(
