@@ -479,11 +479,14 @@ class Pip(PipCommandBuilder):
     ) -> None:
         if pkg_requirement is None and path_requirements_file is None:
             raise ValueError("pkg_requirement and path_requirements_file must not be None simultaneously.")
+
+        index_args: list[str]
+        env_vars: dict[str, str]
         if pip_config:
-            index_args: list[str] = pip_config.get_index_args()
+            index_args = pip_config.get_index_args()
             env_vars = pip_config.get_environment_variables()
         else:
-            index_args: list[str] = []
+            index_args = []
             env_vars = os.environ.copy()
 
         cmd = [python_path, "-m", "pip", "download"]
@@ -497,7 +500,9 @@ class Pip(PipCommandBuilder):
             cmd.append(str(pkg_requirement))
         if path_requirements_file:
             cmd.extend(["-r", path_requirements_file])
-        cls.run_pip(cmd, env_vars, requirements_files=[path_requirements_file] if path_requirements_file else None, cwd=output_dir)
+        cls.run_pip(
+            cmd, env_vars, requirements_files=[path_requirements_file] if path_requirements_file else None, cwd=output_dir
+        )
 
     @classmethod
     def _prepare_pip_install_command(
@@ -552,7 +557,14 @@ class Pip(PipCommandBuilder):
         return cmd, clean_constraints_files, clean_requirements_files, sub_env
 
     @classmethod
-    def run_pip(cls, cmd: list[str], env: dict[str, str], constraints_files: list[str]|None = None, requirements_files: list[str]|None = None, cwd: str|None = None) -> None:
+    def run_pip(
+        cls,
+        cmd: list[str],
+        env: dict[str, str],
+        constraints_files: list[str] | None = None,
+        requirements_files: list[str] | None = None,
+        cwd: str | None = None,
+    ) -> None:
         if constraints_files is None:
             constraints_files = []
         if requirements_files is None:
@@ -1082,7 +1094,7 @@ class CommandRunner:
         cmd: list[str],
         timeout: float = 10,
         env_vars: Optional[Mapping[str, str]] = None,
-        cwd: str|None = None,
+        cwd: str | None = None,
     ) -> tuple[int, list[str]]:
         """
         Similar to the _run_command_and_log_output method, but here, the output is logged on the fly instead of at the end

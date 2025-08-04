@@ -231,14 +231,14 @@ def test_project_download(pip_index: str, snippetcompiler_clean, install: bool):
         module_name="minimalv2module",
         has_files_dir=False,
         has_templates_dir=False,
-        has_tests_dir=False
+        has_tests_dir=False,
     )
     assert_files_in_module(
         module_dir=os.path.join(downloadpath, "elaboratev2module"),
         module_name="elaboratev2module",
         has_files_dir=True,
         has_templates_dir=True,
-        has_tests_dir=True
+        has_tests_dir=True,
     )
 
 
@@ -269,6 +269,7 @@ def test_project_download_with_version_constraint(pip_index: str, snippetcompile
     pkgs_installed_in_editable_mode = env.process_env.get_installed_packages(only_editable=True)
     assert pkgs_installed_in_editable_mode["inmanta-module-elaboratev2module"] == version.Version("1.2.3")
 
+
 def test_project_download_pip_config(pip_index: str, snippetcompiler_clean):
     """
     Verify that the `inmanta project download` command takes into account the pip configuration
@@ -291,7 +292,10 @@ def test_project_download_pip_config(pip_index: str, snippetcompiler_clean):
 
     assert len(os.listdir(downloadpath)) == 1
     pkgs_installed_in_editable_mode = env.process_env.get_installed_packages(only_editable=True)
-    assert pkgs_installed_in_editable_mode["inmanta-module-elaboratev2module"].base_version == version.Version("2.3.5").base_version
+    assert (
+        pkgs_installed_in_editable_mode["inmanta-module-elaboratev2module"].base_version
+        == version.Version("2.3.5").base_version
+    )
 
 
 def test_project_download_no_project(tmpdir, monkeypatch):
@@ -305,4 +309,3 @@ def test_project_download_no_project(tmpdir, monkeypatch):
         project_tool.download(install=False)
 
     assert "Unable to find an inmanta project" in str(excinfo.value)
-

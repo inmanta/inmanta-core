@@ -16,11 +16,11 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import os
 import datetime
 import functools
 import hashlib
 import json
+import os
 import typing
 import urllib
 import uuid

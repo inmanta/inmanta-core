@@ -76,7 +76,6 @@ from inmanta.module import (
     ModuleV2Source,
     Project,
     gitprovider,
-    ProjectNotFoundException,
 )
 from inmanta.stable_api import stable_api
 from packaging.version import Version
@@ -321,7 +320,13 @@ compatible with the dependencies specified by the updated modules.
         )
         add_deps_check_arguments(update)
 
-        download = subparser.add_parser("download", help="Download all dependencies of the Inmanta project from the pip index, extract them and convert them into their source format. The extracted modules will be stored in the directory indicated by the downloadpath option in the project.yml file.", parents=parent_parsers)
+        download = subparser.add_parser(
+            "download",
+            help="Download all dependencies of the Inmanta project from the pip index, extract them and convert them into"
+            " their source format. The extracted modules will be stored in the directory indicated by the downloadpath"
+            " option in the project.yml file.",
+            parents=parent_parsers,
+        )
         download.add_argument(
             "--install",
             dest="install",
@@ -339,7 +344,9 @@ compatible with the dependencies specified by the updated modules.
             raise Exception(f"Project requirements file not found at: {path_requirements_file}")
 
         converter = PythonPackageToSourceConverter()
-        paths_python_packages = converter.download_in_source_format(output_dir=downloadpath, pip_config=pip_config, path_requirements_file=path_requirements_file)
+        paths_python_packages = converter.download_in_source_format(
+            output_dir=downloadpath, pip_config=pip_config, path_requirements_file=path_requirements_file
+        )
         assert paths_python_packages
         if install:
             env.process_env.install_for_config(
@@ -685,9 +692,7 @@ When a development release is done using the \--dev option, this command:
         module_requirement = InmantaModuleRequirement.parse(module_req)
         converter = PythonPackageToSourceConverter()
         paths_module_sources = converter.download_in_source_format(
-            output_dir=directory,
-            pip_config=None,
-            module_requirement=module_requirement
+            output_dir=directory, pip_config=None, module_requirement=module_requirement
         )
         assert len(paths_module_sources) == 1
         # Install in editable mode if requested
@@ -1899,7 +1904,7 @@ class PythonPackageToSourceConverter:
     def download_in_source_format(
         self,
         output_dir: str,
-        pip_config: model.PipConfig|None,
+        pip_config: model.PipConfig | None,
         module_requirement: InmantaModuleRequirement | None = None,
         path_requirements_file: str | None = None,
     ) -> list[str]:
@@ -1934,10 +1939,10 @@ class PythonPackageToSourceConverter:
 
     def _download_source_packages(
         self,
-        download_dir: str ,
-        pip_config: model.PipConfig|None,
+        download_dir: str,
+        pip_config: model.PipConfig | None,
         module_requirement: InmantaModuleRequirement | None = None,
-        path_requirements_file: str | None = None
+        path_requirements_file: str | None = None,
     ) -> list[str]:
         """
         Download the source distribution packages for the given requirements into the download_dir.

@@ -1381,7 +1381,7 @@ class SnippetCompilationTest(KeepOnFail):
         index_url: Optional[str] = None,
         extra_index_url: list[str] = [],
         main_file: str = "main.cf",
-        pre: bool|None = None,
+        pre: bool | None = None,
     ) -> Project:
         """
         Sets up the project to compile a snippet of inmanta DSL. Activates the compiler environment (and patches
@@ -1491,7 +1491,7 @@ class SnippetCompilationTest(KeepOnFail):
         main_file: str = "main.cf",
         ministd: bool = False,
         environment_settings: dict[str, EnvSettingType] | None = None,
-        pre: bool|None = None,
+        pre: bool | None = None,
     ) -> None:
         add_to_module_path = add_to_module_path if add_to_module_path is not None else []
         python_package_sources = python_package_sources if python_package_sources is not None else []
