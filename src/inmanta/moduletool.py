@@ -76,6 +76,7 @@ from inmanta.module import (
     ModuleV2Source,
     Project,
     gitprovider,
+    ProjectNotFoundException,
 )
 from inmanta.stable_api import stable_api
 from packaging.version import Version

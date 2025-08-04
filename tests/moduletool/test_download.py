@@ -193,7 +193,10 @@ def test_module_download_install(tmpdir, monkeypatch, tmpvenv_active, pip_index:
 
 
 @pytest.mark.parametrize("install", [True, False])
-def test_project_download(monkeypatch, pip_index: str, snippetcompiler_clean, install: bool):
+def test_project_download(pip_index: str, snippetcompiler_clean, install: bool):
+    """
+    Test the `inmanta project download` command and its --install option.
+    """
     snippetcompiler_clean.setup_for_snippet(
         snippet="",
         install_project=False,
@@ -201,7 +204,6 @@ def test_project_download(monkeypatch, pip_index: str, snippetcompiler_clean, in
             module.InmantaModuleRequirement.parse("elaboratev2module").get_python_package_requirement(),
             module.InmantaModuleRequirement.parse("minimalv2module").get_python_package_requirement(),
         ],
-        install_mode=module.InstallMode.release,
         use_pip_config_file=False,
         index_url=pip_index,
     )
@@ -218,7 +220,12 @@ def test_project_download(monkeypatch, pip_index: str, snippetcompiler_clean, in
     pkgs_installed_in_editable_mode = env.process_env.get_installed_packages(only_editable=True)
     if install:
         assert ("inmanta-module-minimalv2module" in pkgs_installed_in_editable_mode) == install
+        assert pkgs_installed_in_editable_mode["inmanta-module-minimalv2module"] == version.Version("1.1.1")
         assert ("inmanta-module-elaboratev2module" in pkgs_installed_in_editable_mode) == install
+        assert pkgs_installed_in_editable_mode["inmanta-module-elaboratev2module"] == version.Version("2.3.4")
+    else:
+        assert "inmanta-module-minimalv2module" not in pkgs_installed_in_editable_mode
+        assert "inmanta-module-elaboratev2module" not in pkgs_installed_in_editable_mode
     assert_files_in_module(
         module_dir=os.path.join(downloadpath, "minimalv2module"),
         module_name="minimalv2module",
@@ -233,4 +240,69 @@ def test_project_download(monkeypatch, pip_index: str, snippetcompiler_clean, in
         has_templates_dir=True,
         has_tests_dir=True
     )
+
+
+@pytest.mark.parametrize("already_installed", [True, False])
+def test_project_download_with_version_constraint(pip_index: str, snippetcompiler_clean, already_installed: bool):
+    """
+    Verify that the `inmanta project download` command correctly takes into account version constraints.
+
+    :param already_installed: Whether the Inmanta module is already installed in the venv before running
+                              the `inmanta project download` command.
+    """
+    snippetcompiler_clean.setup_for_snippet(
+        snippet="",
+        install_project=already_installed,
+        python_requires=[
+            module.InmantaModuleRequirement.parse("elaboratev2module~=1.0").get_python_package_requirement(),
+        ],
+        use_pip_config_file=False,
+        index_url=pip_index,
+    )
+    downloadpath = snippetcompiler_clean.project.downloadpath
+    assert not os.path.exists(downloadpath) or not os.listdir(downloadpath)
+
+    project_tool = moduletool.ProjectTool()
+    project_tool.download(install=True)
+
+    assert len(os.listdir(downloadpath)) == 1
+    pkgs_installed_in_editable_mode = env.process_env.get_installed_packages(only_editable=True)
+    assert pkgs_installed_in_editable_mode["inmanta-module-elaboratev2module"] == version.Version("1.2.3")
+
+def test_project_download_pip_config(pip_index: str, snippetcompiler_clean):
+    """
+    Verify that the `inmanta project download` command takes into account the pip configuration
+    """
+    snippetcompiler_clean.setup_for_snippet(
+        snippet="",
+        install_project=False,
+        python_requires=[
+            module.InmantaModuleRequirement.parse("elaboratev2module").get_python_package_requirement(),
+        ],
+        use_pip_config_file=False,
+        index_url=pip_index,
+        pre=True,
+    )
+    downloadpath = snippetcompiler_clean.project.downloadpath
+    assert not os.path.exists(downloadpath) or not os.listdir(downloadpath)
+
+    project_tool = moduletool.ProjectTool()
+    project_tool.download(install=True)
+
+    assert len(os.listdir(downloadpath)) == 1
+    pkgs_installed_in_editable_mode = env.process_env.get_installed_packages(only_editable=True)
+    assert pkgs_installed_in_editable_mode["inmanta-module-elaboratev2module"].base_version == version.Version("2.3.5").base_version
+
+
+def test_project_download_no_project(tmpdir, monkeypatch):
+    """
+    Ensure proper error reporting if the `inmanta project download` command is not executed on
+    an Inmanta project.
+    """
+    monkeypatch.chdir(tmpdir)
+    project_tool = moduletool.ProjectTool()
+    with pytest.raises(module.ProjectNotFoundException) as excinfo:
+        project_tool.download(install=False)
+
+    assert "Unable to find an inmanta project" in str(excinfo.value)
 
