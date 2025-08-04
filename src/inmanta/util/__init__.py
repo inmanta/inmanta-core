@@ -998,7 +998,7 @@ def make_attribute_hash(resource_id: "ResourceId", attributes: Mapping[str, obje
     from inmanta.protocol.common import custom_json_encoder
 
     character = json.dumps(
-        {k: v for k, v in attributes.items() if k not in ["id", "requires", "provides", "version"]},
+        {k: v for k, v in attributes.items() if k not in ["id", "requires", "version"]},
         default=custom_json_encoder,
         sort_keys=True,  # sort the keys for stable hashes when using dicts, see #5306
     )

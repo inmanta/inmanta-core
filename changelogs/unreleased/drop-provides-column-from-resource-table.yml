@@ -1,0 +1,5 @@
+---
+description: "Drop provides column from resource table"
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [master]

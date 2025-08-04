@@ -122,13 +122,10 @@ class ResourceSetValidator:
     def ensure_no_cross_resource_set_dependencies(self) -> None:
         """
         This method raises a CrossResourceSetDependencyError when a resource in self.resources that belongs to a non-shared
-        resource set has a dependency (requires/provides) on another resource that belongs to a different non-shared resource
+        resource set has a dependency (requires) on another resource that belongs to a different non-shared resource
         set.
         """
         for res in self.resources:
-            # It's sufficient to only check the requires relationship. The provides
-            # relationship is always a subset of the reverse relationship (provides relationship).
-            # The provides relationship only contains the cross-agent dependencies.
             for req in res.get_requires():
                 if self._is_cross_resource_set_dependency(res, req):
                     raise CrossResourceSetDependencyError(res.resource_id, req)
@@ -303,10 +300,10 @@ class PartialUpdateMerger:
         result = []
         for rid_shared_resource in all_rids_shared_resources:
             if rid_shared_resource in shared_resources_new and rid_shared_resource in self.shared_resources_old:
-                # Merge requires/provides shared resource
+                # Merge requires shared resource
                 old_shared_resource = self.shared_resources_old[rid_shared_resource]
                 new_shared_resource = shared_resources_new[rid_shared_resource]
-                res = self._merge_requires_and_provides_of_shared_resource(old_shared_resource, new_shared_resource)
+                res = self._merge_requires_of_shared_resource(old_shared_resource, new_shared_resource)
             elif rid_shared_resource in shared_resources_new:
                 # New shared resource in partial compile
                 res = shared_resources_new[rid_shared_resource]
@@ -314,7 +311,7 @@ class PartialUpdateMerger:
                 # Old shared resource not referenced by partial compile
                 res_old = self.shared_resources_old[rid_shared_resource]
                 res = res_old.copy_for_partial_compile(new_version=self.version)
-                res = self._clean_requires_provides_old_shared_resource(res)
+                res = self._clean_requires_of_old_shared_resource(res)
             result.append(res)
         return result
 
@@ -332,25 +329,23 @@ class PartialUpdateMerger:
             return False
         return True
 
-    def _clean_requires_provides_old_shared_resource(self, resource: data.Resource) -> data.Resource:
+    def _clean_requires_of_old_shared_resource(self, resource: data.Resource) -> data.Resource:
         """
-        Cleanup the requires/provides relationship for shared resources that are not present in the partial compile
+        Cleanup the requires relationship for shared resources that are not present in the partial compile
         and that were copied from the old version of the model.
         """
         resource.attributes["requires"] = [
             rid for rid in resource.attributes["requires"] if self._should_keep_dependency_old_shared_resources(rid)
         ]
-        resource.provides = [rid for rid in resource.provides if self._should_keep_dependency_old_shared_resources(rid)]
         return resource
 
-    def _merge_requires_and_provides_of_shared_resource(self, old: data.Resource, new: data.Resource) -> data.Resource:
+    def _merge_requires_of_shared_resource(self, old: data.Resource, new: data.Resource) -> data.Resource:
         """
-        Update the requires and provides relationship of `new` to make it consistent with the new version of the model.
+        Update the requires relationship of `new` to make it consistent with the new version of the model.
 
         :param old: The shared resource present in the old version of the model.
         :param new: The shared resource part of the incremental compile.
         """
-        new.provides = list(self._merge_dependencies_shared_resource(old.provides, new.provides))
         new.attributes["requires"] = self._merge_dependencies_shared_resource(old.get_requires(), new.get_requires())
         return new
 
@@ -563,8 +558,7 @@ class OrchestrationService(protocol.ServerSlice):
     ) -> dict[ResourceIdStr, data.Resource]:
         """
         This method converts the resources sent to the put_version or put_partial endpoint to dao Resource objects.
-        The resulting resource objects will have their provides set up correctly for cross agent dependencies
-        and the version field of these resources will be set to set_version if provided.
+        The resulting resource objects will have their version field set to set_version if provided.
 
         An exception will be raised when the one of the following constraints is not satisfied:
             * A resource present in the resource_sets parameter is not present in the resources dictionary.
@@ -573,8 +567,6 @@ class OrchestrationService(protocol.ServerSlice):
         rid_to_resource = {}
         # The content of the requires attribute for all the resources
         all_requires: set[ResourceIdStr] = set()
-        # list of all resources which have a cross agent dependency, as a tuple, (dependant,requires)
-        cross_agent_dep: list[tuple[data.Resource, Id]] = []
         for res_dict in resources:
             # Verify that the version field and the version in the resource version id field match
             version_part_of_resource_id = Id.parse_id(res_dict["id"]).version
@@ -603,8 +595,6 @@ class OrchestrationService(protocol.ServerSlice):
             if set_version is not None:
                 res_obj.model = set_version
 
-            # find cross agent dependencies
-            agent = res_obj.agent
             if "requires" not in attributes:
                 LOGGER.warning("Received resource without requires attribute (%s)", res_obj.resource_id)
             else:
@@ -613,18 +603,10 @@ class OrchestrationService(protocol.ServerSlice):
                 for req in attributes["requires"]:
                     rid = Id.parse_id(req)
                     all_requires.add(rid.resource_str())
-                    if rid.get_agent_name() != agent:
-                        # it is a CAD
-                        cross_agent_dep.append((res_obj, rid))
                     cleaned_requires.append(rid.resource_str())
                 attributes["requires"] = cleaned_requires
 
             rid_to_resource[res_obj.resource_id] = res_obj
-
-        # hook up all CADs
-        for f, t in cross_agent_dep:
-            res_obj = rid_to_resource[t.resource_str()]
-            res_obj.provides.append(f.resource_id)
 
         rids = set(rid_to_resource.keys())
 
