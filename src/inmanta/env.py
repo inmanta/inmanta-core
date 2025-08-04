@@ -45,7 +45,7 @@ import inmanta.util
 import packaging.requirements
 import packaging.utils
 import packaging.version
-from inmanta import const
+from inmanta import const, file_parser
 from inmanta.ast import CompilerException
 from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig
 from inmanta.server.bootloader import InmantaBootloader
@@ -360,21 +360,6 @@ class PipCommandBuilder:
         return [python_path, "-m", "pip", "uninstall", "-y", *pkg_names]
 
     @classmethod
-    def compose_download_command(
-        cls, python_path: str, pkg_requirement: inmanta.util.CanonicalRequirement, no_deps: bool, no_binary: str | None
-    ) -> list[str]:
-        """
-        Returns the pip command to download a python package.
-        """
-        command = [python_path, "-m", "pip", "download"]
-        if no_deps:
-            command.append("--no-deps")
-        if no_binary:
-            command.extend(["--no-binary", no_binary])
-        command.append(str(pkg_requirement))
-        return command
-
-    @classmethod
     def compose_list_command(
         cls, python_path: str, format: Optional[PipListFormat] = None, only_editable: bool = False
     ) -> list[str]:
@@ -428,7 +413,7 @@ class Pip(PipCommandBuilder):
         :param upgrade_strategy: what upgrade strategy to use
         """
 
-        cmd, constraints_files_clean, requirements_files_clean, sub_env = cls._prepare_command(
+        cmd, constraints_files_clean, requirements_files_clean, sub_env = cls._prepare_pip_install_command(
             python_path,
             config,
             requirements,
@@ -469,7 +454,7 @@ class Pip(PipCommandBuilder):
         :param upgrade_strategy: what upgrade strategy to use
         """
 
-        cmd, constraints_files_clean, requirements_files_clean, sub_env = cls._prepare_command(
+        cmd, constraints_files_clean, requirements_files_clean, sub_env = cls._prepare_pip_install_command(
             python_path,
             config,
             requirements,
@@ -482,7 +467,40 @@ class Pip(PipCommandBuilder):
         await cls.async_run_pip(cmd, sub_env, constraints_files_clean, requirements_files_clean)
 
     @classmethod
-    def _prepare_command(
+    def run_pip_download_command(
+        cls,
+        python_path: str,
+        output_dir: str,
+        pip_config: PipConfig | None,
+        pkg_requirement: inmanta.util.CanonicalRequirement | None = None,
+        path_requirements_file: str | None = None,
+        no_deps: bool = False,
+        no_binary: str | None = None,
+    ) -> None:
+        if pkg_requirement is None and path_requirements_file is None:
+            raise ValueError("pkg_requirement and path_requirements_file must not be None simultaneously.")
+        if pip_config:
+            index_args: list[str] = pip_config.get_index_args()
+            env_vars = pip_config.get_environment_variables()
+        else:
+            index_args: list[str] = []
+            env_vars = os.environ.copy()
+
+        cmd = [python_path, "-m", "pip", "download"]
+        if index_args:
+            cmd.extend(index_args)
+        if no_deps:
+            cmd.append("--no-deps")
+        if no_binary:
+            cmd.extend(["--no-binary", no_binary])
+        if pkg_requirement:
+            cmd.append(str(pkg_requirement))
+        if path_requirements_file:
+            cmd.extend(["-r", path_requirements_file])
+        cls.run_pip(cmd, env_vars, requirements_files=[path_requirements_file] if path_requirements_file else None, cwd=output_dir)
+
+    @classmethod
+    def _prepare_pip_install_command(
         cls,
         python_path: str,
         config: PipConfig,
@@ -515,19 +533,7 @@ class Pip(PipCommandBuilder):
         else:
             # All others need an index
             assert_pip_has_source(config, "'" + " ".join(install_args) + "'")
-        index_args: list[str] = []
-        if config.index_url:
-            index_args.append("--index-url")
-            index_args.append(config.index_url)
-        elif not config.use_system_config:
-            # If the config doesn't set index url
-            # and we are not using system config,
-            # then we need to disable the index.
-            # This can only happen if paths is also set.
-            index_args.append("--no-index")
-        for extra_index_url in config.extra_index_url:
-            index_args.append("--extra-index-url")
-            index_args.append(extra_index_url)
+        index_args: list[str] = config.get_index_args()
         clean_constraints_files = constraints_files if constraints_files is not None else []
         # Command
         cmd = [
@@ -542,31 +548,17 @@ class Pip(PipCommandBuilder):
             *index_args,
         ]
         # ISOLATION!
-        sub_env = os.environ.copy()
-        if not config.use_system_config:
-            # If we don't use system config, unset env vars
-            if "PIP_EXTRA_INDEX_URL" in sub_env:
-                del sub_env["PIP_EXTRA_INDEX_URL"]
-            if "PIP_INDEX_URL" in sub_env:
-                del sub_env["PIP_INDEX_URL"]
-            if "PIP_PRE" in sub_env:
-                del sub_env["PIP_PRE"]
-            if "PIP_NO_INDEX" in sub_env:
-                del sub_env["PIP_NO_INDEX"]
-
-            # setting this env_var to os.devnull disables the loading of all pip configuration file
-            sub_env["PIP_CONFIG_FILE"] = os.devnull
-        if config.pre is not None:
-            # Make sure that IF pip pre is set, we enforce it
-            # The `--pre` option can only enable it
-            # The env var can both enable and disable
-            sub_env["PIP_PRE"] = str(config.pre)
+        sub_env = config.get_environment_variables()
         return cmd, clean_constraints_files, clean_requirements_files, sub_env
 
     @classmethod
-    def run_pip(cls, cmd: list[str], env: dict[str, str], constraints_files: list[str], requirements_files: list[str]) -> None:
+    def run_pip(cls, cmd: list[str], env: dict[str, str], constraints_files: list[str]|None = None, requirements_files: list[str]|None = None, cwd: str|None = None) -> None:
+        if constraints_files is None:
+            constraints_files = []
+        if requirements_files is None:
+            requirements_files = []
         cls._log_before_run(cmd, constraints_files, requirements_files)
-        return_code, full_output = CommandRunner(LOGGER_PIP).run_command_and_stream_output(cmd, env_vars=env)
+        return_code, full_output = CommandRunner(LOGGER_PIP).run_command_and_stream_output(cmd, env_vars=env, cwd=cwd)
         cls._process_return(cmd, env, full_output, return_code)
 
     @classmethod
@@ -843,14 +835,32 @@ import sys
         output = CommandRunner(LOGGER_PIP).run_command_and_log_output(cmd, stderr=subprocess.DEVNULL, env=os.environ.copy())
         return {canonicalize_name(r["name"]): packaging.version.Version(r["version"]) for r in json.loads(output)}
 
-    def download_python_package(self, pkg_requirement: inmanta.util.CanonicalRequirement, output_directory: str) -> None:
+    def download_source_distributions(
+        self,
+        output_directory: str,
+        pip_config: PipConfig | None,
+        pkg_requirement: inmanta.util.CanonicalRequirement | None = None,
+        path_requirements_file: str | None = None,
+    ) -> None:
         """
-        Download the python package that satisfies the constraint pkg_requirement as a source distributin package.
+        Download the python packages that satisfy the given requirements as a source distribution package.
         """
-        cmd = PipCommandBuilder.compose_download_command(
-            python_path=self.python_path, pkg_requirement=pkg_requirement, no_deps=True, no_binary=pkg_requirement.name
+        if pkg_requirement is None and path_requirements_file is None:
+            raise ValueError("pkg_requirement and path_requirements_file must not be None simultaneously.")
+        requirements: list[inmanta.util.CanonicalRequirement] = []
+        if path_requirements_file:
+            requirements.extend(file_parser.RequirementsTxtParser.parse(path_requirements_file))
+        if pkg_requirement is not None:
+            requirements.append(pkg_requirement)
+        Pip.run_pip_download_command(
+            python_path=self.python_path,
+            output_dir=output_directory,
+            pip_config=pip_config,
+            pkg_requirement=pkg_requirement,
+            path_requirements_file=path_requirements_file,
+            no_deps=True,
+            no_binary=(",".join(r.name for r in requirements) if requirements else None),
         )
-        CommandRunner(LOGGER_PIP).run_command_and_log_output(cmd, env=os.environ.copy(), cwd=output_directory)
 
     def install_for_config(
         self,
@@ -1072,6 +1082,7 @@ class CommandRunner:
         cmd: list[str],
         timeout: float = 10,
         env_vars: Optional[Mapping[str, str]] = None,
+        cwd: str|None = None,
     ) -> tuple[int, list[str]]:
         """
         Similar to the _run_command_and_log_output method, but here, the output is logged on the fly instead of at the end
@@ -1083,6 +1094,7 @@ class CommandRunner:
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             env=env_vars,
+            cwd=cwd,
         )
         assert process.stdout is not None  # Make mypy happy
         try:

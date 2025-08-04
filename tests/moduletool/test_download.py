@@ -71,7 +71,7 @@ def pip_index(modules_v2_dir: str) -> str:
         yield index_dir
 
 
-def execute_inmanta_download(module_req: str, install: bool, download_dir: str | None) -> str:
+def execute_module_download(module_req: str, install: bool, download_dir: str | None) -> str:
     """
     Executes the `inmanta module download` command and returns the ModuleV2 object for the
     downloaded module.
@@ -109,7 +109,7 @@ def assert_files_in_module(
         assert os.path.exists(os.path.join(module_dir, file_or_dir)) == must_exist_in_root_dir
 
 
-def test_download_module(tmpdir, monkeypatch, tmpvenv_active, pip_index: str):
+def test_module_download(tmpdir, monkeypatch, tmpvenv_active, pip_index: str):
     """
     Test the `inmanta module download` command with a version constraint.
     """
@@ -119,7 +119,7 @@ def test_download_module(tmpdir, monkeypatch, tmpvenv_active, pip_index: str):
 
     # Test download package without constraint
     os.mkdir(download_dir)
-    mod: module.ModuleV2 = execute_inmanta_download(module_req="elaboratev2module", install=False, download_dir=download_dir)
+    mod: module.ModuleV2 = execute_module_download(module_req="elaboratev2module", install=False, download_dir=download_dir)
     assert_files_in_module(
         module_dir=mod.path, module_name="elaboratev2module", has_files_dir=True, has_templates_dir=True, has_tests_dir=True
     )
@@ -128,7 +128,7 @@ def test_download_module(tmpdir, monkeypatch, tmpvenv_active, pip_index: str):
 
     # Test download package with constraint
     os.mkdir(download_dir)
-    mod: module.ModuleV2 = execute_inmanta_download(
+    mod: module.ModuleV2 = execute_module_download(
         module_req="elaboratev2module~=1.2.0", install=False, download_dir=download_dir
     )
     assert_files_in_module(
@@ -140,7 +140,7 @@ def test_download_module(tmpdir, monkeypatch, tmpvenv_active, pip_index: str):
     # Test download package with --pre
     os.mkdir(download_dir)
     monkeypatch.setenv("PIP_PRE", "true")
-    mod: module.ModuleV2 = execute_inmanta_download(module_req="elaboratev2module", install=False, download_dir=download_dir)
+    mod: module.ModuleV2 = execute_module_download(module_req="elaboratev2module", install=False, download_dir=download_dir)
     assert_files_in_module(
         module_dir=mod.path, module_name="elaboratev2module", has_files_dir=True, has_templates_dir=True, has_tests_dir=True
     )
@@ -152,14 +152,14 @@ def test_download_module(tmpdir, monkeypatch, tmpvenv_active, pip_index: str):
     # (e.g. files, templates, tests).
     monkeypatch.setenv("PIP_PRE", "false")
     os.mkdir(download_dir)
-    mod: module.ModuleV2 = execute_inmanta_download(module_req="minimalv2module", install=False, download_dir=download_dir)
+    mod: module.ModuleV2 = execute_module_download(module_req="minimalv2module", install=False, download_dir=download_dir)
     assert_files_in_module(
         module_dir=mod.path, module_name="minimalv2module", has_files_dir=False, has_templates_dir=False, has_tests_dir=False
     )
     assert mod.version == version.Version("1.1.1")
 
 
-def test_download_cwd(tmpdir, monkeypatch, tmpvenv_active, pip_index: str):
+def test_module_download_cwd(tmpdir, monkeypatch, tmpvenv_active, pip_index: str):
     """
     Test the `inmanta module download` command when downloading to the current working directory.
     """
@@ -168,13 +168,13 @@ def test_download_cwd(tmpdir, monkeypatch, tmpvenv_active, pip_index: str):
     download_dir = os.path.join(tmpdir, "download")
     os.mkdir(download_dir)
     monkeypatch.chdir(download_dir)
-    mod: module.ModuleV2 = execute_inmanta_download(module_req="elaboratev2module", install=False, download_dir=None)
+    mod: module.ModuleV2 = execute_module_download(module_req="elaboratev2module", install=False, download_dir=None)
     assert_files_in_module(
         module_dir=mod.path, module_name="elaboratev2module", has_files_dir=True, has_templates_dir=True, has_tests_dir=True
     )
 
 
-def test_download_install(tmpdir, monkeypatch, tmpvenv_active, pip_index: str):
+def test_module_download_install(tmpdir, monkeypatch, tmpvenv_active, pip_index: str):
     """
     Test the install option of the `inmanta module download` command.
     """
@@ -186,7 +186,51 @@ def test_download_install(tmpdir, monkeypatch, tmpvenv_active, pip_index: str):
     pkgs_installed_in_editable_mode: dict[packaging.utils.NormalizedName, version.Version]
     pkgs_installed_in_editable_mode = env.process_env.get_installed_packages(only_editable=True)
     assert pkg_name not in pkgs_installed_in_editable_mode
-    execute_inmanta_download(module_req="minimalv2module", install=True, download_dir=download_dir)
+    execute_module_download(module_req="minimalv2module", install=True, download_dir=download_dir)
     pkgs_installed_in_editable_mode = env.process_env.get_installed_packages(only_editable=True)
     assert pkg_name in pkgs_installed_in_editable_mode
     assert pkgs_installed_in_editable_mode[pkg_name] == version.Version("1.1.1")
+
+
+@pytest.mark.parametrize("install", [True, False])
+def test_project_download(monkeypatch, pip_index: str, snippetcompiler_clean, install: bool):
+    snippetcompiler_clean.setup_for_snippet(
+        snippet="",
+        install_project=False,
+        python_requires=[
+            module.InmantaModuleRequirement.parse("elaboratev2module").get_python_package_requirement(),
+            module.InmantaModuleRequirement.parse("minimalv2module").get_python_package_requirement(),
+        ],
+        install_mode=module.InstallMode.release,
+        use_pip_config_file=False,
+        index_url=pip_index,
+    )
+    downloadpath = snippetcompiler_clean.project.downloadpath
+    assert not os.path.exists(downloadpath) or not os.listdir(downloadpath)
+    pkgs_installed_in_editable_mode = env.process_env.get_installed_packages(only_editable=False)
+    assert "inmanta-module-minimalv2module" not in pkgs_installed_in_editable_mode
+    assert "inmanta-module-elaboratev2module" not in pkgs_installed_in_editable_mode
+
+    project_tool = moduletool.ProjectTool()
+    project_tool.download(install=install)
+
+    assert len(os.listdir(downloadpath)) == 2
+    pkgs_installed_in_editable_mode = env.process_env.get_installed_packages(only_editable=True)
+    if install:
+        assert ("inmanta-module-minimalv2module" in pkgs_installed_in_editable_mode) == install
+        assert ("inmanta-module-elaboratev2module" in pkgs_installed_in_editable_mode) == install
+    assert_files_in_module(
+        module_dir=os.path.join(downloadpath, "minimalv2module"),
+        module_name="minimalv2module",
+        has_files_dir=False,
+        has_templates_dir=False,
+        has_tests_dir=False
+    )
+    assert_files_in_module(
+        module_dir=os.path.join(downloadpath, "elaboratev2module"),
+        module_name="elaboratev2module",
+        has_files_dir=True,
+        has_templates_dir=True,
+        has_tests_dir=True
+    )
+

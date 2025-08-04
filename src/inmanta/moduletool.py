@@ -57,6 +57,7 @@ from build.env import DefaultIsolatedEnv
 from inmanta import const, env, util
 from inmanta.command import CLIException, ShowUsageException
 from inmanta.const import CF_CACHE_DIR
+from inmanta.data import model
 from inmanta.module import (
     DummyProject,
     FreezeOperator,
@@ -318,6 +319,33 @@ compatible with the dependencies specified by the updated modules.
             parents=parent_parsers,
         )
         add_deps_check_arguments(update)
+
+        download = subparser.add_parser("download", help="Download all dependencies of the Inmanta project from the pip index, extract them and convert them into their source format. The extracted modules will be stored in the directory indicated by the downloadpath option in the project.yml file.", parents=parent_parsers)
+        download.add_argument(
+            "--install",
+            dest="install",
+            help="Install the downloaded module in editable mode into the active Python environment.",
+            action="store_true",
+        )
+
+    def download(self, install: bool) -> None:
+        project = self.get_project()
+        downloadpath = project.downloadpath if project.downloadpath else os.path.join(project.path, "libs")
+        os.makedirs(downloadpath, exist_ok=True)
+        pip_config: model.PipConfig = project.metadata.pip
+        path_requirements_file = os.path.join(project.path, "requirements.txt")
+        if not os.path.exists(path_requirements_file):
+            raise Exception(f"Project requirements file not found at: {path_requirements_file}")
+
+        converter = PythonPackageToSourceConverter()
+        paths_python_packages = converter.download_in_source_format(output_dir=downloadpath, pip_config=pip_config, path_requirements_file=path_requirements_file)
+        assert paths_python_packages
+        if install:
+            env.process_env.install_for_config(
+                requirements=[],
+                config=pip_config,
+                paths=[env.LocalPackagePath(path=path, editable=True) for path in paths_python_packages],
+            )
 
     def freeze(self, outfile: Optional[str], recursive: Optional[bool], operator: Optional[str]) -> None:
         """
@@ -654,8 +682,12 @@ When a development release is done using the \--dev option, this command:
         if directory is None:
             directory = os.getcwd()
         module_requirement = InmantaModuleRequirement.parse(module_req)
-        module_downloader = ModuleDownloader()
-        paths_module_sources = module_downloader.download_in_source_format(module_requirement, output_dir=directory)
+        converter = PythonPackageToSourceConverter()
+        paths_module_sources = converter.download_in_source_format(
+            output_dir=directory,
+            pip_config=None,
+            module_requirement=module_requirement
+        )
         assert len(paths_module_sources) == 1
         # Install in editable mode if requested
         if install:
@@ -1857,13 +1889,19 @@ graft inmanta_plugins/{self._module.name}/templates
         return config
 
 
-class ModuleDownloader:
+class PythonPackageToSourceConverter:
     """
     A class that offers support to download modules in source format
     from a Python package repository.
     """
 
-    def download_in_source_format(self, module_requirement: InmantaModuleRequirement, output_dir: str) -> list[str]:
+    def download_in_source_format(
+        self,
+        output_dir: str,
+        pip_config: model.PipConfig|None,
+        module_requirement: InmantaModuleRequirement | None = None,
+        path_requirements_file: str | None = None,
+    ) -> list[str]:
         """
         This method:
             * Download the source distribution packages for the given
@@ -1876,7 +1914,9 @@ class ModuleDownloader:
             # Download the python package
             download_dir = os.path.join(path_tmp_dir, "download")
             os.mkdir(download_dir)
-            paths_source_packages: list[str] = self._download_source_packages(module_requirement, download_dir)
+            paths_source_packages: list[str] = self._download_source_packages(
+                download_dir, pip_config, module_requirement, path_requirements_file
+            )
             # Extract the packages and convert to source format
             extract_dir = os.path.join(path_tmp_dir, "extract")
             os.mkdir(extract_dir)
@@ -1891,16 +1931,24 @@ class ModuleDownloader:
                 result.append(path_pkg_in_output_dir)
         return result
 
-    def _download_source_packages(self, module_requirement: InmantaModuleRequirement, download_dir: str) -> list[str]:
+    def _download_source_packages(
+        self,
+        download_dir: str ,
+        pip_config: model.PipConfig|None,
+        module_requirement: InmantaModuleRequirement | None = None,
+        path_requirements_file: str | None = None
+    ) -> list[str]:
         """
         Download the source distribution packages for the given requirements into the download_dir.
 
         :return: A list of path to the source distribution packages that were downloaded.
         """
         assert not os.listdir(download_dir)
-        env.process_env.download_python_package(
-            pkg_requirement=module_requirement.get_python_package_requirement(),
+        env.process_env.download_source_distributions(
             output_directory=download_dir,
+            pip_config=pip_config,
+            pkg_requirement=module_requirement.get_python_package_requirement() if module_requirement else None,
+            path_requirements_file=path_requirements_file,
         )
         return [os.path.join(download_dir, filename) for filename in os.listdir(download_dir)]
 
