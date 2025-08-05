@@ -4852,11 +4852,6 @@ class Resource(BaseDocument):
 
     resource_set: Optional[str] = None
 
-    # internal field to handle cross agent dependencies
-    # if this resource is updated, it must notify all RV's in this list
-    # the list contains full rv id's
-    provides: list[ResourceIdStr] = []
-
     # Methods for backward compatibility
     @property
     def resource_version_id(self) -> ResourceVersionIdStr:
@@ -4883,7 +4878,6 @@ class Resource(BaseDocument):
         # This bug has been fixed in the database. For backwards compatibility reason we here make sure that the
         # version field is present in the attributes dictionary served out via the API.
         record["attributes"]["version"] = version
-        record["provides"] = [resources.Id.set_version_in_id(id, version) for id in record["provides"]]
 
     @classmethod
     async def get_last_non_deploying_state_for_dependencies(
@@ -5298,7 +5292,6 @@ class Resource(BaseDocument):
             attribute_hash=self.attribute_hash,
             is_undefined=self.is_undefined,
             resource_set=self.resource_set,
-            provides=self.provides,
         )
 
     @classmethod
@@ -5439,8 +5432,7 @@ class Resource(BaseDocument):
                 is_undefined,
                 attributes,
                 attribute_hash,
-                resource_set,
-                provides
+                resource_set
             )(
                 SELECT
                     r.environment,
@@ -5452,8 +5444,7 @@ class Resource(BaseDocument):
                     r.is_undefined,
                     r.attributes AS attributes,
                     r.attribute_hash,
-                    r.resource_set,
-                    r.provides
+                    r.resource_set
                 FROM {cls.table_name()} AS r
                 WHERE r.environment=$1 AND r.model=$2 AND r.resource_set IS NOT NULL AND NOT r.resource_set=ANY($4)
             )
