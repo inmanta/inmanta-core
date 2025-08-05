@@ -1011,14 +1011,8 @@ class PipConfig(BaseModel):
         sub_env = os.environ.copy()
         if not self.use_system_config:
             # If we don't use system config, unset env vars
-            if "PIP_EXTRA_INDEX_URL" in sub_env:
-                del sub_env["PIP_EXTRA_INDEX_URL"]
-            if "PIP_INDEX_URL" in sub_env:
-                del sub_env["PIP_INDEX_URL"]
-            if "PIP_PRE" in sub_env:
-                del sub_env["PIP_PRE"]
-            if "PIP_NO_INDEX" in sub_env:
-                del sub_env["PIP_NO_INDEX"]
+            for key in ("PIP_EXTRA_INDEX_URL", "PIP_INDEX_URL", "PIP_PRE", "PIP_NO_INDEX"):
+                sub_env.pop(key, None)
 
             # setting this env_var to os.devnull disables the loading of all pip configuration file
             sub_env["PIP_CONFIG_FILE"] = os.devnull
