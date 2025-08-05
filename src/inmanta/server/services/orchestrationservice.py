@@ -122,7 +122,7 @@ class ResourceSetValidator:
     def ensure_no_cross_resource_set_dependencies(self) -> None:
         """
         This method raises a CrossResourceSetDependencyError when a resource in self.resources that belongs to a non-shared
-        resource set has a dependency (requires) on another resource that belongs to a different non-shared resource
+        resource set has a dependency (requires/provides) on another resource that belongs to a different non-shared resource
         set.
         """
         for res in self.resources:
