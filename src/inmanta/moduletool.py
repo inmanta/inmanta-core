@@ -20,6 +20,7 @@ import argparse
 import configparser
 import datetime
 import enum
+import gzip
 import inspect
 import itertools
 import logging
@@ -53,7 +54,7 @@ import inmanta.warnings
 import packaging.requirements
 import toml
 from build.env import DefaultIsolatedEnv
-from inmanta import const
+from inmanta import const, env
 from inmanta.command import CLIException, ShowUsageException
 from inmanta.const import CF_CACHE_DIR
 from inmanta.module import (
@@ -626,6 +627,71 @@ When a development release is done using the \--dev option, this command:
             "this message will also be used as the commit message.",
         )
         release.add_argument("-a", "--all", dest="commit_all", help="Use commit -a", action="store_true")
+        download = subparser.add_parser(
+            "download",
+            help="Download the source distribution of an Inmanta module from a Python package repository,"
+            " extract it and convert it to its source format.",
+            parents=parent_parsers,
+        )
+        download.add_argument(
+            "module_req",
+            help="The name of the module, optionally with a version constraint.",
+        )
+        download.add_argument(
+            "--install",
+            dest="install",
+            help="Install the downloaded module in editable mode into the active Python environment.",
+            action="store_true",
+        )
+        download.add_argument(
+            "-d",
+            "--directory",
+            dest="directory",
+            help="Download the module in this directory instead of the current working directory.",
+        )
+
+    def download(self, module_req: str, install: bool, directory: str | None) -> None:
+        if directory is None:
+            directory = os.getcwd()
+        module_requirement = InmantaModuleRequirement.parse(module_req)
+        module_name = module_requirement.name
+        with tempfile.TemporaryDirectory() as path_tmp_dir:
+            # Download the python package
+            download_dir = os.path.join(path_tmp_dir, "download")
+            os.mkdir(download_dir)
+            env.process_env.download_python_package(
+                pkg_requirement=module_requirement.get_python_package_requirement(),
+                output_directory=download_dir,
+            )
+            files_download_dir = os.listdir(download_dir)
+            assert len(files_download_dir) == 1
+            path_python_source_package = os.path.join(download_dir, files_download_dir[0])
+            # Extract the package
+            extract_dir = os.path.join(path_tmp_dir, "extract")
+            os.mkdir(extract_dir)
+            with gzip.open(filename=path_python_source_package, mode="rb") as tar_file_obj:
+                with tarfile.TarFile(mode="r", fileobj=tar_file_obj) as tar:
+                    tar.extractall(path=extract_dir, filter="data")
+            files_extract_dir = os.listdir(extract_dir)
+            assert len(files_extract_dir) == 1
+            path_extracted_pkg = os.path.join(extract_dir, files_extract_dir[0])
+            # Convert to source format
+            try:
+                # Remove this file as it will be replace by the one present in the inmanta_plugins/<mod-name> directory.
+                os.remove(os.path.join(path_extracted_pkg, "setup.cfg"))
+            except FileNotFoundError:
+                pass
+            files_and_dirs_to_move = ["model", "templates", "files", "setup.cfg"]
+            for file_or_dir in files_and_dirs_to_move:
+                fq_path = os.path.join(path_extracted_pkg, "inmanta_plugins", module_name, file_or_dir)
+                if os.path.exists(fq_path):
+                    shutil.move(src=fq_path, dst=path_extracted_pkg)
+            # Move to desired output directory
+            destination_dir = os.path.join(directory, module_name)
+            shutil.copytree(src=path_extracted_pkg, dst=destination_dir)
+            # Install in editable mode if requested
+            if install:
+                env.process_env.install_from_source(paths=[env.LocalPackagePath(path=destination_dir, editable=True)])
 
     def add(self, module_req: str, v2: bool = True, override: bool = False) -> None:
         """

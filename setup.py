@@ -12,7 +12,7 @@ requires = [
     "crontab>=0.23,<2.0",
     "cryptography>=36,<46",
     # docstring-parser has been known to publish non-backwards compatible minors in the past
-    "docstring-parser>=0.10,<0.17",
+    "docstring-parser>=0.10,<0.18",
     "email-validator>=1,<3",
     "jinja2~=3.0",
     "more-itertools>=8,<11",
@@ -37,6 +37,7 @@ requires = [
     "setproctitle~=1.3",
     "SQLAlchemy~=2.0",
     "strawberry-sqlalchemy-mapper==0.6.4",
+    "jsonpath-ng~=1.7",
 ]
 
 
@@ -121,7 +122,7 @@ setup(
         # option to install a matched pair of inmanta-core and pytest-inmanta-extensions
         "pytest-inmanta-extensions": [f"pytest-inmanta-extensions~={version}.0.dev"],
         "datatrace": ["graphviz"],
-        "tracing": ["logfire>=0.46,<4.0", "opentelemetry-instrumentation-asyncpg~=0.46b0"],
+        "tracing": ["logfire>=0.46,<5.0", "opentelemetry-instrumentation-asyncpg~=0.46b0"],
     },
     entry_points={
         "console_scripts": [

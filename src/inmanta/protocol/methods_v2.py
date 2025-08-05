@@ -401,6 +401,28 @@ def environment_setting_delete(tid: uuid.UUID, id: str) -> ReturnValue[None]:
     """
 
 
+@typedmethod(
+    path="/protected_environment_settings",
+    operation="POST",
+    arg_options=methods.ENV_OPTS,
+    api=True,
+    client_types=[ClientType.compiler],
+    api_version=2,
+)
+def protected_environment_settings_set_batch(
+    tid: uuid.UUID, settings: dict[str, model.EnvSettingType], protected_by: model.ProtectedBy
+) -> None:
+    """
+    Set the values for the given environment settings and mark them as protected.
+    If any other environment setting in that environment was protected for the same reason,
+    its protected status will be cancelled.
+
+    :param tid: The id of the environment from which to update the environment settings.
+    :param settings: The values for each environment setting that has to be updated.
+    :param protected_by: The reason why the environment settings must be protected.
+    """
+
+
 @auth(auth_label=const.CoreAuthorizationLabel.DESIRED_STATE_WRITE, read_only=False, environment_param="tid")
 @typedmethod(
     path="/reserve_version", operation="POST", arg_options=methods.ENV_OPTS, client_types=[ClientType.compiler], api_version=2
@@ -1610,7 +1632,7 @@ def delete_role(name: str) -> None:
 
 @auth(auth_label=const.CoreAuthorizationLabel.ROLE_ASSIGNMENT_READ, read_only=True)
 @typedmethod(path="/role_assignment/<username>", operation="GET", client_types=[ClientType.api], api_version=2)
-def list_roles_for_user(username: str) -> list[model.RoleAssignment]:
+def list_roles_for_user(username: str) -> model.RoleAssignmentsPerEnvironment:
     """
     Returns the roles assigned to the given user.
 

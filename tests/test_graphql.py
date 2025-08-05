@@ -26,7 +26,33 @@ from utils import run_compile_and_wait_until_compile_is_done
 
 
 @pytest.fixture
-async def setup_database(project_default):
+async def setup_database(project_default, server, client):
+    id_env_1 = uuid.UUID("11111111-1234-5678-1234-000000000001")
+    result = await client.environment_create(
+        project_id=project_default,
+        name="test-env-b",
+        environment_id=id_env_1,
+    )
+    assert result.code == 200
+
+    id_env_2 = uuid.UUID("11111111-1234-5678-1234-000000000002")
+    result = await client.environment_create(
+        project_id=project_default,
+        name="test-env-c",
+        environment_id=id_env_2,
+    )
+    assert result.code == 200
+
+    id_env_3 = uuid.UUID("11111111-1234-5678-1234-000000000003")
+    result = await client.environment_create(
+        project_id=project_default,
+        name="test-env-a",
+        environment_id=id_env_3,
+    )
+    assert result.code == 200
+    result = await client.halt_environment(id_env_3)
+    assert result.code == 200
+
     def add_notifications(env_id: uuid.UUID) -> list[models.Notification]:
         notifications = []
         for i in range(8):
@@ -46,42 +72,9 @@ async def setup_database(project_default):
             )
         return notifications
 
-    # Initialize DB
+    # Add notifications
     async with data.get_session() as session:
-        environment_1 = models.Environment(
-            id=uuid.UUID("11111111-1234-5678-1234-000000000001"),
-            name="test-env-b",
-            project=project_default,
-            halted=False,
-            settings={
-                "enable_lsm_expert_mode": False,
-            },
-        )
-        environment_2 = models.Environment(
-            id=uuid.UUID("11111111-1234-5678-1234-000000000002"),
-            name="test-env-c",
-            project=project_default,
-            halted=False,
-            settings={
-                "enable_lsm_expert_mode": True,
-            },
-        )
-        environment_3 = models.Environment(
-            id=uuid.UUID("11111111-1234-5678-1234-000000000003"),
-            name="test-env-a",
-            project=project_default,
-            halted=True,
-        )
-
-        session.add_all(
-            [
-                environment_1,
-                environment_2,
-                environment_3,
-                *add_notifications(environment_1.id),
-                *add_notifications(environment_2.id),
-            ]
-        )
+        session.add_all([*add_notifications(id_env_1), *add_notifications(id_env_2)])
         await session.commit()
         await session.flush()
 
@@ -93,62 +86,6 @@ async def test_graphql_schema(server, client):
     result = await client.graphql_schema()
     assert result.code == 200
     assert result.result["data"]["__schema"]
-
-
-async def test_query_is_expert_mode(server, client, setup_database, project_default):
-    """
-    Tests the custom attribute isExpertMode
-    """
-    query = """
-{
-    environments {
-        edges {
-            node {
-              id
-              halted
-              isExpertMode
-              project
-            }
-        }
-    }
-}
-    """
-    result = await client.graphql(query=query)
-    assert result.code == 200
-    assert result.result["data"] == {
-        "data": {
-            "environments": {
-                "edges": [
-                    {
-                        "node": {
-                            "halted": False,
-                            "id": "11111111-1234-5678-1234-000000000001",
-                            "isExpertMode": False,
-                            "project": project_default,
-                        }
-                    },
-                    {
-                        "node": {
-                            "halted": False,
-                            "id": "11111111-1234-5678-1234-000000000002",
-                            "isExpertMode": True,
-                            "project": project_default,
-                        }
-                    },
-                    {
-                        "node": {
-                            "halted": True,
-                            "id": "11111111-1234-5678-1234-000000000003",
-                            "isExpertMode": False,
-                            "project": project_default,
-                        }
-                    },
-                ]
-            }
-        },
-        "errors": None,
-        "extensions": {},
-    }
 
 
 async def test_query_environments_with_filtering(server, client, setup_database):
@@ -178,7 +115,7 @@ async def test_query_environments_with_filtering(server, client, setup_database)
                         "node": {
                             "halted": False,
                             "id": "11111111-1234-5678-1234-000000000002",
-                            "isExpertMode": True,
+                            "isExpertMode": False,
                         }
                     }
                 ]
@@ -223,21 +160,19 @@ async def test_query_environments_with_paging(server, client, setup_database):
     """
     Display basic paging capabilities
     """
-    async with data.get_session() as session:
-        project = models.Project(id=uuid.UUID("00000000-1234-5678-1234-000000000002"), name="test-proj-2")
-        instances = [project]
-        for i in range(10):
-            instances.append(
-                models.Environment(
-                    id=uuid.UUID(f"21111111-1234-5678-1234-00000000000{i}"),
-                    name=f"test-env-{i}",
-                    project=project.id,
-                    halted=False,
-                )
-            )
-        session.add_all(instances)
-        await session.commit()
-        await session.flush()
+    # Create second project
+    id_project_2 = uuid.UUID("00000000-1234-5678-1234-000000000002")
+    result = await client.project_create(name="test-proj-2", project_id=id_project_2)
+    assert result.code == 200
+    # Create environments in project
+    for i in range(10):
+        result = await client.environment_create(
+            project_id=id_project_2,
+            name=f"test-env-{i}",
+            environment_id=uuid.UUID(f"21111111-1234-5678-1234-00000000000{i}"),
+        )
+        assert result.code == 200
+
     query = """
 {
     environments(%s){

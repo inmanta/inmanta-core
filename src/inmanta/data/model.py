@@ -26,10 +26,10 @@ import uuid
 from collections import abc
 from collections.abc import Sequence
 from enum import Enum, StrEnum
-from typing import ClassVar, Mapping, Optional, Self, Union
+from typing import ClassVar, Mapping, Optional, Self, Union, assert_never
 
 import pydantic.schema
-from pydantic import ConfigDict, Field, computed_field, field_validator, model_validator
+from pydantic import ConfigDict, Field, SerializationInfo, computed_field, field_serializer, field_validator, model_validator
 
 import inmanta
 import inmanta.ast.export as ast_export
@@ -320,8 +320,50 @@ class EnvironmentSetting(BaseModel):
     allowed_values: Optional[list[EnvSettingType]] = None
 
 
+class ProtectedBy(str, Enum):
+    """
+    An enum that indicates the reason why an environment setting can be protected.
+    """
+
+    # The environment setting is managed using the environment_settings property of the project.yml file.
+    project_yml = "project_yml"
+
+    def get_detailed_description(self) -> str:
+        """
+        Return a string that explains in detail why the environment setting is protected.
+        """
+        match self:
+            case ProtectedBy.project_yml:
+                return "Setting is managed by the project.yml file of the Inmanta project."
+            case _ as unreachable:
+                assert_never(unreachable)
+
+
+class EnvironmentSettingDetails(BaseModel):
+    """
+    A class that stores the value and other metadata about an environment setting.
+
+    :param value: The value of the environment setting.
+    :param protected: True iff the environment setting cannot be updated using the normal
+                      endpoints to update environment settings.
+    :param protected_by: This field indicates the reason why the environment setting is protected.
+                         This field is set to None if the environment setting is not protected.
+    """
+
+    value: EnvSettingType
+    protected: bool = False
+    protected_by: ProtectedBy | None = None
+
+
 class EnvironmentSettingsReponse(BaseModel):
+    """
+    :param settings_v2: This attribute aims to replace the `settings` attribute. Next to the value
+                        of the setting this field contains additional information such as whether
+                        the setting is protected or not.
+    """
+
     settings: dict[str, EnvSettingType]
+    settings_v2: dict[str, EnvironmentSettingDetails]
     definition: dict[str, EnvironmentSetting]
 
 
@@ -784,6 +826,16 @@ class RoleAssignment(BaseModel):
     role: str
 
 
+class RoleAssignmentsPerEnvironment(BaseModel):
+    assignments: dict[uuid.UUID, list[str]]
+
+    @field_serializer("assignments")
+    def serialize_assignments(self, assignments: dict[uuid.UUID, list[str]], _info: SerializationInfo) -> dict[str, list[str]]:
+        # Serialize uuid keys in dict to string. The json.dumps() doesn't use the custom serializer for that.
+        # https://github.com/python/cpython/issues/63020
+        return {str(k): v for k, v in assignments.items()}
+
+
 class User(BaseModel):
     """A user"""
 
@@ -793,7 +845,13 @@ class User(BaseModel):
 
 
 class UserWithRoles(User):
-    roles: list[RoleAssignment]
+    roles: dict[uuid.UUID, list[str]]
+
+    @field_serializer("roles")
+    def serialize_roles(self, roles: dict[uuid.UUID, list[str]], _info: SerializationInfo) -> dict[str, list[str]]:
+        # Serialize uuid keys in dict to string. The json.dumps() doesn't use the custom serializer for that.
+        # https://github.com/python/cpython/issues/63020
+        return {str(k): v for k, v in roles.items()}
 
 
 class CurrentUser(BaseModel):

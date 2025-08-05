@@ -415,6 +415,7 @@ class ScheduledWork:
 
         :param resources: Set of resources that should be deployed. Adds a deploy task to the scheduled work for each
             of these, unless it is already scheduled.
+        :param reason: The reason for this deploy.
         :param priority: The priority of this deploy.
         :param deploying: Set of resources for which a non-stale deploy is in progress, i.e. the scheduler does not need to
             take action to deploy the latest intent for any of these resources because that deploy is already in progress

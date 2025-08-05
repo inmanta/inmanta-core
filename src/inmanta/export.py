@@ -21,6 +21,7 @@ import base64
 import itertools
 import logging
 import time
+import uuid
 from collections.abc import Sequence
 from typing import Any, Callable, Optional, Union
 
@@ -32,6 +33,7 @@ from inmanta.ast import CompilerException, Namespace, UnknownException
 from inmanta.ast.entity import Entity
 from inmanta.config import Option, is_list, is_uuid_opt
 from inmanta.const import ResourceState
+from inmanta.data import model
 from inmanta.data.model import PipConfig
 from inmanta.execute.proxy import DynamicProxy, ProxyContext, ProxyMode
 from inmanta.execute.runtime import Instance
@@ -139,6 +141,7 @@ class Exporter:
         self.failed = False
 
         self._file_store: dict[str, bytes] = {}
+        self.client = protocol.SyncClient("compiler")
 
     def _get_instance_proxies_of_types(self, types: list[str]) -> dict[str, Sequence[ProxiedType]]:
         """Returns a dict of instances for the given types"""
@@ -358,8 +361,7 @@ class Exporter:
             LOGGER.warning("The environment for this model should be set for export to server!")
             return 0
         else:
-            conn = protocol.SyncClient("compiler")
-            result = conn.reserve_version(tid)
+            result = self.client.reserve_version(tid)
             if result.code != 200:
                 raise Exception(f"Unable to reserve version number from server (msg: {result.result})")
             return result.result["data"]
@@ -376,15 +378,22 @@ class Exporter:
         partial_compile: bool = False,
         resource_sets_to_remove: Optional[Sequence[str]] = None,
         allow_handler_code_update: bool = False,
+        export_env_var_settings: bool = True,
     ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, ResourceState]]]:
         """
         Run the export functions. Return value for partial json export uses 0 as version placeholder.
+
+        :param export_env_var_settings: True iff the environment settings, defined in the project.yml file,
+                                        will be updated on the server. This argument is used by the test suite
+                                        to make sure we don't connect to the server if the test itself doesn't
+                                        need a server at all.
         """
         start = time.time()
         if not partial_compile and resource_sets_to_remove:
             raise Exception("Cannot remove resource sets when a full compile was done")
         self._removed_resource_sets = set(resource_sets_to_remove) if resource_sets_to_remove is not None else set()
 
+        project = Project.get()
         self.types = types
         self.scopes = scopes
 
@@ -415,6 +424,16 @@ class Exporter:
 
         resources = self.resources_to_list()
 
+        # Update the environment settings, mentioned in the project.yml file, on the server.
+        if not self.failed and not no_commit and export_env_var_settings:
+            result = self.client.protected_environment_settings_set_batch(
+                tid=self._get_env_id(),
+                settings=project.metadata.environment_settings or {},
+                protected_by=model.ProtectedBy.project_yml,
+            )
+            if result.code != 200:
+                raise Exception("Failed to update the environment settings, defined in the project.yml file, on the server.")
+
         export_done = time.time()
         LOGGER.debug("Generating resources from the compiled model took %0.03f seconds", export_done - start)
 
@@ -432,10 +451,10 @@ class Exporter:
                 metadata,
                 partial_compile,
                 list(self._removed_resource_sets),
-                Project.get().metadata.pip,
+                project.metadata.pip,
                 allow_handler_code_update=allow_handler_code_update,
             )
-            LOGGER.info("Committed resources with version %d" % self._version)
+            LOGGER.info("Committed resources with version %d", self._version)
 
         exported_version: int = self._version
         if include_status:
@@ -493,7 +512,6 @@ class Exporter:
 
     def register_code(
         self,
-        conn: protocol.SyncClient,
         code_manager: loader.CodeManager,
     ) -> None:
         """Deploy code to the server"""
@@ -518,7 +536,14 @@ class Exporter:
                 if not type_name.startswith("core::"):
                     code_manager.register_code(resource_type, obj)
 
-        upload_code(conn, code_manager)
+        upload_code(self.client, code_manager)
+
+    def _get_env_id(self) -> uuid.UUID:
+        tid = cfg_env.get()
+        if tid is None:
+            LOGGER.error("The environment for this model should be set!")
+            raise Exception("The environment for this model should be set!")
+        return tid
 
     def commit_resources(
         self,
@@ -535,44 +560,39 @@ class Exporter:
 
         :return: The version for which resources were committed.
         """
-        tid = cfg_env.get()
-        if tid is None:
-            LOGGER.error("The environment for this model should be set!")
-            raise Exception("The environment for this model should be set!")
+        tid = self._get_env_id()
 
         if version is None and not partial_compile:
             raise Exception("Full export requires version to be set")
 
-        conn = protocol.SyncClient("compiler")
-
         code_manager = loader.CodeManager()
         code_manager.build_agent_map(self._resources)
 
-        self.register_code(conn, code_manager)
+        self.register_code(code_manager)
 
-        LOGGER.info("Uploading %d files" % len(self._file_store))
+        LOGGER.info("Uploading %d files", len(self._file_store))
 
         # collect all hashes and send them at once to the server to check
         # if they are already uploaded
         hashes = list(self._file_store.keys())
 
-        result = conn.stat_files(files=hashes)
+        result = self.client.stat_files(files=hashes)
 
         if result.code != 200:
             raise Exception("Unable to check status of files at server")
 
         to_upload = result.result["files"]
 
-        LOGGER.info("Only %d files are new and need to be uploaded" % len(to_upload))
+        LOGGER.info("Only %d files are new and need to be uploaded", len(to_upload))
         for hash_id in to_upload:
             content = self._file_store[hash_id]
 
-            result = conn.upload_file(id=hash_id, content=base64.b64encode(content).decode("ascii"))
+            result = self.client.upload_file(id=hash_id, content=base64.b64encode(content).decode("ascii"))
 
             if result.code != 200:
-                LOGGER.error("Unable to upload file with hash %s" % hash_id)
+                LOGGER.error("Unable to upload file with hash %s", hash_id)
             else:
-                LOGGER.debug("Uploaded file with hash %s" % hash_id)
+                LOGGER.debug("Uploaded file with hash %s", hash_id)
 
         # Collecting version information
         version_info = {const.EXPORT_META_DATA: metadata}
@@ -589,7 +609,7 @@ class Exporter:
 
         def do_put(**kwargs: object) -> protocol.Result:
             if partial_compile:
-                result = conn.put_partial(
+                result = self.client.put_partial(
                     tid=tid,
                     resources=resources,
                     resource_sets=self._resource_sets,
@@ -602,7 +622,7 @@ class Exporter:
                     **kwargs,
                 )
             else:
-                result = conn.put_version(
+                result = self.client.put_version(
                     tid=tid,
                     version=version,
                     resources=resources,

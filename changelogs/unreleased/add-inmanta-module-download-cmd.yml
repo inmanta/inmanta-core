@@ -1,0 +1,8 @@
+---
+description: "Added the `inmanta module download` command, that allows downloading Inmanta modules in their source format from a Python package repository."
+issue-nr: 7820
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [master, iso8]
+sections:
+  feature: "{{description}}"
