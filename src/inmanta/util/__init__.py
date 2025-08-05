@@ -1016,4 +1016,4 @@ def get_inmanta_module_name(path_source_distribution_pkg: str) -> str:
     filename_source_distribution_pkg = os.path.basename(path_source_distribution_pkg)
     assert filename_source_distribution_pkg.endswith("tar.gz")
     python_package_name = filename_source_distribution_pkg.split("-", maxsplit=1)[0]
-    return python_package_name[len("inmanta_module_") :]
+    return python_package_name.removeprefix("inmanta_module_")
