@@ -4827,7 +4827,7 @@ class Resource(BaseDocument):
     :param resource_id_value: The attribute value from the resource id
     :param agent: The name of the agent responsible for deploying this resource
     :param attributes: The desired state for this version of the resource as a dict of attributes
-    :param attribute_hash: hash of the attributes, excluding requires and version,
+    :param attribute_hash: hash of the attributes, excluding requires, provides and version,
                            used to determine if a resource describes the same state across versions
     :param is_undefined: If the desired state for resource is undefined
     :param resource_set: The resource set this resource belongs to. Used when doing partial compiles.
