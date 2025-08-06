@@ -428,11 +428,7 @@ def test_export_no_server(snippetcompiler):
     """
     Make sure that export to json works if no server is present.
     """
-    snippetcompiler.setup_for_snippet(
-        """
-        """,
-        autostd=True,
-    )
+    snippetcompiler.setup_for_snippet("")
     process = do_run([sys.executable, "-m", "inmanta.app", "export", "-j", "out.json"], cwd=snippetcompiler.project_dir)
     stdout, stderr = process.communicate(timeout=30)
     assert process.returncode == 0, f"{stdout}\n\n{stderr}"
