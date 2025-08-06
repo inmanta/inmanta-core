@@ -424,7 +424,7 @@ class Exporter:
 
         resources = self.resources_to_list()
 
-        export_to_json = (self.options and self.options.json)
+        export_to_json = self.options and self.options.json
 
         # Update the environment settings, mentioned in the project.yml file, on the server.
         if not self.failed and not no_commit and export_env_var_settings and not export_to_json:
