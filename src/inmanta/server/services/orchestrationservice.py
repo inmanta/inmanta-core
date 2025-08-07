@@ -914,7 +914,7 @@ class OrchestrationService(protocol.ServerSlice):
                 environment=env.id,
                 updated_resources=list(rid_to_resource.values()),
                 updated_resource_sets=list(set(resource_sets.values())),
-                latest_version=version,
+                target_version=version,
                 base_version=partial_base_version,
                 resource_set_names_not_to_bump=deleted_resource_sets_as_set | set(resource_sets.values()),
                 connection=connection,

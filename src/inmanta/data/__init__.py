@@ -4952,6 +4952,11 @@ class ResourceSet(BaseDocument):
         updated_resource_sets: list[str | None],
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> None:
+        """
+        Checks for duplicates in the target version.
+        This should only happen when we try to migrate a resource to another resource set (base -> target)
+        while the base resource set is not present in the partial compile.
+        """
         query = """
             WITH all_resources AS (
                 SELECT *
@@ -4984,7 +4989,11 @@ class ResourceSet(BaseDocument):
                 if resource_id not in rid_to_resource_sets:
                     rid_to_resource_sets[resource_id] = {}
                 key = "new" if resource_set_name in updated_resource_sets else "old"
-                assert key not in rid_to_resource_sets[resource_id], f"{key} already in {rid_to_resource_sets[resource_id]}"
+                if key in rid_to_resource_sets[resource_id]:
+                    raise BadRequest(
+                        f"Resource set with name {resource_set_name} appears more than once on version {version} "
+                        f"of the model with ids {rid_to_resource_sets[resource_id]} and {resource_id}"
+                    )
                 rid_to_resource_sets[resource_id][key] = resource_set_name
 
             # Each resource id should appear twice
@@ -5004,18 +5013,32 @@ class ResourceSet(BaseDocument):
     async def insert_sets_and_resources(
         cls,
         environment: uuid.UUID,
-        latest_version: int,
+        target_version: int,
         updated_resources: list[m.Resource],
         updated_resource_sets: list[str | None],
         base_version: Optional[int] = None,
         resource_set_names_not_to_bump: Optional[Set[str]] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> None:
+        """
+        Inserts resources and resource sets. These resource sets are linked to the target version
+        :param environment: The environment of these resources.
+        :param target_version: The version which we want to link the resource sets to
+        :param updated_resources: A list of resources to insert.
+            On a full compile, this list should contain all resources present in the version.
+            On a partial compile, this list should contain all resources belonging to a resource set that was changed.
+        :param updated_resource_sets: A list of resource sets that were changed.
+        :param base_version: This is the version which the partial compile is based on. None if we are doing a full compile.
+        :param resource_set_names_not_to_bump: These are the resource set names from the base version .
+            which we do not wish to bump. Either because these sets were removed in this partial compile or because
+            these sets received changes. Not applicable for a full compile.
+        :param connection: The connection to use.
+        """
 
         is_partial_update = base_version is not None
         resource_sets_to_bump = (
             """
-            UNION SELECT rscm.resource_set_id, rs.name
+            UNION SELECT rscm.resource_set_id
             FROM public.resource_set_configuration_model AS rscm
             INNER JOIN public.resource_set AS rs
                 ON rscm.environment=rs.environment
@@ -5044,19 +5067,19 @@ class ResourceSet(BaseDocument):
 
         for r in updated_resources:
             assert r.environment == environment
-            assert r.model == latest_version
-            resource_ids.append(str(r.resource_id))
+            assert r.model == target_version
+            resource_ids.append(r.resource_id)
             agents.append(r.agent)
             attributes.append(json.dumps(r.attributes))
             attribute_hashes.append(util.make_attribute_hash(r.resource_id, r.attributes))
-            resource_types.append(str(r.resource_type))
+            resource_types.append(r.resource_type)
             resource_id_values.append(r.resource_id_value)
             is_undefined.append(r.is_undefined)
             resource_sets.append(r.resource_set)
 
         values = [
             environment,
-            latest_version,
+            target_version,
             updated_resource_sets,
             resource_ids,
             agents,
@@ -5089,7 +5112,7 @@ class ResourceSet(BaseDocument):
             ),
             -- resource sets to include in new version of the model --
             resource_set_ids_in_latest_version (id) AS (
-                SELECT id, name FROM inserted_resource_sets
+                SELECT id FROM inserted_resource_sets
                 {resource_sets_to_bump}
             ),
             -- link resource sets to this new version of the model --
@@ -5158,7 +5181,7 @@ class ResourceSet(BaseDocument):
         if is_partial_update:
             await cls.validate_resource_sets_in_version(
                 environment=environment,
-                version=latest_version,
+                version=target_version,
                 updated_resource_sets=updated_resource_sets,
                 connection=connection,
             )
