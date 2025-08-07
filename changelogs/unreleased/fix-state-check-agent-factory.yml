@@ -1,0 +1,4 @@
+---
+description: "Make sure that no deploy actions can be done while the agent_factory fixture is running the scheduler state check"
+change-type: patch
+destination-branches: [master, iso8]
