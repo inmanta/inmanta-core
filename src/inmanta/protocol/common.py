@@ -46,13 +46,12 @@ from tornado import web
 from tornado.httpclient import HTTPRequest
 
 from inmanta import const, execute, types, util
-from inmanta.data.model import BaseModel, DateTimeNormalizerModel
 from inmanta.protocol import exceptions
 from inmanta.protocol.auth import auth
 from inmanta.protocol.auth.decorators import AuthorizationMetadata
 from inmanta.protocol.openapi import model as openapi_model
 from inmanta.stable_api import stable_api
-from inmanta.types import ArgumentTypes, HandlerType, JsonType, MethodType, ReturnTypes
+from inmanta.types import ArgumentTypes, BaseModel, DateTimeNormalizerModel, HandlerType, JsonType, MethodType, ReturnTypes
 
 if TYPE_CHECKING:
     from inmanta.protocol.rest.client import RESTClient
@@ -1252,7 +1251,9 @@ class Result(Generic[R]):
             self._result,
             # TODO: should these three parameters become a single CallContext arg?
             client=self._client,
-            method_properties=self._method_properties,
+            # TODO: is this type ignore the best we can do? I think so, because can't be statically proven that type has been
+            #   validated through is_pageable. Add comment!
+            method_properties=self._method_properties,  # type: ignore
             environment=self._environment,
         )
 

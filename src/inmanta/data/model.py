@@ -37,46 +37,11 @@ import pydantic_core.core_schema
 from inmanta import const, data, protocol, resources
 from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes, JsonType
+from inmanta.types import BaseModel as BaseModel  # Keep in place for backwards compat with <=ISO8
 from inmanta.types import ResourceIdStr as ResourceIdStr  # Keep in place for backwards compat with <=ISO8
 from inmanta.types import ResourceType as ResourceType  # Keep in place for backwards compat with <=ISO8
 from inmanta.types import ResourceVersionIdStr as ResourceVersionIdStr  # Keep in place for backwards compat with <=ISO8
 from inmanta.types import SimpleTypes
-
-
-def api_boundary_datetime_normalizer(value: datetime.datetime) -> datetime.datetime:
-    if value.tzinfo is None:
-        return value.replace(tzinfo=datetime.timezone.utc)
-    else:
-        return value
-
-
-@stable_api
-class DateTimeNormalizerModel(pydantic.BaseModel):
-    """
-    A model that normalizes all datetime values to be timezone aware. Assumes that all naive timestamps represent UTC times.
-    """
-
-    @field_validator("*", mode="after")
-    @classmethod
-    def validator_timezone_aware_timestamps(cls: type, value: object) -> object:
-        """
-        Ensure that all datetime times are timezone aware.
-        """
-        if isinstance(value, datetime.datetime):
-            return api_boundary_datetime_normalizer(value)
-        else:
-            return value
-
-
-@stable_api
-class BaseModel(DateTimeNormalizerModel):
-    """
-    Base class for all data objects in Inmanta
-    """
-
-    # Populate models with the value property of enums, rather than the raw enum.
-    # This is useful to serialise model.dict() later
-    model_config: ClassVar[ConfigDict] = ConfigDict(use_enum_values=True)
 
 
 class ExtensionStatus(BaseModel):
