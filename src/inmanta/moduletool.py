@@ -341,14 +341,13 @@ compatible with the dependencies specified by the updated modules.
         pip_config: model.PipConfig = project.metadata.pip
         path_requirements_file = os.path.join(project.path, "requirements.txt")
         if not os.path.exists(path_requirements_file):
-            raise Exception(f"Project requirements file not found at: {path_requirements_file}")
+            return
 
         converter = PythonPackageToSourceConverter()
         paths_python_packages = converter.download_in_source_format(
             output_dir=downloadpath, pip_config=pip_config, path_requirements_file=path_requirements_file
         )
-        assert paths_python_packages
-        if install:
+        if paths_python_packages and install:
             env.process_env.install_for_config(
                 requirements=[],
                 config=pip_config,

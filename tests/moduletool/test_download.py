@@ -307,3 +307,18 @@ def test_project_download_no_project(tmpdir, monkeypatch):
         project_tool.download(install=False)
 
     assert "Unable to find an inmanta project" in str(excinfo.value)
+
+
+@pytest.mark.parametrize("project_has_requirements_txt_file", [True, False])
+def test_project_download_nothing_to_download(snippetcompiler_clean, project_has_requirements_txt_file: bool):
+    """
+    Verify that the `inmanta project download` command behaves correctly
+    if there are no modules to download.
+    """
+    snippetcompiler_clean.setup_for_snippet(snippet="", install_project=False)
+    if not project_has_requirements_txt_file:
+        path_requirements_txt = os.path.join(snippetcompiler_clean.project_dir, "requirements.txt")
+        os.remove(path_requirements_txt)
+    project_tool = moduletool.ProjectTool()
+    project_tool.download(install=True)
+
