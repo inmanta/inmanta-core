@@ -1236,7 +1236,7 @@ class Result(Generic[R]):
         return ta.validate_python(self.result[self.method_properties.envelope_key])
 
     # TODO: consider making this a classmthod PageableResult.from_result() instead. No self-overload required then
-    # TODO: name, docstring, implementation, ...
+    # TODO: name, docstring, implementation, ... Internal method
     @typing.overload
     def pageable[V: types.SimpleTypes](self: "Result[list[V]]") -> "PageableResult[V]": ...
     @typing.overload
@@ -1247,8 +1247,14 @@ class Result(Generic[R]):
         if not self.method_properties.is_pageable():
             # TODO
             raise Exception("not pageable")
-        # TODO
-        return PageableResult()
+        return PageableResult(
+            self.code,
+            self._result,
+            # TODO: should these three parameters become a single CallContext arg?
+            client=self._client,
+            method_properties=self._method_properties,
+            environment=self._environment,
+        )
 
 
 class PageableResult(Result[list[V]], Generic[V]):
