@@ -54,6 +54,9 @@ The code snippet below provides an example of a complete ``project.yml`` file:
         extra-index-url: []
         pre: false
         use-system-config: false
+    environment_settings:
+        auto_deploy: true
+        server_compile: true
 
 
 .. _specify_location_pip:
@@ -93,7 +96,7 @@ Setting this to ``true`` will have the following consequences:
   environment variables or pip config files, and passed to pip as extra indexes.
 
 - If ``pre`` is set, it will supersede pip's ``pre`` option set by the ``PIP_PRE`` environment variable or in pip
-config file. When true, pre-release versions are allowed when installing v2 modules or v1 modules' dependencies.
+  config file. When true, pre-release versions are allowed when installing v2 modules or v1 modules' dependencies.
 
 - :term:`Executors<executor>` live on the same host as the server, and so they will share the pip config at the system level.
 
@@ -213,6 +216,18 @@ Changes relative to ``inmanta-2023.4`` (OSS):
     - An error is now raised if ``pip.use-system-config`` is false and no "primary" index is set through ``pip.index-url``.
     - Pip environment variables are no longer ignored when ``pip.use-system-config`` is true and the corresponding option
       from the ``project_yml`` is unset.
+
+Environment settings
+--------------------
+
+This section explains the behavior of the ``environment_settings`` configuration option in the ``project.yml`` file. This
+option allows a project to indicate that it needs certain environment settings to be set to a specific value. These environment
+settings are applied on the server each time the ``inmanta export`` command is executed. All environment settings exported like
+this will become protected. This means that it will no longer be possible to update these settings using the API endpoints to
+update environment settings or via the web-console. In other words, these environment settings are from then on managed using the
+project.yml file only. To unprotect an environment setting, remove it from the project.yml file again and run the
+``inmanta export`` command.
+
 
 Module metadata files
 #####################

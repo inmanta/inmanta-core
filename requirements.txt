@@ -18,7 +18,7 @@ inmanta-dev-dependencies==2.171.0
 inmanta-module-std
 inmanta-sphinx==2.3.0
 jinja2==3.1.6
-logfire==3.25.0
+logfire==4.0.0
 more-itertools==10.7.0
 myst-parser==4.0.1
 openapi_spec_validator==0.7.2
@@ -47,7 +47,7 @@ sphinxcontrib-redoc==1.6.0
 sphinxcontrib-serializinghtml==2.0.0
 sphinx-design==0.6.1
 Sphinx-Substitution-Extensions==2025.6.6
-SQLAlchemy==2.0.41
+SQLAlchemy==2.0.42
 strawberry-sqlalchemy-mapper==0.6.4
 texttable==1.7.0
 time-machine==2.16.0
