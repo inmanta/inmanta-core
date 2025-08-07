@@ -4938,6 +4938,231 @@ class ResourceSet(BaseDocument):
             connection=connection,
         )
 
+    @classmethod
+    def get_printable_name_for_resource_set(cls, native: str | None) -> str:
+        if native is None:
+            return "<SHARED>"
+        return native
+
+    @classmethod
+    async def validate_resource_sets_in_version(
+        cls,
+        environment: uuid.UUID,
+        version: int,
+        updated_resource_sets: list[str | None],
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> None:
+        query = """
+            WITH all_resources AS (
+                SELECT *
+                FROM resource_set_configuration_model AS rscm
+                INNER JOIN resource_set AS rs
+                    ON rscm.environment=rs.environment
+                    AND rscm.resource_set_id=rs.id
+                INNER JOIN resource AS r
+                    ON rs.environment=r.environment
+                    AND rs.id=r.resource_set_id
+                WHERE rscm.environment=$1
+                    AND rscm.model=$2
+                ),
+                duplicate_resources AS (
+                    SELECT ar.resource_id
+                    FROM all_resources AS ar
+                    GROUP BY ar.resource_id
+                    HAVING COUNT(*) > 1
+                )
+                SELECT ar.resource_id, ar.name, ar.id
+                FROM all_resources AS ar
+                WHERE ar.resource_id=ANY(SELECT * FROM duplicate_resources)
+        """
+        records = await cls._fetch_query(query, environment, version, connection=connection)
+        if records:
+            rid_to_resource_sets: dict[str, dict[str, str]] = {}
+            for record in records:
+                resource_id = str(record["resource_id"])
+                resource_set_name = str(record["name"])
+                if resource_id not in rid_to_resource_sets:
+                    rid_to_resource_sets[resource_id] = {}
+                key = "new" if resource_set_name in updated_resource_sets else "old"
+                assert key not in rid_to_resource_sets[resource_id], f"{key} already in {rid_to_resource_sets[resource_id]}"
+                rid_to_resource_sets[resource_id][key] = resource_set_name
+
+            # Each resource id should appear twice
+            assert len(rid_to_resource_sets) * 2 == len(records)
+            msg = (
+                "The following Resource(s) cannot be migrated to a different resource set using a partial compile, "
+                "a full compile is necessary for this process:\n"
+            )
+            msg += "\n".join(
+                f"    {rid} moved from {cls.get_printable_name_for_resource_set(resource_sets["old"])} "
+                f"to {cls.get_printable_name_for_resource_set(resource_sets["new"])}"
+                for rid, resource_sets in rid_to_resource_sets.items()
+            )
+            raise BadRequest(msg)
+
+    @classmethod
+    async def insert_sets_and_resources(
+        cls,
+        environment: uuid.UUID,
+        latest_version: int,
+        updated_resources: list[m.Resource],
+        updated_resource_sets: list[str | None],
+        base_version: Optional[int] = None,
+        resource_set_names_not_to_bump: Optional[Set[str]] = None,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> None:
+
+        is_partial_update = base_version is not None
+        resource_sets_to_bump = (
+            """
+            UNION SELECT rscm.resource_set_id, rs.name
+            FROM public.resource_set_configuration_model AS rscm
+            INNER JOIN public.resource_set AS rs
+                ON rscm.environment=rs.environment
+                AND rscm.resource_set_id=rs.id
+            WHERE rscm.environment=$1
+                AND rscm.model=$12
+                AND NOT EXISTS (
+                    -- extra hoop to make comparison with null names --
+                      SELECT 1
+                      FROM UNNEST($13::text[]) AS outdated_resource_set_names(name)
+                      WHERE outdated_resource_set_names.name IS NOT DISTINCT FROM rs.name
+                    )
+        """
+            if is_partial_update
+            else ""
+        )
+
+        resource_ids = []
+        agents = []
+        attributes = []
+        attribute_hashes = []
+        resource_types = []
+        resource_id_values = []
+        is_undefined = []
+        resource_sets = []
+
+        for r in updated_resources:
+            assert r.environment == environment
+            assert r.model == latest_version
+            resource_ids.append(str(r.resource_id))
+            agents.append(r.agent)
+            attributes.append(json.dumps(r.attributes))
+            attribute_hashes.append(util.make_attribute_hash(r.resource_id, r.attributes))
+            resource_types.append(str(r.resource_type))
+            resource_id_values.append(r.resource_id_value)
+            is_undefined.append(r.is_undefined)
+            resource_sets.append(r.resource_set)
+
+        values = [
+            environment,
+            latest_version,
+            updated_resource_sets,
+            resource_ids,
+            agents,
+            attributes,
+            attribute_hashes,
+            resource_types,
+            resource_id_values,
+            is_undefined,
+            resource_sets,
+        ]
+        if is_partial_update:
+            values.extend([base_version, resource_set_names_not_to_bump])
+
+        query = f"""
+            -- updated resource sets --
+            WITH resource_set_names(name) AS (
+                SELECT UNNEST($3::text[])
+            ),
+            -- insert resource sets with generated id --
+            inserted_resource_sets (environment, id, name) AS (
+                INSERT INTO public.resource_set (environment, id, name)
+                (
+                    SELECT
+                        $1,
+                        gen_random_uuid() AS id,
+                        rs.name
+                    FROM resource_set_names AS rs
+                )
+                RETURNING environment, id, name
+            ),
+            -- resource sets to include in new version of the model --
+            resource_set_ids_in_latest_version (id) AS (
+                SELECT id, name FROM inserted_resource_sets
+                {resource_sets_to_bump}
+            ),
+            -- link resource sets to this new version of the model --
+            resource_set_to_configuration_model AS (
+                INSERT INTO public.resource_set_configuration_model(
+                    environment,
+                    model,
+                    resource_set_id
+                )(
+                    SELECT
+                        $1,
+                        $2,
+                        rslv.id
+                    FROM resource_set_ids_in_latest_version AS rslv
+                )
+                RETURNING resource_set_id
+            ),
+            -- data to populate the resource table --
+            resource_data AS (
+                SELECT
+                    UNNEST($4::varchar[]) AS resource_id,
+                    UNNEST($5::varchar[]) AS agent,
+                    UNNEST($6::jsonb[]) AS attributes,
+                    UNNEST($7::varchar[]) AS attribute_hash,
+                    UNNEST($8::varchar[]) AS resource_type,
+                    UNNEST($9::varchar[]) AS resource_id_value,
+                    UNNEST($10::boolean[]) AS is_undefined,
+                    UNNEST($11::text[]) AS resource_set
+            )
+            INSERT INTO public.resource(
+                    environment,
+                    model,
+                    resource_id,
+                    resource_type,
+                    resource_id_value,
+                    agent,
+                    is_undefined,
+                    attributes,
+                    attribute_hash,
+                    resource_set,
+                    resource_set_id
+                )(
+                    SELECT
+                        $1,
+                        $2,
+                        r.resource_id,
+                        r.resource_type,
+                        r.resource_id_value,
+                        r.agent,
+                        r.is_undefined,
+                        r.attributes,
+                        r.attribute_hash,
+                        rs.name,
+                        rs.id
+                    FROM resource_data AS r
+                    INNER JOIN inserted_resource_sets AS rs
+                        ON r.resource_set IS NOT DISTINCT FROM rs.name
+        )
+        """
+
+        await cls._execute_query(
+            query,
+            *values,
+            connection=connection,
+        )
+        if is_partial_update:
+            await cls.validate_resource_sets_in_version(
+                environment=environment,
+                version=latest_version,
+                updated_resource_sets=updated_resource_sets,
+                connection=connection,
+            )
+
 
 @stable_api
 class Resource(BaseDocument):
@@ -5421,7 +5646,7 @@ class Resource(BaseDocument):
             attributes=self.attributes.copy(),
             attribute_hash=self.attribute_hash,
             is_undefined=self.is_undefined,
-            resource_set=self.resource_set
+            resource_set=self.resource_set,
         )
 
     @classmethod
