@@ -844,7 +844,7 @@ DISABLE_STATE_CHECK = False
 
 
 @pytest.fixture(scope="function")
-async def agent_factory(server, monkeypatch) -> AsyncIterator[Callable[[uuid.UUID], Awaitable[Agent]]]:
+async def agent_factory(server, client, monkeypatch) -> AsyncIterator[Callable[[uuid.UUID], Awaitable[Agent]]]:
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     agents: list[Agent] = []
 
@@ -889,6 +889,12 @@ async def agent_factory(server, monkeypatch) -> AsyncIterator[Callable[[uuid.UUI
     global DISABLE_STATE_CHECK
     try:
         if not DISABLE_STATE_CHECK:
+            all_environments = {agent.environment for agent in agents}
+            for environment in all_environments:
+                # Make sure that the scheduler doesn't deploy anything anymore, because this would alter
+                # the last_deploy timestamp in the resource_state.
+                result = await client.all_agents_action(tid=environment, action=const.AgentAction.pause.value)
+                assert result.code == 200
             for agent in agents:
                 await agent.stop_working()
                 the_state = copy.deepcopy(dict(agent.scheduler._state.resource_state))
