@@ -5902,10 +5902,10 @@ class Resource(BaseDocument):
         self.__mangle_dict(dct)
         return dct
 
-    def to_dto(self) -> m.Resource:
+    def to_dto(self, include_resource_version_in_requires=True) -> m.Resource:
         attributes = self.attributes.copy()
 
-        if "requires" in self.attributes:
+        if "requires" in self.attributes and include_resource_version_in_requires:
             version = self.model
             attributes["requires"] = [resources.Id.set_version_in_id(id, version) for id in self.attributes["requires"]]
 

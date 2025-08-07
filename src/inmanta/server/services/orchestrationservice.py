@@ -114,7 +114,7 @@ class ResourceSetValidator:
         set.
         """
         for res in self.resources:
-            for req in res.attributes.get("requires", {}):
+            for req in res.attributes.get("requires", []):
                 if self._is_cross_resource_set_dependency(res, req):
                     raise CrossResourceSetDependencyError(res.resource_id, req)
 
@@ -200,7 +200,7 @@ class PartialUpdateMerger:
             )
         )
         updated_and_shared_resources_old_dto: abc.Mapping[ResourceIdStr, ResourceDTO] = {
-            k: v.to_dto() for k, v in updated_and_shared_resources_old.items()
+            k: v.to_dto(include_resource_version_in_requires=False) for k, v in updated_and_shared_resources_old.items()
         }
         rids_deleted_resource_sets: abc.Set[ResourceIdStr] = {
             rid
@@ -305,7 +305,7 @@ class PartialUpdateMerger:
             else:
                 # Old shared resource not referenced by partial compile
                 res_old = self.shared_resources_old[rid_shared_resource]
-                res = res_old.model_copy(update={"version": self.version}, deep=True)
+                res = res_old.model_copy(update={"model": self.version}, deep=True)
                 res = self._clean_requires_of_old_shared_resource(res)
             result.append(res)
         return result
@@ -1131,7 +1131,9 @@ class OrchestrationService(protocol.ServerSlice):
                 base_version: int = base_model.version
                 if not base_model.is_suitable_for_partial_compiles:
                     resources_in_base_version = await data.Resource.get_resources_for_version(env.id, base_version)
-                    resource_set_validator = ResourceSetValidator([r.to_dto() for r in resources_in_base_version])
+                    resource_set_validator = ResourceSetValidator(
+                        [r.to_dto(include_resource_version_in_requires=False) for r in resources_in_base_version]
+                    )
                     try:
                         resource_set_validator.ensure_no_cross_resource_set_dependencies()
                     except CrossResourceSetDependencyError as e:
