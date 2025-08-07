@@ -845,7 +845,7 @@ DISABLE_STATE_CHECK = False
 
 
 @pytest.fixture(scope="function")
-async def agent_factory(server, monkeypatch) -> AsyncIterator[Callable[[uuid.UUID], Awaitable[Agent]]]:
+async def agent_factory(server, client, monkeypatch) -> AsyncIterator[Callable[[uuid.UUID], Awaitable[Agent]]]:
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     agents: list[Agent] = []
 
