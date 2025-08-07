@@ -20,7 +20,7 @@ Contact: code@inmanta.com
 
 import builtins
 import uuid
-from collections.abc import Coroutine, Mapping, Sequence
+from collections.abc import Coroutine, Generator, Mapping, Sequence
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Callable, NewType, Optional, Union
 
@@ -46,6 +46,10 @@ else:
 StrictNonIntBool = pydantic.StrictBool
 
 
+type AsyncioGenerator[R] = Generator[object, None, R]
+"""
+Asyncio-compatible generator as returned from a sync function, e.g. __await__.
+"""
 type AsyncioCoroutine[R] = Coroutine[object, None, R]
 """
 Coroutine for use with asyncio, where we don't care about yield and send types.
@@ -70,9 +74,14 @@ type StrictJson = dict[str, StrictJson] | list[StrictJson] | str | int | float |
 
 
 type StrMapping[T] = Mapping[str, T] | Mapping[ResourceIdStr, T] | Mapping[ResourceVersionIdStr, T]
-type ArgumentTypes = SimpleTypes | Sequence[SimpleTypes] | StrMapping[ArgumentTypes]
+# TODO: review these type defs. Are they used?
+type SinglePageTypes = SimpleTypes | StrMapping[ArgumentTypes]
+# TODO: Sequence defined here by necessity, while return types must not be Sequence in practice. Is there a runtime check? Or can PageableResult  and is_pageable() etc use Sequence instead?
+type PageableTypes = Sequence[SimpleTypes]  # only simple types allowed, not dicts or lists
 
-type ReturnTypes = Optional[ArgumentTypes]
+type ArgumentTypes = SinglePageTypes | PageableTypes
+type ReturnTypes = SinglePageTypes | PageableTypes
+
 type MethodReturn = ReturnTypes | ReturnValue[ReturnTypes]
 type MethodType = Callable[..., MethodReturn]
 

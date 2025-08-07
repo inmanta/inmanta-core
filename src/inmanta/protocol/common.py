@@ -29,7 +29,7 @@ import typing
 import typing_extensions
 import uuid
 from collections import defaultdict
-from collections.abc import Awaitable, AsyncIterator, Callable, Generator, Iterable, Mapping, MutableMapping, Sequence
+from collections.abc import Awaitable, AsyncIterator, Callable, Iterable, Mapping, MutableMapping, Sequence
 from datetime import datetime
 from enum import Enum
 from functools import partial
@@ -74,6 +74,7 @@ HTML_CONTENT_WITH_UTF8_CHARSET = f"{HTML_CONTENT}; {UTF8_CHARSET}"
 
 
 R = typing_extensions.TypeVar("R", bound=types.ReturnTypes, covariant=True, default=types.ReturnTypes)
+V = typing_extensions.TypeVar("V", bound=types.SimpleTypes, covariant=True, default=types.SimpleTypes)
 
 
 class CallContext:
@@ -1001,6 +1002,16 @@ class MethodProperties(Generic[R]):
         else:
             return None
 
+    @typing.overload
+    def is_pageable[T: types.SimpleTypes](self: "MethodProperties[list[T]]") -> typing.Literal[True]: ...
+    @typing.overload
+    def is_pageable(self: "MethodProperties[types.SinglePageTypes]") -> typing.Literal[False]: ...
+    @typing.overload
+    def is_pageable(self) -> bool: ...  # catch-all for unknown parameter types and non-list sequence types
+    def is_pageable(self) -> bool:
+        # TODO: docstring
+        return self.return_type is list or typing.get_origin(self.return_type) is list
+
 
 class UrlMethod:
     """
@@ -1183,100 +1194,13 @@ class Result(Generic[R]):
         """
         self._callback = fnc
 
-    # TODO: mypy complains about this one. TODO below this one may provide a solution
-    # TODO: consider making ListResult to provide better type checking
-    @typing.overload
-    def all[T: types.SimpleTypes](self: "Result[list[T]]") -> AsyncIterator[T]: ...
-    @typing.overload
-    def all(self) -> typing.Never: ...
-    def all(self: Self) -> AsyncIterator[object]:
-        # TODO: docstring
-        """
-        Helper method to iterate over all individual items in this result object.
-        This method will start at this result's page and follow paging links.
-        """
-
-        # TODO: consider making ClientCall() accept either Result or Awaitable[Result]
-        async def get_self() -> Self:
-            return self
-
-        # TODO: the way it's constructed now, Result still needs properties. Can we change the structure so that ClientCall doesn't?
-        client_call = ClientCall.construct(get_self(), properties=self.method_properties)
-        if not isinstance(client_call, ListClientCall):
-            # TODO
-            raise Exception("not a list")
-        return client_call.all()
-
-    async def next_page(self) -> Optional["Result[R]"]:
-        if not self.result:
-            return None
-
-        next_link_url = self.result.get("links", {}).get("next")
-        if not next_link_url:
-            return None
-
-        if self._client is None:
-            raise Exception(
-                "The next_page() method cannot be called on this Result object. Make sure you "
-                "set the client and method_properties parameters when constructing "
-                "a Result object manually (e.g. outside of a regular API call)."
-            )
-
-        server_url = self._client._get_client_config()
-        url = server_url + next_link_url
-        headers = {"X-Inmanta-tid": self._environment} if self._environment else None
-        request = HTTPRequest(url=url, method="GET", headers=headers)
-        return self._client._decode_response(
-            await self._client.client.fetch(request), self.method_properties, self._environment
-        )
-
-
-# TODO: add type var defaults to ClientCall, Result, MethodProperties, then remove some explicits
-# TODO: implement stacking of options??? Perhaps not worth it? Consider SyncClient
-# TODO: implement sync
-class ClientCall(Awaitable[Result[R]]):
-    # TODO: docstring
-    def __init__(self, result: Awaitable[Result[R]], *, properties: MethodProperties[R]) -> None:
-        # TODO: consider use cases. Do we need to cache first page? If not, add exception when used twice?
-        self._first_result: Awaitable[Result[R]] = result
-        self._properties: MethodProperties[R] = properties
-
-    # TODO: name
-    @typing.overload
-    @staticmethod
-    def construct[T: types.SimpleTypes](result: Awaitable[Result[list[T]]], *, properties: MethodProperties[list[T]]) -> "ListClientCall[T]": ...
-    @typing.overload
-    @staticmethod
-    def construct[T: types.ReturnTypes](result: Awaitable[Result[T]], *, properties: MethodProperties[T]) -> "ClientCall[T]": ...
-    @staticmethod
-    def construct[T: types.ReturnTypes](
-        result: Awaitable[Result[T]], *, properties: MethodProperties[T]
-    ) -> "ClientCall[T] | ListClientCall":
-        if properties.return_type is list or typing.get_origin(properties.return_type) is list:
-            return ListClientCall(
-                result, properties=properties  # type: ignore
-            )
-        else:
-            return ClientCall(result, properties=properties)
-
-    # TODO: also add this as a sync method on `Result`
-    async def value(self) -> R:
-        """
-        Returns the client call's result value for a single page (if paged). Returns the value as returned by the API method,
-        without wrapping it in a `Result` object.
-
-        Verifies return code and validates result type.
-        """
-        return self._unwrap_result(await self._first_result)
-
     # TODO: process warnings?
-    @classmethod
-    def _unwrap_result[R: types.ReturnTypes](cls, result: Result[R]) -> R:
+    def value(self) -> R:
         # TODO: docstring
         """
         Convert the response into a proper type and restore exception if any
         """
-        if result.code != 200:
+        if self.code != 200:
             exc_mapping: Mapping[int, type[exceptions.BaseHttpException]] = {
                 400: exceptions.BadRequest,
                 401: exceptions.UnauthorizedException,
@@ -1286,47 +1210,49 @@ class ClientCall(Awaitable[Result[R]]):
                 500: exceptions.ServerError,
                 503: exceptions.ShutdownInProgress,
             }
-            exception: type[exceptions.BaseHttpException] = exc_mapping.get(result.code, exceptions.ServerError)
+            exception: type[exceptions.BaseHttpException] = exc_mapping.get(self.code, exceptions.ServerError)
 
             raise (
-                exception(result.code, message=result.result.get("message", None), details=result.result.get("error_details", None))
-                if result.result is not None
+                exception(self.code, message=self.result.get("message", None), details=self.result.get("error_details", None))
+                if self.result is not None
                 else exception()
             )
 
-        # TODO: make method_properties non-private?
-
         # typed methods always require an envelope key
-        if result.result is None or result.method_properties.envelope_key not in result.result:
+        if self.result is None or self.method_properties.envelope_key not in self.result:
             # TODO: better message
             raise exceptions.BadRequest("No data was provided in the body. Make sure to only use typed methods.")
 
-        if result.method_properties.return_type is None:
+        if self.method_properties.return_type is None:
             return None
 
         try:
             # TODO: test this with method that returns `ReturnValue`
-            ta = pydantic.TypeAdapter(result.method_properties.return_type)
+            ta = pydantic.TypeAdapter(self.method_properties.return_type)
         except InvalidMethodDefinition:
             # TODO: better message
             raise exceptions.BadRequest("Typed client can only be used with typed methods.")
 
-        return ta.validate_python(result.result[result.method_properties.envelope_key])
+        return ta.validate_python(self.result[self.method_properties.envelope_key])
 
-    def __await__(self) -> Generator[object, None, Result[R]]:
-        return self._first_result.__await__()
+    # TODO: consider making this a classmthod PageableResult.from_result() instead. No self-overload required then
+    # TODO: name, docstring, implementation, ...
+    @typing.overload
+    def pageable[V: types.SimpleTypes](self: "Result[list[V]]") -> "PageableResult[V]": ...
+    @typing.overload
+    def pageable(self: "Result[types.SinglePageTypes]") -> typing.NoReturn: ...
+    @typing.overload
+    def pageable(self) -> object: ...  # catch-all for unknown parameter types and non-list sequence types
+    def pageable(self) -> object:
+        if not self.method_properties.is_pageable():
+            # TODO
+            raise Exception("not pageable")
+        # TODO
+        return PageableResult()
 
 
-V = typing_extensions.TypeVar("V", bound=types.SimpleTypes, default=types.SimpleTypes)
-
-
-# TODO: name
-# TODO: type constraint correct?
-class ListClientCall(ClientCall[list[V]], Generic[V]):
-    def __init__(self, result: Awaitable[Result[list[V]]], *, properties: MethodProperties[list[V]]) -> None:
-        ClientCall.__init__(self, result, properties=properties)
-        self._iterator: Optional[AsyncIterator[V]] = None
-
+class PageableResult(Result[list[V]], Generic[V]):
+    # TODO: name
     async def all(self) -> AsyncIterator[V]:
         """
         Returns an async iterator over all values returned by this call. Follows paging links if there are any.
@@ -1337,17 +1263,107 @@ class ListClientCall(ClientCall[list[V]], Generic[V]):
 
         Equivalent to using this object as async iterator directly.
         """
-        page: Result[list[V]]
+        page: "PageableResult[V]"
         async for page in self._pages():
-            unwrapped: Sequence[V] = self._unwrap_result(page)
+            unwrapped: Sequence[V] = page.value()
             for item in unwrapped:
                 yield item
 
-    async def _pages(self) -> AsyncIterator[Result[list[V]]]:
-        result: Optional[Result[list[V]]] = await self._first_result
+    # TODO: name
+    # TODO: docstring. Mention that it's only pages starting from this one
+    async def _pages(self) -> AsyncIterator["PageableResult[V]"]:
+        result: Optional["PageableResult[V]"] = self
         while result is not None:
             yield result
             result = await result.next_page()
+
+    async def next_page(self) -> Optional["PageableResult[V]"]:
+        if self._client is None:
+            raise Exception(
+                "The next_page() method cannot be called on this Result object. Make sure you "
+                "set the client and method_properties parameters when constructing "
+                "a Result object manually (e.g. outside of a regular API call)."
+            )
+
+        if not self.result:
+            return None
+
+        next_link_url = self.result.get("links", {}).get("next")
+        if not next_link_url:
+            return None
+
+        server_url = self._client._get_client_config()
+        url = server_url + next_link_url
+        headers = {"X-Inmanta-tid": self._environment} if self._environment else None
+        request = HTTPRequest(url=url, method="GET", headers=headers)
+        result: Result[list[V]] = self._client._decode_response(
+            await self._client.client.fetch(request), self.method_properties, self._environment
+        )
+
+        return result.pageable()
+
+
+# TODO: implement stacking of options??? Perhaps not worth it? Consider SyncClient
+class ClientCall(Awaitable[Result[R]]):
+    # TODO: docstring
+    def __init__(self, result: Awaitable[Result[R]], *, properties: MethodProperties[R]) -> None:
+        # TODO: consider use cases. Do we need to cache first page? If not, add exception when used twice?
+        self._first_result: Awaitable[Result[R]] = result
+        self._properties: MethodProperties[R] = properties
+
+    # TODO: name
+    @typing.overload
+    @staticmethod
+    def create[V: types.SimpleTypes](
+        result: Awaitable[Result[list[V]]], *, properties: MethodProperties[list[V]]
+    ) -> "PageableClientCall[V]": ...
+    @typing.overload
+    @staticmethod
+    def create[T: types.ReturnTypes](result: Awaitable[Result[T]], *, properties: MethodProperties[T]) -> "ClientCall[T]": ...
+    @staticmethod
+    def create[T: types.ReturnTypes](result: Awaitable[Result[T]], *, properties: MethodProperties[T]) -> "ClientCall[T]":
+        return (
+            PageableClientCall(
+                result, properties=properties  # type: ignore
+            )
+            if properties.is_pageable()
+            else ClientCall(result, properties=properties)
+        )
+
+    async def value(self) -> R:
+        """
+        Returns the client call's result value for a single page (if paged). Returns the value as returned by the API method,
+        without wrapping it in a `Result` object.
+
+        Verifies return code and validates result type.
+        """
+        return (await self).value()
+
+    def __await__(self) -> types.AsyncioGenerator[Result[R]]:
+        return self._first_result.__await__()
+
+
+# TODO: name
+class PageableClientCall(ClientCall[list[V]], Awaitable[PageableResult[V]]):
+    def __await__(self) -> types.AsyncioGenerator[PageableResult[V]]:
+        async def wrap_pageable() -> PageableResult[V]:
+            result: Result[list[V]] = await self._first_result
+            return result.pageable()
+
+        return wrap_pageable().__await__()
+
+    # TODO: docstring
+    async def all(self) -> AsyncIterator[V]:
+        """
+        Returns an async iterator over all values returned by this call. Follows paging links if there are any.
+        Values are processed and validated as in `value()`, i.e. iterates over the value as returned by the API method,
+        without wrapping in a `Result` object. If there are pages, simply chains results from multiple pages after each other.
+
+        For non-list results, the iterator simply yields the single result.
+
+        Equivalent to using this object as async iterator directly.
+        """
+        return (await self).all()
 
 
 class SessionManagerInterface:

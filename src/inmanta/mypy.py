@@ -60,7 +60,7 @@ class ClientMethodsPlugin(Plugin):
         # TODO: clean up everything below
         client_call = self.lookup_fully_qualified("inmanta.protocol.common.ClientCall")
         client_call_generic = typevars.fill_typevars(client_call.node)
-        client_call_list = self.lookup_fully_qualified("inmanta.protocol.common.ListClientCall")
+        client_call_list = self.lookup_fully_qualified("inmanta.protocol.common.PageableClientCall")
         client_call_list_generic = typevars.fill_typevars(client_call_list.node)
 
         def hook(ctx):

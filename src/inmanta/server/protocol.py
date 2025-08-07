@@ -105,6 +105,7 @@ class ReturnClient(Client):
             return common.Result(
                 code=return_value["code"],
                 result=return_value["result"],
+                # TODO: self._transport_instance is None unless with_rest_client
                 client=self._transport_instance,
                 method_properties=method_properties,
             )

@@ -785,11 +785,9 @@ src/inmanta/protocol/common.py:0: error: Incompatible return value type (got "di
 src/inmanta/protocol/common.py:0: error: Missing type parameters for generic type "ReturnValue"  [type-arg]
 src/inmanta/protocol/common.py:0: error: Need type annotation for "params_to_add" (hint: "params_to_add: dict[<type>, <type>] = ...")  [var-annotated]
 src/inmanta/protocol/common.py:0: error: No overload variant of "create_model" matches argument types "str", "dict[str, tuple[object, object | None]]", "type[DateTimeNormalizerModel]"  [call-overload]
-src/inmanta/protocol/common.py:0: error: Overloaded function signatures 1 and 2 overlap with incompatible return types  [overload-overlap]
 src/inmanta/protocol/common.py:0: error: Returning Any from function declared to return "int"  [no-any-return]
 src/inmanta/protocol/common.py:0: error: Returning Any from function declared to return "type[BaseModel]"  [no-any-return]
 src/inmanta/protocol/common.py:0: error: Untyped decorator makes function "set_result" untyped  [misc]
-src/inmanta/protocol/common.py:0: note: Flipping the order of overloads will fix this error
 src/inmanta/protocol/common.py:0: note: Possible overload variants:
 src/inmanta/protocol/common.py:0: note: def [ModelT: BaseModel] create_model(str, /, *, __config__: ConfigDict | None = ..., __doc__: str | None = ..., __base__: type[ModelT] | tuple[type[ModelT], ...], __module__: str = ..., __validators__: dict[str, Callable[..., Any]] | None = ..., __cls_kwargs__: dict[str, Any] | None = ..., **field_definitions: Any | tuple[str, Any]) -> type[ModelT]
 src/inmanta/protocol/common.py:0: note: def create_model(str, /, *, __config__: ConfigDict | None = ..., __doc__: str | None = ..., __base__: None = ..., __module__: str = ..., __validators__: dict[str, Callable[..., Any]] | None = ..., __cls_kwargs__: dict[str, Any] | None = ..., **field_definitions: Any | tuple[str, Any]) -> type[BaseModel]
@@ -807,7 +805,7 @@ src/inmanta/protocol/endpoints.py:0: error: Cannot determine type of "key"  [has
 src/inmanta/protocol/endpoints.py:0: error: Cannot determine type of "value"  [has-type]
 src/inmanta/protocol/endpoints.py:0: error: Cannot determine type of "value"  [has-type]
 src/inmanta/protocol/endpoints.py:0: error: Cannot determine type of "value"  [has-type]
-src/inmanta/protocol/endpoints.py:0: error: Incompatible types in assignment (expression has type "Any | BaseModel | UUID | int | float | datetime | Sequence[BaseModel | UUID | bool | int | float | datetime | str | None] | Mapping[str, ArgumentTypes] | Mapping[ResourceIdStr, ArgumentTypes] | Mapping[ResourceVersionIdStr, ArgumentTypes] | None", variable has type "str")  [assignment]
+src/inmanta/protocol/endpoints.py:0: error: Incompatible types in assignment (expression has type "Any | BaseModel | UUID | int | float | datetime | Mapping[str, ArgumentTypes] | Mapping[ResourceIdStr, ArgumentTypes] | Mapping[ResourceVersionIdStr, ArgumentTypes] | Sequence[BaseModel | UUID | bool | int | float | datetime | str | None] | None", variable has type "str")  [assignment]
 src/inmanta/protocol/endpoints.py:0: error: Incompatible types in assignment (expression has type "None", variable has type "RESTClient")  [assignment]
 src/inmanta/protocol/endpoints.py:0: error: Invalid index type "str" for "Mapping[ResourceIdStr, ArgumentTypes]"; expected type "ResourceIdStr"  [index]
 src/inmanta/protocol/endpoints.py:0: error: Invalid index type "str" for "Mapping[ResourceVersionIdStr, ArgumentTypes]"; expected type "ResourceVersionIdStr"  [index]
@@ -816,8 +814,8 @@ src/inmanta/protocol/endpoints.py:0: error: Missing type parameters for generic 
 src/inmanta/protocol/endpoints.py:0: error: No overload variant of "__getitem__" of "Sequence" matches argument type "str"  [call-overload]
 src/inmanta/protocol/endpoints.py:0: error: Return type "Callable[..., Awaitable[ReturnTypes]]" of "__getattr__" incompatible with return type "Callable[..., ClientCall[BaseModel | UUID | bool | int | float | <6 more items> | None]]" in supertype "Client"  [override]
 src/inmanta/protocol/endpoints.py:0: error: Unpacking a string is disallowed  [misc]
-src/inmanta/protocol/endpoints.py:0: error: Unsupported right operand type for in ("BaseModel | UUID | int | float | datetime | Sequence[BaseModel | UUID | bool | int | float | datetime | str | None] | Mapping[str, ArgumentTypes] | Mapping[ResourceIdStr, ArgumentTypes] | Mapping[ResourceVersionIdStr, ArgumentTypes]")  [operator]
-src/inmanta/protocol/endpoints.py:0: error: Value of type "BaseModel | UUID | int | float | datetime | Sequence[BaseModel | UUID | bool | int | float | datetime | str | None] | Mapping[str, ArgumentTypes] | Mapping[ResourceIdStr, ArgumentTypes] | Mapping[ResourceVersionIdStr, ArgumentTypes]" is not indexable  [index]
+src/inmanta/protocol/endpoints.py:0: error: Unsupported right operand type for in ("BaseModel | UUID | int | float | datetime | Mapping[str, ArgumentTypes] | Mapping[ResourceIdStr, ArgumentTypes] | Mapping[ResourceVersionIdStr, ArgumentTypes] | Sequence[BaseModel | UUID | bool | int | float | datetime | str | None]")  [operator]
+src/inmanta/protocol/endpoints.py:0: error: Value of type "BaseModel | UUID | int | float | datetime | Mapping[str, ArgumentTypes] | Mapping[ResourceIdStr, ArgumentTypes] | Mapping[ResourceVersionIdStr, ArgumentTypes] | Sequence[BaseModel | UUID | bool | int | float | datetime | str | None]" is not indexable  [index]
 src/inmanta/protocol/endpoints.py:0: note: Possible overload variants:
 src/inmanta/protocol/endpoints.py:0: note: def __getitem__(self, int, /) -> BaseModel | UUID | bool | int | float | datetime | str | None
 src/inmanta/protocol/endpoints.py:0: note: def __getitem__(self, slice[Any, Any, Any], /) -> Sequence[BaseModel | UUID | bool | int | float | datetime | str | None]
@@ -1050,7 +1048,7 @@ src/inmanta/server/config.py:0: note: def __new__(cls, str | bytes | bytearray, 
 src/inmanta/server/diff.py:0: error: "object" has no attribute "__iter__"; maybe "__dir__" or "__str__"? (not iterable)  [attr-defined]
 src/inmanta/server/diff.py:0: error: Incompatible return value type (got "str | None", expected "str")  [return-value]
 src/inmanta/server/extensions.py:0: error: Returning Any from function declared to return "bool"  [no-any-return]
-src/inmanta/server/protocol.py:0: error: Argument "result" to "Result" has incompatible type "BaseModel | UUID | int | float | datetime | Sequence[BaseModel | UUID | bool | int | float | datetime | str | None] | Mapping[str, ArgumentTypes] | Mapping[ResourceIdStr, ArgumentTypes] | Mapping[ResourceVersionIdStr, ArgumentTypes] | None"; expected "dict[str, Any] | None"  [arg-type]
+src/inmanta/server/protocol.py:0: error: Argument "result" to "Result" has incompatible type "BaseModel | UUID | int | float | datetime | Mapping[str, ArgumentTypes] | Mapping[ResourceIdStr, ArgumentTypes] | Mapping[ResourceVersionIdStr, ArgumentTypes] | Sequence[BaseModel | UUID | bool | int | float | datetime | str | None] | None"; expected "dict[str, Any] | None"  [arg-type]
 src/inmanta/server/protocol.py:0: error: Argument 1 to "RESTServer" has incompatible type "SessionManager"; expected "SessionManagerInterface"  [arg-type]
 src/inmanta/server/protocol.py:0: error: Argument 1 to "append" of "list" has incompatible type "tuple[str, type[RedirectHandler], dict[str, str]]"; expected "Rule"  [arg-type]
 src/inmanta/server/protocol.py:0: error: Argument 1 to "start" of "RESTServer" has incompatible type "dict_values[str, ServerSlice]"; expected "Sequence[CallTarget]"  [arg-type]
