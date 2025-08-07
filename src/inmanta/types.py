@@ -72,12 +72,16 @@ JsonType = dict[str, Any]
 ReturnTupple = tuple[int, Optional[JsonType]]
 type StrictJson = dict[str, StrictJson] | list[StrictJson] | str | int | float | bool | None
 
-
 type StrMapping[T] = Mapping[str, T] | Mapping[ResourceIdStr, T] | Mapping[ResourceVersionIdStr, T]
-# TODO: review these type defs. Are they used?
+
 type SinglePageTypes = SimpleTypes | StrMapping[ArgumentTypes]
-# TODO: Sequence defined here by necessity, while return types must not be Sequence in practice. Is there a runtime check? Or can PageableResult  and is_pageable() etc use Sequence instead?
-type PageableTypes = Sequence[SimpleTypes]  # only simple types allowed, not dicts or lists
+# only simple types allowed within list args, not dicts or lists.
+# Typed as Sequence for necessity (covariance), though runtime checks and method overloads require list in practice.
+# This is an unfortunate limitation of the Python type system, related to str being a Sequence, among other things.
+# Luckily, list is the more conventional return type for method annotations, so as long as that convention is followed,
+# it should not cause any trouble. And if it does after all, the only consequence will be that paging will not be supported
+# through the Python client.
+type PageableTypes = Sequence[SimpleTypes]
 
 type ArgumentTypes = SinglePageTypes | PageableTypes
 type ReturnTypes = SinglePageTypes | PageableTypes
