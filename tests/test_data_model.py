@@ -19,7 +19,6 @@ Contact: code@inmanta.com
 import datetime
 import json
 import typing
-from enum import Enum
 
 import pydantic
 import pytest
