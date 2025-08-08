@@ -497,13 +497,13 @@ class Pip(PipCommandBuilder):
             cmd.append("--no-deps")
         if no_binary:
             cmd.extend(["--no-binary", no_binary])
-        if dependencies:
-            cmd.extend([str(r) for r in dependencies])
         with tempfile.NamedTemporaryFile() as fd:
             if constraints:
                 fd.write("\n".join(str(c) for c in constraints).encode())
                 fd.seek(0)
                 cmd.extend(["-c", fd.name])
+            if dependencies:
+                cmd.extend([str(r) for r in dependencies])
             cls.run_pip(cmd, env=env_vars, cwd=output_dir, constraints_files=[fd.name])
 
     @classmethod
