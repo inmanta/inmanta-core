@@ -28,6 +28,7 @@ import packaging.utils
 from inmanta import env, module, moduletool
 from libpip2pi.commands import dir2pi
 from packaging import version
+from packaging.requirements import Requirement
 from utils import module_from_template
 
 
@@ -246,20 +247,35 @@ def test_project_download(pip_index: str, snippetcompiler_clean, install: bool):
     )
 
 
+@pytest.mark.parametrize("add_constraint_project_yml", [True, False])
 @pytest.mark.parametrize("already_installed", [True, False])
-def test_project_download_with_version_constraint(pip_index: str, snippetcompiler_clean, already_installed: bool):
+def test_project_download_with_version_constraint(
+    pip_index: str,
+    snippetcompiler_clean,
+    already_installed: bool,
+    add_constraint_project_yml: bool,
+):
     """
     Verify that the `inmanta project download` command correctly takes into account version constraints.
 
     :param already_installed: Whether the Inmanta module is already installed in the venv before running
                               the `inmanta project download` command.
+    :param add_constraint_project_yml: True iff the constraint is set in the project.yml file.
+                                       False iff the constraint is set in the requirements.txt file.
     """
+    python_requires: list[Requirement]
+    project_requires: list[module.InmantaModuleRequirement] | None
+    if add_constraint_project_yml:
+        python_requires = [module.InmantaModuleRequirement.parse("elaboratev2module").get_python_package_requirement()]
+        project_requires = [module.InmantaModuleRequirement.parse("elaboratev2module~=1.0")]
+    else:
+        python_requires = [module.InmantaModuleRequirement.parse("elaboratev2module~=1.0").get_python_package_requirement()]
+        project_requires = None
     snippetcompiler_clean.setup_for_snippet(
         snippet="",
         install_project=already_installed,
-        python_requires=[
-            module.InmantaModuleRequirement.parse("elaboratev2module~=1.0").get_python_package_requirement(),
-        ],
+        python_requires=python_requires,
+        project_requires=project_requires,
         use_pip_config_file=False,
         index_url=pip_index,
     )
