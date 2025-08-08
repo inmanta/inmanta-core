@@ -27,6 +27,7 @@ import re
 import site
 import subprocess
 import sys
+import tempfile
 import typing
 import venv
 from collections import abc
@@ -45,7 +46,7 @@ import inmanta.util
 import packaging.requirements
 import packaging.utils
 import packaging.version
-from inmanta import const, file_parser
+from inmanta import const
 from inmanta.ast import CompilerException
 from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig
 from inmanta.server.bootloader import InmantaBootloader
@@ -470,15 +471,15 @@ class Pip(PipCommandBuilder):
     def run_pip_download_command(
         cls,
         python_path: str,
+        dependencies: Sequence[inmanta.util.CanonicalRequirement],
         output_dir: str,
-        pip_config: PipConfig | None,
-        pkg_requirement: inmanta.util.CanonicalRequirement | None = None,
-        path_requirements_file: str | None = None,
+        constraints: Sequence[inmanta.util.CanonicalRequirement] | None = None,
+        pip_config: PipConfig | None = None,
         no_deps: bool = False,
         no_binary: str | None = None,
     ) -> None:
-        if pkg_requirement is None and path_requirements_file is None:
-            raise ValueError("pkg_requirement and path_requirements_file must not be None simultaneously.")
+        if not dependencies:
+            return
 
         index_args: list[str]
         env_vars: dict[str, str]
@@ -496,13 +497,14 @@ class Pip(PipCommandBuilder):
             cmd.append("--no-deps")
         if no_binary:
             cmd.extend(["--no-binary", no_binary])
-        if pkg_requirement:
-            cmd.append(str(pkg_requirement))
-        if path_requirements_file:
-            cmd.extend(["-r", path_requirements_file])
-        cls.run_pip(
-            cmd, env_vars, requirements_files=[path_requirements_file] if path_requirements_file else None, cwd=output_dir
-        )
+        if dependencies:
+            cmd.extend([str(r) for r in dependencies])
+        with tempfile.NamedTemporaryFile() as fd:
+            if constraints:
+                fd.write("\n".join(str(c) for c in constraints).encode())
+                fd.seek(0)
+                cmd.extend(["-c", fd.name])
+            cls.run_pip(cmd, env=env_vars, cwd=output_dir, constraints_files=[fd.name])
 
     @classmethod
     def _prepare_pip_install_command(
@@ -847,34 +849,28 @@ import sys
         output = CommandRunner(LOGGER_PIP).run_command_and_log_output(cmd, stderr=subprocess.DEVNULL, env=os.environ.copy())
         return {canonicalize_name(r["name"]): packaging.version.Version(r["version"]) for r in json.loads(output)}
 
-    def download_source_distributions(
+    def download_distributions(
         self,
         output_directory: str,
         pip_config: PipConfig | None,
-        pkg_requirement: inmanta.util.CanonicalRequirement | None = None,
-        path_requirements_file: str | None = None,
+        dependencies: Sequence[inmanta.util.CanonicalRequirement],
+        constraints: Sequence[inmanta.util.CanonicalRequirement] | None = None,
+        no_binary: str | None = None,
+        no_deps: bool = False,
     ) -> None:
         """
-        Download the python packages that satisfy the given requirements as a source distribution package.
+        Download the python distribution packages that satisfy the given requirements.
         """
-        if pkg_requirement is None and path_requirements_file is None:
-            raise ValueError("pkg_requirement and path_requirements_file must not be None simultaneously.")
-        requirements: list[inmanta.util.CanonicalRequirement] = []
-        if path_requirements_file:
-            requirements.extend(file_parser.RequirementsTxtParser.parse(path_requirements_file))
-        if pkg_requirement is not None:
-            requirements.append(pkg_requirement)
+        if not dependencies:
+            return
         Pip.run_pip_download_command(
             python_path=self.python_path,
             output_dir=output_directory,
             pip_config=pip_config,
-            pkg_requirement=pkg_requirement,
-            path_requirements_file=path_requirements_file,
-            no_deps=True,
-            # Setting no_binary to :all: would imply that `pip download` downloads all dependencies
-            # of these modules in source format as well. This would make the command fail if
-            # these dependencies are not available in a source distribution package.
-            no_binary=(",".join(r.name for r in requirements) if requirements else None),
+            dependencies=dependencies,
+            constraints=constraints,
+            no_deps=no_deps,
+            no_binary=no_binary,
         )
 
     def install_for_config(

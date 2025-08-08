@@ -1956,6 +1956,23 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             loader.unload_inmanta_plugins()
         loader.PluginModuleFinder.reset()
 
+    def get_all_dependencies_and_constraints(
+        self,
+    ) -> tuple[Sequence[inmanta.util.CanonicalRequirement], Sequence[inmanta.util.CanonicalRequirement]]:
+        """
+        Returns a tuple that contains all the dependencies and constraints that should be used when
+        installing this project. The first element in the tuple contains the dependencies. The second
+        element contains the constraints.
+        """
+        dependencies: Sequence[inmanta.util.CanonicalRequirement] = [
+            inmanta.util.parse_requirement(req) for req in self.get_all_python_requirements_as_list()
+        ]
+        constraints: Sequence[inmanta.util.CanonicalRequirement] = [
+            InmantaModuleRequirement(inmanta.util.parse_requirement(requirement=spec)).get_python_package_requirement()
+            for spec in self._metadata.requires
+        ]
+        return dependencies, constraints
+
     def install_modules(self, *, bypass_module_cache: bool = False, update: bool = False) -> None:
         """
         Installs all modules.
@@ -1967,15 +1984,11 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             self.use_virtual_env()
 
         # install all dependencies
-        dependencies: Sequence[inmanta.util.CanonicalRequirement] = [
-            inmanta.util.parse_requirement(req) for req in self.get_all_python_requirements_as_list()
-        ]
+        dependencies: Sequence[inmanta.util.CanonicalRequirement]
+        constraints: Sequence[inmanta.util.CanonicalRequirement]
+        dependencies, constraints = self.get_all_dependencies_and_constraints()
         if len(dependencies) > 0:
             modules_pre = self.module_source.take_v2_modules_snapshot(header="Module versions before installation:")
-            constraints: Sequence[inmanta.util.CanonicalRequirement] = [
-                InmantaModuleRequirement(inmanta.util.parse_requirement(requirement=spec)).get_python_package_requirement()
-                for spec in self._metadata.requires
-            ]
             with tempfile.NamedTemporaryFile() as fd:
                 if constraints:
                     fd.write("\n".join(str(c) for c in constraints).encode())

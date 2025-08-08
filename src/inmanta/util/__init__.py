@@ -1008,12 +1008,23 @@ def make_attribute_hash(resource_id: "ResourceId", attributes: Mapping[str, obje
     return m.hexdigest()
 
 
-def get_inmanta_module_name(path_source_distribution_pkg: str) -> str:
+def get_pkg_name_and_version(path_distribution_pkg: str) -> tuple[str, str]:
     """
-    Returns the name of the Inmanta module that belongs to the given python
-    source distribution package for an Inmanta module.
+    Returns a tuple that holds the name and version number of the given
+    distribution package.
     """
-    filename_source_distribution_pkg = os.path.basename(path_source_distribution_pkg)
-    assert filename_source_distribution_pkg.endswith("tar.gz")
-    python_package_name = filename_source_distribution_pkg.split("-", maxsplit=1)[0]
-    return python_package_name.removeprefix("inmanta_module_")
+    filename = os.path.basename(path_distribution_pkg)
+    if filename.endswith(".tar.gz"):
+        filename = filename.removesuffix(".tar.gz")
+    pkg_name, version = filename.split("-")[0:2]
+    normalized_pkg_name = parse_requirement(pkg_name.removeprefix("inmanta-module-")).name
+    return normalized_pkg_name, version
+
+
+def get_module_name(path_distribution_pkg: str) -> str:
+    """
+    Returns the name of the Inmanta module that belongs to the given python package.
+    """
+    filename = os.path.basename(path_distribution_pkg)
+    pkg_name: str = filename.split("-", maxsplit=1)[0]
+    return pkg_name.removeprefix("inmanta_module_")

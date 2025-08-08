@@ -42,26 +42,32 @@ def pip_index(modules_v2_dir: str) -> str:
         index_dir = os.path.join(build_dir, "simple")
 
         modules_to_build = [
-            ("elaboratev2module", version.Version("1.2.3"), False),
-            ("elaboratev2module", version.Version("2.3.4"), False),
-            ("elaboratev2module", version.Version("2.3.5"), True),
-            ("minimalv2module", version.Version("1.1.1"), False),
+            ("elaboratev2module", "elaboratev2module", version.Version("1.2.3"), False, None),
+            ("elaboratev2module", "elaboratev2module", version.Version("2.3.4"), False, None),
+            ("elaboratev2module", "elaboratev2module", version.Version("2.3.5"), True, None),
+            ("minimalv2module", "minimalv2module", version.Version("1.1.1"), False, None),
+            ("minimalv2module", "mod1", version.Version("1.0.0"), False, [module.InmantaModuleRequirement.parse("mod2<2")]),
+            ("minimalv2module", "mod2", version.Version("1.0.0"), False, [module.InmantaModuleRequirement.parse("mod1")]),
+            ("minimalv2module", "mod2", version.Version("2.0.0"), False, [module.InmantaModuleRequirement.parse("mod1")]),
+            ("minimalv2module", "mod3", version.Version("1.0.0"), False, None),
         ]
 
-        for module_name, mod_version, is_prerelease in modules_to_build:
+        for module_name, new_name, mod_version, is_prerelease, new_requirements in modules_to_build:
             template_dir = os.path.join(modules_v2_dir, module_name)
             module_dir = os.path.join(source_dir, module_name)
             module_from_template(
                 source_dir=template_dir,
                 dest_dir=module_dir,
+                new_name=new_name,
                 new_version=mod_version,
+                new_requirements=new_requirements,
             )
             moduletool.ModuleTool().build(
                 path=module_dir,
                 output_dir=build_dir,
                 dev_build=is_prerelease,
                 wheel=True,
-                sdist=True,
+                sdist=(new_name != "mod3"),
             )
             shutil.rmtree(module_dir)
 
@@ -296,6 +302,61 @@ def test_project_download_pip_config(pip_index: str, snippetcompiler_clean):
     )
 
 
+def test_project_module_with_dependencies(pip_index: str, snippetcompiler_clean):
+    """
+    Make sure that:
+        * The dependencies of modules are not downloaded by the `inmanta project download` command.
+        * Version constraints on dependencies are taken into account.
+    """
+    snippetcompiler_clean.setup_for_snippet(
+        snippet="",
+        install_project=False,
+        python_requires=[
+            module.InmantaModuleRequirement.parse("mod2").get_python_package_requirement(),
+        ],
+        use_pip_config_file=False,
+        index_url=pip_index,
+    )
+    downloadpath = snippetcompiler_clean.project.downloadpath
+    assert not os.path.exists(downloadpath) or not os.listdir(downloadpath)
+
+    project_tool = moduletool.ProjectTool()
+    project_tool.download(install=True)
+
+    assert len(os.listdir(downloadpath)) == 2
+    pkgs_installed_in_editable_mode = env.process_env.get_installed_packages(only_editable=True)
+    assert pkgs_installed_in_editable_mode["inmanta-module-mod1"] == version.Version("1.0.0")
+    assert pkgs_installed_in_editable_mode["inmanta-module-mod2"] == version.Version("1.0.0")
+
+
+def test_project_download_no_source_pkg_available(pip_index: str, snippetcompiler_clean, caplog):
+    """
+    Ensure correct error reporting if the Inmanta module is not available as a source
+    distribution package.
+    """
+    snippetcompiler_clean.setup_for_snippet(
+        snippet="",
+        install_project=False,
+        python_requires=[
+            module.InmantaModuleRequirement.parse("minimalv2module").get_python_package_requirement(),
+            module.InmantaModuleRequirement.parse("mod3").get_python_package_requirement(),
+        ],
+        use_pip_config_file=False,
+        index_url=pip_index,
+    )
+    downloadpath = snippetcompiler_clean.project.downloadpath
+    assert not os.path.exists(downloadpath) or not os.listdir(downloadpath)
+
+    caplog.clear()
+    project_tool = moduletool.ProjectTool()
+    project_tool.download(install=True)
+
+    assert "Package inmanta-module-mod3==1.0.0 is not available as a source distribution package. Skipping it." in caplog.text
+    assert os.listdir(downloadpath) == ["minimalv2module"]
+    pkgs_installed_in_editable_mode = env.process_env.get_installed_packages(only_editable=True)
+    assert pkgs_installed_in_editable_mode["inmanta-module-minimalv2module"] == version.Version("1.1.1")
+
+
 def test_project_download_no_project(tmpdir, monkeypatch):
     """
     Ensure proper error reporting if the `inmanta project download` command is not executed on
@@ -321,4 +382,3 @@ def test_project_download_nothing_to_download(snippetcompiler_clean, project_has
         os.remove(path_requirements_txt)
     project_tool = moduletool.ProjectTool()
     project_tool.download(install=True)
-
