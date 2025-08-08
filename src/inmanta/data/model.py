@@ -76,7 +76,7 @@ class BaseModel(DateTimeNormalizerModel):
 
     # Populate models with the value property of enums, rather than the raw enum.
     # This is useful to serialise model.dict() later
-    model_config: ClassVar[ConfigDict] = ConfigDict(use_enum_values=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(use_enum_values=False)
 
 
 class ExtensionStatus(BaseModel):
