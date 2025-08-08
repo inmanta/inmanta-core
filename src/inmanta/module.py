@@ -1989,19 +1989,14 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         dependencies, constraints = self.get_all_dependencies_and_constraints()
         if len(dependencies) > 0:
             modules_pre = self.module_source.take_v2_modules_snapshot(header="Module versions before installation:")
-            with tempfile.NamedTemporaryFile() as fd:
-                if constraints:
-                    fd.write("\n".join(str(c) for c in constraints).encode())
-                    fd.seek(0)
-
-                # upgrade both direct and transitive module dependencies: eager upgrade strategy
-                self.virtualenv.install_for_config(
-                    dependencies,
-                    constraint_files=[fd.name],
-                    config=self.metadata.pip,
-                    upgrade=update,
-                    upgrade_strategy=env.PipUpgradeStrategy.EAGER,
-                )
+            # upgrade both direct and transitive module dependencies: eager upgrade strategy
+            self.virtualenv.install_for_config(
+                dependencies,
+                config=self.metadata.pip,
+                upgrade=update,
+                upgrade_strategy=env.PipUpgradeStrategy.EAGER,
+                constraints=constraints,
+            )
             self.module_source.log_snapshot_difference_v2_modules(
                 modules_pre, header="Successfully installed modules for project"
             )

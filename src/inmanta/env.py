@@ -882,6 +882,7 @@ import sys
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
         paths: list[LocalPackagePath] = [],
         add_inmanta_requires: bool = True,
+        constraints: Sequence[inmanta.util.CanonicalRequirement] | None = None,
     ) -> None:
         """
         Perform a pip install in this environment, according to the given config
@@ -904,15 +905,19 @@ import sys
         else:
             inmanta_requirements = []
 
-        Pip.run_pip_install_command_from_config(
-            python_path=self.python_path,
-            config=config,
-            requirements=[*requirements, *inmanta_requirements],
-            constraints_files=constraint_files,
-            upgrade=upgrade,
-            upgrade_strategy=upgrade_strategy,
-            paths=paths,
-        )
+        with tempfile.NamedTemporaryFile() as fd:
+            if constraints:
+                fd.write("\n".join(str(c) for c in constraints).encode())
+                fd.seek(0)
+            Pip.run_pip_install_command_from_config(
+                python_path=self.python_path,
+                config=config,
+                requirements=[*requirements, *inmanta_requirements],
+                constraints_files=[*constraint_files, fd.name],
+                upgrade=upgrade,
+                upgrade_strategy=upgrade_strategy,
+                paths=paths,
+            )
 
     async def async_install_for_config(
         self,
@@ -1197,12 +1202,20 @@ class ActiveEnv(PythonEnvironment):
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
         paths: list[LocalPackagePath] = [],
         add_inmanta_requires: bool = True,
+        constraints: Sequence[inmanta.util.CanonicalRequirement] | None = None,
     ) -> None:
         if (not upgrade and self.are_installed(requirements)) and not paths:
             return
         try:
             super().install_for_config(
-                requirements, config, upgrade, constraint_files, upgrade_strategy, paths, add_inmanta_requires
+                requirements,
+                config,
+                upgrade,
+                constraint_files,
+                upgrade_strategy,
+                paths,
+                add_inmanta_requires,
+                constraints=constraints,
             )
         finally:
             self.notify_change()
@@ -1393,11 +1406,19 @@ class VirtualEnv(ActiveEnv):
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
         paths: list[LocalPackagePath] = [],
         add_inmanta_requires: bool = True,
+        constraints: Sequence[inmanta.util.CanonicalRequirement] | None = None,
     ) -> None:
         if not self._using_venv:
             raise Exception(f"Not using venv {self.env_path}. use_virtual_env() should be called first.")
         super().install_for_config(
-            requirements, config, upgrade, constraint_files, upgrade_strategy, paths, add_inmanta_requires
+            requirements,
+            config,
+            upgrade,
+            constraint_files,
+            upgrade_strategy,
+            paths,
+            add_inmanta_requires,
+            constraints=constraints,
         )
 
 

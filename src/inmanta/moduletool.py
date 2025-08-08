@@ -351,9 +351,9 @@ compatible with the dependencies specified by the updated modules.
             pip_config=project.metadata.pip,
         )
         if paths_python_packages and install:
-            # TODO: Pass correct dependencies and constraints
             env.process_env.install_for_config(
                 requirements=[],
+                constraints=[*dependencies, *constraints],
                 config=project.metadata.pip,
                 paths=[env.LocalPackagePath(path=path, editable=True) for path in paths_python_packages],
             )
