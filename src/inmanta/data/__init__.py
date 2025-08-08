@@ -4879,46 +4879,40 @@ class ResourceSet(BaseDocument):
         while the base resource set is not present in the partial compile.
         """
         query = """
-            WITH all_resources AS (
-                SELECT *
-                FROM resource_set_configuration_model AS rscm
-                INNER JOIN resource_set AS rs
-                    ON rscm.environment=rs.environment
-                    AND rscm.resource_set_id=rs.id
-                INNER JOIN resource AS r
-                    ON rs.environment=r.environment
-                    AND rs.id=r.resource_set_id
-                WHERE rscm.environment=$1
-                    AND rscm.model=$2
-                ),
-                duplicate_resources AS (
-                    SELECT ar.resource_id
-                    FROM all_resources AS ar
-                    GROUP BY ar.resource_id
-                    HAVING COUNT(*) > 1
-                )
-                SELECT ar.resource_id, ar.name, ar.id
-                FROM all_resources AS ar
-                WHERE ar.resource_id=ANY(SELECT * FROM duplicate_resources)
+            SELECT
+              r.resource_id, array_agg(rs.name) AS name
+            FROM resource_set_configuration_model AS rscm
+            INNER JOIN resource_set AS rs
+                ON rscm.environment=rs.environment
+                AND rscm.resource_set_id=rs.id
+            INNER JOIN resource AS r
+                ON rs.environment=r.environment
+                AND rs.id=r.resource_set_id
+            WHERE rscm.environment=$1
+                AND rscm.model=$2
+            GROUP BY r.resource_id
+            HAVING COUNT(*) > 1
         """
         records = await cls._fetch_query(query, environment, version, connection=connection)
         if records:
             rid_to_resource_sets: dict[str, dict[str, str]] = {}
             for record in records:
                 resource_id = str(record["resource_id"])
-                resource_set_name = str(record["name"])
-                if resource_id not in rid_to_resource_sets:
-                    rid_to_resource_sets[resource_id] = {}
-                key = "new" if resource_set_name in updated_resource_sets else "old"
-                if key in rid_to_resource_sets[resource_id]:
+                resource_set_names = list(record["name"])
+                if len(resource_set_names) != 2:
                     raise BadRequest(
-                        f"Resource set with name {resource_set_name} appears more than once on version {version} "
-                        f"of the model with ids {rid_to_resource_sets[resource_id]} and {resource_id}"
+                        f"Resource {resource_id} appears on version {version} in these resource sets: {resource_set_names}"
                     )
-                rid_to_resource_sets[resource_id][key] = resource_set_name
+                rid_to_resource_sets[resource_id] = {}
+                for name in resource_set_names:
+                    key = "new" if name in updated_resource_sets else "old"
+                    if key in rid_to_resource_sets[resource_id]:
+                        raise BadRequest(
+                            f"Resource set with name {name} appears more than once on version {version} "
+                            f"of the model with ids {rid_to_resource_sets[resource_id]} and {resource_id}"
+                        )
+                    rid_to_resource_sets[resource_id][key] = name
 
-            # Each resource id should appear twice
-            assert len(rid_to_resource_sets) * 2 == len(records)
             msg = (
                 "The following Resource(s) cannot be migrated to a different resource set using a partial compile, "
                 "a full compile is necessary for this process:\n"
@@ -4938,7 +4932,7 @@ class ResourceSet(BaseDocument):
         updated_resources: list[m.Resource],
         updated_resource_sets: list[str | None],
         base_version: Optional[int] = None,
-        resource_set_names_not_to_bump: Optional[Set[str]] = None,
+        resource_set_names_not_to_bump: Optional[Set[str | None]] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> None:
         """
@@ -5813,7 +5807,7 @@ class Resource(BaseDocument):
         """
         Returns the content of the requires field in the attributes.
         """
-        if "requires" not in self.attributes:
+        if "requires" not in self.attributes or not isinstance(self.attributes["requires"], list):
             return []
         return list(self.attributes["requires"])
 
@@ -5823,7 +5817,7 @@ class Resource(BaseDocument):
         self.__mangle_dict(dct)
         return dct
 
-    def to_dto(self, include_resource_version_in_requires=True) -> m.Resource:
+    def to_dto(self, include_resource_version_in_requires: bool = True) -> m.Resource:
         attributes = self.attributes.copy()
 
         if "requires" in self.attributes and include_resource_version_in_requires:
