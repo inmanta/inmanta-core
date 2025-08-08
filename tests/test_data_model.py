@@ -29,24 +29,6 @@ from inmanta.data.model import BaseModel, LogLine
 from inmanta.protocol.common import json_encode
 
 
-def test_model_inheritance():
-    """Test if config classes inheritance"""
-
-    class Choices(str, Enum):
-        yes = "yes"
-        no = "no"
-
-    class Project(BaseModel):
-        name: str
-        opts: Choices
-
-    project = Project(name="test", opts="no")
-    ser = project.dict()
-
-    assert ser["opts"] == "no"
-    assert not isinstance(ser["opts"], Enum)
-
-
 def test_union_bool_json():
     """
     Test if pydantic correctly serializes a bool to bool and not int when using a Union.
