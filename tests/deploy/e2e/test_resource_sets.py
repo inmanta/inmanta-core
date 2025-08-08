@@ -2028,7 +2028,7 @@ async def test_put_partial_dep_on_specific_set_removed(server, client, environme
     )
     assert result.code == 200
 
-    resources_in_model = await data.Resource.get_list(model=2)
+    resources_in_model = await data.Resource.get_resources_for_version(environment=environment, version=2)
     assert len(resources_in_model) == 3
     rid_to_resource = {res.resource_id: res for res in resources_in_model}
     assert rid_to_resource[rid1].attributes["requires"] == []

@@ -3043,12 +3043,9 @@ class Parameter(BaseDocument):
         WITH resources_in_latest_released_version AS (
             SELECT r.*
             FROM resource_set_configuration_model AS rscm
-            INNER JOIN {ResourceSet.table_name()} AS rs
-                ON rs.environment=rscm.environment
-                AND rs.id=rscm.resource_set_id
             INNER JOIN {Resource.table_name()} AS r
-                ON r.environment=rs.environment
-                AND r.resource_set_id=rs.id
+                ON rscm.environment=r.environment
+                AND rscm.resource_set_id=r.resource_set_id
             WHERE rscm.model=(
                     SELECT max(c.version)
                     FROM {ConfigurationModel.table_name()} AS c
@@ -4735,12 +4732,9 @@ class ResourcePersistentState(BaseDocument):
             WITH resources_in_version AS (
                 SELECT r.*
                 FROM resource_set_configuration_model AS rscm
-                INNER JOIN {ResourceSet.table_name()} AS rs
-                    ON rs.environment=rscm.environment
-                    AND rs.id=rscm.resource_set_id
                 INNER JOIN {Resource.table_name()} AS r
-                    ON r.environment=rs.environment
-                    AND r.resource_set_id=rs.id
+                    ON rscm.environment=r.environment
+                    AND rscm.resource_set_id=r.resource_set_id
                 WHERE rscm.environment=$1 AND rscm.model=$2
             )
             INSERT INTO {cls.table_name()} (
@@ -5148,27 +5142,6 @@ class ResourceSet(BaseDocument):
                 """
                 await self._execute_query(query, self.environment, self.id, versions, connection=con)
 
-    async def insert_with_link_to_configuration_model(
-        self, versions: list[int] | None = None, connection: Optional[asyncpg.connection.Connection] = None
-    ) -> None:
-        """
-        Inserts the ResourceSet into the database and creates a link to the configuration models in the versions argument.
-        :param versions: The versions of the configuration model this ResourceSet belongs to
-        """
-        async with self.get_connection(connection) as con:
-            await self.insert(con)
-            if versions is not None and len(versions) > 0:
-                query = """
-                INSERT INTO public.resource_set_configuration_model(
-                    environment,
-                    resource_set_id,
-                    model
-                )
-                SELECT $1, $2, UNNEST($3::int[])
-                ON CONFLICT DO NOTHING;
-                """
-                await self._execute_query(query, self.environment, self.id, versions, connection=con)
-
 
 @stable_api
 class Resource(BaseDocument):
@@ -5250,12 +5223,9 @@ class Resource(BaseDocument):
             WITH resources_in_version AS (
                 SELECT r.*
                 FROM resource_set_configuration_model AS rscm
-                INNER JOIN resource_set AS rs ON
-                    rscm.environment=rs.environment AND
-                    rscm.resource_set_id=rs.id
                 INNER JOIN resource AS r ON
-                    rs.environment=r.environment AND
-                    rs.id=r.resource_set_id
+                    rscm.environment=r.environment AND
+                    rscm.resource_set_id=r.resource_set_id
                 WHERE rscm.environment=$1 AND rscm.model=$2
             )
             SELECT r1.resource_id, r1.last_non_deploying_status
@@ -5309,13 +5279,9 @@ class Resource(BaseDocument):
         query = f"""
             SELECT r.*
                 FROM resource_set_configuration_model AS rscm
-
-                INNER JOIN {ResourceSet.table_name()} AS rs
-                    ON rs.environment=rscm.environment
-                    AND rs.id=rscm.resource_set_id
                 INNER JOIN {cls.table_name()} AS r
-                    ON r.environment=rs.environment
-                    AND r.resource_set_id=rs.id
+                    ON rscm.environment=r.environment
+                    AND rscm.resource_set_id=r.resource_set_id
                 INNER JOIN unnest($2::resource_id_version_pair[]) requested(resource_id, model)
                     ON rscm.model=requested.model AND r.resource_id=requested.resource_id
                 WHERE rscm.environment=$1
@@ -5412,7 +5378,6 @@ class Resource(BaseDocument):
         :param attributes: The resource should contain these key-value pairs in its attributes list.
         """
         values = [cls._get_value(environment)]
-        # DISTINCT can go away when we remove copy_resources_from_unchanged_resource_set
         query = f"""
             WITH resource_sets_in_latest_version AS (
                 SELECT rscm.resource_set_id
@@ -5421,7 +5386,7 @@ class Resource(BaseDocument):
                                                   FROM {ConfigurationModel.table_name()} AS cm
                                                   WHERE cm.environment=$1)
             )
-            SELECT DISTINCT ON (r.resource_id) r.*
+            SELECT r.*
             FROM {Resource.table_name()} AS r
             JOIN resource_sets_in_latest_version AS rsv
                 ON r.resource_set_id=rsv.resource_set_id
@@ -5796,62 +5761,6 @@ class Resource(BaseDocument):
         return m.ResourceDeploySummary.create_from_db_result(results)
 
     @classmethod
-    async def copy_resources_from_unchanged_resource_set(
-        cls,
-        environment: uuid.UUID,
-        source_version: int,
-        destination_version: int,
-        updated_resource_sets: abc.Set[str],
-        deleted_resource_sets: abc.Set[str],
-        *,
-        connection: Optional[asyncpg.connection.Connection] = None,
-    ) -> dict[ResourceIdStr, str]:
-        """
-        Copy the resources that belong to an unchanged resource set of a partial compile,
-        from source_version to destination_version. This method doesn't copy shared resources.
-        """
-        query = f"""
-            INSERT INTO {cls.table_name()}(
-                environment,
-                model,
-                resource_id,
-                resource_type,
-                resource_id_value,
-                agent,
-                is_undefined,
-                attributes,
-                attribute_hash,
-                resource_set,
-                resource_set_id
-            )(
-                SELECT
-                    r.environment,
-                    $3,
-                    r.resource_id,
-                    r.resource_type,
-                    r.resource_id_value,
-                    r.agent,
-                    r.is_undefined,
-                    r.attributes AS attributes,
-                    r.attribute_hash,
-                    r.resource_set,
-                    r.resource_set_id
-                FROM {cls.table_name()} AS r
-                WHERE r.environment=$1 AND r.model=$2 AND r.resource_set IS NOT NULL AND NOT r.resource_set=ANY($4)
-            )
-            RETURNING resource_id, resource_set
-        """
-        async with cls.get_connection(connection) as con:
-            result = await con.fetch(
-                query,
-                environment,
-                source_version,
-                destination_version,
-                updated_resource_sets | deleted_resource_sets,
-            )
-            return {str(record["resource_id"]): str(record["resource_set"]) for record in result}
-
-    @classmethod
     async def get_resources_in_resource_sets(
         cls,
         environment: uuid.UUID,
@@ -6022,12 +5931,9 @@ class ConfigurationModel(BaseDocument):
             resources_in_this_version AS (
                 SELECT r.*
                 FROM resource_set_configuration_model AS rscm
-                INNER JOIN {ResourceSet.table_name()} AS rs
-                    ON rscm.environment=rs.environment
-                    AND rscm.resource_set_id=rs.id
                 INNER JOIN {Resource.table_name()} AS r
-                    ON rs.environment=r.environment
-                    AND rs.id=r.resource_set_id
+                    ON rscm.environment=r.environment
+                    AND rscm.resource_set_id=r.resource_set_id
                 WHERE rscm.environment=$1 AND rscm.model=$8
                 -- Keep only resources that belong to the shared resource set or a resource set that was not updated
                     AND (r.resource_set IS NULL OR NOT r.resource_set=ANY($9))
