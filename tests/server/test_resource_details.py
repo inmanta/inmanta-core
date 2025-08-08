@@ -18,9 +18,10 @@ Contact: code@inmanta.com
 
 import datetime
 import itertools
+import uuid
 from collections import defaultdict
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from dateutil.tz import UTC
@@ -102,6 +103,7 @@ async def env_with_resources(server, client):
     deploy_times = {env.id: defaultdict(list), env2.id: defaultdict(list), env3.id: defaultdict(list)}
 
     counter = itertools.count()
+    resource_set_per_version: dict[tuple[uuid.UUID, int], data.ResourceSet] = {}
 
     async def create_resource(
         name: str,
@@ -121,9 +123,15 @@ async def env_with_resources(server, client):
 
         update_last_deployed = status in const.DONE_STATES
 
+        if (environment, version) not in resource_set_per_version:
+            resource_set = data.ResourceSet(environment=environment, id=uuid4())
+            await resource_set.insert()
+            resource_set_per_version[(environment, version)] = resource_set
+
         res = data.Resource.new(
             environment=environment,
             resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),
+            resource_set=resource_set_per_version[(environment, version)],
             attributes={**attributes, **{"name": name}},
         )
         await res.insert()

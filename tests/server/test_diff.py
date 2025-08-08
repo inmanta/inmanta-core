@@ -51,11 +51,15 @@ async def create_resource_in_multiple_versions(
     resource_type: str = "std::testing::NullResource",
 ):
     key = f"{resource_type}[{agent},name={name}]"
+
     for version, attributes in version_attributes_map.items():
+        resource_set = data.ResourceSet(environment=environment, id=uuid.uuid4())
+        await resource_set.insert()
         res = data.Resource.new(
             environment=environment,
             resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),
             attributes={**attributes, **{"name": name}},
+            resource_set=resource_set,
         )
         await res.insert()
 
