@@ -56,7 +56,7 @@ class handle:
 MethodT = TypeVar("MethodT", bound=types.MethodType)
 
 
-def method(
+def method[C: Callable](
     path: str,
     operation: str = "POST",
     reply: bool = True,
@@ -72,7 +72,7 @@ def method(
     envelope: bool = False,
     envelope_key: str = const.ENVELOPE_KEY,
     enforce_auth: bool = True,
-) -> Callable[..., Callable]:
+) -> Callable[[C], C]:
     """
     Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
     and model the protocol.

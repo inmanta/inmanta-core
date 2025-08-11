@@ -1,3 +1,4 @@
+src/inmanta/agent/agent_new.py:0: error: Argument "tid" to "get_state" has incompatible type "UUID | None"; expected "UUID"  [arg-type]
 src/inmanta/agent/cache.py:0: error: Function is missing a type annotation for one or more arguments  [no-untyped-def]
 src/inmanta/agent/forking_executor.py:0: error: Argument 1 of "connection_made" is incompatible with supertype "asyncio.protocols.BaseProtocol"; supertype defines the argument type as "BaseTransport"  [override]
 src/inmanta/agent/forking_executor.py:0: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#incompatible-overrides
@@ -783,6 +784,7 @@ src/inmanta/protocol/decorators.py:0: error: Missing type parameters for generic
 src/inmanta/protocol/decorators.py:0: error: Missing type parameters for generic type "Callable"  [type-arg]
 src/inmanta/protocol/endpoints.py:0: error: "Callable[..., Any]" has no attribute "__api_version__"  [attr-defined]
 src/inmanta/protocol/endpoints.py:0: error: "Callable[..., Any]" has no attribute "__api_version__"  [attr-defined]
+src/inmanta/protocol/endpoints.py:0: error: Argument "tid" to "heartbeat" has incompatible type "UUID | None"; expected "UUID"  [arg-type]
 src/inmanta/protocol/endpoints.py:0: error: Argument 1 to "update" of "MutableMapping" has incompatible type "dict[str, str] | None"; expected "SupportsKeysAndGetItem[str, Any]"  [arg-type]
 src/inmanta/protocol/endpoints.py:0: error: Call to untyped function "close" in typed context  [no-untyped-call]
 src/inmanta/protocol/endpoints.py:0: error: Cannot determine type of "key"  [has-type]
@@ -1013,6 +1015,7 @@ src/inmanta/resources.py:0: error: Function is missing a type annotation  [no-un
 src/inmanta/resources.py:0: error: Incompatible return value type (got "Resource", expected "R")  [return-value]
 src/inmanta/resources.py:0: error: Returning Any from function declared to return "bool"  [no-any-return]
 src/inmanta/resources.py:0: error: Returning Any from function declared to return "bool"  [no-any-return]
+src/inmanta/server/agentmanager.py:0: error: Call to untyped function "get_status" in typed context  [no-untyped-call]
 src/inmanta/server/agentmanager.py:0: error: Item "None" of "Sequence[Agent] | None" has no attribute "__iter__" (not iterable)  [union-attr]
 src/inmanta/server/agentmanager.py:0: error: Value of type "dict[str, Any] | None" is not indexable  [index]
 src/inmanta/server/agentmanager.py:0: error: Value of type variable "AnyStr" of "abspath" cannot be "str | None"  [type-var]

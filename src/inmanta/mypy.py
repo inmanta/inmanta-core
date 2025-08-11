@@ -1,11 +1,8 @@
 import packaging.version
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from mypy import nodes, typevars, types
 from mypy.plugin import AttributeContext, Plugin
 from typing import Optional
-
-
-# TODO: review full implementation
 
 
 class ClientMethodsPlugin(Plugin):
@@ -18,11 +15,10 @@ class ClientMethodsPlugin(Plugin):
             (
                 name
                 for prefix in (
-                    # TODO: typed & sync clients?
-                    # TODO: SessionClient injects sid
+                    # TODO: SyncClient? Probably better to deprecate it in favor of sync() method. Feasible?
                     "inmanta.protocol.endpoints.Client.",
-                    "inmanta.server.protocol.ReturnClient.",
                     "inmanta.protocol.endpoints.SessionClient.",
+                    "inmanta.protocol.endpoints.TypedClient.",
                 )
                 if (name := fullname.removeprefix(prefix)) != fullname
             ),
@@ -48,7 +44,9 @@ class ClientMethodsPlugin(Plugin):
         return result
 
     def _get_instance(self, fullname: str) -> Optional[types.Instance]:
-        # TODO: docstring
+        """
+        Returns a mypy.types.Instance for the given full name, if it exists.
+        """
         node: Optional[nodes.SymbolTableNode] = self.lookup_fully_qualified(fullname)
         if node is None or not isinstance(node.node, nodes.TypeInfo):
             return None
@@ -67,18 +65,42 @@ class ClientMethodsPlugin(Plugin):
             return None
 
         def hook(ctx: AttributeContext) -> types.CallableType:
-            if (
+            drop_arg_index: Optional[int] = (
+                # SessionClient injects sid => drop it from the signature offered to callers
+                next((i for i, arg_name in enumerate(method.arg_names) if arg_name == "sid"), None)
+                if fullname.startswith("inmanta.protocol.endpoints.SessionClient.")
+                else None
+            )
+
+            return_type: types.Type
+            if fullname.startswith("inmanta.protocol.endpoints.TypedClient."):
+                # TypedClient returns method's return type without wrapping it
+                return_type = method.ret_type
+            elif (
                 isinstance(method.ret_type, types.Instance)
                 and method.ret_type.type.fullname == "builtins.list"
             ):
                 pageable_client_call: Optional[types.Instance] = self._get_instance("inmanta.protocol.common.PageableClientCall")
                 assert pageable_client_call is not None
-                ret_type = pageable_client_call.copy_modified(args=[method.ret_type.args[0]])
+                return_type = pageable_client_call.copy_modified(args=[method.ret_type.args[0]])
             else:
                 client_call: Optional[types.Instance] = self._get_instance("inmanta.protocol.common.ClientCall")
                 assert client_call is not None
-                ret_type = client_call.copy_modified(args=[method.ret_type])
-            return method.copy_modified(ret_type=ret_type)
+                return_type = client_call.copy_modified(args=[method.ret_type])
+
+            def drop[T](s: Sequence[T], i: int) -> list[T]:
+                return [*s[:i], *s[i + 1:]]
+
+            return (
+                method.copy_modified(ret_type=return_type)
+                if drop_arg_index is None
+                else method.copy_modified(
+                    arg_types=drop(method.arg_types, drop_arg_index),
+                    arg_kinds=drop(method.arg_kinds, drop_arg_index),
+                    arg_names=drop(method.arg_names, drop_arg_index),
+                    ret_type=return_type,
+                )
+            )
 
         return hook
 

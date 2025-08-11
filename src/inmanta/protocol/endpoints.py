@@ -225,8 +225,7 @@ class SessionEndpoint(Endpoint, CallTarget):
             while True:
                 LOGGER.log(3, "sending heartbeat for %s", str(self.sessionid))
                 result = await self._heartbeat_client.heartbeat(
-                    sid=str(self.sessionid),
-                    tid=str(self._env_id),
+                    tid=self._env_id,
                     endpoint_names=list(self.end_point_names),
                     nodename=self.node_name,
                     no_hang=not connected,
@@ -278,7 +277,7 @@ class SessionEndpoint(Endpoint, CallTarget):
             LOGGER.error(msg)
             # if reply_id is none, we don't send the reply
             if method_call.reply_id is not None:
-                await self._client.heartbeat_reply(self.sessionid, method_call.reply_id, {"result": msg, "code": 500})
+                await self._client.heartbeat_reply(method_call.reply_id, {"result": msg, "code": 500})
             return
 
         body = method_call.body or {}
@@ -314,7 +313,7 @@ class SessionEndpoint(Endpoint, CallTarget):
         # if reply is is none, we don't send the reply
         if method_call.reply_id is not None:
             await self._client.heartbeat_reply(
-                self.sessionid, method_call.reply_id, {"result": response.body, "code": response.status_code}
+                method_call.reply_id, {"result": response.body, "code": response.status_code}
             )
 
 
@@ -477,6 +476,10 @@ class SessionClient(Client):
             kwargs["sid"] = self._sid
 
         return await super()._call(method_properties, args, kwargs)
+
+    def __getattr__(self, name: str) -> Callable[..., common.ClientCall]:
+        # custom __getattr__ to force the mypy plugin to be triggered for this class rather than the parent
+        return super().__getattr__(name)
 
 
 # TODO: deprecate

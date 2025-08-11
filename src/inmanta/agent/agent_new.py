@@ -158,7 +158,7 @@ class Agent(SessionEndpoint):
                 return 200, f"Agent `{agent}` has been notified!"
 
     async def on_reconnect(self) -> None:
-        result = await self._client.get_state(tid=self._env_id, sid=self.sessionid, agent=AGENT_SCHEDULER_ID)
+        result = await self._client.get_state(tid=self._env_id, agent=AGENT_SCHEDULER_ID)
         if result.code == 200 and result.result is not None:
             state = result.result
             if "enabled" in state and isinstance(state["enabled"], bool):
