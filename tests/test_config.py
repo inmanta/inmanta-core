@@ -25,9 +25,10 @@ import pytest
 from tornado import netutil
 
 import inmanta.agent.config as cfg
-from inmanta import protocol
+from inmanta import const, protocol
 from inmanta.config import Config, Option, option_as_default
 from inmanta.const import ClientType
+from inmanta.protocol.auth.decorators import auth
 from inmanta.server.protocol import Server, ServerSlice
 
 
@@ -204,6 +205,7 @@ async def test_bind_address_ipv4(async_finalizer):
         3) Start the Inmanta server with bind-address 127.0.0.1. and execute an API call
     """
 
+    @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
     @protocol.method(path="/test", operation="POST", client_types=[ClientType.api])
     async def test_endpoint():
         pass
@@ -251,6 +253,7 @@ async def test_bind_address_ipv4(async_finalizer):
 
 
 async def test_bind_address_ipv6(async_finalizer) -> None:
+    @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
     @protocol.method(path="/test", operation="POST", client_types=[ClientType.api])
     async def test_endpoint():
         pass
@@ -285,6 +288,7 @@ async def test_bind_address_ipv6(async_finalizer) -> None:
 
 
 async def test_bind_port(unused_tcp_port, async_finalizer):
+    @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
     @protocol.method(path="/test", operation="POST", client_types=[ClientType.api])
     async def test_endpoint():
         pass

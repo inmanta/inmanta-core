@@ -23,16 +23,19 @@ import uuid
 from typing import Any, Literal, Optional, Union
 
 import inmanta.types
+from inmanta import const
 from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, ParameterSource, ResourceState
 from inmanta.data import model
 from inmanta.data.model import DataBaseReport, LinkedDiscoveredResource, PipConfig
 from inmanta.protocol import methods
+from inmanta.protocol.auth.decorators import auth
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.decorators import typedmethod
 from inmanta.protocol.openapi.model import OpenAPI
 from inmanta.types import PrimitiveTypes, ResourceIdStr
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.DESIRED_STATE_WRITE, read_only=False, environment_param="tid")
 @typedmethod(
     path="/version/partial",
     operation="PUT",
@@ -43,11 +46,13 @@ from inmanta.types import PrimitiveTypes, ResourceIdStr
 )
 def put_partial(
     tid: uuid.UUID,
+    module_version_info: dict[str, model.InmantaModule],
     resource_state: Optional[dict[ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]]] = None,
     unknowns: Optional[list[dict[str, PrimitiveTypes]]] = None,
     resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
     removed_resource_sets: Optional[list[str]] = None,
     pip_config: Optional[PipConfig] = None,
+    allow_handler_code_update: bool = False,
     **kwargs: object,  # bypass the type checking for the resources and version_info argument
 ) -> ReturnValue[int]:
     """
@@ -72,11 +77,17 @@ def put_partial(
               * resources: a list of resource objects. Since the version is not known yet resource versions should be set to 0.
               * version_info: Model version information
     :param pip_config: Pip config used by this version
+    :param module_version_info: Map of (module name, module version) to InmantaModule
+    :param allow_handler_code_update: [Expert] Allow handler code update during partial compile. This is otherwise
+        only allowed for full compiles. Use with extreme caution, and only when confident that all code is compatible
+        with previous versions.
+
     :return: The newly stored version number.
     """
 
 
 # Method for working with projects
+@auth(auth_label=const.CoreAuthorizationLabel.PROJECT_CREATE, read_only=False)
 @typedmethod(path="/project", operation="PUT", client_types=[ClientType.api], api_version=2)
 def project_create(name: str, project_id: Optional[uuid.UUID] = None) -> model.Project:
     """
@@ -87,6 +98,7 @@ def project_create(name: str, project_id: Optional[uuid.UUID] = None) -> model.P
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.PROJECT_MODIFY, read_only=False)
 @typedmethod(path="/project/<id>", operation="POST", client_types=[ClientType.api], api_version=2)
 def project_modify(id: uuid.UUID, name: str) -> model.Project:
     """
@@ -97,6 +109,7 @@ def project_modify(id: uuid.UUID, name: str) -> model.Project:
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.PROJECT_DELETE, read_only=False)
 @typedmethod(path="/project/<id>", operation="DELETE", client_types=[ClientType.api], api_version=2)
 def project_delete(id: uuid.UUID) -> None:
     """
@@ -106,6 +119,7 @@ def project_delete(id: uuid.UUID) -> None:
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.PROJECT_READ, read_only=True)
 @typedmethod(path="/project", operation="GET", client_types=[ClientType.api], api_version=2)
 def project_list(environment_details: bool = False) -> list[model.Project]:
     """
@@ -115,6 +129,7 @@ def project_list(environment_details: bool = False) -> list[model.Project]:
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.PROJECT_READ, read_only=True)
 @typedmethod(path="/project/<id>", operation="GET", client_types=[ClientType.api], api_version=2)
 def project_get(id: uuid.UUID, environment_details: bool = False) -> model.Project:
     """
@@ -126,6 +141,7 @@ def project_get(id: uuid.UUID, environment_details: bool = False) -> model.Proje
 
 
 # Methods for working with environments
+@auth(auth_label=const.CoreAuthorizationLabel.ENVIRONMENT_CREATE, read_only=False)
 @typedmethod(path="/environment", operation="PUT", client_types=[ClientType.api], api_version=2)
 def environment_create(
     project_id: uuid.UUID,
@@ -154,6 +170,7 @@ def environment_create(
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.ENVIRONMENT_MODIFY, read_only=False, environment_param="id")
 @typedmethod(path="/environment/<id>", operation="POST", client_types=[ClientType.api], api_version=2)
 def environment_modify(
     id: uuid.UUID,
@@ -185,6 +202,7 @@ def environment_modify(
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.ENVIRONMENT_DELETE, read_only=False, environment_param="id")
 @typedmethod(path="/environment/<id>", operation="DELETE", client_types=[ClientType.api], api_version=2)
 def environment_delete(id: uuid.UUID) -> None:
     """
@@ -197,6 +215,7 @@ def environment_delete(id: uuid.UUID) -> None:
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.ENVIRONMENT_READ, read_only=True)
 @typedmethod(path="/environment", operation="GET", client_types=[ClientType.api], api_version=2)
 def environment_list(details: bool = False) -> list[model.Environment]:
     """
@@ -206,6 +225,7 @@ def environment_list(details: bool = False) -> list[model.Environment]:
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.ENVIRONMENT_READ, read_only=True, environment_param="id")
 @typedmethod(
     path="/environment/<id>",
     operation="GET",
@@ -222,6 +242,7 @@ def environment_get(id: uuid.UUID, details: bool = False) -> model.Environment:
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.ENVIRONMENT_HALT_RESUME, read_only=False, environment_param="tid")
 @typedmethod(
     path="/actions/environment/halt",
     operation="POST",
@@ -241,6 +262,7 @@ def halt_environment(tid: uuid.UUID) -> None:
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.ENVIRONMENT_HALT_RESUME, read_only=False, environment_param="tid")
 @typedmethod(
     path="/actions/environment/resume",
     operation="POST",
@@ -259,6 +281,7 @@ def resume_environment(tid: uuid.UUID) -> None:
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.ENVIRONMENT_CLEAR, read_only=False, environment_param="id")
 @typedmethod(
     path="/decommission/<id>",
     operation="DELETE",
@@ -278,6 +301,7 @@ def environment_clear(id: uuid.UUID) -> None:
 
 
 # Method for listing and creating auth tokens for an environment that can be used by the agent and compilers
+@auth(auth_label=const.CoreAuthorizationLabel.TOKEN, read_only=False, environment_param="tid")
 @typedmethod(
     path="/environment_auth",
     operation="POST",
@@ -299,6 +323,7 @@ def environment_create_token(tid: uuid.UUID, client_types: list[str], idempotent
 
 # Method for listing/getting/setting/removing settings of an environment. This API is also used by agents to configure
 # environments.
+@auth(auth_label=const.CoreAuthorizationLabel.ENVIRONMENT_SETTING_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/environment_settings",
     operation="GET",
@@ -316,6 +341,7 @@ def environment_settings_list(tid: uuid.UUID) -> model.EnvironmentSettingsRepons
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.ENVIRONMENT_SETTING_WRITE, read_only=False, environment_param="tid")
 @typedmethod(
     path="/environment_settings/<id>",
     operation="POST",
@@ -336,6 +362,7 @@ def environment_settings_set(tid: uuid.UUID, id: str, value: model.EnvSettingTyp
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.ENVIRONMENT_SETTING_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/environment_settings/<id>",
     operation="GET",
@@ -355,6 +382,7 @@ def environment_setting_get(tid: uuid.UUID, id: str) -> model.EnvironmentSetting
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.ENVIRONMENT_SETTING_WRITE, read_only=False, environment_param="tid")
 @typedmethod(
     path="/environment_settings/<id>",
     operation="DELETE",
@@ -374,6 +402,29 @@ def environment_setting_delete(tid: uuid.UUID, id: str) -> ReturnValue[None]:
 
 
 @typedmethod(
+    path="/protected_environment_settings",
+    operation="POST",
+    arg_options=methods.ENV_OPTS,
+    api=True,
+    client_types=[ClientType.compiler],
+    api_version=2,
+)
+def protected_environment_settings_set_batch(
+    tid: uuid.UUID, settings: dict[str, model.EnvSettingType], protected_by: model.ProtectedBy
+) -> None:
+    """
+    Set the values for the given environment settings and mark them as protected.
+    If any other environment setting in that environment was protected for the same reason,
+    its protected status will be cancelled.
+
+    :param tid: The id of the environment from which to update the environment settings.
+    :param settings: The values for each environment setting that has to be updated.
+    :param protected_by: The reason why the environment settings must be protected.
+    """
+
+
+@auth(auth_label=const.CoreAuthorizationLabel.DESIRED_STATE_WRITE, read_only=False, environment_param="tid")
+@typedmethod(
     path="/reserve_version", operation="POST", arg_options=methods.ENV_OPTS, client_types=[ClientType.compiler], api_version=2
 )
 def reserve_version(tid: uuid.UUID) -> int:
@@ -384,15 +435,20 @@ def reserve_version(tid: uuid.UUID) -> int:
     """
 
 
-@typedmethod(path="/docs", operation="GET", client_types=[ClientType.api], api_version=2)
-def get_api_docs(format: Optional[ApiDocsFormat] = ApiDocsFormat.swagger) -> ReturnValue[Union[OpenAPI, str]]:
+@auth(auth_label=const.CoreAuthorizationLabel.DOCS_READ, read_only=True)
+@typedmethod(path="/docs", operation="GET", client_types=[ClientType.api], api_version=2, token_param="token")
+def get_api_docs(
+    format: Optional[ApiDocsFormat] = ApiDocsFormat.swagger, token: str | None = None
+) -> ReturnValue[Union[OpenAPI, str]]:
     """
     Get the OpenAPI definition of the API
 
     :param format: Use 'openapi' to get the schema in json format, leave empty or use 'swagger' to get the Swagger-UI view
+    :param token: If provided, use this token to authorize the request instead of the value from the authorization header.
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.STATUS_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/scheduler_status",
     operation="GET",
@@ -442,6 +498,7 @@ def notify_timer_update(tid: uuid.UUID) -> None:
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.AGENT_PAUSE_RESUME, read_only=False, environment_param="tid")
 @typedmethod(
     path="/agent/<name>/<action>", operation="POST", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
@@ -464,6 +521,7 @@ def agent_action(tid: uuid.UUID, name: str, action: AgentAction) -> None:
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.ENVIRONMENT_HALT_RESUME, read_only=False, environment_param="tid")
 @typedmethod(
     path="/agents/<action>", operation="POST", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
@@ -485,6 +543,7 @@ def all_agents_action(tid: uuid.UUID, action: AgentAction) -> None:
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.AGENT_READ, read_only=True, environment_param="tid")
 @typedmethod(path="/agents", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2)
 def get_agents(
     tid: uuid.UUID,
@@ -520,6 +579,7 @@ def get_agents(
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.AGENT_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/agents/process/<id>", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
@@ -535,6 +595,7 @@ def get_agent_process_details(tid: uuid.UUID, id: uuid.UUID, report: bool = Fals
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.STATUS_READ, read_only=True)
 @typedmethod(
     path="/db_status", api=False, server_agent=True, enforce_auth=False, operation="POST", client_types=[], api_version=2
 )
@@ -544,6 +605,7 @@ def get_db_status() -> DataBaseReport:
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.COMPILE_REPORT_READ, read_only=True)
 @typedmethod(
     path="/compiledata/<id>",
     operation="GET",
@@ -558,6 +620,7 @@ def get_compile_data(id: uuid.UUID) -> Optional[model.CompileData]:
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.RESOURCE_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/resource_actions", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
@@ -604,6 +667,7 @@ def get_resource_actions(
 
 
 # No pagination support is provided for this endpoint because there is no elegant way to page the output of this endpoint.
+@auth(auth_label=const.CoreAuthorizationLabel.RESOURCE_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/resource/<rvid>/events",
     operation="GET",
@@ -659,6 +723,7 @@ def resource_did_dependency_change(
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.RESOURCE_READ, read_only=True, environment_param="tid")
 @typedmethod(path="/resource", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2)
 def resource_list(
     tid: uuid.UUID,
@@ -696,8 +761,13 @@ def resource_list(
                 resource_type: filter by the type of the resource
                 resource_id_value: filter by the attribute values of the resource
                 status: filter by the current status of the resource.
-                For status filters it's also possible to invert the condition with '!', for example
-                `filter.status=!orphaned` will return all the resources that are not in 'orphaned' state
+                For status filters it's also possible to invert the condition with '!'.
+                The inverted status filter works as a separate filter from the normal status filter.
+                For example: `filter.status=!orphaned` will return all the resources that are not in 'orphaned' state.
+                If multiple values are provided to the inverted filter, resources are returned if they don't match
+                any of the filter values.
+                For example: `?filter.status=!deployed&filter.status=!available`
+                returns all instances except those whose status is deployed or available.
                 The values for the 'agent', 'resource_type' and 'value' filters are matched partially.
     :param sort: Return the results sorted according to the parameter value.
                 It should follow the pattern `<attribute_to_sort_by>.<order>`, for example `resource_type.desc`
@@ -714,6 +784,7 @@ def resource_list(
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.RESOURCE_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/resource/<rid>", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
@@ -728,6 +799,7 @@ def resource_details(tid: uuid.UUID, rid: inmanta.types.ResourceIdStr) -> model.
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.RESOURCE_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/resource/<rid>/history", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
@@ -764,6 +836,7 @@ def resource_history(
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.RESOURCE_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/resource/<rid>/logs", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
@@ -825,6 +898,7 @@ def resource_logs(
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.FACT_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/resource/<rid>/facts", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
@@ -838,6 +912,7 @@ def get_facts(tid: uuid.UUID, rid: inmanta.types.ResourceIdStr) -> list[model.Fa
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.FACT_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/resource/<rid>/facts/<id>",
     operation="GET",
@@ -856,6 +931,7 @@ def get_fact(tid: uuid.UUID, rid: inmanta.types.ResourceIdStr, id: uuid.UUID) ->
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.COMPILE_REPORT_READ, read_only=True, environment_param="tid")
 @typedmethod(path="/compilereport", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2)
 def get_compile_reports(
     tid: uuid.UUID,
@@ -869,6 +945,9 @@ def get_compile_reports(
 ) -> list[model.CompileReport]:
     """
     Get the compile reports from an environment.
+
+    The returned compile report objects may carry links to other objects, e.g. a service instance.
+    The full list of supported links can be found :ref:`here <api_self_referencing_links>`.
 
     :param tid: The id of the environment
     :param limit: Limit the number of instances that are returned
@@ -912,11 +991,15 @@ def get_compile_reports(
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.COMPILE_REPORT_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/compilereport/<id>", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
 def compile_details(tid: uuid.UUID, id: uuid.UUID) -> model.CompileDetails:
     """
+    The returned compile details object may carry links to other objects, e.g. a service instance.
+    The full list of supported links can be found :ref:`here <api_self_referencing_links>`.
+
     :param tid: The id of the environment in which the compilation process occurred.
     :param id: The id of the compile for which the details are being requested.
 
@@ -925,6 +1008,7 @@ def compile_details(tid: uuid.UUID, id: uuid.UUID) -> model.CompileDetails:
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.DESIRED_STATE_READ, read_only=True, environment_param="tid")
 @typedmethod(path="/desiredstate", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2)
 def list_desired_state_versions(
     tid: uuid.UUID,
@@ -954,6 +1038,7 @@ def list_desired_state_versions(
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.DESIRED_STATE_WRITE, read_only=False, environment_param="tid")
 @typedmethod(
     path="/desiredstate/<version>/promote",
     operation="POST",
@@ -973,6 +1058,7 @@ def promote_desired_state_version(
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.RESOURCE_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/desiredstate/<version>",
     operation="GET",
@@ -1019,6 +1105,7 @@ def get_resources_in_version(
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.DESIRED_STATE_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/desiredstate/diff/<from_version>/<to_version>",
     operation="GET",
@@ -1050,6 +1137,7 @@ def get_diff_of_versions(
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.RESOURCE_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/desiredstate/<version>/resource/<rid>",
     operation="GET",
@@ -1069,6 +1157,7 @@ def versioned_resource_details(
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.PARAMETER_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/parameters",
     operation="GET",
@@ -1114,6 +1203,7 @@ def get_parameters(
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.PARAMETER_WRITE, read_only=False, environment_param="tid")
 @typedmethod(
     path="/parameters/<name>",
     operation="PUT",
@@ -1142,6 +1232,7 @@ def set_parameter(
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.FACT_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/facts",
     operation="GET",
@@ -1186,6 +1277,7 @@ def get_all_facts(
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.FACT_WRITE, read_only=False, environment_param="tid")
 @typedmethod(
     path="/facts/<name>",
     operation="PUT",
@@ -1221,6 +1313,7 @@ def set_fact(
 # Dryrun related methods
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.DRYRUN_WRITE, read_only=False, environment_param="tid")
 @typedmethod(
     path="/dryrun/<version>", operation="POST", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
@@ -1235,6 +1328,7 @@ def dryrun_trigger(tid: uuid.UUID, version: int) -> uuid.UUID:
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.DRYRUN_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/dryrun/<version>", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
@@ -1249,6 +1343,7 @@ def list_dryruns(tid: uuid.UUID, version: int) -> list[model.DryRun]:
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.DRYRUN_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/dryrun/<version>/<report_id>",
     operation="GET",
@@ -1269,6 +1364,7 @@ def get_dryrun_diff(tid: uuid.UUID, version: int, report_id: uuid.UUID) -> model
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.NOTIFICATION_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/notification",
     operation="GET",
@@ -1318,6 +1414,7 @@ def list_notifications(
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.NOTIFICATION_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/notification/<notification_id>",
     operation="GET",
@@ -1339,6 +1436,7 @@ def get_notification(
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.NOTIFICATION_WRITE, read_only=False, environment_param="tid")
 @typedmethod(
     path="/notification/<notification_id>",
     operation="PATCH",
@@ -1364,24 +1462,7 @@ def update_notification(
     """
 
 
-@typedmethod(
-    path="/code/<version>",
-    operation="GET",
-    agent_server=True,
-    arg_options=methods.ENV_OPTS,
-    client_types=[ClientType.agent],
-    api_version=2,
-)
-def get_source_code(tid: uuid.UUID, version: int, resource_type: str) -> list[model.Source]:
-    """
-    Get the code for the given version and the given resource
-    :param tid: The id of the environment
-    :param version: The id of the model version
-    :param resource_type: The type name of the resource
-    :raises NotFound: Raised when the version or type is not found
-    """
-
-
+@auth(auth_label=const.CoreAuthorizationLabel.PIP_CONFIG_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/pip/config/<version>",
     operation="GET",
@@ -1401,6 +1482,7 @@ def get_pip_config(tid: uuid.UUID, version: int) -> Optional[model.PipConfig]:
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.METRICS_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/metrics",
     operation="GET",
@@ -1454,13 +1536,15 @@ def login(username: str, password: str) -> ReturnValue[model.LoginReturn]:
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.ROLE_ASSIGNMENT_READ, read_only=True)
 @typedmethod(path="/user", operation="GET", client_types=[ClientType.api], api_version=2)
-def list_users() -> list[model.User]:
+def list_users() -> list[model.UserWithRoles]:
     """List all users
 
     :return: A list of all users"""
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.USER_READ, read_only=True)
 @typedmethod(path="/current_user", operation="GET", client_types=[ClientType.api], api_version=2)
 def get_current_user() -> model.CurrentUser:
     """Get the current logged in user (based on the provided JWT) and server auth settings
@@ -1469,6 +1553,7 @@ def get_current_user() -> model.CurrentUser:
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.USER_WRITE, read_only=False)
 @typedmethod(path="/user/<username>", operation="DELETE", client_types=[ClientType.api], api_version=2)
 def delete_user(username: str) -> None:
     """Delete a user from the system with given username.
@@ -1479,6 +1564,7 @@ def delete_user(username: str) -> None:
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.USER_WRITE, read_only=False)
 @typedmethod(path="/user", operation="POST", client_types=[ClientType.api], api_version=2)
 def add_user(username: str, password: str) -> model.User:
     """Add a new user to the system
@@ -1490,6 +1576,7 @@ def add_user(username: str, password: str) -> model.User:
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.USER_CHANGE_PASSWORD, read_only=False)
 @typedmethod(path="/user/<username>/password", operation="PATCH", client_types=[ClientType.api], api_version=2)
 def set_password(username: str, password: str) -> None:
     """Change the password of a user
@@ -1497,6 +1584,85 @@ def set_password(username: str, password: str) -> None:
     :param username: The username of the user
     :param password: The password of this new user. The password should be at least 8 characters long.
     :raises NotFound: Raised when the user does not exist
+    :raises BadRequest: Raised when server authentication is not enabled
+    """
+
+
+@auth(auth_label=const.CoreAuthorizationLabel.ROLE_IS_ADMIN, read_only=False)
+@typedmethod(path="/is_admin", operation="PATCH", client_types=[ClientType.api], api_version=2)
+def set_is_admin(username: str, is_admin: bool) -> None:
+    """
+    Set whether the given user is an admin or not.
+
+    :param username: The username of the user for which the admin status has to be updated.
+    :param is_admin: True iff the given user should be an admin user.
+    :raises BadRequest: Raised when server authentication is not enabled
+    """
+
+
+@auth(auth_label=const.CoreAuthorizationLabel.ROLE_READ, read_only=True)
+@typedmethod(path="/role", operation="GET", client_types=[ClientType.api], api_version=2)
+def list_roles() -> list[str]:
+    """
+    Returns the names of the roles that exist.
+    """
+
+
+@auth(auth_label=const.CoreAuthorizationLabel.ROLE_WRITE, read_only=False)
+@typedmethod(path="/role", operation="POST", client_types=[ClientType.api], api_version=2)
+def create_role(name: str) -> None:
+    """
+    Create a new role.
+
+    :param name: The name of the role to create.
+    :raises BadRequest: Raised when server authentication is not enabled
+    """
+
+
+@auth(auth_label=const.CoreAuthorizationLabel.ROLE_WRITE, read_only=False)
+@typedmethod(path="/role", operation="DELETE", client_types=[ClientType.api], api_version=2)
+def delete_role(name: str) -> None:
+    """
+    Delete a role.
+
+    :param name: The name of the role to delete.
+    :raises BadRequest: Raised when server authentication is not enabled
+    """
+
+
+@auth(auth_label=const.CoreAuthorizationLabel.ROLE_ASSIGNMENT_READ, read_only=True)
+@typedmethod(path="/role_assignment/<username>", operation="GET", client_types=[ClientType.api], api_version=2)
+def list_roles_for_user(username: str) -> model.RoleAssignmentsPerEnvironment:
+    """
+    Returns the roles assigned to the given user.
+
+    :param username: The name of the user for which the roles are returned.
+    """
+
+
+@auth(auth_label=const.CoreAuthorizationLabel.ROLE_ASSIGNMENT_WRITE, read_only=False)
+@typedmethod(path="/role_assignment/<username>", operation="POST", client_types=[ClientType.api], api_version=2)
+def assign_role(username: str, environment: uuid.UUID, role: str) -> None:
+    """
+    Assign a role to a certain user.
+
+    :param username: The name of the user the role will be assigned to.
+    :param environment: The environment scope of the role.
+    :param role: The name of the role that should be assigned to the user.
+    :raises BadRequest: Raised when server authentication is not enabled
+    """
+
+
+@auth(auth_label=const.CoreAuthorizationLabel.ROLE_ASSIGNMENT_WRITE, read_only=False)
+@typedmethod(path="/role_assignment/<username>", operation="DELETE", client_types=[ClientType.api], api_version=2)
+def unassign_role(username: str, environment: uuid.UUID, role: str) -> None:
+    """
+    Remove a role from a certain user.
+
+    :param username: The name of the user from which to unassign the role.
+    :param environment: The environment scope of the role.
+    :param role: The name of the role that should be unassigned from the user.
+    :raise BadRequest: If the user with the given username doesn't have the given role assigned.
     :raises BadRequest: Raised when server authentication is not enabled
     """
 
@@ -1543,6 +1709,7 @@ def discovered_resource_create_batch(tid: uuid.UUID, discovered_resources: list[
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.DISCOVERED_RESOURCES_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/discovered/<discovered_resource_id>",
     operation="GET",
@@ -1559,6 +1726,7 @@ def discovered_resources_get(tid: uuid.UUID, discovered_resource_id: ResourceIdS
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.DISCOVERED_RESOURCES_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/discovered",
     operation="GET",
@@ -1606,6 +1774,7 @@ def discovered_resources_get_batch(
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.GRAPHQL_READ, read_only=True)
 @typedmethod(
     path="/graphql",
     operation="POST",
@@ -1618,8 +1787,33 @@ def graphql(query: str) -> Any:  # Actual return type: strawberry.types.executio
     GraphQL endpoint for Inmanta.
     Supports paging, filtering and sorting on certain attributes.
 
-    Available queries:
-        - "environments" - Gets a list of created environments.
-            Supports filter and sorting on id and name.
+    To check which queries are enabled, use the 'GET /api/v2/graphql/schema' endpoint.
+    """
+    pass
+
+
+@auth(auth_label=const.CoreAuthorizationLabel.GRAPHQL_READ, read_only=True)
+@typedmethod(
+    path="/graphql/schema",
+    operation="GET",
+    client_types=[ClientType.api],
+    api_version=2,
+    strict_typing=False,
+)
+def graphql_schema() -> dict[str, Any]:
+    """
+    Endpoint to retrieve schema details for the GraphQL endpoint.
+    To actually execute a query, use 'POST /api/v2/graphql'
+    """
+    pass
+
+
+@typedmethod(path="/health", operation="GET", client_types=[ClientType.api], enforce_auth=False, api_version=2)
+def health() -> ReturnValue[None]:
+    """
+    Returns a 200 response code if the server is healthy
+    or a 500 if the server is not healthy.
+
+    In contrast to the 'GET /api/v1/serverstatus' endpoint, this endpoint does not require authentication.
     """
     pass

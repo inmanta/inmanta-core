@@ -17,7 +17,6 @@ Contact: code@inmanta.com
 """
 
 import asyncio
-import base64
 import functools
 import json
 import logging
@@ -30,14 +29,14 @@ import pytest
 from dateutil import parser
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
-from inmanta import config, const, data, loader, resources, util
-from inmanta.agent import executor, handler
+from inmanta import config, const, data, util
+from inmanta.agent import executor
 from inmanta.const import ParameterSource
 from inmanta.data import AUTO_DEPLOY, ResourcePersistentState
 from inmanta.data.model import AttributeStateChange
 from inmanta.deploy import persistence, state
-from inmanta.export import upload_code
 from inmanta.protocol import Client
+from inmanta.resources import Id
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_SERVER
 from inmanta.server import config as opt
 from inmanta.server.bootloader import InmantaBootloader
@@ -118,6 +117,7 @@ async def test_create_too_many_versions(client, server, no_agent, n_versions_to_
             unknowns=[],
             version_info={},
             compiler_version=get_compiler_version(),
+            module_version_info={},
         )
         assert res.code == 200
 
@@ -147,7 +147,10 @@ async def test_create_too_many_versions(client, server, no_agent, n_versions_to_
     assert len(prvs) == min(n_versions_to_keep + 2, n_versions_to_create + 1)
 
 
-@pytest.mark.parametrize("has_released_versions", [True, False])
+@pytest.mark.parametrize(
+    "has_released_versions",
+    [True, False],
+)
 async def test_purge_versions(server, client, environment, has_released_versions: bool, agent_no_state_check) -> None:
     """
     Verify that the `OrchestrationService._purge_versions()` method works correctly and that it doesn't cleanup
@@ -176,6 +179,7 @@ async def test_purge_versions(server, client, environment, has_released_versions
             unknowns=[],
             version_info={},
             compiler_version=get_compiler_version(),
+            module_version_info={},
         )
         assert res.code == 200
 
@@ -254,6 +258,7 @@ async def test_n_versions_env_setting_scope(client, server):
             unknowns=[],
             version_info={},
             compiler_version=get_compiler_version(),
+            module_version_info={},
         )
         assert res.code == 200
 
@@ -264,6 +269,7 @@ async def test_n_versions_env_setting_scope(client, server):
             unknowns=[],
             version_info={},
             compiler_version=get_compiler_version(),
+            module_version_info={},
         )
         assert res.code == 200
 
@@ -285,167 +291,10 @@ async def test_n_versions_env_setting_scope(client, server):
     assert versions.result["count"] == n_versions_to_keep_env2
 
 
-@pytest.mark.slowtest
-async def test_resource_action_update(server_multi, client_multi, environment_multi, null_agent_multi):
-    """
-    Test the server to manage the updates on a model during agent deploy
-    """
-    aclient = null_agent_multi._client
-    version = (await client_multi.reserve_version(environment_multi)).result["data"]
-
-    resources = [
-        {
-            "group": "root",
-            "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
-            "id": "std::testing::NullResource[vm1.dev.inmanta.com,name=network],v=%d" % version,
-            "owner": "root",
-            "path": "/etc/sysconfig/network",
-            "permissions": 644,
-            "purged": False,
-            "reload": False,
-            "requires": [],
-            "version": version,
-        },
-        {
-            "group": "root",
-            "hash": "b4350bef50c3ec3ee532d4a3f9d6daedec3d2aba",
-            "id": "std::testing::NullResource[vm2.dev.inmanta.com,name=motd],v=%d" % version,
-            "owner": "root",
-            "path": "/etc/motd",
-            "permissions": 644,
-            "purged": False,
-            "reload": False,
-            "requires": [],
-            "version": version,
-        },
-        {
-            "group": "root",
-            "hash": "3bfcdad9ab7f9d916a954f1a96b28d31d95593e4",
-            "id": "std::testing::NullResource[vm1.dev.inmanta.com,name=hostname],v=%d" % version,
-            "owner": "root",
-            "path": "/etc/hostname",
-            "permissions": 644,
-            "purged": False,
-            "reload": False,
-            "requires": [],
-            "version": version,
-        },
-        {
-            "id": "std::Service[vm1.dev.inmanta.com,name=network],v=%d" % version,
-            "name": "network",
-            "onboot": True,
-            "requires": ["std::testing::NullResource[vm1.dev.inmanta.com,name=network],v=%d" % version],
-            "state": "running",
-            "version": version,
-        },
-    ]
-
-    res = await client_multi.put_version(
-        tid=environment_multi,
-        version=version,
-        resources=resources,
-        unknowns=[],
-        version_info={},
-        compiler_version=get_compiler_version(),
-    )
-    assert res.code == 200
-
-    result = await client_multi.list_versions(environment_multi)
-    assert result.code == 200
-    assert result.result["count"] == 1
-
-    result = await client_multi.release_version(environment_multi, version, False)
-    assert result.code == 200
-
-    result = await client_multi.get_version(environment_multi, version)
-    assert result.code == 200
-    assert result.result["model"]["version"] == version
-    assert result.result["model"]["total"] == len(resources)
-    assert result.result["model"]["released"]
-
-    action_id = uuid.uuid4()
-    now = datetime.now()
-    result = await aclient.resource_action_update(
-        environment_multi,
-        ["std::testing::NullResource[vm1.dev.inmanta.com,name=network],v=%d" % version],
-        action_id,
-        "deploy",
-        now,
-        now,
-        "deployed",
-        [],
-        {},
-    )
-
-    assert result.code == 200
-
-    result = await client_multi.resource_list(tid=environment_multi, deploy_summary=True)
-    assert result.code == 200
-    assert result.result["metadata"]["deploy_summary"]["by_state"]["deployed"] == 1
-
-    action_id = uuid.uuid4()
-    now = datetime.now()
-    result = await aclient.resource_action_update(
-        environment_multi,
-        ["std::testing::NullResource[vm1.dev.inmanta.com,name=hostname],v=%d" % version],
-        action_id,
-        "deploy",
-        now,
-        now,
-        "deployed",
-        [],
-        {},
-    )
-    assert result.code == 200
-
-    result = await client_multi.resource_list(tid=environment_multi, deploy_summary=True)
-    assert result.code == 200
-    assert result.result["metadata"]["deploy_summary"]["by_state"]["deployed"] == 2
-
-
-async def test_get_environment(client, clienthelper, server, environment):
-    for i in range(10):
-        version = await clienthelper.get_version()
-
-        resources = []
-        for j in range(i):
-            resources.append(
-                {
-                    "group": "root",
-                    "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
-                    "id": "std::testing::NullResource[vm1.dev.inmanta.com,name=file%d],v=%d" % (j, version),
-                    "owner": "root",
-                    "path": "/tmp/file%d" % j,
-                    "permissions": 644,
-                    "purged": False,
-                    "reload": False,
-                    "requires": [],
-                    "version": version,
-                }
-            )
-
-        res = await client.put_version(
-            tid=environment,
-            version=version,
-            resources=resources,
-            unknowns=[],
-            version_info={},
-            compiler_version=get_compiler_version(),
-        )
-        assert res.code == 200
-
-    result = await client.get_environment(environment, versions=5, resources=1)
-    assert result.code == 200
-    assert len(result.result["environment"]["versions"]) == 5
-    assert len(result.result["environment"]["resources"]) == 9
-
-
 async def test_resource_update(postgresql_client, client, clienthelper, server, environment, async_finalizer, null_agent):
     """
     Test updating resources and logging
     """
-
-    aclient = null_agent._client
 
     version = await clienthelper.get_version()
 
@@ -473,65 +322,58 @@ async def test_resource_update(postgresql_client, client, clienthelper, server, 
         unknowns=[],
         version_info={},
         compiler_version=get_compiler_version(),
+        module_version_info={},
     )
     assert res.code == 200
 
     result = await client.release_version(environment, version, False)
     assert result.code == 200
 
-    resource_ids = [x["id"] for x in resources]
-
     # Start the deploy
-    action_id = uuid.uuid4()
-    now = datetime.now()
-    result = await aclient.resource_action_update(
-        environment, resource_ids, action_id, "deploy", now, status=const.ResourceState.deploying
-    )
-    assert result.code == 200
+    update_manager = persistence.ToDbUpdateManager(client, uuid.UUID(environment))
+    deploy_ids = []
+    for res in resources:
+        id = res["id"]
+        action_id = uuid.uuid4()
+        await update_manager.send_in_progress(action_id, Id.parse_id(id))
+        assert result.code == 200
+        deploy_ids.append((res, action_id))
 
     # Get the status from a resource
-    result = await client.get_resource(tid=environment, id=resource_ids[0], logs=True)
+    result = await client.get_resource(tid=environment, id=deploy_ids[0][0]["id"], logs=True)
     assert result.code == 200
     logs = {x["action"]: x for x in result.result["logs"]}
 
     assert "deploy" in logs
     assert logs["deploy"]["finished"] is None
-    assert logs["deploy"]["messages"] is None
-    assert logs["deploy"]["changes"] is None
-
-    # Send some logs
-    result = await aclient.resource_action_update(
-        environment,
-        resource_ids,
-        action_id,
-        "deploy",
-        status=const.ResourceState.deploying,
-        messages=[data.LogLine.log(const.LogLevel.INFO, "Test log %(a)s %(b)s", a="a", b="b")],
-    )
-    assert result.code == 200
-
-    # Get the status from a resource
-    result = await client.get_resource(tid=environment, id=resource_ids[0], logs=True)
-    assert result.code == 200
-    logs = {x["action"]: x for x in result.result["logs"]}
-
-    assert "deploy" in logs
     assert "messages" in logs["deploy"]
     assert len(logs["deploy"]["messages"]) == 1
-    assert logs["deploy"]["messages"][0]["msg"] == "Test log a b"
-    assert logs["deploy"]["finished"] is None
+    assert logs["deploy"]["messages"][0]["msg"] == "Resource deploy started on agent vm1, setting status to deploying"
     assert logs["deploy"]["changes"] is None
 
     # Finish the deploy
     now = datetime.now()
-    changes = {x: {"owner": {"old": "root", "current": "inmanta"}} for x in resource_ids}
-    result = await aclient.resource_action_update(environment, resource_ids, action_id, "deploy", finished=now, changes=changes)
-    assert result.code == 400
-
-    result = await aclient.resource_action_update(
-        environment, resource_ids, action_id, "deploy", status=const.ResourceState.deployed, finished=now, changes=changes
-    )
-    assert result.code == 200
+    for res, action_id in deploy_ids:
+        rid = Id.parse_id(res["id"])
+        await update_manager.send_deploy_done(
+            attribute_hash=util.make_attribute_hash(resource_id=rid.resource_str(), attributes=res),
+            result=executor.DeployReport(
+                rvid=rid.resource_version_str(),
+                action_id=action_id,
+                resource_state=const.HandlerResourceState.deployed,
+                messages=[],
+                changes={"attr1": AttributeStateChange(current=None, desired="test")},
+                change=const.Change.purged,
+            ),
+            state=state.ResourceState(
+                compliance=state.Compliance.COMPLIANT,
+                last_deploy_result=state.DeployResult.DEPLOYED,
+                blocked=state.Blocked.NOT_BLOCKED,
+                last_deployed=now,
+            ),
+            started=now,
+            finished=now,
+        )
     assert await clienthelper.done_count() == 10
 
 
@@ -553,13 +395,21 @@ async def test_clear_environment(client, server, clienthelper, environment):
     """
     version = await clienthelper.get_version()
     result = await client.put_version(
-        tid=environment, version=version, resources=[], unknowns=[], version_info={}, compiler_version=get_compiler_version()
+        tid=environment,
+        version=version,
+        resources=[],
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+        module_version_info={},
     )
     assert result.code == 200
 
-    result = await client.get_environment(id=environment, versions=10)
+    result = await client.environment_get(id=environment)
     assert result.code == 200
-    assert len(result.result["environment"]["versions"]) == 1
+    versions = await client.list_versions(tid=environment)
+    assert versions.code == 200
+    assert versions.result["count"] == 1
 
     # trigger multiple compiles and wait for them to complete in order to test cascade deletion of collapsed compiles (#2350)
     result = await client.notify_change_get(id=environment)
@@ -586,9 +436,12 @@ async def test_clear_environment(client, server, clienthelper, environment):
 
     assert not os.path.exists(env_dir)
 
-    result = await client.get_environment(id=environment, versions=10)
+    result = await client.list_desired_state_versions(tid=environment)
     assert result.code == 200
-    assert len(result.result["environment"]["versions"]) == 0
+    assert len(result.result["data"]) == 0
+    versions = await client.list_versions(tid=environment)
+    assert versions.code == 200
+    assert versions.result["count"] == 0
 
 
 async def test_tokens(server_multi, client_multi, environment_multi, request):
@@ -600,7 +453,7 @@ async def test_tokens(server_multi, client_multi, environment_multi, request):
         return
 
     test_token = client_multi._transport_instance.token
-    token = await client_multi.create_token(environment_multi, ["api"], idempotent=True)
+    token = await client_multi.create_token(environment_multi, ["compiler"], idempotent=True)
     jot = token.result["token"]
 
     assert jot != test_token
@@ -608,10 +461,10 @@ async def test_tokens(server_multi, client_multi, environment_multi, request):
     client_multi._transport_instance.token = jot
 
     # try to access a non environment call (global)
-    result = await client_multi.list_environments()
-    assert result.code == 403
+    result = await client_multi.stat_file(id="test")
+    assert result.code == 404
 
-    result = await client_multi.list_versions(environment_multi)
+    result = await client_multi.list_params(environment_multi)
     assert result.code == 200
 
     token = await client_multi.create_token(environment_multi, ["agent"], idempotent=True)
@@ -626,40 +479,6 @@ async def test_token_without_auth(server, client, environment):
     """Generating a token when auth is not enabled is not allowed"""
     token = await client.create_token(environment, ["api"], idempotent=True)
     assert token.code == 400
-
-
-async def test_batched_code_upload(
-    server_multi, client_multi, sync_client_multi, environment_multi, agent_multi, snippetcompiler
-):
-    """Test uploading all code definitions at once"""
-    snippetcompiler.setup_for_snippet(
-        """
-    import std::testing
-    f = std::testing::NullResource(name="test")
-    """
-    )
-    version, _ = await snippetcompiler.do_export_and_deploy(do_raise=False)
-
-    code_manager = loader.CodeManager()
-
-    for type_name, resource_definition in resources.resource.get_resources():
-        code_manager.register_code(type_name, resource_definition)
-
-    for type_name, handler_definition in handler.Commander.get_providers():
-        code_manager.register_code(type_name, handler_definition)
-
-    await asyncio.get_event_loop().run_in_executor(
-        None, lambda: upload_code(sync_client_multi, environment_multi, version, code_manager)
-    )
-
-    for name, source_info in code_manager.get_types():
-        assert len(source_info) >= 2
-        for info in source_info:
-            # fetch the code from the server
-            response = await agent_multi._client.get_file(info.hash)
-            assert response.code == 200
-            source_code = base64.b64decode(response.result["content"])
-            assert info.content == source_code
 
 
 @pytest.mark.parametrize("auto_start_agent", [True])
@@ -847,7 +666,6 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
     """
     Test querying resource actions via the API
     """
-    aclient = null_agent._client
 
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
@@ -897,6 +715,7 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
         unknowns=[],
         version_info={},
         compiler_version=get_compiler_version(),
+        module_version_info={},
     )
     assert res.code == 200
 
@@ -907,24 +726,26 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
     resource_ids_created = [resources[-1]["id"]]
 
     # Start the deploy
-    action_id = uuid.uuid4()
     now = datetime.now().astimezone()
-    result = await aclient.resource_action_update(
-        environment,
-        resource_ids_created,
-        action_id,
-        "deploy",
-        now,
-        status=const.ResourceState.deploying,
-        change=const.Change.created,
-    )
-    assert result.code == 200
+    env = uuid.UUID(environment)
+    update_manager = persistence.ToDbUpdateManager(client, env)
+    action_id = uuid.uuid4()
+    await update_manager.send_in_progress(action_id, Id.parse_id(resource_ids_created[0]))
+    # The change of the resource action generated by the `send_in_progress` is only
+    # populated when we call `send_deploy_done`, this is a shortcut for testing purposes
+    ra = await data.ResourceAction.get_one(environment=env, action_id=action_id)
+    await ra.update_fields(change=const.Change.created)
 
     action_id = uuid.uuid4()
-    result = await aclient.resource_action_update(
-        environment, resource_ids_nochange, action_id, "deploy", now, status=const.ResourceState.deploying
-    )
-    assert result.code == 200
+    await data.ResourceAction(
+        environment=env,
+        version=version,
+        resource_version_ids=resource_ids_nochange,
+        action_id=uuid.uuid4(),
+        action=const.ResourceAction.deploy,
+        change=const.Change.nochange,
+        started=now,
+    ).insert()
 
     # Get the status from a resource
     result = await client.get_resource_actions(tid=environment)
@@ -998,7 +819,6 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
         res1 = data.Resource.new(
             environment=env.id,
             resource_version_id="std::testing::NullResource[agent1,name=motd],v=%s" % str(i),
-            status=const.ResourceState.deployed,
             attributes={"attr": [{"a": 1, "b": "c"}], "path": "/etc/motd"},
         )
         await res1.insert()
@@ -1104,11 +924,9 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
 
 
 @pytest.mark.parametrize("no_agent", [True])
-@pytest.mark.parametrize("method_to_use", ["send_in_progress", "resource_action_update"])
-async def test_send_in_progress(server, client, environment, agent, method_to_use: str):
+async def test_send_in_progress(server, client, environment, agent):
     """
-    Ensure that the `ToDbUpdateManager.send_in_progress()` method and the `resource_action_update()` API endpoint do the same
-    when a new deployment is reported.
+    Ensure that the `ToDbUpdateManager.send_in_progress()` method outputs the expected ResourceActions
     """
     env_id = uuid.UUID(environment)
 
@@ -1132,7 +950,6 @@ async def test_send_in_progress(server, client, environment, agent, method_to_us
     rvid_r3_v1 = f"{rvid_r3},v={model_version}"
 
     async def make_resource_with_last_non_deploying_status(
-        status: const.ResourceState,
         last_non_deploying_status: const.NonDeployingResourceState,
         resource_version_id: str,
         attributes: dict[str, object],
@@ -1140,30 +957,31 @@ async def test_send_in_progress(server, client, environment, agent, method_to_us
     ) -> None:
         r1 = data.Resource.new(
             environment=env_id,
-            status=status,
             resource_version_id=resource_version_id,
             attributes=attributes,
         )
         await r1.insert()
         await data.ResourcePersistentState.populate_for_version(environment=uuid.UUID(environment), model_version=version)
-        await r1.update_persistent_state(last_deploy=datetime.now(tz=UTC), last_non_deploying_status=last_non_deploying_status)
+        await data.ResourcePersistentState.update_persistent_state(
+            environment=uuid.UUID(environment),
+            resource_id=r1.resource_id,
+            last_deploy=datetime.now(tz=UTC),
+            last_non_deploying_status=last_non_deploying_status,
+        )
 
     await make_resource_with_last_non_deploying_status(
-        status=const.ResourceState.skipped,
         last_non_deploying_status=const.NonDeployingResourceState.skipped,
         resource_version_id=rvid_r1_v1,
         attributes={"purge_on_delete": False, "requires": [rvid_r2, rvid_r3]},
         version=model_version,
     )
     await make_resource_with_last_non_deploying_status(
-        status=const.ResourceState.deployed,
         last_non_deploying_status=const.NonDeployingResourceState.deployed,
         resource_version_id=rvid_r2_v1,
         attributes={"purge_on_delete": False, "requires": []},
         version=model_version,
     )
     await make_resource_with_last_non_deploying_status(
-        status=const.ResourceState.failed,
         last_non_deploying_status=const.NonDeployingResourceState.failed,
         resource_version_id=rvid_r3_v1,
         attributes={"purge_on_delete": False, "requires": []},
@@ -1172,18 +990,8 @@ async def test_send_in_progress(server, client, environment, agent, method_to_us
 
     action_id = uuid.uuid4()
 
-    if method_to_use == "send_in_progress":
-        update_manager = persistence.ToDbUpdateManager(client, env_id)
-        await update_manager.send_in_progress(action_id, resources.Id.parse_id(rvid_r1_v1))
-    else:
-        await agent._client.resource_action_update(
-            tid=env_id,
-            resource_ids=[rvid_r1_v1],
-            action_id=action_id,
-            action=const.ResourceAction.deploy,
-            started=datetime.now().astimezone(),
-            status=const.ResourceState.deploying,
-        )
+    update_manager = persistence.ToDbUpdateManager(client, env_id)
+    await update_manager.send_in_progress(action_id, Id.parse_id(rvid_r1_v1))
 
     # Ensure that both API calls result in the same behavior
     result = await client.get_resource_actions(tid=env_id)
@@ -1224,17 +1032,18 @@ async def test_send_in_progress_action_id_conflict(server, client, environment, 
 
     await data.Resource.new(
         environment=env_id,
-        status=const.ResourceState.skipped,
         resource_version_id=rvid_r1_v1,
         attributes={"purge_on_delete": False, "requires": []},
     ).insert()
+
+    await data.ResourcePersistentState.populate_for_version(environment=uuid.UUID(environment), model_version=model_version)
 
     action_id = uuid.uuid4()
     update_manager = persistence.ToDbUpdateManager(client, env_id)
 
     async def execute_send_in_progress(expect_exception: bool, resulting_nr_resource_actions: int) -> None:
         try:
-            await update_manager.send_in_progress(action_id, resources.Id.parse_id(rvid_r1_v1))
+            await update_manager.send_in_progress(action_id, Id.parse_id(rvid_r1_v1))
         except ValueError:
             assert expect_exception
         else:
@@ -1248,14 +1057,9 @@ async def test_send_in_progress_action_id_conflict(server, client, environment, 
     await execute_send_in_progress(expect_exception=True, resulting_nr_resource_actions=1)
 
 
-@pytest.mark.parametrize(
-    "method_to_use",
-    ["send_deploy_done", "resource_action_update"],
-)
-async def test_send_deploy_done(server, client, environment, null_agent, caplog, method_to_use, clienthelper):
+async def test_send_deploy_done(server, client, environment, null_agent, caplog, clienthelper):
     """
-    Ensure that the `send_deploy_done` method behaves in the same way as the `resource_action_update` endpoint
-    when the finished field is not None.
+    Ensure that the `send_deploy_done` method emits the expected ResourceActions
     """
     result = await client.set_setting(environment, "auto_deploy", True)
     assert result.code == 200
@@ -1287,7 +1091,7 @@ async def test_send_deploy_done(server, client, environment, null_agent, caplog,
 
     update_manager = persistence.ToDbUpdateManager(client, env_id)
     action_id = uuid.uuid4()
-    await update_manager.send_in_progress(action_id, resources.Id.parse_id(rvid_r1_v1))
+    await update_manager.send_in_progress(action_id, Id.parse_id(rvid_r1_v1))
 
     # Assert initial state
     result = await client.get_resource_actions(tid=env_id)
@@ -1317,41 +1121,25 @@ async def test_send_deploy_done(server, client, environment, null_agent, caplog,
             data.LogLine.log(level=const.LogLevel.DEBUG, msg="message", timestamp=now, keyword=123, none=None),
             data.LogLine.log(level=const.LogLevel.INFO, msg="test", timestamp=now),
         ]
-        if method_to_use == "send_deploy_done":
-            await update_manager.send_deploy_done(
-                attribute_hash=util.make_attribute_hash(resource_id=rid_r1, attributes=attributes_r1),
-                result=executor.DeployReport(
-                    rvid=rvid_r1_v1,
-                    action_id=action_id,
-                    resource_state=const.HandlerResourceState.deployed,
-                    messages=messages,
-                    changes={"attr1": AttributeStateChange(current=None, desired="test")},
-                    change=const.Change.purged,
-                ),
-                state=state.ResourceState(
-                    compliance=state.Compliance.COMPLIANT,
-                    last_deploy_result=state.DeployResult.DEPLOYED,
-                    blocked=state.Blocked.NOT_BLOCKED,
-                    last_deployed=now,
-                ),
-                started=now,
-                finished=now,
-            )
-        else:
-            result = await null_agent._client.resource_action_update(
-                tid=env_id,
-                resource_ids=[rvid_r1_v1],
+        await update_manager.send_deploy_done(
+            attribute_hash=util.make_attribute_hash(resource_id=rid_r1, attributes=attributes_r1),
+            result=executor.DeployReport(
+                rvid=rvid_r1_v1,
                 action_id=action_id,
-                action=const.ResourceAction.deploy,
-                started=None,
-                finished=now,
-                status=const.ResourceState.deployed,
+                resource_state=const.HandlerResourceState.deployed,
                 messages=messages,
-                changes={rvid_r1_v1: {"attr1": AttributeStateChange(current=None, desired="test")}},
+                changes={"attr1": AttributeStateChange(current=None, desired="test")},
                 change=const.Change.purged,
-                send_events=True,
-            )
-            assert result.code == 200, result.result
+            ),
+            state=state.ResourceState(
+                compliance=state.Compliance.COMPLIANT,
+                last_deploy_result=state.DeployResult.DEPLOYED,
+                blocked=state.Blocked.NOT_BLOCKED,
+                last_deployed=now,
+            ),
+            started=now,
+            finished=now,
+        )
 
     result = await client.get_resource_actions(tid=env_id)
     assert result.code == 200, result.result
@@ -1445,33 +1233,9 @@ async def test_send_deploy_done_error_handling(server, client, environment, agen
 
     rvid_r1_v1 = ResourceVersionIdStr(f"std::testing::NullResource[agent1,name=file1],v={model_version}")
 
-    # Resource doesn't exist
-    with pytest.raises(ValueError) as exec_info:
-        await update_manager.send_deploy_done(
-            attribute_hash="",
-            result=executor.DeployReport(
-                rvid=rvid_r1_v1,
-                action_id=uuid.uuid4(),
-                resource_state=const.HandlerResourceState.deployed,
-                messages=[],
-                changes={},
-                change=const.Change.nochange,
-            ),
-            state=state.ResourceState(
-                compliance=state.Compliance.COMPLIANT,
-                last_deploy_result=state.DeployResult.DEPLOYED,
-                blocked=state.Blocked.NOT_BLOCKED,
-                last_deployed=datetime.now().astimezone(),
-            ),
-            started=datetime.now().astimezone(),
-            finished=datetime.now().astimezone(),
-        )
-    assert "The resource with the given id does not exist in the given environment" in str(exec_info.value)
-
     # Create resource
     await data.Resource.new(
         environment=env_id,
-        status=const.ResourceState.available,
         resource_version_id=rvid_r1_v1,
         attributes={"purge_on_delete": False, "requires": []},
     ).insert()
@@ -1656,6 +1420,7 @@ async def test_serialization_attributes_of_resource_to_api(client, server, envir
         unknowns=[],
         version_info={},
         compiler_version=get_compiler_version(),
+        module_version_info={},
     )
     assert result.code == 200
 
@@ -1724,6 +1489,7 @@ async def test_put_stale_version(client, server, environment, clienthelper, capl
                 resources=resources,
                 unknowns=[],
                 version_info={},
+                module_version_info={},
             )
             assert result.code == 200
             return result.result["data"]
@@ -1735,6 +1501,7 @@ async def test_put_stale_version(client, server, environment, clienthelper, capl
                 unknowns=[],
                 version_info={},
                 compiler_version=get_compiler_version(),
+                module_version_info={},
             )
             assert result.code == 200
             return version
@@ -1781,6 +1548,7 @@ async def test_set_fact_v2(
         unknowns=[],
         version_info={},
         compiler_version=util.get_compiler_version(),
+        module_version_info={},
     )
     assert result.code == 200
 

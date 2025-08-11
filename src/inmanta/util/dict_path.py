@@ -21,7 +21,7 @@ import itertools
 import logging
 import re
 from collections.abc import Sequence
-from typing import Optional, TypeGuard, TypeVar, Union, overload
+from typing import ItemsView, Optional, Protocol, TypeVar, Union, overload, runtime_checkable
 
 from inmanta.stable_api import stable_api
 
@@ -31,6 +31,34 @@ TWDP = TypeVar("TWDP", bound="WildDictPath")
 TWID = TypeVar("TWID", bound="WildInDict")
 TWKL = TypeVar("TWKL", bound="WildKeyedList")
 TWCP = TypeVar("TWCP", bound="WildComposedPath")
+
+
+@runtime_checkable
+class Mapping(Protocol):
+    """
+    Specific Mapping type for this module, simplified wrt collections.abc.Mapping[str, object]
+
+    For getting items from dicts, this is the interface that is used by this module
+    """
+
+    def __getitem__(self, key: str) -> object: ...
+
+    def items(self) -> ItemsView[str, object]: ...
+
+
+@runtime_checkable
+class MutableMapping(Mapping, Protocol):
+    """
+    Specific MutableMapping type for this module, simplified wrt collections.abc.MutableMapping[str, object]
+
+    For manipulating dicts, this is the interface that is used by this module
+    """
+
+    def __setitem__(self, key: str, value: object) -> None: ...
+
+    def __delitem__(self, key: str) -> None: ...
+
+    def clear(self) -> None: ...
 
 
 @stable_api
@@ -204,7 +232,9 @@ class WildDictPath(abc.ABC):
     """
 
     # Special characters should be escaped in data elements of the dict path
-    # to prevent incorrect interpretation of the dict path.
+    # to prevent incorrect interpretation of the dict path. The '.' character is
+    # the only exception: it can be left unescaped when used in "value" elements
+    # of the key-value pairs in list selectors (e.g. "neighbors[ip=2.2.2.2]")
     SPECIAL_CHARACTERS: list[str] = ["\\", "[", "]", ".", "*", "="]
     REGEX_SPECIAL_CHARACTER = rf"([{re.escape(''.join(SPECIAL_CHARACTERS))}])"
     PATTERN_SPECIAL_CHARACTER = re.compile(REGEX_SPECIAL_CHARACTER)
@@ -271,23 +301,6 @@ class WildDictPath(abc.ABC):
     def parse(cls: type[TWDP], inp: str) -> Optional[TWDP]:
         pass
 
-    def _validate_container(
-        self, container: object, set: bool = False, remove: bool = False
-    ) -> TypeGuard[dict[object, object]]:
-        """Validate that the container supports the required mapping protocol operations"""
-        # To be refined in https://github.com/inmanta/inmanta-core/issues/8398
-
-        if not hasattr(container, "__getitem__"):
-            return False
-
-        if set and not hasattr(container, "__setitem__"):
-            return False
-
-        if remove and not hasattr(container, "__delitem__"):
-            return False
-
-        return True
-
 
 @stable_api
 class WildInDict(WildDictPath):
@@ -340,13 +353,13 @@ class WildInDict(WildDictPath):
         self.key: Union[NormalValue, WildCardValue] = key_value
 
     def get_elements(self, container: object) -> list[object]:
-        if self._validate_container(container):
+        if isinstance(container, Mapping):
             try:
                 return [value for key, value in container.items() if self.key.matches(key)]
             except KeyError:
                 return []
         else:
-            raise ContainerStructureException(f"{container} is not a Dict")
+            raise ContainerStructureException(f"{container} is not a Mapping")
 
     def resolve_wild_cards(self, container: object) -> Sequence["WildInDict"]:
         """
@@ -377,13 +390,13 @@ class WildInDict(WildDictPath):
             ]
 
         """
-        if self._validate_container(container):
+        if isinstance(container, Mapping):
             try:
-                return [WildInDict(str(key)) for key in container if self.key.matches(key)]
+                return [WildInDict(str(key)) for key, value in container.items() if self.key.matches(key)]
             except KeyError:
                 return []
         else:
-            raise ContainerStructureException(f"{container} is not a Dict")
+            raise ContainerStructureException(f"{container} is not a Mapping")
 
     def to_str(self) -> str:
         return self.key.escape()
@@ -469,7 +482,7 @@ class WildKeyedList(WildDictPath):
         rf"(?P<key_attribute>({WildDictPath.REGEX_NORMAL_CHARACTER}|{WildDictPath.REGEX_ESCAPED_SPECIAL_CHARACTER})+|\*)"
     )
     REGEX_KEY_VALUE = (
-        rf"(?P<key_value>({WildDictPath.REGEX_NORMAL_CHARACTER}|{WildDictPath.REGEX_ESCAPED_SPECIAL_CHARACTER})*|\*|\\0)"
+        rf"(?P<key_value>({WildDictPath.REGEX_NORMAL_CHARACTER}|{WildDictPath.REGEX_ESCAPED_SPECIAL_CHARACTER}|\.)*|\*|\\0)"
     )
     KEY_VALUE_PAIR = rf"\[{REGEX_KEY_ATTRIBUTE}={REGEX_KEY_VALUE}]"
 
@@ -699,7 +712,15 @@ class WildComposedPath(WildDictPath):
     """
 
     element_types: Sequence[type[WildDictPath]] = [WildInDict, WildKeyedList]
-    COMPOSED_DICT_PATH_PATTERN = re.compile(r"(?:[^.\\]|\\.)+")
+    # The '?' near the end of the KEYED_LIST_FILTER regex "... *?\])" is here for
+    # non-greedy matching. We need it to match pairs of closest square brackets:
+
+    #  e.g. for the following scenario: list[a=b].item.sublist[c=d][e=f]
+    #               with lazy match:        <--->             <---><--->  (good)
+    #               with greedy match:      <-------------------------->  (bad)
+
+    KEYED_LIST_FILTER = r"(?:\[(?:[^\\]|\\.)*?\])"
+    COMPOSED_DICT_PATH_PATTERN = re.compile(rf"(?:{KEYED_LIST_FILTER}|[^.\\\[]|\\.)+")
 
     def __init__(self, path_str: Optional[str] = None, path: Optional[Sequence[WildDictPath]] = None) -> None:
         if (path_str is None) == (path is None):
@@ -720,8 +741,14 @@ class WildComposedPath(WildDictPath):
 
     @classmethod
     def split_on_dots(cls, path_str: str) -> list[str]:
-        """
-        Split the given `path_str` on dot characters if they are not escaped with a backslash.
+        r"""
+        Split the given `path_str` into a list of individual items.
+
+        The '.' character is used as the separator when it is not backslash escaped
+        and when it is outside a list item selector.
+
+        e.g. "neighbors[ip=2.2.2.2].pre\.fix"  ==>  [ "neighbors[ip=2.2.2.2], "pre\.fix" ]
+
         """
         match = cls.COMPOSED_DICT_PATH_PATTERN.findall(path_str)
         if not match:
@@ -805,16 +832,16 @@ class WildNullPath(WildDictPath):
     """
 
     def get_elements(self, container: object) -> list[object]:
-        if self._validate_container(container):
+        if isinstance(container, Mapping):
             return [container]
         else:
-            raise ContainerStructureException(f"{container} is not a Dict")
+            raise ContainerStructureException(f"{container} is not a Mapping")
 
     def resolve_wild_cards(self, container: object) -> Sequence["WildNullPath"]:
-        if self._validate_container(container):
+        if isinstance(container, Mapping):
             return [WildNullPath()]
         else:
-            raise ContainerStructureException(f"{container} is not a Dict")
+            raise ContainerStructureException(f"{container} is not a Mapping")
 
     def get_path_sections(self) -> Sequence["DictPath"]:
         return []
@@ -922,11 +949,11 @@ class InDict(DictPath, WildInDict):
         elements = WildInDict.get_elements(self, container)
 
         if not elements and construct:
-            if self._validate_container(container):
+            if isinstance(container, MutableMapping):
                 container[self.key.value] = {}
                 return container[self.key.value]
             else:
-                raise ContainerStructureException(f"{container} is not a Dict")
+                raise ContainerStructureException(f"{container} is not a MutableMapping")
 
         if len(elements) != 1:
             raise KeyError(f"Found no or multiple items matching {self.to_str()} in {container}: {elements}")
@@ -934,10 +961,10 @@ class InDict(DictPath, WildInDict):
         return elements[0]
 
     def set_element(self, container: object, value: object, construct: bool = True) -> None:
-        if self._validate_container(container, set=True):
+        if isinstance(container, MutableMapping):
             container[self.key.value] = value
         else:
-            raise ContainerStructureException(f"{container} is not a Dict")
+            raise ContainerStructureException(f"{container} is not a MutableMapping")
 
     def get_path_sections(self) -> Sequence[DictPath]:
         return [self]
@@ -946,12 +973,12 @@ class InDict(DictPath, WildInDict):
         return self.key.value
 
     def remove(self, container: object) -> None:
-        if self._validate_container(container, remove=True):
-            for key in list(container.keys()):
+        if isinstance(container, MutableMapping):
+            for key in [k for k, v in container.items()]:
                 if self.key.matches(key):
                     del container[key]
         else:
-            raise ContainerStructureException(f"{container} is not a Dict")
+            raise ContainerStructureException(f"{container} is not a MutableMapping")
 
 
 @stable_api
@@ -1126,20 +1153,17 @@ class NullPath(DictPath, WildNullPath):
     (i.e. return the container itself)
     """
 
-    def get_element(self, container: object, construct: bool = False) -> dict[object, object]:
-        if self._validate_container(container):
+    def get_element(self, container: object, construct: bool = False) -> Mapping:
+        if isinstance(container, Mapping):
             return container
         else:
-            raise ContainerStructureException(f"{container} is not a Dict")
+            raise ContainerStructureException(f"{container} is not a Mapping")
 
     def set_element(self, container: object, value: object, construct: bool = True) -> None:
-        if not self._validate_container(container, set=True, remove=True):
-            raise ContainerStructureException(f"Argument container is not a Dict: {container}")
-        if not self._validate_container(value):
-            raise ContainerStructureException(f"Argument value is not a Dict: {container}")
-        assert isinstance(container, dict)
-        assert isinstance(value, dict)
-        container.clear()
+        if not isinstance(container, MutableMapping):
+            raise ContainerStructureException(f"Argument container is not a MutableMapping: {container}")
+        if not isinstance(value, Mapping):
+            raise ContainerStructureException(f"Argument value is not a Mapping: {container}")
         for key, value in value.items():
             container[key] = value
 

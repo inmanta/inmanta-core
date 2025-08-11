@@ -17,7 +17,9 @@ Contact: code@inmanta.com
 """
 
 import asyncio
+import base64
 import datetime
+import hashlib
 import uuid
 from collections import abc
 from typing import Optional
@@ -25,10 +27,12 @@ from typing import Optional
 import utils
 from inmanta import const, data, util
 from inmanta.agent import executor
+from inmanta.data.model import ModuleSourceMetadata
 from inmanta.deploy import persistence, state
+from inmanta.loader import InmantaModule
 from inmanta.protocol.common import Result
 from inmanta.resources import Id
-from inmanta.types import ResourceIdStr, ResourceVersionIdStr
+from inmanta.types import ResourceIdStr
 from inmanta.util import get_compiler_version
 
 
@@ -46,8 +50,13 @@ async def test_resource_sets_via_put_version(server, client, environment, client
         resource_sets={
             "test::Resource[agent1,key=key1]": "set-a",
         },
+        module_version_info={},
     )
     assert result.code == 400
+    assert (
+        "Invalid request: The following resource ids provided in the resource_sets "
+        "parameter are not present in the resources list: test::Resource[agent1,key=key1]"
+    ) in result.result["message"]
 
     resources = [
         {
@@ -97,6 +106,7 @@ async def test_resource_sets_via_put_version(server, client, environment, client
         version_info={},
         compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
+        module_version_info={},
     )
     assert result.code == 200
 
@@ -126,6 +136,7 @@ async def test_put_partial_version_allocation(server, client, environment, clien
         unknowns=[],
         version_info=None,
         resource_sets={},
+        module_version_info={},
     )
     assert result.code == 400
     assert "partial export requires a base model but no versions have been exported yet" in result.result["message"]
@@ -157,6 +168,7 @@ async def test_put_partial_version_allocation(server, client, environment, clien
         version_info={},
         compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
+        module_version_info={},
     )
     assert result.code == 200
 
@@ -168,6 +180,7 @@ async def test_put_partial_version_allocation(server, client, environment, clien
             unknowns=[],
             version_info={},
             resource_sets=resource_sets,
+            module_version_info={},
         )
         if expected_error is not None:
             code, message = expected_error
@@ -225,6 +238,24 @@ async def test_put_partial_replace_resource_set(server, client, environment, cli
         "test::Resource[agent1,key=key1]": "set-a",
     }
 
+    content = "# test"
+    sha1sum = hashlib.new("sha1")
+    sha1sum.update(content.encode())
+    hv: str = sha1sum.hexdigest()
+    await client.upload_file(hv, content=base64.b64encode(content.encode()).decode("ascii"))
+
+    module_source_metadata = ModuleSourceMetadata(
+        name="inmanta_plugins.test",
+        hash_value=hv,
+        is_byte_code=False,
+    )
+
+    module_version_info = {
+        "test": InmantaModule(
+            name="test", version="0.0.0", files_in_module=[module_source_metadata], requirements=[], for_agents=["agent1"]
+        )
+    }
+
     result = await client.put_version(
         tid=environment,
         version=version,
@@ -234,6 +265,7 @@ async def test_put_partial_replace_resource_set(server, client, environment, cli
         version_info={},
         compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
+        module_version_info=module_version_info,
     )
     assert result.code == 200
     resources_partial = [
@@ -256,6 +288,7 @@ async def test_put_partial_replace_resource_set(server, client, environment, cli
         resource_sets={
             "test::Resource[agent1,key=key2]": "set-a",
         },
+        module_version_info=module_version_info,
     )
 
     assert result.code == 200, result.result
@@ -300,6 +333,7 @@ async def test_put_partial_resources_in_resource_set(server, client, environment
         version_info={},
         compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
+        module_version_info={},
     )
     assert result.code == 200
     resources_partial = [
@@ -323,6 +357,7 @@ async def test_put_partial_resources_in_resource_set(server, client, environment
             "test::Resource[agent1,key=key1]": "set-a",
             "test::Resource[agent1,key=key2]": "set-a",
         },
+        module_version_info={},
     )
 
     assert result.code == 400, result.result
@@ -358,6 +393,7 @@ async def test_put_partial_merge_not_in_resource_set(server, client, environment
         version_info={},
         compiler_version=get_compiler_version(),
         resource_sets={},
+        module_version_info={},
     )
     assert result.code == 200
     resources_partial = [
@@ -378,6 +414,7 @@ async def test_put_partial_merge_not_in_resource_set(server, client, environment
         unknowns=[],
         version_info=None,
         resource_sets={},
+        module_version_info={},
     )
 
     assert result.code == 200
@@ -426,6 +463,7 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
         version_info={},
         compiler_version=get_compiler_version(),
         resource_sets={"test::Resource[agent1,key=key1]": "set-a-old", "test::Resource[agent1,key=key2]": "set-b-old"},
+        module_version_info={},
     )
     assert result.code == 200
     resources_partial = [
@@ -454,6 +492,7 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
         unknowns=[],
         version_info=None,
         resource_sets={"test::Resource[agent1,key=key1]": "set-a-new", "test::Resource[agent1,key=key2]": "set-b-new"},
+        module_version_info={},
     )
 
     assert result.code == 400
@@ -465,6 +504,198 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
     ]
 
     assert all(line in result.result["message"] for line in expected_lines)
+
+    # Swap them
+    result = await client.put_partial(
+        tid=environment,
+        resources=resources_partial,
+        resource_state={},
+        unknowns=[],
+        version_info=None,
+        resource_sets={"test::Resource[agent1,key=key1]": "set-b-old", "test::Resource[agent1,key=key2]": "set-a-old"},
+        module_version_info={},
+    )
+
+    assert result.code == 200, result.result
+
+    # Swap the new sets and removal of the old one
+    result = await client.put_partial(
+        tid=environment,
+        resources=resources_partial,
+        resource_state={},
+        unknowns=[],
+        version_info=None,
+        resource_sets={"test::Resource[agent1,key=key1]": "set-a-new", "test::Resource[agent1,key=key2]": "set-b-new"},
+        module_version_info={},
+        removed_resource_sets=["set-b-old", "set-a-old"],
+    )
+
+    assert result.code == 200, result.result
+
+    # Allow move into shared
+    result = await client.put_partial(
+        tid=environment,
+        resources=resources_partial,
+        resource_state={},
+        unknowns=[],
+        version_info=None,
+        resource_sets={"test::Resource[agent1,key=key1]": "set-a-new"},
+        module_version_info={},
+        removed_resource_sets=["set-b-new"],
+    )
+
+    assert result.code == 200, result.result
+
+    resource_list = await data.Resource.get_resources_in_latest_version(uuid.UUID(environment))
+    resource_sets_from_db = {resource.resource_id: resource.resource_set for resource in resource_list}
+    expected_resource_sets = {"test::Resource[agent1,key=key1]": "set-a-new", "test::Resource[agent1,key=key2]": None}
+    assert resource_sets_from_db == expected_resource_sets
+
+    # Don't allow escape out of shared
+    # Swap the new sets and removal of the old one
+    result = await client.put_partial(
+        tid=environment,
+        resources=resources_partial,
+        resource_state={},
+        unknowns=[],
+        version_info=None,
+        resource_sets={"test::Resource[agent1,key=key1]": "set-a-new", "test::Resource[agent1,key=key2]": "set-b-new"},
+        module_version_info={},
+    )
+    assert result.code == 400, result.result
+    assert (
+        "Invalid request: A partial compile only migrate resources between resource set that are pushed together: "
+        "trying to move test::Resource[agent1,key=key2] from resource set <SHARED> to set-b-new." in result.result["message"]
+    )
+
+    # Don't allow escape out of shared
+    # Swap the new sets and removal of the old one
+    # Try to trick it by providing None as an updated set
+    result = await client.put_partial(
+        tid=environment,
+        resources=resources_partial
+        + [
+            {
+                "key": "key3",
+                "value": "value2",
+                "id": "test::Resource[agent1,key=key3],v=0",
+                "send_event": False,
+                "purged": False,
+                "requires": [],
+            }
+        ],
+        resource_state={},
+        unknowns=[],
+        version_info=None,
+        resource_sets={
+            "test::Resource[agent1,key=key1]": "set-a-new",
+            "test::Resource[agent1,key=key2]": "set-b-new",
+            "test::Resource[agent1,key=key3]": None,
+        },
+        module_version_info={},
+    )
+    assert result.code == 400, result.result
+    assert (
+        "A partial compile only migrate resources between resource set that are pushed together: "
+        "trying to move test::Resource[agent1,key=key2] from resource set <SHARED> to set-b-new." in result.result["message"]
+    )
+
+    # Reset for require provides test
+    version = await clienthelper.get_version()
+    resources = [
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": "test::Resource[agent1,key=key1],v=%d" % version,
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "key": "key2",
+            "value": "value2",
+            "id": "test::Resource[agent1,key=key2],v=%d" % version,
+            "send_event": False,
+            "purged": False,
+            "requires": ["test::Resource[agent1,key=key1]"],
+        },
+    ]
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        resource_state={},
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+        resource_sets={"test::Resource[agent1,key=key1]": "set-a-old", "test::Resource[agent1,key=key2]": "set-a-old"},
+        module_version_info={},
+    )
+    assert result.code == 200
+
+    # Try to move on part of require-provide to new resource set, updating both sets
+    version = 0
+    resources = [
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": "test::Resource[agent1,key=key1],v=%d" % version,
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "key": "key2",
+            "value": "value2",
+            "id": "test::Resource[agent1,key=key2],v=%d" % version,
+            "send_event": False,
+            "purged": False,
+            "requires": ["test::Resource[agent1,key=key1]"],
+        },
+    ]
+
+    result = await client.put_partial(
+        tid=environment,
+        resources=resources,
+        resource_state={},
+        unknowns=[],
+        version_info=None,
+        resource_sets={"test::Resource[agent1,key=key1]": "set-a-old", "test::Resource[agent1,key=key2]": "set-b-old"},
+        module_version_info={},
+    )
+    assert result.code == 400, result.result
+    assert (
+        "Invalid request: A dependency exists between resources test::Resource[agent1,key=key2] and "
+        "test::Resource[agent1,key=key1], but they belong to different resource sets." in result.result["message"]
+    )
+
+    # Try to move on part of require-provide updating only requires
+    version = 0
+    resources = [
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": "test::Resource[agent1,key=key1],v=%d" % version,
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+    ]
+
+    result = await client.put_partial(
+        tid=environment,
+        resources=resources,
+        resource_state={},
+        unknowns=[],
+        version_info=None,
+        resource_sets={"test::Resource[agent1,key=key1]": "set-b-old"},
+        module_version_info={},
+    )
+    assert result.code == 400, result.result
+    assert (
+        "Invalid request: The following Resource(s) cannot be migrated to a different resource set using a partial compile"
+        in result.result["message"]
+    )
 
 
 async def test_put_partial_update_not_in_resource_set(server, client, environment, clienthelper):
@@ -491,6 +722,7 @@ async def test_put_partial_update_not_in_resource_set(server, client, environmen
         version_info={},
         compiler_version=get_compiler_version(),
         resource_sets={},
+        module_version_info={},
     )
     assert result.code == 200
     resources_partial = [
@@ -511,6 +743,7 @@ async def test_put_partial_update_not_in_resource_set(server, client, environmen
         unknowns=[],
         version_info=None,
         resource_sets={},
+        module_version_info={},
     )
 
     assert result.code == 400
@@ -557,6 +790,7 @@ async def test_put_partial_update_multiple_resource_set(server, client, environm
         version_info={},
         compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
+        module_version_info={},
     )
     assert result.code == 200
     resources_partial = [
@@ -588,6 +822,7 @@ async def test_put_partial_update_multiple_resource_set(server, client, environm
             "test::Resource[agent1,key=key1]": "set-a",
             "test::Resource[agent1,key=key2]": "set-b",
         },
+        module_version_info={},
     )
 
     assert result.code == 200
@@ -629,6 +864,7 @@ async def test_resource_sets_dependency_graph(server, client, environment, clien
         version_info={},
         compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
+        module_version_info={},
     )
     assert result.code == 400
     assert result.result["message"] == (
@@ -748,6 +984,7 @@ async def test_put_partial_mixed_scenario(server, client, environment, clienthel
         version_info={},
         compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
+        module_version_info={},
     )
     assert result.code == 200
     resources_partial = [
@@ -811,6 +1048,7 @@ async def test_put_partial_mixed_scenario(server, client, environment, clienthel
             "test::Resource[agent1,key=key92]": "set-f",
         },
         removed_resource_sets=["set-c"],
+        module_version_info={},
     )
 
     assert result.code == 200, result.result
@@ -933,6 +1171,7 @@ async def test_put_partial_validation_error(server, client, environment, clienth
         version_info={},
         compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
+        module_version_info={},
     )
     assert result.code == 200
     resources_partial = ["key1", "key2"]
@@ -947,6 +1186,7 @@ async def test_put_partial_validation_error(server, client, environment, clienth
             "test::Resource[agent1,key=key1]": "set-a",
             "test::Resource[agent1,key=key2]": "set-b",
         },
+        module_version_info={},
     )
 
     assert result.code == 400
@@ -993,6 +1233,7 @@ async def test_put_partial_verify_params(server, client, environment, clienthelp
         version_info={},
         compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
+        module_version_info={},
     )
     assert result.code == 200
     resources_partial = [
@@ -1025,6 +1266,7 @@ async def test_put_partial_verify_params(server, client, environment, clienthelp
             "test::Resource[agent1,key=key2]": "set-b",
             "hello": "set-c",
         },
+        module_version_info={},
     )
 
     assert result.code == 400
@@ -1073,6 +1315,7 @@ async def test_put_partial_different_env(server, client):
         version_info={},
         compiler_version=get_compiler_version(),
         resource_sets={},
+        module_version_info={},
     )
     assert result.code == 200, result.result
 
@@ -1085,6 +1328,7 @@ async def test_put_partial_different_env(server, client):
         version_info={},
         compiler_version=get_compiler_version(),
         resource_sets={},
+        module_version_info={},
     )
     assert result.code == 200
 
@@ -1106,6 +1350,7 @@ async def test_put_partial_different_env(server, client):
         unknowns=[],
         version_info=None,
         resource_sets={},
+        module_version_info={},
     )
 
     assert result.code == 200
@@ -1174,6 +1419,7 @@ async def test_put_partial_removed_rs_in_rs(server, client, environment, clienth
         version_info={},
         compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
+        module_version_info={},
     )
     assert result.code == 200
     resources_partial = [
@@ -1197,6 +1443,7 @@ async def test_put_partial_removed_rs_in_rs(server, client, environment, clienth
             "test::Resource[agent1,key=key2]": "set-b",
         },
         removed_resource_sets=["set-b"],
+        module_version_info={},
     )
 
     assert result.code == 400
@@ -1260,6 +1507,7 @@ async def test_put_partial_with_resource_state_set(server, client, environment, 
         version_info={},
         compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
+        module_version_info={},
     )
     assert result.code == 200, result.result
 
@@ -1277,12 +1525,12 @@ async def test_put_partial_with_resource_state_set(server, client, environment, 
 
     # Set key 3 to deployed
     action_id = uuid.uuid4()
-    rvid3 = ResourceVersionIdStr(f"test::Resource[agent1,key=key3],v={version}")
-    await update_manager.send_in_progress(action_id=action_id, resource_id=Id.parse_id(rvid3))
+    rvid3 = Id.parse_id(f"test::Resource[agent1,key=key3],v={version}")
+    await update_manager.send_in_progress(action_id=action_id, resource_id=rvid3)
     await update_manager.send_deploy_done(
-        attribute_hash=util.make_attribute_hash(ResourceIdStr("test::Resource[agent1,key=key3]"), attributes=resources[2]),
+        attribute_hash=util.make_attribute_hash(rvid3.resource_str(), attributes=resources[2]),
         result=executor.DeployReport(
-            rvid=rvid3,
+            rvid=rvid3.resource_version_str(),
             action_id=action_id,
             resource_state=const.HandlerResourceState.deployed,
             messages=[],
@@ -1346,11 +1594,16 @@ async def test_put_partial_with_resource_state_set(server, client, environment, 
         unknowns=[],
         version_info=None,
         resource_sets=resource_sets,
+        module_version_info={},
     )
     assert result.code == 200
 
     result = await client.release_version(tid=environment, id=result.result["data"])
     assert result.code == 200
+
+    # Simulate the scheduler fixing the state after the release_version
+    rps = await data.ResourcePersistentState.get_one(environment=environment, resource_id="test::Resource[agent1,key=key5]")
+    await rps.update(is_undefined=False, blocked=state.Blocked.NOT_BLOCKED)
 
     result = await client.resource_list(tid=environment)
     assert result.code == 200
@@ -1359,7 +1612,8 @@ async def test_put_partial_with_resource_state_set(server, client, environment, 
     rid_to_res = {r["resource_id"]: r for r in result.result["data"]}
 
     assert rid_to_res["test::Resource[agent1,key=key1]"]["status"] == const.ResourceState.undefined.value
-    assert rid_to_res["test::Resource[agent1,key=key2]"]["status"] == const.ResourceState.available.value
+    # Resource is still set as deploying even though a new one released
+    assert rid_to_res["test::Resource[agent1,key=key2]"]["status"] == const.ResourceState.deploying.value
     assert rid_to_res["test::Resource[agent1,key=key3]"]["status"] == const.ResourceState.deployed.value
     assert rid_to_res["test::Resource[agent1,key=key4]"]["status"] == const.ResourceState.available.value
     assert rid_to_res["test::Resource[agent1,key=key5]"]["status"] == const.ResourceState.available.value
@@ -1446,6 +1700,7 @@ async def test_put_partial_with_undeployable_resources(server, client, environme
         version_info={},
         compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
+        module_version_info={},
     )
     assert result.code == 200, result.result
 
@@ -1521,6 +1776,7 @@ async def test_put_partial_with_undeployable_resources(server, client, environme
         unknowns=[],
         version_info=None,
         resource_sets=resource_sets,
+        module_version_info={},
     )
     assert result.code == 200, result.result
     version = result.result["data"]
@@ -1576,6 +1832,7 @@ async def test_put_partial_with_unknowns(server, client, environment, clienthelp
         version_info={},
         compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
+        module_version_info={},
     )
     assert result.code == 200
 
@@ -1611,6 +1868,7 @@ async def test_put_partial_with_unknowns(server, client, environment, clienthelp
         unknowns=unknowns,
         version_info=None,
         resource_sets=resource_sets,
+        module_version_info={},
     )
     assert result.code == 200
 
@@ -1634,88 +1892,6 @@ async def test_put_partial_with_unknowns(server, client, environment, clienthelp
     assert_unknown(unknowns_by_rid["test::Resource[agent1,key=key1]"], "unknown_1", "test::Resource[agent1,key=key1]")
     assert_unknown(unknowns_by_rid[""], "unknown_3", "")
     assert_unknown(unknowns_by_rid["test::Resource[agent1,key=key5]"], "unknown_5", "test::Resource[agent1,key=key5]")
-
-
-async def test_put_partial_dep_on_shared_set_removed(server, client, environment, clienthelper) -> None:
-    """
-    Ensure that the put_partial endpoint correctly updates the provides relationship when a resource A from a specific
-    resource set depends on a resource B from the shared resource set and resource A is removed by a partial compile.
-    """
-    version = await clienthelper.get_version()
-    rid1 = "test::Resource[agent1,key=key1]"
-    rid2 = "test::Resource[agent2,key=key2]"
-    rid3 = "test::Resource[agent2,key=key3]"
-    resources = [
-        {
-            "key": "key1",
-            "version": version,
-            "id": f"{rid1},v={version}",
-            "send_event": False,
-            "purged": False,
-            "requires": [],
-        },
-        {
-            "key": "key2",
-            "version": version,
-            "id": f"{rid2},v={version}",
-            "send_event": False,
-            "purged": False,
-            "requires": [f"{rid1},v={version}"],
-        },
-        {
-            "key": "key3",
-            "version": version,
-            "id": f"{rid3},v={version}",
-            "send_event": False,
-            "purged": False,
-            "requires": [],
-        },
-    ]
-    resource_sets = {rid2: "set-a", rid3: "set-a"}
-    resource_states = {
-        rid1: const.ResourceState.available,
-        rid2: const.ResourceState.available,
-        rid3: const.ResourceState.available,
-    }
-    result = await client.put_version(
-        tid=environment,
-        version=version,
-        resources=resources,
-        resource_state=resource_states,
-        unknowns=[],
-        version_info={},
-        compiler_version=get_compiler_version(),
-        resource_sets=resource_sets,
-    )
-    assert result.code == 200
-
-    # Partial compile
-    resources_partial = [
-        {
-            "key": "key3",
-            "version": 0,
-            "id": f"{rid3},v=0",
-            "send_event": False,
-            "purged": False,
-            "requires": [],
-        },
-    ]
-    resource_sets = {rid3: "set-a"}
-    resource_states = {rid3: const.ResourceState.available}
-    result = await client.put_partial(
-        tid=environment,
-        resources=resources_partial,
-        resource_state=resource_states,
-        unknowns=[],
-        version_info=None,
-        resource_sets=resource_sets,
-    )
-    assert result.code == 200
-
-    resources_in_model = await data.Resource.get_list(model=2)
-    assert len(resources_in_model) == 2
-    rid_to_resource = {res.resource_id: res for res in resources_in_model}
-    assert rid_to_resource[rid1].provides == []
 
 
 async def test_put_partial_dep_on_specific_set_removed(server, client, environment, clienthelper, agent) -> None:
@@ -1768,6 +1944,7 @@ async def test_put_partial_dep_on_specific_set_removed(server, client, environme
         version_info={},
         compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
+        module_version_info={},
     )
     assert result.code == 200
 
@@ -1791,6 +1968,7 @@ async def test_put_partial_dep_on_specific_set_removed(server, client, environme
         unknowns=[],
         version_info=None,
         resource_sets=resource_sets,
+        module_version_info={},
     )
     assert result.code == 200
 
@@ -1798,7 +1976,6 @@ async def test_put_partial_dep_on_specific_set_removed(server, client, environme
     assert len(resources_in_model) == 3
     rid_to_resource = {res.resource_id: res for res in resources_in_model}
     assert rid_to_resource[rid1].attributes["requires"] == []
-    assert rid_to_resource[rid2].provides == []
 
     # Test for: https://github.com/inmanta/inmanta-core/issues/7065
     # Make sure dryrun succeeds after a put_partial call
@@ -1847,6 +2024,7 @@ async def test_put_partial_dep_on_non_existing_resource(server, client, environm
         version_info={},
         compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
+        module_version_info={},
     )
     assert result.code == 200
 
@@ -1887,6 +2065,7 @@ async def test_put_partial_dep_on_non_existing_resource(server, client, environm
         unknowns=[],
         version_info=None,
         resource_sets=resource_sets,
+        module_version_info={},
     )
     assert result.code == 400
     assert (
@@ -1936,6 +2115,7 @@ async def test_put_partial_inter_set_dependency(server, client, environment, cli
         version_info={},
         compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
+        module_version_info={},
     )
     assert result.code == 200
 
@@ -1959,6 +2139,7 @@ async def test_put_partial_inter_set_dependency(server, client, environment, cli
         unknowns=[],
         version_info=None,
         resource_sets=resource_sets,
+        module_version_info={},
     )
     assert result.code == 400
     assert (
@@ -2027,6 +2208,7 @@ async def test_is_suitable_for_partial_compiles(server, client, environment, cli
             version_info={},
             compiler_version=get_compiler_version(),
             resource_sets=resource_sets,
+            module_version_info={},
         )
         assert result.code == 200
         return version
@@ -2062,6 +2244,7 @@ async def test_is_suitable_for_partial_compiles(server, client, environment, cli
             version_info=None,
             resource_sets=resource_sets,
             removed_resource_sets=["set2"],
+            module_version_info={},
         )
         if not should_fail:
             assert result.code == 200

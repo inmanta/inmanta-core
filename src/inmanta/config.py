@@ -100,7 +100,6 @@ class Config:
         """
         Load the configuration file
         """
-
         cfg_files_in_config_dir: list[str]
         if config_dir and os.path.isdir(config_dir):
             cfg_files_in_config_dir = sorted(
@@ -115,16 +114,13 @@ class Config:
         files: list[str]
         if min_c_config_file is not None:
             files = [main_cfg_file] + cfg_files_in_config_dir + local_dot_inmanta_cfg_files + [min_c_config_file]
-            cls._min_c_config_file = min_c_config_file
 
         else:
             files = [main_cfg_file] + cfg_files_in_config_dir + local_dot_inmanta_cfg_files
-            cls._min_c_config_file = None
 
         config = LenientConfigParser(interpolation=Interpolation())
         config.read(files)
-        cls.__instance = config
-        cls._config_dir = config_dir
+        cls._save_loaded_config(config, config_dir, min_c_config_file)
 
     @classmethod
     def load_config_from_dict(
@@ -137,8 +133,16 @@ class Config:
         """
         config = LenientConfigParser(interpolation=Interpolation())
         config.read_dict(input_config)
+        cls._save_loaded_config(config, config_dir=None, min_c_config_file=None)
+
+    @classmethod
+    def _save_loaded_config(
+        cls, config: LenientConfigParser, config_dir: Optional[str], min_c_config_file: Optional[str]
+    ) -> None:
         cls.__instance = config
-        cls._config_dir = None
+        cls._config_dir = config_dir
+        cls._min_c_config_file = min_c_config_file
+        cls._config_updated()
 
     @classmethod
     def config_as_dict(cls) -> typing.Mapping[str, typing.Mapping[str, typing.Any]]:
@@ -166,6 +170,18 @@ class Config:
         cls.__instance = None
         cls._config_dir = None
         cls._min_c_config_file = None
+        cls._config_updated()
+
+    @classmethod
+    def _config_updated(cls) -> None:
+        """
+        This method must be called every time the configuration is updated.
+        """
+        from inmanta.protocol.auth import auth
+
+        # Clear the cached JWT config. It might have become out of sync with
+        # the configuration in this class.
+        auth.AuthJWTConfig.reset()
 
     @overload
     @classmethod
@@ -201,7 +217,7 @@ class Config:
         cfg: ConfigParser = cls.get_instance()
         val: Optional[str] = _get_from_env(section, name)
         if val is not None:
-            LOGGER.debug(f"Setting {section}:{name} was set using an environment variable")
+            LOGGER.debug("Setting %s:%s was set using an environment variable", section, name)
             return val
         # Typing of this method in the sdk is not entirely accurate
         # It just returns the fallback, whatever its type
@@ -217,8 +233,10 @@ class Config:
         """
         Return a boolean from the configuration
         """
-        cls.validate_option_request(section, name, default_value)
-        return cls.get_instance().getboolean(section, name, fallback=default_value)
+        value = cls.get(section, name, default_value)
+        if value is None:
+            raise ValueError(f"Expected boolean value. Found: {value}")
+        return is_bool(value)
 
     @classmethod
     def set(cls, section: str, name: str, value: str) -> None:
@@ -230,6 +248,7 @@ class Config:
         if section not in cls.get_instance():
             cls.get_instance().add_section(section)
         cls.get_instance().set(section, name, value)
+        cls._config_updated()
 
     @classmethod
     def register_option(cls, option: "Option") -> None:
@@ -238,7 +257,7 @@ class Config:
     @classmethod
     def validate_option_request(cls, section: str, name: str, default_value: Optional[T]) -> Optional["Option[T]"]:
         if section not in cls.__config_definition:
-            LOGGER.warning("Config section %s not defined" % (section))
+            LOGGER.warning("Config section %s not defined", section)
             # raise Exception("Config section %s not defined" % (section))
             return None
         if name not in cls.__config_definition[section]:
@@ -248,8 +267,7 @@ class Config:
         opt = cls.__config_definition[section][name]
         if default_value is not None and opt.get_default_value() != default_value:
             LOGGER.warning(
-                "Inconsistent default value for option %s.%s: defined as %s, got %s"
-                % (section, name, opt.default, default_value)
+                "Inconsistent default value for option %s.%s: defined as %s, got %s", section, name, opt.default, default_value
             )
 
         return opt
@@ -399,6 +417,12 @@ class Option(Generic[T]):
         self.default = default
         self.predecessor_option = predecessor_option
         Config.register_option(self)
+
+    def get_full_name(self) -> str:
+        """
+        Returns the fully-qualified name of this config option.
+        """
+        return f"{self.section}.{self.name}"
 
     def get(self) -> T:
         raw_config: ConfigParser = Config.get()

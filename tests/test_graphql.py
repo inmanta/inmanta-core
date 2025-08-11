@@ -12,12 +12,13 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import datetime
 import uuid
 
 import pytest
 
 import inmanta.data.sqlalchemy as models
-from inmanta import data
+from inmanta import const, data
 from inmanta.server import SLICE_COMPILER
 from inmanta.server.services.compilerservice import CompilerService
 from inmanta.util import retry_limited
@@ -25,92 +26,66 @@ from utils import run_compile_and_wait_until_compile_is_done
 
 
 @pytest.fixture
-async def setup_database(project_default):
-    # Initialize DB
+async def setup_database(project_default, server, client):
+    id_env_1 = uuid.UUID("11111111-1234-5678-1234-000000000001")
+    result = await client.environment_create(
+        project_id=project_default,
+        name="test-env-b",
+        environment_id=id_env_1,
+    )
+    assert result.code == 200
+
+    id_env_2 = uuid.UUID("11111111-1234-5678-1234-000000000002")
+    result = await client.environment_create(
+        project_id=project_default,
+        name="test-env-c",
+        environment_id=id_env_2,
+    )
+    assert result.code == 200
+
+    id_env_3 = uuid.UUID("11111111-1234-5678-1234-000000000003")
+    result = await client.environment_create(
+        project_id=project_default,
+        name="test-env-a",
+        environment_id=id_env_3,
+    )
+    assert result.code == 200
+    result = await client.halt_environment(id_env_3)
+    assert result.code == 200
+
+    def add_notifications(env_id: uuid.UUID) -> list[models.Notification]:
+        notifications = []
+        for i in range(8):
+            created = (datetime.datetime.now().astimezone() - datetime.timedelta(days=1)).replace(hour=i)
+            notifications.append(
+                models.Notification(
+                    id=uuid.uuid4(),
+                    title="Notification" if i % 2 else "Error",
+                    message="Something happened" if i % 2 else "Something bad happened",
+                    environment=env_id,
+                    severity=const.NotificationSeverity.message if i % 2 else const.NotificationSeverity.error,
+                    uri="/api/v2/notification",
+                    created=created.astimezone(),
+                    read=i in {2, 4},
+                    cleared=i in {4, 5},
+                )
+            )
+        return notifications
+
+    # Add notifications
     async with data.get_session() as session:
-        environment_1 = models.Environment(
-            id=uuid.UUID("11111111-1234-5678-1234-000000000001"),
-            name="test-env-b",
-            project=project_default,
-            halted=False,
-            settings={
-                "enable_lsm_expert_mode": False,
-            },
-        )
-        environment_2 = models.Environment(
-            id=uuid.UUID("11111111-1234-5678-1234-000000000002"),
-            name="test-env-c",
-            project=project_default,
-            halted=False,
-            settings={
-                "enable_lsm_expert_mode": True,
-            },
-        )
-        environment_3 = models.Environment(
-            id=uuid.UUID("11111111-1234-5678-1234-000000000003"),
-            name="test-env-a",
-            project=project_default,
-            halted=True,
-        )
-        session.add_all([environment_1, environment_2, environment_3])
+        session.add_all([*add_notifications(id_env_1), *add_notifications(id_env_2)])
         await session.commit()
         await session.flush()
 
 
-async def test_query_is_expert_mode(server, client, setup_database, project_default):
+async def test_graphql_schema(server, client):
     """
-    Tests the custom attribute isExpertMode
+    Tests to see if the graphql schema endpoint is working
     """
-    query = """
-{
-    environments {
-        edges {
-            node {
-              id
-              halted
-              isExpertMode
-              project
-            }
-        }
-    }
-}
-    """
-    result = await client.graphql(query=query)
+    result = await client.graphql_schema()
     assert result.code == 200
-    assert result.result["data"] == {
-        "data": {
-            "environments": {
-                "edges": [
-                    {
-                        "node": {
-                            "halted": False,
-                            "id": "11111111-1234-5678-1234-000000000001",
-                            "isExpertMode": False,
-                            "project": project_default,
-                        }
-                    },
-                    {
-                        "node": {
-                            "halted": False,
-                            "id": "11111111-1234-5678-1234-000000000002",
-                            "isExpertMode": True,
-                            "project": project_default,
-                        }
-                    },
-                    {
-                        "node": {
-                            "halted": True,
-                            "id": "11111111-1234-5678-1234-000000000003",
-                            "isExpertMode": False,
-                            "project": project_default,
-                        }
-                    },
-                ]
-            }
-        },
-        "errors": None,
-        "extensions": {},
-    }
+    assert result.result["data"]["__schema"]
 
 
 async def test_query_environments_with_filtering(server, client, setup_database):
@@ -140,7 +115,7 @@ async def test_query_environments_with_filtering(server, client, setup_database)
                         "node": {
                             "halted": False,
                             "id": "11111111-1234-5678-1234-000000000002",
-                            "isExpertMode": True,
+                            "isExpertMode": False,
                         }
                     }
                 ]
@@ -185,21 +160,19 @@ async def test_query_environments_with_paging(server, client, setup_database):
     """
     Display basic paging capabilities
     """
-    async with data.get_session() as session:
-        project = models.Project(id=uuid.UUID("00000000-1234-5678-1234-000000000002"), name="test-proj-2")
-        instances = [project]
-        for i in range(10):
-            instances.append(
-                models.Environment(
-                    id=uuid.UUID(f"21111111-1234-5678-1234-00000000000{i}"),
-                    name=f"test-env-{i}",
-                    project=project.id,
-                    halted=False,
-                )
-            )
-        session.add_all(instances)
-        await session.commit()
-        await session.flush()
+    # Create second project
+    id_project_2 = uuid.UUID("00000000-1234-5678-1234-000000000002")
+    result = await client.project_create(name="test-proj-2", project_id=id_project_2)
+    assert result.code == 200
+    # Create environments in project
+    for i in range(10):
+        result = await client.environment_create(
+            project_id=id_project_2,
+            name=f"test-env-{i}",
+            environment_id=uuid.UUID(f"21111111-1234-5678-1234-00000000000{i}"),
+        )
+        assert result.code == 200
+
     query = """
 {
     environments(%s){
@@ -323,3 +296,130 @@ async def test_is_environment_compiling(server, client, clienthelper, environmen
     result = await client.graphql(query=query)
     assert result.code == 200
     assert result.result["data"] == get_response(is_compiling=False)
+
+
+async def test_notifications(server, client, setup_database):
+    """
+    Assert that the notifications query works with filtering and sorting
+    """
+
+    query = """
+        {
+          notifications %s {
+              pageInfo{
+                startCursor,
+                endCursor,
+                hasPreviousPage,
+                hasNextPage
+            }
+            edges {
+              cursor
+              node {
+                title
+                environment
+                created
+                cleared
+              }
+            }
+          }
+        }
+    """
+    # Get full list of notifications
+    result = await client.graphql(query=query % "")
+    assert result.code == 200
+    edges = result.result["data"]["data"]["notifications"]["edges"]
+    # Environments 1 and 2 have 2 cleared and 6 uncleared notifications
+    assert len(edges) == 16
+
+    # Get list of notifications filtered by cleared
+    result = await client.graphql(
+        query=query
+        % """
+            (filter: {
+              cleared: false
+              environment: "11111111-1234-5678-1234-000000000001"
+            },
+            orderBy: {
+                created: "desc"
+            })
+    """
+    )
+    assert result.code == 200
+    edges = result.result["data"]["data"]["notifications"]["edges"]
+    # Environments 1 has 6 uncleared notifications
+    assert len(edges) == 6
+    # Assert that each notification is uncleared and that the most recent notifications appear first
+    # Arbitrary date that is more recent than any of the created notifications
+    previous_time = datetime.datetime.now().astimezone()
+    for edge in edges:
+        assert edge["node"]["cleared"] is False
+        assert edge["node"]["environment"] == "11111111-1234-5678-1234-000000000001"
+        created = datetime.datetime.fromisoformat(edge["node"]["created"])
+        assert created < previous_time
+        previous_time = created
+
+    # Get first page of notifications
+    result = await client.graphql(
+        query=query
+        % """
+            (filter: {
+              cleared: false
+              environment: "11111111-1234-5678-1234-000000000001"
+            },
+            orderBy: {
+                created: "desc"
+            },
+            first: 3)
+    """
+    )
+    assert result.code == 200
+    notifications = result.result["data"]["data"]["notifications"]
+    pageInfo = notifications["pageInfo"]
+    assert pageInfo["hasPreviousPage"] is False
+    assert pageInfo["hasNextPage"] is True
+    edges = notifications["edges"]
+    assert len(edges) == 3
+    assert edges[0]["cursor"] == pageInfo["startCursor"]
+    assert edges[-1]["cursor"] == pageInfo["endCursor"]
+    # Assert that each notification is uncleared and that the most recent notifications appear first
+    # Arbitrary date that is more recent than any of the created notifications
+    previous_time = datetime.datetime.now().astimezone()
+    for edge in edges:
+        assert edge["node"]["cleared"] is False
+        assert edge["node"]["environment"] == "11111111-1234-5678-1234-000000000001"
+        created = datetime.datetime.fromisoformat(edge["node"]["created"])
+        assert created < previous_time
+        previous_time = created
+
+    # Get first page of notifications
+    next_page_filter = (
+        """
+            (filter: {
+              cleared: false
+              environment: "11111111-1234-5678-1234-000000000001"
+            },
+            orderBy: {
+                created: "desc"
+            },
+            first: 3, after: "%s")
+    """
+        % pageInfo["endCursor"]
+    )
+    result = await client.graphql(query=query % next_page_filter)
+    assert result.code == 200
+    notifications = result.result["data"]["data"]["notifications"]
+    pageInfo = notifications["pageInfo"]
+    assert pageInfo["hasPreviousPage"] is True
+    assert pageInfo["hasNextPage"] is False
+    edges = notifications["edges"]
+    assert len(edges) == 3
+    assert edges[0]["cursor"] == pageInfo["startCursor"]
+    assert edges[-1]["cursor"] == pageInfo["endCursor"]
+
+    # previous_time is the created time of the last result of the first page
+    for edge in edges:
+        assert edge["node"]["cleared"] is False
+        assert edge["node"]["environment"] == "11111111-1234-5678-1234-000000000001"
+        created = datetime.datetime.fromisoformat(edge["node"]["created"])
+        assert created < previous_time
+        previous_time = created

@@ -79,7 +79,7 @@ async def test_project_api_v1(client):
     assert len(result.result["projects"]) == 0
 
     # get non existing environment
-    response = await client.get_environment(uuid.uuid4())
+    response = await client.environment_get(uuid.uuid4())
     assert response.code == 404
 
 
@@ -356,12 +356,12 @@ async def test_env_api(client):
     assert result.result["environment"]["id"] == env_id
     assert result.result["environment"]["name"] == "dev2"
 
-    result = await client.get_environment(id=env_id)
+    result = await client.environment_get(id=env_id)
     assert result.code == 200
-    assert "environment" in result.result
-    assert result.result["environment"]["id"] == env_id
-    assert result.result["environment"]["project"] == project_id
-    assert result.result["environment"]["name"] == "dev2"
+    assert "data" in result.result
+    assert result.result["data"]["id"] == env_id
+    assert result.result["data"]["project_id"] == project_id
+    assert result.result["data"]["name"] == "dev2"
 
     project_result = await client.get_project(id=project_id)
     assert project_result.code == 200
@@ -525,15 +525,20 @@ async def test_environment_listener(server, client_v2, caplog):
 
 
 @pytest.mark.parametrize("install", [True, False])
-def test_project_load_install(snippetcompiler_clean, install: bool) -> None:
+def test_project_load_install(snippetcompiler_clean, local_module_package_index: str, install: bool) -> None:
     """
     Verify that loading a project only installs modules when install is True.
     """
-    project: Project = snippetcompiler_clean.setup_for_snippet("import dummy_module", autostd=True, install_project=False)
+    project: Project = snippetcompiler_clean.setup_for_snippet(
+        "import minimalv2module",
+        python_requires=[inmanta.util.parse_requirement("inmanta-module-minimalv2module")],
+        install_project=False,
+        index_url=local_module_package_index,
+    )
     if install:
         project.load(install=True)
     else:
-        with pytest.raises(ModuleLoadingException, match="Failed to load module dummy_module"):
+        with pytest.raises(ModuleLoadingException, match="Failed to load module minimalv2module"):
             project.load()
         # make sure project load works after installing modules
         project.install_modules()

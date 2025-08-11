@@ -650,7 +650,7 @@ class HandlerAPI(ABC, Generic[TResource]):
         """
 
     @abstractmethod
-    def check_facts(self, ctx: HandlerContext, resource: TResource) -> dict[str, object]:
+    def check_facts(self, ctx: HandlerContext, resource: TResource) -> dict[str, str]:
         """
         This method is called by the agent to query for facts.
 
@@ -704,7 +704,7 @@ class HandlerAPI(ABC, Generic[TResource]):
         :param resource: The resource being handled.
         """
 
-    def facts(self, ctx: HandlerContext, resource: TResource) -> dict[str, object]:
+    def facts(self, ctx: HandlerContext, resource: TResource) -> dict[str, str]:
         """
         Override this method to implement fact querying. A queried fact can be reported back in two different ways:
         either via the return value of this method or by adding the fact to the HandlerContext via the
@@ -916,7 +916,7 @@ class ResourceHandler(HandlerAPI[TResource]):
                 )
 
     @tracing.instrument("ResourceHandler.check_facts", extract_args=True)
-    def check_facts(self, ctx: HandlerContext, resource: TResource) -> dict[str, object]:
+    def check_facts(self, ctx: HandlerContext, resource: TResource) -> dict[str, str]:
         """
         This method is called by the agent to query for facts. It runs :func:`~inmanta.agent.handler.HandlerAPI.pre`
         and :func:`~inmanta.agent.handler.HandlerAPI.post`. This method calls
@@ -926,7 +926,7 @@ class ResourceHandler(HandlerAPI[TResource]):
         :param resource: The resource to query facts for.
         :return: A dict with fact names as keys and facts values.
         """
-        facts = {}
+        facts: dict[str, str] = {}
         try:
             self.pre(ctx, resource)
             facts = self.facts(ctx, resource)
@@ -1106,7 +1106,7 @@ class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered])
           discovered and reported to the server. Objects of this type must be pydantic objects.
     """
 
-    def check_facts(self, ctx: HandlerContext, resource: TDiscovery) -> dict[str, object]:
+    def check_facts(self, ctx: HandlerContext, resource: TDiscovery) -> dict[str, str]:
         return {}
 
     @abstractmethod

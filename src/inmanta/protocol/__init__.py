@@ -53,12 +53,12 @@ to REST transport with Tornado, together with the code in :module:`~inmanta.serv
 
 # flake8: noqa: F401, F403
 
-from . import methods, methods_v2
-from .auth import decode_token, encode_token
-from .common import Response, Result, gzipped_json, json_encode
-from .decorators import handle, method, typedmethod
-from .endpoints import Client, SyncClient, TypedClient, VersionMatch
-from .websocket import Session, SessionEndpoint, SessionListener
+from inmanta.protocol import methods, methods_v2
+from inmanta.protocol.auth import decode_token, encode_token
+from inmanta.protocol.common import Response, Result, gzipped_json, json_encode
+from inmanta.protocol.decorators import handle, method, typedmethod
+from inmanta.protocol.endpoints import Client, SyncClient, TypedClient, VersionMatch
+from inmanta.protocol.websocket import Session, SessionEndpoint, SessionListener
 
 __all__ = [
     "Response",

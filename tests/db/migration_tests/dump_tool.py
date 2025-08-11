@@ -38,9 +38,9 @@ from inmanta.server import SLICE_COMPILER, SLICE_SERVER
 from inmanta.server.services.compilerservice import CompilerService
 
 if __file__ and os.path.dirname(__file__).split("/")[-2] == "inmanta_tests":
-    from inmanta_tests.utils import wait_for_version, wait_until_deployment_finishes  # noqa: F401
+    from inmanta_tests.utils import retry_limited, wait_for_version, wait_until_deployment_finishes  # noqa: F401
 else:
-    from utils import wait_for_version, wait_until_deployment_finishes
+    from utils import retry_limited, wait_for_version, wait_until_deployment_finishes
 
 
 def check_result(result: inmanta.protocol.Result) -> bool:
@@ -153,9 +153,7 @@ async def test_dump_db(
     versions = await wait_for_version(client, env_id_1, env_1_version, compile_timeout=40)
     v1 = versions["versions"][0]["version"]
 
-    check_result(
-        await client.release_version(env_id_1, v1, push=True, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy)
-    )
+    check_result(await client.release_version(env_id_1, v1))
 
     await wait_until_deployment_finishes(client, env_id_1, timeout=20)
 
@@ -172,11 +170,7 @@ async def test_dump_db(
     env_1_version += 1
     await wait_for_version(client, env_id_1, env_1_version)
 
-    check_result(
-        await client.release_version(
-            env_id_1, env_1_version, push=True, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
-        )
-    )
+    check_result(await client.release_version(env_id_1, env_1_version))
 
     await wait_until_deployment_finishes(client, env_id_1, timeout=20)
 
@@ -185,11 +179,7 @@ async def test_dump_db(
 
     env_1_version += 1
     await wait_for_version(client, env_id_1, env_1_version)
-    check_result(
-        await client.release_version(
-            env_id_1, env_1_version, push=False, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
-        )
-    )
+    check_result(await client.release_version(env_id_1, env_1_version))
 
     await populate_facts_and_parameters(client, env_id_1)
 
@@ -199,7 +189,7 @@ async def test_dump_db(
     await wait_for_version(client, env_id_1, env_1_version)
     check_result(await client.notify_change(id=env_id_1))
     env_1_version += 1
-    await wait_for_version(client, env_id_1, env_1_version)
+    await wait_for_version(client, env_id_1, env_1_version, compile_timeout=50)
 
     # Partial compile
     rid2 = "test::Resource[agent2,key=key2]"
@@ -223,6 +213,7 @@ async def test_dump_db(
             unknowns=[],
             version_info=None,
             resource_sets=resource_sets,
+            module_version_info={},
         )
     )
 
@@ -309,11 +300,10 @@ async def test_dump_db(
             "test::Resource[agent1,key=key6]": const.ResourceState.available,
         },
         compiler_version=util.get_compiler_version(),
+        module_version_info={},
     )
     assert res.code == 200
-    res = await client.release_version(
-        env_id_3, id=1, push=True, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
-    )
+    res = await client.release_version(env_id_3, id=1)
     assert res.code == 200
     await wait_until_deployment_finishes(client, env_id_3)
 
@@ -345,11 +335,10 @@ async def test_dump_db(
             "test::Resource[agent1,key=key7]": const.ResourceState.available,
         },
         compiler_version=util.get_compiler_version(),
+        module_version_info={},
     )
     assert res.code == 200
-    res = await client.release_version(
-        env_id_3, id=2, push=True, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
-    )
+    res = await client.release_version(env_id_3, id=2)
     assert res.code == 200
     await wait_until_deployment_finishes(client, env_id_3)
 
@@ -393,8 +382,33 @@ async def test_dump_db(
             "test::Resource[agent1,key=key8]": const.ResourceState.available,
         },
         compiler_version=util.get_compiler_version(),
+        module_version_info={},
     )
     assert res.code == 200
+
+    # Create an environment that contains a compile report with a notification
+    # associated with it about the fact that the compile failed.
+    result = await client.create_environment(project_id=project_id, name="dev-4")
+    assert result.code == 200
+    env_id_4 = result.result["environment"]["id"]
+    project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["server"], str(env_id_4), "compiler")
+    # Make dir read-only so that the compile service fails on it
+    os.makedirs(project_dir, exist_ok=True)
+    os.chmod(project_dir, 0o444)
+
+    async def has_compile_finished(env_id: uuid.UUID) -> bool:
+        result = await client.is_compiling(env_id)
+        return result.code == 204
+
+    check_result(await client.notify_change(id=env_id_4))
+    await retry_limited(has_compile_finished, timeout=10, env_id=env_id_4)
+    check_result(await client.notify_change(id=env_id_4))
+    await retry_limited(has_compile_finished, timeout=10, env_id=env_id_4)
+
+    compiles = await data.Compile.get_list(environment=env_id_4)
+    assert len(compiles) == 2
+    # Delete one compile so that we have a notification for a compile that no longer exists.
+    await compiles[0].delete()
 
     proc = await asyncio.create_subprocess_exec(
         "pg_dump", "-h", "127.0.0.1", "-p", str(postgres_db.port), "-f", outfile, "-O", "-U", postgres_db.user, database_name

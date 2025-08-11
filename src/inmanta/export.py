@@ -33,8 +33,9 @@ from inmanta.ast import CompilerException, Namespace, UnknownException
 from inmanta.ast.entity import Entity
 from inmanta.config import Option, is_list, is_uuid_opt
 from inmanta.const import ResourceState
+from inmanta.data import model
 from inmanta.data.model import PipConfig
-from inmanta.execute.proxy import DynamicProxy
+from inmanta.execute.proxy import DynamicProxy, ProxyContext, ProxyMode
 from inmanta.execute.runtime import Instance
 from inmanta.module import Project
 from inmanta.resources import Id, IgnoreResourceException, Resource, resource, to_id
@@ -78,7 +79,7 @@ class DependencyCycleException(Exception):
         return "Cycle in dependencies: %s" % self.cycle
 
 
-def upload_code(conn: protocol.SyncClient, tid: uuid.UUID, version: int, code_manager: loader.CodeManager) -> None:
+def upload_code(conn: protocol.SyncClient, code_manager: loader.CodeManager) -> None:
     res = conn.stat_files(list(code_manager.get_file_hashes()))
     if res is None or res.code != 200:
         raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
@@ -88,28 +89,6 @@ def upload_code(conn: protocol.SyncClient, tid: uuid.UUID, version: int, code_ma
         res = conn.upload_file(id=file, content=base64.b64encode(content).decode("ascii"))
         if res is None or res.code != 200:
             raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
-
-    # Example of what a source_map may look like:
-    # Type Name: mymodule::Mytype"
-    # Source Files:
-    #   /path/to/__init__.py (hash: 'abc123', module: 'inmanta_plugins.mymodule.Mytype')
-    #   /path/to/utils.py (hash: 'def456', module: 'inmanta_plugins.mymodule.Mytype')
-    #
-    # source_map = {
-    #    "mymodule::Mytype": {
-    #      'abc123': ('/path/to/__init__.py', 'inmanta_plugins.mymodule.Mytype', <requirements if any>),
-    #      'def456': ('/path/to/utils.py', 'inmanta_plugins.mymodule.Mytype', <requirements if any>)
-    #    },
-    # ...other types would be included as well
-    # }
-    source_map = {
-        resource_name: {source.hash: (source.path, source.module_name, source.requires) for source in sources}
-        for resource_name, sources in code_manager.get_types()
-    }
-
-    res = conn.upload_code_batched(tid=tid, id=version, resources=source_map)
-    if res is None or res.code != 200:
-        raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
 
 
 class Exporter:
@@ -162,13 +141,17 @@ class Exporter:
         self.failed = False
 
         self._file_store: dict[str, bytes] = {}
+        self.client = protocol.SyncClient("compiler")
 
     def _get_instance_proxies_of_types(self, types: list[str]) -> dict[str, Sequence[ProxiedType]]:
         """Returns a dict of instances for the given types"""
         proxies: dict[str, Sequence[ProxiedType]] = {}
         for t in types:
             if self.types is not None and t in self.types:
-                proxies[t] = [DynamicProxy.return_value(i) for i in self.types[t].get_all_instances()]
+                proxies[t] = [
+                    DynamicProxy.return_value(i, context=ProxyContext(path=f"<{i}>", mode=ProxyMode.EXPORT))
+                    for i in self.types[t].get_all_instances()
+                ]
             else:
                 proxies[t] = []
 
@@ -192,7 +175,13 @@ class Exporter:
             if len(instances) > 0:
                 for instance in instances:
                     try:
-                        res = Resource.create_from_model(self, resource_type, DynamicProxy.return_value(instance))
+                        res = Resource.create_from_model(
+                            self,
+                            resource_type,
+                            DynamicProxy.return_value(
+                                instance, context=ProxyContext(path=f"<{instance}>", mode=ProxyMode.EXPORT)
+                            ),
+                        )
                         resource_mapping[instance] = res
                         self.add_resource(res)
                     except UnknownException:
@@ -372,8 +361,7 @@ class Exporter:
             LOGGER.warning("The environment for this model should be set for export to server!")
             return 0
         else:
-            conn = protocol.SyncClient("compiler")
-            result = conn.reserve_version(tid)
+            result = self.client.reserve_version(tid)
             if result.code != 200:
                 raise Exception(f"Unable to reserve version number from server (msg: {result.result})")
             return result.result["data"]
@@ -389,15 +377,23 @@ class Exporter:
         export_plugin: Optional[str] = None,
         partial_compile: bool = False,
         resource_sets_to_remove: Optional[Sequence[str]] = None,
+        allow_handler_code_update: bool = False,
+        export_env_var_settings: bool = True,
     ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, ResourceState]]]:
         """
         Run the export functions. Return value for partial json export uses 0 as version placeholder.
+
+        :param export_env_var_settings: True iff the environment settings, defined in the project.yml file,
+                                        will be updated on the server. This argument is used by the test suite
+                                        to make sure we don't connect to the server if the test itself doesn't
+                                        need a server at all.
         """
         start = time.time()
         if not partial_compile and resource_sets_to_remove:
             raise Exception("Cannot remove resource sets when a full compile was done")
         self._removed_resource_sets = set(resource_sets_to_remove) if resource_sets_to_remove is not None else set()
 
+        project = Project.get()
         self.types = types
         self.scopes = scopes
 
@@ -428,13 +424,25 @@ class Exporter:
 
         resources = self.resources_to_list()
 
+        export_to_json = self.options and self.options.json
+
+        # Update the environment settings, mentioned in the project.yml file, on the server.
+        if not self.failed and not no_commit and export_env_var_settings and not export_to_json:
+            result = self.client.protected_environment_settings_set_batch(
+                tid=self._get_env_id(),
+                settings=project.metadata.environment_settings or {},
+                protected_by=model.ProtectedBy.project_yml,
+            )
+            if result.code != 200:
+                raise Exception("Failed to update the environment settings, defined in the project.yml file, on the server.")
+
         export_done = time.time()
         LOGGER.debug("Generating resources from the compiled model took %0.03f seconds", export_done - start)
 
         if len(self._resources) == 0:
             LOGGER.warning("Empty deployment model.")
 
-        if self.options and self.options.json:
+        if export_to_json:
             with open(self.options.json, "wb+") as fd:
                 fd.write(protocol.json_encode(resources).encode("utf-8"))
 
@@ -445,9 +453,10 @@ class Exporter:
                 metadata,
                 partial_compile,
                 list(self._removed_resource_sets),
-                Project.get().metadata.pip,
+                project.metadata.pip,
+                allow_handler_code_update=allow_handler_code_update,
             )
-            LOGGER.info("Committed resources with version %d" % self._version)
+            LOGGER.info("Committed resources with version %d", self._version)
 
         exported_version: int = self._version
         if include_status:
@@ -488,6 +497,8 @@ class Exporter:
         else:
             self._resource_state[resource.id.resource_str()] = const.ResourceState.available
 
+        resource.is_undefined = is_undefined
+
         self._resources[resource.id] = resource
 
     def resources_to_list(self) -> list[dict[str, Any]]:
@@ -501,12 +512,12 @@ class Exporter:
 
         return resources
 
-    def deploy_code(self, conn: protocol.SyncClient, tid: uuid.UUID, version: Optional[int] = None) -> None:
+    def register_code(
+        self,
+        code_manager: loader.CodeManager,
+    ) -> None:
         """Deploy code to the server"""
-        if version is None:
-            version = int(time.time())
 
-        code_manager = loader.CodeManager()
         LOGGER.info("Sending resources and handler source to server")
 
         types = set()
@@ -527,9 +538,14 @@ class Exporter:
                 if not type_name.startswith("core::"):
                     code_manager.register_code(resource_type, obj)
 
-        LOGGER.info("Uploading source files")
+        upload_code(self.client, code_manager)
 
-        upload_code(conn, tid, version, code_manager)
+    def _get_env_id(self) -> uuid.UUID:
+        tid = cfg_env.get()
+        if tid is None:
+            LOGGER.error("The environment for this model should be set!")
+            raise Exception("The environment for this model should be set!")
+        return tid
 
     def commit_resources(
         self,
@@ -539,49 +555,46 @@ class Exporter:
         partial_compile: bool,
         resource_sets_to_remove: list[str],
         pip_config: PipConfig,
+        allow_handler_code_update: bool = False,
     ) -> int:
         """
         Commit the entire list of resources to the configuration server.
 
         :return: The version for which resources were committed.
         """
-        tid = cfg_env.get()
-        if tid is None:
-            LOGGER.error("The environment for this model should be set!")
-            raise Exception("The environment for this model should be set!")
+        tid = self._get_env_id()
 
         if version is None and not partial_compile:
             raise Exception("Full export requires version to be set")
 
-        conn = protocol.SyncClient("compiler")
+        code_manager = loader.CodeManager()
+        code_manager.build_agent_map(self._resources)
 
-        # partial exports use the same code as the version they're based on
-        if not partial_compile:
-            self.deploy_code(conn, tid, version)
+        self.register_code(code_manager)
 
-        LOGGER.info("Uploading %d files" % len(self._file_store))
+        LOGGER.info("Uploading %d files", len(self._file_store))
 
         # collect all hashes and send them at once to the server to check
         # if they are already uploaded
         hashes = list(self._file_store.keys())
 
-        result = conn.stat_files(files=hashes)
+        result = self.client.stat_files(files=hashes)
 
         if result.code != 200:
             raise Exception("Unable to check status of files at server")
 
         to_upload = result.result["files"]
 
-        LOGGER.info("Only %d files are new and need to be uploaded" % len(to_upload))
+        LOGGER.info("Only %d files are new and need to be uploaded", len(to_upload))
         for hash_id in to_upload:
             content = self._file_store[hash_id]
 
-            result = conn.upload_file(id=hash_id, content=base64.b64encode(content).decode("ascii"))
+            result = self.client.upload_file(id=hash_id, content=base64.b64encode(content).decode("ascii"))
 
             if result.code != 200:
-                LOGGER.error("Unable to upload file with hash %s" % hash_id)
+                LOGGER.error("Unable to upload file with hash %s", hash_id)
             else:
-                LOGGER.debug("Uploaded file with hash %s" % hash_id)
+                LOGGER.debug("Uploaded file with hash %s", hash_id)
 
         # Collecting version information
         version_info = {const.EXPORT_META_DATA: metadata}
@@ -598,7 +611,7 @@ class Exporter:
 
         def do_put(**kwargs: object) -> protocol.Result:
             if partial_compile:
-                result = conn.put_partial(
+                result = self.client.put_partial(
                     tid=tid,
                     resources=resources,
                     resource_sets=self._resource_sets,
@@ -606,10 +619,12 @@ class Exporter:
                     resource_state=self._resource_state,
                     version_info=version_info,
                     removed_resource_sets=resource_sets_to_remove,
+                    module_version_info=code_manager.get_module_version_info(),
+                    allow_handler_code_update=allow_handler_code_update,
                     **kwargs,
                 )
             else:
-                result = conn.put_version(
+                result = self.client.put_version(
                     tid=tid,
                     version=version,
                     resources=resources,
@@ -618,6 +633,7 @@ class Exporter:
                     resource_state=self._resource_state,
                     version_info=version_info,
                     compiler_version=get_compiler_version(),
+                    module_version_info=code_manager.get_module_version_info(),
                     **kwargs,
                 )
             return result

@@ -34,14 +34,16 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 import inmanta.util
 import util.performance
 import utils
-from inmanta import const, data, resources, util
+from inmanta import const, data, util
 from inmanta.agent.executor import DeployReport
 from inmanta.const import ResourceState
 from inmanta.data.model import LatestReleasedResource
-from inmanta.deploy import persistence, state
-from inmanta.deploy.state import DeployResult
+from inmanta.deploy import scheduler
+from inmanta.resources import Id
 from inmanta.server import config
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
+
+LOGGER: logging.Logger = logging.getLogger(__name__)
 
 
 async def test_resource_list_no_released_version(server, client):
@@ -113,6 +115,7 @@ async def test_has_only_one_version_from_resource(server, client):
         environment=env.id, resource_version_id=res2_key + ",v=%d" % version, attributes={"name": res2_name}
     )
     await res2_v1.insert()
+    # This version has both resources so we can populate just this version
     await data.ResourcePersistentState.populate_for_version(environment=env.id, model_version=version)
 
     version = 2
@@ -120,38 +123,36 @@ async def test_has_only_one_version_from_resource(server, client):
         environment=env.id,
         resource_version_id=res1_key + ",v=%d" % version,
         attributes={"name": res1_name},
-        status=ResourceState.deploying,
     )
     await res1_v2.insert()
     res2_v2 = data.Resource.new(
         environment=env.id,
         resource_version_id=res2_key + ",v=%d" % version,
         attributes={"name": res2_name},
-        status=ResourceState.deploying,
     )
     await res2_v2.insert()
-    await data.ResourcePersistentState.populate_for_version(environment=env.id, model_version=version)
 
     version = 3
     res1_v3 = data.Resource.new(
         environment=env.id,
         resource_version_id=res1_key + ",v=%d" % version,
         attributes={"name": res1_name},
-        status=ResourceState.deployed,
     )
     await res1_v3.insert()
-    await data.ResourcePersistentState.populate_for_version(environment=env.id, model_version=version)
+
+    # This will mark res2 as an orphan since it is not on version 3
+    await data.ResourcePersistentState.mark_as_orphan(environment=env.id, resource_ids={ResourceIdStr(res2_key)})
 
     version = 4
     res1_v4 = data.Resource.new(
         environment=env.id,
         resource_version_id=res1_key + ",v=%d" % version,
         attributes={"name": res1_name, "new_attr": 123, "requires": ["abc"]},
-        status=ResourceState.deployed,
     )
     await res1_v4.insert()
-    await data.ResourcePersistentState.populate_for_version(environment=env.id, model_version=version)
-    await res1_v4.update_persistent_state(last_non_deploying_status=ResourceState.deployed)
+    await data.ResourcePersistentState.update_persistent_state(
+        environment=env.id, resource_id=res1_v4.resource_id, last_non_deploying_status=ResourceState.deployed
+    )
 
     result = await client.resource_list(env.id, sort="status.asc")
     assert result.code == 200
@@ -170,8 +171,9 @@ async def env_with_resources(server, client):
     env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
     await env.insert()
 
+    max_version = 3
     # Add multiple versions of model, with 2 of them released
-    for i in range(1, 4):
+    for i in range(1, max_version + 1):
         cm = data.ConfigurationModel(
             environment=env.id,
             version=i,
@@ -184,36 +186,51 @@ async def env_with_resources(server, client):
         await cm.insert()
 
     async def create_resource(
-        agent: str, path: str, resource_type: str, status: ResourceState, versions: list[int], environment: UUID = env.id
+        agent: str,
+        path: str,
+        resource_type: str,
+        status: ResourceState,
+        versions: list[int],
+        environment: UUID = env.id,
+        orphan: bool = False,
     ):
+        key = f"{resource_type}[{agent},path={path}]"
         for version in versions:
-            key = f"{resource_type}[{agent},path={path}]"
             res = data.Resource.new(
                 environment=environment,
                 resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),
                 attributes={"path": path, "version": version},
-                status=status,
+                is_undefined=status is ResourceState.undefined,
             )
             await res.insert()
-            await data.ResourcePersistentState.populate_for_version(environment=environment, model_version=version)
-            await res.update_persistent_state(
-                last_deploy=datetime.now(tz=UTC),
-                last_non_deploying_status=(
-                    status
-                    if status
-                    not in [
-                        ResourceState.available,
-                        ResourceState.deploying,
-                        ResourceState.undefined,
-                        ResourceState.skipped_for_undefined,
-                    ]
-                    else None
-                ),
-            )
+        # Populate RPS
+        version = max(versions)
+        await data.ResourcePersistentState.populate_for_version(environment=environment, model_version=version)
+        # Mark orphans as such
+        if orphan:
+            await data.ResourcePersistentState.mark_as_orphan(environment=environment, resource_ids={ResourceIdStr(key)})
+
+        await data.ResourcePersistentState.update_persistent_state(
+            environment=environment,
+            resource_id=ResourceIdStr(key),
+            last_deploy=datetime.now(tz=UTC),
+            last_non_deploying_status=(
+                status
+                if status
+                not in [
+                    ResourceState.available,
+                    ResourceState.deploying,
+                    ResourceState.undefined,
+                    ResourceState.skipped_for_undefined,
+                ]
+                else None
+            ),
+        )
 
     await create_resource("agent1", "/etc/file1", "test::File", ResourceState.available, [1, 2, 3])
-    await create_resource("agent1", "/etc/file2", "test::File", ResourceState.deploying, [1, 2])  # Orphaned
-    await create_resource("agent2", "/etc/file3", "test::File", ResourceState.deployed, [2])  # Orphaned
+    # The following 2 resources are orphaned
+    await create_resource("agent1", "/etc/file2", "test::File", ResourceState.deploying, [1, 2], orphan=True)
+    await create_resource("agent2", "/etc/file3", "test::File", ResourceState.deployed, [2], orphan=True)
     await create_resource("agent2", "/tmp/file4", "test::File", ResourceState.unavailable, [3])
     await create_resource("agent2", "/tmp/dir5", "test::Directory", ResourceState.skipped, [3])
     await create_resource("agent3", "/tmp/dir6", "test::Directory", ResourceState.deployed, [3])
@@ -598,6 +615,22 @@ async def test_none_resources_paging(server, client, env_with_resources):
     assert len(actual_result_asc_next.result["data"]) == 2
 
 
+async def test_client_all_pages(server, client, env_with_resources):
+    env = env_with_resources
+    result = await client.resource_list(tid=env.id)
+    assert result.code == 200
+    all_resources = result.result["data"]
+    assert len(all_resources) == 6
+
+    result = await client.resource_list(tid=env.id, limit=2)
+
+    idx = 0
+    async for item in result.all():
+        assert item == all_resources[idx]
+        idx += 1
+    assert idx == len(all_resources)
+
+
 @pytest.mark.parametrize(
     "sort, expected_status",
     [
@@ -707,22 +740,33 @@ async def test_deploy_summary(server, client, env_with_resources):
 
 
 @pytest.fixture
-async def very_big_env(server, client, environment, clienthelper, null_agent, instances: int) -> int:
+async def very_big_env(server, client, environment, clienthelper, null_agent, monkeypatch, instances: int) -> int:
     env_obj = await data.Environment.get_by_id(environment)
     await env_obj.set(data.AUTO_DEPLOY, True)
 
     deploy_counter = 0
     # The mix:
-    # 100 versions -> increments , all hashes change after 50 steps
-    # each with 5000 resources (50 sets of 100 resources)
+    # 2*<instances> versions -> increments , all hashes change after <instances> steps
+    # each version with 100 resources
     # one undefined
     # one skip for undef
     # one failed
     # one skipped
-    # 500 orphans: in second half, produce 10 orphans each
-    # every 10th version is not released
+    # orphans: in second half, produce 10 orphans each -> 10*<instances> orphans
+    # every 10th version is not released -> not sure what this means and if it still applies
 
-    async def make_resource_set(tenant_index: int, iteration: int) -> int:
+    dummy_scheduler = scheduler.ResourceScheduler(uuid.UUID(environment), executor_manager=None, client=client)
+
+    async def mock_run(self) -> None:
+        """Mocks the call to TaskRunner._run."""
+        return
+
+    # We want dummy_scheduler._running=True so that read_version runs correctly
+    # But we don't want the TaskRunner to actually run anything that is scheduled (we will do that manually)
+    monkeypatch.setattr("inmanta.deploy.scheduler.TaskRunner._run", mock_run)
+    await dummy_scheduler._initialize()
+
+    async def make_resource_set(tenant_index: int, iteration: int) -> list[dict[str, object]]:
         is_full = tenant_index == 0 and iteration == 0
         if is_full:
             version = await clienthelper.get_version()
@@ -751,9 +795,10 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
                 environment,
                 version,
                 attributes,
-                resource_state,
-                [],
-                {},
+                module_version_info={},
+                resource_state=resource_state,
+                unknowns=[],
+                version_info={},
                 compiler_version=inmanta.util.get_compiler_version(),
                 resource_sets=resource_sets,
             )
@@ -761,6 +806,7 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
         else:
             result = await client.put_partial(
                 environment,
+                module_version_info={},
                 resource_state=resource_state,
                 unknowns=[],
                 version_info={},
@@ -771,87 +817,79 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
             version = result.result["data"]
         await utils.wait_until_version_is_released(client, environment, version)
 
+        # Updates the scheduler state
+        await dummy_scheduler.read_version()
+
         # Get all resources
         result = await client.get_version(tid=environment, id=version)
         assert result.code == 200
         all_resources: list[dict[str, object]] = result.result["resources"]
 
-        # Filter out resources part of the increment
-        increment: set[ResourceIdStr]
-        increment, _ = await data.ConfigurationModel.get_increment(environment, version)
-        resources_in_increment_for_agent: list[dict[str, object]] = [
-            r for r in all_resources if r["resource_id"] in increment and r["agent"] == f"agent{tenant_index}"
+        resources_in_dirty_set: list[dict[str, object]] = [
+            r
+            for r in all_resources
+            if r["resource_id"] in dummy_scheduler._state.dirty and r["agent"] == f"agent{tenant_index}"
         ]
-
-        to_db_update_manager = persistence.ToDbUpdateManager(client, uuid.UUID(environment))
 
         async def deploy(resource: dict[str, object]) -> None:
             nonlocal deploy_counter
-            rid = ResourceIdStr(resource["resource_id"])
-            rvid = ResourceVersionIdStr(resource["resource_version_id"])
-            actionid = uuid.uuid4()
             deploy_counter = deploy_counter + 1
-            start_time: datetime = datetime.now().astimezone()
-            await to_db_update_manager.send_in_progress(actionid, resources.Id.parse_id(rvid))
+            rid = ResourceIdStr(resource["resource_id"])
+            action_id = uuid.uuid4()
+            rvid = ResourceVersionIdStr(resource["resource_version_id"])
+            deploy_intent = await dummy_scheduler.deploy_start(action_id, rid)
             if "sub=4]" in rid:
+                # never finish deploying r4
                 return
-            else:
-                if "sub=2]" in rid:
-                    status = const.HandlerResourceState.failed
-                    compliance_status = state.Compliance.NON_COMPLIANT
-                    deployment_result = DeployResult.FAILED
-                elif "sub=3]" in rid:
-                    status = const.HandlerResourceState.skipped
-                    compliance_status = state.Compliance.NON_COMPLIANT
-                    deployment_result = DeployResult.SKIPPED
-                else:
-                    status = const.HandlerResourceState.deployed
-                    compliance_status = state.Compliance.COMPLIANT
-                    deployment_result = DeployResult.DEPLOYED
-                await to_db_update_manager.send_deploy_done(
-                    attribute_hash=util.make_attribute_hash(resource_id=rid, attributes=resource),
-                    result=DeployReport(
+            if deploy_intent is not None:
+                await dummy_scheduler.deploy_done(
+                    deploy_intent,
+                    DeployReport(
                         rvid=rvid,
-                        action_id=actionid,
-                        resource_state=status,
+                        action_id=action_id,
+                        resource_state=(
+                            const.HandlerResourceState.failed
+                            if "sub=2]" in rid
+                            else const.HandlerResourceState.skipped if "sub=3]" in rid else const.HandlerResourceState.deployed
+                        ),
                         messages=[],
                         changes={},
                         change=None,
                     ),
-                    state=state.ResourceState(
-                        compliance=compliance_status,
-                        last_deploy_result=deployment_result,
-                        blocked=state.Blocked.NOT_BLOCKED,
-                        last_deployed=datetime.now().astimezone(),
-                    ),
-                    started=start_time,
-                    finished=datetime.now().astimezone(),
                 )
 
-        await asyncio.gather(*(deploy(resource) for resource in resources_in_increment_for_agent))
+        await asyncio.gather(*(deploy(resource) for resource in resources_in_dirty_set))
+        return resources_in_dirty_set
 
+    first_iteration_resources = {}
     for iteration in [0, 1]:
         for tenant in range(instances):
-            await make_resource_set(tenant, iteration)
-            logging.getLogger(__name__).warning("deploys: %d, tenant: %d, iteration: %d", deploy_counter, tenant, iteration)
+            resources = await make_resource_set(tenant, iteration)
+            LOGGER.warning("deploys: %d, tenant: %d, iteration: %d", deploy_counter, tenant, iteration)
+            # Since we are using null_agent we need to manually mark orphans
+            if iteration == 0:
+                first_iteration_resources[tenant] = {Id.parse_id(res["id"]).resource_str() for res in resources}
+            elif iteration == 1:
+                new_rids = {Id.parse_id(res["id"]).resource_str() for res in resources}
+                orphans = first_iteration_resources[tenant] - new_rids
+                await dummy_scheduler.state_update_manager.mark_as_orphan(environment=environment, resource_ids=orphans)
 
     return instances
 
 
-@pytest.mark.slowtest
 @pytest.mark.parametrize("instances", [2])  # set the size
 @pytest.mark.parametrize("trace", [False])  # make it analyze the queries
 async def test_resources_paging_performance(client, environment, very_big_env: int, trace: bool, async_finalizer):
-    """Scaling test, not part of the norma testsuite"""
+    """Scaling test, not part of the normal testsuite"""
     # Basic sanity
     result = await client.resource_list(environment, limit=5, deploy_summary=True)
     assert result.code == 200
     assert result.result["metadata"]["deploy_summary"] == {
         "by_state": {
-            "available": very_big_env - 1,
+            "available": 0,
             "cancelled": 0,
             "deployed": (95 * very_big_env),
-            "deploying": 1,
+            "deploying": very_big_env,
             "failed": very_big_env,
             "skipped": very_big_env,
             "skipped_for_undefined": very_big_env,
@@ -869,9 +907,9 @@ async def test_resources_paging_performance(client, environment, very_big_env: i
     filters = [
         ({}, very_big_env * 110),
         ({"status": "!orphaned"}, very_big_env * 100),
-        ({"status": "deploying"}, 1),
+        ({"status": "deploying"}, very_big_env),
         ({"status": "deployed"}, 95 * very_big_env),
-        ({"status": "available"}, very_big_env - 1),
+        ({"status": "available"}, 0),
         ({"agent": "agent0"}, 110),
         ({"agent": "someotheragent"}, 0),
         ({"resource_id_value": "39"}, very_big_env),
@@ -928,6 +966,4 @@ async def test_resources_paging_performance(client, environment, very_big_env: i
             latency_page2, links = await time_page(links, "next")
             latency_page3, links = await time_page(links, "next")
 
-            logging.getLogger(__name__).warning(
-                "Timings %s %s %d %d %d", filter, order, latency_page1, latency_page2, latency_page3
-            )
+            LOGGER.warning("Timings %s %s %d %d %d", filter, order, latency_page1, latency_page2, latency_page3)

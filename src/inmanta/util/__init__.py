@@ -317,12 +317,6 @@ class Scheduler:
         """
         Add task that is currently executing to `self._executing_tasks`.
         """
-        # requires: RequiresProvidesMapping = dataclasses.field(default_factory=RequiresProvidesMapping)
-        # # types per agent keeps track of which resource types live on which agent by doing a reference count
-        # # the dict is agent_name -> resource_type -> resource_count
-        # types_per_agent: dict[str, dict["ResourceType", int]] = dataclasses.field(
-        #     default_factory=lambda: defaultdict(lambda: defaultdict(lambda: 0))
-        # )
         if action in self._executing_tasks and self._executing_tasks[action]:
             LOGGER.warning("Multiple instances of background task %s are executing simultaneously", action.__name__)
         self._executing_tasks[action].append(task)
@@ -1004,7 +998,7 @@ def make_attribute_hash(resource_id: "ResourceId", attributes: Mapping[str, obje
     from inmanta.protocol.common import custom_json_encoder
 
     character = json.dumps(
-        {k: v for k, v in attributes.items() if k not in ["requires", "provides", "version"]},
+        {k: v for k, v in attributes.items() if k not in ["id", "requires", "provides", "version"]},
         default=custom_json_encoder,
         sort_keys=True,  # sort the keys for stable hashes when using dicts, see #5306
     )

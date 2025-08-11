@@ -24,6 +24,20 @@ from inmanta.execute.proxy import DynamicProxy
 from inmanta.plugins import plugin, ModelType
 
 
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class DataclassABC: ...
+
+
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class SimpleDC(DataclassABC):
+    n: int
+
+
+@plugin
+def create_simple_dc() -> DataclassABC:  # annotated with ABC to test inheritance
+    return SimpleDC(n=42)
+
+
 @dataclasses.dataclass(frozen=True)
 class Virtualmachine:
     name: "str"
@@ -101,3 +115,11 @@ def is_odd_string(thing: "string") -> None:
 def return_any() -> "any":
     out = Virtualmachine(name="Test", os={"X": "x"}, ram=5, cpus={"s": 5}, disk=[15], slots=None)
     return out
+
+
+@plugin
+def dc_union(value: int | Virtualmachine) -> None:
+    """
+    A plugin that takes a union with a dataclass. Could just as well (more realistic) be a union between two dataclasses.
+    """
+    ...

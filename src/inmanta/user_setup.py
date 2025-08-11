@@ -28,7 +28,7 @@ from inmanta import config, data
 from inmanta.const import MIN_PASSWORD_LENGTH
 from inmanta.data import start_engine, stop_engine
 from inmanta.data.model import AuthMethod
-from inmanta.protocol import auth
+from inmanta.protocol.auth import auth
 from inmanta.server import config as server_config
 
 
@@ -54,7 +54,7 @@ def validate_server_setup() -> None:
     config.Config.load_config(config_dir="/etc/inmanta/inmanta.d")
 
     value = click.confirm(
-        "This command should be execute locally on the orchestrator you want to configure. Are you "
+        "This command should be executed locally on the orchestrator you want to configure. Are you "
         "running this command locally?"
     )
     if value:
@@ -107,10 +107,10 @@ async def connect_to_db() -> None:
         database_host=server_config.db_host.get(),
         database_port=server_config.db_port.get(),
         database_name=server_config.db_name.get(),
-        pool_size=connection_pool_min_size,
-        max_overflow=connection_pool_max_size - connection_pool_min_size,
-        pool_timeout=connection_timeout,
-        echo=True,
+        create_db_schema=False,
+        connection_pool_min_size=connection_pool_min_size,
+        connection_pool_max_size=connection_pool_max_size,
+        connection_timeout=connection_timeout,
     )
 
 
@@ -139,11 +139,7 @@ async def do_user_setup() -> None:
         pw_hash = nacl.pwhash.str(password.encode())
 
         # insert the user
-        user = data.User(
-            username=username,
-            password_hash=pw_hash.decode(),
-            auth_method=AuthMethod.database,
-        )
+        user = data.User(username=username, password_hash=pw_hash.decode(), auth_method=AuthMethod.database, is_admin=True)
         await user.insert()
 
         click.echo(f"{'User %s: ' % username : <50}{click.style('created', fg='green')}")
@@ -155,6 +151,7 @@ async def do_user_setup() -> None:
             "The version of the database is out of date: start the server to upgrade the database "
             "schema to the lastest version."
         )
+
     finally:
         await stop_engine()
 

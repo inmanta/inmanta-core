@@ -580,25 +580,7 @@ class ResourceView(DataView[ResourceStatusOrder, model.LatestReleasedResource]):
                         rps.resource_id_value,
                         r.model,
                         rps.environment,
-                        (
-                            CASE
-                                -- The resource_persistent_state.last_non_deploying_status column is only populated for
-                                -- actual deployment operations to prevent locking issues. This case-statement calculates
-                                -- the correct state from the combination of the resource table and the
-                                -- resource_persistent_state table.
-                                WHEN r.model < (SELECT version FROM latest_version)
-                                    THEN 'orphaned'
-                                WHEN r.status::text IN('deploying', 'undefined', 'skipped_for_undefined')
-                                    -- The deploying, undefined and skipped_for_undefined states are not tracked in the
-                                    -- resource_persistent_state table.
-                                    THEN r.status::text
-                                WHEN rps.last_deployed_attribute_hash != r.attribute_hash
-                                    -- The hash changed since the last deploy -> new desired state
-                                    THEN r.status::text
-                                    -- No override required, use last known state from actual deployment
-                                    ELSE rps.last_non_deploying_status::text
-                            END
-                        ) as status
+                        {const.SQL_RESOURCE_STATUS_SELECTOR} AS status
                     FROM versioned_resource_state AS rps
             -- LEFT join for trivial `COUNT(*)`. Not applicable when filtering orphans because left table contains orphans.
                     {'' if self.drop_orphans else 'LEFT'} JOIN resource AS r
@@ -682,7 +664,7 @@ class ResourcesInVersionView(DataView[VersionedResourceOrder, model.VersionedRes
                 resource_id=versioned_resource["resource_id"],
                 resource_version_id=versioned_resource["resource_id"] + f",v={self.version}",
                 id_details=data.Resource.get_details_from_resource_id(versioned_resource["resource_id"]),
-                requires=versioned_resource["attributes"].get("requires", []),  # todo: broken
+                requires=versioned_resource["attributes"].get("requires", []),
             )
             for versioned_resource in records
         ]
@@ -759,6 +741,7 @@ class CompileReportView(DataView[CompileReportOrder, CompileReport]):
                 exporter_plugin=compile["exporter_plugin"],
                 notify_failed_compile=compile["notify_failed_compile"],
                 failed_compile_message=compile["failed_compile_message"],
+                links=cast(dict[str, list[str]], compile.get("links", {})),
             )
             for compile in records
         ]
@@ -1144,6 +1127,7 @@ class NotificationsView(DataView[NotificationOrder, model.Notification]):
                 cleared=notification["cleared"],
                 uri=notification["uri"],
                 environment=notification["environment"],
+                compile_id=notification["compile_id"],
             )
             for notification in records
         ]

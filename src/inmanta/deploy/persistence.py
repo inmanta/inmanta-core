@@ -20,16 +20,15 @@ import abc
 import datetime
 import logging
 import uuid
-from collections.abc import Set
 from contextlib import AbstractAsyncContextManager
-from typing import Any, Optional
+from typing import Any, Optional, Set
 from uuid import UUID
 
 from asyncpg import Connection, UniqueViolationError
 
 from inmanta import const, data
 from inmanta.agent import executor
-from inmanta.const import TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, ResourceState
+from inmanta.const import TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
 from inmanta.data import LogLine
 from inmanta.deploy import state
 from inmanta.protocol import Client
@@ -99,7 +98,10 @@ class StateUpdateManager(abc.ABC):
 
     @abc.abstractmethod
     async def mark_as_orphan(
-        self, environment: UUID, resource_ids: Set[ResourceIdStr], connection: Optional[Connection] = None
+        self,
+        environment: UUID,
+        resource_ids: Set[ResourceIdStr],
+        connection: Optional[Connection] = None,
     ) -> None:
         pass
 
@@ -121,50 +123,43 @@ class ToDbUpdateManager(StateUpdateManager):
         self.client = client
 
     def get_connection(self, connection: Optional[Connection] = None) -> AbstractAsyncContextManager[Connection]:
-        return data.Scheduler.get_connection()
+        return data.Scheduler.get_connection(connection)
 
     async def send_in_progress(self, action_id: UUID, resource_id: Id) -> None:
         """
         Update the db to reflect that deployment has started for a given resource.
         """
+        log_line = data.LogLine.log(
+            logging.INFO,
+            "Resource deploy started on agent %(agent)s, setting status to deploying",
+            agent=resource_id.agent_name,
+        )
+        # Not in Handler context, need to flush explicitly
+        log_line.write_to_logger_for_resource(resource_id.agent_name, resource_id.resource_version_str(), False)
 
+        resource_action = data.ResourceAction(
+            environment=self.environment,
+            version=resource_id.version,
+            resource_version_ids=[resource_id.resource_version_str()],
+            action_id=action_id,
+            action=const.ResourceAction.deploy,
+            started=datetime.datetime.now().astimezone(),
+            messages=[log_line],
+            status=const.ResourceState.deploying,
+        )
         async with data.Resource.get_connection() as connection:
             async with connection.transaction():
-                # This check is made in an overabundance of caution and can probably be dropped
-                resource = await data.Resource.get_one(
-                    connection=connection,
-                    environment=self.environment,
-                    resource_id=resource_id.resource_str(),
-                    model=resource_id.version,
-                    lock=data.RowLockMode.FOR_UPDATE,
-                )
-                assert resource is not None, f"Resource {resource_id} does not exists in the database, this should not happen"
-
-                log_line = data.LogLine.log(
-                    logging.INFO,
-                    "Resource deploy started on agent %(agent)s, setting status to deploying",
-                    agent=resource_id.agent_name,
-                )
-                # Not in Handler context, need to flush explicitly
-                log_line.write_to_logger_for_resource(resource_id.agent_name, resource_id.resource_version_str(), False)
-
-                resource_action = data.ResourceAction(
-                    environment=self.environment,
-                    version=resource_id.version,
-                    resource_version_ids=[resource_id.resource_version_str()],
-                    action_id=action_id,
-                    action=const.ResourceAction.deploy,
-                    started=datetime.datetime.now().astimezone(),
-                    messages=[log_line],
-                    status=const.ResourceState.deploying,
-                )
                 try:
                     await resource_action.insert(connection=connection)
                 except UniqueViolationError:
                     raise ValueError(f"A resource action with id {action_id} already exists.")
 
-                # FIXME: we may want to have this in the RPS table instead of Resource table, at some point
-                await resource.update_fields(connection=connection, status=const.ResourceState.deploying)
+                await data.ResourcePersistentState.update_persistent_state(
+                    environment=self.environment,
+                    resource_id=resource_id.resource_str(),
+                    is_deploying=True,
+                    connection=connection,
+                )
 
     async def send_deploy_done(
         self,
@@ -218,25 +213,13 @@ class ToDbUpdateManager(StateUpdateManager):
 
         async with data.Resource.get_connection() as connection:
             async with connection.transaction():
-                # TODO: do we need the resource at all?
-                resource = await data.Resource.get_one(
+
+                resource_action = await data.ResourceAction.get_one(
                     connection=connection,
+                    lock=data.RowLockMode.FOR_NO_KEY_UPDATE,
                     environment=self.environment,
-                    resource_id=resource_id_parsed.resource_str(),
-                    model=resource_id_parsed.version,
-                    # acquire lock on Resource before read and before lock on ResourceAction to prevent conflicts with
-                    # cascading deletes
-                    lock=data.RowLockMode.FOR_UPDATE,
+                    action_id=action_id,
                 )
-                if resource is None:
-                    raise ValueError("The resource with the given id does not exist in the given environment.")
-
-                # no escape from terminal
-                if resource.status != status and resource.status in TERMINAL_STATES:
-                    LOGGER.error("Attempting to set undeployable resource to deployable state")
-                    raise AssertionError("Attempting to set undeployable resource to deployable state")
-
-                resource_action = await data.ResourceAction.get(action_id=action_id, connection=connection)
                 if resource_action is None:
                     raise ValueError(
                         f"No resource action exists for action_id {action_id}. Ensure send_in_progress is called first."
@@ -260,7 +243,6 @@ class ToDbUpdateManager(StateUpdateManager):
                     finished=finished,
                     connection=connection,
                 )
-
                 extra_datetime_fields: dict[str, datetime.datetime] = {}
                 if status == ResourceState.deployed:
                     # use start time for last_success because it is used for comparison with dependencies' last_produced_events
@@ -270,28 +252,22 @@ class ToDbUpdateManager(StateUpdateManager):
                 # use finished time for last_produced_events because it is used for comparison with dependencies' start
                 extra_datetime_fields["last_produced_events"] = finished
 
-                await resource.update_fields(
-                    status=status,
-                    connection=connection,
-                )
-                await resource.update_persistent_state(
+                await data.ResourcePersistentState.update_persistent_state(
+                    resource_id=resource_id_parsed.resource_str(),
+                    environment=self.environment,
+                    is_deploying=False,
                     last_deploy=finished,
                     last_deployed_version=resource_id_parsed.version,
-                    last_deployed_attribute_hash=resource.attribute_hash,
+                    last_deployed_attribute_hash=attribute_hash,
                     last_non_deploying_status=const.NonDeployingResourceState(status),
                     last_deploy_result=state.last_deploy_result if state is not None else None,
                     **extra_datetime_fields,
                     connection=connection,
                 )
 
-                if (
-                    not stale_deploy
-                    and "purged" in resource.attributes
-                    and resource.attributes["purged"]
-                    and status == const.ResourceState.deployed
-                ):
+                if not stale_deploy and change is Change.purged and status == const.ResourceState.deployed:
                     await data.Parameter.delete_all(
-                        environment=self.environment, resource_id=resource.resource_id, connection=connection
+                        environment=self.environment, resource_id=resource_id_parsed.resource_str(), connection=connection
                     )
 
     async def dryrun_update(self, env: UUID, dryrun_result: executor.DryrunReport) -> None:
@@ -366,10 +342,7 @@ class ToDbUpdateManager(StateUpdateManager):
         )
 
     async def mark_as_orphan(
-        self,
-        environment: UUID,
-        resource_ids: Set[ResourceIdStr],
-        connection: Optional[Connection] = None,
+        self, environment: UUID, resource_ids: Set[ResourceIdStr], connection: Optional[Connection] = None
     ) -> None:
         await data.ResourcePersistentState.mark_as_orphan(environment, resource_ids, connection=connection)
 

@@ -27,17 +27,18 @@ from json import JSONDecodeError
 from typing import Optional, Union
 
 import tornado
-from pyformance import timer
 from tornado import httpserver, iostream, routing, web
 from tornado import websocket as tornado_websocket
 
 from inmanta import config as inmanta_config
 from inmanta import const, tracing
 from inmanta.protocol import common, endpoints, exceptions, websocket
+from inmanta.protocol.auth import providers
 from inmanta.protocol.rest import RESTBase, execute_call
 from inmanta.server import config as server_config
 from inmanta.server.config import server_access_control_allow_origin, server_enable_auth, server_tz_aware_timestamps
 from inmanta.types import ReturnTypes
+from inmanta.vendor.pyformance import timer
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 
@@ -219,13 +220,22 @@ class RESTHandler(tornado.web.RequestHandler):
 
 
 class StaticContentHandler(tornado.web.RequestHandler):
-    def initialize(self, transport: "RESTServer", content: str, content_type: str) -> None:
+    def initialize(
+        self,
+        transport: "RESTServer",
+        content: str,
+        content_type: str,
+        set_no_cache_header: bool = False,
+    ) -> None:
         self._transport = transport
         self._content = content
         self._content_type = content_type
+        self._set_no_cache_header = set_no_cache_header
 
     def get(self, *args: list[str], **kwargs: dict[str, str]) -> None:
         self.set_header("Content-Type", self._content_type)
+        if self._set_no_cache_header:
+            self.set_header("Cache-Control", "no-cache")
         self.write(self._content)
         self.set_status(200)
 
@@ -284,6 +294,7 @@ class RESTServer(RESTBase):
         self.idle_event.set()
         self.running = False
         self._http_server = None
+        self._authorization_provider = providers.AuthorizationProvider.create_from_config() if self.is_auth_enabled() else None
 
         # Session handling
         self._sessions: dict[(uuid.UUID, str) : websocket.Session] = {}
@@ -297,6 +308,9 @@ class RESTServer(RESTBase):
         self.inflight_counter -= 1
         if self.inflight_counter == 0:
             self.idle_event.set()
+
+    def is_auth_enabled(self) -> bool:
+        return server_config.server_enable_auth.get()
 
     def get_global_url_map(self, targets: Sequence[common.CallTarget]) -> dict[str, dict[str, common.UrlMethod]]:
         global_url_map: dict[str, dict[str, common.UrlMethod]] = defaultdict(dict)
@@ -312,17 +326,19 @@ class RESTServer(RESTBase):
         """
         Start the server on the current ioloop
         """
+        if self._authorization_provider:
+            await self._authorization_provider.start()
+
         global_url_map: dict[str, dict[str, common.UrlMethod]] = self.get_global_url_map(targets)
 
         # TODO: add constant for url
         rules: list[routing.Rule] = [routing.Rule(routing.PathMatches("/v2/ws"), WebsocketHandler, {"transport": self})]
-        rules.extend(additional_rules)
 
         for url, handler_config in global_url_map.items():
             rules.append(routing.Rule(routing.PathMatches(url), RESTHandler, {"transport": self, "config": handler_config}))
             LOGGER.debug("Registering handler(s) for url %s and methods %s", url, ", ".join(handler_config.keys()))
 
-        application = web.Application(rules, compress_response=True, websocket_ping_interval=1)
+        application = web.Application(handlers=[*additional_rules, *rules], compress_response=True, websocket_ping_interval=1)
 
         crt = inmanta_config.Config.get("server", "ssl_cert_file", None)
         key = inmanta_config.Config.get("server", "ssl_key_file", None)
@@ -365,6 +381,11 @@ class RESTServer(RESTBase):
         await self.idle_event.wait()
         if self._http_server is not None:
             await self._http_server.close_all_connections()
+        if self._authorization_provider:
+            await self._authorization_provider.stop()
+
+    def get_authorization_provider(self) -> providers.AuthorizationProvider | None:
+        return self._authorization_provider
 
     def add_session_listener(self, session_listener: websocket.SessionListener) -> None:
         self.listeners.append(session_listener)

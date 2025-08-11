@@ -17,6 +17,7 @@ Contact: code@inmanta.com
 """
 
 import importlib.metadata
+import itertools
 import logging
 import re
 import socket
@@ -27,8 +28,10 @@ from typing import TYPE_CHECKING, Mapping, Optional
 from tornado import routing, web
 
 import inmanta.protocol.endpoints
-from inmanta.data.model import ExtensionStatus
-from inmanta.protocol import Result, TypedClient, common, endpoints
+from inmanta import tracing
+from inmanta.data.model import ExtensionStatus, ReportedStatus, SliceStatus
+from inmanta.protocol import Client, Result, TypedClient, common, endpoints, handle, methods, methods_v2
+from inmanta.protocol.exceptions import ShutdownInProgress
 from inmanta.protocol.rest import server
 from inmanta.server import SLICE_TRANSPORT
 from inmanta.types import ArgumentTypes
@@ -126,6 +129,22 @@ class Server(endpoints.Endpoint):
         self._slice_sequence = self._order_slices()
         return self._slice_sequence
 
+    def _validate(self) -> None:
+        """
+        Validate whether the server is in a consistent state.
+        Raises an exception if an inconsistency is found.
+        """
+        for method_name, properties_list in common.MethodProperties.methods.items():
+            for properties in properties_list:
+                # All endpoints used by end-users must have an @auth annotation.
+                has_auth_annotation = properties.authorization_metadata is not None
+                if (
+                    properties.is_external_interface()
+                    and not has_auth_annotation
+                    and properties.function not in {methods_v2.login, methods_v2.health}
+                ):
+                    raise Exception(f"API endpoint {method_name} is missing an @auth annotation.")
+
     async def start(self) -> None:
         """
         Start the transport.
@@ -137,6 +156,7 @@ class Server(endpoints.Endpoint):
         if self.running:
             return
         LOGGER.debug("Starting Server Rest Endpoint")
+        self._validate()
         self.running = True
 
         for my_slice in self._get_slice_sequence():
@@ -170,13 +190,29 @@ class Server(endpoints.Endpoint):
 
         order = list(reversed(self._get_slice_sequence()))
 
-        for endpoint in order:
-            LOGGER.debug("Pre Stopping %s", endpoint.name)
-            await endpoint.prestop()
+        pre_stop_exceptions: dict[str, Exception] = {}
+        stop_exceptions: dict[str, Exception] = {}
 
         for endpoint in order:
-            LOGGER.debug("Stopping %s", endpoint.name)
-            await endpoint.stop()
+            try:
+                LOGGER.debug("Pre Stopping %s", endpoint.name)
+                await endpoint.prestop()
+            except Exception as e:
+                pre_stop_exceptions[endpoint.name] = e
+
+        for endpoint in order:
+            try:
+                LOGGER.debug("Stopping %s", endpoint.name)
+                await endpoint.stop()
+            except Exception as e:
+                stop_exceptions[endpoint.name] = e
+
+        if pre_stop_exceptions or stop_exceptions:
+            raise BaseExceptionGroup(
+                "Uncaught exception occurred during the following slice(s) shutdown %s."
+                % str(set(pre_stop_exceptions.keys()).union(set(stop_exceptions.keys()))),
+                [exc for exc in itertools.chain(pre_stop_exceptions.values(), stop_exceptions.values())],
+            )
 
 
 class ServerSlice(inmanta.protocol.common.CallTarget, TaskHandler[Result | None]):
@@ -199,6 +235,9 @@ class ServerSlice(inmanta.protocol.common.CallTarget, TaskHandler[Result | None]
     """
 
     feature_manager: "FeatureManager"
+
+    # The number of seconds after which the call to the get_status() endpoint of this server slice should time out.
+    GET_SLICE_STATUS_TIMEOUT: int = 1
 
     def __init__(self, name: str) -> None:
         super().__init__()
@@ -327,12 +366,23 @@ class ServerSlice(inmanta.protocol.common.CallTarget, TaskHandler[Result | None]
         if start:
             self._handlers.append((r"/", web.RedirectHandler, {"url": location[1:]}))
 
-    def add_static_content(self, path: str, content: str, content_type: str = "application/javascript") -> None:
+    def add_static_content(
+        self,
+        path: str,
+        content: str,
+        content_type: str = "application/javascript",
+        set_no_cache_header: bool = False,
+    ) -> None:
         self._handlers.append(
             routing.Rule(
                 routing.PathMatches(r"%s(.*)" % path),
                 server.StaticContentHandler,
-                {"transport": self, "content": content, "content_type": content_type},
+                {
+                    "transport": self,
+                    "content": content,
+                    "content_type": content_type,
+                    "set_no_cache_header": set_no_cache_header,
+                },
             )
         )
 
@@ -366,6 +416,45 @@ class ServerSlice(inmanta.protocol.common.CallTarget, TaskHandler[Result | None]
         Get the status of this slice.
         """
         return {}
+
+    async def get_reported_status(self) -> tuple[ReportedStatus, Optional[str]]:
+        """
+        Get the reported status of this slice as well as a message if applicable.
+        """
+        return ReportedStatus.OK, None
+
+    async def get_slice_status(self) -> SliceStatus:
+        """
+        Get the reported status of this slice
+        """
+        try:
+            status, message = await self.get_reported_status()
+            return SliceStatus(
+                name=self.name,
+                status=await asyncio.wait_for(self.get_status(), self.GET_SLICE_STATUS_TIMEOUT),
+                reported_status=status,
+                message=message,
+            )
+        except asyncio.TimeoutError:
+            return SliceStatus(
+                name=self.name,
+                status={
+                    "error": f"Timeout on data collection for {self.name}, consult the server log for additional information"
+                },
+                reported_status=ReportedStatus.Error,
+                message="Timeout on data collection",
+            )
+        except Exception:
+            LOGGER.error(
+                f"The following error occurred while trying to determine the status of slice {self.name}",
+                exc_info=True,
+            )
+            return SliceStatus(
+                name=self.name,
+                status={"error": "An unexpected error occurred, reported to server log"},
+                reported_status=ReportedStatus.Error,
+                message="An unexpected error occurred, reported to server log",
+            )
 
     def define_features(self) -> list["Feature[object]"]:
         """Return a list of feature that this slice offers"""

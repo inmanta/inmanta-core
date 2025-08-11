@@ -754,6 +754,21 @@ async def test_server_recompile(server, client, environment, monkeypatch):
     """
     Test a recompile on the server and verify recompile triggers
     """
+    # Put settings in-place to test the feature that updates the environment_settings set in the project.yml file.
+    result = await client.environment_settings_set(tid=environment, id=data.RESOURCE_ACTION_LOGS_RETENTION, value=5)
+    assert result.code == 200
+    result = await client.environment_setting_get(tid=environment, id=data.ENVIRONMENT_METRICS_RETENTION)
+    assert result.code == 200
+    assert result.result["data"]["settings"][data.ENVIRONMENT_METRICS_RETENTION] == 336
+    result = await client.environment_setting_get(tid=environment, id=data.NOTIFICATION_RETENTION)
+    assert result.code == 200
+    assert result.result["data"]["settings"][data.NOTIFICATION_RETENTION] == 365
+    # Assert no protected environment settings
+    result = await client.environment_settings_list(tid=environment)
+    assert result.code == 200
+    for s in result.result["data"]["settings_v2"].values():
+        assert not s["protected"]
+        assert s["protected_by"] is None
 
     project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["server"], str(environment), "compiler")
     project_source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "project")
@@ -791,6 +806,28 @@ async def test_server_recompile(server, client, environment, monkeypatch):
     versions = await wait_for_version(client, environment, 1, compile_timeout=40)
     assert versions["versions"][0]["total"] == 1
     assert versions["versions"][0]["version_info"]["export_metadata"]["type"] == "api"
+
+    # Verify that the environment settings were updated correctly
+    result = await client.environment_setting_get(tid=environment, id=data.RESOURCE_ACTION_LOGS_RETENTION)
+    assert result.code == 200
+    # This setting is not present in the project.yml file, so it should not be changed.
+    assert result.result["data"]["settings"][data.RESOURCE_ACTION_LOGS_RETENTION] == 5
+    result = await client.environment_setting_get(tid=environment, id=data.ENVIRONMENT_METRICS_RETENTION)
+    assert result.code == 200
+    assert result.result["data"]["settings"][data.ENVIRONMENT_METRICS_RETENTION] == 100
+    result = await client.environment_setting_get(tid=environment, id=data.NOTIFICATION_RETENTION)
+    assert result.code == 200
+    assert result.result["data"]["settings"][data.NOTIFICATION_RETENTION] == 200
+    # Assert protection
+    result = await client.environment_settings_list(tid=environment)
+    assert result.code == 200
+    for setting_name, s in result.result["data"]["settings_v2"].items():
+        if setting_name in {data.ENVIRONMENT_METRICS_RETENTION, data.NOTIFICATION_RETENTION}:
+            assert s["protected"]
+            assert model.ProtectedBy(s["protected_by"]) == model.ProtectedBy.project_yml
+        else:
+            assert not s["protected"]
+            assert s["protected_by"] is None
 
     # get compile reports and make sure the environment variables are not logged
     reports = await client.get_reports(environment)
@@ -1004,7 +1041,12 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     # request a compile
     remote_id1 = uuid.uuid4()
     await compilerslice.request_recompile(
-        env=env, force_update=False, do_export=False, remote_id=remote_id1, env_vars={"my_unique_var": "1"}
+        env=env,
+        force_update=False,
+        do_export=False,
+        remote_id=remote_id1,
+        env_vars={"my_unique_var": "1"},
+        links={"self": ["my-link"]},
     )
 
     # api should return one
@@ -1014,6 +1056,8 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     result = await client.get_compile_queue(environment)
     assert len(result.result["queue"]) == 1
     assert result.result["queue"][0]["remote_id"] == str(remote_id1)
+    # Assert that links are present in the compile queue
+    assert result.result["queue"][0]["links"] == {"self": ["my-link"]}
     assert result.code == 200
     # None in the queue, all running
     await retry_limited(lambda: compilerslice._queue_count_cache == 0, 10)
@@ -1241,12 +1285,18 @@ async def test_compilerservice_halt(
 ) -> None:
     compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
 
+    # Wait until the compiler service is ready to process compiles.
+    # As long as the compiler service is not fully ready,
+    # is_compiling() will always return False.
+    await retry_limited(lambda: compilerslice.fully_ready, timeout=10)
+
     result = await client.get_compile_queue(environment)
     assert result.code == 200
     assert len(result.result["queue"]) == 0
     assert compilerslice._queue_count_cache == 0
 
-    await client.halt_environment(environment)
+    result = await client.halt_environment(environment)
+    assert result.code == 200
 
     env = await data.Environment.get_by_id(environment)
     assert env is not None
@@ -1260,7 +1310,8 @@ async def test_compilerservice_halt(
     result = await client.is_compiling(environment)
     assert result.code == 204
 
-    await client.resume_environment(environment)
+    result = await client.resume_environment(environment)
+    assert result.code == 200
     result = await client.is_compiling(environment)
     assert result.code == 200
 
@@ -1541,6 +1592,7 @@ async def test_git_uses_environment_variables(environment_factory: EnvironmentFa
     assert "trace: " in report.errstream
 
 
+@pytest.mark.parametrize("no_agent", [True])
 @pytest.mark.parametrize(
     "recompile_backoff,expected_log_message,expected_log_level",
     [
@@ -1715,6 +1767,12 @@ async def test_notification_on_failed_exporting_compile(
     compile_failed_notification = next((item for item in result.result["data"] if item["title"] == "Compilation failed"), None)
     assert compile_failed_notification
     assert str(compile_id) in compile_failed_notification["uri"]
+    assert compile_id == uuid.UUID(compile_failed_notification["compile_id"])
+
+    result = await client.get_notification(tid=env.id, notification_id=compile_failed_notification["id"])
+    assert result.code == 200
+    assert str(compile_id) in result.result["data"]["uri"]
+    assert compile_id == uuid.UUID(result.result["data"]["compile_id"])
 
 
 async def test_notification_on_failed_pull_during_compile(
@@ -2015,7 +2073,7 @@ class Mockreport:
 
 
 async def test_venv_use_and_reuse(tmp_path, caplog):
-    caplog.at_level(logging.DEBUG)
+    caplog.set_level(logging.DEBUG)
 
     # Set up mock
     project = tmp_path / "project"
@@ -2040,7 +2098,7 @@ async def test_venv_upgrade_version_match(tmp_path, caplog):
     1. Make a venv in the old layout and upgrade it
     2. Test we can handle re-creation of the venv
     """
-    caplog.at_level(logging.DEBUG)
+    caplog.set_level(logging.DEBUG)
 
     # Set up mock
     project = tmp_path / "project"
@@ -2071,7 +2129,7 @@ async def test_venv_upgrade_version_match(tmp_path, caplog):
 async def test_venv_upgrade_version_mismatch(tmp_path, caplog):
     # Make fake venv of wrong version
 
-    caplog.at_level(logging.DEBUG)
+    caplog.set_level(logging.DEBUG)
 
     # Old setup
     project = tmp_path / "project2"

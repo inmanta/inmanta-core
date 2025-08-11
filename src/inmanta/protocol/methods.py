@@ -18,7 +18,6 @@ Contact: code@inmanta.com
 Module defining the v1 rest api
 """
 
-import datetime
 import uuid
 from typing import Any, Literal, Optional, Union
 
@@ -26,11 +25,12 @@ import inmanta.types
 from inmanta import const, data, resources
 from inmanta.const import ResourceState
 from inmanta.data import model
-from inmanta.data.model import PipConfig
+from inmanta.data.model import InmantaModule, PipConfig
 from inmanta.protocol import exceptions
+from inmanta.protocol.auth.decorators import auth
 from inmanta.protocol.common import ArgOption
 from inmanta.protocol.decorators import method, typedmethod
-from inmanta.types import JsonType, PrimitiveTypes
+from inmanta.types import JsonType, PrimitiveTypes, ResourceIdStr
 
 
 async def convert_environment(env: uuid.UUID, metadata: dict) -> "data.Environment":
@@ -69,6 +69,7 @@ RVID_OPTS = {"rvid": ArgOption(getter=convert_resource_version_id)}
 
 
 # Method for working with projects
+@auth(auth_label=const.CoreAuthorizationLabel.PROJECT_CREATE, read_only=False)
 @method(path="/project", operation="PUT", client_types=[const.ClientType.api])
 def create_project(name: str, project_id: Optional[uuid.UUID] = None):
     """
@@ -79,6 +80,7 @@ def create_project(name: str, project_id: Optional[uuid.UUID] = None):
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.PROJECT_MODIFY, read_only=False)
 @method(path="/project/<id>", operation="POST", client_types=[const.ClientType.api])
 def modify_project(id: uuid.UUID, name: str):
     """
@@ -89,6 +91,7 @@ def modify_project(id: uuid.UUID, name: str):
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.PROJECT_DELETE, read_only=False)
 @method(path="/project/<id>", operation="DELETE", client_types=[const.ClientType.api])
 def delete_project(id: uuid.UUID):
     """
@@ -98,6 +101,7 @@ def delete_project(id: uuid.UUID):
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.PROJECT_READ, read_only=True)
 @method(path="/project", operation="GET", client_types=[const.ClientType.api])
 def list_projects():
     """
@@ -105,6 +109,7 @@ def list_projects():
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.PROJECT_READ, read_only=True)
 @method(path="/project/<id>", operation="GET", client_types=[const.ClientType.api])
 def get_project(id: uuid.UUID):
     """
@@ -115,6 +120,7 @@ def get_project(id: uuid.UUID):
 
 
 # Methods for working with environments
+@auth(auth_label=const.CoreAuthorizationLabel.ENVIRONMENT_CREATE, read_only=False, environment_param="environment_id")
 @method(path="/environment", operation="PUT", client_types=[const.ClientType.api])
 def create_environment(
     project_id: uuid.UUID,
@@ -134,6 +140,7 @@ def create_environment(
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.ENVIRONMENT_MODIFY, read_only=False, environment_param="id")
 @method(path="/environment/<id>", operation="POST", client_types=[const.ClientType.api])
 def modify_environment(id: uuid.UUID, name: str, repository: Optional[str] = None, branch: Optional[str] = None):
     """
@@ -148,6 +155,7 @@ def modify_environment(id: uuid.UUID, name: str, repository: Optional[str] = Non
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.ENVIRONMENT_DELETE, read_only=False, environment_param="id")
 @method(path="/environment/<id>", operation="DELETE", client_types=[const.ClientType.api])
 def delete_environment(id: uuid.UUID):
     """
@@ -160,6 +168,7 @@ def delete_environment(id: uuid.UUID):
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.ENVIRONMENT_READ, read_only=True)
 @method(path="/environment", operation="GET", client_types=[const.ClientType.api])
 def list_environments():
     """
@@ -167,28 +176,11 @@ def list_environments():
     """
 
 
-@method(
-    path="/environment/<id>",
-    operation="GET",
-    client_types=[const.ClientType.api],
-    arg_options={"id": ArgOption(getter=add_env)},
-)
-def get_environment(id: uuid.UUID, versions: Optional[int] = None, resources: Optional[int] = None):
-    """
-    Get an environment and all versions associated.
-
-    :param id: The id of the environment to return.
-    :param versions: Optional. If provided and greater than 0, include this many of the most recent versions for this
-                     environment, ordered in descending order of their version number.
-                     If not provided or 0, no version information is included.
-    :param resources: Optional. If provided and greater than 0, include a summary of the resources in the environment.
-    """
-
-
 # Method for listing/getting/setting/removing settings of an environment. This API is also used by agents to configure
 # environments.
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.ENVIRONMENT_SETTING_READ, read_only=True, environment_param="tid")
 @method(
     path="/environment_settings",
     operation="GET",
@@ -205,6 +197,7 @@ def list_settings(tid: uuid.UUID):
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.ENVIRONMENT_SETTING_WRITE, read_only=False, environment_param="tid")
 @method(
     path="/environment_settings/<id>",
     operation="POST",
@@ -223,6 +216,7 @@ def set_setting(tid: uuid.UUID, id: str, value: Union[PrimitiveTypes, JsonType])
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.ENVIRONMENT_SETTING_READ, read_only=True, environment_param="tid")
 @method(
     path="/environment_settings/<id>",
     operation="GET",
@@ -240,6 +234,7 @@ def get_setting(tid: uuid.UUID, id: str):
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.ENVIRONMENT_SETTING_WRITE, read_only=False, environment_param="tid")
 @method(
     path="/environment_settings/<id>",
     operation="DELETE",
@@ -261,6 +256,7 @@ def delete_setting(tid: uuid.UUID, id: str):
 # Method for listing and creating auth tokens for an environment that can be used by the agent and compilers
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.TOKEN, read_only=False, environment_param="tid")
 @method(
     path="/environment_auth",
     operation="POST",
@@ -278,6 +274,7 @@ def create_token(tid: uuid.UUID, client_types: list, idempotent: bool = True):
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.ENVIRONMENT_CLEAR, read_only=False, environment_param="id")
 @method(
     path="/decommission/<id>",
     operation="DELETE",
@@ -303,6 +300,7 @@ def clear_environment(id: uuid.UUID):
 # Upload, retrieve and check for file. A file is identified by a hash of its content.
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.FILE_WRITE, read_only=False)
 @method(
     path="/file/<id>",
     operation="PUT",
@@ -315,11 +313,12 @@ def upload_file(id: str, content: str):
     """
     Upload a new file
 
-    :param id: The id of the file
+    :param id: The sha1 hash of the content of the file.
     :param content: The base64 encoded content of the file
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.FILE_READ, read_only=True)
 @method(
     path="/file/<id>",
     operation="HEAD",
@@ -336,6 +335,7 @@ def stat_file(id: str):
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.FILE_READ, read_only=True)
 @method(
     path="/file/<id>",
     operation="GET",
@@ -352,6 +352,7 @@ def get_file(id: str):
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.FILE_READ, read_only=True)
 @method(
     path="/file",
     api=True,
@@ -370,6 +371,7 @@ def stat_files(files: list):
 # Manage resources on the server
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.RESOURCE_READ, read_only=True, environment_param="tid")
 @method(
     path="/resource/<id>",
     operation="GET",
@@ -402,43 +404,10 @@ def get_resource(
     """
 
 
-@method(path="/resource", operation="POST", agent_server=True, arg_options=ENV_OPTS, client_types=[const.ClientType.agent])
-def resource_action_update(
-    tid: uuid.UUID,
-    resource_ids: list,
-    action_id: uuid.UUID,
-    action: const.ResourceAction,
-    started: Optional[datetime.datetime] = None,
-    finished: Optional[datetime.datetime] = None,
-    status: Optional[Union[const.ResourceState, const.DeprecatedResourceState]] = None,
-    messages: list = [],
-    changes: dict = {},
-    change: Optional[const.Change] = None,
-    send_events: bool = False,
-):
-    """
-    Send a resource update to the server
-
-    :param tid: The id of the environment this resource belongs to
-    :param resource_ids: The resource with the given resource_version_id id from the agent
-    :param action_id: A unique id to indicate the resource action that has be updated
-    :param action: The action performed
-    :param started: Optional. The timestamp when this action was started. When this action (action_id) has not been saved yet,
-                    started has to be defined.
-    :param finished: Optional. The timestamp when this action was finished. Afterwards, no changes with the same action_id
-                    can be stored. The status field also has to be set.
-    :param status: Optional. The current status of the resource (if known)
-    :param messages: Optional. A list of log entries to add to this entry.
-    :param changes: Optional. A dict of changes to this resource. The key of this dict indicates the attributes/fields that
-                   have been changed. The value contains the new value and/or the original value.
-    :param change: Optional. The result of the changes
-    :param send_events: Optional. [DEPRECATED] The value of this field is not used anymore.
-    """
-
-
 # Manage configuration model versions
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.DESIRED_STATE_READ, read_only=True, environment_param="tid")
 @method(path="/version", operation="GET", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def list_versions(tid: uuid.UUID, start: Optional[int] = None, limit: Optional[int] = None):
     """
@@ -451,6 +420,7 @@ def list_versions(tid: uuid.UUID, start: Optional[int] = None, limit: Optional[i
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.DESIRED_STATE_READ, read_only=True, environment_param="tid")
 @method(path="/version/<id>", operation="GET", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def get_version(
     tid: uuid.UUID, id: int, include_logs: Optional[bool] = None, log_filter: Optional[str] = None, limit: Optional[int] = None
@@ -470,6 +440,7 @@ def get_version(
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.DESIRED_STATE_WRITE, read_only=False, environment_param="tid")
 @method(path="/version/<id>", operation="DELETE", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def delete_version(tid: uuid.UUID, id: int):
     """
@@ -485,6 +456,7 @@ def put_version(
     tid: uuid.UUID,
     version: int,
     resources: list,
+    module_version_info: dict[str, InmantaModule],
     resource_state: dict[inmanta.types.ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]] = {},
     unknowns: Optional[list[dict[str, PrimitiveTypes]]] = None,
     version_info: Optional[dict] = None,
@@ -507,9 +479,12 @@ def put_version(
     :param compiler_version: Optional. version of the compiler, if not provided, this call will return an error
     :param resource_sets: Optional. a dictionary describing which resource belongs to which resource set
     :param pip_config: Optional. Pip config used by this version
+    :param module_version_info: Map of (module name, module version) to InmantaModule
+
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.DESIRED_STATE_WRITE, read_only=False, environment_param="tid")
 @method(
     path="/version/<id>", operation="POST", arg_options=ENV_OPTS, client_types=[const.ClientType.api, const.ClientType.compiler]
 )
@@ -531,6 +506,7 @@ def release_version(
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.DEPLOY, read_only=False, environment_param="tid")
 @method(path="/deploy", operation="POST", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def deploy(
     tid: uuid.UUID,
@@ -549,6 +525,7 @@ def deploy(
 # Method for requesting and quering a dryrun
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.DRYRUN_WRITE, read_only=False, environment_param="tid")
 @method(path="/dryrun/<id>", operation="POST", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def dryrun_request(tid: uuid.UUID, id: int):
     """
@@ -559,6 +536,7 @@ def dryrun_request(tid: uuid.UUID, id: int):
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.DRYRUN_READ, read_only=True, environment_param="tid")
 @method(path="/dryrun", operation="GET", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def dryrun_list(tid: uuid.UUID, version: Optional[int] = None):
     """
@@ -569,6 +547,7 @@ def dryrun_list(tid: uuid.UUID, version: Optional[int] = None):
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.DRYRUN_READ, read_only=True, environment_param="tid")
 @method(path="/dryrun/<id>", operation="GET", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def dryrun_report(tid: uuid.UUID, id: uuid.UUID):
     """
@@ -617,6 +596,7 @@ def do_dryrun(tid: uuid.UUID, id: uuid.UUID, agent: str, version: int):
 # Method to notify the server of changes in the configuration model source code
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.COMPILER_EXECUTE, read_only=False, environment_param="id")
 @method(
     path="/notify/<id>",
     operation="GET",
@@ -632,6 +612,7 @@ def notify_change_get(id: uuid.UUID, update: bool = True):
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.COMPILER_EXECUTE, read_only=False, environment_param="id")
 @method(
     path="/notify/<id>",
     operation="POST",
@@ -648,6 +629,7 @@ def notify_change(id: uuid.UUID, update: bool = True, metadata: dict = {}):
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.COMPILER_STATUS_READ, read_only=True, environment_param="id")
 @method(path="/notify/<id>", operation="HEAD", client_types=[const.ClientType.api])
 def is_compiling(id: uuid.UUID):
     """
@@ -660,6 +642,7 @@ def is_compiling(id: uuid.UUID):
 # Get and set parameters on the server
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.PARAMETER_READ, read_only=True, environment_param="tid")
 @method(
     path="/parameter/<id>",
     operation="GET",
@@ -684,6 +667,7 @@ def get_param(tid: uuid.UUID, id: str, resource_id: Optional[str] = None):
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.PARAMETER_WRITE, read_only=False, environment_param="tid")
 @method(
     path="/parameter/<id>",
     operation="PUT",
@@ -718,6 +702,7 @@ def set_param(
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.PARAMETER_WRITE, read_only=False, environment_param="tid")
 @method(
     path="/parameter/<id>",
     operation="DELETE",
@@ -734,6 +719,7 @@ def delete_param(tid: uuid.UUID, id: str, resource_id: Optional[str] = None):
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.PARAMETER_READ, read_only=True, environment_param="tid")
 @method(
     path="/parameter", operation="POST", arg_options=ENV_OPTS, client_types=[const.ClientType.api, const.ClientType.compiler]
 )
@@ -749,6 +735,7 @@ def list_params(tid: uuid.UUID, query: dict = {}):
 #  Get and set parameters on the server
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.PARAMETER_WRITE, read_only=False, environment_param="tid")
 @method(
     path="/parameters",
     operation="PUT",
@@ -785,7 +772,7 @@ def set_parameters(tid: uuid.UUID, parameters: list):
     reply=False,
     enforce_auth=False,
 )
-def get_parameter(tid: uuid.UUID, agent: str, resource: dict):
+def get_parameter(tid: uuid.UUID, agent: str, resource_id: ResourceIdStr):
     """
     Get all parameters/facts known by the agents for the given resource
 
@@ -795,29 +782,14 @@ def get_parameter(tid: uuid.UUID, agent: str, resource: dict):
 
     :param tid: The environment
     :param agent: The agent to get the parameters from
-    :param resource: The resource to query the parameters from
-    """
-
-
-@method(path="/codebatched/<id>", operation="PUT", arg_options=ENV_OPTS, client_types=[const.ClientType.compiler])
-def upload_code_batched(tid: uuid.UUID, id: int, resources: dict):
-    """
-    Upload batches of code for various resources associated with a specific version of a configuration model in an environment.
-
-    :param tid: The id of the environment to which the code belongs.
-    :param id: The version number of the configuration model.
-    :param resources: A dictionary where each key is a string representing a resource type.
-                  For each resource type, the value is a dictionary. This nested dictionary's keys are file hashes,
-                  and each key maps to a tuple. This tuple contains three elements: the file name, the module name,
-                  and a list of requirements.
-
-    The endpoint validates that all provided file references are valid and checks for conflicts with existing code entries.
+    :param resource_id: The id of the resource to query the parameters from
     """
 
 
 # Generate download the diff of two hashes
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.FILE_READ, read_only=True)
 @method(path="/filediff", client_types=[const.ClientType.api])
 def diff(file_id_1: str, file_id_2: str):
     """
@@ -833,10 +805,14 @@ def diff(file_id_1: str, file_id_2: str):
 # Get a list of compile reports
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.COMPILE_REPORT_READ, read_only=True, environment_param="tid")
 @method(path="/compilereport", operation="GET", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def get_reports(tid: uuid.UUID, start: Optional[str] = None, end: Optional[str] = None, limit: Optional[int] = None):
     """
     Return compile reports newer then start
+
+    The returned compile report objects may carry links to other objects, e.g. a service instance.
+    The full list of supported links can be found :ref:`here <api_self_referencing_links>`.
 
     :param tid: The id of the environment to get a report from
     :param start: Optional. Reports after start
@@ -846,10 +822,14 @@ def get_reports(tid: uuid.UUID, start: Optional[str] = None, end: Optional[str] 
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.COMPILE_REPORT_READ, read_only=True)
 @method(path="/compilereport/<id>", operation="GET", client_types=[const.ClientType.api])
 def get_report(id: uuid.UUID):
     """
     Get a compile report from the server
+
+    The returned compile report object may carry links to other objects, e.g. a service instance.
+    The full list of supported links can be found :ref:`here <api_self_referencing_links>`.
 
     :param id: The id of the compile and its reports to fetch.
     """
@@ -858,6 +838,7 @@ def get_report(id: uuid.UUID):
 # Get a list of all agents
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.AGENT_READ, read_only=True, environment_param="environment")
 @method(path="/agentproc", operation="GET", client_types=[const.ClientType.api])
 def list_agent_processes(
     environment: Optional[uuid.UUID] = None,
@@ -883,6 +864,7 @@ def list_agent_processes(
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.AGENT_READ, read_only=True)
 @method(path="/agentproc/<id>", operation="GET", client_types=[const.ClientType.api])
 def get_agent_process(id: uuid.UUID):
     """
@@ -893,18 +875,7 @@ def get_agent_process(id: uuid.UUID):
     """
 
 
-# Get a list of all agents
-@method(path="/agent/<id>", operation="POST", api=True, timeout=5, arg_options=ENV_OPTS, client_types=[const.ClientType.api])
-def trigger_agent(tid: uuid.UUID, id: str):
-    """
-    Request the server to reload an agent
-
-    :param tid: The environment this agent is defined in
-    :param id: The name of the agent
-    :return: The requested node
-    """
-
-
+@auth(auth_label=const.CoreAuthorizationLabel.AGENT_READ, read_only=True, environment_param="tid")
 @method(path="/agent", operation="GET", api=True, timeout=5, arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def list_agents(tid: uuid.UUID, start: Optional[str] = None, end: Optional[str] = None, limit: Optional[int] = None):
     """
@@ -1001,6 +972,7 @@ def get_state(tid: uuid.UUID, sid: uuid.UUID, agent: str):
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.STATUS_READ, read_only=True)
 @typedmethod(path="/serverstatus", operation="GET", client_types=[const.ClientType.api])
 def get_server_status() -> model.StatusResponse:
     """
@@ -1008,6 +980,7 @@ def get_server_status() -> model.StatusResponse:
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.COMPILER_STATUS_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/compilequeue",
     operation="GET",
@@ -1019,6 +992,9 @@ def get_server_status() -> model.StatusResponse:
 def get_compile_queue(tid: uuid.UUID) -> list[model.CompileRun]:
     """
     Get the current compiler queue on the server, ordered by increasing `requested` timestamp.
+
+    The returned compile run object may carry links to other objects, e.g. a service instance. The full list of supported links
+    can be found :ref:`here <api_self_referencing_links>`.
 
     :param tid: The id of the environment for which to retrieve the compile queue.
 

@@ -30,7 +30,7 @@ from tornado import web
 
 import requests
 from inmanta import config, const
-from inmanta.protocol import auth
+from inmanta.protocol.auth import auth
 from inmanta.server.protocol import Server
 
 
@@ -119,8 +119,6 @@ validate_cert=false
             )
         )
 
-    # Make sure the config starts from a clean slate
-    auth.AuthJWTConfig.reset()
     config.Config.load_config(config_file)
 
     cfg_list = await asyncio.get_event_loop().run_in_executor(None, auth.AuthJWTConfig.list)
@@ -168,48 +166,12 @@ validate_cert=false
             )
         )
 
-    # Make sure the config starts from a clean slate
-    auth.AuthJWTConfig.reset()
     config.Config.load_config(config_file)
     with pytest.raises(ValueError):
         await asyncio.get_event_loop().run_in_executor(None, partial(auth.AuthJWTConfig.get, "auth_jwt_keycloak"))
 
 
-def test_custom_claim_matching(tmp_path) -> None:
-    """Validate parsing claim matching"""
-    config_file = tmp_path / "auth.cfg"
-    with open(config_file, "w+", encoding="utf-8") as fd:
-        fd.write(
-            """
-[auth_jwt_test]
-algorithm=HS256
-sign=true
-client_types=agent,compiler
-key=eciwliGyqECVmXtIkNpfVrtBLutZiITZKSKYhogeHMM
-expire=0
-issuer=https://localhost:8888/
-audience=https://localhost:8888/
-claims=
-    prod in environment
-    type is dc
-"""
-        )
-
-    # Make sure the config starts from a clean slate
-    auth.AuthJWTConfig.reset()
-    config.Config.load_config(str(config_file))
-
-    # load and parse
-    cfg = auth.AuthJWTConfig.get("test")
-    assert cfg
-
-    assert auth.check_custom_claims({"environment": ["prod"], "type": "dc"}, cfg.claims)
-    assert not auth.check_custom_claims({"environment": ["prod"], "type": ["dc"]}, cfg.claims)
-    assert auth.check_custom_claims({"environment": ["prod"], "type": "dc", "other": "test"}, cfg.claims)
-    assert not auth.check_custom_claims({"environment": ["prod"]}, cfg.claims)
-    assert auth.check_custom_claims({"environment": ["prod"]}, [])
-
-
+@pytest.mark.parametrize("enable_auth", [True])
 async def test_customer_header_user(tmp_path: pathlib.Path, server: Server) -> None:
     """Test using custom header and users"""
     port = config.Config.get("client_rest_transport", "port")

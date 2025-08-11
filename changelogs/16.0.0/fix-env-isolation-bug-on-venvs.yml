@@ -1,0 +1,6 @@
+---
+description: Fixed bug that can cause the Python environment of a executor to be shared across different Inmanta environment. This could result in a corrupt executor environment.
+change-type: patch
+destination-branches: [master, iso8]
+sections:
+  bugfix: "{{description}}"

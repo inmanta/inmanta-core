@@ -104,7 +104,6 @@ async def test_4889_deadlock_delete_resource_action_insert(monkeypatch, environm
     resource = inmanta.types.ResourceVersionIdStr(f"mymod::myresource[myagent,id=1],v={version}")
     await data.Resource.new(
         environment=env_id,
-        status=const.ResourceState.available,
         resource_version_id=resource,
         attributes={},
     ).insert()

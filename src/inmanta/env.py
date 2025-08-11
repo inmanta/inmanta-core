@@ -37,10 +37,9 @@ from importlib.abc import Loader
 from importlib.machinery import ModuleSpec
 from importlib.metadata import Distribution, distribution, distributions
 from itertools import chain
-from re import Pattern
 from subprocess import CalledProcessError
 from textwrap import indent
-from typing import Callable, NamedTuple, Optional, Tuple, TypeVar
+from typing import Callable, Optional, Tuple, TypeVar
 
 import inmanta.util
 import packaging.requirements
@@ -361,6 +360,21 @@ class PipCommandBuilder:
         return [python_path, "-m", "pip", "uninstall", "-y", *pkg_names]
 
     @classmethod
+    def compose_download_command(
+        cls, python_path: str, pkg_requirement: inmanta.util.CanonicalRequirement, no_deps: bool, no_binary: str | None
+    ) -> list[str]:
+        """
+        Returns the pip command to download a python package.
+        """
+        command = [python_path, "-m", "pip", "download"]
+        if no_deps:
+            command.append("--no-deps")
+        if no_binary:
+            command.extend(["--no-binary", no_binary])
+        command.append(str(pkg_requirement))
+        return command
+
+    @classmethod
     def compose_list_command(
         cls, python_path: str, format: Optional[PipListFormat] = None, only_editable: bool = False
     ) -> list[str]:
@@ -500,7 +514,7 @@ class Pip(PipCommandBuilder):
             pass
         else:
             # All others need an index
-            assert_pip_has_source(config, " ".join(install_args))
+            assert_pip_has_source(config, "'" + " ".join(install_args) + "'")
         index_args: list[str] = []
         if config.index_url:
             index_args.append("--index-url")
@@ -829,9 +843,18 @@ import sys
         output = CommandRunner(LOGGER_PIP).run_command_and_log_output(cmd, stderr=subprocess.DEVNULL, env=os.environ.copy())
         return {canonicalize_name(r["name"]): packaging.version.Version(r["version"]) for r in json.loads(output)}
 
+    def download_python_package(self, pkg_requirement: inmanta.util.CanonicalRequirement, output_directory: str) -> None:
+        """
+        Download the python package that satisfies the constraint pkg_requirement as a source distributin package.
+        """
+        cmd = PipCommandBuilder.compose_download_command(
+            python_path=self.python_path, pkg_requirement=pkg_requirement, no_deps=True, no_binary=pkg_requirement.name
+        )
+        CommandRunner(LOGGER_PIP).run_command_and_log_output(cmd, env=os.environ.copy(), cwd=output_directory)
+
     def install_for_config(
         self,
-        requirements: list[inmanta.util.CanonicalRequirement],
+        requirements: Sequence[inmanta.util.CanonicalRequirement],
         config: PipConfig,
         upgrade: bool = False,
         constraint_files: Optional[list[str]] = None,
@@ -1144,7 +1167,7 @@ class ActiveEnv(PythonEnvironment):
 
     def install_for_config(
         self,
-        requirements: list[inmanta.util.CanonicalRequirement],
+        requirements: Sequence[inmanta.util.CanonicalRequirement],
         config: PipConfig,
         upgrade: bool = False,
         constraint_files: Optional[list[str]] = None,
@@ -1160,162 +1183,6 @@ class ActiveEnv(PythonEnvironment):
             )
         finally:
             self.notify_change()
-
-    def get_constraint_violations_for_check(
-        self,
-        strict_scope: Optional[Pattern[str]] = None,
-        constraints: Optional[list[inmanta.util.CanonicalRequirement]] = None,
-    ) -> tuple[set[VersionConflict], set[VersionConflict]]:
-        """
-        Return the constraint violations that exist in this venv. Returns a tuple of non-strict and strict violations,
-        in that order.
-
-        Extra's are ignored entirely
-        """
-        inmanta_core_canonical = packaging.utils.canonicalize_name("inmanta-core")
-
-        class OwnedRequirement(NamedTuple):
-            requirement: inmanta.util.CanonicalRequirement
-            owner: Optional[NormalizedName] = None
-
-            def is_owned_by(self, owners: abc.Set[NormalizedName]) -> bool:
-                return self.owner is None or self.owner in owners
-
-        # all requirements of all packages installed in this environment
-        # assume no extras
-        installed_constraints: abc.Set[OwnedRequirement] = frozenset(
-            OwnedRequirement(parsed, packaging.utils.canonicalize_name(dist_info.name))
-            for dist_info in PythonWorkingSet.get_dist_in_working_set().values()
-            for parsed in (
-                inmanta.util.parse_requirement(requirement=str(requirement)) for requirement in (dist_info.requires or [])
-            )
-            if parsed.marker is None or parsed.marker.evaluate()
-        )
-
-        inmanta_constraints: abc.Set[OwnedRequirement] = frozenset(
-            OwnedRequirement(r, owner=inmanta_core_canonical) for r in self._get_requirements_on_inmanta_package()
-        )
-        extra_constraints: abc.Set[OwnedRequirement] = frozenset(
-            (OwnedRequirement(r) for r in constraints) if constraints is not None else []
-        )
-
-        all_constraints: abc.Set[OwnedRequirement] = installed_constraints | inmanta_constraints | extra_constraints
-
-        parameters = list(
-            chain(
-                (
-                    []
-                    if strict_scope is None
-                    else (
-                        packaging.utils.canonicalize_name(dist_info.name)
-                        for dist_info in PythonWorkingSet.get_dist_in_working_set().values()
-                        if strict_scope.fullmatch(packaging.utils.canonicalize_name(dist_info.name))
-                    )
-                ),
-                (requirement.requirement.name for requirement in inmanta_constraints),
-                (requirement.requirement.name for requirement in extra_constraints),
-            )
-        )
-        full_strict_scope: abc.Set[NormalizedName] = PythonWorkingSet.get_dependency_tree(parameters)
-
-        installed_versions: dict[NormalizedName, packaging.version.Version] = PythonWorkingSet.get_packages_in_working_set()
-
-        constraint_violations: set[VersionConflict] = set()
-        constraint_violations_strict: set[VersionConflict] = set()
-        for c in all_constraints:
-            requirement = c.requirement
-            req_name = NormalizedName(requirement.name)  # requirement is already canonical
-            if requirement.marker and not requirement.marker.evaluate():
-                continue
-            if req_name not in installed_versions or (
-                not requirement.specifier.contains(installed_versions[req_name], prereleases=True)
-            ):
-                version_conflict = VersionConflict(
-                    requirement=requirement,
-                    installed_version=installed_versions.get(req_name, None),
-                    owner=c.owner,
-                )
-                if c.is_owned_by(full_strict_scope):
-                    constraint_violations_strict.add(version_conflict)
-                else:
-                    constraint_violations.add(version_conflict)
-
-        return constraint_violations, constraint_violations_strict
-
-    def check(
-        self,
-        strict_scope: Optional[Pattern[str]] = None,
-        constraints: Optional[list[inmanta.util.CanonicalRequirement]] = None,
-    ) -> None:
-        """
-        Check this Python environment for incompatible dependencies in installed packages.
-
-        :param strict_scope: A full pattern representing the package names that are considered in scope for the installed
-            packages compatibility check. strict_scope packages' dependencies will also be considered for conflicts.
-            Any conflicts for packages that do not match this pattern will only raise a warning.
-            The pattern is matched against an all-lowercase package name.
-        :param constraints: In addition to checking for compatibility within the environment, also verify that the environment's
-            packages meet the given constraints. All listed packages are expected to be installed.
-        """
-        constraint_violations, constraint_violations_strict = self.get_constraint_violations_for_check(
-            strict_scope, constraints
-        )
-
-        if len(constraint_violations_strict) != 0:
-            raise ConflictingRequirements(
-                "",  # The exception has a detailed list of constraint_violations, so it can make its own message
-                constraint_violations_strict,
-            )
-
-        for violation in constraint_violations:
-            LOGGER.warning("%s", violation)
-
-    def check_legacy(
-        self, in_scope: Pattern[str], constraints: Optional[list[inmanta.util.CanonicalRequirement]] = None
-    ) -> bool:
-        """
-        Check this Python environment for incompatible dependencies in installed packages. This method is a legacy method
-        in the sense that it has been replaced with a more correct check defined in self.check(). This method is invoked
-        when the `--no-strict-deps-check` commandline option is provided.
-
-        Extra's are ignored
-
-        :param in_scope: A full pattern representing the package names that are considered in scope for the installed packages'
-            compatibility check. Only in scope packages' dependencies will be considered for conflicts. The pattern is matched
-            against an all-lowercase package name.
-        :param constraints: In addition to checking for compatibility within the environment, also verify that the environment's
-            packages meet the given constraints. All listed packages are expected to be installed.
-        :return: True iff the check succeeds.
-        """
-        constraint_violations_non_strict, constraint_violations_strict = self.get_constraint_violations_for_check(
-            in_scope, constraints
-        )
-
-        working_set: abc.Iterable[importlib.metadata.Distribution] = PythonWorkingSet.get_dist_in_working_set().values()
-        # add all requirements of all in scope packages installed in this environment
-        all_constraints: set[inmanta.util.CanonicalRequirement] = set(constraints if constraints is not None else []).union(
-            inmanta.util.parse_requirement(requirement=requirement)
-            for dist_info in working_set
-            if in_scope.fullmatch(dist_info.name)
-            for requirement in dist_info.requires or []
-        )
-
-        installed_versions: dict[NormalizedName, packaging.version.Version] = PythonWorkingSet.get_packages_in_working_set()
-        constraint_violations: set[VersionConflict] = {
-            VersionConflict(constraint, installed_versions.get(constraint.name, None))
-            for constraint in all_constraints
-            if not constraint.marker or constraint.marker.evaluate()
-            if (
-                constraint.name not in installed_versions
-                or not constraint.specifier.contains(installed_versions[constraint.name], prereleases=True)
-            )
-        }
-
-        all_violations = constraint_violations_non_strict | constraint_violations_strict | constraint_violations
-        for violation in all_violations:
-            LOGGER.warning("%s", violation)
-
-        return len(constraint_violations) == 0
 
     @classmethod
     def get_module_file(cls, module: str) -> Optional[tuple[Optional[str], Loader]]:
@@ -1496,7 +1363,7 @@ class VirtualEnv(ActiveEnv):
 
     def install_for_config(
         self,
-        requirements: list[inmanta.util.CanonicalRequirement],
+        requirements: Sequence[inmanta.util.CanonicalRequirement],
         config: PipConfig,
         upgrade: bool = False,
         constraint_files: Optional[list[str]] = None,

@@ -16,6 +16,7 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import enum
 import logging
 import warnings
 from typing import Optional
@@ -158,6 +159,50 @@ server_ssl_key = Option(
 
 server_ssl_cert = Option(
     "server", "ssl_cert_file", None, "SSL certificate file for the server key. Leave blank to disable SSL", is_str_opt
+)
+
+
+class AuthorizationProviderName(enum.Enum):
+    """
+    An enum that contains the possible values for the server.authorization_provider config option.
+    """
+
+    legacy = "legacy"
+    policy_engine = "policy-engine"
+
+    @classmethod
+    def get_valid_values_str(cls) -> str:
+        """
+        Returns a human readable string containing the valid values for
+        the server.authorization_provider config option.
+        """
+        valid_values = [e.value for e in cls]
+        assert len(valid_values) > 1
+        return ", ".join(valid_values[0:-1]) + " or " + valid_values[-1]
+
+
+def _is_authorization_provider(value: str) -> str:
+    f"""
+    str, valid values: {AuthorizationProviderName.get_valid_values_str()}
+    """
+    value = value.lower()
+    try:
+        AuthorizationProviderName(value)
+    except ValueError:
+        raise ValueError(
+            f"Invalid value for config option {authorization_provider.get_full_name()}: {value}."
+            f" Valid values: {AuthorizationProviderName.get_valid_values_str()}"
+        )
+    else:
+        return value
+
+
+authorization_provider = Option(
+    "server",
+    "authorization-provider",
+    AuthorizationProviderName.legacy.value,
+    f"The authorization provider that should be used if authentication is enabled: {AuthorizationProviderName.get_valid_values_str()}",
+    _is_authorization_provider,
 )
 
 

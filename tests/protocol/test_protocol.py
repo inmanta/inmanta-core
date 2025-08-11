@@ -40,6 +40,7 @@ from inmanta import config, const, protocol
 from inmanta.const import ClientType
 from inmanta.data.model import BaseModel
 from inmanta.protocol import VersionMatch, exceptions, json_encode
+from inmanta.protocol.auth.decorators import auth
 from inmanta.protocol.common import (
     HTML_CONTENT,
     HTML_CONTENT_WITH_UTF8_CHARSET,
@@ -262,7 +263,8 @@ async def test_method_properties():
     Test method properties decorator and helper functions
     """
 
-    @protocol.method(path="/test", operation="PUT", client_types=["api"], api_prefix="x", api_version=2)
+    @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+    @protocol.method(path="/test", operation="PUT", client_types=[const.ClientType.api], api_prefix="x", api_version=2)
     def test_method(name):
         """
         Create a new project
@@ -280,6 +282,7 @@ async def test_invalid_client_type():
     """
     with pytest.raises(InvalidMethodDefinition) as e:
 
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
         @protocol.method(path="/test", operation="PUT", client_types=["invalid"])
         def test_method(name):
             """
@@ -294,7 +297,8 @@ async def test_call_arguments_defaults():
     Test processing RPC messages
     """
 
-    @protocol.method(path="/test", operation="PUT", client_types=["api"])
+    @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+    @protocol.method(path="/test", operation="PUT", client_types=[const.ClientType.api])
     def test_method(name: str, value: int = 10):
         """
         Create a new project
@@ -306,7 +310,7 @@ async def test_call_arguments_defaults():
         test_method,
         "test_method",
     )
-    call = CallArguments(method, {"name": "test"}, {})
+    call = CallArguments(config=method, message={"name": "test"}, request_headers={})
     await call.process()
 
     assert call.call_args["name"] == "test"
@@ -330,7 +334,8 @@ async def test_pydantic():
         id: uuid.UUID
         name: str
 
-    @protocol.method(path="/test", operation="PUT", client_types=["api"])
+    @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+    @protocol.method(path="/test", operation="PUT", client_types=[const.ClientType.api])
     def test_method(project: Project):
         """
         Create a new project
@@ -343,7 +348,7 @@ async def test_pydantic():
         "test_method",
     )
     id = uuid.uuid4()
-    call = CallArguments(method, {"project": {"name": "test", "id": str(id)}}, {})
+    call = CallArguments(config=method, message={"project": {"name": "test", "id": str(id)}}, request_headers={})
     await call.process()
 
     project = call.call_args["project"]
@@ -351,7 +356,7 @@ async def test_pydantic():
     assert project.id == id
 
     with pytest.raises(exceptions.BadRequest):
-        call = CallArguments(method, {"project": {"name": "test", "id": "abcd"}}, {})
+        call = CallArguments(config=method, message={"project": {"name": "test", "id": "abcd"}}, request_headers={})
         await call.process()
 
 
@@ -397,13 +402,15 @@ async def test_pydantic_alias(server_config, async_finalizer):
         validate_: bool = pydantic.Field(..., alias="validate")
 
     class ProjectServer(ServerSlice):
-        @protocol.typedmethod(path="/test", operation="POST", client_types=["api"])
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+        @protocol.typedmethod(path="/test", operation="POST", client_types=[const.ClientType.api])
         def test_method(project: Project) -> ReturnValue[Project]:  # NOQA
             """
             Create a new project
             """
 
-        @protocol.typedmethod(path="/test2", operation="POST", client_types=["api"])
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+        @protocol.typedmethod(path="/test2", operation="POST", client_types=[const.ClientType.api])
         def test_method2(project: list[Project]) -> ReturnValue[list[Project]]:  # NOQA
             """
             Create a new project
@@ -450,7 +457,8 @@ async def test_return_non_warnings(server_config, async_finalizer):
     """
 
     class ProjectServer(ServerSlice):
-        @protocol.typedmethod(path="/test", operation="POST", client_types=["api"])
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+        @protocol.typedmethod(path="/test", operation="POST", client_types=[const.ClientType.api])
         def test_method(name: str) -> ReturnValue[None]:  # NOQA
             """
             Create a new project
@@ -487,7 +495,8 @@ async def test_invalid_handler():
     with pytest.raises(ValueError):
 
         class ProjectServer(ServerSlice):
-            @protocol.method(path="/test", operation="POST", client_types=["api"])
+            @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+            @protocol.method(path="/test", operation="POST", client_types=[const.ClientType.api])
             def test_method(self):
                 """
                 Create a new project
@@ -508,7 +517,8 @@ async def test_return_value(server_config, async_finalizer):
         name: str
 
     class ProjectServer(ServerSlice):
-        @protocol.method(path="/test", operation="POST", client_types=["api"])
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+        @protocol.method(path="/test", operation="POST", client_types=[const.ClientType.api])
         def test_method(project: Project) -> ReturnValue[Project]:  # NOQA
             """
             Create a new project
@@ -545,17 +555,20 @@ async def test_return_model(server_config, async_finalizer):
         name: str
 
     class ProjectServer(ServerSlice):
-        @protocol.method(path="/test", operation="POST", client_types=["api"])
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+        @protocol.method(path="/test", operation="POST", client_types=[const.ClientType.api])
         def test_method(project: Project) -> Project:  # NOQA
             """
             Create a new project
             """
 
-        @protocol.method(path="/test2", operation="POST", client_types=["api"])
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+        @protocol.method(path="/test2", operation="POST", client_types=[const.ClientType.api])
         def test_method2(project: Project) -> None:  # NOQA
             pass
 
-        @protocol.method(path="/test3", operation="POST", client_types=["api"])
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+        @protocol.method(path="/test3", operation="POST", client_types=[const.ClientType.api])
         def test_method3(project: Project) -> None:  # NOQA
             pass
 
@@ -604,7 +617,8 @@ async def test_data_envelope(server_config, async_finalizer):
         name: str
 
     class ProjectServer(ServerSlice):
-        @protocol.typedmethod(path="/test", operation="POST", client_types=["api"])
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+        @protocol.typedmethod(path="/test", operation="POST", client_types=[const.ClientType.api])
         def test_method(project: Project) -> ReturnValue[Project]:  # NOQA
             pass
 
@@ -613,7 +627,8 @@ async def test_data_envelope(server_config, async_finalizer):
             new_project = project.copy()
             return ReturnValue(response=new_project)
 
-        @protocol.typedmethod(path="/test2", operation="POST", client_types=["api"], envelope_key="method")
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+        @protocol.typedmethod(path="/test2", operation="POST", client_types=[const.ClientType.api], envelope_key="method")
         def test_method2(project: Project) -> ReturnValue[Project]:  # NOQA
             pass
 
@@ -622,7 +637,8 @@ async def test_data_envelope(server_config, async_finalizer):
             new_project = project.copy()
             return ReturnValue(response=new_project)
 
-        @protocol.method(path="/test3", operation="POST", client_types=["api"], envelope=True)
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+        @protocol.method(path="/test3", operation="POST", client_types=[const.ClientType.api], envelope=True)
         def test_method3(project: Project):  # NOQA
             pass
 
@@ -630,7 +646,10 @@ async def test_data_envelope(server_config, async_finalizer):
         async def test_method3(self, project: dict) -> Apireturn:
             return 200, {"id": 1, "name": 2}
 
-        @protocol.method(path="/test4", operation="POST", client_types=["api"], envelope=True, envelope_key="project")
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+        @protocol.method(
+            path="/test4", operation="POST", client_types=[const.ClientType.api], envelope=True, envelope_key="project"
+        )
         def test_method4(project: Project):  # NOQA
             pass
 
@@ -685,7 +704,8 @@ async def test_invalid_paths():
     """
     with pytest.raises(InvalidPathException) as e:
 
-        @protocol.method(path="test", operation="PUT", client_types=["api"], api_prefix="x", api_version=2)
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+        @protocol.method(path="test", operation="PUT", client_types=[const.ClientType.api], api_prefix="x", api_version=2)
         def test_method(name):
             pass
 
@@ -693,7 +713,10 @@ async def test_invalid_paths():
 
     with pytest.raises(InvalidPathException) as e:
 
-        @protocol.method(path="/test/<othername>", operation="PUT", client_types=["api"], api_prefix="x", api_version=2)
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+        @protocol.method(
+            path="/test/<othername>", operation="PUT", client_types=[const.ClientType.api], api_prefix="x", api_version=2
+        )
         def test_method2(name):
             pass
 
@@ -707,11 +730,13 @@ async def test_nested_paths(server_config, async_finalizer):
         name: str
 
     class ProjectServer(ServerSlice):
-        @protocol.typedmethod(path="/test/<data>", operation="GET", client_types=["api"])
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=True)
+        @protocol.typedmethod(path="/test/<data>", operation="GET", client_types=[const.ClientType.api])
         def test_method(data: str) -> Project:  # NOQA
             pass
 
-        @protocol.typedmethod(path="/test/<data>/config", operation="GET", client_types=["api"])
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=True)
+        @protocol.typedmethod(path="/test/<data>/config", operation="GET", client_types=[const.ClientType.api])
         def test_method2(data: str) -> Project:  # NOQA
             pass
 
@@ -750,7 +775,8 @@ async def test_list_basemodel_argument(server_config, async_finalizer):
         name: str
 
     class ProjectServer(ServerSlice):
-        @protocol.typedmethod(path="/test", operation="POST", client_types=["api"])
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+        @protocol.typedmethod(path="/test", operation="POST", client_types=[const.ClientType.api])
         def test_method(data: list[Project], data2: list[int]) -> Project:  # NOQA
             pass
 
@@ -782,7 +808,8 @@ async def test_dict_basemodel_argument(server_config, async_finalizer):
         name: str
 
     class ProjectServer(ServerSlice):
-        @protocol.typedmethod(path="/test", operation="POST", client_types=["api"])
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+        @protocol.typedmethod(path="/test", operation="POST", client_types=[const.ClientType.api])
         def test_method(data: dict[str, Project], data2: dict[str, int]) -> Project:  # NOQA
             pass
 
@@ -815,7 +842,8 @@ async def test_dict_with_optional_values(server_config, async_finalizer):
         val: Optional[types]
 
     class ProjectServer(ServerSlice):
-        @protocol.typedmethod(path="/test", operation="POST", client_types=["api"])
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+        @protocol.typedmethod(path="/test", operation="POST", client_types=[const.ClientType.api])
         def test_method(data: dict[str, Optional[types]]) -> Result:  # NOQA
             pass
 
@@ -825,7 +853,8 @@ async def test_dict_with_optional_values(server_config, async_finalizer):
             assert "test" in data
             return Result(val=data["test"])
 
-        @protocol.typedmethod(path="/test", operation="GET", client_types=["api"])
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=True)
+        @protocol.typedmethod(path="/test", operation="GET", client_types=[const.ClientType.api])
         def test_method2(data: Optional[str] = None) -> None:  # NOQA
             pass
 
@@ -867,7 +896,8 @@ async def test_dict_and_list_return(server_config, async_finalizer):
         name: str
 
     class ProjectServer(ServerSlice):
-        @protocol.typedmethod(path="/test", operation="POST", client_types=["api"])
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+        @protocol.typedmethod(path="/test", operation="POST", client_types=[const.ClientType.api])
         def test_method(data: Project) -> list[Project]:  # NOQA
             pass
 
@@ -875,7 +905,8 @@ async def test_dict_and_list_return(server_config, async_finalizer):
         async def test_method(self, data: Project) -> list[Project]:  # NOQA
             return [Project(name="test_method")]
 
-        @protocol.typedmethod(path="/test2", operation="POST", client_types=["api"])
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+        @protocol.typedmethod(path="/test2", operation="POST", client_types=[const.ClientType.api])
         def test_method2(data: Project) -> list[str]:  # NOQA
             pass
 
@@ -908,7 +939,8 @@ async def test_method_definition():
     """
     with pytest.raises(InvalidMethodDefinition) as e:
 
-        @protocol.typedmethod(path="/test", operation="PUT", client_types=["api"])
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+        @protocol.typedmethod(path="/test", operation="PUT", client_types=[const.ClientType.api])
         def test_method1(name) -> None:
             """
             Create a new project
@@ -918,7 +950,8 @@ async def test_method_definition():
 
     with pytest.raises(InvalidMethodDefinition) as e:
 
-        @protocol.typedmethod(path="/test", operation="PUT", client_types=["api"])
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+        @protocol.typedmethod(path="/test", operation="PUT", client_types=[const.ClientType.api])
         def test_method2(name: Iterator[str]) -> None:
             """
             Create a new project
@@ -928,7 +961,8 @@ async def test_method_definition():
 
     with pytest.raises(InvalidMethodDefinition) as e:
 
-        @protocol.typedmethod(path="/test", operation="PUT", client_types=["api"])
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+        @protocol.typedmethod(path="/test", operation="PUT", client_types=[const.ClientType.api])
         def test_method3(name: list[object]) -> None:
             """
             Create a new project
@@ -941,7 +975,8 @@ async def test_method_definition():
 
     with pytest.raises(InvalidMethodDefinition) as e:
 
-        @protocol.typedmethod(path="/test", operation="PUT", client_types=["api"])
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+        @protocol.typedmethod(path="/test", operation="PUT", client_types=[const.ClientType.api])
         def test_method4(name: dict[int, str]) -> None:
             """
             Create a new project
@@ -951,7 +986,8 @@ async def test_method_definition():
 
     with pytest.raises(InvalidMethodDefinition) as e:
 
-        @protocol.typedmethod(path="/test", operation="PUT", client_types=["api"])
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+        @protocol.typedmethod(path="/test", operation="PUT", client_types=[const.ClientType.api])
         def test_method5(name: dict[str, object]) -> None:
             """
             Create a new project
@@ -962,13 +998,15 @@ async def test_method_definition():
         "bytes, AnyUrl or a List of these types or a Dict with str keys and values of these types."
     ) in str(e.value)
 
-    @protocol.typedmethod(path="/service_types/<service_type>", operation="DELETE", client_types=["api"])
+    @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+    @protocol.typedmethod(path="/service_types/<service_type>", operation="DELETE", client_types=[const.ClientType.api])
     def lcm_service_type_delete(tid: uuid.UUID, service_type: str) -> None:
         """Delete an existing service type."""
 
 
 def test_optional():
-    @protocol.typedmethod(path="/service_types/<service_type>", operation="DELETE", client_types=["api"])
+    @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+    @protocol.typedmethod(path="/service_types/<service_type>", operation="DELETE", client_types=[const.ClientType.api])
     def lcm_service_type_delete(tid: uuid.UUID, service_type: str, version: Optional[str] = None) -> None:
         """Delete an existing service type."""
 
@@ -979,7 +1017,8 @@ async def test_union_types(server_config, async_finalizer):
     AttributeTypes = Union[SimpleTypes, list[SimpleTypes], dict[str, SimpleTypes]]  # NOQA
 
     class ProjectServer(ServerSlice):
-        @protocol.typedmethod(path="/test", operation="GET", client_types=["api"])
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=True)
+        @protocol.typedmethod(path="/test", operation="GET", client_types=[const.ClientType.api])
         def test_method(data: SimpleTypes, version: Optional[int] = None) -> list[SimpleTypes]:  # NOQA
             pass
 
@@ -989,7 +1028,8 @@ async def test_union_types(server_config, async_finalizer):
                 return data
             return [data]
 
-        @protocol.typedmethod(path="/testp", operation="POST", client_types=["api"])
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+        @protocol.typedmethod(path="/testp", operation="POST", client_types=[const.ClientType.api])
         def test_methodp(data: AttributeTypes, version: Optional[int] = None) -> list[SimpleTypes]:  # NOQA
             pass
 
@@ -1039,7 +1079,8 @@ async def test_basemodel_validation(server_config, async_finalizer):
         value: str
 
     class ProjectServer(ServerSlice):
-        @protocol.typedmethod(path="/test", operation="POST", client_types=["api"])
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+        @protocol.typedmethod(path="/test", operation="POST", client_types=[const.ClientType.api])
         def test_method(data: Project) -> Project:  # NOQA
             pass
 
@@ -1103,14 +1144,19 @@ async def test_multi_version_method(server_config, async_finalizer):
         value: str
 
     class ProjectServer(ServerSlice):
-        @protocol.typedmethod(path="/test2", operation="POST", client_types=["api"], api_version=3)
-        @protocol.typedmethod(path="/test", operation="POST", client_types=["api"], api_version=2, envelope_key="data")
-        @protocol.typedmethod(path="/test", operation="POST", client_types=["api"], api_version=1, envelope_key="project")
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+        @protocol.typedmethod(path="/test2", operation="POST", client_types=[const.ClientType.api], api_version=3)
+        @protocol.typedmethod(
+            path="/test", operation="POST", client_types=[const.ClientType.api], api_version=2, envelope_key="data"
+        )
+        @protocol.typedmethod(
+            path="/test", operation="POST", client_types=[const.ClientType.api], api_version=1, envelope_key="project"
+        )
         def test_method(project: Project) -> Project:  # NOQA
             pass
 
         @protocol.handle(test_method)
-        async def test_method(self, project: Project) -> Project:  # NOQA
+        async def test_handle(self, project: Project) -> Project:  # NOQA
             return project
 
     rs = Server()
@@ -1180,8 +1226,13 @@ async def test_multi_version_handler(server_config, async_finalizer):
         value: str
 
     class ProjectServer(ServerSlice):
-        @protocol.typedmethod(path="/test", operation="POST", client_types=["api"], api_version=2, envelope_key="data")
-        @protocol.typedmethod(path="/test", operation="POST", client_types=["api"], api_version=1, envelope_key="project")
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+        @protocol.typedmethod(
+            path="/test", operation="POST", client_types=[const.ClientType.api], api_version=2, envelope_key="data"
+        )
+        @protocol.typedmethod(
+            path="/test", operation="POST", client_types=[const.ClientType.api], api_version=1, envelope_key="project"
+        )
         def test_method(project: Project) -> Project:  # NOQA
             pass
 
@@ -1218,7 +1269,8 @@ async def test_simple_return_type(server_config, async_finalizer):
     """Test methods with simple return types"""
 
     class ProjectServer(ServerSlice):
-        @protocol.typedmethod(path="/test", operation="POST", client_types=["api"])
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+        @protocol.typedmethod(path="/test", operation="POST", client_types=[const.ClientType.api])
         def test_method(project: str) -> str:  # NOQA
             pass
 
@@ -1244,7 +1296,8 @@ async def test_html_content_type(server_config, async_finalizer):
     """Test whether API endpoints with a text/html content-type work."""
     html_content = "<html><body>test</body></html>"
 
-    @protocol.typedmethod(path="/test", operation="GET", client_types=["api"])
+    @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=True)
+    @protocol.typedmethod(path="/test", operation="GET", client_types=[const.ClientType.api])
     def test_method() -> ReturnValue[str]:  # NOQA
         pass
 
@@ -1271,7 +1324,8 @@ async def test_html_content_type_with_utf8_encoding(server_config, async_finaliz
     """Test whether API endpoints with a "text/html; charset=UTF-8" content-type work."""
     html_content = "<html><body>test</body></html>"
 
-    @protocol.typedmethod(path="/test", operation="GET", client_types=["api"])
+    @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=True)
+    @protocol.typedmethod(path="/test", operation="GET", client_types=[const.ClientType.api])
     def test_method() -> ReturnValue[str]:  # NOQA
         pass
 
@@ -1298,7 +1352,8 @@ async def test_octet_stream_content_type(server_config, async_finalizer):
     """Test whether API endpoints with an application/octet-stream content-type work."""
     byte_stream = b"test123"
 
-    @protocol.typedmethod(path="/test", operation="GET", client_types=["api"])
+    @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=True)
+    @protocol.typedmethod(path="/test", operation="GET", client_types=[const.ClientType.api])
     def test_method() -> ReturnValue[bytes]:  # NOQA
         pass
 
@@ -1325,7 +1380,8 @@ async def test_zip_content_type(server_config, async_finalizer):
     """Test whether API endpoints with an application/zip content-type work."""
     zip_content = b"test123"
 
-    @protocol.typedmethod(path="/test", operation="GET", client_types=["api"])
+    @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=True)
+    @protocol.typedmethod(path="/test", operation="GET", client_types=[const.ClientType.api])
     def test_method() -> ReturnValue[bytes]:  # NOQA
         pass
 
@@ -1350,7 +1406,8 @@ async def test_zip_content_type(server_config, async_finalizer):
 
 @pytest.fixture
 async def options_server():
-    @protocol.typedmethod(path="/test", operation="OPTIONS", client_types=["api"])
+    @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+    @protocol.typedmethod(path="/test", operation="OPTIONS", client_types=[const.ClientType.api])
     def test_method() -> ReturnValue[str]:  # NOQA
         pass
 
@@ -1419,8 +1476,13 @@ async def test_tuple_index_out_of_range(server_config, async_finalizer):
         value: str
 
     class ProjectServer(ServerSlice):
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=True)
         @protocol.typedmethod(
-            api_prefix="test", path="/project/<project>", operation="GET", arg_options=ENV_OPTS, client_types=["api"]
+            api_prefix="test",
+            path="/project/<project>",
+            operation="GET",
+            arg_options=ENV_OPTS,
+            client_types=[const.ClientType.api],
         )
         def test_method(
             tid: uuid.UUID, project: str, include_deleted: bool = False
@@ -1452,7 +1514,8 @@ async def test_tuple_index_out_of_range(server_config, async_finalizer):
 
 async def test_multiple_path_params(server_config, async_finalizer):
     class ProjectServer(ServerSlice):
-        @protocol.typedmethod(path="/test/<id>/<name>", operation="GET", client_types=["api"])
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=True)
+        @protocol.typedmethod(path="/test/<id>/<name>", operation="GET", client_types=[const.ClientType.api])
         def test_method(id: str, name: str, age: int) -> str:  # NOQA
             pass
 
@@ -1475,6 +1538,7 @@ async def test_2151_method_header_parameter_in_body(async_finalizer, unused_tcp_
     async def _id(x: object, dct: dict[str, str]) -> object:
         return x
 
+    @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
     @protocol.method(
         path="/testmethod",
         operation="POST",
@@ -1549,6 +1613,7 @@ async def test_2151_method_header_parameter_in_body(async_finalizer, unused_tcp_
 
 @pytest.mark.parametrize("return_value,valid", [(1, True), (None, True), ("Hello World!", False)])
 async def test_2277_typedmethod_return_optional(async_finalizer, return_value: object, valid: bool, server_config) -> None:
+    @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=True)
     @protocol.typedmethod(
         path="/typedtestmethod",
         operation="GET",
@@ -1585,12 +1650,14 @@ async def test_2277_typedmethod_return_optional(async_finalizer, return_value: o
 def test_method_strict_exception() -> None:
     with pytest.raises(InvalidMethodDefinition, match="Invalid type for argument arg: Any type is not allowed in strict mode"):
 
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
         @protocol.typedmethod(path="/testmethod", operation="POST", client_types=[const.ClientType.api])
         def test_method(arg: Any) -> None:
             pass
 
 
 async def test_method_nonstrict_allowed(async_finalizer, server_config) -> None:
+    @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
     @protocol.typedmethod(path="/zipsingle", operation="POST", client_types=[const.ClientType.api], strict_typing=False)
     def merge_dicts(one: dict[str, Any], other: dict[str, int], any_arg: Any) -> dict[str, Any]:
         """
@@ -1656,7 +1723,10 @@ async def test_method_nonstrict_allowed(async_finalizer, server_config) -> None:
 )
 async def test_dict_list_get_roundtrip(server_config, async_finalizer, param_type, param_value, expected_url):
     class ProjectServer(ServerSlice):
-        @protocol.typedmethod(path="/test/<id>/<name>", operation="GET", client_types=["api"], strict_typing=False)
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=True)
+        @protocol.typedmethod(
+            path="/test/<id>/<name>", operation="GET", client_types=[const.ClientType.api], strict_typing=False
+        )
         def test_method(id: str, name: str, filter: param_type) -> Any:  # NOQA
             pass
 
@@ -1684,7 +1754,8 @@ async def test_dict_list_get_roundtrip(server_config, async_finalizer, param_typ
 
 async def test_dict_get_optional(server_config, async_finalizer):
     class ProjectServer(ServerSlice):
-        @protocol.typedmethod(path="/test/<id>/<name>", operation="GET", client_types=["api"])
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=True)
+        @protocol.typedmethod(path="/test/<id>/<name>", operation="GET", client_types=[const.ClientType.api])
         def test_method(id: str, name: str, filter: Optional[dict[str, str]] = None) -> str:  # NOQA
             pass
 
@@ -1716,7 +1787,8 @@ async def test_dict_get_optional(server_config, async_finalizer):
 
 async def test_dict_list_nested_get_optional(server_config, async_finalizer):
     class ProjectServer(ServerSlice):
-        @protocol.typedmethod(path="/test/<id>/<name>", operation="GET", client_types=["api"])
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=True)
+        @protocol.typedmethod(path="/test/<id>/<name>", operation="GET", client_types=[const.ClientType.api])
         def test_method(id: str, name: str, filter: Optional[dict[str, list[str]]] = None) -> str:  # NOQA
             pass
 
@@ -1765,7 +1837,8 @@ async def test_dict_list_get_invalid(server_config, async_finalizer, param_type,
     with pytest.raises(InvalidMethodDefinition) as e:
 
         class ProjectServer(ServerSlice):
-            @protocol.typedmethod(path="/test/<id>/<name>", operation="GET", client_types=["api"])
+            @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=True)
+            @protocol.typedmethod(path="/test/<id>/<name>", operation="GET", client_types=[const.ClientType.api])
             def test_method(id: str, name: str, filter: param_type) -> str:  # NOQA
                 pass
 
@@ -1778,11 +1851,13 @@ async def test_dict_list_get_invalid(server_config, async_finalizer, param_type,
 
 async def test_list_get_optional(server_config, async_finalizer):
     class ProjectServer(ServerSlice):
-        @protocol.typedmethod(path="/test/<id>/<name>", operation="GET", client_types=["api"])
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=True)
+        @protocol.typedmethod(path="/test/<id>/<name>", operation="GET", client_types=[const.ClientType.api])
         def test_method(id: str, name: str, sort: Optional[list[int]] = None) -> str:  # NOQA
             pass
 
-        @protocol.typedmethod(path="/test_uuid/<id>", operation="GET", client_types=["api"])
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=True)
+        @protocol.typedmethod(path="/test_uuid/<id>", operation="GET", client_types=[const.ClientType.api])
         def test_method_uuid(id: str, sort: Optional[list[uuid.UUID]] = None) -> str:  # NOQA
             pass
 
@@ -1821,7 +1896,8 @@ async def test_list_get_optional(server_config, async_finalizer):
 
 async def test_dicts_multiple_get(server_config, async_finalizer):
     class ProjectServer(ServerSlice):
-        @protocol.typedmethod(path="/test/<id>/<name>", operation="GET", client_types=["api"])
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=True)
+        @protocol.typedmethod(path="/test/<id>/<name>", operation="GET", client_types=[const.ClientType.api])
         def test_method(id: str, name: str, filter: dict[str, list[str]], another_filter: dict[str, str]) -> str:  # NOQA
             pass
 
@@ -1852,15 +1928,18 @@ async def test_dicts_multiple_get(server_config, async_finalizer):
 
 async def test_dict_list_get_by_url(server_config, async_finalizer):
     class ProjectServer(ServerSlice):
-        @protocol.typedmethod(path="/test/<id>/<name>", operation="GET", client_types=["api"])
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=True)
+        @protocol.typedmethod(path="/test/<id>/<name>", operation="GET", client_types=[const.ClientType.api])
         def test_method(id: str, name: str, filter: dict[str, str]) -> str:  # NOQA
             pass
 
-        @protocol.typedmethod(path="/test_list/<id>", operation="GET", client_types=["api"])
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=True)
+        @protocol.typedmethod(path="/test_list/<id>", operation="GET", client_types=[const.ClientType.api])
         def test_method_list(id: str, filter: list[int]) -> str:  # NOQA
             pass
 
-        @protocol.typedmethod(path="/test_dict_of_lists/<id>", operation="GET", client_types=["api"])
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=True)
+        @protocol.typedmethod(path="/test_dict_of_lists/<id>", operation="GET", client_types=[const.ClientType.api])
         def test_method_dict_of_lists(id: str, filter: dict[str, list[str]]) -> str:  # NOQA
             pass
 
@@ -1942,7 +2021,8 @@ async def test_api_datetime_utc(server_config, async_finalizer):
     naive_utc: datetime.datetime = now.astimezone(datetime.timezone.utc).replace(tzinfo=None)
 
     class ProjectServer(ServerSlice):
-        @protocol.typedmethod(path="/test", operation="GET", client_types=["api"])
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=True)
+        @protocol.typedmethod(path="/test", operation="GET", client_types=[const.ClientType.api])
         def test_method(timestamp: datetime.datetime) -> list[datetime.datetime]:
             pass
 
@@ -2020,6 +2100,7 @@ async def test_dict_of_list(server_config, async_finalizer):
         attr: int
 
     class ProjectServer(ServerSlice):
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=True)
         @protocol.typedmethod(path="/test", operation="GET", client_types=[const.ClientType.api])
         def test_method(id: str) -> dict[str, list[APydanticType]]:
             pass
@@ -2044,7 +2125,8 @@ async def test_dict_of_list(server_config, async_finalizer):
 
 async def test_return_value_with_meta(server_config, async_finalizer):
     class ProjectServer(ServerSlice):
-        @protocol.typedmethod(path="/test", operation="GET", client_types=["api"])
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=True)
+        @protocol.typedmethod(path="/test", operation="GET", client_types=[const.ClientType.api])
         def test_method(with_warning: bool) -> ReturnValueWithMeta[str]:  # NOQA
             pass
 
@@ -2083,6 +2165,7 @@ async def test_kwargs(server_config, async_finalizer):
     """
 
     class ProjectServer(ServerSlice):
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
         @protocol.typedmethod(path="/test", operation="POST", client_types=[ClientType.api], varkw=True)
         def test_method(id: str, **kwargs: object) -> dict[str, str]:  # NOQA
             """
@@ -2113,6 +2196,7 @@ async def test_get_description_foreach_http_status_code() -> None:
     """
 
     class ProjectServer(ServerSlice):
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
         @protocol.typedmethod(path="/test", operation="POST", client_types=[ClientType.api], varkw=True)
         def test_method1(id: str, **kwargs: object) -> dict[str, str]:  # NOQA
             """
@@ -2123,6 +2207,7 @@ async def test_get_description_foreach_http_status_code() -> None:
             :raises 500: A server error.
             """
 
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
         @protocol.typedmethod(path="/test", operation="POST", client_types=[ClientType.api], varkw=True)
         def test_method2(id: str, **kwargs: object) -> dict[str, str]:  # NOQA
             """
@@ -2146,3 +2231,17 @@ async def test_get_description_foreach_http_status_code() -> None:
     assert response_code_to_description[200] == ""
     assert response_code_to_description[404] == ""
     assert response_code_to_description[500] == ""
+
+
+async def test_token_param_not_present_in_method_signature() -> None:
+    """
+    Verify that an exception is raised if the method defines a token_param, but
+    that parameter is not present in the signature of the method.
+    """
+    with pytest.raises(InvalidMethodDefinition) as excinfo:
+
+        @protocol.typedmethod(path="/test", operation="GET", client_types=[ClientType.api], token_param="test")
+        def test_method1() -> dict[str, str]:  # NOQA
+            pass
+
+    assert "token_param (test) is missing in parameters of method." in str(excinfo.value)

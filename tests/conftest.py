@@ -19,6 +19,8 @@ Contact: code@inmanta.com
 import copy
 import logging.config
 import pathlib
+import stat
+import tempfile
 import warnings
 from glob import glob
 from re import Pattern
@@ -28,21 +30,22 @@ from tornado.httpclient import AsyncHTTPClient
 
 import _pytest.logging
 import inmanta.deploy.state
+import requests
 import toml
 from inmanta import logging as inmanta_logging
 from inmanta.agent.handler import CRUDHandler, HandlerContext, ResourceHandler, SkipResource, TResource, provider
 from inmanta.agent.write_barier_executor import WriteBarierExecutorManager
 from inmanta.config import log_dir
-from inmanta.data import get_engine, start_engine, stop_engine
+from inmanta.data.model import AuthMethod, EnvSettingType
 from inmanta.db.util import PGRestore
 from inmanta.logging import InmantaLoggerConfig
-from inmanta.protocol import auth
+from inmanta.protocol.auth import auth
 from inmanta.references import mutator, reference
 from inmanta.resources import PurgeableResource, Resource, resource
-from inmanta.server.services.databaseservice import initialize_sql_alchemy_engine
+from inmanta.server.config import AuthorizationProviderName
+from inmanta.tornado import LoopResolverWithUnixSocketSuppport
 from inmanta.util import ScheduledTask, Scheduler, TaskMethod, TaskSchedule
 from packaging.requirements import Requirement
-from sqlalchemy.ext.asyncio import AsyncEngine
 
 """
 About the use of @parametrize_any and @slowtest:
@@ -114,25 +117,22 @@ import socket
 import string
 import subprocess
 import sys
-import tempfile
 import time
 import traceback
 import uuid
 import venv
 import weakref
 from collections import abc, defaultdict, namedtuple
-from collections.abc import AsyncIterator, Awaitable, Iterator, Mapping
+from collections.abc import AsyncIterator, Awaitable, Iterator
 from configparser import ConfigParser
 from typing import Any, Callable, Dict, Generic, Optional, Union
 
 import asyncpg
 import psutil
 import py
-import pyformance
 import pytest
 from asyncpg.exceptions import DuplicateDatabaseError
 from click import testing
-from pyformance.registry import MetricsRegistry
 from tornado import netutil
 
 import inmanta
@@ -162,6 +162,8 @@ from inmanta.server.protocol import Server, SliceStartupException
 from inmanta.server.services import orchestrationservice
 from inmanta.server.services.compilerservice import CompilerService, CompileRun
 from inmanta.types import JsonType, ResourceIdStr
+from inmanta.vendor import pyformance
+from inmanta.vendor.pyformance import MetricsRegistry
 from inmanta.warnings import WarningsManager
 from libpip2pi.commands import dir2pi
 from packaging.version import Version
@@ -178,6 +180,10 @@ logger = logging.getLogger(__name__)
 
 TABLES_TO_KEEP = [x.table_name() for x in data._classes] + [
     "resourceaction_resource",
+    "inmanta_module",
+    "agent_modules",
+    "module_files",
+    "role_assignment",
 ]  # Join table
 
 # Save the cwd as early as possible to prevent that it gets overridden by another fixture
@@ -382,48 +388,35 @@ async def postgresql_client(postgres_db, database_name_internal):
         password=postgres_db.password,
         database=database_name_internal,
     )
+    await data.asyncpg_on_connect(client)
     yield client
     await client.close()
 
 
-@pytest.fixture
-def sqlalchemy_url_parameters(postgres_db, database_name_internal: str) -> dict[str, str]:
-    """
-    Return the dict representation of the parameters to pass to the start_engine
-    function to start the sql alchemy engine.
-    """
-    return {
-        "database_username": postgres_db.user,
-        "database_password": postgres_db.password,
-        "database_host": postgres_db.host,
-        "database_port": postgres_db.port,
-        "database_name": database_name_internal,
-    }
-
-
 @pytest.fixture(scope="function")
-async def sql_alchemy_engine(sqlalchemy_url_parameters: Mapping[str, str]) -> AsyncEngine:
-
-    await start_engine(**sqlalchemy_url_parameters)
-    engine = get_engine()
-
-    yield engine
-
-    await stop_engine()
+async def postgresql_pool(postgres_db, database_name_internal):
+    pool = await asyncpg.create_pool(
+        host=postgres_db.host,
+        port=postgres_db.port,
+        user=postgres_db.user,
+        password=postgres_db.password,
+        database=database_name_internal,
+    )
+    yield pool
+    await pool.close()
 
 
 @pytest.fixture(scope="function")
 async def init_dataclasses_and_load_schema(postgres_db, database_name, clean_reset):
-    await initialize_sql_alchemy_engine(
-        database_host=postgres_db.host,
-        database_port=postgres_db.port,
-        database_name=database_name,
-        database_username=postgres_db.user,
-        database_password=postgres_db.password,
-        create_db_schema=True,
+    await data.connect_pool(
+        host=postgres_db.host,
+        port=postgres_db.port,
+        username=postgres_db.user,
+        password=postgres_db.password,
+        database=database_name,
     )
     yield
-    await stop_engine()
+    await data.disconnect_pool()
 
 
 @pytest.fixture(scope="function")
@@ -447,7 +440,6 @@ async def clean_db(create_db, postgresql_client):
                        not part of the Inmanta schema. These should be cleaned-up before running a new test.
     """
     yield
-    # By using the connection pool, we can make sure that the connection we use is alive
 
     tables_in_db = await postgresql_client.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
     tables_in_db = [x["table_name"] for x in tables_in_db]
@@ -579,7 +571,6 @@ def clean_reset_session():
 
 def reset_all_objects():
     resources.resource.reset()
-    asyncio.set_child_watcher(None)
     reset_metrics()
     # No dynamic loading of commands at the moment, so no need to reset/reload
     # command.Commander.reset()
@@ -594,6 +585,7 @@ def reset_all_objects():
     AsyncHTTPClient.configure(None)
     reference.reset()
     mutator.reset()
+    LoopResolverWithUnixSocketSuppport.clear_unix_socket_registry()
 
 
 @pytest.fixture()
@@ -707,9 +699,84 @@ def log_state_tcp_ports(request, log_file):
     _write_log_line(f"After run test case {request.function.__name__}:")
 
 
+@pytest.fixture
+def enable_auth() -> bool:
+    """
+    A fixture that indicates whether the server_config fixture should
+    set server.auth to true or false.
+    """
+    return False
+
+
+@pytest.fixture
+def authentication_method() -> AuthMethod:
+    """
+    A fixture that returns the authentication method configured by the server_config fixture.
+    """
+    return AuthMethod.oidc
+
+
+@pytest.fixture
+def authorization_provider() -> AuthorizationProviderName:
+    """
+    A fixture that returns the authorization provider configured by the server_config fixture.
+    """
+    return AuthorizationProviderName.policy_engine
+
+
+@pytest.fixture
+def access_policy() -> str:
+    """
+    A fixture that returns the access policy configured by the server_config fixture.
+    """
+    return """
+        package policy
+
+        # Allow everything
+        default allow:=true
+    """
+
+
+@pytest.fixture(scope="session")
+def path_policy_engine_executable() -> str:
+    """
+    Returns the path to the Open Policy Agent executable.
+    This method caches the executables to prevent slow setup times of the test suite.
+    """
+    opa_version = inmanta.OPA_VERSION
+    cache_dir = os.path.abspath(os.path.join(__file__, "..", "data", "opa_executables.cache", f"v{opa_version}"))
+    os.makedirs(cache_dir, exist_ok=True)
+    cache_file = os.path.join(cache_dir, "opa_linux_amd64_static")
+    if not os.path.exists(cache_file):
+        with open(cache_file, "wb") as fp:
+            opa_executables_url_prefix = os.environ.get(
+                "INMANTA_OPA_EXECUTABLES_URL_PREFIX", "https://openpolicyagent.org/downloads"
+            )
+            url_to_opa_executable = f"{opa_executables_url_prefix}/v{opa_version}/opa_linux_amd64_static"
+            logger.info("Downloading OPA executable from %s", url_to_opa_executable)
+            req = requests.get(url_to_opa_executable, stream=True)
+            req.raise_for_status()
+            for chunk in req.iter_content(chunk_size=1024):
+                fp.write(chunk)
+        # Give owner execute permissions on file
+        os.chmod(cache_file, stat.S_IRWXU)
+    yield cache_file
+
+
 @pytest.fixture(scope="function")
 async def server_config(
-    inmanta_config, postgres_db, database_name, clean_reset, unused_tcp_port_factory, auto_start_agent, no_agent
+    inmanta_config,
+    postgres_db,
+    database_name,
+    clean_reset,
+    unused_tcp_port_factory,
+    auto_start_agent,
+    no_agent,
+    enable_auth: bool,
+    authentication_method: AuthMethod,
+    authorization_provider: AuthorizationProviderName,
+    access_policy: str,
+    path_policy_engine_executable: str,
 ):
     reset_metrics()
     agentmanager.assert_no_start_scheduler = not auto_start_agent
@@ -739,10 +806,19 @@ async def server_config(
         config.Config.set("config", "executable", os.path.abspath(inmanta.app.__file__))
         config.Config.set("server", "agent-timeout", "2")
         config.Config.set("agent", "agent-repair-interval", "0")
-        config.Config.set("agent", "executor-mode", "forking")
         config.Config.set("agent", "executor-venv-retention-time", "60")
         config.Config.set("agent", "executor-retention-time", "10")
+        utils.configure_auth(
+            auth=enable_auth,
+            ca=False,
+            ssl=False,
+            authentication_method=authentication_method,
+            authorization_provider=authorization_provider,
+            access_policy=access_policy,
+            path_opa_executable=path_policy_engine_executable,
+        )
         yield config
+
     agentmanager.assert_no_start_scheduler = False
     agentmanager.no_start_scheduler = False
 
@@ -787,12 +863,30 @@ async def server(server_pre_start, request, auto_start_agent) -> abc.AsyncIterat
     ids=["SSL and Auth", "SSL", "Auth", "Normal", "SSL and Auth with not self signed certificate"],
 )
 async def server_multi(
-    server_pre_start, inmanta_config, postgres_db, database_name, request, clean_reset, unused_tcp_port_factory
+    server_pre_start,
+    inmanta_config,
+    postgres_db,
+    database_name,
+    request,
+    clean_reset,
+    unused_tcp_port_factory,
+    authentication_method: AuthMethod,
+    authorization_provider: AuthorizationProviderName,
+    access_policy: str,
+    path_policy_engine_executable: str,
 ):
     with tempfile.TemporaryDirectory() as state_dir:
         ssl, auth, ca = request.param
 
-        utils.configure_auth(auth, ca, ssl)
+        utils.configure_auth(
+            auth=auth,
+            ca=ca,
+            ssl=ssl,
+            authentication_method=authentication_method,
+            authorization_provider=authorization_provider,
+            access_policy=access_policy,
+            path_opa_executable=path_policy_engine_executable,
+        )
 
         # Config.set() always expects a string value
         pg_password = "" if postgres_db.password is None else postgres_db.password
@@ -815,7 +909,6 @@ async def server_multi(
         config.Config.set("config", "executable", os.path.abspath(inmanta.app.__file__))
         config.Config.set("server", "agent-timeout", "2")
         config.Config.set("agent", "agent-repair-interval", "0")
-        config.Config.set("agent", "executor-mode", "forking")
         config.Config.set("agent", "executor-venv-retention-time", "60")
         config.Config.set("agent", "executor-retention-time", "10")
 
@@ -860,7 +953,7 @@ DISABLE_STATE_CHECK = False
 
 
 @pytest.fixture(scope="function")
-async def agent_factory(server, monkeypatch) -> AsyncIterator[Callable[[uuid.UUID], Awaitable[Agent]]]:
+async def agent_factory(server, client, monkeypatch) -> AsyncIterator[Callable[[uuid.UUID], Awaitable[Agent]]]:
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     agents: list[Agent] = []
 
@@ -891,7 +984,7 @@ async def agent_factory(server, monkeypatch) -> AsyncIterator[Callable[[uuid.UUI
 
         a.executor_manager = executor
         a.scheduler.executor_manager = executor
-        a.scheduler.code_manager = utils.DummyCodeManager(a._client)
+        a.scheduler.code_manager = utils.DummyCodeManager()
         await a.start()
         await utils.retry_limited(
             lambda: agentmanager.is_scheduler_running_for(environment),
@@ -904,6 +997,16 @@ async def agent_factory(server, monkeypatch) -> AsyncIterator[Callable[[uuid.UUI
     global DISABLE_STATE_CHECK
     try:
         if not DISABLE_STATE_CHECK:
+            all_environments = {agent.environment for agent in agents}
+            for environment in all_environments:
+                # Make sure that the scheduler doesn't deploy anything anymore, because this would alter
+                # the last_deploy timestamp in the resource_state.
+                result = await client.all_agents_action(tid=environment, action=const.AgentAction.pause.value)
+                assert result.code == 200
+                # Set data.RESET_DEPLOY_PROGRESS_ON_START back to False in all of the environments of the created agents
+                # Because this teardown asserts that the state is correct on restart and this setting breaks that assertion
+                result = await client.set_setting(environment, data.RESET_DEPLOY_PROGRESS_ON_START, False)
+                assert result.code == 200
             for agent in agents:
                 await agent.stop_working()
                 the_state = copy.deepcopy(dict(agent.scheduler._state.resource_state))
@@ -1002,7 +1105,7 @@ async def agent_multi(server_multi, environment_multi):
     executor = WriteBarierExecutorManager(executor)
     a.executor_manager = executor
     a.scheduler.executor_manager = executor
-    a.scheduler.code_manager = utils.DummyCodeManager(a._client)
+    a.scheduler.code_manager = utils.DummyCodeManager()
 
     await a.start()
 
@@ -1077,6 +1180,7 @@ async def environment_creator() -> AsyncIterator[Callable[[protocol.Client, str,
         :return: The uuid of the newly created environment as a string.
         """
         result = await client.create_environment(project_id=project_id, name=env_name)
+        assert result.code == 200, result
         env_id = result.result["environment"]["id"]
 
         cfg_env.set(env_id)
@@ -1277,7 +1381,6 @@ class SnippetCompilationTest(KeepOnFail):
         python_requires: Optional[list[Requirement]] = None,
         install_mode: Optional[InstallMode] = None,
         relation_precedence_rules: Optional[list[RelationPrecedenceRule]] = None,
-        strict_deps_check: Optional[bool] = None,
         use_pip_config_file: bool = False,
         index_url: Optional[str] = None,
         extra_index_url: list[str] = [],
@@ -1299,7 +1402,6 @@ class SnippetCompilationTest(KeepOnFail):
                              no install mode is set explicitly in the project.yml file.
         :param relation_precedence_policy: The relation precedence policy that should be stored in the project.yml file of the
                                            Inmanta project.
-        :param strict_deps_check: True iff the returned project should have strict dependency checking enabled.
         :param use_pip_config_file: True iff the pip config file should be used and no source is required for v2 to work
                                     False if a package source is needed for v2 modules to work
         :param main_file: Path to the .cf file to use as main entry point. A relative or an absolute path can be provided.
@@ -1329,7 +1431,6 @@ class SnippetCompilationTest(KeepOnFail):
             autostd or ministd,
             install_project,
             install_v2_modules,
-            strict_deps_check=strict_deps_check,
             main_file=main_file,
             dirty_venv=dirty_venv,
         )
@@ -1340,13 +1441,10 @@ class SnippetCompilationTest(KeepOnFail):
         install_project: bool,
         install_v2_modules: Optional[list[LocalPackagePath]] = None,
         main_file: str = "main.cf",
-        strict_deps_check: Optional[bool] = None,
         dirty_venv: bool = True,
     ):
         loader.PluginModuleFinder.reset()
-        self.project = Project(
-            self.project_dir, autostd=autostd, main_file=main_file, venv_path=self.venv, strict_deps_check=strict_deps_check
-        )
+        self.project = Project(self.project_dir, autostd=autostd, main_file=main_file, venv_path=self.venv)
         Project.set(self.project)
 
         if dirty_venv:
@@ -1394,6 +1492,7 @@ class SnippetCompilationTest(KeepOnFail):
         extra_index_url: list[str] = [],
         main_file: str = "main.cf",
         ministd: bool = False,
+        environment_settings: dict[str, EnvSettingType] | None = None,
     ) -> None:
         add_to_module_path = add_to_module_path if add_to_module_path is not None else []
         python_package_sources = python_package_sources if python_package_sources is not None else []
@@ -1441,6 +1540,9 @@ class SnippetCompilationTest(KeepOnFail):
                     f"""                extra_index_url: [{", ".join(url for url in extra_index_url)}]
 """
                 )
+            if environment_settings:
+                cfg.write("\n            environment_settings:\n")
+                cfg.write("\n".join(f"                {name}: {value}" for name, value in environment_settings.items()))
         with open(os.path.join(self.project_dir, "requirements.txt"), "w", encoding="utf-8") as fd:
             fd.write("\n".join(str(req) for req in python_requires))
         self.main = os.path.join(self.project_dir, main_file)
@@ -1522,6 +1624,7 @@ class SnippetCompilationTest(KeepOnFail):
             include_status=include_status,
             partial_compile=partial_compile,
             resource_sets_to_remove=resource_sets_to_remove,
+            export_env_var_settings=deploy,
         )
 
     async def do_export_and_deploy(
@@ -1661,7 +1764,7 @@ class CLI:
     async def run(self, *args, **kwargs):
         # set column width very wide so lines are not wrapped
         os.environ["COLUMNS"] = "1000"
-        runner = testing.CliRunner(mix_stderr=False)
+        runner = testing.CliRunner()
         cmd_args = ["--host", "localhost", "--port", config.Config.get("cmdline_rest_transport", "port")]
         cmd_args.extend(args)
 
@@ -1940,7 +2043,7 @@ def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
             ModuleTool().build(path=path, output_dir=build_dir, wheel=True)
         # Download bare necessities
         CommandRunner(logging.getLogger(__name__)).run_command_and_log_output(
-            ["pip", "download", "setuptools", "wheel"], cwd=build_dir
+            [sys.executable, "-m", "pip", "download", "setuptools", "wheel"], cwd=build_dir
         )
 
         # Build python package repository

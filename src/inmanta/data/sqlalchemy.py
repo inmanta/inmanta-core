@@ -16,7 +16,11 @@ import datetime
 import uuid
 from typing import Any, List, Optional
 
-from inmanta.data.model import EnvSettingType
+import asyncpg
+
+from inmanta.data.model import AgentName, EnvSettingType
+from inmanta.data.model import InmantaModule as InmantaModuleDTO
+from inmanta.data.model import InmantaModuleName, InmantaModuleVersion
 from sqlalchemy import (
     ARRAY,
     Boolean,
@@ -42,7 +46,310 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
 class Base(DeclarativeBase):
-    pass
+
+    @classmethod
+    async def delete_all(cls, environment: uuid.UUID, connection: asyncpg.connection.Connection) -> None:
+        await connection.execute("DELETE FROM %s WHERE environment=$1" % cls.__tablename__, environment)
+
+
+class InmantaModule(Base):
+    __tablename__ = "inmanta_module"
+
+    __table_args__ = (
+        PrimaryKeyConstraint("name", "version", "environment", name="module_pkey"),
+        ForeignKeyConstraint(["environment"], ["environment.id"], ondelete="CASCADE", name="code_environment_fkey"),
+    )
+
+    name: Mapped[str] = mapped_column(String)
+    version: Mapped[str] = mapped_column(String)
+    environment: Mapped[uuid.UUID] = mapped_column(UUID)
+    requirements: Mapped[list[str]] = mapped_column(ARRAY(String()))
+
+    @classmethod
+    async def register_modules(
+        cls, environment: uuid.UUID, modules: dict[InmantaModuleName, InmantaModuleDTO], connection: asyncpg.Connection
+    ) -> None:
+        """
+        This is the first phase of code registration:
+        For all provided modules, this method will write to the database:
+            - the version being registered for this module. (This is a hash derived from
+                the content of the files in this module and from its requirements)
+            - which files belong to this module for this version.
+
+        Any attempt to register a module or file again is silently ignored.
+
+        The second phase takes place in the AgentModules.register_modules_for_agents method
+        where we register which agents require which module version for a given model
+        version.
+
+        :param environment: The environment for which to register inmanta modules.
+        :param modules: Map of module name to inmanta module data.
+        :param connection: The asyncpg connection to use.
+        """
+
+        insert_modules_query = f"""
+            INSERT INTO {InmantaModule.__tablename__}(
+                name,
+                version,
+                environment,
+                requirements
+            ) VALUES(
+                $1,
+                $2,
+                $3,
+                $4
+            )
+            ON CONFLICT DO NOTHING;
+        """
+
+        insert_files_query = f"""
+            INSERT INTO {ModuleFiles.__tablename__}(
+                inmanta_module_name,
+                inmanta_module_version,
+                environment,
+                file_content_hash,
+                python_module_name,
+                is_byte_code
+            ) VALUES(
+                $1,
+                $2,
+                $3,
+                $4,
+                $5,
+                $6
+            )
+            ON CONFLICT DO NOTHING;
+        """
+        async with connection.transaction():
+            await connection.executemany(
+                insert_modules_query,
+                [
+                    (inmanta_module_name, inmanta_module_data.version, environment, inmanta_module_data.requirements)
+                    for inmanta_module_name, inmanta_module_data in modules.items()
+                ],
+            )
+            await connection.executemany(
+                insert_files_query,
+                [
+                    (
+                        inmanta_module_name,
+                        inmanta_module_data.version,
+                        environment,
+                        file.hash_value,
+                        file.name,
+                        file.is_byte_code,
+                    )
+                    for inmanta_module_name, inmanta_module_data in modules.items()
+                    for file in inmanta_module_data.files_in_module
+                ],
+            )
+
+    @classmethod
+    async def delete_version(
+        cls, environment: uuid.UUID, model_version: int, connection: asyncpg.connection.Connection
+    ) -> None:
+        await connection.execute(
+            f"""
+            DELETE FROM {InmantaModule.__tablename__}
+            WHERE (environment, name, version) IN (
+                SELECT environment, inmanta_module_name, inmanta_module_version
+                FROM public.agent_modules
+                WHERE environment=$1
+                AND cm_version=$2
+            )
+            """,
+            environment,
+            model_version,
+        )
+
+
+class ModuleFiles(Base):
+    __tablename__ = "module_files"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["inmanta_module_name", "inmanta_module_version", "environment"],
+            ["inmanta_module.name", "inmanta_module.version", "inmanta_module.environment"],
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(["environment"], ["environment.id"], ondelete="CASCADE", name="module_files_environment_fkey"),
+        ForeignKeyConstraint(
+            ["file_content_hash"], ["file.content_hash"], ondelete="RESTRICT", name="module_files_file_content_hash_fkey"
+        ),
+        UniqueConstraint("inmanta_module_name", "inmanta_module_version", "environment", "python_module_name"),
+    )
+    __mapper_args__ = {"primary_key": ["inmanta_module_name", "inmanta_module_version", "environment", "python_module_name"]}
+
+    inmanta_module_name: Mapped[str] = mapped_column(String)
+    inmanta_module_version: Mapped[str] = mapped_column(String)
+    environment: Mapped[uuid.UUID] = mapped_column(UUID)
+    file_content_hash: Mapped[str] = mapped_column(String)
+    python_module_name: Mapped[str] = mapped_column(String)
+    is_byte_code: Mapped[bool] = mapped_column(Boolean)
+
+    @classmethod
+    async def delete_version(
+        cls, environment: uuid.UUID, model_version: int, connection: asyncpg.connection.Connection
+    ) -> None:
+        await connection.execute(
+            f"""
+            DELETE FROM {ModuleFiles.__tablename__}
+            WHERE (environment, inmanta_module_name, inmanta_module_version) IN (
+                SELECT environment, inmanta_module_name, inmanta_module_version
+                FROM {AgentModules.__tablename__}
+                WHERE environment=$1
+                AND cm_version=$2
+            )
+            """,
+            environment,
+            model_version,
+        )
+
+
+class AgentModules(Base):
+    __tablename__ = "agent_modules"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["cm_version", "environment"], ["configurationmodel.version", "configurationmodel.environment"], ondelete="CASCADE"
+        ),
+        ForeignKeyConstraint(["agent_name", "environment"], ["agent.name", "agent.environment"], ondelete="CASCADE"),
+        ForeignKeyConstraint(
+            ["inmanta_module_name", "inmanta_module_version", "environment"],
+            ["inmanta_module.name", "inmanta_module.version", "inmanta_module.environment"],
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("cm_version", "environment", "agent_name", "inmanta_module_name", "inmanta_module_version"),
+    )
+    __mapper_args__ = {"primary_key": ["cm_version", "environment", "agent_name", "inmanta_module_name"]}
+
+    cm_version: Mapped[int] = mapped_column(Integer)
+    environment: Mapped[uuid.UUID] = mapped_column(UUID)
+    agent_name: Mapped[str] = mapped_column(String)
+    inmanta_module_name: Mapped[str] = mapped_column(String)
+    inmanta_module_version: Mapped[str] = mapped_column(String)
+
+    @classmethod
+    async def get_registered_modules_data(
+        cls, model_version: int, environment: uuid.UUID, connection: asyncpg.Connection
+    ) -> dict[InmantaModuleName, tuple[InmantaModuleVersion, set[AgentName]]]:
+        """
+        Retrieve all registered modules for a given model version.
+        For each module, return the registered version as well as the set of agents registered
+        for using it.
+
+        This method is meant to be used in a context where we want to use an already open
+        asyncpg connection.
+
+        :param model_version: The model version for which to retrieve registered module data.
+        :param environment: The environment for which to retrieve registered module data.
+        :param connection: The asyncpg connection to use.
+        :return: A dict with keys module name and values a tuple of:
+            - the version for this module in this model version.
+            - the set of agents registered for this module in this model version.
+        """
+        query = f"""
+            SELECT
+                agent_name,
+                inmanta_module_name,
+                inmanta_module_version
+            FROM
+                {AgentModules.__tablename__}
+            WHERE
+                cm_version=$1
+            AND
+                environment=$2
+         """
+        async with connection.transaction():
+            values = [model_version, environment]
+            module_usage_info: dict[InmantaModuleName, tuple[InmantaModuleVersion, set[AgentName]]] = {}
+
+            async for record in connection.cursor(query, *values):
+                if record["inmanta_module_name"] in module_usage_info:
+                    if record["inmanta_module_version"] != module_usage_info[str(record["inmanta_module_name"])][0]:
+                        # Should never happen
+                        raise Exception(
+                            f"Inconsistent database state for model version {model_version}. A single version is expected "
+                            f"per inmanta module. At least the two following versions are registered for module "
+                            f"{record["inmanta_module_name"]}: [{record["inmanta_module_version"]}, "
+                            f"{module_usage_info[str(record["inmanta_module_name"])][0]}]"
+                        )
+                    else:
+                        module_usage_info[str(record["inmanta_module_name"])][1].add(str(record["agent_name"]))
+                else:
+                    module_usage_info[str(record["inmanta_module_name"])] = (
+                        str(record["inmanta_module_version"]),
+                        {str(record["agent_name"])},
+                    )
+
+            return module_usage_info
+
+    @classmethod
+    async def register_modules_for_agents(
+        cls,
+        model_version: int,
+        environment: uuid.UUID,
+        module_usage_info: dict[InmantaModuleName, tuple[InmantaModuleVersion, set[AgentName]]],
+        connection: asyncpg.Connection,
+    ) -> None:
+        """
+        This is phase 2 of code registration. This method is expected to be called after the
+        InmantaModule.register_modules method that takes care of phase 1.
+
+        For a given model version, register which agents use which modules.
+
+        This method is meant to be used in a context where we want to use an already open
+        asyncpg connection.
+
+        :param model_version: The model version for which to register modules per agent.
+        :param module_usage_info: Maps inmanta module names to a tuple of:
+            -   The version to register for this module
+            -   The set of agents using this module in this model version.
+        :param environment: The environment for which to register modules per agent.
+        :param connection: The asyncpg connection to use.
+        """
+        query = f"""
+            INSERT INTO {AgentModules.__tablename__}(
+                cm_version,
+                environment,
+                agent_name,
+                inmanta_module_name,
+                inmanta_module_version
+            ) VALUES(
+                $1,
+                $2,
+                $3,
+                $4,
+                $5
+            )
+            ON CONFLICT DO NOTHING;
+        """
+        async with connection.transaction():
+            values = []
+            for inmanta_module_name, (inmanta_module_version, agents_to_register) in module_usage_info.items():
+                for agent_name in agents_to_register:
+                    values.append(
+                        (
+                            model_version,
+                            environment,
+                            agent_name,
+                            inmanta_module_name,
+                            inmanta_module_version,
+                        )
+                    )
+
+            await connection.executemany(
+                query,
+                values,
+            )
+
+    @classmethod
+    async def delete_version(
+        cls, environment: uuid.UUID, model_version: int, connection: asyncpg.connection.Connection
+    ) -> None:
+        await connection.execute(
+            f"DELETE FROM {AgentModules.__tablename__} WHERE environment=$1 AND cm_version=$2",
+            environment,
+            model_version,
+        )
 
 
 class File(Base):
@@ -104,7 +411,6 @@ class Environment(Base):
     project_: Mapped["Project"] = relationship("Project", back_populates="environment")
 
     agentprocess: Mapped[List["AgentProcess"]] = relationship("AgentProcess", back_populates="environment_")
-    code: Mapped[List["Code"]] = relationship("Code", back_populates="environment_")
     compile: Mapped[List["Compile"]] = relationship("Compile", back_populates="environment_")
     configurationmodel: Mapped[List["ConfigurationModel"]] = relationship("ConfigurationModel", back_populates="environment_")
     discoveredresource: Mapped[List["DiscoveredResource"]] = relationship("DiscoveredResource", back_populates="environment_")
@@ -119,7 +425,7 @@ class Environment(Base):
     resource_persistent_state: Mapped[List["ResourcePersistentState"]] = relationship(
         "ResourcePersistentState", back_populates="environment_"
     )
-    unknownparameter: Mapped[List["UnknownParameter"]] = relationship("UnknownParameter", back_populates="environment_")
+    unknownparameter: Mapped[List["UnknownParameter"]] = relationship("UnknownParameter", viewonly=True)
     agent: Mapped[List["Agent"]] = relationship("Agent", back_populates="environment_")
 
 
@@ -143,21 +449,6 @@ class AgentProcess(Base):
 
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="agentprocess")
     agentinstance: Mapped[List["AgentInstance"]] = relationship("AgentInstance", back_populates="agentprocess")
-
-
-class Code(Base):
-    __tablename__ = "code"
-    __table_args__ = (
-        ForeignKeyConstraint(["environment"], ["environment.id"], ondelete="CASCADE", name="code_environment_fkey"),
-        PrimaryKeyConstraint("environment", "version", "resource", name="code_pkey"),
-    )
-
-    environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
-    resource: Mapped[str] = mapped_column(String, primary_key=True)
-    version: Mapped[int] = mapped_column(Integer, primary_key=True)
-    source_refs: Mapped[Optional[dict[str, tuple[str, str, list[str]]]]] = mapped_column(JSONB)
-
-    environment_: Mapped["Environment"] = relationship("Environment", back_populates="code")
 
 
 class Compile(Base):
@@ -602,7 +893,7 @@ class UnknownParameter(Base):
     resolved: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text("false"))
 
     configurationmodel: Mapped["ConfigurationModel"] = relationship("ConfigurationModel", back_populates="unknownparameter")
-    environment_: Mapped["Environment"] = relationship("Environment", back_populates="unknownparameter")
+    environment_: Mapped["Environment"] = relationship("Environment", viewonly=True)
 
 
 class Agent(Base):

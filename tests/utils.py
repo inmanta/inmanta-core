@@ -20,13 +20,16 @@ import asyncio
 import base64
 import configparser
 import datetime
+import enum
 import functools
 import json
 import logging
 import math
 import os
+import pathlib
 import queue
 import random
+import re
 import shutil
 import uuid
 from collections import abc
@@ -38,6 +41,8 @@ from typing import TYPE_CHECKING, Any, Collection, Mapping, Optional, Set, TypeV
 
 import pytest
 import yaml
+from tornado import httpclient
+from tornado.httpclient import HTTPRequest
 
 import build
 import build.env
@@ -49,19 +54,20 @@ from inmanta import config, const, data, env, module, protocol, util
 from inmanta.agent import config as cfg
 from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
-from inmanta.agent.executor import ExecutorBlueprint, ResourceInstallSpec
+from inmanta.agent.executor import ExecutorBlueprint, ModuleInstallSpec
 from inmanta.const import AGENT_SCHEDULER_ID
-from inmanta.data import get_connection_ctx_mgr
-from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig, SchedulerStatusReport
+from inmanta.data.model import LEGACY_PIP_DEFAULT, AuthMethod, PipConfig, SchedulerStatusReport
 from inmanta.deploy import state
 from inmanta.deploy.scheduler import ResourceScheduler
 from inmanta.deploy.state import ResourceIntent
 from inmanta.moduletool import ModuleTool
 from inmanta.protocol import Client, SessionEndpoint, methods, methods_v2
+from inmanta.protocol.auth import auth, policy_engine
 from inmanta.server.bootloader import InmantaBootloader
+from inmanta.server.config import AuthorizationProviderName, server_auth_method
 from inmanta.server.extensions import ProductMetadata
 from inmanta.server.services.compilerservice import CompilerService
-from inmanta.types import Apireturn, ResourceIdStr, ResourceType
+from inmanta.types import Apireturn, ResourceIdStr
 from inmanta.util import get_compiler_version, hash_file
 from libpip2pi.commands import dir2pi
 
@@ -249,7 +255,7 @@ class LogSequence:
         if not self.allow_errors:
             # first error is later
             idxe = self._find("", logging.ERROR, "", self.index, min_level)
-            assert idxe == -1 or idxe >= index
+            assert idxe == -1 or idxe >= index, f"Unexpected ERROR log line found: {self.caplog.records[idxe]}"
         assert index >= 0, "could not find " + msg
         return LogSequence(self.caplog, index + 1, self.allow_errors, self.ignore)
 
@@ -281,10 +287,31 @@ def assert_no_warning(caplog, loggers_to_allow: list[str] = NOISY_LOGGERS):
         assert record.levelname != "WARNING" or (record.name in loggers_to_allow), str(record) + record.getMessage()
 
 
-def configure_auth(auth: bool, ca: bool, ssl: bool) -> None:
+def configure_auth(
+    auth: bool,
+    ca: bool,
+    ssl: bool,
+    authentication_method: AuthMethod | None = None,
+    authorization_provider: AuthorizationProviderName | None = None,
+    access_policy: str | None = None,
+    path_opa_executable: str | None = None,
+) -> None:
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
     if auth:
         config.Config.set("server", "auth", "true")
+        if authentication_method:
+            server_auth_method.set(authentication_method.value)
+        if authorization_provider:
+            config.Config.set("server", "authorization-provider", authorization_provider.value)
+        if access_policy:
+            assert path_opa_executable is not None
+            state_dir = config.state_dir.get()
+            os.mkdir(os.path.join(state_dir, "policy_engine"))
+            access_policy_file = os.path.join(state_dir, "policy_engine", "policy.rego")
+            with open(access_policy_file, "w") as fh:
+                fh.write(access_policy)
+            policy_engine.policy_file.set(access_policy_file)
+            policy_engine.path_opa_executable.set(path_opa_executable)
     for x, ct in [
         ("server", None),
         ("agent_rest_transport", ["agent"]),
@@ -315,7 +342,7 @@ async def report_db_index_usage(min_precent=100):
         " n_live_tup rows_in_table, seq_scan * n_live_tup badness  FROM pg_stat_user_tables "
         "WHERE seq_scan + idx_scan > 0 order by badness desc"
     )
-    async with get_connection_ctx_mgr() as con:
+    async with data.get_connection_pool().acquire() as con:
         result = await con.fetch(q)
 
     for row in result:
@@ -337,7 +364,7 @@ async def wait_until_version_is_released(client, environment: uuid.UUID, version
     await retry_limited(_is_version_released, timeout=10)
 
 
-async def wait_for_version(client, environment, cnt, compile_timeout: int = 30):
+async def wait_for_version(client, environment, cnt: int, compile_timeout: int = 30):
     """
     :param compile_timeout: Raise an AssertionError if the compilation didn't finish after this amount of seconds.
     """
@@ -345,12 +372,13 @@ async def wait_for_version(client, environment, cnt, compile_timeout: int = 30):
     # Wait until the server is no longer compiling
     # wait for it to finish
     async def compile_done():
-        compiling = await client.is_compiling(environment)
-        code = compiling.code
-        return code == 204
+        result = await client.get_reports(environment)
+        assert result.code == 200
+        return all(r["success"] is not None for r in result.result["reports"])
 
     await retry_limited(compile_done, compile_timeout)
 
+    # Output compile report for debugging purposes
     reports = await client.get_reports(environment)
     for report in reports.result["reports"]:
         data = await client.get_report(report["id"])
@@ -488,6 +516,7 @@ class ClientHelper:
             unknowns=[],
             version_info={},
             compiler_version=get_compiler_version(),
+            module_version_info={},
         )
         assert res.code == 200, res.result
         if wait_for_released:
@@ -913,6 +942,7 @@ async def _deploy_resources(client, environment, resources, version: int, push, 
         unknowns=[],
         version_info={},
         compiler_version=get_compiler_version(),
+        module_version_info={},
     )
     assert result.code == 200
 
@@ -986,24 +1016,24 @@ def make_requires(resources: Mapping[ResourceIdStr, ResourceIntent]) -> Mapping[
     return {k: {req for req in resource.attributes.get("requires", [])} for k, resource in resources.items()}
 
 
-dummyblueprint = ExecutorBlueprint(
-    pip_config=LEGACY_PIP_DEFAULT,
-    requirements=[],
-    python_version=(3, 11),
-    sources=[],
-)
+def _get_dummy_blueprint_for(environment: uuid.UUID) -> ExecutorBlueprint:
+    return ExecutorBlueprint(
+        environment_id=environment,
+        pip_config=LEGACY_PIP_DEFAULT,
+        requirements=[],
+        python_version=(3, 11),
+        sources=[],
+    )
 
 
 class DummyCodeManager(CodeManager):
-    """Code manager that prentend no code is ever needed"""
+    """Code manager that pretends no code is ever needed"""
 
     async def get_code(
-        self, environment: uuid.UUID, version: int, resource_types: Collection[ResourceType]
-    ) -> tuple[Collection[ResourceInstallSpec], executor.FailedResources]:
-        if not resource_types:
-            raise ValueError(f"{self.__class__.__name__}.get_code() expects at least one resource type")
-
-        return ([ResourceInstallSpec(rt, version, dummyblueprint) for rt in resource_types], {})
+        self, environment: uuid.UUID, model_version: int, agent_name: str
+    ) -> tuple[Collection[ModuleInstallSpec], executor.FailedModules]:
+        dummyblueprint: ExecutorBlueprint = _get_dummy_blueprint_for(environment)
+        return ([ModuleInstallSpec("dummy_module", "0.0.0", dummyblueprint)], {})
 
 
 async def is_agent_done(scheduler: ResourceScheduler, agent_name: str) -> bool:
@@ -1078,3 +1108,113 @@ async def run_compile_and_wait_until_compile_is_done(
 
     await retry_limited(_is_compile_finished, timeout=10)
     return run
+
+
+def validate_version_numbers_migration_scripts(versions_folder: pathlib.Path) -> None:
+    """
+    Validate whether the names of the database migration scripts in the given directory
+    are compliant with the schema. Migration scripts must have the format vYYYYMMDDN.py
+    """
+    v1_found = False
+    for path in versions_folder.iterdir():
+        file_name = path.name
+        if not file_name.endswith(".py"):
+            continue
+        if file_name == "__init__.py":
+            continue
+        if file_name == "v1.py":
+            v1_found = True
+            continue
+        if not re.fullmatch(r"v([0-9]{9})\.py", file_name):
+            raise Exception(f"Database migration script {file_name} has invalid format.")
+    assert v1_found
+
+
+def get_auth_client(
+    env_to_role_dct: dict[str, list[str]], is_admin: bool, client_types: abc.Sequence[const.ClientType] | None = None
+) -> protocol.Client:
+    """
+    Returns a client that uses an access token to authenticate to the server.
+
+    This method changes the `client_rest_transport.token` config option.
+
+    :param env_to_role_dct: A dictionary that maps the id of an environment to a list of roles that user has
+                            in that environment.
+    :param id_admin: A boolean that indicates whether the user is a global admin.
+    :param client_type: A sequence of client_types that should be included in the token.
+    """
+    if client_types is None:
+        client_types = [const.ClientType.api]
+    token = auth.encode_token(
+        client_types=[c.value for c in client_types],
+        expire=None,
+        custom_claims={
+            const.INMANTA_ROLES_URN: env_to_role_dct,
+            const.INMANTA_IS_ADMIN_URN: is_admin,
+        },
+    )
+    config.Config.set("client_rest_transport", "token", token)
+    return protocol.Client("client")
+
+
+async def verify_authorization_labels_in_default_policy(
+    enum_with_labels: enum.Enum, include_prefixes: Set[str] | None = None, exclude_prefixes: Set[str] | None = None
+) -> None:
+    """
+    Ensure that authorization labels defined in the access policy map to their corresponding enum and
+    ensure every label only occurs in one set.
+
+    :param enum_with_labels: The enum that has to be used to validate the authorization labels.
+    :param include_prefixes: If provided, only check authorization labels that start with these prefixes.
+    :param exclude_prefixes: If provided, don't check authorization labls that start with these prefixes.
+    """
+    policy_engine_client = httpclient.AsyncHTTPClient()
+
+    async def evaluate_in_policy(query: str):
+        request = HTTPRequest(
+            url=f"http://policy_engine/v1/data/policy/{query}",
+            method="POST",
+            headers={"Content-Type": "application/json"},
+            body="",
+        )
+        response = await policy_engine_client.fetch(request)
+        if response.code != 200:
+            raise Exception(f"Policy evaluation failed: {response.body}")
+        return json.loads(response.body.decode())["result"]
+
+    variables_containing_labels = [
+        "read_only_labels",
+        "noc_specific_labels",
+        "operator_specific_labels",
+        "admin_specific_labels",
+        "expert_admin_specific_labels",
+    ]
+
+    # 1. Fetch labels from the policy
+    # 2. Verify they exist in the enum
+    var_name_to_labels = {
+        var_name: {
+            enum_with_labels(label)
+            for label in await evaluate_in_policy(var_name)
+            if (exclude_prefixes is None or not any(label.startswith(p) for p in exclude_prefixes))
+            and (include_prefixes is None or any(label.startswith(p) for p in include_prefixes))
+        }
+        for var_name in variables_containing_labels
+    }
+
+    # Ensure no label exists in more than one variable
+    for i in range(len(variables_containing_labels) - 1):
+        for j in range(i + 1, len(variables_containing_labels)):
+            var_name_i = variables_containing_labels[i]
+            var_name_j = variables_containing_labels[j]
+            intersection = var_name_to_labels[var_name_i] & var_name_to_labels[var_name_j]
+            if intersection:
+                raise Exception(f"Label(s) {intersection} exist(s) in {var_name_i} and {var_name_j}.")
+
+
+def read_file(file_name: str) -> str:
+    """
+    Returns the content of the given file.
+    """
+    with open(file_name, "r") as fh:
+        return fh.read()
