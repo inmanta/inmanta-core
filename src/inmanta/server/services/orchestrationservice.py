@@ -867,8 +867,8 @@ class OrchestrationService(protocol.ServerSlice):
         undeployable_ids: abc.Sequence[ResourceIdStr] = [
             res.resource_id for res in rid_to_resource.values() if res.is_undefined
         ]
-        updated_resource_sets_no_shared: abc.Set[str] = {sr for sr in resource_sets.values() if sr is not None}
-        deleted_resource_sets_as_set: abc.Set[str] = set(removed_resource_sets)
+        updated_resource_sets_no_shared: abc.Set[str] = set({sr for sr in resource_sets.values() if sr is not None})
+        deleted_resource_sets_as_set: set[str] = set(removed_resource_sets)
         async with connection.transaction():
             try:
                 if is_partial_update:
@@ -910,14 +910,12 @@ class OrchestrationService(protocol.ServerSlice):
                 raise ServerError("The given version is already defined. Versions should be unique.")
 
             all_ids: set[Id] = {Id.parse_id(rid, version) for rid in rid_to_resource.keys()}
-            updated_resource_sets: abc.Set[str | None] = set(resource_sets.values())
             await data.ResourceSet.insert_sets_and_resources(
                 environment=env.id,
                 updated_resources=list(rid_to_resource.values()),
-                updated_resource_sets=list(updated_resource_sets),
                 target_version=version,
                 base_version=partial_base_version,
-                resource_set_names_not_to_bump=deleted_resource_sets_as_set | updated_resource_sets,
+                deleted_resource_sets=deleted_resource_sets_as_set,
                 connection=connection,
             )
             await cm.recalculate_total(connection=connection)
