@@ -32,7 +32,7 @@ from datetime import datetime
 from enum import Enum
 from functools import partial
 from inspect import Parameter
-from typing import Any, AsyncIterator, Callable, Generic, Optional, TypeVar, Union, cast, get_type_hints
+from typing import Any, AsyncIterator, Callable, Generic, Optional, TypeVar, Union, cast, get_type_hints, TYPE_CHECKING
 from urllib import parse
 
 import docstring_parser

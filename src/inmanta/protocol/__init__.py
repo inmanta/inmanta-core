@@ -54,7 +54,7 @@ to REST transport with Tornado, together with the code in :module:`~inmanta.serv
 # flake8: noqa: F401, F403
 
 from inmanta.protocol import methods, methods_v2
-from inmanta.protocol.auth import decode_token, encode_token
+from inmanta.protocol.auth.auth import decode_token, encode_token
 from inmanta.protocol.common import Response, Result, gzipped_json, json_encode
 from inmanta.protocol.decorators import handle, method, typedmethod
 from inmanta.protocol.endpoints import Client, SyncClient, TypedClient, VersionMatch

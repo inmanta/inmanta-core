@@ -33,7 +33,8 @@ from inmanta.protocol.auth.decorators import auth
 from inmanta.protocol.methods import ENV_OPTS
 from inmanta.server import SLICE_SESSION_MANAGER
 from inmanta.server.config import AuthorizationProviderName
-from inmanta.server.protocol import Server, ServerSlice, SessionListener
+from inmanta.server.protocol import Server, ServerSlice
+from inmanta.protocol.websocket import SessionListener
 from utils import configure_auth, retry_limited
 
 LOGGER = logging.getLogger(__name__)

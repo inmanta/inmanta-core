@@ -23,7 +23,7 @@ import json
 import logging
 import re
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, cast  # noqa: F401
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, cast, AnyStr  # noqa: F401
 
 import pydantic
 import typing_inspect

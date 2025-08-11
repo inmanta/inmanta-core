@@ -24,7 +24,7 @@ import sys
 import time
 import uuid
 from asyncio import queues, subprocess
-from collections.abc import Iterable, Iterator, Mapping, Sequence, Set
+from collections.abc import Iterable, Mapping, Sequence, Set
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
@@ -43,7 +43,7 @@ from inmanta import logging as inmanta_logging
 from inmanta import tracing
 from inmanta.agent import config as agent_cfg
 from inmanta.config import Config, config_map_to_str, scheduler_log_config
-from inmanta.const import AGENT_SCHEDULER_ID, AgentAction, AgentStatus
+from inmanta.const import AgentAction, AgentStatus
 from inmanta.data import APILIMIT, Environment, InvalidSort, model
 from inmanta.data.model import DataBaseReport
 from inmanta.protocol import common, encode_token, endpoints, handle, methods, methods_v2, websocket
@@ -113,7 +113,7 @@ class SessionAction:
     """
 
     def __init__(
-        self, action_type: SessionActionType, session: protocol.Session, endpoint_names_snapshot: set[str], timestamp: datetime
+        self, action_type: SessionActionType, session: websocket.Session, endpoint_names_snapshot: set[str], timestamp: datetime
     ):
         self.action_type = action_type
         self.session = session
