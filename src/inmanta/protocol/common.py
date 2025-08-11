@@ -16,6 +16,7 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import asyncio
 import enum
 import gzip
 import importlib
@@ -1346,6 +1347,19 @@ class ClientCall(Awaitable[Result[R]]):
         Verifies return code and validates result type.
         """
         return (await self).value()
+
+    def sync(self, *, timeout: int = 120, ioloop: Optional[asyncio.AbstractEventLoop] = None) -> Result[R]:
+        # TODO: docstring + consider how / if to do paging
+        with_timeout: types.AsyncioCoroutine[Result[R]] = asyncio.wait_for(self, timeout)
+        try:
+            if ioloop is None:
+                # no loop is running: create a loop for this thread if it doesn't exist already and run it
+                return util.ensure_event_loop().run_until_complete(with_timeout)
+            else:
+                # loop is running on different thread
+                return asyncio.run_coroutine_threadsafe(with_timeout, ioloop).result()
+        except TimeoutError:
+            raise ConnectionRefusedError()
 
     def __await__(self) -> types.AsyncioGenerator[Result[R]]:
         return self._first_result.__await__()

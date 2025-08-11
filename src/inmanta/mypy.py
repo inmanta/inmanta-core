@@ -15,9 +15,9 @@ class ClientMethodsPlugin(Plugin):
             (
                 name
                 for prefix in (
-                    # TODO: SyncClient? Probably better to deprecate it in favor of sync() method. Feasible?
                     "inmanta.protocol.endpoints.Client.",
                     "inmanta.protocol.endpoints.SessionClient.",
+                    "inmanta.protocol.endpoints.SyncClient.",
                     "inmanta.protocol.endpoints.TypedClient.",
                 )
                 if (name := fullname.removeprefix(prefix)) != fullname
@@ -72,21 +72,37 @@ class ClientMethodsPlugin(Plugin):
                 else None
             )
 
+            # unwrap ReturnValue[T]
+            default_return_type_flattened: types.Type = (
+                method.ret_type.args[0]
+                if (
+                    isinstance(method.ret_type, types.Instance)
+                    and method.ret_type.type.fullname == "inmanta.protocol.common.ReturnValue"
+                )
+                else method.ret_type
+            )
+
             return_type: types.Type
             if fullname.startswith("inmanta.protocol.endpoints.TypedClient."):
                 # TypedClient returns method's return type without wrapping it
-                return_type = method.ret_type
+                return_type = default_return_type_flattened
+            elif fullname.startswith("inmanta.protocol.endpoints.SyncClient."):
+                # SyncClient returns method's return type wrapped in a Result object
+                result_type: Optional[types.Instance] = self._get_instance("inmanta.protocol.common.Result")
+                assert result_type is not None
+                return_type = result_type.copy_modified(args=[default_return_type_flattened])
+            # normal clients return method's return type wrapped in ClientCall or PageableClientCall
             elif (
-                isinstance(method.ret_type, types.Instance)
-                and method.ret_type.type.fullname == "builtins.list"
+                isinstance(default_return_type_flattened, types.Instance)
+                and default_return_type_flattened.type.fullname == "builtins.list"
             ):
                 pageable_client_call: Optional[types.Instance] = self._get_instance("inmanta.protocol.common.PageableClientCall")
                 assert pageable_client_call is not None
-                return_type = pageable_client_call.copy_modified(args=[method.ret_type.args[0]])
+                return_type = pageable_client_call.copy_modified(args=[default_return_type_flattened.args[0]])
             else:
                 client_call: Optional[types.Instance] = self._get_instance("inmanta.protocol.common.ClientCall")
                 assert client_call is not None
-                return_type = client_call.copy_modified(args=[method.ret_type])
+                return_type = client_call.copy_modified(args=[default_return_type_flattened])
 
             def drop[T](s: Sequence[T], i: int) -> list[T]:
                 return [*s[:i], *s[i + 1:]]

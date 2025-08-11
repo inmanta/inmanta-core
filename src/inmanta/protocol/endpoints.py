@@ -440,21 +440,8 @@ class SyncClient:
             self._client = client
 
     def __getattr__(self, name: str) -> Callable[..., common.Result]:
-        def async_call(*args: Sequence[object], **kwargs: Mapping[str, object]) -> common.Result:
-            method: Callable[..., Awaitable[common.Result]] = getattr(self._client, name)
-            with_timeout: types.AsyncioCoroutine[common.Result] = asyncio.wait_for(method(*args, **kwargs), self.timeout)
-
-            try:
-                if self._ioloop is None:
-                    # no loop is running: create a loop for this thread if it doesn't exist already and run it
-                    return util.ensure_event_loop().run_until_complete(with_timeout)
-                else:
-                    # loop is running on different thread
-                    return run_coroutine_threadsafe(with_timeout, self._ioloop).result()
-            except TimeoutError:
-                raise ConnectionRefusedError()
-
-        return async_call
+        async_method = getattr(self._client, name)
+        return lambda *args, **kwargs: async_method(*args, **kwargs).sync()
 
 
 class SessionClient(Client):
