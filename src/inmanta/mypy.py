@@ -1,28 +1,24 @@
+import packaging.version
 from collections.abc import Callable
-from mypy import typevars
-from mypy.plugin import AttributeContext, MethodContext, Plugin
-from mypy.types import AnyType, NoneType, Type
-
-# TODO: some type / syntax errors in the codebase cause mypy to raise an import error for this file, on this import line.
-#           => double check if the import is required
-from inmanta.protocol import methods, methods_v2
+from mypy import nodes, typevars, types
+from mypy.plugin import AttributeContext, Plugin
+from typing import Optional
 
 
-# TODO: fix type errors in this file
-
-
-client: str = "inmanta.protocol.endpoints.SessionClient."
+# TODO: review full implementation
 
 
 class ClientMethodsPlugin(Plugin):
-    def _get_method(self, fullname: str) -> object:
+    def _get_method(self, fullname: str) -> Optional[types.CallableType]:
+        """
+        If the given fully qualified name is a method access on a client object, returns the type signature object for that
+        method. Returns None otherwise.
+        """
         client_attr: Optional[str] = next(
             (
                 name
                 for prefix in (
                     # TODO: typed & sync clients?
-                    # TODO: detect inheritance instead, because get_attr_hook uses top level while get_method_hook uses concrete
-                    #   type, which may lead to inconsistencies
                     # TODO: SessionClient injects sid
                     "inmanta.protocol.endpoints.Client.",
                     "inmanta.server.protocol.ReturnClient.",
@@ -33,50 +29,64 @@ class ClientMethodsPlugin(Plugin):
             None,
         )
 
-        if client_attr is None:
+        if client_attr is None or "." in client_attr:
             return None
 
-        return (
-            # TODO: use registered methods instead?
+        # TODO: what about inmanta-lsm methods?
+        node: Optional[nodes.SymbolTableNode] = (
             self.lookup_fully_qualified(f"inmanta.protocol.methods_v2.{client_attr}")
             or self.lookup_fully_qualified(f"inmanta.protocol.methods.{client_attr}")
         )
 
-    def get_attribute_hook(self, fullname: str) -> Callable[[AttributeContext], Type] | None:
-        method: Optional[object] = self._get_method(fullname)
-        if method is None:
-            return None
-        return lambda ctx: method.node.type
-
-    def get_method_hook(self, fullname: str) -> Callable[[MethodContext], Type] | None:
-        """
-        Hook to modify the return type of a method. When this is called, `get_attribute_hook` has already linked the attribute
-        access to the method. This hook then wraps the method's return type in a ClientCall object.
-        """
-        method: Optional[object] = self._get_method(fullname)
-        if method is None:
+        if node is None:
             return None
 
-        # TODO: clean up everything below
-        client_call = self.lookup_fully_qualified("inmanta.protocol.common.ClientCall")
-        client_call_generic = typevars.fill_typevars(client_call.node)
-        client_call_list = self.lookup_fully_qualified("inmanta.protocol.common.PageableClientCall")
-        client_call_list_generic = typevars.fill_typevars(client_call_list.node)
+        result: Optional[types.Type] = node.type
+        if result is None or not isinstance(result, types.CallableType):
+            return None
 
-        def hook(ctx):
-            is_list: bool = (
-                # TODO: better check and implementation
-                not isinstance(ctx.default_return_type, (AnyType, NoneType))
-                and ctx.default_return_type.type.fullname == "builtins.list"
-            )
-            if is_list:
-                return client_call_list_generic.copy_modified(args=[ctx.default_return_type.args[0]])
+        return result
+
+    def _get_instance(self, fullname: str) -> Optional[types.Instance]:
+        # TODO: docstring
+        node: Optional[nodes.SymbolTableNode] = self.lookup_fully_qualified(fullname)
+        if node is None or not isinstance(node.node, nodes.TypeInfo):
+            return None
+        generic: types.Instance | types.TupleType = typevars.fill_typevars(node.node)
+        if not isinstance(generic, types.Instance):
+            return None
+        return generic
+
+    def get_attribute_hook(self, fullname: str) -> Optional[Callable[[AttributeContext], types.CallableType]]:
+        """
+        For dynamic method accesses on a client object, return a hook that resolves to the associated method type signature,
+        with the return type wrapped in a ClientCall.
+        """
+        method: Optional[types.CallableType] = self._get_method(fullname)
+        if method is None:
+            return None
+
+        def hook(ctx: AttributeContext) -> types.CallableType:
+            if (
+                isinstance(method.ret_type, types.Instance)
+                and method.ret_type.type.fullname == "builtins.list"
+            ):
+                pageable_client_call: Optional[types.Instance] = self._get_instance("inmanta.protocol.common.PageableClientCall")
+                assert pageable_client_call is not None
+                ret_type = pageable_client_call.copy_modified(args=[method.ret_type.args[0]])
             else:
-                return client_call_generic.copy_modified(args=[ctx.default_return_type])
+                client_call: Optional[types.Instance] = self._get_instance("inmanta.protocol.common.ClientCall")
+                assert client_call is not None
+                ret_type = client_call.copy_modified(args=[method.ret_type])
+            return method.copy_modified(ret_type=ret_type)
 
         return hook
 
 
-def plugin(version: str):
-    # ignore version argument if the plugin works with all mypy versions.
-    return ClientMethodsPlugin
+def plugin(version: str) -> type[Plugin]:
+    return (
+        ClientMethodsPlugin
+        if packaging.version.Version(version) >= packaging.version.Version("1.17")
+        # fall back to default behavior for older versions with unknown compatibility
+        else Plugin
+    )

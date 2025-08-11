@@ -1,4 +1,3 @@
-/home/sander/.virtualenvs/inmanta-core-312/lib/python3.12/site-packages/mypy/types.py:0: note: "copy_modified" of "TupleType" defined here
 src/inmanta/agent/cache.py:0: error: Function is missing a type annotation for one or more arguments  [no-untyped-def]
 src/inmanta/agent/forking_executor.py:0: error: Argument 1 of "connection_made" is incompatible with supertype "asyncio.protocols.BaseProtocol"; supertype defines the argument type as "BaseTransport"  [override]
 src/inmanta/agent/forking_executor.py:0: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#incompatible-overrides
@@ -694,20 +693,6 @@ src/inmanta/moduletool.py:0: error: Missing type parameters for generic type Mod
 src/inmanta/moduletool.py:0: error: Missing type parameters for generic type Module  [type-arg]
 src/inmanta/moduletool.py:0: error: Missing type parameters for generic type Module  [type-arg]
 src/inmanta/moduletool.py:0: error: Skipping analyzing "cookiecutter.main": module is installed, but missing library stubs or py.typed marker  [import-untyped]
-src/inmanta/mypy.py:0: error: Argument 1 to "fill_typevars" has incompatible type "SymbolNode | Any | None"; expected "TypeInfo"  [arg-type]
-src/inmanta/mypy.py:0: error: Argument 1 to "fill_typevars" has incompatible type "SymbolNode | Any | None"; expected "TypeInfo"  [arg-type]
-src/inmanta/mypy.py:0: error: Function is missing a return type annotation  [no-untyped-def]
-src/inmanta/mypy.py:0: error: Function is missing a type annotation  [no-untyped-def]
-src/inmanta/mypy.py:0: error: Item "None" of "SymbolTableNode | None" has no attribute "node"  [union-attr]
-src/inmanta/mypy.py:0: error: Item "None" of "SymbolTableNode | None" has no attribute "node"  [union-attr]
-src/inmanta/mypy.py:0: error: Name "Optional" is not defined  [name-defined]
-src/inmanta/mypy.py:0: error: Name "Optional" is not defined  [name-defined]
-src/inmanta/mypy.py:0: error: Name "Optional" is not defined  [name-defined]
-src/inmanta/mypy.py:0: error: Unexpected keyword argument "args" for "copy_modified" of "TupleType"  [call-arg]
-src/inmanta/mypy.py:0: error: Unexpected keyword argument "args" for "copy_modified" of "TupleType"  [call-arg]
-src/inmanta/mypy.py:0: note: Did you forget to import it from "typing"? (Suggestion: "from typing import Optional")
-src/inmanta/mypy.py:0: note: Did you forget to import it from "typing"? (Suggestion: "from typing import Optional")
-src/inmanta/mypy.py:0: note: Did you forget to import it from "typing"? (Suggestion: "from typing import Optional")
 src/inmanta/parser/cache.py:0: error: Argument 1 to "ASTUnpickler" has incompatible type "BufferedReader[_BufferedReaderStream]"; expected "BytesIO"  [arg-type]
 src/inmanta/parser/parsetab.py:0: error: Need type annotation for "_lr_action" (hint: "_lr_action: dict[<type>, <type>] = ...")  [var-annotated]
 src/inmanta/parser/parsetab.py:0: error: Need type annotation for "_lr_goto" (hint: "_lr_goto: dict[<type>, <type>] = ...")  [var-annotated]

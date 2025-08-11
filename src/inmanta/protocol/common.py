@@ -1001,6 +1001,7 @@ class MethodProperties(Generic[R]):
         else:
             return None
 
+    # TODO: is this overload worth it? Does it really add anything? Perhaps as a classmethod with TypeGuard?
     @typing.overload
     def is_pageable[T: types.SimpleTypes](self: "MethodProperties[list[T]]") -> typing.Literal[True]: ...
     @typing.overload
