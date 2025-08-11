@@ -393,7 +393,6 @@ class Client(Endpoint):
 
         def wrap(*args: object, **kwargs: object) -> common.ClientCall:
             assert method
-            method.function(*args, **kwargs)
             return common.ClientCall.create(
                 self._call(method_properties=method, args=args, kwargs=kwargs), properties=method
             )
