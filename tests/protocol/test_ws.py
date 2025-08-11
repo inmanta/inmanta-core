@@ -20,17 +20,21 @@ import asyncio
 import logging
 import uuid
 
+from inmanta import const
 from inmanta.protocol import SessionEndpoint, handle, typedmethod, websocket
+from inmanta.protocol.auth.decorators import auth
 from inmanta.server.protocol import Server, ServerSlice
 
 LOGGER = logging.getLogger(__name__)
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.STATUS_READ, read_only=True)
 @typedmethod(path="/server_status", operation="GET")
 def get_current_server_status() -> str:
     """Get the status of the server"""
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.STATUS_READ, read_only=True)
 @typedmethod(path="/agent_status", operation="GET")
 def get_current_agent_status() -> str:
     """Get the status of the agent"""

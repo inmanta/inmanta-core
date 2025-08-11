@@ -28,7 +28,7 @@ from inmanta import tracing
 from inmanta.const import INMANTA_MT_HEADER
 from inmanta.protocol import common
 from inmanta.protocol.auth import providers
-from inmanta.protocol.rest import RESTBase, match_call
+from inmanta.protocol.rest import RESTBase, match_call, AuthnzInterface
 
 if TYPE_CHECKING:
     from inmanta.protocol.endpoints import Endpoint
@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 LOGGER: logging.Logger = logging.getLogger(__name__)
 
 
-class RESTClient(RESTBase):
+class RESTClient(RESTBase, AuthnzInterface):
     """
     A REST (json body over http) client transport. Only methods that operate on resource can use all
     HTTP verbs. For other methods the POST verb is used.

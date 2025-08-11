@@ -16,6 +16,7 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import asyncio
 import importlib.metadata
 import itertools
 import logging
@@ -27,11 +28,8 @@ from typing import TYPE_CHECKING, Mapping, Optional
 
 from tornado import routing, web
 
-import inmanta.protocol.endpoints
-from inmanta import tracing
 from inmanta.data.model import ExtensionStatus, ReportedStatus, SliceStatus
 from inmanta.protocol import Client, Result, TypedClient, common, endpoints, handle, methods, methods_v2
-from inmanta.protocol.exceptions import ShutdownInProgress
 from inmanta.protocol.rest import server
 from inmanta.server import SLICE_TRANSPORT
 from inmanta.types import ArgumentTypes
@@ -215,7 +213,7 @@ class Server(endpoints.Endpoint):
             )
 
 
-class ServerSlice(inmanta.protocol.common.CallTarget, TaskHandler[Result | None]):
+class ServerSlice(common.CallTarget, TaskHandler[Result | None]):
     """
     Base class for server extensions offering zero or more api endpoints
 

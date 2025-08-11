@@ -31,10 +31,10 @@ from inmanta import const, data
 from inmanta.protocol import method
 from inmanta.protocol.auth.decorators import auth
 from inmanta.protocol.methods import ENV_OPTS
+from inmanta.protocol.websocket import SessionListener
 from inmanta.server import SLICE_SESSION_MANAGER
 from inmanta.server.config import AuthorizationProviderName
 from inmanta.server.protocol import Server, ServerSlice
-from inmanta.protocol.websocket import SessionListener
 from utils import configure_auth, retry_limited
 
 LOGGER = logging.getLogger(__name__)
@@ -134,8 +134,8 @@ async def test_2way_protocol(inmanta_config, server_config, no_tid_check):
     configure_auth(auth=True, ca=False, ssl=False, authorization_provider=AuthorizationProviderName.legacy)
     rs = Server()
     server = SessionSpy()
-    rs.get_slice(SLICE_SESSION_MANAGER).add_listener(server)
-    rs.add_slice(server)
+    # rs.get_slice(SLICE_SESSION_MANAGER).add_listener(server)
+    # rs.add_slice(server)
     await rs.start()
 
     agent = Agent("agent")

@@ -34,7 +34,7 @@ from inmanta import config as inmanta_config
 from inmanta import const, tracing
 from inmanta.protocol import common, endpoints, exceptions, websocket
 from inmanta.protocol.auth import providers
-from inmanta.protocol.rest import RESTBase, execute_call
+from inmanta.protocol.rest import RESTBase, execute_call, AuthnzInterface
 from inmanta.server import config as server_config
 from inmanta.server.config import server_access_control_allow_origin, server_enable_auth, server_tz_aware_timestamps
 from inmanta.types import ReturnTypes
@@ -133,7 +133,7 @@ class RESTHandler(tornado.web.RequestHandler):
                             else:
                                 message[key] = [v.decode("latin-1") for v in value]
 
-                        result = await execute_call(call_config, message, self.request.headers)
+                        result = await execute_call(self, call_config, message, self.request.headers)
                         self.respond(result.body, result.headers, result.status_code)
                     except JSONDecodeError as e:
                         error_message = f"The request body couldn't be decoded as a JSON: {e}"
@@ -248,6 +248,7 @@ class WebsocketHandler(tornado_websocket.WebSocketHandler, websocket.WebsocketFr
         self._server: "RESTServer" = transport
 
         self.set_call_targets(self._server.endpoint.call_targets)
+        self.set_authnz_context(transport)
 
     async def on_message(self, message: Union[str, bytes]) -> None:
         """The tornado handler calls this method. Delegate it to the decoder"""
@@ -276,7 +277,7 @@ class WebsocketHandler(tornado_websocket.WebSocketHandler, websocket.WebsocketFr
         self.close()
 
 
-class RESTServer(RESTBase):
+class RESTServer(RESTBase, AuthnzInterface):
     """A tornado based rest server with websocket based two-way communication support"""
 
     _http_server: Optional[httpserver.HTTPServer]

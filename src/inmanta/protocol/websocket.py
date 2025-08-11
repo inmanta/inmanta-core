@@ -31,6 +31,7 @@ from inmanta import config as inmanta_config
 from inmanta import const, tracing, types, util
 from inmanta.data import model
 from inmanta.protocol import common, endpoints, rest
+from inmanta.protocol.auth import providers
 
 LOGGER = logging.getLogger(__name__)
 
@@ -198,73 +199,6 @@ type WSMessages = Annotated[
 ]
 
 
-async def dispatch_method(call_targets: list[common.CallTarget], msg: RPC_Call) -> Optional[RPC_Reply]:
-    """Dispatch a request from the server into the RPC code so the requests gets executed. The call results is send back
-    to the server using a heartbeat reply.
-    """
-    method_call = common.Request(url=msg.url, method=msg.method, headers=msg.headers, body=msg.body, reply_id=msg.reply_id)
-
-    LOGGER.debug("Received call through websocket: %s %s %s", method_call.reply_id, method_call.method, method_call.url)
-    kwargs, config = rest.match_call(call_targets, method_call.url, method_call.method)
-
-    if config is None:
-        # We cannot match the call to method on this endpoint. We send a reply to report this + ensure that the session
-        # does not time out
-        error = "An error occurred during heartbeat method call ({} {} {}): {}".format(
-            method_call.reply_id,
-            method_call.method,
-            method_call.url,
-            "No such method",
-        )
-        LOGGER.error(error)
-        # if reply_id is none, we don't send the reply
-        if method_call.reply_id is not None:
-            return RPC_Reply(
-                reply_id=msg.reply_id,
-                code=500,
-                result={"error": error},  # TODO verify if this is the correct key to report the error
-            )
-        return None
-
-    # rebuild a request so that the RPC layer can process it as if it came from a proper HTTP call
-    body = method_call.body or {}
-    query_string = parse.urlparse(method_call.url).query
-    for key, value in parse.parse_qs(query_string, keep_blank_values=True).items():
-        if len(value) == 1:
-            body[key] = value[0]
-        else:
-            body[key] = value
-
-    body.update(kwargs)
-
-    with tracing.attach_context(
-        {const.TRACEPARENT: method_call.headers[const.TRACEPARENT]} if const.TRACEPARENT in method_call.headers else {}
-    ):
-        # do the dispatch
-        response: common.Response = await rest.execute_call(config, body, method_call.headers)
-
-    # report the result back
-    if response.status_code == 500:
-        msg = ""
-        if response.body is not None and "message" in response.body:
-            msg = response.body["message"]
-        LOGGER.error(
-            "An error occurred during heartbeat method call (%s %s %s): %s",
-            method_call.reply_id,
-            method_call.method,
-            method_call.url,
-            msg,
-        )
-
-    # if reply is none, we don't send the reply
-    if method_call.reply_id is not None:
-        return RPC_Reply(
-            reply_id=msg.reply_id,
-            code=response.status_code,
-            result=response.body,
-        )
-
-
 async def handle_timeout(future: asyncio.Future, timeout: int, log_message: str) -> None:
     """A function that awaits a future until its value is ready or until timeout. When the call times out, a message is
     logged. The future itself will be cancelled.
@@ -287,6 +221,10 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
         self._session: Optional[Session] = None
         self._call_targets: Optional[list[common.CallTarget]] = None
         self._replies: dict[uuid.UUID, asyncio.Future[common.Result]] = {}
+        self._authnz_context: rest.AuthnzInterface | None = None
+
+    def set_authnz_context(self, context: rest.AuthnzInterface) -> None:
+        self._authnz_context = context
 
     @property
     def session(self) -> Optional[Session]:
@@ -411,7 +349,7 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
             LOGGER.error("Cannot dispatch method when no call targets are available.")
             return
 
-        reply = await dispatch_method(self._call_targets, msg)
+        reply = await self.dispatch_method(msg)
         await self.write_message(reply.model_dump_json())
 
     async def on_open_session(self, session: Session) -> None:
@@ -433,6 +371,72 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
         await self.close_session()
         await self.write_message(CloseSession().model_dump_json())
 
+    async def dispatch_method(self, msg: RPC_Call) -> Optional[RPC_Reply]:
+        """Dispatch a request from the server into the RPC code so the requests gets executed. The call results is send back
+        to the server using a heartbeat reply.
+        """
+        method_call = common.Request(url=msg.url, method=msg.method, headers=msg.headers, body=msg.body, reply_id=msg.reply_id)
+
+        LOGGER.debug("Received call through websocket: %s %s %s", method_call.reply_id, method_call.method, method_call.url)
+        kwargs, config = rest.match_call(self._call_targets, method_call.url, method_call.method)
+
+        if config is None:
+            # We cannot match the call to method on this endpoint. We send a reply to report this + ensure that the session
+            # does not time out
+            error = "An error occurred during heartbeat method call ({} {} {}): {}".format(
+                method_call.reply_id,
+                method_call.method,
+                method_call.url,
+                "No such method",
+            )
+            LOGGER.error(error)
+            # if reply_id is none, we don't send the reply
+            if method_call.reply_id is not None:
+                return RPC_Reply(
+                    reply_id=msg.reply_id,
+                    code=500,
+                    result={"error": error},  # TODO verify if this is the correct key to report the error
+                )
+            return None
+
+        # rebuild a request so that the RPC layer can process it as if it came from a proper HTTP call
+        body = method_call.body or {}
+        query_string = parse.urlparse(method_call.url).query
+        for key, value in parse.parse_qs(query_string, keep_blank_values=True).items():
+            if len(value) == 1:
+                body[key] = value[0]
+            else:
+                body[key] = value
+
+        body.update(kwargs)
+
+        with tracing.attach_context(
+            {const.TRACEPARENT: method_call.headers[const.TRACEPARENT]} if const.TRACEPARENT in method_call.headers else {}
+        ):
+            # do the dispatch
+            response: common.Response = await rest.execute_call(self._authnz_context, config, body, method_call.headers)
+
+        # report the result back
+        if response.status_code == 500:
+            msg = ""
+            if response.body is not None and "message" in response.body:
+                msg = response.body["message"]
+            LOGGER.error(
+                "An error occurred during heartbeat method call (%s %s %s): %s",
+                method_call.reply_id,
+                method_call.method,
+                method_call.url,
+                msg,
+            )
+
+        # if reply is none, we don't send the reply
+        if method_call.reply_id is not None:
+            return RPC_Reply(
+                reply_id=msg.reply_id,
+                code=response.status_code,
+                result=response.body,
+            )
+
 
 class WebSocketClientConnection(websocket.WebSocketClientConnection):
     """A websocket connection with on_ping and on_pong handlers that we use to register session liveness"""
@@ -446,7 +450,7 @@ class WebSocketClientConnection(websocket.WebSocketClientConnection):
             self._on_pong_cb()
 
 
-class SessionEndpoint(endpoints.Endpoint, common.CallTarget, WebsocketFrameDecoder):
+class SessionEndpoint(endpoints.Endpoint, common.CallTarget, WebsocketFrameDecoder, rest.AuthnzInterface):
     """
     An endpoint for clients that make calls to a server and that receive calls back from the server using long-poll
     """
@@ -464,13 +468,26 @@ class SessionEndpoint(endpoints.Endpoint, common.CallTarget, WebsocketFrameDecod
         self.reconnect_delay = reconnect_delay
         self.add_call_target(self)
 
-        self._ws_client: Optional[websocket.WebSocketClientConnection] = None
+        self._ws_client: Optional[WebSocketClientConnection] = None
         self.set_call_targets(self.call_targets)
+        self.set_authnz_context(self)
 
         self.create_session(
             environment_id=self.environment,
             session_name=self.name,
         )
+
+    def is_auth_enabled(self) -> bool:
+        """
+        Return True iff authentication is enabled.
+        """
+        return False
+
+    def get_authorization_provider(self) -> providers.AuthorizationProvider | None:
+        """
+        Returns the authorization provider or None if we are not running on the server.
+        """
+        return None
 
     def get_environment(self) -> uuid.UUID:
         return self._env_id

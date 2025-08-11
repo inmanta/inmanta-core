@@ -23,7 +23,7 @@ import json
 import logging
 import re
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, cast, AnyStr  # noqa: F401
+from typing import Any, AnyStr, Optional, Type, cast
 
 import pydantic
 import typing_inspect
@@ -617,7 +617,7 @@ class RESTBase(util.TaskHandler[None], abc.ABC):
     def id(self) -> str:
         return self._id
 
-    def _decode(self, body: bytes) -> Optional[JsonType]:
+    def _decode(self, body: bytes | None) -> Optional[JsonType]:
         """
         Decode a response body
         """
@@ -626,6 +626,10 @@ class RESTBase(util.TaskHandler[None], abc.ABC):
             result = cast(JsonType, json.loads(escape.to_basestring(body)))
 
         return result
+
+
+class AuthnzInterface:
+    """An interface that provides access to auth status and policy engine."""
 
     def is_auth_enabled(self) -> bool:
         """
@@ -642,6 +646,7 @@ class RESTBase(util.TaskHandler[None], abc.ABC):
 
 
 async def execute_call(
+    endpoint: AuthnzInterface,
     config: common.UrlMethod | None,
     message: dict[str, object],
     request_headers: Mapping[str, str],
@@ -661,10 +666,11 @@ async def execute_call(
         # Authorization might need data from the request but we do not want to process it before we are sure the call
         # is authenticated.
         arguments = CallArguments(config, message, request_headers)
-        is_auth_enabled: bool = self.is_auth_enabled()
+        is_auth_enabled: bool = endpoint.is_auth_enabled()
         arguments.authenticate(auth_enabled=is_auth_enabled)
         await arguments.process()
-        authorization_provider = self.get_authorization_provider()
+
+        authorization_provider = endpoint.get_authorization_provider()
         if authorization_provider:
             await authorization_provider.authorize_request(arguments)
 

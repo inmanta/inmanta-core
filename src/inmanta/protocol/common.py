@@ -32,7 +32,7 @@ from datetime import datetime
 from enum import Enum
 from functools import partial
 from inspect import Parameter
-from typing import Any, AsyncIterator, Callable, Generic, Optional, TypeVar, Union, cast, get_type_hints, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, AsyncIterator, Callable, Generic, Optional, TypeVar, Union, cast, get_type_hints
 from urllib import parse
 
 import docstring_parser
@@ -47,7 +47,7 @@ from inmanta import const, execute, types, util
 from inmanta.data.model import BaseModel, DateTimeNormalizerModel
 from inmanta.protocol.auth import auth
 from inmanta.protocol.auth.decorators import AuthorizationMetadata
-from inmanta.protocol.exceptions import BadRequest, BaseHttpException
+from inmanta.protocol import exceptions
 from inmanta.protocol.openapi import model as openapi_model
 from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes, HandlerType, JsonType, MethodType, ReturnTypes
@@ -124,7 +124,7 @@ class Request:
         # Reply ID is used to send back the result
         # If None, no reply is expected
         #  i.e. this call will immediately return, potentially even before the request is dispatched
-        self.reply_id: uuid.UUID = reply_id
+        self.reply_id: uuid.UUID | None = reply_id
 
     @property
     def body(self) -> Optional[JsonType]:
