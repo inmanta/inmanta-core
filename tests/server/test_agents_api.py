@@ -261,9 +261,7 @@ async def test_sorting_validation(client, environment: str, env_with_agents: Non
 async def test_agent_process_details(client, environment: str) -> None:
     env_uuid = uuid.UUID(environment)
     process_sid = uuid.uuid4()
-    await data.SchedulerSession(
-        hostname="localhost-dummy", environment=env_uuid, sid=process_sid
-    ).insert()
+    await data.SchedulerSession(hostname="localhost-dummy", environment=env_uuid, sid=process_sid).insert()
     id_primary = uuid.uuid4()
     await data.Agent(
         environment=env_uuid,

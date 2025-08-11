@@ -93,7 +93,6 @@ class MockSession:
         self.client.set_state.side_effect = empty_future
         self.client.get_status = api_call_future
 
-
     def get_client(self):
         return self.client
 

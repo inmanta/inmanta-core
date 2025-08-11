@@ -271,7 +271,7 @@ class WebsocketHandler(tornado_websocket.WebSocketHandler, websocket.WebsocketFr
         await self.close_session()
 
     async def close_connection(self) -> None:
-        """ Close the connection that is linked to a session """
+        """Close the connection that is linked to a session"""
         await super().close_connection()
         self.close()
 

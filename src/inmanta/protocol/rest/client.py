@@ -27,9 +27,8 @@ from inmanta import config as inmanta_config
 from inmanta import tracing
 from inmanta.const import INMANTA_MT_HEADER
 from inmanta.protocol import common
-from inmanta.protocol.rest import RESTBase, match_call
 from inmanta.protocol.auth import providers
-from inmanta.protocol.rest import RESTBase
+from inmanta.protocol.rest import RESTBase, match_call
 
 if TYPE_CHECKING:
     from inmanta.protocol.endpoints import Endpoint

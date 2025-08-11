@@ -27,7 +27,7 @@ import pytest
 from inmanta import const
 from inmanta.agent.handler import ResourceHandler
 from inmanta.data import model
-from inmanta.protocol import VersionMatch, common, Client
+from inmanta.protocol import Client, VersionMatch, common
 from inmanta.util import get_compiler_version
 from utils import _deploy_resources, log_contains, make_random_file, retry_limited, wait_until_deployment_finishes
 

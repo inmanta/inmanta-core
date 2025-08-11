@@ -627,7 +627,6 @@ class RESTBase(util.TaskHandler[None], abc.ABC):
 
         return result
 
-
     def is_auth_enabled(self) -> bool:
         """
         Return True iff authentication is enabled.
@@ -640,7 +639,7 @@ class RESTBase(util.TaskHandler[None], abc.ABC):
         Returns the authorization provider or None if we are not running on the server.
         """
         raise NotImplementedError()
-    
+
 
 async def execute_call(
     config: common.UrlMethod | None,
@@ -658,9 +657,9 @@ async def execute_call(
         #     if not self.validate_sid(uuid.UUID(str(message["sid"]))):
         #         raise exceptions.BadRequest("the sid %s is not valid." % message["sid"])
 
-            # First check if the call is authenticated, then process the request so we can handle it and then authorize it.
-            # Authorization might need data from the request but we do not want to process it before we are sure the call
-            # is authenticated.
+        # First check if the call is authenticated, then process the request so we can handle it and then authorize it.
+        # Authorization might need data from the request but we do not want to process it before we are sure the call
+        # is authenticated.
         arguments = CallArguments(config, message, request_headers)
         is_auth_enabled: bool = self.is_auth_enabled()
         arguments.authenticate(auth_enabled=is_auth_enabled)

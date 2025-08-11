@@ -971,7 +971,12 @@ class NullAgent(SessionEndpoint):
         """
         :param environment: environment id
         """
-        super().__init__(name="agent", environment=environment, timeout=cfg.server_timeout.get(), reconnect_delay=cfg.agent_reconnect_delay.get())
+        super().__init__(
+            name="agent",
+            environment=environment,
+            timeout=cfg.server_timeout.get(),
+            reconnect_delay=cfg.agent_reconnect_delay.get(),
+        )
         self._env_id = environment
         self.enabled: dict[str, bool] = {}
 

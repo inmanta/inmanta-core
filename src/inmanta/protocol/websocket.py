@@ -15,6 +15,7 @@ limitations under the License.
 
 Contact: code@inmanta.com
 """
+
 import asyncio
 import logging
 import socket
@@ -398,7 +399,7 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
                     future.set_result(common.Result(code=msg.code, result=msg.result))
 
     async def close_session(self):
-        """Close the session linked with the decoder. Call this method when the connection closes. """
+        """Close the session linked with the decoder. Call this method when the connection closes."""
         if self._session is None or self._session.is_closed():
             return
 
@@ -428,7 +429,7 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
         )
 
     async def close_connection(self) -> None:
-        """ Close the connection that belongs to this session and the session itself """
+        """Close the connection that belongs to this session and the session itself"""
         await self.close_session()
         await self.write_message(CloseSession().model_dump_json())
 
