@@ -4833,6 +4833,12 @@ class ResourceSet(BaseDocument):
         return "resource_set"
 
     @classmethod
+    def get_printable_name_for_resource_set(cls, native: str | None) -> str:
+        if native is None:
+            return "<SHARED>"
+        return native
+
+    @classmethod
     async def get_resource_sets_in_version(
         cls, environment: uuid.UUID, version: int, connection: Optional[asyncpg.connection.Connection] = None
     ) -> list["ResourceSet"]:
@@ -4860,12 +4866,6 @@ class ResourceSet(BaseDocument):
         return result
 
     @classmethod
-    def get_printable_name_for_resource_set(cls, native: str | None) -> str:
-        if native is None:
-            return "<SHARED>"
-        return native
-
-    @classmethod
     async def validate_resource_sets_in_version(
         cls,
         environment: uuid.UUID,
@@ -4875,7 +4875,7 @@ class ResourceSet(BaseDocument):
         connection: asyncpg.connection.Connection,
     ) -> None:
         """
-        Checks for duplicates in the target version.
+        Checks for duplicate resources and resource_sets in the target version.
         This should only happen when we try to migrate a resource to another resource set (base -> target)
         while the base resource set is not present in the partial compile.
         """
@@ -4946,7 +4946,7 @@ class ResourceSet(BaseDocument):
                 - Resource sets we want to delete
                 - Resource sets with the same name as one of the updated resource sets (they are now outdated)
         If a resource from a specific resource set is present in updated_resources, all other resources from that resource
-        set are expected to be present as well.
+        set are expected to be present as well, including if that resource is part of the shared set.
         The shared resource set is treated as any other.
         :param environment: The environment of these resources.
         :param target_version: The version which we want to link the resource sets to

@@ -566,8 +566,7 @@ class OrchestrationService(protocol.ServerSlice):
         all_requires: set[ResourceIdStr] = set()
         for res_dict in resources:
             # Verify that the version field and the version in the resource version id field match
-            raw_id = res_dict["id"]
-            resource_version_id = Id.parse_id(raw_id)
+            resource_version_id = Id.parse_id(res_dict["id"])
             version_part_of_resource_id = resource_version_id.version
             resource_id = resource_version_id.resource_str()
             if "version" in res_dict and res_dict["version"] != version_part_of_resource_id:
@@ -581,7 +580,7 @@ class OrchestrationService(protocol.ServerSlice):
             is_undefined = (
                 True
                 if resource_id in resource_state
-                and const.ResourceState[resource_state[resource_id]] == const.ResourceState.undefined
+                and const.ResourceState[resource_state[resource_id]] is const.ResourceState.undefined
                 else False
             )
 
@@ -867,8 +866,8 @@ class OrchestrationService(protocol.ServerSlice):
         undeployable_ids: abc.Sequence[ResourceIdStr] = [
             res.resource_id for res in rid_to_resource.values() if res.is_undefined
         ]
-        updated_resource_sets_no_shared: abc.Set[str] = set({sr for sr in resource_sets.values() if sr is not None})
-        deleted_resource_sets_as_set: set[str] = set(removed_resource_sets)
+        updated_resource_sets_no_shared: abc.Set[str] = {sr for sr in resource_sets.values() if sr is not None}
+        deleted_resource_sets_as_set: abc.Set[str] = set(removed_resource_sets)
         async with connection.transaction():
             try:
                 if is_partial_update:
