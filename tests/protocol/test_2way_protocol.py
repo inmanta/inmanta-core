@@ -92,7 +92,7 @@ class Agent(protocol.SessionEndpoint):
 
     @protocol.handle(get_agent_status_x)
     async def get_agent_status_x(self, id):
-        return 200, {"status": "ok", "agents": list(self.end_point_names)}
+        return 200, {"status": "ok"}
 
     @protocol.handle(get_agent_push)
     async def get_agent_push(self, id):
@@ -107,7 +107,7 @@ class Agent(protocol.SessionEndpoint):
         self.disconnect += 1
 
 
-async def get_environment(env: uuid.UUID, metadata: dict):
+async def get_environment(env: uuid.UUID, metadata: dict) -> data.Environment:
     return data.Environment(from_postgres=True, id=env, name="test", project=env, repo_url="xx", repo_branch="xx")
 
 
@@ -121,7 +121,7 @@ def no_tid_check():
 
 
 async def assert_agent_counter(agent: Agent, reconnect: int, disconnected: int) -> None:
-    def is_same():
+    def is_same() -> bool:
         return agent.disconnect == disconnected and agent.reconnect == reconnect
 
     await retry_limited(is_same, 10)

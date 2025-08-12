@@ -280,6 +280,7 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
 
         match msg:
             case OpenSession():
+                LOGGER.info("Opening session %s on host %s with environment %s", msg.session_name, msg.hostname, msg.environment_id)
                 # session open request: normally only initiated by the client and received by the server
                 # TODO: handle duplicate sessions
                 self._session = Session(
@@ -298,6 +299,7 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
                 if self._session is None:
                     LOGGER.error("Received a session open for a session that is not opened yet.")
                 else:
+                    await self.on_open_session(self._session)
                     self._session.confirm_open()
 
             case RejectSession():
