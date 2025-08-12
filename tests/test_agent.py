@@ -24,7 +24,6 @@ from inmanta.agent import reporting
 from inmanta.agent.handler import HandlerContext, InvalidOperation
 from inmanta.data.model import AttributeStateChange
 from inmanta.resources import Id, PurgeableResource
-from inmanta.server import SLICE_SESSION_MANAGER
 
 logger = logging.getLogger(__name__)
 

@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING, Mapping, Optional
 from tornado import routing, web
 
 from inmanta.data.model import ExtensionStatus, ReportedStatus, SliceStatus
-from inmanta.protocol import Client, Result, TypedClient, common, endpoints, handle, methods, methods_v2, rest
+from inmanta.protocol import Client, Result, TypedClient, common, endpoints, methods_v2, rest, handle
 from inmanta.protocol.rest import server as rest_server
 from inmanta.server import SLICE_TRANSPORT
 from inmanta.types import ArgumentTypes

@@ -2835,7 +2835,6 @@ class Environment(BaseDocument):
         """
         async with self.get_connection(connection=connection) as con:
             await Agent.delete_all(environment=self.id, connection=con)
-            await AgentInstance.delete_all(tid=self.id, connection=con)
             await SchedulerSession.delete_all(environment=self.id, connection=con)
             await Compile.delete_all(environment=self.id, connection=con)  # Triggers cascading delete on report table
             await Parameter.delete_all(environment=self.id, connection=con)

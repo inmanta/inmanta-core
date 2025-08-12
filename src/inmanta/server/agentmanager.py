@@ -30,7 +30,6 @@ from datetime import datetime
 from enum import Enum
 from functools import reduce
 from typing import Any, Optional, Union, cast
-from uuid import UUID
 
 import asyncpg.connection
 
@@ -228,7 +227,7 @@ class AgentManager(ServerSlice, websocket.SessionListener):
         return out
 
     def get_dependencies(self) -> list[str]:
-        return [SLICE_DATABASE, SLICE_SESSION_MANAGER]
+        return [SLICE_DATABASE]
 
     def get_depended_by(self) -> list[str]:
         return [SLICE_TRANSPORT]
@@ -507,7 +506,7 @@ class AgentManager(ServerSlice, websocket.SessionListener):
     def get_agent_client(self, tid: uuid.UUID) -> Optional[endpoints.Client]:
         if isinstance(tid, str):
             tid = uuid.UUID(tid)
-        return self.scheduler_for_env.get(tid).get_client()
+        return self.scheduler_for_env.get(tid).session.get_client()
 
     async def expire_sessions_for_environment(self, env_id: uuid.UUID) -> None:
         """

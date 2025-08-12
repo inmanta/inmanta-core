@@ -280,7 +280,9 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
 
         match msg:
             case OpenSession():
-                LOGGER.info("Opening session %s on host %s with environment %s", msg.session_name, msg.hostname, msg.environment_id)
+                LOGGER.info(
+                    "Opening session %s on host %s with environment %s", msg.session_name, msg.hostname, msg.environment_id
+                )
                 # session open request: normally only initiated by the client and received by the server
                 # TODO: handle duplicate sessions
                 self._session = Session(

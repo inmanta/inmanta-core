@@ -405,30 +405,6 @@ class MethodProperties:
 
         return None
 
-    @classmethod
-    def select_method(
-        cls, name: str, match_constraint: VersionMatch = VersionMatch.lowest, exact_version: int = 0
-    ) -> Optional["MethodProperties"]:
-        """Select a method to call with the given name and using the given match constraint
-
-        :param name: The name of the method to select
-        :param match_constraint: How to decide which version to match against
-        :param exact_version: The exact version to match against in case of VersionMatch.exact
-        """
-        if name not in cls.methods:
-            return None
-
-        methods = cls.methods[name]
-
-        if match_constraint is VersionMatch.lowest:
-            return min(methods, key=lambda x: x.api_version)
-        elif match_constraint is VersionMatch.highest:
-            return max(methods, key=lambda x: x.api_version)
-        elif match_constraint is VersionMatch.exact:
-            return next((m for m in methods if m.api_version == exact_version), None)
-
-        return None
-
     def __init__(
         self,
         function: MethodType,
