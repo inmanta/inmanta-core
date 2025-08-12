@@ -113,11 +113,10 @@ class SessionAction:
     """
 
     def __init__(
-        self, action_type: SessionActionType, session: websocket.Session, endpoint_names_snapshot: set[str], timestamp: datetime
+        self, action_type: SessionActionType, session: websocket.Session, timestamp: datetime
     ):
         self.action_type = action_type
         self.session = session
-        self.endpoint_names_snapshot = endpoint_names_snapshot
         self.timestamp = timestamp
 
 
@@ -410,7 +409,7 @@ class AgentManager(ServerSlice, websocket.SessionListener):
         if action_type == SessionActionType.REGISTER_SESSION:
             await self._register_session(action.session, action.timestamp)
         elif action_type == SessionActionType.EXPIRE_SESSION:
-            await self._expire_session(action.session, action.endpoint_names_snapshot, action.timestamp)
+            await self._expire_session(action.session, action.timestamp)
         else:
             LOGGER.warning("Unknown SessionAction %s", action_type.name)
 

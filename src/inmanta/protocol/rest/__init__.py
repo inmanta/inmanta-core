@@ -655,13 +655,6 @@ async def execute_call(
         if config is None:
             raise Exception("This method is unknown! This should not occur!")
 
-        # if config.properties.validate_sid:
-        #     if "sid" not in message or not isinstance(message["sid"], str):
-        #         raise exceptions.BadRequest("this is an agent to server call, it should contain an agent session id")
-        #
-        #     if not self.validate_sid(uuid.UUID(str(message["sid"]))):
-        #         raise exceptions.BadRequest("the sid %s is not valid." % message["sid"])
-
         # First check if the call is authenticated, then process the request so we can handle it and then authorize it.
         # Authorization might need data from the request but we do not want to process it before we are sure the call
         # is authenticated.

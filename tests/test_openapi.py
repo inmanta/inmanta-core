@@ -31,9 +31,9 @@ from pydantic.networks import AnyHttpUrl, AnyUrl, PostgresDsn
 from inmanta.const import ClientType, CoreAuthorizationLabel, ResourceAction
 from inmanta.data import model
 from inmanta.data.model import EnvironmentSetting
-from inmanta.protocol import method
+from inmanta.protocol import method, exceptions
 from inmanta.protocol.auth.decorators import auth
-from inmanta.protocol.common import ArgOption, BaseHttpException, MethodProperties, UrlMethod
+from inmanta.protocol.common import ArgOption, MethodProperties, UrlMethod
 from inmanta.protocol.openapi.converter import (
     ArgOptionHandler,
     FunctionParameterHandler,
@@ -47,7 +47,7 @@ from inmanta.server.extensions import FeatureManager
 from inmanta.server.protocol import Server
 
 
-class DummyException(BaseHttpException):
+class DummyException(exceptions.BaseHttpException):
     def __init__(self):
         super().__init__(status_code=405)
 

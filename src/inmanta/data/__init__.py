@@ -3349,7 +3349,12 @@ class Agent(BaseDocument):
     name: str
     last_failover: Optional[datetime.datetime] = None
     paused: bool = False
+    id_primary: Optional[uuid.UUID] = None
     unpause_on_resume: Optional[bool] = None
+
+    @property
+    def primary(self) -> Optional[uuid.UUID]:
+        return self.id_primary
 
     @classmethod
     def get_valid_field_names(cls) -> list[str]:

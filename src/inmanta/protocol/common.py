@@ -55,8 +55,6 @@ from inmanta.types import ArgumentTypes, HandlerType, JsonType, MethodType, Retu
 if TYPE_CHECKING:
     from inmanta.protocol.rest.client import RESTClient
 
-    from .endpoints import CallTarget
-
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 

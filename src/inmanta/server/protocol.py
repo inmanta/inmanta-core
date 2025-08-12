@@ -29,8 +29,8 @@ from typing import TYPE_CHECKING, Mapping, Optional
 from tornado import routing, web
 
 from inmanta.data.model import ExtensionStatus, ReportedStatus, SliceStatus
-from inmanta.protocol import Client, Result, TypedClient, common, endpoints, handle, methods, methods_v2
-from inmanta.protocol.rest import server
+from inmanta.protocol import Client, Result, TypedClient, common, endpoints, handle, methods, methods_v2, rest
+from inmanta.protocol.rest import server as rest_server
 from inmanta.server import SLICE_TRANSPORT
 from inmanta.types import ArgumentTypes
 from inmanta.util import (
@@ -73,7 +73,7 @@ class Server(endpoints.Endpoint):
         self._handlers: list[routing.Rule] = []
         self.connection_timout = connection_timout
 
-        self._transport = server.RESTServer(self, self.id)
+        self._transport = rest_server.RESTServer(self, self.id)
         self.add_slice(TransportSlice(self))
         self.running = False
 
@@ -535,5 +535,5 @@ class LocalClient(TypedClient):
     ) -> common.Result:
         spec = method_properties.build_call(args, kwargs)
         method_config = self._get_op_mapping(spec.url, spec.method)
-        response = await inmanta.protocol.rest.execute_call(method_config, spec.body, spec.headers)
+        response = await rest.execute_call(self._server._transport, method_config, spec.body, spec.headers)
         return common.typed_process_response(method_properties, common.Result(code=response.status_code, result=response.body))
