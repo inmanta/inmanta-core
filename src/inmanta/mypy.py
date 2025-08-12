@@ -65,13 +65,6 @@ class ClientMethodsPlugin(Plugin):
             return None
 
         def hook(ctx: AttributeContext) -> types.CallableType:
-            drop_arg_index: Optional[int] = (
-                # SessionClient injects sid => drop it from the signature offered to callers
-                next((i for i, arg_name in enumerate(method.arg_names) if arg_name == "sid"), None)
-                if fullname.startswith("inmanta.protocol.endpoints.SessionClient.")
-                else None
-            )
-
             # unwrap ReturnValue[T]
             default_return_type_flattened: types.Type = (
                 method.ret_type.args[0]
@@ -107,16 +100,7 @@ class ClientMethodsPlugin(Plugin):
             def drop[T](s: Sequence[T], i: int) -> list[T]:
                 return [*s[:i], *s[i + 1:]]
 
-            return (
-                method.copy_modified(ret_type=return_type)
-                if drop_arg_index is None
-                else method.copy_modified(
-                    arg_types=drop(method.arg_types, drop_arg_index),
-                    arg_kinds=drop(method.arg_kinds, drop_arg_index),
-                    arg_names=drop(method.arg_names, drop_arg_index),
-                    ret_type=return_type,
-                )
-            )
+            return method.copy_modified(ret_type=return_type)
 
         return hook
 

@@ -1219,6 +1219,7 @@ class Result(Generic[R]):
                 else exception()
             )
 
+        # TODO: this will not work with non-typed methods!!!
         # typed methods always require an envelope key
         if self.result is None or self.method_properties.envelope_key not in self.result:
             # TODO: better message

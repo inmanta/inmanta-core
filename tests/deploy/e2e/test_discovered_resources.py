@@ -309,13 +309,13 @@ async def test_discovery_resource_bad_res_id(server, client, agent, environment)
     assert expected_error_message in result.result["message"]
 
     # Check that the discovered_resource_create endpoint requires the discovery_resource_id to be provided
-    with pytest.raises(TypeError) as e:
-        result = await agent._client.discovered_resource_create(
-            tid=environment,
-            discovered_resource_id="invalid_rid",
-            values={"value1": "test1", "value2": "test2"},
-        )
-    assert "discovered_resource_create() missing 1 required positional argument: 'discovery_resource_id'" in e.value.args
+    result = await agent._client.discovered_resource_create(
+        tid=environment,
+        discovered_resource_id="invalid_rid",
+        values={"value1": "test1", "value2": "test2"},
+    )
+    assert result.code == 400
+    assert "Invalid request: Field 'discovery_resource_id' is required." in result.result["message"]
 
     result = await agent._client.discovered_resource_create(
         tid=environment,

@@ -225,6 +225,7 @@ class SessionEndpoint(Endpoint, CallTarget):
             while True:
                 LOGGER.log(3, "sending heartbeat for %s", str(self.sessionid))
                 result = await self._heartbeat_client.heartbeat(
+                    sid=self.sessionid,
                     tid=self._env_id,
                     endpoint_names=list(self.end_point_names),
                     nodename=self.node_name,
@@ -277,7 +278,9 @@ class SessionEndpoint(Endpoint, CallTarget):
             LOGGER.error(msg)
             # if reply_id is none, we don't send the reply
             if method_call.reply_id is not None:
-                await self._client.heartbeat_reply(method_call.reply_id, {"result": msg, "code": 500})
+                await self._client.heartbeat_reply(
+                    sid=self.sessionid, reply_id=method_call.reply_id, data={"result": msg, "code": 500}
+                )
             return
 
         body = method_call.body or {}
@@ -313,7 +316,7 @@ class SessionEndpoint(Endpoint, CallTarget):
         # if reply is is none, we don't send the reply
         if method_call.reply_id is not None:
             await self._client.heartbeat_reply(
-                method_call.reply_id, {"result": response.body, "code": response.status_code}
+                sid=self.sessionid, reply_id=method_call.reply_id, data={"result": response.body, "code": response.status_code}
             )
 
 
