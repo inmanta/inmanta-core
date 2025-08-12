@@ -443,7 +443,7 @@ class SyncClient:
 
     def __getattr__(self, name: str) -> Callable[..., common.Result]:
         async_method = getattr(self._client, name)
-        return lambda *args, **kwargs: async_method(*args, **kwargs).sync()
+        return lambda *args, **kwargs: async_method(*args, **kwargs).sync(timeout=self.timeout, ioloop=self._ioloop)
 
 
 class SessionClient(Client):
