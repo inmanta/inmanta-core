@@ -476,11 +476,19 @@ class TypedClient(Client):
     A client that returns typed data instead of JSON. Deprecated in favor of ClientCall/Result.value().
     """
 
-    def __init__(self, *args, **kwargs) -> None:
+    def __init__(
+        self,
+        name: str,
+        timeout: int = 120,
+        version_match: VersionMatch = VersionMatch.lowest,
+        exact_version: int = 0,
+        with_rest_client: bool = True,
+        force_instance: bool = False,
+    ) -> None:
         LOGGER.warning(
             "The TypedClient has been deprecated. Please use the normal client as `client.method_call().value()` instead"
         )
-        super().__init__(*args, **kwargs)
+        super().__init__(name, timeout, version_match, exact_version, with_rest_client, force_instance)
 
     def __getattr__(self, name: str) -> Callable[..., Awaitable[types.ReturnTypes]]:
         call: Callable[..., common.ClientCall] = super().__getattr__(name)

@@ -111,7 +111,6 @@ type StrictJson = dict[str, StrictJson] | list[StrictJson] | str | int | float |
 
 type StrMapping[T] = Mapping[str, T] | Mapping[ResourceIdStr, T] | Mapping[ResourceVersionIdStr, T]
 
-# TODO: this PR changed mapping values from SimpleTypes to ArgumentTypes. Why? Was it just inaccurate?
 type SinglePageTypes = SimpleTypes | StrMapping[ArgumentTypes]
 # only simple types allowed within list args, not dicts or lists.
 # Typed as Sequence for necessity (covariance), though runtime checks and method overloads require list in practice.

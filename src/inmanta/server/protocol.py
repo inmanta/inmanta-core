@@ -864,9 +864,12 @@ class SessionManager(ServerSlice):
             return 500
 
 
-# TODO: consider how to evolve this one if TypedClient is deprecated
+# TODO: consider how to evolve this one if TypedClient is deprecated. Ideally, this would become untyped, but that's breaking.
+#       Is it used anywhere???
 class LocalClient(TypedClient):
-    """A client that calls methods async on the server in the same process"""
+    """
+    A client that calls methods async on the server in the same process.
+    """
 
     def __init__(self, name: str, server: Server) -> None:
         super().__init__(name, with_rest_client=False)
