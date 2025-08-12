@@ -4871,7 +4871,8 @@ class ResourceSet(BaseDocument):
         environment: uuid.UUID,
         version: int,
         updated_resource_sets: set[str | None],
-        connection: Optional[asyncpg.connection.Connection] = None,
+        *,
+        connection: asyncpg.connection.Connection,
     ) -> None:
         """
         Checks for duplicates in the target version.
@@ -4930,8 +4931,9 @@ class ResourceSet(BaseDocument):
         target_version: int,
         updated_resources: list[m.Resource],
         base_version: Optional[int] = None,
-        deleted_resource_sets: Optional[set[str]] = None,
-        connection: Optional[asyncpg.connection.Connection] = None,
+        deleted_resource_sets: Optional[abc.Set[str]] = None,
+        *,
+        connection: asyncpg.connection.Connection,
     ) -> None:
         """
         Inserts resources and resource sets.
@@ -4943,7 +4945,8 @@ class ResourceSet(BaseDocument):
             - Every resource set in the base version except:
                 - Resource sets we want to delete
                 - Resource sets with the same name as one of the updated resource sets (they are now outdated)
-        This method expects the full set of resources for any resource set present in updated_resource_sets.
+        If a resource from a specific resource set is present in updated_resources, all other resources from that resource
+        set are expected to be present as well.
         The shared resource set is treated as any other.
         :param environment: The environment of these resources.
         :param target_version: The version which we want to link the resource sets to
@@ -4990,10 +4993,7 @@ class ResourceSet(BaseDocument):
         """
 
         resource_set_records = await cls._fetch_query(
-            insert_resource_sets,
-            environment,
-            updated_resource_sets,
-            connection=connection,
+            insert_resource_sets, environment, updated_resource_sets, connection=connection
         )
 
         # Data to insert into the database
@@ -5001,11 +5001,59 @@ class ResourceSet(BaseDocument):
         # Ids of the resource sets we inserted
         inserted_resource_set_ids = []
         # Names of the resource sets we do not want to bump in case of a partial compile (outdated and deleted sets)
-        resource_set_names_not_to_bump = deleted_resource_sets if deleted_resource_sets else set()
+        resource_set_names_not_to_bump = set(deleted_resource_sets) if deleted_resource_sets else set()
         for resource_set in resource_set_records:
             resource_set_data.append({"id": str(resource_set["id"]), "name": resource_set["name"]})
             resource_set_names_not_to_bump.add(resource_set["name"])
             inserted_resource_set_ids.append(str(resource_set["id"]))
+
+        values = [environment, target_version, inserted_resource_set_ids]
+
+        if is_partial_update:
+            resource_sets_to_bump = """
+                   -- select the ids of each resource set of the base version that is NOT deleted or updated --
+                   UNION SELECT rscm.resource_set_id
+                   FROM public.resource_set_configuration_model AS rscm
+                   INNER JOIN public.resource_set AS rs
+                       ON rscm.environment=rs.environment
+                       AND rscm.resource_set_id=rs.id
+                   WHERE rscm.environment=$1
+                       AND rscm.model=$4
+                       AND NOT EXISTS (
+                           -- extra hoop to make comparison with null names --
+                             SELECT 1
+                             FROM UNNEST($5::text[]) AS resource_set_names_not_to_bump(name)
+                             WHERE resource_set_names_not_to_bump.name IS NOT DISTINCT FROM rs.name
+                           )
+                   """
+            values.extend([base_version, resource_set_names_not_to_bump])
+        else:
+            resource_sets_to_bump = ""
+
+        query_link_to_model = f"""
+                   -- resource set ids to include in new version of the model --
+                   WITH resource_set_ids_in_latest_version (id) AS (
+                       SELECT * FROM UNNEST($3::uuid[])
+                       {resource_sets_to_bump}
+                   )
+                   -- link resource sets to this new version of the model --
+                   INSERT INTO public.resource_set_configuration_model(
+                       environment,
+                       model,
+                       resource_set_id
+                   )
+                   SELECT
+                       $1,
+                       $2,
+                       rslv.id
+                   FROM resource_set_ids_in_latest_version AS rslv
+               """
+
+        await cls._execute_query(
+            query_link_to_model,
+            *values,
+            connection=connection,
+        )
 
         insert_resources = """
             WITH resource_data AS (
@@ -5019,13 +5067,6 @@ class ResourceSet(BaseDocument):
                     resource_id_value text,
                     is_undefined boolean,
                     resource_set text
-                )
-            ),
-            resource_set_data AS (
-                SELECT *
-                FROM jsonb_to_recordset($4::jsonb) AS rs(
-                    id uuid,
-                    name text
                 )
             )
             INSERT INTO public.resource(
@@ -5054,8 +5095,12 @@ class ResourceSet(BaseDocument):
                 rs.name,
                 rs.id
             FROM resource_data AS r
-            INNER JOIN resource_set_data  AS rs
+            INNER JOIN public.resource_set AS rs
                 ON r.resource_set IS NOT DISTINCT FROM rs.name
+            INNER JOIN public.resource_set_configuration_model AS rscm
+                ON rs.environment=rscm.environment
+                AND rs.id=rscm.resource_set_id
+            WHERE rscm.model=$2
         """
 
         await cls._execute_query(
@@ -5063,57 +5108,9 @@ class ResourceSet(BaseDocument):
             environment,
             target_version,
             json.dumps(resource_data),
-            json.dumps(resource_set_data),
             connection=connection,
         )
 
-        values = [environment, target_version, inserted_resource_set_ids]
-
-        if is_partial_update:
-            resource_sets_to_bump = """
-            -- select the ids of each resource set of the base version that is NOT deleted or updated --
-            UNION SELECT rscm.resource_set_id
-            FROM public.resource_set_configuration_model AS rscm
-            INNER JOIN public.resource_set AS rs
-                ON rscm.environment=rs.environment
-                AND rscm.resource_set_id=rs.id
-            WHERE rscm.environment=$1
-                AND rscm.model=$4
-                AND NOT EXISTS (
-                    -- extra hoop to make comparison with null names --
-                      SELECT 1
-                      FROM UNNEST($5::text[]) AS resource_set_names_not_to_bump(name)
-                      WHERE resource_set_names_not_to_bump.name IS NOT DISTINCT FROM rs.name
-                    )
-            """
-            values.extend([base_version, resource_set_names_not_to_bump])
-        else:
-            resource_sets_to_bump = ""
-
-        query_link_to_model = f"""
-            -- resource set ids to include in new version of the model --
-            WITH resource_set_ids_in_latest_version (id) AS (
-                SELECT * FROM UNNEST($3::uuid[])
-                {resource_sets_to_bump}
-            )
-            -- link resource sets to this new version of the model --
-            INSERT INTO public.resource_set_configuration_model(
-                environment,
-                model,
-                resource_set_id
-            )
-            SELECT
-                $1,
-                $2,
-                rslv.id
-            FROM resource_set_ids_in_latest_version AS rslv
-        """
-
-        await cls._execute_query(
-            query_link_to_model,
-            *values,
-            connection=connection,
-        )
         if is_partial_update:
             await cls.validate_resource_sets_in_version(
                 environment=environment,
