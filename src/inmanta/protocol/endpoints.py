@@ -471,9 +471,16 @@ class SessionClient(Client):
         return super().__getattr__(name)
 
 
-# TODO: deprecate
 class TypedClient(Client):
-    """A client that returns typed data instead of JSON"""
+    """
+    A client that returns typed data instead of JSON. Deprecated in favor of ClientCall/Result.value().
+    """
+
+    def __init__(self, *args, **kwargs) -> None:
+        LOGGER.warning(
+            "The TypedClient has been deprecated. Please use the normal client as `client.method_call().value()` instead"
+        )
+        super().__init__(*args, **kwargs)
 
     def __getattr__(self, name: str) -> Callable[..., Awaitable[types.ReturnTypes]]:
         call: Callable[..., common.ClientCall] = super().__getattr__(name)

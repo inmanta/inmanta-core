@@ -610,7 +610,6 @@ class MethodProperties(Generic[R]):
             raise InvalidMethodDefinition(f"token_param ({self.token_param}) is missing in parameters of method.")
 
         if not typed:
-            # TODO: consider this. Any or object? Where / how is this used?
             self._return_type = typing.Any  # type: ignore
             return
 
@@ -1196,11 +1195,12 @@ class Result(Generic[R]):
         """
         self._callback = fnc
 
-    # TODO: process warnings?
+    # TODO: process warnings. data["metadata"]["warnings"]? Add test!
     def value(self) -> R:
-        # TODO: docstring
         """
-        Returns the value wrapped in this result, parsed as the type declared by the method. Only works for typed methods.
+        Returns the value wrapped in this result, parsed as the method's return type. Only works for typed methods.
+        If paged, returns only the values for the page represented by this result. To get all results, see `all()`.
+
         Converts return codes to http exceptions where appliccable.
 
         :raises BaseHttpException: when return code is not 200
@@ -1311,13 +1311,15 @@ class PageableResult(Result[list[V]], Generic[V]):
 
 
 class ClientCall(Awaitable[Result[R]]):
-    # TODO: docstring
-    def __init__(self, result: Awaitable[Result[R]], *, properties: MethodProperties[R]) -> None:
-        # TODO: consider use cases. Do we need to cache first page? If not, add exception when used twice?
-        self._first_result: Awaitable[Result[R]] = result
-        self._properties: MethodProperties[R] = properties
+    """
+    Result of a client method call. Can be awaited to get a Result, and offers helper methods to access the value wrapped in
+    that result so that helper methods can be simply chained on the client method call, rather than to have to nest awaits.
 
-    # TODO: name + docstring
+    This is a stateful, intermediate object, and it is not meant to be stored for calling multiple methods on it.
+    """
+    def __init__(self, result: Awaitable[Result[R]]) -> None:
+        self._first_result: Awaitable[Result[R]] = result
+
     @typing.overload
     @staticmethod
     def create[V: types.SimpleTypes](
@@ -1328,20 +1330,24 @@ class ClientCall(Awaitable[Result[R]]):
     def create[T: types.ReturnTypes](result: Awaitable[Result[T]], *, properties: MethodProperties[T]) -> "ClientCall[T]": ...
     @staticmethod
     def create[T: types.ReturnTypes](result: Awaitable[Result[T]], *, properties: MethodProperties[T]) -> "ClientCall[T]":
+        """
+        Creates a ClientCall object from a result awaitable. Determines whether to create a plain or a pageable client call
+        instance based on the associated method properties object.
+        """
         return (
-            PageableClientCall(
-                result, properties=properties  # type: ignore
-            )
+            PageableClientCall(result)  # type: ignore
             if properties.is_pageable()
-            else ClientCall(result, properties=properties)
+            else ClientCall(result)
         )
 
     async def value(self) -> R:
         """
-        Returns the client call's result value for a single page (if paged). Returns the value as returned by the API method,
-        without wrapping it in a `Result` object.
+        Returns the value wrapped in this result, parsed as the method's return type. Only works for typed methods.
+        If paged, returns only the values for the page represented by this result. To get all results, see `all()`.
 
-        Verifies return code and validates result type.
+        Converts return codes to http exceptions where appliccable.
+
+        :raises BaseHttpException: when return code is not 200
         """
         return (await self).value()
 
