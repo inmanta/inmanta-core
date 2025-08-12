@@ -473,7 +473,6 @@ async def test_session_creation_fails(server, environment, async_finalizer, capl
     assert len(agentmanager.sessions) == 0
 
     a = NullAgent(environment=environment)
-    await a.add_end_point_name("agent1")
     async_finalizer(a.stop)
     await a.start()
 
@@ -506,7 +505,6 @@ async def test_session_creation_fails(server, environment, async_finalizer, capl
     caplog.clear()
 
     a = NullAgent(environment=environment)
-    await a.add_end_point_name("agent1")
     await a.start()
     async_finalizer(a.stop)
 
@@ -662,7 +660,6 @@ async def test_exception_occurs_while_processing_session_action(server, environm
 
     # Start agent
     a = NullAgent(environment=environment)
-    await a.add_end_point_name("agent1")
     await a.start()
     async_finalizer(a.stop)
 
@@ -676,7 +673,6 @@ async def test_exception_occurs_while_processing_session_action(server, environm
 
     # Start new agent
     a = NullAgent(environment=environment)
-    await a.add_end_point_name("agent1")
     await a.start()
     async_finalizer(a.stop)
 
@@ -722,7 +718,6 @@ async def test_are_agents_active(server, client, environment, async_finalizer) -
     # Start agent
     await agentmanager.ensure_agent_registered(env, agent_name)
     a = NullAgent(environment=environment)
-    await a.add_end_point_name("agent1")
     async_finalizer(a.stop)
     await a.start()
 
@@ -805,7 +800,6 @@ async def test_heartbeat_different_session(server_pre_start, async_finalizer, ca
     agent_manager = ibl.restserver.get_slice(SLICE_AGENT_MANAGER)
 
     a = NullAgent(environment=environment.id)
-    await a.add_end_point_name("agent1")
 
     async_finalizer.add(a.stop)
     await a.start()

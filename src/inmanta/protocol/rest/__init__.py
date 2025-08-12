@@ -24,6 +24,7 @@ import logging
 import re
 from collections.abc import Mapping
 from typing import Any, AnyStr, Optional, Type, cast
+from urllib import parse
 
 import pydantic
 import typing_inspect

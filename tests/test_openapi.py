@@ -31,7 +31,7 @@ from pydantic.networks import AnyHttpUrl, AnyUrl, PostgresDsn
 from inmanta.const import ClientType, CoreAuthorizationLabel, ResourceAction
 from inmanta.data import model
 from inmanta.data.model import EnvironmentSetting
-from inmanta.protocol import method, exceptions
+from inmanta.protocol import exceptions, method
 from inmanta.protocol.auth.decorators import auth
 from inmanta.protocol.common import ArgOption, MethodProperties, UrlMethod
 from inmanta.protocol.openapi.converter import (

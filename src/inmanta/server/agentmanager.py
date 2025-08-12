@@ -54,7 +54,6 @@ from inmanta.server import (
     SLICE_DATABASE,
     SLICE_ENVIRONMENT,
     SLICE_SERVER,
-    SLICE_SESSION_MANAGER,
     SLICE_TRANSPORT,
 )
 from inmanta.server import config as opt
@@ -112,9 +111,7 @@ class SessionAction:
     A session update to be executed by the AgentManager.
     """
 
-    def __init__(
-        self, action_type: SessionActionType, session: websocket.Session, timestamp: datetime
-    ):
+    def __init__(self, action_type: SessionActionType, session: websocket.Session, timestamp: datetime):
         self.action_type = action_type
         self.session = session
         self.timestamp = timestamp

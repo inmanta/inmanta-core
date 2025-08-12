@@ -74,6 +74,11 @@ class Agent(SessionEndpoint):
         self.working = False
         self._client = self.session.get_client()
 
+    @property
+    def sessionid(self) -> uuid.UUID:
+        assert self._session
+        return self._session.id
+
     async def start(self) -> None:
         self._db_monitor = DatabaseMonitor(
             data.get_connection_pool(),

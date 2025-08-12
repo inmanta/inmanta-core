@@ -31,8 +31,7 @@ from inmanta import const, data
 from inmanta.protocol import method
 from inmanta.protocol.auth.decorators import auth
 from inmanta.protocol.methods import ENV_OPTS
-from inmanta.protocol.websocket import SessionListener
-from inmanta.server import SLICE_SESSION_MANAGER
+from inmanta.protocol.websocket import Session, SessionListener
 from inmanta.server.config import AuthorizationProviderName
 from inmanta.server.protocol import Server, ServerSlice
 from utils import configure_auth, retry_limited
@@ -60,9 +59,9 @@ class SessionSpy(SessionListener, ServerSlice):
     def __init__(self):
         ServerSlice.__init__(self, "sessionspy")
         self.expires = 0
-        self._sessions = []
+        self._sessions: list[Session] = []
 
-    async def new_session(self, session, endpoint_names_snapshot: set[str]):
+    async def session_opened(self, session: Session) -> None:
         self._sessions.append(session)
 
     @protocol.handle(get_status_x)
@@ -76,9 +75,8 @@ class SessionSpy(SessionListener, ServerSlice):
 
         return 200, {"agents": status_list}
 
-    async def expire(self, session, endpoint_names_snapshot: set[str]):
+    async def session_closed(self, session: Session) -> None:
         self._sessions.remove(session)
-        print(session._sid)
         self.expires += 1
 
     def get_sessions(self):
@@ -86,8 +84,8 @@ class SessionSpy(SessionListener, ServerSlice):
 
 
 class Agent(protocol.SessionEndpoint):
-    def __init__(self, name: str, timeout: int = 120, reconnect_delay: int = 5):
-        super().__init__(name, timeout, reconnect_delay)
+    def __init__(self, name: str, environment: uuid.UUID, timeout: int = 120, reconnect_delay: int = 5):
+        super().__init__(name, environment, timeout, reconnect_delay)
         self.reconnect = 0
         self.disconnect = 0
         self.pushes = 0
@@ -134,13 +132,11 @@ async def test_2way_protocol(inmanta_config, server_config, no_tid_check):
     configure_auth(auth=True, ca=False, ssl=False, authorization_provider=AuthorizationProviderName.legacy)
     rs = Server()
     server = SessionSpy()
-    # rs.get_slice(SLICE_SESSION_MANAGER).add_listener(server)
-    # rs.add_slice(server)
+    rs._transport.add_session_listener(server)
+    rs.add_slice(server)
     await rs.start()
 
-    agent = Agent("agent")
-    await agent.add_end_point_name("agent")
-    agent.set_environment(uuid.uuid4())
+    agent = Agent("agent", uuid.uuid4())
     await agent.start()
 
     await retry_limited(lambda: len(server.get_sessions()) == 1, 10)
@@ -188,7 +184,7 @@ async def test_agent_timeout(server_config, no_tid_check, async_finalizer):
 
     rs = Server()
     server = SessionSpy()
-    rs.get_slice(SLICE_SESSION_MANAGER).add_listener(server)
+    rs._transport.add_session_listener(server)
     rs.add_slice(server)
     await rs.start()
     async_finalizer(rs.stop)
@@ -196,9 +192,7 @@ async def test_agent_timeout(server_config, no_tid_check, async_finalizer):
     env = uuid.uuid4()
 
     # agent 1
-    agent = Agent("agent")
-    await agent.add_end_point_name("agent")
-    agent.set_environment(env)
+    agent = Agent("agent", env)
     await agent.start()
     async_finalizer(agent.stop)
 
@@ -208,9 +202,7 @@ async def test_agent_timeout(server_config, no_tid_check, async_finalizer):
     await assert_agent_counter(agent, 1, 0)
 
     # agent 2
-    agent2 = Agent("agent")
-    await agent2.add_end_point_name("agent")
-    agent2.set_environment(env)
+    agent2 = Agent("agent", env)
     await agent2.start()
     async_finalizer(agent2.stop)
 
@@ -246,10 +238,10 @@ async def test_server_timeout(server_config, no_tid_check, async_finalizer):
 
     Config.set("server", "agent-timeout", "1")
 
-    async def start_server():
+    async def start_server() -> tuple[SessionSpy, Server]:
         rs = Server()
         server = SessionSpy()
-        rs.get_slice(SLICE_SESSION_MANAGER).add_listener(server)
+        rs._transport.add_session_listener(server)
         rs.add_slice(server)
         await rs.start()
         async_finalizer(rs.stop)
@@ -260,9 +252,7 @@ async def test_server_timeout(server_config, no_tid_check, async_finalizer):
     env = uuid.uuid4()
 
     # agent 1
-    agent = Agent("agent")
-    await agent.add_end_point_name("agent")
-    agent.set_environment(env)
+    agent = Agent("agent", environment=env)
     await agent.start()
     async_finalizer(agent.stop)
 

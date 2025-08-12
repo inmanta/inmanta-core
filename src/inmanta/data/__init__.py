@@ -3349,12 +3349,7 @@ class Agent(BaseDocument):
     name: str
     last_failover: Optional[datetime.datetime] = None
     paused: bool = False
-    id_primary: Optional[uuid.UUID] = None
     unpause_on_resume: Optional[bool] = None
-
-    @property
-    def primary(self) -> Optional[uuid.UUID]:
-        return self.id_primary
 
     @classmethod
     def get_valid_field_names(cls) -> list[str]:
@@ -3377,8 +3372,9 @@ class Agent(BaseDocument):
     def get_status(self) -> AgentStatus:
         if self.paused:
             return AgentStatus.paused
-        if self.primary is not None:
-            return AgentStatus.up
+        # if self.primary is not None:
+        return AgentStatus.up
+        # TODO: fix
         return AgentStatus.down
 
     def to_dict(self) -> JsonType:
@@ -3392,13 +3388,6 @@ class Agent(BaseDocument):
         base["state"] = self.get_status().value
 
         return base
-
-    @classmethod
-    def _convert_field_names_to_db_column_names(cls, field_dict: dict[str, object]) -> dict[str, object]:
-        if "primary" in field_dict:
-            field_dict["id_primary"] = field_dict["primary"]
-            del field_dict["primary"]
-        return field_dict
 
     @classmethod
     async def get(
@@ -3492,39 +3481,6 @@ class Agent(BaseDocument):
             query = f"UPDATE {cls.table_name()} SET unpause_on_resume=$1 WHERE environment=$2 AND name=$3"
             values = [cls._get_value(should_be_unpaused_on_resume), cls._get_value(env), cls._get_value(endpoint)]
         await cls._execute_query(query, *values, connection=connection)
-
-    @classmethod
-    async def update_primary(
-        cls,
-        env: uuid.UUID,
-        endpoints_with_new_primary: Sequence[tuple[str, Optional[uuid.UUID]]],
-        now: datetime.datetime,
-        connection: Optional[asyncpg.connection.Connection] = None,
-    ) -> None:
-        """
-        Update the primary agent instance for agents present in the database.
-
-        :param env: The environment of the agent
-        :param endpoints_with_new_primary: Contains a tuple (agent-name, sid) for each agent that has got a new
-                                           primary agent instance. The sid in the tuple is the session id of the new
-                                           primary. If the session id is None, the Agent doesn't have a primary anymore.
-        :param now: Timestamp of this failover
-        """
-        for endpoint, sid in endpoints_with_new_primary:
-            # Lock mode is required because we will update in this transaction
-            # Deadlocks with cleanup otherwise
-            agent = await cls.get(env, endpoint, connection=connection, lock=RowLockMode.FOR_NO_KEY_UPDATE)
-            if agent is None:
-                continue
-
-            if sid is None:
-                await agent.update_fields(last_failover=now, primary=None, connection=connection)
-            else:
-                instances = await AgentInstance.active_for(tid=env, endpoint=agent.name, process=sid, connection=connection)
-                if instances:
-                    await agent.update_fields(last_failover=now, id_primary=instances[0].id, connection=connection)
-                else:
-                    await agent.update_fields(last_failover=now, id_primary=None, connection=connection)
 
     @classmethod
     async def clean_up(cls, connection: Optional[asyncpg.connection.Connection] = None) -> None:

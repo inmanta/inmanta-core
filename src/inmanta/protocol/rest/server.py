@@ -34,7 +34,7 @@ from inmanta import config as inmanta_config
 from inmanta import const, tracing
 from inmanta.protocol import common, endpoints, exceptions, websocket
 from inmanta.protocol.auth import providers
-from inmanta.protocol.rest import RESTBase, execute_call, AuthnzInterface
+from inmanta.protocol.rest import AuthnzInterface, RESTBase, execute_call
 from inmanta.server import config as server_config
 from inmanta.server.config import server_access_control_allow_origin, server_enable_auth, server_tz_aware_timestamps
 from inmanta.types import ReturnTypes
