@@ -1,0 +1,6 @@
+---
+description: "Change Resource.to_dto() to no longer include the version field in the attributes"
+change-type: patch
+destination-branches: [master]
+sections:
+    deprecation-note: "{{description}}"

@@ -5529,11 +5529,6 @@ class Resource(BaseDocument):
             version = self.model
             attributes["requires"] = [resources.Id.set_version_in_id(id, version) for id in self.attributes["requires"]]
 
-        # Due to a bug, the version field has always been present in the attributes dictionary.
-        # This bug has been fixed in the database. For backwards compatibility reason we here make sure that the
-        # version field is present in the attributes dictionary served out via the API.
-        attributes["version"] = self.model
-
         return m.Resource(
             environment=self.environment,
             model=self.model,
