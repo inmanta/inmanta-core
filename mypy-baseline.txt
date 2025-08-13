@@ -348,7 +348,6 @@ src/inmanta/data/__init__.py:0: error: Item "None" of "RowLockMode | None" has n
 src/inmanta/data/__init__.py:0: error: Key expression in dictionary comprehension has incompatible type "object"; expected type "ResourceIdStr"  [misc]
 src/inmanta/data/__init__.py:0: error: Key expression in dictionary comprehension has incompatible type "object"; expected type "ResourceIdStr"  [misc]
 src/inmanta/data/__init__.py:0: error: Key expression in dictionary comprehension has incompatible type "object"; expected type "ResourceIdStr"  [misc]
-src/inmanta/data/__init__.py:0: error: Key expression in dictionary comprehension has incompatible type "str"; expected type "ResourceIdStr"  [misc]
 src/inmanta/data/__init__.py:0: error: List comprehension has incompatible type List[object]; expected List[str]  [misc]
 src/inmanta/data/__init__.py:0: error: List comprehension has incompatible type List[object]; expected List[str]  [misc]
 src/inmanta/data/__init__.py:0: error: List item 0 has incompatible type "object"; expected "str"  [list-item]
