@@ -5469,7 +5469,7 @@ class Resource(BaseDocument):
                     ON rscm.environment=r.environment
                     AND rscm.resource_set_id=r.resource_set_id
                 WHERE rscm.environment=$1 AND rscm.model=$2
-                {'AND rs.agent=$3' if agent else ''}
+                {'AND r.agent=$3' if agent else ''}
         """
         resources_list: Union[list[Resource], list[dict[str, object]]] = []
         async with cls.get_connection(connection) as con:
@@ -5596,9 +5596,12 @@ class Resource(BaseDocument):
 
         query = f"""
         SELECT {collect_projection(projection, 'r')}, {collect_projection(projection_persistent, 'rps')} {json_projection}
-        FROM {cls.table_name()} r JOIN resource_persistent_state rps
-                                    ON r.environment=rps.environment AND r.resource_id = rps.resource_id
-        WHERE r.environment=$1 AND r.model = $2;
+        FROM {cls.table_name()} AS r
+        JOIN resource_persistent_state AS rps
+            ON r.environment=rps.environment AND r.resource_id = rps.resource_id
+        JOIN resource_set_configuration_model AS rscm
+            ON r.environment=rscm.environment AND r.resource_set_id=rscm.resource_set_id
+        WHERE r.environment=$1 AND rscm.model = $2;
         """
         resource_records = await cls._fetch_query(query, environment, version, connection=connection)
         resources = [dict(record) for record in resource_records]
@@ -5684,26 +5687,43 @@ class Resource(BaseDocument):
     ) -> Optional[m.ReleasedResourceDetails]:
 
         query = f"""
-        SELECT DISTINCT ON (resource_id) first.resource_id, cm.date as first_generated_time,
-        first.model as first_model, latest.model AS latest_model, latest.resource_id as latest_resource_id,
-        latest.resource_type, latest.agent, latest.resource_id_value, rps.last_deploy as latest_deploy, latest.attributes,
-        {const.SQL_RESOURCE_STATUS_SELECTOR} AS status
+        SELECT DISTINCT ON (resource_id)
+            first.resource_id,
+            cm.date as first_generated_time,
+            first.model as first_model,
+            latest.model AS latest_model,
+            latest.resource_id as latest_resource_id,
+            latest.resource_type,
+            latest.agent,
+            latest.resource_id_value
+            rps.last_deploy as latest_deploy,
+            latest.attributes,
+            {const.SQL_RESOURCE_STATUS_SELECTOR} AS status
         FROM resource first
         INNER JOIN
             /* 'latest' is the latest released version of the resource */
-            (SELECT distinct on (resource_id) resource_id, attribute_hash, model, attributes,
-                resource_type, agent, resource_id_value
-                FROM resource
-                JOIN configurationmodel cm ON resource.model = cm.version AND resource.environment = cm.environment
-                WHERE resource.environment = $1 AND resource_id = $2 AND cm.released = TRUE
-                ORDER BY resource_id, model desc
+            (SELECT distinct on (resource_id)
+                resource_id,
+                attribute_hash,
+                model,
+                attributes,
+                resource_type,
+                agent,
+                resource_id_value
+            FROM resource
+            JOIN configurationmodel cm
+                ON resource.model=cm.version AND resource.environment=cm.environment
+            WHERE resource.environment=$1 AND resource_id=$2 AND cm.released=TRUE
+            ORDER BY resource_id, model desc
             ) as latest
         /* The 'first' values correspond to the first time the attribute hash was the same as in
             the 'latest' released version */
-        ON first.resource_id = latest.resource_id AND first.attribute_hash = latest.attribute_hash
-        INNER JOIN configurationmodel cm ON first.model = cm.version AND first.environment = cm.environment
-        INNER JOIN resource_persistent_state rps on rps.resource_id = first.resource_id AND first.environment = rps.environment
-        WHERE first.environment = $1 AND first.resource_id = $2 AND cm.released = TRUE
+            ON first.resource_id = latest.resource_id AND first.attribute_hash = latest.attribute_hash
+        INNER JOIN configurationmodel cm
+            ON first.model=cm.version AND first.environment=cm.environment
+        INNER JOIN resource_persistent_state rps
+            ON rps.resource_id=first.resource_id AND first.environment=rps.environment
+        WHERE first.environment=$1 AND first.resource_id=$2 AND cm.released=TRUE
         ORDER BY first.resource_id, first.model asc;
         """
         values = [cls._get_value(env), cls._get_value(resource_id)]
@@ -5753,9 +5773,18 @@ class Resource(BaseDocument):
     async def get_versioned_resource_details(
         cls, environment: uuid.UUID, version: int, resource_id: ResourceIdStr
     ) -> Optional[m.VersionedResourceDetails]:
-        resource = await cls.get_one(environment=environment, model=version, resource_id=resource_id)
-        if not resource:
+        query = f"""
+            SELECT r.*
+            FROM {cls.table_name()} AS r
+            INNER JOIN resource_set_configuration_model AS rscm
+                ON r.environment=rscm.environment AND r.resource_set_id=rscm.resource_set_id
+            WHERE rscm.environment=$1 AND rscm.model=$2 AND r.resource_id=$3
+        """
+
+        result = await cls._fetch_query(query, environment, version, resource_id)
+        if not result:
             return None
+        resource = cls(from_postgres=True, **result[0])
         parsed_id = resources.Id.parse_id(resource.resource_id)
         parsed_id.set_version(resource.model)
         return m.VersionedResourceDetails(
