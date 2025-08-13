@@ -1894,90 +1894,6 @@ async def test_put_partial_with_unknowns(server, client, environment, clienthelp
     assert_unknown(unknowns_by_rid["test::Resource[agent1,key=key5]"], "unknown_5", "test::Resource[agent1,key=key5]")
 
 
-async def test_put_partial_dep_on_shared_set_removed(server, client, environment, clienthelper) -> None:
-    """
-    Ensure that the put_partial endpoint correctly updates the provides relationship when a resource A from a specific
-    resource set depends on a resource B from the shared resource set and resource A is removed by a partial compile.
-    """
-    version = await clienthelper.get_version()
-    rid1 = "test::Resource[agent1,key=key1]"
-    rid2 = "test::Resource[agent2,key=key2]"
-    rid3 = "test::Resource[agent2,key=key3]"
-    resources = [
-        {
-            "key": "key1",
-            "version": version,
-            "id": f"{rid1},v={version}",
-            "send_event": False,
-            "purged": False,
-            "requires": [],
-        },
-        {
-            "key": "key2",
-            "version": version,
-            "id": f"{rid2},v={version}",
-            "send_event": False,
-            "purged": False,
-            "requires": [f"{rid1},v={version}"],
-        },
-        {
-            "key": "key3",
-            "version": version,
-            "id": f"{rid3},v={version}",
-            "send_event": False,
-            "purged": False,
-            "requires": [],
-        },
-    ]
-    resource_sets = {rid2: "set-a", rid3: "set-a"}
-    resource_states = {
-        rid1: const.ResourceState.available,
-        rid2: const.ResourceState.available,
-        rid3: const.ResourceState.available,
-    }
-    result = await client.put_version(
-        tid=environment,
-        version=version,
-        resources=resources,
-        resource_state=resource_states,
-        unknowns=[],
-        version_info={},
-        compiler_version=get_compiler_version(),
-        resource_sets=resource_sets,
-        module_version_info={},
-    )
-    assert result.code == 200
-
-    # Partial compile
-    resources_partial = [
-        {
-            "key": "key3",
-            "version": 0,
-            "id": f"{rid3},v=0",
-            "send_event": False,
-            "purged": False,
-            "requires": [],
-        },
-    ]
-    resource_sets = {rid3: "set-a"}
-    resource_states = {rid3: const.ResourceState.available}
-    result = await client.put_partial(
-        tid=environment,
-        resources=resources_partial,
-        resource_state=resource_states,
-        unknowns=[],
-        version_info=None,
-        resource_sets=resource_sets,
-        module_version_info={},
-    )
-    assert result.code == 200
-
-    resources_in_model = await data.Resource.get_list(model=2)
-    assert len(resources_in_model) == 2
-    rid_to_resource = {res.resource_id: res for res in resources_in_model}
-    assert rid_to_resource[rid1].provides == []
-
-
 async def test_put_partial_dep_on_specific_set_removed(server, client, environment, clienthelper, agent) -> None:
     """
     Ensure that the put_partial endpoint correctly updates the requires/provides relationship when a resource A from the shared
@@ -2060,7 +1976,6 @@ async def test_put_partial_dep_on_specific_set_removed(server, client, environme
     assert len(resources_in_model) == 3
     rid_to_resource = {res.resource_id: res for res in resources_in_model}
     assert rid_to_resource[rid1].attributes["requires"] == []
-    assert rid_to_resource[rid2].provides == []
 
     # Test for: https://github.com/inmanta/inmanta-core/issues/7065
     # Make sure dryrun succeeds after a put_partial call

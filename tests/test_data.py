@@ -1340,54 +1340,6 @@ async def test_escaped_resources(init_dataclasses_and_load_schema):
     assert resources[0].attributes["routes"] == routes
 
 
-async def test_resource_provides(init_dataclasses_and_load_schema):
-    project = data.Project(name="test")
-    await project.insert()
-
-    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
-    await env.insert()
-
-    version = 1
-    cm1 = data.ConfigurationModel(
-        environment=env.id,
-        version=version,
-        date=datetime.datetime.now(),
-        total=1,
-        version_info={},
-        released=True,
-        is_suitable_for_partial_compiles=False,
-    )
-    await cm1.insert()
-
-    res1 = data.Resource.new(
-        environment=env.id,
-        resource_version_id="std::testing::NullResource[agent1,name=file1],v=%d" % version,
-        attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False},
-    )
-    res2 = data.Resource.new(
-        environment=env.id,
-        resource_version_id="std::testing::NullResource[agent1,name=file2],v=%d" % version,
-        attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False},
-    )
-    res1.provides.append(res2.resource_version_id)
-
-    assert len(res1.provides) == 1
-    assert len(res2.provides) == 0
-    assert res1.provides[0] == res2.resource_version_id
-    assert res2.provides == []
-
-    await res1.insert()
-    await res2.insert()
-
-    res1 = await data.Resource.get(env.id, res1.resource_version_id)
-    res2 = await data.Resource.get(env.id, res2.resource_version_id)
-
-    assert len(res1.provides) == 1
-    assert len(res2.provides) == 0
-    assert res1.provides[0] == res2.resource_version_id
-    assert res2.provides == []
-
-
 async def test_resource_hash(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()

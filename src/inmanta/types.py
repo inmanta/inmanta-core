@@ -75,10 +75,6 @@ class BaseModel(DateTimeNormalizerModel):
     Base class for all data objects in Inmanta
     """
 
-    # Populate models with the value property of enums, rather than the raw enum.
-    # This is useful to serialise model.dict() later
-    model_config: ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(use_enum_values=True)
-
 
 # kept for backwards compatibility
 StrictNonIntBool = pydantic.StrictBool

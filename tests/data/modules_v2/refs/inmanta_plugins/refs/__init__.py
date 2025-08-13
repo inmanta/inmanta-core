@@ -152,7 +152,7 @@ class DictMade(Reference[str]):
 
 @plugin
 def create_DictRef(value: str | Reference[str]) -> DictMade:
-    return DictMade(name={"name": value})
+    return DictMade(name={"name": [value]})
 
 
 @resource("refs::DeepResource", agent="agentname", id_attribute="name")
@@ -170,7 +170,7 @@ class DeepNoReferences(Deep):
     @classmethod
     def get_value(cls, _, resource) -> dict[str, object | Reference[object]]:
         # same as Deep.get_value but don't declare that references are allowed => test should fail
-        return {"inner.something": resource.value}
+        return {"inner.something": [resource.value]}
 
 
 @resource("refs::DictResource", agent="agentname", id_attribute="name")

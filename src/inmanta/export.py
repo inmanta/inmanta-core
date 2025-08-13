@@ -426,8 +426,10 @@ class Exporter:
 
         resources = self.resources_to_list()
 
+        export_to_json = self.options and self.options.json
+
         # Update the environment settings, mentioned in the project.yml file, on the server.
-        if not self.failed and not no_commit and export_env_var_settings:
+        if not self.failed and not no_commit and export_env_var_settings and not export_to_json:
             result = self.client.protected_environment_settings_set_batch(
                 tid=self._get_env_id(),
                 settings=project.metadata.environment_settings or {},
@@ -442,7 +444,7 @@ class Exporter:
         if len(self._resources) == 0:
             LOGGER.warning("Empty deployment model.")
 
-        if self.options and self.options.json:
+        if export_to_json:
             with open(self.options.json, "wb+") as fd:
                 fd.write(protocol.json_encode(resources).encode("utf-8"))
 
