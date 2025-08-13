@@ -1276,6 +1276,9 @@ class Result(Generic[R]):
 
 
 class PageableResult(Result[list[V]], Generic[V]):
+    """
+    Result for a list value, that offers methods for paging.
+    """
     async def all(self) -> AsyncIterator[V]:
         """
         Returns an async iterator over all values returned by this call. Follows paging links if there are any.
