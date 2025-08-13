@@ -1279,6 +1279,7 @@ class PageableResult(Result[list[V]], Generic[V]):
     """
     Result for a list value, that offers methods for paging.
     """
+
     async def all(self) -> AsyncIterator[V]:
         """
         Returns an async iterator over all values returned by this call. Follows paging links if there are any.
@@ -1328,8 +1329,9 @@ class PageableResult(Result[list[V]], Generic[V]):
 
 class ClientCall(Awaitable[Result[R]]):
     """
-    Result of a client method call. Can be awaited to get a Result, and offers helper methods to access the value wrapped in
-    that result so that helper methods can be simply chained on the client method call, rather than to have to nest awaits.
+    A client method call, pending a result. Can be awaited to get a Result, and offers helper methods to access the value
+    wrapped in that result so that helper methods can be simply chained on the client method call, rather than to have to nest
+    awaits.
 
     This is a stateful, intermediate object, and it is not meant to be stored for calling multiple methods on it.
     """
@@ -1386,6 +1388,10 @@ class ClientCall(Awaitable[Result[R]]):
 
 
 class PageableClientCall(ClientCall[list[V]], Awaitable[PageableResult[V]]):
+    """
+    A client method call for a pageable result.
+    """
+
     def __await__(self) -> types.AsyncioGenerator[PageableResult[V]]:
         async def wrap_pageable() -> PageableResult[V]:
             result: Result[list[V]] = await self._first_result
@@ -1410,7 +1416,7 @@ class SessionManagerInterface:
 
     def validate_sid(self, sid: uuid.UUID) -> bool:
         """
-        check if the given sid is a valid session
+        Check if the given sid is a valid session
         :param sid: The session id
         :return: True if the session is valid
         """

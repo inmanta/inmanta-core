@@ -22,7 +22,7 @@ import builtins
 import datetime
 import uuid
 from collections.abc import Coroutine, Generator, Mapping, Sequence
-from typing import TYPE_CHECKING, Any, Callable, ClassVar, NewType, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable, NewType, Optional, Union
 
 import pydantic
 import typing_inspect
