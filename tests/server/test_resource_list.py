@@ -628,6 +628,20 @@ async def test_client_all_pages(server, client, env_with_resources):
         idx += 1
     assert idx == len(all_resources)
 
+    # all without awaiting Result
+    idx = 0
+    async for item in client.resource_list(tid=env.id, limit=2).all():
+        assert item == all_resources[idx]
+        idx += 1
+    assert idx == len(all_resources)
+
+    # value limited to single page
+    idx = 0
+    for item in await client.resource_list(tid=env.id, limit=2).value():
+        assert item == all_resources[idx]
+        idx += 1
+    assert idx == 2
+
 
 @pytest.mark.parametrize(
     "sort, expected_status",

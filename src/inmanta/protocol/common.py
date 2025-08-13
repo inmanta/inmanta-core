@@ -1198,7 +1198,6 @@ class Result(Generic[R]):
         """
         self._callback = fnc
 
-    # TODO: process warnings. data["metadata"]["warnings"]? Add test!
     def value(self) -> R:
         """
         Returns the value wrapped in this result, parsed as the method's return type. Only works for typed methods.
@@ -1230,11 +1229,19 @@ class Result(Generic[R]):
         if self.result is None or self.method_properties.envelope_key not in self.result:
             raise exceptions.BadRequest("No data was provided in the body. Make sure to only use typed methods.")
 
+        warnings: Optional[object] = self.result.get("metadata", {}).get("warnings", None)
+        if warnings is not None:
+            if not isinstance(warnings, list):
+                raise exceptions.BadRequest("Invalid warnings metadata attached to method response.")
+            for warning in warnings:
+                if not isinstance(warning, str):
+                    raise exceptions.BadRequest("Invalid warnings metadata attached to method response.")
+                LOGGER.warning(warning)
+
         if self.method_properties.return_type is None:
             return None
 
         try:
-            # TODO: test this with method that returns `ReturnValue`
             ta = pydantic.TypeAdapter(self.method_properties.return_type)
         except InvalidMethodDefinition:
             raise exceptions.BadRequest("Typed client can only be used with typed methods.")
@@ -1389,7 +1396,8 @@ class PageableClientCall(ClientCall[list[V]], Awaitable[PageableResult[V]]):
         Values are processed and validated as in `value()`, i.e. iterates over the value as returned by the API method,
         without wrapping in a `Result` object. If there are pages, simply chains results from multiple pages after each other.
         """
-        return (await self).all()
+        async for v in (await self).all():
+            yield v
 
 
 class SessionManagerInterface:
@@ -1399,7 +1407,7 @@ class SessionManagerInterface:
 
     def validate_sid(self, sid: uuid.UUID) -> bool:
         """
-        Check if the given sid is a valid session
+        check if the given sid is a valid session
         :param sid: The session id
         :return: True if the session is valid
         """
