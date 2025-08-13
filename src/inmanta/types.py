@@ -23,10 +23,11 @@ import datetime
 import uuid
 from collections.abc import Coroutine, Generator, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, NewType, Optional, Union
-from inmanta.stable_api import stable_api
 
 import pydantic
 import typing_inspect
+
+from inmanta.stable_api import stable_api
 
 if TYPE_CHECKING:
     # Include imports from other modules here and use the quoted annotation in the definition to prevent import loops

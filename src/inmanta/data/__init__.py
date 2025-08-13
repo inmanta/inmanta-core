@@ -60,7 +60,14 @@ from inmanta.deploy import state
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config
 from inmanta.stable_api import stable_api
-from inmanta.types import JsonType, PrimitiveTypes, ResourceIdStr, ResourceType, ResourceVersionIdStr, api_boundary_datetime_normalizer
+from inmanta.types import (
+    JsonType,
+    PrimitiveTypes,
+    ResourceIdStr,
+    ResourceType,
+    ResourceVersionIdStr,
+    api_boundary_datetime_normalizer,
+)
 from inmanta.util import parse_timestamp
 from sqlalchemy import URL, AdaptedConnection, NullPool
 from sqlalchemy.dialects import registry

@@ -1,60 +1,30 @@
-import packaging.version
+"""
+Copyright 2025 Inmanta
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+Contact: code@inmanta.com
+"""
+
 from collections.abc import Callable, Sequence
-from mypy import nodes, typevars, types
-from mypy.plugin import AttributeContext, Plugin
 from typing import Optional
+
+import packaging.version
+from mypy import nodes, types, typevars
+from mypy.plugin import AttributeContext, Plugin
 
 
 class ClientMethodsPlugin(Plugin):
-    def _get_method(self, fullname: str) -> Optional[types.CallableType]:
-        """
-        If the given fully qualified name is a method access on a client object, returns the type signature object for that
-        method. Returns None otherwise.
-        """
-        client_attr: Optional[str] = next(
-            (
-                name
-                for prefix in (
-                    "inmanta.protocol.endpoints.Client.",
-                    "inmanta.protocol.endpoints.SessionClient.",
-                    "inmanta.protocol.endpoints.SyncClient.",
-                    "inmanta.protocol.endpoints.TypedClient.",
-                )
-                if (name := fullname.removeprefix(prefix)) != fullname
-            ),
-            None,
-        )
-
-        if client_attr is None or "." in client_attr:
-            return None
-
-        # TODO: what about inmanta-lsm methods?
-        node: Optional[nodes.SymbolTableNode] = (
-            self.lookup_fully_qualified(f"inmanta.protocol.methods_v2.{client_attr}")
-            or self.lookup_fully_qualified(f"inmanta.protocol.methods.{client_attr}")
-        )
-
-        if node is None:
-            return None
-
-        result: Optional[types.Type] = node.type
-        if result is None or not isinstance(result, types.CallableType):
-            return None
-
-        return result
-
-    def _get_instance(self, fullname: str) -> Optional[types.Instance]:
-        """
-        Returns a mypy.types.Instance for the given full name, if it exists.
-        """
-        node: Optional[nodes.SymbolTableNode] = self.lookup_fully_qualified(fullname)
-        if node is None or not isinstance(node.node, nodes.TypeInfo):
-            return None
-        generic: types.Instance | types.TupleType = typevars.fill_typevars(node.node)
-        if not isinstance(generic, types.Instance):
-            return None
-        return generic
-
     def get_attribute_hook(self, fullname: str) -> Optional[Callable[[AttributeContext], types.CallableType]]:
         """
         For dynamic method accesses on a client object, return a hook that resolves to the associated method type signature,
@@ -89,7 +59,9 @@ class ClientMethodsPlugin(Plugin):
                 isinstance(default_return_type_flattened, types.Instance)
                 and default_return_type_flattened.type.fullname == "builtins.list"
             ):
-                pageable_client_call: Optional[types.Instance] = self._get_instance("inmanta.protocol.common.PageableClientCall")
+                pageable_client_call: Optional[types.Instance] = self._get_instance(
+                    "inmanta.protocol.common.PageableClientCall"
+                )
                 assert pageable_client_call is not None
                 return_type = pageable_client_call.copy_modified(args=[default_return_type_flattened.args[0]])
             else:
@@ -98,11 +70,59 @@ class ClientMethodsPlugin(Plugin):
                 return_type = client_call.copy_modified(args=[default_return_type_flattened])
 
             def drop[T](s: Sequence[T], i: int) -> list[T]:
-                return [*s[:i], *s[i + 1:]]
+                return [*s[:i], *s[i + 1 :]]
 
             return method.copy_modified(ret_type=return_type)
 
         return hook
+
+    def _get_method(self, fullname: str) -> Optional[types.CallableType]:
+        """
+        If the given fully qualified name is a method access on a client object, returns the type signature object for that
+        method. Returns None otherwise.
+        """
+        client_attr: Optional[str] = next(
+            (
+                name
+                for prefix in (
+                    "inmanta.protocol.endpoints.Client.",
+                    "inmanta.protocol.endpoints.SessionClient.",
+                    "inmanta.protocol.endpoints.SyncClient.",
+                    "inmanta.protocol.endpoints.TypedClient.",
+                )
+                if (name := fullname.removeprefix(prefix)) != fullname
+            ),
+            None,
+        )
+
+        if client_attr is None or "." in client_attr:
+            return None
+
+        # TODO: what about inmanta-lsm methods?
+        node: Optional[nodes.SymbolTableNode] = self.lookup_fully_qualified(
+            f"inmanta.protocol.methods_v2.{client_attr}"
+        ) or self.lookup_fully_qualified(f"inmanta.protocol.methods.{client_attr}")
+
+        if node is None:
+            return None
+
+        result: Optional[types.Type] = node.type
+        if result is None or not isinstance(result, types.CallableType):
+            return None
+
+        return result
+
+    def _get_instance(self, fullname: str) -> Optional[types.Instance]:
+        """
+        Returns a mypy.types.Instance for the given full name, if it exists.
+        """
+        node: Optional[nodes.SymbolTableNode] = self.lookup_fully_qualified(fullname)
+        if node is None or not isinstance(node.node, nodes.TypeInfo):
+            return None
+        generic: types.Instance | types.TupleType = typevars.fill_typevars(node.node)
+        if not isinstance(generic, types.Instance):
+            return None
+        return generic
 
 
 def plugin(version: str) -> type[Plugin]:

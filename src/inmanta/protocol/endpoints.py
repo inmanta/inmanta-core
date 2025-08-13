@@ -20,20 +20,17 @@ import asyncio
 import inspect
 import logging
 import socket
-import typing
 import uuid
-from asyncio import CancelledError, run_coroutine_threadsafe, sleep
+from asyncio import CancelledError, sleep
 from collections import defaultdict
-from collections.abc import Awaitable, Mapping, Sequence
+from collections.abc import Awaitable, Sequence
 from enum import Enum
-from typing import Any, Callable, Optional
+from typing import Callable, Optional
 from urllib import parse
-
-import pydantic
 
 from inmanta import config as inmanta_config
 from inmanta import const, tracing, types, util
-from inmanta.protocol import common, exceptions
+from inmanta.protocol import common
 from inmanta.util import TaskHandler
 
 from .rest import client
@@ -396,9 +393,7 @@ class Client(Endpoint):
 
         def wrap(*args: object, **kwargs: object) -> common.ClientCall:
             assert method
-            return common.ClientCall.create(
-                self._call(method_properties=method, args=args, kwargs=kwargs), properties=method
-            )
+            return common.ClientCall.create(self._call(method_properties=method, args=args, kwargs=kwargs), properties=method)
 
         return wrap
 

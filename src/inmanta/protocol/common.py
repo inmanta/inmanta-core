@@ -27,15 +27,14 @@ import logging
 import re
 import time
 import typing
-import typing_extensions
 import uuid
 from collections import defaultdict
-from collections.abc import Awaitable, AsyncIterator, Callable, Iterable, Mapping, MutableMapping, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Mapping, MutableMapping, Sequence
 from datetime import datetime
 from enum import Enum
 from functools import partial
 from inspect import Parameter
-from typing import TYPE_CHECKING, Any, Generic, Optional, Self, TypeVar, Union, cast, get_type_hints
+from typing import TYPE_CHECKING, Any, Generic, Optional, TypeVar, Union, cast, get_type_hints
 from urllib import parse
 
 import docstring_parser
@@ -46,13 +45,14 @@ from pydantic.main import create_model
 from tornado import web
 from tornado.httpclient import HTTPRequest
 
+import typing_extensions
 from inmanta import const, execute, types, util
 from inmanta.protocol import exceptions
 from inmanta.protocol.auth import auth
 from inmanta.protocol.auth.decorators import AuthorizationMetadata
 from inmanta.protocol.openapi import model as openapi_model
 from inmanta.stable_api import stable_api
-from inmanta.types import ArgumentTypes, BaseModel, DateTimeNormalizerModel, HandlerType, JsonType, MethodType, ReturnTypes
+from inmanta.types import ArgumentTypes, BaseModel, DateTimeNormalizerModel, HandlerType, JsonType, ReturnTypes
 
 if TYPE_CHECKING:
     from inmanta.protocol.rest.client import RESTClient
@@ -716,7 +716,7 @@ class MethodProperties(Generic[R]):
             assert orig is not None  # Make mypy happy
             is_literal_type: bool = typing_inspect.is_literal_type(orig)
 
-            if not is_literal_type and not orig in (list, dict, Sequence, Mapping):
+            if not is_literal_type and orig not in (list, dict, Sequence, Mapping):
                 raise InvalidMethodDefinition(
                     f"Type {arg_type} of argument {arg} can only be generic list / Sequence, dict / Mapping or Literal"
                 )
@@ -1003,10 +1003,13 @@ class MethodProperties(Generic[R]):
 
     @typing.overload
     def is_pageable[T: types.SimpleTypes](self: "MethodProperties[list[T]]") -> typing.Literal[True]: ...
+
     @typing.overload
     def is_pageable(self: "MethodProperties[types.SinglePageTypes]") -> typing.Literal[False]: ...
+
     @typing.overload
     def is_pageable(self) -> bool: ...  # catch-all for unknown parameter types and non-list sequence types
+
     def is_pageable(self) -> bool:
         """
         Returns True iff this is a pageable method, i.e. if its return type is a list.
@@ -1218,7 +1221,7 @@ class Result(Generic[R]):
             exception: type[exceptions.BaseHttpException] = exc_mapping.get(self.code, exceptions.ServerError)
 
             raise (
-                exception(self.code, message=self.result.get("message", None), details=self.result.get("error_details", None))
+                exception(message=self.result.get("message", None), details=self.result.get("error_details", None))
                 if self.result is not None
                 else exception()
             )
@@ -1240,10 +1243,13 @@ class Result(Generic[R]):
 
     @typing.overload
     def pageable[V: types.SimpleTypes](self: "Result[list[V]]") -> "PageableResult[V]": ...
+
     @typing.overload
     def pageable(self: "Result[types.SinglePageTypes]") -> typing.NoReturn: ...
+
     @typing.overload
     def pageable(self) -> object: ...  # catch-all for unknown parameter types and non-list sequence types
+
     def pageable(self) -> object:
         """
         Converts this result to a pageable result, if the result type is pageable.
@@ -1317,6 +1323,7 @@ class ClientCall(Awaitable[Result[R]]):
 
     This is a stateful, intermediate object, and it is not meant to be stored for calling multiple methods on it.
     """
+
     def __init__(self, result: Awaitable[Result[R]]) -> None:
         self._first_result: Awaitable[Result[R]] = result
 
@@ -1325,20 +1332,18 @@ class ClientCall(Awaitable[Result[R]]):
     def create[V: types.SimpleTypes](
         result: Awaitable[Result[list[V]]], *, properties: MethodProperties[list[V]]
     ) -> "PageableClientCall[V]": ...
+
     @typing.overload
     @staticmethod
     def create[T: types.ReturnTypes](result: Awaitable[Result[T]], *, properties: MethodProperties[T]) -> "ClientCall[T]": ...
+
     @staticmethod
     def create[T: types.ReturnTypes](result: Awaitable[Result[T]], *, properties: MethodProperties[T]) -> "ClientCall[T]":
         """
         Creates a ClientCall object from a result awaitable. Determines whether to create a plain or a pageable client call
         instance based on the associated method properties object.
         """
-        return (
-            PageableClientCall(result)  # type: ignore
-            if properties.is_pageable()
-            else ClientCall(result)
-        )
+        return PageableClientCall(result) if properties.is_pageable() else ClientCall(result)  # type: ignore
 
     async def value(self) -> R:
         """

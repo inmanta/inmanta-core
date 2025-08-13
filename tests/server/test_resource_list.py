@@ -617,9 +617,7 @@ async def test_none_resources_paging(server, client, env_with_resources):
 
 async def test_client_all_pages(server, client, env_with_resources):
     env = env_with_resources
-    result = await client.resource_list(tid=env.id)
-    assert result.code == 200
-    all_resources = result.result["data"]
+    all_resources = await client.resource_list(tid=env.id).value()
     assert len(all_resources) == 6
 
     result = await client.resource_list(tid=env.id, limit=2)

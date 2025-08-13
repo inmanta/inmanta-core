@@ -20,7 +20,7 @@ import logging
 import re
 from asyncio import CancelledError
 from collections.abc import Mapping, Sequence
-from typing import TYPE_CHECKING, Any, AnyStr, Optional
+from typing import TYPE_CHECKING, AnyStr, Optional
 from urllib.parse import unquote
 
 import tornado.simple_httpclient

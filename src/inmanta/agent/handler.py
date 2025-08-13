@@ -1109,9 +1109,7 @@ class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered])
         return {}
 
     @abstractmethod
-    def discover_resources(
-        self, ctx: HandlerContext, discovery_resource: TDiscovery
-    ) -> Mapping[ResourceIdStr, TDiscovered]:
+    def discover_resources(self, ctx: HandlerContext, discovery_resource: TDiscovery) -> Mapping[ResourceIdStr, TDiscovered]:
         """
         This method implements the resource discovery logic. This method will be called
         by the handler during deployment of the corresponding discovery resource.

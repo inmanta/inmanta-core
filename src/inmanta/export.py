@@ -378,9 +378,10 @@ class Exporter:
         resource_sets_to_remove: Optional[Sequence[str]] = None,
         allow_handler_code_update: bool = False,
         export_env_var_settings: bool = True,
-    ) -> tuple[int, ResourceDict] | tuple[
-        int, ResourceDict, dict[ResourceIdStr, Literal[const.ResourceState.available, const.ResourceState.undefined]]
-    ]:
+    ) -> (
+        tuple[int, ResourceDict]
+        | tuple[int, ResourceDict, dict[ResourceIdStr, Literal[const.ResourceState.available, const.ResourceState.undefined]]]
+    ):
         """
         Run the export functions. Return value for partial json export uses 0 as version placeholder.
 

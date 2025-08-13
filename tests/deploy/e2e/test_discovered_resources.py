@@ -20,7 +20,6 @@ import json
 from collections.abc import Sequence
 from urllib import parse
 
-import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 from inmanta.server import config
