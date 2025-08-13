@@ -5459,12 +5459,18 @@ class Resource(BaseDocument):
         *,
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> list["Resource"]:
+        values = [environment, version]
         if agent:
-            (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version, agent=agent)
-        else:
-            (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
-
-        query = f"SELECT * FROM {Resource.table_name()} WHERE {filter_statement}"
+            values.append(agent)
+        query = f"""
+            SELECT r.*
+                FROM resource_set_configuration_model AS rscm
+                INNER JOIN {Resource.table_name()} AS r
+                    ON rscm.environment=r.environment
+                    AND rscm.resource_set_id=r.resource_set_id
+                WHERE rscm.environment=$1 AND rscm.model=$2
+                {'AND rs.agent=$3' if agent else ''}
+        """
         resources_list: Union[list[Resource], list[dict[str, object]]] = []
         async with cls.get_connection(connection) as con:
             async with con.transaction():
@@ -5487,12 +5493,18 @@ class Resource(BaseDocument):
         connection: Optional[Connection] = None,
     ) -> list[dict[str, object]]:
         if not projection:
-            projection = "*"
+            projection = "r.*"
         else:
-            projection = ",".join(projection)
-        (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
-        query = "SELECT " + projection + " FROM " + cls.table_name() + " WHERE " + filter_statement
-        resource_records = await cls._fetch_query(query, *values, connection=connection)
+            projection = ",".join([f"r.{p}" for p in projection])
+        query = f"""
+            SELECT {projection}
+                FROM resource_set_configuration_model AS rscm
+                INNER JOIN {Resource.table_name()} AS r
+                    ON rscm.environment=r.environment
+                    AND rscm.resource_set_id=r.resource_set_id
+                WHERE rscm.environment=$1 AND rscm.model=$2
+        """
+        resource_records = await cls._fetch_query(query, environment, version, connection=connection)
         return [dict(record) for record in resource_records]
 
     @classmethod
@@ -5854,10 +5866,11 @@ class Resource(BaseDocument):
             version = self.model
             attributes["requires"] = [resources.Id.set_version_in_id(id, version) for id in self.attributes["requires"]]
 
-        # Due to a bug, the version field has always been present in the attributes dictionary.
-        # This bug has been fixed in the database. For backwards compatibility reason we here make sure that the
-        # version field is present in the attributes dictionary served out via the API.
-        attributes["version"] = self.model
+        if include_resource_version_in_requires:
+            # Due to a bug, the version field has always been present in the attributes dictionary.
+            # This bug has been fixed in the database. For backwards compatibility reason we here make sure that the
+            # version field is present in the attributes dictionary served out via the API.
+            attributes["version"] = self.model
 
         return m.Resource(
             environment=self.environment,

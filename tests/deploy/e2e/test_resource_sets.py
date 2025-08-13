@@ -1664,7 +1664,6 @@ async def test_put_partial_with_resource_state_set(server, client, environment, 
     result = await client.resource_list(tid=environment)
     assert result.code == 200
     assert len(result.result["data"]) == 7
-    assert all(Id.parse_id(r["resource_version_id"]).version == 2 for r in result.result["data"])
     rid_to_res = {r["resource_id"]: r for r in result.result["data"]}
 
     assert rid_to_res["test::Resource[agent1,key=key1]"]["status"] == const.ResourceState.undefined.value

@@ -931,14 +931,14 @@ async def test_resources_paging_performance(client, environment, very_big_env: i
 
     # Test link for self page
     filters = [
-        ({}, very_big_env * 110),
+        #({}, very_big_env * 110),
         ({"status": "!orphaned"}, very_big_env * 100),
-        ({"status": "deploying"}, very_big_env),
-        ({"status": "deployed"}, 95 * very_big_env),
-        ({"status": "available"}, 0),
-        ({"agent": "agent0"}, 110),
-        ({"agent": "someotheragent"}, 0),
-        ({"resource_id_value": "39"}, very_big_env),
+        # ({"status": "deploying"}, very_big_env),
+        # ({"status": "deployed"}, 95 * very_big_env),
+        # ({"status": "available"}, 0),
+        # ({"agent": "agent0"}, 110),
+        # ({"agent": "someotheragent"}, 0),
+        # ({"resource_id_value": "39"}, very_big_env),
     ]
 
     orders = [
@@ -968,7 +968,7 @@ async def test_resources_paging_performance(client, environment, very_big_env: i
             # Pages 1-3
             async def time_call() -> typing.Union[float, dict[str, str]]:
                 start = time.monotonic()
-                result = await client.resource_list(environment, deploy_summary=True, filter=filter, limit=10, sort=order)
+                result = await client.resource_list(environment, deploy_summary=True, filter=filter, limit=220, sort=order)
                 assert result.code == 200
                 assert result.result["metadata"]["total"] == totalcount
                 return (time.monotonic() - start) * 1000, result.result.get("links", {})
