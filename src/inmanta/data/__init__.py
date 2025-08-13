@@ -5120,7 +5120,7 @@ class ResourceSet(BaseDocument):
             INNER JOIN public.resource_set_configuration_model AS rscm
                 ON rs.environment=rscm.environment
                 AND rs.id=rscm.resource_set_id
-            WHERE rscm.model=$2
+            WHERE rscm.model=$2 AND rscm.environment=$1
         """
 
         await cls._execute_query(
