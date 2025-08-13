@@ -566,8 +566,7 @@ class OrchestrationService(protocol.ServerSlice):
         all_requires: set[ResourceIdStr] = set()
         for res_dict in resources:
             # Verify that the version field and the version in the resource version id field match
-            raw_id = res_dict["id"]
-            resource_version_id = Id.parse_id(raw_id)
+            resource_version_id = Id.parse_id(res_dict["id"])
             version_part_of_resource_id = resource_version_id.version
             resource_id = resource_version_id.resource_str()
             if "version" in res_dict and res_dict["version"] != version_part_of_resource_id:
@@ -581,7 +580,7 @@ class OrchestrationService(protocol.ServerSlice):
             is_undefined = (
                 True
                 if resource_id in resource_state
-                and const.ResourceState[resource_state[resource_id]] == const.ResourceState.undefined
+                and const.ResourceState[resource_state[resource_id]] is const.ResourceState.undefined
                 else False
             )
 
@@ -910,14 +909,12 @@ class OrchestrationService(protocol.ServerSlice):
                 raise ServerError("The given version is already defined. Versions should be unique.")
 
             all_ids: set[Id] = {Id.parse_id(rid, version) for rid in rid_to_resource.keys()}
-            updated_resource_sets: abc.Set[str | None] = set(resource_sets.values())
             await data.ResourceSet.insert_sets_and_resources(
                 environment=env.id,
                 updated_resources=list(rid_to_resource.values()),
-                updated_resource_sets=list(updated_resource_sets),
                 target_version=version,
                 base_version=partial_base_version,
-                resource_set_names_not_to_bump=deleted_resource_sets_as_set | updated_resource_sets,
+                deleted_resource_sets=deleted_resource_sets_as_set,
                 connection=connection,
             )
             await cm.recalculate_total(connection=connection)

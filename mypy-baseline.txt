@@ -302,6 +302,7 @@ src/inmanta/data/__init__.py:0: error: Argument 1 to "_get_composed_filter" of "
 src/inmanta/data/__init__.py:0: error: Argument 1 to "_get_composed_filter" of "BaseDocument" has incompatible type "**dict[str, object]"; expected "str | None"  [arg-type]
 src/inmanta/data/__init__.py:0: error: Argument 1 to "_get_composed_filter" of "BaseDocument" has incompatible type "**dict[str, object]"; expected "str | None"  [arg-type]
 src/inmanta/data/__init__.py:0: error: Argument 1 to "_get_composed_filter" of "BaseDocument" has incompatible type "**dict[str, object]"; expected "str | None"  [arg-type]
+src/inmanta/data/__init__.py:0: error: Argument 1 to "add" of "set" has incompatible type "object"; expected "str"  [arg-type]
 src/inmanta/data/__init__.py:0: error: Argument 1 to "add_logs" of "ResourceAction" has incompatible type "list[dict[str, object]]"; expected "str | None"  [arg-type]
 src/inmanta/data/__init__.py:0: error: Argument 1 to "append" of "list" has incompatible type "ConfigurationModel"; expected "dict[str, object]"  [arg-type]
 src/inmanta/data/__init__.py:0: error: Argument 1 to "append" of "list" has incompatible type "Record"; expected "Resource"  [arg-type]
