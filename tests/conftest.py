@@ -987,8 +987,7 @@ async def agent_factory(server, client, monkeypatch) -> AsyncIterator[Callable[[
         a.scheduler.code_manager = utils.DummyCodeManager()
         await a.start()
         await utils.retry_limited(
-            lambda: agentmanager.get_agent_client(tid=environment, endpoint=const.AGENT_SCHEDULER_ID, live_agent_only=True)
-            is not None,
+            lambda: agentmanager.is_scheduler_running_for(environment),
             timeout=10,
         )
         return a

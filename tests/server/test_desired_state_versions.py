@@ -55,12 +55,6 @@ class MockAgentThatMarksScheduled(SessionEndpoint):
         self._env_id = environment
         self.limit = 100  # only scheduler versions lower than this.
 
-    async def start_connected(self) -> None:
-        """
-        Setup our single endpoint
-        """
-        await self.add_end_point_name(AGENT_SCHEDULER_ID)
-
     @protocol.handle(methods.set_state)
     async def set_state(self, agent: Optional[str], enabled: bool) -> Apireturn:
         return 200

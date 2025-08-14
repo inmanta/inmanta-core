@@ -21,9 +21,10 @@ import copy
 import inspect
 import json
 import logging
-import uuid
+import re
 from collections.abc import Mapping
-from typing import Any, Dict, List, Optional, Tuple, Type, cast, get_type_hints  # noqa: F401
+from typing import Any, AnyStr, Optional, Type, cast
+from urllib import parse
 
 import pydantic
 import typing_inspect
@@ -617,7 +618,7 @@ class RESTBase(util.TaskHandler[None], abc.ABC):
     def id(self) -> str:
         return self._id
 
-    def _decode(self, body: bytes) -> Optional[JsonType]:
+    def _decode(self, body: bytes | None) -> Optional[JsonType]:
         """
         Decode a response body
         """
@@ -627,8 +628,9 @@ class RESTBase(util.TaskHandler[None], abc.ABC):
 
         return result
 
-    def validate_sid(self, sid: uuid.UUID) -> bool:
-        raise NotImplementedError()
+
+class AuthnzInterface:
+    """An interface that provides access to auth status and policy engine."""
 
     def is_auth_enabled(self) -> bool:
         """
@@ -636,60 +638,73 @@ class RESTBase(util.TaskHandler[None], abc.ABC):
         """
         raise NotImplementedError()
 
-    async def _execute_call(
-        self,
-        config: common.UrlMethod,
-        message: dict[str, object],
-        request_headers: Mapping[str, str],
-    ) -> common.Response:
-        try:
-            if config is None:
-                raise Exception("This method is unknown! This should not occur!")
-
-            if config.properties.validate_sid:
-                if "sid" not in message or not isinstance(message["sid"], str):
-                    raise exceptions.BadRequest("this is an agent to server call, it should contain an agent session id")
-
-                if not self.validate_sid(uuid.UUID(str(message["sid"]))):
-                    raise exceptions.BadRequest("the sid %s is not valid." % message["sid"])
-
-            # First check if the call is authenticated, then process the request so we can handle it and then authorize it.
-            # Authorization might need data from the request but we do not want to process it before we are sure the call
-            # is authenticated.
-            arguments = CallArguments(config, message, request_headers)
-            is_auth_enabled: bool = self.is_auth_enabled()
-            arguments.authenticate(auth_enabled=is_auth_enabled)
-            await arguments.process()
-            authorization_provider = self.get_authorization_provider()
-            if authorization_provider:
-                await authorization_provider.authorize_request(arguments)
-
-            LOGGER.debug(
-                "Calling method %s(%s) user=%s",
-                config.method_name,
-                ", ".join([f"{name}={common.shorten(str(value))}" for name, value in arguments.call_args.items()]),
-                arguments.auth_username if arguments.auth_username else "<>",
-            )
-
-            with tracing.span("Calling method " + config.method_name, arguments=arguments.call_args):
-                result = await config.handler(**arguments.call_args)
-
-            return await arguments.process_return(result)
-        except pydantic.ValidationError:
-            LOGGER.exception(f"The handler {config.handler} caused a validation error in a data model (pydantic).")
-            raise exceptions.ServerError("data validation error.")
-
-        except exceptions.BaseHttpException:
-            LOGGER.debug("An HTTP Error occurred", exc_info=True)
-            raise
-
-        except Exception as e:
-            LOGGER.exception("An exception occurred during the request.")
-            raise exceptions.ServerError(str(e.args))
-
     @abc.abstractmethod
     def get_authorization_provider(self) -> providers.AuthorizationProvider | None:
         """
         Returns the authorization provider or None if we are not running on the server.
         """
         raise NotImplementedError()
+
+
+async def execute_call(
+    endpoint: AuthnzInterface,
+    config: common.UrlMethod | None,
+    message: dict[str, object],
+    request_headers: Mapping[str, str],
+) -> common.Response:
+    try:
+        if config is None:
+            raise Exception("This method is unknown! This should not occur!")
+
+        # First check if the call is authenticated, then process the request so we can handle it and then authorize it.
+        # Authorization might need data from the request but we do not want to process it before we are sure the call
+        # is authenticated.
+        arguments = CallArguments(config, message, request_headers)
+        is_auth_enabled: bool = endpoint.is_auth_enabled()
+        arguments.authenticate(auth_enabled=is_auth_enabled)
+        await arguments.process()
+
+        authorization_provider = endpoint.get_authorization_provider()
+        if authorization_provider:
+            await authorization_provider.authorize_request(arguments)
+
+        LOGGER.debug(
+            "Calling method %s(%s) user=%s",
+            config.method_name,
+            ", ".join([f"{name}={common.shorten(str(value))}" for name, value in arguments.call_args.items()]),
+            arguments.auth_username if arguments.auth_username else "<>",
+        )
+
+        with tracing.span("Calling method " + config.method_name, arguments=arguments.call_args):
+            result = await config.handler(**arguments.call_args)
+
+        return await arguments.process_return(result)
+    except pydantic.ValidationError:
+        LOGGER.exception(f"The handler {config.handler} caused a validation error in a data model (pydantic).")
+        raise exceptions.ServerError("data validation error.")
+
+    except exceptions.BaseHttpException:
+        LOGGER.debug("An HTTP Error occurred", exc_info=True)
+        raise
+
+    except Exception as e:
+        LOGGER.exception("An exception occurred during the request.")
+        raise exceptions.ServerError(str(e.args))
+
+
+def match_call(
+    call_targets: list[common.CallTarget], url: str, method: str
+) -> tuple[Optional[dict[str, AnyStr]], Optional[common.UrlMethod]]:
+    """
+    Get the method call for the given url and http method. This method is used for return calls over long poll
+    """
+    for target in call_targets:
+        url_map = target.get_op_mapping()
+        for url_re, handlers in url_map.items():
+            if not url_re.endswith("$"):
+                url_re += "$"
+            match = re.match(url_re, url)
+            if match and method in handlers:
+                return {parse.unquote(k): parse.unquote(v) for k, v in match.groupdict().items()}, handlers[method]
+
+    return None, None

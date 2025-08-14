@@ -27,14 +27,14 @@ import pytest
 from inmanta import const
 from inmanta.agent.handler import ResourceHandler
 from inmanta.data import model
-from inmanta.protocol import SessionClient, VersionMatch, common
+from inmanta.protocol import Client, VersionMatch, common
 from inmanta.util import get_compiler_version
 from utils import _deploy_resources, log_contains, make_random_file, retry_limited, wait_until_deployment_finishes
 
 T = TypeVar("T")
 
 
-class MockSessionClient(SessionClient):
+class MockSessionClient(Client):
     def __init__(self, return_code, content):
         self._version_match = VersionMatch.highest
         self.return_code = return_code

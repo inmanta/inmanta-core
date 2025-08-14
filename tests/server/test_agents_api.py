@@ -39,11 +39,9 @@ async def env_with_agents(client, environment: str) -> None:
 
     # create scheduler
     process_sid = uuid.uuid4()
-    await data.AgentProcess(hostname="localhost", environment=env_uuid, sid=process_sid).insert()
-    id_primary = uuid.uuid4()
-    await data.AgentInstance(id=id_primary, process=process_sid, name="scheduler-instance", tid=env_uuid).insert()
+    await data.SchedulerSession(hostname="localhost", environment=env_uuid, sid=process_sid).insert()
     scheduler_agent = await data.Agent.get_one(environment=env_uuid, name=inmanta.const.AGENT_SCHEDULER_ID)
-    await scheduler_agent.update(id_primary=id_primary, last_failover=(datetime.datetime.now() - datetime.timedelta(minutes=5)))
+    await scheduler_agent.update(last_failover=(datetime.datetime.now() - datetime.timedelta(minutes=5)))
 
     async def create_agent(
         name: str,
@@ -51,11 +49,9 @@ async def env_with_agents(client, environment: str) -> None:
         last_failover: Optional[datetime.datetime] = None,
         unpause_on_resume: Optional[bool] = None,
     ):
-        id_primary = None
         await data.Agent(
             environment=env_uuid,
             name=name,
-            id_primary=id_primary,
             paused=paused,
             last_failover=last_failover,
             unpause_on_resume=unpause_on_resume,
@@ -263,15 +259,10 @@ async def test_sorting_validation(client, environment: str, env_with_agents: Non
 async def test_agent_process_details(client, environment: str) -> None:
     env_uuid = uuid.UUID(environment)
     process_sid = uuid.uuid4()
-    await data.AgentProcess(
-        hostname="localhost-dummy", environment=env_uuid, sid=process_sid, last_seen=datetime.datetime.now()
-    ).insert()
-    id_primary = uuid.uuid4()
-    await data.AgentInstance(id=id_primary, process=process_sid, name="dummy-instance", tid=env_uuid).insert()
+    await data.SchedulerSession(hostname="localhost-dummy", environment=env_uuid, sid=process_sid).insert()
     await data.Agent(
         environment=env_uuid,
         name="dummy-agent",
-        id_primary=id_primary,
         paused=True,
     ).insert()
 

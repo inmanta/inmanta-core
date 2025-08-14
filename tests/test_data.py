@@ -177,7 +177,7 @@ async def test_project_cascade_delete(init_dataclasses_and_load_schema):
         env = data.Environment(name=environment_name, project=project.id, repo_url="", repo_branch="")
         await env.insert()
 
-        agent_proc = data.AgentProcess(
+        agent_proc = data.SchedulerSession(
             hostname="testhost",
             environment=env.id,
             first_seen=datetime.datetime.now(),
@@ -222,7 +222,7 @@ async def test_project_cascade_delete(init_dataclasses_and_load_schema):
 
         assert func(await data.Project.get_by_id(project.id))
         assert func(await data.Environment.get_by_id(env.id))
-        assert func(await data.AgentProcess.get_one(sid=agent_proc.sid))
+        assert func(await data.SchedulerSession.get_one(sid=agent_proc.sid))
         assert func(await data.AgentInstance.get_by_id(agent_instances[0].id))
         assert func(await data.AgentInstance.get_by_id(agent_instances[1].id))
         assert func(await data.Agent.get_one(environment=agent.environment, name=agent.name))
@@ -285,7 +285,7 @@ async def test_environment_cascade_content_only(init_dataclasses_and_load_schema
     env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
     await env.insert()
 
-    agent_proc = data.AgentProcess(
+    agent_proc = data.SchedulerSession(
         hostname="testhost",
         environment=env.id,
         first_seen=datetime.datetime.now(),
@@ -335,7 +335,7 @@ async def test_environment_cascade_content_only(init_dataclasses_and_load_schema
 
     assert (await data.Project.get_by_id(project.id)) is not None
     assert (await data.Environment.get_by_id(env.id)) is not None
-    assert (await data.AgentProcess.get_one(sid=agent_proc.sid)) is not None
+    assert (await data.SchedulerSession.get_one(sid=agent_proc.sid)) is not None
     assert (await data.AgentInstance.get_by_id(agi1.id)) is not None
     assert (await data.AgentInstance.get_by_id(agi2.id)) is not None
     assert (await data.Agent.get_one(environment=agent.environment, name=agent.name)) is not None
@@ -352,7 +352,7 @@ async def test_environment_cascade_content_only(init_dataclasses_and_load_schema
 
     assert (await data.Project.get_by_id(project.id)) is not None
     assert (await data.Environment.get_by_id(env.id)) is not None
-    assert (await data.AgentProcess.get_one(sid=agent_proc.sid)) is None
+    assert (await data.SchedulerSession.get_one(sid=agent_proc.sid)) is None
     assert (await data.AgentInstance.get_by_id(agi1.id)) is None
     assert (await data.AgentInstance.get_by_id(agi2.id)) is None
     assert (await data.Agent.get_one(environment=agent.environment, name=agent.name)) is None
@@ -428,7 +428,7 @@ async def test_agent_process(init_dataclasses_and_load_schema):
     await env.insert()
 
     sid = uuid.uuid4()
-    agent_proc = data.AgentProcess(
+    agent_proc = data.SchedulerSession(
         hostname="testhost", environment=env.id, first_seen=datetime.datetime.now(), last_seen=datetime.datetime.now(), sid=sid
     )
     await agent_proc.insert()
@@ -438,18 +438,18 @@ async def test_agent_process(init_dataclasses_and_load_schema):
     agi2 = data.AgentInstance(process=agent_proc.sid, name="agi2", tid=env.id)
     await agi2.insert()
 
-    agent_procs = await data.AgentProcess.get_list(environment=env.id, order_by_column="last_seen", order="ASC NULLS LAST")
+    agent_procs = await data.SchedulerSession.get_list(environment=env.id, order_by_column="last_seen", order="ASC NULLS LAST")
     assert len(agent_procs) == 1
     assert agent_procs[0].sid == agent_proc.sid
 
-    assert (await data.AgentProcess.get_by_sid(sid)).sid == agent_proc.sid
-    assert (await data.AgentProcess.get_by_sid(uuid.UUID(int=1))) is None
+    assert (await data.SchedulerSession.get_by_sid(sid)).sid == agent_proc.sid
+    assert (await data.SchedulerSession.get_by_sid(uuid.UUID(int=1))) is None
 
-    live_procs = await data.AgentProcess.get_live()
+    live_procs = await data.SchedulerSession.get_live()
     assert len(live_procs) == 1
     assert live_procs[0].sid == agent_proc.sid
 
-    live_by_env_procs = await data.AgentProcess.get_list(
+    live_by_env_procs = await data.SchedulerSession.get_list(
         environment=env.id, expired=None, order_by_column="last_seen", order="ASC NULLS LAST"
     )
     assert len(live_by_env_procs) == 1
@@ -457,17 +457,17 @@ async def test_agent_process(init_dataclasses_and_load_schema):
 
     await agent_proc.update_fields(expired=datetime.datetime.now())
 
-    live_procs = await data.AgentProcess.get_live()
+    live_procs = await data.SchedulerSession.get_live()
     assert len(live_procs) == 0
 
-    live_by_env_procs = await data.AgentProcess.get_list(
+    live_by_env_procs = await data.SchedulerSession.get_list(
         environment=env.id, expired=None, order_by_column="last_seen", order="ASC NULLS LAST"
     )
     assert len(live_by_env_procs) == 0
 
     await agent_proc.delete_cascade()
 
-    assert (await data.AgentProcess.get_one(sid=agent_proc.sid)) is None
+    assert (await data.SchedulerSession.get_one(sid=agent_proc.sid)) is None
     assert (await data.AgentInstance.get_by_id(agi1.id)) is None
     assert (await data.AgentInstance.get_by_id(agi2.id)) is None
 
@@ -490,7 +490,7 @@ async def test_agentprocess_cleanup(init_dataclasses_and_load_schema, postgresql
     async def insert_agent_proc_and_instances(
         env_id: uuid.UUID, hostname: str, expired_proc: Optional[datetime.datetime], expired_instances: list[datetime.datetime]
     ) -> None:
-        agent_proc = data.AgentProcess(hostname=hostname, environment=env_id, expired=expired_proc, sid=uuid.uuid4())
+        agent_proc = data.SchedulerSession(hostname=hostname, environment=env_id, expired=expired_proc, sid=uuid.uuid4())
         await agent_proc.insert()
         for i in range(len(expired_instances)):
             agent_instance = data.AgentInstance(
@@ -500,7 +500,7 @@ async def test_agentprocess_cleanup(init_dataclasses_and_load_schema, postgresql
 
     async def verify_nr_of_records(env: uuid.UUID, hostname: str, expected_nr_procs: int, expected_nr_instances: int):
         # Verify expected_nr_procs
-        result = await data.AgentProcess.get_list(environment=env, hostname=hostname)
+        result = await data.SchedulerSession.get_list(environment=env, hostname=hostname)
         assert len(result) == expected_nr_procs, result
         # Verify expected_nr_instances
         query = """
@@ -529,7 +529,7 @@ async def test_agentprocess_cleanup(init_dataclasses_and_load_schema, postgresql
     # Run cleanup twice to verify stability
     for i in range(2):
         # Perform cleanup
-        await data.AgentProcess.cleanup(nr_expired_records_to_keep=1)
+        await data.SchedulerSession.cleanup(nr_expired_records_to_keep=1)
         # Assert outcome
         # Halting env1 has no impact on the cleanup: an expired instance will be kept in both cases
         # Halting env2 has an impact on the cleanup: if it's halted 5 expired instances in 2 processes will not be removed.
@@ -561,7 +561,7 @@ async def test_delete_agentinstance_which_is_primary(init_dataclasses_and_load_s
     env = data.Environment(name="env1", project=project.id, repo_url="", repo_branch="")
     await env.insert()
 
-    agent_proc = data.AgentProcess(hostname="test", environment=env.id, expired=None, sid=uuid.uuid4())
+    agent_proc = data.SchedulerSession(hostname="test", environment=env.id, expired=None, sid=uuid.uuid4())
     await agent_proc.insert()
     agent_instance = data.AgentInstance(
         id=uuid.uuid4(), process=agent_proc.sid, name="agent_instance", expired=None, tid=env.id
@@ -582,7 +582,7 @@ async def test_agent_instance(init_dataclasses_and_load_schema):
     await env.insert()
 
     sid = uuid.uuid4()
-    agent_proc = data.AgentProcess(
+    agent_proc = data.SchedulerSession(
         hostname="testhost", environment=env.id, first_seen=datetime.datetime.now(), last_seen=datetime.datetime.now(), sid=sid
     )
     await agent_proc.insert()
@@ -633,7 +633,7 @@ async def test_agent(init_dataclasses_and_load_schema):
     await env.insert()
 
     sid = uuid.uuid4()
-    agent_proc = data.AgentProcess(
+    agent_proc = data.SchedulerSession(
         hostname="testhost", environment=env.id, first_seen=datetime.datetime.now(), last_seen=datetime.datetime.now(), sid=sid
     )
     await agent_proc.insert()
@@ -679,7 +679,7 @@ async def test_agent(init_dataclasses_and_load_schema):
     assert agent3.get_status() == AgentStatus.down
 
     primary_instance = await data.AgentInstance.get_by_id(agent1.primary)
-    primary_process = await data.AgentProcess.get_one(sid=primary_instance.process)
+    primary_process = await data.SchedulerSession.get_one(sid=primary_instance.process)
     assert primary_process.sid == agent_proc.sid
 
 

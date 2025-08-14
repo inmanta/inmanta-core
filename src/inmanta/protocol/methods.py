@@ -297,46 +297,6 @@ def clear_environment(id: uuid.UUID):
     """
 
 
-# Send a heartbeat to indicate that an agent is alive
-@method(
-    path="/heartbeat",
-    operation="POST",
-    agent_server=True,
-    validate_sid=False,
-    arg_options=ENV_OPTS,
-    client_types=[const.ClientType.agent],
-)
-def heartbeat(sid: uuid.UUID, tid: uuid.UUID, endpoint_names: list, nodename: str, no_hang: bool = False):
-    """
-    Send a heartbeat to the server
-
-    :param sid: The session ID used by this agent at this moment
-    :param tid: The environment this node and its agents belongs to
-    :param endpoint_names: The names of the endpoints on this node
-    :param nodename: The name of the node from which the heart beat comes
-    :param no_hang: Optional. don't use this call for long polling, but for connectivity check
-
-    also registered as API method, because it is called with an invalid SID the first time
-    """
-
-
-@method(
-    path="/heartbeat",
-    operation="PUT",
-    agent_server=True,
-    arg_options={"sid": ArgOption(getter=ignore_env)},
-    client_types=[const.ClientType.agent],
-)
-def heartbeat_reply(sid: uuid.UUID, reply_id: uuid.UUID, data: dict):
-    """
-    Send a reply back to the server
-
-    :param sid: The session ID used by this agent at this moment
-    :param reply_id: The id data is a reply to
-    :param data: The data as a response to the reply
-    """
-
-
 # Upload, retrieve and check for file. A file is identified by a hash of its content.
 
 

@@ -28,13 +28,13 @@ from typing import Optional, Union
 
 import tornado
 from tornado import httpserver, iostream, routing, web
+from tornado import websocket as tornado_websocket
 
-import inmanta.protocol.endpoints
 from inmanta import config as inmanta_config
 from inmanta import const, tracing
-from inmanta.protocol import common, exceptions
+from inmanta.protocol import common, endpoints, exceptions, websocket
 from inmanta.protocol.auth import providers
-from inmanta.protocol.rest import RESTBase
+from inmanta.protocol.rest import AuthnzInterface, RESTBase, execute_call
 from inmanta.server import config as server_config
 from inmanta.server.config import server_access_control_allow_origin, server_enable_auth, server_tz_aware_timestamps
 from inmanta.types import ReturnTypes
@@ -133,7 +133,7 @@ class RESTHandler(tornado.web.RequestHandler):
                             else:
                                 message[key] = [v.decode("latin-1") for v in value]
 
-                        result = await self._transport._execute_call(call_config, message, self.request.headers)
+                        result = await execute_call(self._transport, call_config, message, self.request.headers)
                         self.respond(result.body, result.headers, result.status_code)
                     except JSONDecodeError as e:
                         error_message = f"The request body couldn't be decoded as a JSON: {e}"
@@ -240,19 +240,54 @@ class StaticContentHandler(tornado.web.RequestHandler):
         self.set_status(200)
 
 
-class RESTServer(RESTBase):
-    """
-    A tornado based rest server
-    """
+class WebsocketHandler(tornado_websocket.WebSocketHandler, websocket.WebsocketFrameDecoder):
+    """A handler for websocket based 2-way communication"""
+
+    def initialize(self, transport: "RESTServer") -> None:
+        LOGGER.debug("Starting websocket handler")
+        self._server: "RESTServer" = transport
+
+        self.set_call_targets(self._server.endpoint.call_targets)
+        self.set_authnz_context(transport)
+
+    async def on_message(self, message: Union[str, bytes]) -> None:
+        """The tornado handler calls this method. Delegate it to the decoder"""
+        await websocket.WebsocketFrameDecoder.on_message(self, message)
+
+    async def write_message(self, message: str | bytes, binary: bool = False) -> None:
+        await tornado_websocket.WebSocketHandler.write_message(self, message, binary)
+
+    async def on_open_session(self, session: websocket.Session) -> None:
+        await self._server.register_session(session)
+
+    async def on_close_session(self, session: websocket.Session) -> None:
+        await self._server.notify_close_session(session)
+
+    async def on_pong(self, data: bytes) -> None:
+        """Called when we get a response to our ping"""
+        self.seen()
+
+    async def on_close(self) -> None:
+        """Called when the websocket closes"""
+        await self.close_session()
+
+    async def close_connection(self) -> None:
+        """Close the connection that is linked to a session"""
+        await super().close_connection()
+        self.close()
+
+
+class RESTServer(RESTBase, AuthnzInterface):
+    """A tornado based rest server with websocket based two-way communication support"""
 
     _http_server: Optional[httpserver.HTTPServer]
 
-    def __init__(self, session_manager: common.SessionManagerInterface, id: str) -> None:
+    def __init__(self, endpoint: endpoints.Endpoint, id: str) -> None:
         super().__init__()
 
         self._id = id
         self.headers: dict[str, str] = {}
-        self.session_manager = session_manager
+        self.endpoint = endpoint
         # number of ongoing requests
         self.inflight_counter = 0
         # event indicating no more in flight requests
@@ -261,6 +296,10 @@ class RESTServer(RESTBase):
         self.running = False
         self._http_server = None
         self._authorization_provider = providers.AuthorizationProvider.create_from_config() if self.is_auth_enabled() else None
+
+        # Session handling
+        self._sessions: dict[(uuid.UUID, str) : websocket.Session] = {}
+        self.listeners: list[websocket.SessionListener] = []
 
     def start_request(self) -> None:
         self.idle_event.clear()
@@ -271,15 +310,10 @@ class RESTServer(RESTBase):
         if self.inflight_counter == 0:
             self.idle_event.set()
 
-    def validate_sid(self, sid: uuid.UUID) -> bool:
-        return self.session_manager.validate_sid(sid)
-
     def is_auth_enabled(self) -> bool:
         return server_config.server_enable_auth.get()
 
-    def get_global_url_map(
-        self, targets: list[inmanta.protocol.endpoints.CallTarget]
-    ) -> dict[str, dict[str, common.UrlMethod]]:
+    def get_global_url_map(self, targets: Sequence[common.CallTarget]) -> dict[str, dict[str, common.UrlMethod]]:
         global_url_map: dict[str, dict[str, common.UrlMethod]] = defaultdict(dict)
         for slice in targets:
             url_map = slice.get_op_mapping()
@@ -289,9 +323,7 @@ class RESTServer(RESTBase):
                     handler_config[op] = cfg
         return global_url_map
 
-    async def start(
-        self, targets: Sequence[inmanta.protocol.endpoints.CallTarget], additional_rules: list[routing.Rule] = []
-    ) -> None:
+    async def start(self, targets: Sequence[common.CallTarget], additional_rules: list[routing.Rule] = []) -> None:
         """
         Start the server on the current ioloop
         """
@@ -300,13 +332,14 @@ class RESTServer(RESTBase):
 
         global_url_map: dict[str, dict[str, common.UrlMethod]] = self.get_global_url_map(targets)
 
-        rules: list[routing.Rule] = []
+        # TODO: add constant for url
+        rules: list[routing.Rule] = [routing.Rule(routing.PathMatches("/v2/ws"), WebsocketHandler, {"transport": self})]
 
         for url, handler_config in global_url_map.items():
             rules.append(routing.Rule(routing.PathMatches(url), RESTHandler, {"transport": self, "config": handler_config}))
             LOGGER.debug("Registering handler(s) for url %s and methods %s", url, ", ".join(handler_config.keys()))
 
-        application = web.Application(handlers=[*additional_rules, *rules], compress_response=True)
+        application = web.Application(handlers=[*additional_rules, *rules], compress_response=True, websocket_ping_interval=1)
 
         crt = inmanta_config.Config.get("server", "ssl_cert_file", None)
         key = inmanta_config.Config.get("server", "ssl_key_file", None)
@@ -336,6 +369,12 @@ class RESTServer(RESTBase):
         """
         self.running = False
         LOGGER.debug("Stopping Server Rest Endpoint")
+
+        # terminate all sessions cleanly (do we need to hold the lock?)
+        # for session in self._sessions.copy().values():
+        #     await session.expire(0)
+        #     session.abort()
+
         if self._http_server is not None:
             self._http_server.stop()
 
@@ -348,3 +387,35 @@ class RESTServer(RESTBase):
 
     def get_authorization_provider(self) -> providers.AuthorizationProvider | None:
         return self._authorization_provider
+
+    def add_session_listener(self, session_listener: websocket.SessionListener) -> None:
+        self.listeners.append(session_listener)
+
+    async def register_session(self, session: websocket.Session) -> None:
+        """Register a session with the server"""
+        if session.session_key in self._sessions:
+            # TODO: correct exception
+            raise Exception("Duplication session")
+
+        self._sessions[session.session_key] = session
+
+        for listener in self.listeners:
+            await listener.session_opened(session)
+
+    async def notify_close_session(self, session: websocket.Session) -> None:
+        if session.session_key not in self._sessions:
+            return
+
+        del self._sessions[session.session_key]
+
+        for listener in self.listeners:
+            await listener.session_closed(session)
+
+    def get_session(self, environment_id: uuid.UUID, session_name: str) -> websocket.Session:
+        """Get the requested session"""
+        key = (environment_id, session_name)
+        if key not in self._sessions:
+            # TODO: correct exception
+            raise KeyError("Duplication session")
+
+        return self._sessions[key]
