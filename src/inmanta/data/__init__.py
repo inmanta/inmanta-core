@@ -4929,7 +4929,7 @@ class ResourceSet(BaseDocument):
         cls,
         environment: uuid.UUID,
         target_version: int,
-        updated_resources: list[m.Resource],
+        updated_resources: abc.Collection[m.Resource],
         base_version: Optional[int] = None,
         deleted_resource_sets: Optional[abc.Set[str]] = None,
         *,
@@ -4956,7 +4956,7 @@ class ResourceSet(BaseDocument):
         :param base_version: This is the version which the partial compile is based on. None if we are doing a full compile.
         :param deleted_resource_sets: These are the resource set names from the base version which were removed
             in this partial compile. Not applicable for a full compile.
-        :param connection: The connection to use.
+        :param connection: The connection to use. Must be in a transaction context.
         """
 
         is_partial_update = base_version is not None
@@ -4996,14 +4996,11 @@ class ResourceSet(BaseDocument):
             insert_resource_sets, environment, updated_resource_sets, connection=connection
         )
 
-        # Data to insert into the database
-        resource_set_data = []
         # Ids of the resource sets we inserted
         inserted_resource_set_ids = []
         # Names of the resource sets we do not want to bump in case of a partial compile (outdated and deleted sets)
         resource_set_names_not_to_bump = set(deleted_resource_sets) if deleted_resource_sets else set()
         for resource_set in resource_set_records:
-            resource_set_data.append({"id": str(resource_set["id"]), "name": resource_set["name"]})
             resource_set_names_not_to_bump.add(resource_set["name"])
             inserted_resource_set_ids.append(str(resource_set["id"]))
 
@@ -5825,7 +5822,7 @@ class Resource(BaseDocument):
         """
         Returns the content of the requires field in the attributes.
         """
-        if "requires" not in self.attributes or not isinstance(self.attributes["requires"], list):
+        if "requires" not in self.attributes:
             return []
         return list(self.attributes["requires"])
 

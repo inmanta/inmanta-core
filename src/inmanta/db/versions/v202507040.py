@@ -39,6 +39,8 @@ async def update(connection: Connection) -> None:
 
     CREATE TEMP TABLE temp_unique_sets_with_id
     ON COMMIT DROP AS
+
+    -- Non-Null resource sets
     SELECT DISTINCT ON (
             r.environment,
             r.resource_set,
@@ -48,7 +50,22 @@ async def update(connection: Connection) -> None:
         r.resource_set,
         r.model,
         gen_random_uuid() AS id
-    FROM public.resource r;
+    FROM public.resource r
+    WHERE r.resource_set IS NOT NULL
+
+    UNION ALL
+
+    -- Null resource sets
+    SELECT DISTINCT ON (
+            r.environment,
+            r.model
+        )
+        r.environment,
+        NULL,
+        r.model,
+        gen_random_uuid() AS id
+    FROM public.resource r
+    WHERE r.resource_set IS NULL;
 
 
     INSERT INTO public.resource_set (environment, id, name)
@@ -75,6 +92,8 @@ async def update(connection: Connection) -> None:
     ALTER TABLE public.resource
     ADD CONSTRAINT resource_resource_set_id_environment_fkey
         FOREIGN KEY (resource_set_id, environment) REFERENCES public.resource_set(id, environment) ON DELETE CASCADE;
+
+    CREATE INDEX resource_set_environment_name_index ON public.resource_set (environment, name);
 
 
     CREATE INDEX resource_environment_resource_set_id_index ON public.resource (environment, resource_set_id);
