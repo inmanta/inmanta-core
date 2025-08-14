@@ -5690,12 +5690,12 @@ class Resource(BaseDocument):
         SELECT DISTINCT ON (resource_id)
             first.resource_id,
             cm.date as first_generated_time,
-            first.model as first_model,
+\\            rscm.model as first_model,
             latest.model AS latest_model,
             latest.resource_id as latest_resource_id,
             latest.resource_type,
             latest.agent,
-            latest.resource_id_value
+            latest.resource_id_value,
             rps.last_deploy as latest_deploy,
             latest.attributes,
             {const.SQL_RESOURCE_STATUS_SELECTOR} AS status
@@ -5705,26 +5705,30 @@ class Resource(BaseDocument):
             (SELECT distinct on (resource_id)
                 resource_id,
                 attribute_hash,
-                model,
+                cm.version AS model,
                 attributes,
                 resource_type,
                 agent,
                 resource_id_value
-            FROM resource
-            JOIN configurationmodel cm
-                ON resource.model=cm.version AND resource.environment=cm.environment
-            WHERE resource.environment=$1 AND resource_id=$2 AND cm.released=TRUE
+            FROM resource AS r
+            JOIN resource_set_configuration_model AS rscm
+                ON r.environment=rscm.environment AND r.resource_set_id=rscm.resource_set_id
+            JOIN configurationmodel AS cm
+                ON rscm.environment=cm.environment AND rscm.model=cm.version
+            WHERE r.environment=$1 AND r.resource_id=$2 AND cm.released=TRUE
             ORDER BY resource_id, model desc
             ) as latest
         /* The 'first' values correspond to the first time the attribute hash was the same as in
             the 'latest' released version */
-            ON first.resource_id = latest.resource_id AND first.attribute_hash = latest.attribute_hash
-        INNER JOIN configurationmodel cm
-            ON first.model=cm.version AND first.environment=cm.environment
-        INNER JOIN resource_persistent_state rps
+            ON first.resource_id=latest.resource_id AND first.attribute_hash=latest.attribute_hash
+        INNER JOIN resource_set_configuration_model AS rscm
+            ON first.environment=rscm.environment AND first.resource_set_id=rscm.resource_set_id
+        INNER JOIN configurationmodel AS cm
+            ON rscm.model=cm.version AND rscm.environment=cm.environment
+        INNER JOIN resource_persistent_state AS rps
             ON rps.resource_id=first.resource_id AND first.environment=rps.environment
         WHERE first.environment=$1 AND first.resource_id=$2 AND cm.released=TRUE
-        ORDER BY first.resource_id, first.model asc;
+        ORDER BY first.resource_id, rscm.model asc;
         """
         values = [cls._get_value(env), cls._get_value(resource_id)]
         result = await cls.select_query(query, values, no_obj=True)
@@ -5744,14 +5748,17 @@ class Resource(BaseDocument):
         # fetch the status of each of the requires. This is not calculated in the database because the lack of joinable
         # fields requires to calculate the status for each resource record, before it is filtered
         status_query = f"""
-        SELECT DISTINCT ON (resource.resource_id) resource.resource_id,
+        SELECT DISTINCT ON (r.resource_id) r.resource_id,
         {const.SQL_RESOURCE_STATUS_SELECTOR} AS status
-        FROM resource
-        INNER JOIN configurationmodel cm ON resource.model = cm.version AND resource.environment = cm.environment
+        FROM resource AS r
+        INNER JOIN resource_set_configuration_model AS rscm
+            ON r.environment=rscm.environment AND r.resource_set_id=rscm.resource_set_id
+        INNER JOIN configurationmodel AS cm
+            ON rscm.model=cm.version AND rscm.environment=cm.environment
         INNER JOIN resource_persistent_state rps
-              ON rps.resource_id = resource.resource_id AND resource.environment = rps.environment
-        WHERE resource.environment = $1 AND cm.released = TRUE AND resource.resource_id = ANY($2)
-        ORDER BY resource.resource_id, model DESC;
+            ON r.resource_id=rps.resource_id AND r.environment=rps.environment
+        WHERE r.environment=$1 AND cm.released AND r.resource_id = ANY($2)
+        ORDER BY r.resource_id, cm.version DESC;
         """
         status_result = await cls.select_query(status_query, [cls._get_value(env), cls._get_value(requires)], no_obj=True)
 
