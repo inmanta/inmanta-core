@@ -19,6 +19,7 @@ Module defining the v1 rest api
 """
 
 import uuid
+from collections.abc import Mapping, Sequence
 from typing import Any, Literal, Optional, Union
 
 import inmanta.types
@@ -498,7 +499,7 @@ def put_version(
     resources: list,
     module_version_info: dict[str, InmantaModule],
     resource_state: dict[inmanta.types.ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]] = {},
-    unknowns: Optional[list[dict[str, PrimitiveTypes]]] = None,
+    unknowns: Optional[Sequence[Mapping[str, PrimitiveTypes]]] = None,
     version_info: Optional[dict] = None,
     compiler_version: Optional[str] = None,
     resource_sets: dict[inmanta.types.ResourceIdStr, Optional[str]] = {},

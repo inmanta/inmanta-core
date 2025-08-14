@@ -33,7 +33,8 @@ from inmanta.data import model
 from inmanta.data.model import EnvironmentSetting
 from inmanta.protocol import method
 from inmanta.protocol.auth.decorators import auth
-from inmanta.protocol.common import ArgOption, BaseHttpException, MethodProperties, UrlMethod
+from inmanta.protocol.common import ArgOption, MethodProperties, UrlMethod
+from inmanta.protocol.exceptions import BaseHttpException
 from inmanta.protocol.openapi.converter import (
     ArgOptionHandler,
     FunctionParameterHandler,

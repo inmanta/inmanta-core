@@ -39,7 +39,7 @@ import warnings
 from abc import ABC, abstractmethod
 from asyncio import CancelledError, Lock, Task, ensure_future, gather
 from collections import abc, defaultdict
-from collections.abc import Coroutine, Iterable, Iterator
+from collections.abc import Awaitable, Coroutine, Iterable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from logging import Logger
@@ -640,7 +640,7 @@ class TaskHandler(Generic[T]):
     def is_running(self) -> bool:
         return not self._stopped
 
-    def add_background_task(self, future: Coroutine[object, None, T], cancel_on_stop: bool = True) -> Task[T]:
+    def add_background_task(self, future: Awaitable[T], cancel_on_stop: bool = True) -> Task[T]:
         """Add a background task to the event loop. When stop is called, the task is cancelled.
 
         :param future: The future or coroutine to run as background task.

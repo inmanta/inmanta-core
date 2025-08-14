@@ -21,18 +21,16 @@ import inspect
 import logging
 import socket
 import uuid
-from asyncio import CancelledError, run_coroutine_threadsafe, sleep
-from collections import abc, defaultdict
-from collections.abc import Coroutine
+from asyncio import CancelledError, sleep
+from collections import defaultdict
+from collections.abc import Awaitable, Sequence
 from enum import Enum
-from typing import Any, Callable, Optional
+from typing import Callable, Optional
 from urllib import parse
-
-import pydantic
 
 from inmanta import config as inmanta_config
 from inmanta import const, tracing, types, util
-from inmanta.protocol import common, exceptions
+from inmanta.protocol import common
 from inmanta.util import TaskHandler
 
 from .rest import client
@@ -224,8 +222,8 @@ class SessionEndpoint(Endpoint, CallTarget):
             while True:
                 LOGGER.log(3, "sending heartbeat for %s", str(self.sessionid))
                 result = await self._heartbeat_client.heartbeat(
-                    sid=str(self.sessionid),
-                    tid=str(self._env_id),
+                    sid=self.sessionid,
+                    tid=self._env_id,
                     endpoint_names=list(self.end_point_names),
                     nodename=self.node_name,
                     no_hang=not connected,
@@ -277,7 +275,9 @@ class SessionEndpoint(Endpoint, CallTarget):
             LOGGER.error(msg)
             # if reply_id is none, we don't send the reply
             if method_call.reply_id is not None:
-                await self._client.heartbeat_reply(self.sessionid, method_call.reply_id, {"result": msg, "code": 500})
+                await self._client.heartbeat_reply(
+                    sid=self.sessionid, reply_id=method_call.reply_id, data={"result": msg, "code": 500}
+                )
             return
 
         body = method_call.body or {}
@@ -313,7 +313,7 @@ class SessionEndpoint(Endpoint, CallTarget):
         # if reply is is none, we don't send the reply
         if method_call.reply_id is not None:
             await self._client.heartbeat_reply(
-                self.sessionid, method_call.reply_id, {"result": response.body, "code": response.status_code}
+                sid=self.sessionid, reply_id=method_call.reply_id, data={"result": response.body, "code": response.status_code}
             )
 
 
@@ -353,22 +353,21 @@ class Client(Endpoint):
         self._version_match = version_match
         self._exact_version = exact_version
 
-    def close(self):
+    def close(self) -> None:
         """
         Closes the RESTclient instance manually. This is only needed when it is started with force_instance set to true
         """
         self._transport_instance.close()
 
-    async def _call(
-        self, method_properties: common.MethodProperties, args: list[object], kwargs: dict[str, object]
-    ) -> common.Result:
+    async def _call[R: types.ReturnTypes](
+        self, method_properties: common.MethodProperties[R], args: Sequence[object], kwargs: dict[str, object]
+    ) -> common.Result[R]:
         """
         Execute a call and return the result
         """
-        result = await self._transport_instance.call(method_properties, args, kwargs)
-        return result
+        return await self._transport_instance.call(method_properties, args, kwargs)
 
-    def _select_method(self, name) -> Optional[common.MethodProperties]:
+    def _select_method(self, name: str) -> Optional[common.MethodProperties]:
         if name not in common.MethodProperties.methods:
             return None
 
@@ -383,7 +382,7 @@ class Client(Endpoint):
 
         return None
 
-    def __getattr__(self, name: str) -> Callable[..., Coroutine[Any, Any, common.Result]]:
+    def __getattr__(self, name: str) -> Callable[..., common.ClientCall]:
         """
         Return a function that will call self._call with the correct method properties associated
         """
@@ -392,10 +391,9 @@ class Client(Endpoint):
         if method is None:
             raise AttributeError("Method with name %s is not defined for this client" % name)
 
-        def wrap(*args: object, **kwargs: object) -> Coroutine[Any, Any, common.Result]:
+        def wrap(*args: object, **kwargs: object) -> common.ClientCall:
             assert method
-            method.function(*args, **kwargs)
-            return self._call(method_properties=method, args=args, kwargs=kwargs)
+            return common.ClientCall.create(self._call(method_properties=method, args=args, kwargs=kwargs), properties=method)
 
         return wrap
 
@@ -439,21 +437,8 @@ class SyncClient:
             self._client = client
 
     def __getattr__(self, name: str) -> Callable[..., common.Result]:
-        def async_call(*args: list[object], **kwargs: dict[str, object]) -> common.Result:
-            method: Callable[..., abc.Awaitable[common.Result]] = getattr(self._client, name)
-            with_timeout: abc.Awaitable[common.Result] = asyncio.wait_for(method(*args, **kwargs), self.timeout)
-
-            try:
-                if self._ioloop is None:
-                    # no loop is running: create a loop for this thread if it doesn't exist already and run it
-                    return util.ensure_event_loop().run_until_complete(with_timeout)
-                else:
-                    # loop is running on different thread
-                    return run_coroutine_threadsafe(with_timeout, self._ioloop).result()
-            except TimeoutError:
-                raise ConnectionRefusedError()
-
-        return async_call
+        async_method = getattr(self._client, name)
+        return lambda *args, **kwargs: async_method(*args, **kwargs).sync(timeout=self.timeout, ioloop=self._ioloop)
 
 
 class SessionClient(Client):
@@ -465,79 +450,41 @@ class SessionClient(Client):
         super().__init__(name, timeout, force_instance=force_instance)
         self._sid = sid
 
-    async def _call(
-        self, method_properties: common.MethodProperties, args: list[object], kwargs: dict[str, object]
-    ) -> common.Result:
+    async def _call[R: types.ReturnTypes](
+        self, method_properties: common.MethodProperties[R], args: Sequence[object], kwargs: dict[str, object]
+    ) -> common.Result[R]:
         """
         Execute the rpc call
         """
         if "sid" not in kwargs:
             kwargs["sid"] = self._sid
 
-        result = await self._transport_instance.call(method_properties, args, kwargs)
-        return result
+        return await super()._call(method_properties, args, kwargs)
+
+    def __getattr__(self, name: str) -> Callable[..., common.ClientCall]:
+        # custom __getattr__ to force the mypy plugin to be triggered for this class rather than the parent
+        return super().__getattr__(name)
 
 
 class TypedClient(Client):
-    """A client that returns typed data instead of JSON"""
+    """
+    A client that returns typed data instead of JSON. Deprecated in favor of ClientCall/Result.value().
+    """
 
-    def _raise_exception(self, exception_class: type[exceptions.BaseHttpException], result: Optional[types.JsonType]) -> None:
-        """Raise an exception based on the provided status"""
-        if result is None:
-            raise exception_class()
+    def __init__(
+        self,
+        name: str,
+        timeout: int = 120,
+        version_match: VersionMatch = VersionMatch.lowest,
+        exact_version: int = 0,
+        with_rest_client: bool = True,
+        force_instance: bool = False,
+    ) -> None:
+        LOGGER.warning(
+            "The TypedClient has been deprecated. Please use the normal client as `client.method_call().value()` instead"
+        )
+        super().__init__(name, timeout, version_match, exact_version, with_rest_client, force_instance)
 
-        message = result.get("message", None)
-        details = result.get("error_details", None)
-
-        raise exception_class(message, details)
-
-    def _process_response(self, method_properties: common.MethodProperties, response: common.Result) -> types.ReturnTypes:
-        """Convert the response into a proper type and restore exception if any"""
-        match response.code:
-            case 200:
-                # typed methods always require an envelope key
-                if response.result is None or method_properties.envelope_key not in response.result:
-                    raise exceptions.BadRequest("No data was provided in the body. Make sure to only use typed methods.")
-
-                if method_properties.return_type is None:
-                    return None
-
-                try:
-                    ta = pydantic.TypeAdapter(method_properties.return_type)
-                except common.InvalidMethodDefinition:
-                    raise exceptions.BadRequest("Typed client can only be used with typed methods.")
-
-                return ta.validate_python(response.result[method_properties.envelope_key])
-
-            case 400:
-                self._raise_exception(exceptions.BadRequest, response.result)
-
-            case 401:
-                self._raise_exception(exceptions.UnauthorizedException, response.result)
-
-            case 403:
-                self._raise_exception(exceptions.Forbidden, response.result)
-
-            case 404:
-                self._raise_exception(exceptions.NotFound, response.result)
-
-            case 409:
-                self._raise_exception(exceptions.Conflict, response.result)
-
-            case 500:
-                self._raise_exception(exceptions.ServerError, response.result)
-
-            case 503:
-                self._raise_exception(exceptions.ShutdownInProgress, response.result)
-
-            case _:
-                self._raise_exception(exceptions.ServerError, response.result)
-
-        # make mypy happy, it cannot deduce that all the cases will always raise an exception
-        return None
-
-    async def _call(
-        self, method_properties: common.MethodProperties, args: list[object], kwargs: dict[str, object]
-    ) -> types.ReturnTypes:
-        """Execute a call and return the result"""
-        return self._process_response(method_properties, await super()._call(method_properties, args, kwargs))
+    def __getattr__(self, name: str) -> Callable[..., Awaitable[types.ReturnTypes]]:
+        call: Callable[..., common.ClientCall] = super().__getattr__(name)
+        return lambda *args, **kwargs: call(*args, **kwargs).value()
