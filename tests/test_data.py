@@ -1187,7 +1187,7 @@ async def test_model_get_resources_for_version(init_dataclasses_and_load_schema)
         )
         await cm.insert()
 
-    resource_set = await make_resource_set(env.id, [1, 2, 3, 4])
+    resource_set = await make_resource_set(env.id, [3])
 
     async def make_with_status(i, is_undefined=False):
         res = data.Resource.new(
