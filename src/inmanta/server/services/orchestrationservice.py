@@ -555,9 +555,9 @@ class OrchestrationService(protocol.ServerSlice):
     ) -> dict[ResourceIdStr, ResourceDTO]:
         """
         This method converts the resources sent to the put_version or put_partial endpoint to DTO Resource objects.
-        The resulting resource objects will have their version field set to set_version if provided.
+        The resulting resource objects will have their model field set to set_version if provided.
 
-        An exception will be raised when the one of the following constraints is not satisfied:
+        An exception will be raised when one of the following constraints is not satisfied:
             * A resource present in the resource_sets parameter is not present in the resources dictionary.
             * The dependency graph of the provided resources is not closed.
         """
