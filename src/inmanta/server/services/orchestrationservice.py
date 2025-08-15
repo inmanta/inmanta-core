@@ -85,7 +85,7 @@ class CrossResourceSetDependencyError(Exception):
 
 
 class ResourceSetValidator:
-    def __init__(self, resources: list[ResourceDTO]) -> None:
+    def __init__(self, resources: abc.Collection[ResourceDTO]) -> None:
         self.resources = resources
         self.rid_to_resource_set = {res.resource_id: res.resource_set for res in self.resources}
 
@@ -277,7 +277,7 @@ class PartialUpdateMerger:
             ):
                 raise BadRequest(f"Resource ({res.resource_id}) without a resource set cannot be updated via a partial compile")
 
-            resource_set_validator = ResourceSetValidator(list(new_updated_and_shared_resources.values()))
+            resource_set_validator = ResourceSetValidator(new_updated_and_shared_resources.values())
             try:
                 resource_set_validator.ensure_no_cross_resource_set_dependencies()
             except CrossResourceSetDependencyError as e:
@@ -554,10 +554,10 @@ class OrchestrationService(protocol.ServerSlice):
         set_version: Optional[int] = None,
     ) -> dict[ResourceIdStr, ResourceDTO]:
         """
-        This method converts the resources sent to the put_version or put_partial endpoint to dao Resource objects.
-        The resulting resource objects will have their version field set to set_version if provided.
+        This method converts the resources sent to the put_version or put_partial endpoint to DTO Resource objects.
+        The resulting resource objects will have their model field set to set_version if provided.
 
-        An exception will be raised when the one of the following constraints is not satisfied:
+        An exception will be raised when one of the following constraints is not satisfied:
             * A resource present in the resource_sets parameter is not present in the resources dictionary.
             * The dependency graph of the provided resources is not closed.
         """
@@ -862,7 +862,7 @@ class OrchestrationService(protocol.ServerSlice):
 
         started = datetime.datetime.now().astimezone()
 
-        resource_set_validator = ResourceSetValidator(list(rid_to_resource.values()))
+        resource_set_validator = ResourceSetValidator(rid_to_resource.values())
         undeployable_ids: abc.Sequence[ResourceIdStr] = [
             res.resource_id for res in rid_to_resource.values() if res.is_undefined
         ]

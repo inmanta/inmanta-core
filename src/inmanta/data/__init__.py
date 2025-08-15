@@ -4949,7 +4949,7 @@ class ResourceSet(BaseDocument):
         cls,
         environment: uuid.UUID,
         target_version: int,
-        updated_resources: list[m.Resource],
+        updated_resources: abc.Collection[m.Resource],
         base_version: Optional[int] = None,
         deleted_resource_sets: Optional[abc.Set[str]] = None,
         *,
@@ -4960,11 +4960,11 @@ class ResourceSet(BaseDocument):
         Links resource sets to the target version.
         In case of a full compile, we expect to receive every resource set,
             so we insert those and link them to the target version
-        In case of a partial compile, we insert the updated resource sets and we link to the target version:
-            - The resource sets that we just updated
-            - Every resource set in the base version except:
-                - Resource sets we want to delete
-                - Resource sets with the same name as one of the updated resource sets (they are now outdated)
+        In case of a partial compile we:
+            - link every resource_set that was present in the base version to the target version
+            - delete every link in the target version to resource sets that were deleted or are going to be updated
+            - insert the updated resource sets into the database and link them to the target version
+            - insert the updated resources into the database and link them to the appropriate resource sets.
         If a resource from a specific resource set is present in updated_resources, all other resources from that resource
         set are expected to be present as well, including if that resource is part of the shared set.
         The shared resource set is treated as any other.
@@ -4976,7 +4976,7 @@ class ResourceSet(BaseDocument):
         :param base_version: This is the version which the partial compile is based on. None if we are doing a full compile.
         :param deleted_resource_sets: These are the resource set names from the base version which were removed
             in this partial compile. Not applicable for a full compile.
-        :param connection: The connection to use.
+        :param connection: The connection to use. Must be in a transaction context.
         """
 
         is_partial_update = base_version is not None
@@ -4998,83 +4998,72 @@ class ResourceSet(BaseDocument):
             )
             updated_resource_sets.add(r.resource_set)
 
-        insert_resource_sets = """
-            -- updated resource sets --
-            WITH resource_set_names(name) AS (
-                SELECT UNNEST($2::text[])
+        if is_partial_update:
+            deleted_resource_sets = deleted_resource_sets if deleted_resource_sets is not None else set()
+            # link every resource_set that was present in the base version to the target version
+            bump_old_sets = """
+                INSERT INTO public.resource_set_configuration_model(
+                    environment,
+                    model,
+                    resource_set_id
+                )
+                SELECT
+                    $1,
+                    $2,
+                    rscm.resource_set_id
+                FROM public.resource_set_configuration_model AS rscm
+                WHERE rscm.environment=$1
+                    AND rscm.model=$3
+            """
+            await cls._execute_query(bump_old_sets, environment, target_version, base_version, connection=connection)
+            resource_set_links_to_delete = updated_resource_sets | deleted_resource_sets
+            has_shared_resource_set = None in resource_set_links_to_delete
+            # delete every link in the target version to resource sets that were deleted or are going to be updated
+            delete_outdated_resource_sets = f"""
+                DELETE FROM public.resource_set_configuration_model AS rscm
+                USING public.resource_set AS rs
+                WHERE rscm.environment=rs.environment
+                    AND rscm.resource_set_id=rs.id
+                    AND rscm.environment=$1
+                    AND rscm.model=$2
+                    AND (
+                        (rs.name=ANY($3::text[]))
+                        {'OR rs.name IS NOT DISTINCT FROM NULL' if has_shared_resource_set else ''}
+                    )
+            """
+            await cls._execute_query(
+                delete_outdated_resource_sets, environment, target_version, resource_set_links_to_delete, connection=connection
             )
-            INSERT INTO public.resource_set (environment, id, name)
+
+        # insert the updated resource sets into the database and link them to the target version
+        insert_resource_sets = """
+            WITH resource_set_names(name) AS (
+                SELECT UNNEST($3::text[])
+            ),
+            inserted_resource_set_ids(id) AS (
+                INSERT INTO public.resource_set (environment, id, name)
+                SELECT
+                    $1,
+                    gen_random_uuid() AS id,
+                    rs.name
+                FROM resource_set_names AS rs
+                RETURNING id
+            )
+            INSERT INTO public.resource_set_configuration_model(
+               environment,
+               model,
+               resource_set_id
+            )
             SELECT
                 $1,
-                gen_random_uuid() AS id,
-                rs.name
-            FROM resource_set_names AS rs
-            RETURNING id, name;
+                $2,
+                irs.id
+            FROM inserted_resource_set_ids AS irs
         """
 
-        resource_set_records = await cls._fetch_query(
-            insert_resource_sets, environment, updated_resource_sets, connection=connection
-        )
+        await cls._fetch_query(insert_resource_sets, environment, target_version, updated_resource_sets, connection=connection)
 
-        # Data to insert into the database
-        resource_set_data = []
-        # Ids of the resource sets we inserted
-        inserted_resource_set_ids = []
-        # Names of the resource sets we do not want to bump in case of a partial compile (outdated and deleted sets)
-        resource_set_names_not_to_bump = set(deleted_resource_sets) if deleted_resource_sets else set()
-        for resource_set in resource_set_records:
-            resource_set_data.append({"id": str(resource_set["id"]), "name": resource_set["name"]})
-            resource_set_names_not_to_bump.add(resource_set["name"])
-            inserted_resource_set_ids.append(str(resource_set["id"]))
-
-        values = [environment, target_version, inserted_resource_set_ids]
-
-        if is_partial_update:
-            resource_sets_to_bump = """
-                   -- select the ids of each resource set of the base version that is NOT deleted or updated --
-                   UNION SELECT rscm.resource_set_id
-                   FROM public.resource_set_configuration_model AS rscm
-                   INNER JOIN public.resource_set AS rs
-                       ON rscm.environment=rs.environment
-                       AND rscm.resource_set_id=rs.id
-                   WHERE rscm.environment=$1
-                       AND rscm.model=$4
-                       AND NOT EXISTS (
-                           -- extra hoop to make comparison with null names --
-                             SELECT 1
-                             FROM UNNEST($5::text[]) AS resource_set_names_not_to_bump(name)
-                             WHERE resource_set_names_not_to_bump.name IS NOT DISTINCT FROM rs.name
-                           )
-                   """
-            values.extend([base_version, resource_set_names_not_to_bump])
-        else:
-            resource_sets_to_bump = ""
-
-        query_link_to_model = f"""
-                   -- resource set ids to include in new version of the model --
-                   WITH resource_set_ids_in_latest_version (id) AS (
-                       SELECT * FROM UNNEST($3::uuid[])
-                       {resource_sets_to_bump}
-                   )
-                   -- link resource sets to this new version of the model --
-                   INSERT INTO public.resource_set_configuration_model(
-                       environment,
-                       model,
-                       resource_set_id
-                   )
-                   SELECT
-                       $1,
-                       $2,
-                       rslv.id
-                   FROM resource_set_ids_in_latest_version AS rslv
-               """
-
-        await cls._execute_query(
-            query_link_to_model,
-            *values,
-            connection=connection,
-        )
-
+        # insert the updated resources into the database and link them to the appropriate resource sets.
         insert_resources = """
             WITH resource_data AS (
                 SELECT *
@@ -5885,7 +5874,7 @@ class Resource(BaseDocument):
         """
         Returns the content of the requires field in the attributes.
         """
-        if "requires" not in self.attributes or not isinstance(self.attributes["requires"], list):
+        if "requires" not in self.attributes:
             return []
         return list(self.attributes["requires"])
 

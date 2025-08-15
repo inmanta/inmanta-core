@@ -302,7 +302,6 @@ src/inmanta/data/__init__.py:0: error: Argument 1 to "_get_composed_filter" of "
 src/inmanta/data/__init__.py:0: error: Argument 1 to "_get_composed_filter" of "BaseDocument" has incompatible type "**dict[str, object]"; expected "str | None"  [arg-type]
 src/inmanta/data/__init__.py:0: error: Argument 1 to "_get_composed_filter" of "BaseDocument" has incompatible type "**dict[str, object]"; expected "str | None"  [arg-type]
 src/inmanta/data/__init__.py:0: error: Argument 1 to "_get_composed_filter" of "BaseDocument" has incompatible type "**dict[str, object]"; expected "str | None"  [arg-type]
-src/inmanta/data/__init__.py:0: error: Argument 1 to "add" of "set" has incompatible type "object"; expected "str"  [arg-type]
 src/inmanta/data/__init__.py:0: error: Argument 1 to "add_logs" of "ResourceAction" has incompatible type "list[dict[str, object]]"; expected "str | None"  [arg-type]
 src/inmanta/data/__init__.py:0: error: Argument 1 to "append" of "list" has incompatible type "ConfigurationModel"; expected "dict[str, object]"  [arg-type]
 src/inmanta/data/__init__.py:0: error: Argument 1 to "append" of "list" has incompatible type "Record"; expected "Resource"  [arg-type]
@@ -363,9 +362,11 @@ src/inmanta/data/__init__.py:0: error: No overload variant of "__add__" of "list
 src/inmanta/data/__init__.py:0: error: No overload variant of "int" matches argument type "object"  [call-overload]
 src/inmanta/data/__init__.py:0: error: No overload variant of "int" matches argument type "object"  [call-overload]
 src/inmanta/data/__init__.py:0: error: No overload variant of "list" matches argument type "object"  [call-overload]
+src/inmanta/data/__init__.py:0: error: No overload variant of "list" matches argument type "object"  [call-overload]
 src/inmanta/data/__init__.py:0: error: Overloaded function implementation does not accept all possible arguments of signature 1  [misc]
 src/inmanta/data/__init__.py:0: error: Returning Any from function declared to return "Connection"  [no-any-return]
 src/inmanta/data/__init__.py:0: error: Returning Any from function declared to return "Pool"  [no-any-return]
+src/inmanta/data/__init__.py:0: error: Returning Any from function declared to return "Sequence[ResourceIdStr]"  [no-any-return]
 src/inmanta/data/__init__.py:0: error: Returning Any from function declared to return "int | None"  [no-any-return]
 src/inmanta/data/__init__.py:0: error: Returning Any from function declared to return "list[TBaseDocument]"  [no-any-return]
 src/inmanta/data/__init__.py:0: error: Returning Any from function declared to return "list[tuple[ColumnNameStr, ColumnType, PagingOrder]]"  [no-any-return]
@@ -386,6 +387,7 @@ src/inmanta/data/__init__.py:0: note: Possible overload variants:
 src/inmanta/data/__init__.py:0: note: Possible overload variants:
 src/inmanta/data/__init__.py:0: note: Possible overload variants:
 src/inmanta/data/__init__.py:0: note: Possible overload variants:
+src/inmanta/data/__init__.py:0: note: Possible overload variants:
 src/inmanta/data/__init__.py:0: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#incompatible-overrides
 src/inmanta/data/__init__.py:0: note: Subclass:
 src/inmanta/data/__init__.py:0: note: Subclass:
@@ -394,6 +396,8 @@ src/inmanta/data/__init__.py:0: note: Superclass:
 src/inmanta/data/__init__.py:0: note: This violates the Liskov substitution principle
 src/inmanta/data/__init__.py:0: note: def [_S] __add__(self, list[_S], /) -> list[_S | tuple[str, ColumnType, PagingOrder]]
 src/inmanta/data/__init__.py:0: note: def [_T] __init__(self) -> list[_T]
+src/inmanta/data/__init__.py:0: note: def [_T] __init__(self) -> list[_T]
+src/inmanta/data/__init__.py:0: note: def [_T] __init__(self, Iterable[_T], /) -> list[_T]
 src/inmanta/data/__init__.py:0: note: def [_T] __init__(self, Iterable[_T], /) -> list[_T]
 src/inmanta/data/__init__.py:0: note: def __add__(self, list[tuple[str, ColumnType, PagingOrder]], /) -> list[tuple[str, ColumnType, PagingOrder]]
 src/inmanta/data/__init__.py:0: note: def __new__(cls, str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc = ..., /) -> int
