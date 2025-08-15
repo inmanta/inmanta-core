@@ -54,7 +54,7 @@ async def create_resource_in_multiple_versions(
 
     for version, attributes in version_attributes_map.items():
         resource_set = data.ResourceSet(environment=environment, id=uuid.uuid4())
-        await resource_set.insert()
+        await resource_set.insert_with_link_to_configuration_model(versions=[version])
         res = data.Resource.new(
             environment=environment,
             resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),
