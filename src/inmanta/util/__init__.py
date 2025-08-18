@@ -1011,7 +1011,10 @@ def make_attribute_hash(resource_id: "ResourceId", attributes: Mapping[str, obje
 def get_pkg_name_and_version(path_distribution_pkg: str) -> tuple[str, str]:
     """
     Returns a tuple that holds the name and version number of the given
-    distribution package.
+    distribution package. This method is compatible with both wheels and sdist packages.
+
+    Sdist file format: `{name}-{version}.tar.gz`
+    Wheel file format: `{distribution}-{version}(-{build tag})?-{python tag}-{abi tag}-{platform tag}.whl`
     """
     filename = os.path.basename(path_distribution_pkg)
     if filename.endswith(".tar.gz"):
