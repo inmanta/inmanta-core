@@ -367,7 +367,9 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
 
     def remove_venv(self) -> None:
         """
-        Remove the venv of the executor
+        Remove the venv of the executor.
+
+        This method must be called on a threadpool to not block the ioloop.
         """
         try:
             LOGGER.debug("Removing venv %s", self.env_path)
@@ -380,7 +382,9 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
 
     def reset(self) -> None:
         """
-        Remove the venv of the executor and recreate the directory of the venv
+        Remove the venv of the executor and recreate the directory of the venv.
+
+        This method must be called on a threadpool to not block the ioloop.
         """
         self.remove_venv()
         os.makedirs(self.env_path)
@@ -435,7 +439,7 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
             if virtual_environment.is_correctly_initialized():
                 self.pool[folder.name] = virtual_environment
             else:
-                virtual_environment.remove_venv()
+                await asyncio.get_running_loop().run_in_executor(self.thread_pool, virtual_environment.remove_venv)
 
     async def get_environment(self, blueprint: EnvBlueprint) -> ExecutorVirtualEnvironment:
         """
