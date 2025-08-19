@@ -235,7 +235,7 @@ class ArgumentCollector:
         self.offset = offset
         self.de_duplicate = de_duplicate
 
-    def __call__(self, entry: object) -> str:
+    def __call__(self, entry: object) -> typing.LiteralString:
         if self.de_duplicate and entry in self.args:
             return "$" + str(self.args.index(entry) + 1 + self.offset)
         self.args.append(entry)
@@ -4924,6 +4924,7 @@ class ResourceSet(BaseDocument):
             )
             raise BadRequest(msg)
 
+
     @classmethod
     async def insert_sets_and_resources(
         cls,
@@ -4936,18 +4937,17 @@ class ResourceSet(BaseDocument):
         connection: asyncpg.connection.Connection,
     ) -> None:
         """
-        Inserts resources and resource sets.
-        Links resource sets to the target version.
-        In case of a full compile, we expect to receive every resource set,
-            so we insert those and link them to the target version
-        In case of a partial compile we:
-            - link every resource_set that was present in the base version to the target version
-            - delete every link in the target version to resource sets that were deleted or are going to be updated
-            - insert the updated resource sets into the database and link them to the target version
-            - insert the updated resources into the database and link them to the appropriate resource sets.
-        If a resource from a specific resource set is present in updated_resources, all other resources from that resource
-        set are expected to be present as well, including if that resource is part of the shared set.
-        The shared resource set is treated as any other.
+        Inserts resources and resource sets and links resource sets to the target version.
+
+        In case of a full compile, expects to receive every resource set.
+
+        In case of a partial compile, expects to receive all sets with changes, and all resources for those sets (including
+        the shared set, which is treated like any other). We insert the updated resource sets and we link to the target version:
+            - The resource sets that we just updated
+            - Every resource set in the base version except:
+                - Resource sets we want to delete
+                - Resource sets with the same name as one of the updated resource sets (they are now outdated)
+
         :param environment: The environment of these resources.
         :param target_version: The version which we want to link the resource sets to
         :param updated_resources: A list of resources to insert.
@@ -4977,11 +4977,21 @@ class ResourceSet(BaseDocument):
                 }
             )
             updated_resource_sets.add(r.resource_set)
+        resource_data_json: str = json_encode(resource_data)
+
+        # common arguments to all queries
+        # $1: environment
+        # $2: target_version
+        common_values: tuple[uuid.UUID, int] = (cls._get_value(environment), cls.target_version)
 
         if is_partial_update:
+            # copy all old sets except for the ones that are being exported or deleted in this partial update
             deleted_resource_sets = deleted_resource_sets if deleted_resource_sets is not None else set()
+            has_shared_resource_set = None in updated_resource_sets
+
             # link every resource_set that was present in the base version to the target version
-            bump_old_sets = """
+            await cls._execute_query(
+                f"""\
                 INSERT INTO public.resource_set_configuration_model(
                     environment,
                     model,
@@ -4994,29 +5004,22 @@ class ResourceSet(BaseDocument):
                 FROM public.resource_set_configuration_model AS rscm
                 WHERE rscm.environment=$1
                     AND rscm.model=$3
-            """
-            await cls._execute_query(bump_old_sets, environment, target_version, base_version, connection=connection)
-            resource_set_links_to_delete = updated_resource_sets | deleted_resource_sets
-            has_shared_resource_set = None in resource_set_links_to_delete
-            # delete every link in the target version to resource sets that were deleted or are going to be updated
-            delete_outdated_resource_sets = f"""
-                DELETE FROM public.resource_set_configuration_model AS rscm
-                USING public.resource_set AS rs
-                WHERE rscm.environment=rs.environment
-                    AND rscm.resource_set_id=rs.id
-                    AND rscm.environment=$1
-                    AND rscm.model=$2
-                    AND (
-                        (rs.name=ANY($3::text[]))
-                        {'OR rs.name IS NOT DISTINCT FROM NULL' if has_shared_resource_set else ''}
+                    AND NOT (
+                        SELECT rs.name = ANY($3::text[]) {'OR rs.name IS NULL' if has_shared_resource_set else ''}
+                        FROM resource_set AS rs
+                        WHERE
+                            rs.environment = rscm.environment
+                            AND rs.id = rscm.resource_set_id
                     )
-            """
-            await cls._execute_query(
-                delete_outdated_resource_sets, environment, target_version, resource_set_links_to_delete, connection=connection
+                """,
+                *common_values,
+                cls._get_value(updated_resource_sets | deleted_resource_sets),
+                connection=connection,
             )
 
         # insert the updated resource sets into the database and link them to the target version
-        insert_resource_sets = """
+        await cls._execute_query(
+            f"""\
             WITH resource_set_names(name) AS (
                 SELECT UNNEST($3::text[])
             ),
@@ -5039,12 +5042,15 @@ class ResourceSet(BaseDocument):
                 $2,
                 irs.id
             FROM inserted_resource_set_ids AS irs
-        """
-
-        await cls._fetch_query(insert_resource_sets, environment, target_version, updated_resource_sets, connection=connection)
+            """,
+            *common_values,
+            cls._get_value(updated_resource_sets),
+            connection=connection,
+        )
 
         # insert the updated resources into the database and link them to the appropriate resource sets.
-        insert_resources = """
+        await cls._execute_query(
+            f"""\
             WITH resource_data AS (
                 SELECT *
                 FROM jsonb_to_recordset($3::jsonb) AS r(
@@ -5090,13 +5096,9 @@ class ResourceSet(BaseDocument):
                 ON rs.environment=rscm.environment
                 AND rs.id=rscm.resource_set_id
             WHERE rscm.model=$2 AND rscm.environment=$1
-        """
-
-        await cls._execute_query(
-            insert_resources,
-            environment,
-            target_version,
-            json.dumps(resource_data),
+            """,
+            *common_values,
+            cls._get_value(resource_data_json),
             connection=connection,
         )
 

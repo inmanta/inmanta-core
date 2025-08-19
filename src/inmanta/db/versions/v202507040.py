@@ -23,6 +23,9 @@ async def update(connection: Connection) -> None:
     """
     Create resource_set table
     """
+    # TODO: consider value of separate resource table vs name in rscm:
+    #   -> name in rscm has 10% better performance on copy query
+    #   -> but less relational integrity
     schema = """
     -- add and populate resource_set table --
 
@@ -93,7 +96,10 @@ async def update(connection: Connection) -> None:
     ADD CONSTRAINT resource_resource_set_id_environment_fkey
         FOREIGN KEY (resource_set_id, environment) REFERENCES public.resource_set(id, environment) ON DELETE CASCADE;
 
-    CREATE INDEX resource_set_environment_name_index ON public.resource_set (environment, name);
+    -- for selecting resource set WHERE name=... AND version=...
+    -- Tested for 5000 model versions, with 5000 different but like-named sets each:
+    -- (environment, name) index performs at 50%. No index at 20%.
+    CREATE INDEX resource_set_environment_name_id_index ON public.resource_set (environment, name, id);
 
 
     CREATE INDEX resource_environment_resource_set_id_index ON public.resource (environment, resource_set_id);

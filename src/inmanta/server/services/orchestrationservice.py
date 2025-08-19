@@ -225,7 +225,7 @@ class PartialUpdateMerger:
         )
 
     def merge_updated_and_shared_resources(
-        self, updated_and_shared_resources: abc.Sequence[ResourceDTO]
+        self, updated_and_shared_resources: abc.Collection[ResourceDTO]
     ) -> dict[ResourceIdStr, ResourceDTO]:
         """
          Separates named resource sets from the shared resource set and expands the shared set with the shared resources in
@@ -237,7 +237,7 @@ class PartialUpdateMerger:
         """
         shared_resources = {r.resource_id: r for r in updated_and_shared_resources if r.resource_set is None}
         updated_resources = {r.resource_id: r for r in updated_and_shared_resources if r.resource_set is not None}
-        shared_resources_merged = {r.resource_id: r for r in self._merge_shared_resources(shared_resources)}
+        shared_resources_merged = {r.resource_id: r for r in self._merge_shared_resources(shared_resources) or ()}
         # Updated go last, so that in case of overlap, we get the updated one
         # Validation on move is done later
         result = {**shared_resources_merged, **updated_resources}
@@ -283,32 +283,37 @@ class PartialUpdateMerger:
             except CrossResourceSetDependencyError as e:
                 raise BadRequest(e.get_error_message())
 
-    def _merge_shared_resources(self, shared_resources_new: dict[ResourceIdStr, ResourceDTO]) -> abc.Sequence[ResourceDTO]:
+    def _merge_shared_resources(self, shared_resources_new: dict[ResourceIdStr, ResourceDTO]) -> Optional[list[ResourceDTO]]:
         """
         Merge the set of shared resources present in the old version of the model together with the set of shared resources
         present in the partial compile.
 
         :param shared_resources_new: The set of shared resources present in the partial compile.
-        :returns: The set of shared resources that should be present in the new version of the model.
+        :returns: The set of shared resources that should be written to the new version of the model. Returns None if
+            nothing changed versus the previous version
         """
         all_rids_shared_resources = set(self.shared_resources_old.keys()) | set(shared_resources_new.keys())
         result = []
+        update: bool = False
         for rid_shared_resource in all_rids_shared_resources:
             if rid_shared_resource in shared_resources_new and rid_shared_resource in self.shared_resources_old:
                 # Merge requires shared resource
                 old_shared_resource = self.shared_resources_old[rid_shared_resource]
                 new_shared_resource = shared_resources_new[rid_shared_resource]
-                res = self._merge_requires_of_shared_resource(old_shared_resource, new_shared_resource)
+                update = self._merge_requires_of_shared_resource(old_shared_resource, new_shared_resource)
+                res = new_shared_resource
             elif rid_shared_resource in shared_resources_new:
                 # New shared resource in partial compile
                 res = shared_resources_new[rid_shared_resource]
+                update = True
             else:
                 # Old shared resource not referenced by partial compile
                 res_old = self.shared_resources_old[rid_shared_resource]
                 res = res_old.model_copy(update={"model": self.version}, deep=True)
                 res = self._clean_requires_of_old_shared_resource(res)
+                update = True
             result.append(res)
-        return result
+        return result if update else None
 
     def _should_keep_dependency_old_shared_resources(self, rid_dependency: ResourceIdStr) -> bool:
         """
@@ -334,31 +339,25 @@ class PartialUpdateMerger:
         ]
         return resource
 
-    def _merge_requires_of_shared_resource(self, old: ResourceDTO, new: ResourceDTO) -> ResourceDTO:
+    def _merge_requires_of_shared_resource(self, old: ResourceDTO, new: ResourceDTO) -> bool:
         """
-        Update the requires relationship of `new` to make it consistent with the new version of the model.
+        Update the requires relationship of `new` in-place to make it consistent with the new version of the model.
+        Returns True iff the new merged requires differs from the old one.
 
         :param old: The shared resource present in the old version of the model.
         :param new: The shared resource part of the incremental compile.
         """
         old_requires = old.attributes.get("requires", [])
         new_requires = new.attributes.get("requires", [])
-        new.attributes["requires"] = self._merge_dependencies_shared_resource(old_requires, new_requires)
-        return new
-
-    def _merge_dependencies_shared_resource(
-        self, old_deps: abc.Sequence[ResourceIdStr], new_deps: abc.Sequence[ResourceIdStr]
-    ) -> abc.Sequence[ResourceIdStr]:
-        """
-        Merge the dependencies for a certain shared resource together to make it consistent with the new version of the model.
-
-        :param old_deps: The set of dependencies present in the old version of the shared resource.
-        :param new_deps: The set of dependencies present in the shared resource that is part of the partial compile.
-        """
-        old_deps_cleaned: abc.Set[ResourceIdStr] = {
-            dep for dep in old_deps if self._should_keep_dependency_old_shared_resources(dep)
+        old_requires_cleaned: abc.Set[ResourceIdStr] = {
+            req for req in old_requires if self._should_keep_dependency_old_shared_resources(req)
         }
-        return list(old_deps_cleaned | set(new_deps))
+        merged_requires = list(old_requires_cleaned | new_requires)
+        new.attributes["requires"] = merged_requires
+        return (
+            len(old_requires_cleaned) != len(old_requires)  # a requires was dropped
+            or len(merged_requires) != len(old_requires)  # a requires was added by the new version
+        )
 
     async def merge_unknowns(
         self, unknowns_in_partial_compile: abc.Sequence[data.UnknownParameter]
@@ -778,7 +777,7 @@ class OrchestrationService(protocol.ServerSlice):
         self,
         env: data.Environment,
         version: int,
-        rid_to_resource: dict[ResourceIdStr, ResourceDTO],
+        rid_to_resource: Mapping[ResourceIdStr, ResourceDTO],
         unknowns: abc.Sequence[data.UnknownParameter],
         version_info: Optional[JsonType] = None,
         resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
@@ -1166,7 +1165,7 @@ class OrchestrationService(protocol.ServerSlice):
                 )
 
                 # add shared resources
-                merged_resources = partial_update_merger.merge_updated_and_shared_resources(list(rid_to_resource.values()))
+                merged_resources = partial_update_merger.merge_updated_and_shared_resources(rid_to_resource.values())
 
                 merged_unknowns = await partial_update_merger.merge_unknowns(
                     unknowns_in_partial_compile=self._create_unknown_parameter_daos_from_api_unknowns(env.id, version, unknowns)
