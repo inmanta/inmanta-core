@@ -18,6 +18,7 @@ Contact: code@inmanta.com
 
 import datetime
 import json
+import os
 import typing
 import urllib
 import uuid
@@ -949,6 +950,46 @@ class PipConfig(BaseModel):
     def has_source(self) -> bool:
         """Can this config get packages from anywhere?"""
         return bool(self.index_url) or self.use_system_config
+
+    def get_index_args(self) -> list[str]:
+        """
+        Returns the index-related arguments that should be used to run a pip command
+        with this pip config.
+        """
+        index_args: list[str] = []
+        if self.index_url:
+            index_args.append("--index-url")
+            index_args.append(self.index_url)
+        elif not self.use_system_config:
+            # If the config doesn't set index url
+            # and we are not using system config,
+            # then we need to disable the index.
+            # This can only happen if paths is also set.
+            index_args.append("--no-index")
+        for extra_index_url in self.extra_index_url:
+            index_args.append("--extra-index-url")
+            index_args.append(extra_index_url)
+        return index_args
+
+    def get_environment_variables(self) -> dict[str, str]:
+        """
+        Returns the environment variables that should be used to run a pip command
+        with this pip config.
+        """
+        sub_env = os.environ.copy()
+        if not self.use_system_config:
+            # If we don't use system config, unset env vars
+            for key in ("PIP_EXTRA_INDEX_URL", "PIP_INDEX_URL", "PIP_PRE", "PIP_NO_INDEX"):
+                sub_env.pop(key, None)
+
+            # setting this env_var to os.devnull disables the loading of all pip configuration file
+            sub_env["PIP_CONFIG_FILE"] = os.devnull
+        if self.pre is not None:
+            # Make sure that IF pip pre is set, we enforce it
+            # The `--pre` option can only enable it
+            # The env var can both enable and disable
+            sub_env["PIP_PRE"] = str(self.pre)
+        return sub_env
 
 
 LEGACY_PIP_DEFAULT = PipConfig(use_system_config=True)
