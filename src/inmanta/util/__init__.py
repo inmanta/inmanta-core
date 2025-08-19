@@ -1006,3 +1006,28 @@ def make_attribute_hash(resource_id: "ResourceId", attributes: Mapping[str, obje
     m.update(resource_id.encode("utf-8"))
     m.update(character.encode("utf-8"))
     return m.hexdigest()
+
+
+def get_pkg_name_and_version(path_distribution_pkg: str) -> tuple[str, str]:
+    """
+    Returns a tuple that holds the name and version number of the given
+    distribution package. This method is compatible with both wheels and sdist packages.
+
+    Sdist file format: `{name}-{version}.tar.gz`
+    Wheel file format: `{distribution}-{version}(-{build tag})?-{python tag}-{abi tag}-{platform tag}.whl`
+    """
+    filename = os.path.basename(path_distribution_pkg)
+    if filename.endswith(".tar.gz"):
+        filename = filename.removesuffix(".tar.gz")
+    pkg_name, version = filename.split("-")[0:2]
+    normalized_pkg_name = parse_requirement(pkg_name.removeprefix("inmanta-module-")).name
+    return normalized_pkg_name, version
+
+
+def get_module_name(path_distribution_pkg: str) -> str:
+    """
+    Returns the name of the Inmanta module that belongs to the given python package.
+    """
+    filename = os.path.basename(path_distribution_pkg)
+    pkg_name: str = filename.split("-", maxsplit=1)[0]
+    return pkg_name.removeprefix("inmanta_module_")
