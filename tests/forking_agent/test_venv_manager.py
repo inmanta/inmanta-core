@@ -191,7 +191,7 @@ async def test_environment_creation_locking(pip_index, tmpdir) -> None:
     await venv_manager_2.request_shutdown()
 
 
-async def test_recovery_virtual_environment_manager(tmpdir, pip_index):
+async def test_recovery_virtual_environment_manager(tmpdir, pip_index, async_finalizer):
     """
     Verify that the VirtualEnvironmentManager removes venvs that were not correctly initialized.
     """
@@ -205,6 +205,7 @@ async def test_recovery_virtual_environment_manager(tmpdir, pip_index):
         ),
     )
     await venv_manager.start()
+    async_finalizer.add(venv_manager.request_shutdown)
     env_id = uuid.uuid4()
     pip_config = PipConfig(index_url=pip_index.url)
     blueprint1 = executor.EnvBlueprint(
@@ -238,6 +239,11 @@ async def test_recovery_virtual_environment_manager(tmpdir, pip_index):
         ),
     )
     await venv_manager.start()
+    async_finalizer.add(venv_manager.request_shutdown)
 
+    # Assert venv1 was removed
     venv_dirs = os.listdir(tmpdir)
     assert venv_dirs == [venv2.folder_name]
+
+    await venv_manager.request_shutdown()
+    await venv_manager.join()
