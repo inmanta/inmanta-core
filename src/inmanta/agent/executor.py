@@ -431,7 +431,11 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
         for folder in folders:
             # No lock here, singe shot prior to start
             current_folder = self.envs_dir / folder
-            self.pool[folder.name] = ExecutorVirtualEnvironment(env_path=str(current_folder), io_threadpool=self.thread_pool)
+            virtual_environment = ExecutorVirtualEnvironment(env_path=str(current_folder), io_threadpool=self.thread_pool)
+            if virtual_environment.is_correctly_initialized():
+                self.pool[folder.name] = virtual_environment
+            else:
+                virtual_environment.remove_venv()
 
     async def get_environment(self, blueprint: EnvBlueprint) -> ExecutorVirtualEnvironment:
         """

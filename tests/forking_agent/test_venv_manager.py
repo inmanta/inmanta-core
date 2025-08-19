@@ -15,12 +15,14 @@ Contact: code@inmanta.com
 import asyncio
 import concurrent.futures
 import json
+import os
 import subprocess
 import sys
 import uuid
 
 import pytest
 
+from inmanta.agent import config as agent_config
 from inmanta.agent import executor
 from inmanta.data import PipConfig
 from utils import PipIndex
@@ -187,3 +189,55 @@ async def test_environment_creation_locking(pip_index, tmpdir) -> None:
     await venv_manager_2.start()
     assert manager.pool.keys() == venv_manager_2.pool.keys()
     await venv_manager_2.request_shutdown()
+
+
+async def test_recovery_virtual_environment_manager(tmpdir, pip_index):
+    """
+    Verify that the VirtualEnvironmentManager removes venvs that were not correctly initialized.
+    """
+    # Make sure there is no interference with the job that cleans up unused venvs.
+    assert agent_config.executor_venv_retention_time.get() >= 3600
+
+    venv_manager = executor.VirtualEnvironmentManager(
+        envs_dir=tmpdir,
+        thread_pool=concurrent.futures.ThreadPoolExecutor(
+            max_workers=1,
+        ),
+    )
+    await venv_manager.start()
+    env_id = uuid.uuid4()
+    pip_config = PipConfig(index_url=pip_index.url)
+    blueprint1 = executor.EnvBlueprint(
+        environment_id=env_id,
+        pip_config=pip_config,
+        requirements=("pkg1",),
+        python_version=sys.version_info[:2],
+    )
+    blueprint2 = executor.EnvBlueprint(
+        environment_id=env_id,
+        pip_config=pip_config,
+        requirements=(),
+        python_version=sys.version_info[:2],
+    )
+    venv1, venv2 = await asyncio.gather(
+        venv_manager.get_environment(blueprint1),
+        venv_manager.get_environment(blueprint2),
+    )
+    await venv_manager.request_shutdown()
+    await venv_manager.join()
+
+    assert len(os.listdir(tmpdir)) == 2
+
+    # Make venv1 corrupt
+    os.remove(venv1.inmanta_venv_status_file)
+
+    venv_manager = executor.VirtualEnvironmentManager(
+        envs_dir=tmpdir,
+        thread_pool=concurrent.futures.ThreadPoolExecutor(
+            max_workers=1,
+        ),
+    )
+    await venv_manager.start()
+
+    venv_dirs = os.listdir(tmpdir)
+    assert venv_dirs == [venv2.folder_name]
