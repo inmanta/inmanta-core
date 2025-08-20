@@ -4982,7 +4982,7 @@ class ResourceSet(BaseDocument):
         # common arguments to all queries
         # $1: environment
         # $2: target_version
-        common_values: tuple[uuid.UUID, int] = (cls._get_value(environment), cls.target_version)
+        common_values: tuple[object, object] = (cls._get_value(environment), cls._get_value(target_version))
 
         if is_partial_update:
             # copy all old sets except for the ones that are being exported or deleted in this partial update
@@ -5020,16 +5020,12 @@ class ResourceSet(BaseDocument):
         # insert the updated resource sets into the database and link them to the target version
         await cls._execute_query(
             f"""\
-            WITH resource_set_names(name) AS (
-                SELECT UNNEST($3::text[])
-            ),
-            inserted_resource_set_ids(id) AS (
+            WITH inserted_resource_set_ids(id) AS (
                 INSERT INTO public.resource_set (environment, id, name)
                 SELECT
                     $1,
                     gen_random_uuid() AS id,
-                    rs.name
-                FROM resource_set_names AS rs
+                    UNNEST($3::text[])
                 RETURNING id
             )
             INSERT INTO public.resource_set_configuration_model(

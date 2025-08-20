@@ -113,7 +113,7 @@ async def update(connection: Connection) -> None:
       resource_set_id uuid NOT NULL,
       PRIMARY KEY (environment, model, resource_set_id),
       FOREIGN KEY (environment, model) REFERENCES public.configurationmodel(environment, version) ON DELETE CASCADE,
-      FOREIGN KEY (environment, resource_set_id) REFERENCES public.resource_set(environment, id) ON DELETE CASCADE
+      FOREIGN KEY (environment, resource_set_id) REFERENCES public.resource_set(environment, id)
     );
 
     CREATE INDEX resource_set_configuration_model_environment_resource_set_id_index
