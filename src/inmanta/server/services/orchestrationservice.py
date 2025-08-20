@@ -355,8 +355,10 @@ class PartialUpdateMerger:
         merged_requires = list(old_requires_cleaned | new_requires)
         new.attributes["requires"] = merged_requires
         return (
-            len(old_requires_cleaned) != len(old_requires)  # a requires was dropped
-            or len(merged_requires) != len(old_requires)  # a requires was added by the new version
+            # a requires was dropped
+            len(old_requires_cleaned) != len(old_requires)
+            # a requires was added by the new version
+            or len(merged_requires) != len(old_requires)
         )
 
     async def merge_unknowns(

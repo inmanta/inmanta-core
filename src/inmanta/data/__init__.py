@@ -4924,7 +4924,6 @@ class ResourceSet(BaseDocument):
             )
             raise BadRequest(msg)
 
-
     @classmethod
     async def insert_sets_and_resources(
         cls,
@@ -5019,7 +5018,7 @@ class ResourceSet(BaseDocument):
 
         # insert the updated resource sets into the database and link them to the target version
         await cls._execute_query(
-            f"""\
+            """\
             WITH inserted_resource_set_ids(id) AS (
                 INSERT INTO public.resource_set (environment, id, name)
                 SELECT
@@ -5046,7 +5045,7 @@ class ResourceSet(BaseDocument):
 
         # insert the updated resources into the database and link them to the appropriate resource sets.
         await cls._execute_query(
-            f"""\
+            """\
             WITH resource_data AS (
                 SELECT *
                 FROM jsonb_to_recordset($3::jsonb) AS r(
