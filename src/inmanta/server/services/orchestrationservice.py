@@ -352,7 +352,7 @@ class PartialUpdateMerger:
         old_requires_cleaned: abc.Set[ResourceIdStr] = {
             req for req in old_requires if self._should_keep_dependency_old_shared_resources(req)
         }
-        merged_requires = list(old_requires_cleaned | new_requires)
+        merged_requires = list(old_requires_cleaned | set(new_requires))
         new.attributes["requires"] = merged_requires
         return (
             # a requires was dropped

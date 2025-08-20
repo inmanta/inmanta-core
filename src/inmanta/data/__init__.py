@@ -5004,7 +5004,7 @@ class ResourceSet(BaseDocument):
                 WHERE rscm.environment=$1
                     AND rscm.model=$3
                     AND NOT (
-                        SELECT rs.name = ANY($3::text[]) {'OR rs.name IS NULL' if has_shared_resource_set else ''}
+                        SELECT rs.name = ANY($4::text[]) {'OR rs.name IS NULL' if has_shared_resource_set else ''}
                         FROM resource_set AS rs
                         WHERE
                             rs.environment = rscm.environment
@@ -5012,7 +5012,8 @@ class ResourceSet(BaseDocument):
                     )
                 """,
                 *common_values,
-                cls._get_value(updated_resource_sets | deleted_resource_sets),
+                cls._get_value(base_version),
+                cls._get_value((updated_resource_sets | deleted_resource_sets) - {None}),
                 connection=connection,
             )
 
