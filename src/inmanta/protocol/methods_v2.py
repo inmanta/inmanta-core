@@ -24,7 +24,7 @@ from typing import Any, Literal, Optional, Union
 
 import inmanta.types
 from inmanta import const
-from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, ParameterSource, ResourceState
+from inmanta.const import AgentAction, AllAgentAction, ApiDocsFormat, Change, ClientType, ParameterSource, ResourceState
 from inmanta.data import model
 from inmanta.data.model import DataBaseReport, LinkedDiscoveredResource, PipConfig
 from inmanta.protocol import methods
@@ -498,6 +498,21 @@ def notify_timer_update(tid: uuid.UUID) -> None:
     """
 
 
+@typedmethod(
+    path="/executors/remove_venvs",
+    operation="DELETE",
+    server_agent=True,
+    timeout=5,
+    arg_options=methods.AGENT_ENV_OPTS,
+    client_types=[],
+    enforce_auth=False,
+)
+def remove_executor_venvs() -> None:
+    """
+    Remove all the Python virtual environments.
+    """
+
+
 @auth(auth_label=const.CoreAuthorizationLabel.AGENT_PAUSE_RESUME, read_only=False, environment_param="tid")
 @typedmethod(
     path="/agent/<name>/<action>", operation="POST", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
@@ -525,7 +540,7 @@ def agent_action(tid: uuid.UUID, name: str, action: AgentAction) -> None:
 @typedmethod(
     path="/agents/<action>", operation="POST", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
-def all_agents_action(tid: uuid.UUID, action: AgentAction) -> None:
+def all_agents_action(tid: uuid.UUID, action: AllAgentAction) -> None:
     """
     Execute an action on all agents in the given environment.
 
@@ -537,6 +552,8 @@ def all_agents_action(tid: uuid.UUID, action: AgentAction) -> None:
                     * unpause: A unpaused agent will be able to execute deploy operations.
                     * keep_paused_on_resume: The agents will still be paused when the environment is resumed
                     * unpause_on_resume: The agents will be unpaused when the environment is resumed
+                    * remove_all_executor_venvs: Remove all executor venvs in the given environment. During this
+                                                 process the environment will be temporarily halted.
 
     :raises Forbidden: The given environment has been halted and the action is pause/unpause,
                         or the environment is not halted and the action is related to the on_resume behavior

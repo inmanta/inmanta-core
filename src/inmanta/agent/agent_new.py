@@ -66,7 +66,7 @@ class Agent(SessionEndpoint):
 
         assert self._env_id is not None
 
-        self.executor_manager: executor.ExecutorManager[executor.Executor] = self.create_executor_manager()
+        self.executor_manager: forking_executor.MPManager = self.create_executor_manager()
         self.scheduler = scheduler.ResourceScheduler(self._env_id, self.executor_manager, self._client)
         self.working = False
 
@@ -129,6 +129,22 @@ class Agent(SessionEndpoint):
         await self.executor_manager.join([], timeout=timeout)
         await self.scheduler.join()
         LOGGER.info("Scheduler stopped for environment %s", self.environment)
+
+    @protocol.handle(methods_v2.remove_executor_venvs)
+    async def remove_executor_venvs(self) -> None:
+        """
+        Remove all the venvs used by the executors of this agent.
+        """
+        try:
+            # Stop all deployments and stop all executors
+            await self.scheduler.suspend_deployments()
+            await self.executor_manager.stop_all_executors()
+            # Remove venvs
+            environment_manager = self.executor_manager.get_environent_manager()
+            await environment_manager.remove_all_venvs()
+        finally:
+            # Resume deployments again
+            await self.scheduler.resume_deployments()
 
     @protocol.handle(methods.set_state)
     async def set_state(self, agent: Optional[str], enabled: bool) -> Apireturn:

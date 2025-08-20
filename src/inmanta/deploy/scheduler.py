@@ -226,10 +226,10 @@ class TaskRunner:
         self._notify_tasks: dict[uuid.UUID, asyncio.Task[None]] = {}
 
     async def start(self) -> None:
-        self.status = AgentStatus.STARTED
         assert (
             self._task is None or self._task.done()
         ), f"Task Runner {self.endpoint} is trying to start twice, this should not happen"
+        self.status = AgentStatus.STARTED
         self._task = asyncio.create_task(self._run())
 
     async def stop(self) -> None:
@@ -254,20 +254,23 @@ class TaskRunner:
         :param task_id: Is not None if this task was started using the `notify_sync()` method. It's used to clean up the
                         reference to the associated asyncio.Task object in `self._notify_tasks`. This value is None otherwise.
         """
-        should_be_running = await self._scheduler.should_be_running() and await self._scheduler.should_runner_be_running(
-            endpoint=self.endpoint
-        )
+        try:
+            should_be_running = (
+                await self._scheduler.should_be_running()
+                and await self._scheduler.should_runner_be_running(endpoint=self.endpoint)
+                and not self._scheduler.is_deployment_suspended()
+            )
 
-        match self.status:
-            case AgentStatus.STARTED if not should_be_running:
-                await self.stop()
-            case AgentStatus.STOPPED if should_be_running:
-                await self.start()
-            case AgentStatus.STOPPING if should_be_running:
-                self.status = AgentStatus.STARTED
-
-        if task_id:
-            del self._notify_tasks[task_id]
+            match self.status:
+                case AgentStatus.STARTED if not should_be_running:
+                    await self.stop()
+                case AgentStatus.STOPPED if should_be_running:
+                    await self.start()
+                case AgentStatus.STOPPING if should_be_running:
+                    self.status = AgentStatus.STARTED
+        finally:
+            if task_id:
+                del self._notify_tasks[task_id]
 
     def notify_sync(self) -> None:
         """
@@ -356,6 +359,8 @@ class ResourceScheduler(TaskManager):
         self.state_update_manager = ToDbUpdateManager(client, environment)
 
         self._timer_manager = timers.TimerManager(self)
+
+        self._deployment_suspended: bool = False
 
     async def _reset(self) -> None:
         """
@@ -1598,3 +1603,24 @@ class ResourceScheduler(TaskManager):
                 resource_states=resource_states_in_db,
                 discrepancies=discrepancy_map,
             )
+
+    async def suspend_deployments(self) -> None:
+        """
+        Suspend all deployment operations. All other scheduler functionality remains active.
+        """
+        self._deployment_suspended = True
+        await asyncio.gather(*[worker.stop() for worker in self._workers.values()])
+        await asyncio.gather(*[worker.join() for worker in self._workers.values()])
+
+    async def resume_deployments(self) -> None:
+        """
+        Resume all deployment operations.
+        """
+        self._deployment_suspended = False
+        await self.refresh_all_agent_states_from_db()
+
+    def is_deployment_suspended(self) -> bool:
+        """
+        Return True iff the deployment operations for this scheduler are currently suspended.
+        """
+        return self._deployment_suspended

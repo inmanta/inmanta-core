@@ -16,6 +16,7 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import os
 import abc
 import asyncio
 import concurrent.futures
@@ -370,6 +371,12 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         Remove the venv of the executor
         """
         try:
+            # Remove the status file first. Like this we will rebuild the venv on use
+            # if the rmtree() call was interrupted because of a system failure.
+            os.remove(self.inmanta_venv_status_file)
+        except Exception:
+            pass
+        try:
             LOGGER.debug("Removing venv %s", self.env_path)
             shutil.rmtree(self.env_path)
         except Exception:
@@ -421,6 +428,19 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
 
     def get_lock_name_for(self, member_id: str) -> str:
         return member_id
+
+    async def remove_all_venvs(self) -> None:
+        """
+        Removes all the venvs from disk. It's the responsibility of the caller
+        to make sure the venvs are no longer used.
+        """
+        folders = [file for file in self.envs_dir.iterdir() if file.is_dir()]
+        for folder in folders:
+            if folder.name in self.pool:
+                await self.pool[folder.name].request_shutdown()
+            else:
+                virtual_environment = ExecutorVirtualEnvironment(env_path=str(self.envs_dir / folder), io_threadpool=self.thread_pool)
+                await loop.run_in_executor(self.thread_pool, virtual_environment.remove_venv)
 
     async def init_environment_map(self) -> None:
         """
@@ -641,7 +661,8 @@ class ExecutorManager(abc.ABC, typing.Generic[E]):
         """
         Indicate that all executors for this agent can be stopped.
 
-        This is considered to be a hint , the manager can choose to follow or not
+        Because multiple agents can run on the same executor, this method only stops the executor if no more
+        agents are running on it.
 
         If executors are stopped, they are returned
         """
