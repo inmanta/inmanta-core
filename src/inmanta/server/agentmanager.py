@@ -48,7 +48,7 @@ from inmanta.data import APILIMIT, Environment, InvalidSort, model
 from inmanta.data.model import DataBaseReport
 from inmanta.protocol import encode_token, handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
-from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound, ShutdownInProgress, Conflict, ServerError
+from inmanta.protocol.exceptions import BadRequest, Conflict, Forbidden, NotFound, ShutdownInProgress
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
     SLICE_AUTOSTARTED_AGENT_MANAGER,
@@ -313,11 +313,13 @@ class AgentManager(ServerSlice, SessionListener):
         """
         Remove the venvs of the executors used by the given environment.
         """
-        agent_client = self._agent_manager.get_agent_client(tid=env.id, endpoint=AGENT_SCHEDULER_ID, live_agent_only=False)
+        agent_client = self.get_agent_client(tid=env.id, endpoint=AGENT_SCHEDULER_ID, live_agent_only=False)
         if agent_client:
             result = await agent_client.remove_executor_venvs()
             if result.code != 200:
-                raise Exception(f"Failed to remove executor venvs: {result.result['message']}")
+                raise Exception(
+                    f"Failed to remove executor venvs: {result.result['message'] if result.result is not None else ''}"
+                )
         else:
             raise Conflict(f"No scheduler process is running for environment {env.id}")
 

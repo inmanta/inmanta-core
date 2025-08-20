@@ -25,7 +25,7 @@ from typing import Optional
 import inmanta.server.config as opt
 from inmanta import config, const, data, protocol
 from inmanta.agent import config as cfg
-from inmanta.agent import executor, forking_executor
+from inmanta.agent import forking_executor
 from inmanta.agent.reporting import collect_report
 from inmanta.const import AGENT_SCHEDULER_ID
 from inmanta.data.model import DataBaseReport, SchedulerStatusReport
@@ -80,7 +80,7 @@ class Agent(SessionEndpoint):
 
         await super().start()
 
-    def create_executor_manager(self) -> executor.ExecutorManager[executor.Executor]:
+    def create_executor_manager(self) -> forking_executor.MPManager:
         assert self._env_id is not None
         return forking_executor.MPManager(
             self.thread_pool,

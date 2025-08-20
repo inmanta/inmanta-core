@@ -16,7 +16,6 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import os
 import abc
 import asyncio
 import concurrent.futures
@@ -439,8 +438,10 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
             if folder.name in self.pool:
                 await self.pool[folder.name].request_shutdown()
             else:
-                virtual_environment = ExecutorVirtualEnvironment(env_path=str(self.envs_dir / folder), io_threadpool=self.thread_pool)
-                await loop.run_in_executor(self.thread_pool, virtual_environment.remove_venv)
+                virtual_environment = ExecutorVirtualEnvironment(
+                    env_path=str(self.envs_dir / folder), io_threadpool=self.thread_pool
+                )
+                await asyncio.get_running_loop().run_in_executor(self.thread_pool, virtual_environment.remove_venv)
 
     async def init_environment_map(self) -> None:
         """

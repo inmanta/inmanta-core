@@ -98,7 +98,13 @@ import inmanta.types
 import inmanta.util
 from inmanta import const, tracing
 from inmanta.agent import executor, resourcepool
-from inmanta.agent.executor import DeployReport, FailedInmantaModules, GetFactReport, ModuleLoadingException, VirtualEnvironmentManager
+from inmanta.agent.executor import (
+    DeployReport,
+    FailedInmantaModules,
+    GetFactReport,
+    ModuleLoadingException,
+    VirtualEnvironmentManager,
+)
 from inmanta.agent.resourcepool import PoolManager, PoolMember
 from inmanta.const import LOGGER_NAME_EXECUTOR
 from inmanta.protocol.ipc_light import (
@@ -1031,11 +1037,11 @@ class MPManager(
         self.agent_map: collections.defaultdict[str, set[MPExecutor]] = collections.defaultdict(set)
         self.max_executors_per_agent = inmanta.agent.config.agent_executor_cap.get()
 
-    def get_environent_manager() -> VirtualEnvironmentManager:
+    def get_environent_manager(self) -> VirtualEnvironmentManager:
         """
         Returns the VirtualEnvironmentManager used to create Python environments for the executors.
         """
-        return self.process_pool.get_environent_manager()
+        return self.process_pool.get_environment_manager()
 
     def get_lock_name_for(self, member_id: executor.ExecutorId) -> str:
         return member_id.identity()
@@ -1134,7 +1140,7 @@ class MPManager(
         """
         children = set().union(*(e for e in self.agent_map.values()))
         await asyncio.gather(*(child.request_shutdown() for child in children))
-        return children
+        return list(children)
 
     async def stop_for_agent(self, agent_name: str) -> list[MPExecutor]:
         children = list(self.agent_map[agent_name])
