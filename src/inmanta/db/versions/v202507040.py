@@ -29,14 +29,19 @@ async def update(connection: Connection) -> None:
     schema = """
     -- add and populate resource_set table --
 
-    -- table does not really contain any data. We could have in-lined the name in the resource_set_configuration_model table
+    -- Table does not really contain any data. We could have in-lined the name in the resource_set_configuration_model table
     -- but that would decrease the relational integrity because null values are not allowed to reference another table.
+    --
     -- The performance of the two approaches was tested by setting up a database with 5000 model versions, with 5000 distinct
     -- resource sets each, with names the same across all model versions. This represents the (assumed) worst case scenario
-    -- when it comes to performance. Performance was then tested for the query that copies resource sets (no resources) from
-    -- one version to the next. The in-line approach performed slightly better at 60ms vs 70ms. Both scaled linearly with the
-    -- scale of the test (the 5000 mentioned above). This small performance win was not deemed sufficient reason to lose the
-    -- relational integrity.
+    -- when it comes to performance.
+    -- Performance was then tested for the query that copies resource sets (no resources) from one version to the next.
+    -- The in-line approach performed slightly better at 60ms vs 70ms. Both scaled roughly linearly with the
+    -- size of the test (the 5000 mentioned above). When resources were added to the test, the copy query only accounts for 30%
+    -- of the insert time when few and small resource sets are updated. As resource sets in the partial export scale, the
+    -- resource insert (not impacted by this decision) dominates to the point where the copy becomes negligible.
+    -- Other queries that select a resource set by name and model version are still affected, with the minimal performance hit
+    -- described above.
     CREATE TABLE public.resource_set (
         environment uuid NOT NULL,
         id uuid NOT NULL,

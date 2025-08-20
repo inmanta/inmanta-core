@@ -4961,22 +4961,18 @@ class ResourceSet(BaseDocument):
         is_partial_update = base_version is not None
 
         updated_resource_sets: set[str | None] = set()
-        resource_data: list[object] = list()
+        resource_data: dict[str, list[object]] = defaultdict(list)
         for r in updated_resources:
-            resource_data.append(
-                {
-                    "resource_id": str(r.resource_id),
-                    "agent": r.agent,
-                    "attributes": r.attributes,
-                    "attribute_hash": util.make_attribute_hash(r.resource_id, r.attributes),
-                    "resource_type": r.resource_type,
-                    "resource_id_value": r.resource_id_value,
-                    "is_undefined": r.is_undefined,
-                    "resource_set": r.resource_set,
-                }
-            )
             updated_resource_sets.add(r.resource_set)
-        resource_data_json: str = json_encode(resource_data)
+            resource_data["resource_id"].append(str(r.resource_id))
+            resource_data["resource_type"].append(r.resource_type)
+            resource_data["resource_id_value"].append(r.resource_id_value)
+            resource_data["agent"].append(r.agent)
+            resource_data["attributes"].append(r.attributes)
+            resource_data["attribute_hash"].append(util.make_attribute_hash(r.resource_id, r.attributes))
+            resource_data["is_undefined"].append(r.is_undefined)
+            resource_data["resource_set"].append(r.resource_set)
+        resource_data_db: dict[str, object] = {k: cls._get_value(v) for k, v in resource_data.items()}
 
         # common arguments to all queries
         # $1: environment
@@ -5017,49 +5013,42 @@ class ResourceSet(BaseDocument):
                 connection=connection,
             )
 
-        # insert the updated resource sets into the database and link them to the target version
+        # insert the updated resource sets and resources into the database and link everything together
+        # (resource -> set and set -> model)
         await cls._execute_query(
             """\
-            WITH inserted_resource_set_ids(id) AS (
+            -- insert resource sets and keep track of name-id mapping
+            WITH inserted_resource_sets AS (
                 INSERT INTO public.resource_set (environment, id, name)
                 SELECT
                     $1,
                     gen_random_uuid() AS id,
                     UNNEST($3::text[])
-                RETURNING id
-            )
-            INSERT INTO public.resource_set_configuration_model(
-               environment,
-               model,
-               resource_set_id
-            )
-            SELECT
-                $1,
-                $2,
-                irs.id
-            FROM inserted_resource_set_ids AS irs
-            """,
-            *common_values,
-            cls._get_value(updated_resource_sets),
-            connection=connection,
-        )
-
-        # insert the updated resources into the database and link them to the appropriate resource sets.
-        await cls._execute_query(
-            """\
-            WITH resource_data AS (
-                SELECT *
-                FROM jsonb_to_recordset($3::jsonb) AS r(
-                    resource_id text,
-                    agent text,
-                    attributes jsonb,
-                    attribute_hash text,
-                    resource_type text,
-                    resource_id_value text,
-                    is_undefined boolean,
-                    resource_set text
+                RETURNING name, id
+            -- link resource sets to model version
+            ), linked_resource_sets AS (
+                INSERT INTO public.resource_set_configuration_model(
+                   environment,
+                   model,
+                   resource_set_id
                 )
+                SELECT
+                    $1,
+                    $2,
+                    irs.id
+                FROM inserted_resource_sets AS irs
+            ), resource_data AS (
+                SELECT
+                    UNNEST($4::text[]) AS resource_id,
+                    UNNEST($5::text[]) AS resource_type,
+                    UNNEST($6::text[]) AS resource_id_value,
+                    UNNEST($7::text[]) AS agent,
+                    UNNEST($8::jsonb[]) AS attributes,
+                    UNNEST($9::text[]) AS attribute_hash,
+                    UNNEST($10::boolean[]) AS is_undefined,
+                    UNNEST($11::text[]) AS resource_set
             )
+            -- insert resources
             INSERT INTO public.resource(
                 environment,
                 model,
@@ -5067,9 +5056,9 @@ class ResourceSet(BaseDocument):
                 resource_type,
                 resource_id_value,
                 agent,
-                is_undefined,
                 attributes,
                 attribute_hash,
+                is_undefined,
                 resource_set,
                 resource_set_id
             )
@@ -5080,21 +5069,30 @@ class ResourceSet(BaseDocument):
                 r.resource_type,
                 r.resource_id_value,
                 r.agent,
-                r.is_undefined,
                 r.attributes,
                 r.attribute_hash,
+                r.is_undefined,
                 rs.name,
                 rs.id
             FROM resource_data AS r
-            INNER JOIN public.resource_set AS rs
+            -- this join has been tested to be up to four times faster than joining with
+            -- resource_configuration_model, even if the latter would have the name column directly
+            -- (for 5k models, 5k sets, updating 1-1000 sets, with 100-10k resources per set).
+            -- Order of magnitude for reference: 0.5s when updating 10 sets with 1k resources per set.
+            INNER JOIN inserted_resource_sets AS rs
                 ON r.resource_set IS NOT DISTINCT FROM rs.name
-            INNER JOIN public.resource_set_configuration_model AS rscm
-                ON rs.environment=rscm.environment
-                AND rs.id=rscm.resource_set_id
-            WHERE rscm.model=$2 AND rscm.environment=$1
             """,
             *common_values,
-            cls._get_value(resource_data_json),
+            cls._get_value(updated_resource_sets),
+            # insert as separate arrays rather than jsonb because jsob has a size limit
+            resource_data_db["resource_id"],
+            resource_data_db["resource_type"],
+            resource_data_db["resource_id_value"],
+            resource_data_db["agent"],
+            resource_data_db["attributes"],
+            resource_data_db["attribute_hash"],
+            resource_data_db["is_undefined"],
+            resource_data_db["resource_set"],
             connection=connection,
         )
 
