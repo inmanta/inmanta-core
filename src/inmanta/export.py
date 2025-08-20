@@ -373,7 +373,6 @@ class Exporter:
         metadata: dict[str, str] = {},
         no_commit: bool = False,
         include_status: bool = False,
-        model_export: bool = False,
         export_plugin: Optional[str] = None,
         partial_compile: bool = False,
         resource_sets_to_remove: Optional[Sequence[str]] = None,
