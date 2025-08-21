@@ -99,6 +99,32 @@ async def retry_limited(
         raise AssertionError("Bounded wait failed")
 
 
+async def assertion_error_to_boolean(fun: abc.Callable[[], abc.Awaitable[object]]) -> bool:
+    try:
+        await fun()
+        return True
+    except AssertionError:
+        LOGGER.info("Assertion failed, returning false", exc_info=True)
+        return False
+
+
+async def retry_limited_assertion(
+    fun: Union[abc.Callable[..., abc.Awaitable[object]]],
+    timeout: float,
+    interval: float = 0.1,
+    *args: object,
+    **kwargs: object,
+) -> None:
+    try:
+        await util.retry_limited(
+            functools.partial(assertion_error_to_boolean, functools.partial(fun, *args, **kwargs)),
+            timeout,
+            interval,
+        )
+    except asyncio.TimeoutError:
+        raise AssertionError("Bounded wait failed")
+
+
 async def wait_until_logs_are_available(client: Client, environment: str, resource_id: str, expect_nr_of_logs: int) -> None:
     """
     The state of a resource and its logs are not set atomically. As such there is a small window
