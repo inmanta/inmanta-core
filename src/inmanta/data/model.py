@@ -305,7 +305,7 @@ class EnvironmentSetting(BaseModel):
     :param update_model: Update the configuration model (git pull on project and repos)
     :param agent_restart: Restart autostarted agents when this settings is updated.
     :param allowed_values: list of possible values (if type is enum)
-    :param section: the section this option should be rendered in
+    :param section: the section this option should be rendered in. optional for backward compatibility with <iso9
     """
 
     name: str
