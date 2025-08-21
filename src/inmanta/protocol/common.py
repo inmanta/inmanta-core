@@ -1372,14 +1372,9 @@ class ClientCall(Awaitable[Result[R]]):
         """
         Returns a result in a syncronous context. Must not be called from an async context.
         """
-        with_timeout: types.AsyncioCoroutine[Result[R]] = asyncio.wait_for(self, timeout)
         try:
-            if ioloop is None:
-                # no loop is running: create a loop for this thread if it doesn't exist already and run it
-                return util.ensure_event_loop().run_until_complete(with_timeout)
-            else:
-                # loop is running on different thread
-                return asyncio.run_coroutine_threadsafe(with_timeout, ioloop).result()
+            return util.wait_sync(self, timeout=timeout, ioloop=ioloop)
+        # TODO: should this be asyncio.TimeoutError?
         except TimeoutError:
             raise ConnectionRefusedError()
 
@@ -1407,6 +1402,13 @@ class PageableClientCall(ClientCall[list[V]], Awaitable[PageableResult[V]]):
         """
         async for v in (await self).all():
             yield v
+
+    def sync_all(self, *, timeout: int = 120, ioloop: Optional[asyncio.AbstractEventLoop] = None) -> list[V]:
+        # TODO: docstring
+        async def collect() -> list[V]:
+            return [v async for v in self.all()]
+
+        return util.wait_sync(collect(), timeout=timeout, ioloop=ioloop)
 
 
 class SessionManagerInterface:

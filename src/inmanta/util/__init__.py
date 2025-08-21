@@ -56,7 +56,7 @@ import packaging.requirements
 import packaging.utils
 import pydantic_core
 from crontab import CronTab
-from inmanta import COMPILER_VERSION, const
+from inmanta import COMPILER_VERSION, const, types
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ReturnTypes
 from packaging.utils import NormalizedName
@@ -845,6 +845,28 @@ def ensure_event_loop() -> asyncio.AbstractEventLoop:
         new_loop = asyncio.new_event_loop()
         asyncio.set_event_loop(new_loop)
         return new_loop
+
+
+def wait_sync[T](
+    awaitable: Awaitable[T],
+    *,
+    timeout: int = 120,
+    ioloop: Optional[asyncio.AbstractEventLoop] = None,
+) -> T:
+    """
+    Blocks on an async awaitable from a syncronous context. Must not be called from an async context.
+
+    Must not be called from handlers, see Handler.run_sync for that.
+
+    :param ioloop: await on an existing io loop, on another thread. Otherwise an io loop is started on the current thread.
+    """
+    with_timeout: types.AsyncioCoroutine[T] = asyncio.wait_for(awaitable, timeout)
+    if ioloop is None:
+        # no loop is running: create a loop for this thread if it doesn't exist already and run it
+        return ensure_event_loop().run_until_complete(with_timeout)
+    else:
+        # loop is running on different thread
+        return asyncio.run_coroutine_threadsafe(with_timeout, ioloop).result()
 
 
 class ExhaustedPoolWatcher:
