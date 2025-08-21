@@ -39,6 +39,7 @@ from uuid import UUID
 
 import asyncpg
 import dateutil
+import more_itertools
 import pydantic
 import pydantic.tools
 import typing_inspect
@@ -5428,7 +5429,8 @@ class Resource(BaseDocument):
         *,
         since: Optional[int],
         connection: Optional[Connection] = None,
-    ) -> list[tuple[int, list[dict[str, object]]]]:
+    ) -> list[tuple[int, inmanta.types.ResourceSets]]:
+        # TODO: method docstring: empty sets = deleted sets & mention that it's a partial result
         """
         Returns all released model versions with associated resources since (excluding) the given model version.
         Returns resources as raw dicts with the requested fields
@@ -5438,42 +5440,113 @@ class Resource(BaseDocument):
         boundary_query: typing.LiteralString = (
             "SELECT $2::int AS version"
             if since is not None
-            else f""" \
-                            SELECT MAX(version) AS version
-                            FROM {ConfigurationModel.table_name()}
-                            WHERE released=TRUE AND environment=$1
-                            """
+            # TODO: if since is None, should fetch ALL resources, not a partial. That's a vastly different query.
+            #       Or, alternatively, make sure model_pairs is a single 'NULL, version' row
+            #       => make it a separate method!!!
+            else f"""\
+                SELECT MAX(version) AS version
+                FROM {ConfigurationModel.table_name()}
+                WHERE released=TRUE AND environment=$1
+                """
         )
 
-        query: typing.LiteralString = f"""
-            WITH boundary AS (
-                {boundary_query}
+        # TODO: does this return a sane result if there are no newer versions?
+        query: typing.LiteralString = f"""\
+        WITH boundary AS (
+            -- TODO: inline
+            {boundary_query}
+        ), models AS (
+            SELECT *
+            FROM {ConfigurationModel.table_name()} AS cm
+            WHERE cm.environment = $1
+                AND cm.version > (SELECT version FROM boundary) - 1
+                AND cm.released is TRUE
+        ), rs_with_name AS (
+            SELECT
+                rscm.*
+                rs.name,
+            FROM models AS cm
+            INNER JOIN resource_set_configuration_model AS rscm
+                ON rscm.environment = cm.environment
+                AND rscm.model = cm.version
+            -- TODO: get some data on how this performs vs name in rscm
+            INNER JOIN {ResourceSet.table_name()} AS rs
+                ON rs.environment = rscm.environment
+                ON rs.id = rscm.resource_set_id
+        ), model_pairs AS (
+            SELECT *
+            FROM (
+                SELECT
+                    first_value(version) OVER pairs AS old,
+                    last_value(version) OVER pairs AS new
+                FROM models AS cm
+                ORDER BY cm.version
+                WINDOW pairs AS (ORDER BY a ROWS 1 PRECEDING)
             )
-            SELECT m.version, r.resource_id, r.attributes, r.attribute_hash, r.is_undefined
-            FROM {ConfigurationModel.table_name()} as m
-            LEFT JOIN {cls.table_name()} as r
-                ON m.environment=r.environment AND m.version=r.model
-            WHERE m.environment=$1
-                AND m.version > (SELECT version FROM boundary) - 1
-                AND m.released is TRUE
-            ORDER BY m.version ASC
+            -- drop first row where there is no PRECEDING for the window function
+            WHERE old != new
+        )
+        SELECT
+            model_pairs.new AS version,
+            diff.name AS resource_set_name,
+            diff.id AS resource_set_id,
+            r.resource_id,
+            r.attributes,
+            r.attribute_hash,
+            r.is_undefined
+        FROM model_pairs
+        LEFT JOIN LATERAL (
+            -- DISTINCT because join results in two null rows for shared set. ORDER BY below ensures we keep the latest one
+            SELECT DISTINCT ON (rs_new.name, rs_old.name)
+                -- if the set exists in only one of the models, report that one
+                COALESCE(rs_new.name, rs_old.name) AS name,
+                -- we're only interested in the latest id, or the absence of it
+                rs_new.id
+            FROM (SELECT * FROM rs_with_name WHERE model = model_pairs.old) AS rs_old
+            FULL JOIN (SELECT * FROM rs_with_name WHERE model = model_pairs.new) AS rs_new
+                ON AND rs_old.name = rs_new.name
+            -- filter out all sets that remained unchanged
+            WHERE rs_new.id IS DISTINCT FROM rs_old.id
+            -- make sure SELECT DISTINCT matches the new id for the shared set, if it exists
+            ORDER BY rs_new.name, rs_old.name, rs_new.id NULLS LAST
+        ) AS diff
+        ON true
+        LEFT JOIN {cls.table_name()} as r
+            ON r.environment = $1
+            AND r.resource_set_id = diff.id
+        ORDER BY model_pairs.new, diff.name
         """
-        query_values = [cls._get_value(environment), since] if since is not None else [cls._get_value(environment)]
         resource_records = await cls._fetch_query(
             query,
-            *query_values,
+            cls._get_value(environment),
+            # TODO: consider how to handle the since=None case
+            cls._get_value(since),
             connection=connection,
         )
-        result: list[tuple[int, list[dict[str, object]]]] = []
-        for version, raw_resources in itertools.groupby(resource_records, key=lambda r: r["version"]):
-            parsed_resources: list[dict[str, object]] = []
-            for raw_resource in raw_resources:
-                if raw_resource["resource_id"] is None:
-                    # left join produced no resources
+        type Model = tuple[int, inmanta.types.ResourceSets]
+        result: list[Model] = []
+        version: int
+        records: Iterator[asyncpg.Record]
+        record: asyncpg.Record
+        for version, records in itertools.groupby(resource_records, key=lambda r: r["version"]):
+            record, records = more_itertools.spy(records)
+            if record["resource_set_id"] is None:
+                # left join with resource_set did not match => no diff in export
+                result.append((version, {}))
+                continue
+            model_sets: inmanta.types.ResourceSets = defaultdict(list)
+            resource_set_name: Optional[str]
+            for resource_set_name, records in itertools.groupby(records, key=lambda r: r["resource_set_name"]):
+                model_sets[resource_set_name] = []
+                record, records = more_itertools.spy(records)
+                if record["resource_id"] is None:
+                    # left join with resource did not match => empty or deleted resource set
                     continue
-                resource: dict[str, object] = dict(raw_resource)
-                parsed_resources.append(resource)
-            result.append((version, parsed_resources))
+                for record in records:
+                    model_sets[resource_set_name].append(
+                        {k: record[k] for k in ("resource_id", "attributes", "attribute_hash", "is_undefined")}
+                    )
+            result.append((version, model_sets))
         return result
 
     @classmethod

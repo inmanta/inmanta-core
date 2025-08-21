@@ -33,7 +33,7 @@ from typing import Optional, Self
 
 import asyncpg
 
-from inmanta import const, data
+from inmanta import const, data, types
 from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
 from inmanta.data import ConfigurationModel, Environment
@@ -120,36 +120,59 @@ class ResourceRecord(typing.TypedDict):
     attribute_hash: str
 
 
+# TODO: consider if the patch is complete
+
+
 @dataclass(frozen=True)
 class ModelVersion:
     """
     A version of the model to be managed by the scheduler.
     """
+    # TODO: how to model deleted sets? empty list or deleted_sets? The former => docstring
 
     version: int
     resources: Mapping[ResourceIdStr, ResourceIntent]
+    # TODO: the comment below is false. Figure out why it was there. Is it an invariant of new_version()?
+    resource_sets: Mapping[Optional[str], Set[ResourceIdStr]]  # must always contain at least the shared set
     requires: Mapping[ResourceIdStr, Set[ResourceIdStr]]
     undefined: Set[ResourceIdStr]
+    # TODO: how to set this?
+    partial: bool
 
     @classmethod
-    def from_db_records(cls: type[Self], version: int, resources: Collection[ResourceRecord]) -> Self:
-        return cls(
-            version=version,
-            resources={
-                ResourceIdStr(resource["resource_id"]): ResourceIntent(
-                    resource_id=ResourceIdStr(resource["resource_id"]),
+    def from_db_records(
+        cls: type[Self],
+        version: int,
+        resource_sets: Mapping[Optional[str], Sequence[types.ResourceDict]],
+        *,
+        partial: bool,
+    ) -> Self:
+        resources: list[dict[ResourceIdStr, ResourceIntent]] = []
+        sets: dict[Optional[str], set[ResourceIdStr]]= {}
+        requires: dict[ResourceIdStr, Set[ResourceIdStr]]
+        undefined: set[ResourceIdStr}
+        for resource_set, set_resources in resource_sets.items():
+            sets[resource_set] = set()
+            for resource in set_resources:
+                resource_id = ResourceIdStr(resource["resource_id"])
+                sets[resource_set].add(resource_id)
+                resources[resource_id] = ResourceIntent(
+                    resource_id=resource_id,
                     attribute_hash=resource["attribute_hash"],
                     attributes=resource["attributes"],
                 )
-                for resource in resources
-            },
-            requires={
-                ResourceIdStr(resource["resource_id"]): {
+                requires[resource_id] = {
                     Id.parse_id(req).resource_str() for req in resource["attributes"].get("requires", [])
                 }
-                for resource in resources
-            },
-            undefined={ResourceIdStr(resource["resource_id"]) for resource in resources if resource["is_undefined"]},
+                if resource["is_undefined"]:
+                    undefined.add(resource_id)
+        return cls(
+            version=version,
+            resources=resources,
+            resource_sets=resource_sets,
+            requires=requires,
+            undefined=undefined,
+            partial=partial,
         )
 
 
@@ -655,9 +678,11 @@ class ResourceScheduler(TaskManager):
                 connection=con,
             )
 
+            # TODO: update this call to be resource-set aware
             return ModelVersion.from_db_records(
                 version,
                 resources_from_db,  # type: ignore
+                partial=False,
             )
 
     async def read_version(
@@ -683,10 +708,11 @@ class ResourceScheduler(TaskManager):
             # - a new version was released after we started processing this communication or is being released now, in which
             #   case a new notification will be / have been sent and blocked on the intent locked until we're done here.
             # So if we end up with a race, we can be confident that we'll always process the associated notification soon.
-            resources_by_version: Sequence[tuple[int, Sequence[Mapping[str, object]]]] = (
+            partial: bool = self._state.version > 0
+            resources_by_version: Sequence[tuple[int, types.ResourceSets]] = (
                 await data.Resource.get_resources_since_version_raw(
                     self.environment,
-                    since=self._state.version if self._state.version > 0 else None,
+                    since=self._state.version if partial else None,
                     connection=con,
                 )
             )
@@ -694,6 +720,7 @@ class ResourceScheduler(TaskManager):
                 ModelVersion.from_db_records(
                     version,
                     resources,  # type: ignore
+                    partial=partial,
                 )
                 for version, resources in resources_by_version
             ]
@@ -729,16 +756,44 @@ class ResourceScheduler(TaskManager):
 
         version: int
         intent: dict[ResourceIdStr, ResourceIntent] = {}
+        resource_sets: dict[Optional[str], Set[ResourceIdStr]] = {}
         resource_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
         # keep track of all new resource intent and all changes of intent relative to the currently managed version
         intent_changes: dict[ResourceIdStr, ResourceIntentChange] = {}
         # all undefined resources in the new model versions. Newer version information overrides older ones.
         undefined: set[ResourceIdStr] = set()
+        # True iff the above represents a partial view on the intent, i.e. relative to the current state's intent.
+        # False if it represents all intent
+        partial: bool = True
 
         for model in new_versions:
             version = model.version
-            # resources that don't exist anymore in this version
-            for resource in (self._state.intent.keys() | intent.keys()) - model.resources.keys():
+
+            # Update resource sets and check for deleted resources.
+
+            # known resources that are in scope for this partial export, i.e. resources in exported sets
+            known_resources: Set[ResourceIdStr]
+            if model.partial:
+                known_resources = (
+                    # get resources in set from tracked resource set, falling back to state's resource set if appropriate
+                    resource_sets.get(resource_set, self._state.resources_sets.get(resource_set, set()) if partial else set())
+                    for resource_set in model.resource_sets.keys()
+                )
+                # update resource sets mapping
+                for resource_set, resources in model.resource_sets.items():
+                    if len(resources) > 0:
+                        resource_sets[resource_set] = resources
+                    else:
+                        with contextlib.suppress(KeyError)
+                            del resource_sets[resource_set]
+            else:
+                known_resources = intent.keys() | (self._state.intent.keys() if partial else set())
+                # from now on we track all resource sets
+                partial = False
+                resource_sets = dict(model.resource_sets)
+
+            # TODO: review
+            for resource in known_resources - model.resources.keys():
                 with contextlib.suppress(KeyError):
                     del intent[resource]
                     del resource_requires[resource]
@@ -800,8 +855,10 @@ class ResourceScheduler(TaskManager):
             ModelVersion(
                 version=version,
                 resources=intent,
+                resource_sets=resource_sets,
                 requires=resource_requires,
                 undefined=undefined,
+                partial=partial,
             ),
             intent_changes,
         )
@@ -823,7 +880,8 @@ class ResourceScheduler(TaskManager):
 
         :param up_to_date_resources: Set of resources that are to be considered in an assumed good state due to a previously
             successful deploy for the same intent. Should not include any blocked resources. Mostly intended for the very first
-            version when the scheduler is started with a fresh state.
+            version when the scheduler is started with a fresh state. Must be present in the latest version in the
+            new versions list.
         :param last_deploy_time: last known deploy time of all resources. only intended for the very first
             version when the scheduler is started with a fresh state.
             It must contain ALL resources as it is used to start the timers
@@ -929,8 +987,13 @@ class ResourceScheduler(TaskManager):
         #   and has to be even apart from motivations 2-3, it may interleave with
         # 2. clarity: it clearly signifies that this is the atomic and performance-sensitive part
         async with self._scheduler_lock:
-            # update model version
+            # update model version and resource set mapping
             self._state.version = model.version
+            if model.partial:
+                for resource_set, resources in model.resource_sets.items():
+                    self._state.resource_sets[resource_set] = resources
+            else:
+                self._state.resource_sets = dict(model.resource_sets)
             # update resource intent
             for resource in up_to_date_resources:
                 # Registers resource and removes from the dirty set
