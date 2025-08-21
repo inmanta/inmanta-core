@@ -5085,14 +5085,14 @@ class ResourceSet(BaseDocument):
             *common_values,
             cls._get_value(updated_resource_sets),
             # insert as separate arrays rather than jsonb because jsob has a size limit
-            resource_data_db["resource_id"],
-            resource_data_db["resource_type"],
-            resource_data_db["resource_id_value"],
-            resource_data_db["agent"],
-            resource_data_db["attributes"],
-            resource_data_db["attribute_hash"],
-            resource_data_db["is_undefined"],
-            resource_data_db["resource_set"],
+            resource_data_db.get("resource_id", []),
+            resource_data_db.get("resource_type", []),
+            resource_data_db.get("resource_id_value", []),
+            resource_data_db.get("agent", []),
+            resource_data_db.get("attributes", []),
+            resource_data_db.get("attribute_hash", []),
+            resource_data_db.get("is_undefined", []),
+            resource_data_db.get("resource_set", []),
             connection=connection,
         )
 
