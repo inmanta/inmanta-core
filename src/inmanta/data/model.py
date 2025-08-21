@@ -305,6 +305,7 @@ class EnvironmentSetting(BaseModel):
     :param update_model: Update the configuration model (git pull on project and repos)
     :param agent_restart: Restart autostarted agents when this settings is updated.
     :param allowed_values: list of possible values (if type is enum)
+    :param section: the section this option should be rendered in
     """
 
     name: str
@@ -315,6 +316,7 @@ class EnvironmentSetting(BaseModel):
     update_model: bool
     agent_restart: bool
     allowed_values: Optional[list[EnvSettingType]] = None
+    section: Optional[str] = None
 
 
 class ProtectedBy(str, Enum):

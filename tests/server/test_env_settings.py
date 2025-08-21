@@ -283,6 +283,12 @@ async def test_environment_add_new_setting_parameter(server, client, environment
     assert result.code == 200
     assert result.result["value"] is False
 
+    result = await client.list_settings(tid=environment)
+    assert result.code == 200
+    # All setting have a section now, except for the new one
+    assert result.result["metadata"]["a new setting"]["section"] is None
+    assert all(value["section"] for key, value in result.result["metadata"].items() if key != "a new setting")
+
 
 async def test_get_setting_no_longer_exist(server, client, environment):
     """
