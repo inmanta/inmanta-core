@@ -1629,7 +1629,6 @@ class SnippetCompilationTest(KeepOnFail):
         return export.run(
             types,
             scopes,
-            model_export=False,
             include_status=include_status,
             partial_compile=partial_compile,
             resource_sets_to_remove=resource_sets_to_remove,
