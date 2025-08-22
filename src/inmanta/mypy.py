@@ -89,6 +89,7 @@ class ClientMethodsPlugin(Plugin):
                     "inmanta.protocol.endpoints.SessionClient.",
                     "inmanta.protocol.endpoints.SyncClient.",
                     "inmanta.protocol.endpoints.TypedClient.",
+                    "inmanta.server.protocol.LocalClient.",
                 )
                 if (name := fullname.removeprefix(prefix)) != fullname
             ),

@@ -34,7 +34,7 @@ from tornado import gen, queues, routing, web
 import inmanta.protocol.endpoints
 from inmanta import tracing, types
 from inmanta.data.model import ExtensionStatus, ReportedStatus, SliceStatus
-from inmanta.protocol import Client, Result, TypedClient, common, endpoints, handle, methods, methods_v2
+from inmanta.protocol import Client, Result, common, endpoints, handle, methods, methods_v2
 from inmanta.protocol.exceptions import ShutdownInProgress
 from inmanta.protocol.rest import server
 from inmanta.server import SLICE_SESSION_MANAGER, SLICE_TRANSPORT
@@ -863,9 +863,7 @@ class SessionManager(ServerSlice):
             return 500
 
 
-# TODO: consider how to evolve this one if TypedClient is deprecated. Ideally, this would become untyped, but that's breaking.
-#       Is it used anywhere???
-class LocalClient(TypedClient):
+class LocalClient(Client):
     """
     A client that calls methods async on the server in the same process.
     """
