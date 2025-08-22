@@ -839,6 +839,8 @@ def ensure_event_loop() -> asyncio.AbstractEventLoop:
     """
     try:
         # nothing needs to be done if this thread already has an event loop
+        # known issue: asyncio offers no way to get the active event loop if it's not running. So we may be too eager
+        #   in creating a new one.
         return asyncio.get_running_loop()
     except RuntimeError:
         # asyncio.set_event_loop sets the event loop for this thread only
@@ -848,7 +850,7 @@ def ensure_event_loop() -> asyncio.AbstractEventLoop:
 
 
 def wait_sync[T](
-    awaitable: Awaitable[T],
+    awaitable: Awaitable[T] | asyncio.Future[T],
     *,
     timeout: int = 120,
     ioloop: Optional[asyncio.AbstractEventLoop] = None,
@@ -861,12 +863,17 @@ def wait_sync[T](
     :param ioloop: await on an existing io loop, on another thread. Otherwise an io loop is started on the current thread.
     """
     with_timeout: types.AsyncioCoroutine[T] = asyncio.wait_for(awaitable, timeout)
-    if ioloop is None:
-        # no loop is running: create a loop for this thread if it doesn't exist already and run it
-        return ensure_event_loop().run_until_complete(with_timeout)
-    else:
-        # loop is running on different thread
+    if ioloop is not None:
+        # run it on the given loop
         return asyncio.run_coroutine_threadsafe(with_timeout, ioloop).result()
+    # no running loop given: create a loop for this thread if it doesn't exist already and run it
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        # no loop running for this thread. Use asyncio.run
+        return asyncio.run(with_timeout)
+    else:
+        raise Exception("wait_sync can not be called from an async context")
 
 
 class ExhaustedPoolWatcher:

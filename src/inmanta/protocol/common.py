@@ -34,7 +34,7 @@ from datetime import datetime
 from enum import Enum
 from functools import partial
 from inspect import Parameter
-from typing import TYPE_CHECKING, Any, Generic, Optional, TypeVar, Union, cast, get_type_hints
+from typing import TYPE_CHECKING, Any, Generic, Iterator, Optional, TypeVar, Union, cast, get_type_hints
 from urllib import parse
 
 import docstring_parser
@@ -1292,6 +1292,26 @@ class PageableResult(Result[list[V]], Generic[V]):
             for item in unwrapped:
                 yield item
 
+    def all_sync(self, *, timeout: int = 120, ioloop: Optional[asyncio.AbstractEventLoop] = None) -> Iterator[V]:
+        """
+        Returns an iterator over all values returned by this call. For detailed behavior, see `all()`.
+
+        In an async context, call `all()` instead.
+
+        :param timeout: The number of seconds to wait on each API call.
+        """
+        page: "PageableResult[V]"
+        async_pages: AsyncIterator["PageableResult[V]"] = self._pages()
+
+        while True:
+            try:
+                page = util.wait_sync(anext(async_pages), timeout=timeout, ioloop=ioloop)
+            except StopAsyncIteration:
+                return
+            except TimeoutError:
+                raise ConnectionRefusedError()
+            yield from page.value()
+
     async def _pages(self) -> AsyncIterator["PageableResult[V]"]:
         """
         Returns an async iterator over pages, starting from this one.
@@ -1374,7 +1394,6 @@ class ClientCall(Awaitable[Result[R]]):
         """
         try:
             return util.wait_sync(self, timeout=timeout, ioloop=ioloop)
-        # TODO: should this be asyncio.TimeoutError?
         except TimeoutError:
             raise ConnectionRefusedError()
 
@@ -1394,6 +1413,13 @@ class PageableClientCall(ClientCall[list[V]], Awaitable[PageableResult[V]]):
 
         return wrap_pageable().__await__()
 
+    def sync(self, *, timeout: int = 120, ioloop: Optional[asyncio.AbstractEventLoop] = None) -> PageableResult[V]:
+        try:
+            awaitable: Awaitable[PageableResult[V]] = self  # type: ignore
+            return util.wait_sync(awaitable, timeout=timeout, ioloop=ioloop)
+        except TimeoutError:
+            raise ConnectionRefusedError()
+
     async def all(self) -> AsyncIterator[V]:
         """
         Returns an async iterator over all values returned by this call. Follows paging links if there are any.
@@ -1403,12 +1429,15 @@ class PageableClientCall(ClientCall[list[V]], Awaitable[PageableResult[V]]):
         async for v in (await self).all():
             yield v
 
-    def sync_all(self, *, timeout: int = 120, ioloop: Optional[asyncio.AbstractEventLoop] = None) -> list[V]:
-        # TODO: docstring
-        async def collect() -> list[V]:
-            return [v async for v in self.all()]
+    def all_sync(self, *, timeout: int = 120, ioloop: Optional[asyncio.AbstractEventLoop] = None) -> Iterator[V]:
+        """
+        Returns an iterator over all values returned by this call. For detailed behavior, see `all()`.
 
-        return util.wait_sync(collect(), timeout=timeout, ioloop=ioloop)
+        In an async context, call `all()` instead.
+
+        :param timeout: The number of seconds to wait on each API call.
+        """
+        yield from self.sync(timeout=timeout, ioloop=ioloop).all_sync(timeout=timeout, ioloop=ioloop)
 
 
 class SessionManagerInterface:

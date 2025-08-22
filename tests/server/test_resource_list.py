@@ -642,6 +642,15 @@ async def test_client_all_pages(server, client, env_with_resources):
         idx += 1
     assert idx == 2
 
+    def test_sync():
+        idx = 0
+        for item in client.resource_list(tid=env.id, limit=2).all_sync():
+            assert item == all_resources[idx]
+            idx += 1
+        assert idx == len(all_resources)
+
+    await asyncio.get_running_loop().run_in_executor(None, test_sync)
+
 
 @pytest.mark.parametrize(
     "sort, expected_status",
