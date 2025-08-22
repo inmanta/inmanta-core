@@ -552,8 +552,9 @@ def all_agents_action(tid: uuid.UUID, action: AllAgentAction) -> None:
                     * unpause: A unpaused agent will be able to execute deploy operations.
                     * keep_paused_on_resume: The agents will still be paused when the environment is resumed
                     * unpause_on_resume: The agents will be unpaused when the environment is resumed
-                    * remove_all_executor_venvs: Remove all executor venvs in the given environment. During this
-                                                 process the environment will be temporarily halted.
+                    * remove_all_agent_venvs: Remove all agent venvs in the given environment. During this
+                                              process the deployment operation in the environment are temporarily
+                                              halted.
 
     :raises Forbidden: The given environment has been halted and the action is pause/unpause,
                         or the environment is not halted and the action is related to the on_resume behavior

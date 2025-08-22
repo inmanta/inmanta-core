@@ -342,7 +342,7 @@ class AllAgentAction(str, Enum):
     unpause = "unpause"
     keep_paused_on_resume = "keep_paused_on_resume"
     unpause_on_resume = "unpause_on_resume"
-    remove_all_executor_venvs = "remove_all_executor_venvs"
+    remove_all_agent_venvs = "remove_all_agent_venvs"
 
 
 class AgentStatus(str, Enum):

@@ -304,7 +304,7 @@ class AgentManager(ServerSlice, SessionListener):
                 await self._set_unpause_on_resume(env, should_be_unpaused_on_resume=False)
             case AllAgentAction.unpause_on_resume:
                 await self._set_unpause_on_resume(env, should_be_unpaused_on_resume=True)
-            case AllAgentAction.remove_all_executor_venvs:
+            case AllAgentAction.remove_all_agent_venvs:
                 await self._remove_executor_venvs(env)
             case _:
                 assert_never(f"Unknown agent action: {action.name}")
