@@ -16,22 +16,28 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import importlib.metadata
 from collections.abc import Callable, Sequence
 from typing import Optional
 
-import importlib.metadata
 import packaging.version
 from mypy import nodes, types, typevars
 from mypy.plugin import AttributeContext, Plugin
 
-
 method_namespaces: Sequence[str] = [
-    entry_point.value
-    for entry_point in importlib.metadata.entry_points(group="inmanta.mypy.methods")
+    entry_point.value for entry_point in importlib.metadata.entry_points(group="inmanta.mypy.methods")
 ]
 
 
 class ClientMethodsPlugin(Plugin):
+    def get_additional_deps(self, file: nodes.MypyFile) -> list[tuple[int, str, int]]:
+        """
+        Make sure method namespaces are loaded when the Client module is loaded.
+        """
+        if file.fullname != "inmanta.protocol.endpoints":
+            return []
+        return [(10, namespace, -1) for namespace in method_namespaces]
+
     def get_attribute_hook(self, fullname: str) -> Optional[Callable[[AttributeContext], types.CallableType]]:
         """
         For dynamic method accesses on a client object, return a hook that resolves to the associated method type signature,
@@ -110,7 +116,7 @@ class ClientMethodsPlugin(Plugin):
             (
                 lookup
                 for namespace in method_namespaces
-                if (lookup := self.lookup_fully_qualified(f"{namespace}.{client_attr}"))is not None
+                if (lookup := self.lookup_fully_qualified(f"{namespace}.{client_attr}")) is not None
             ),
             None,
         )
