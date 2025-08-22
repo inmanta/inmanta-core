@@ -19,9 +19,16 @@ Contact: code@inmanta.com
 from collections.abc import Callable, Sequence
 from typing import Optional
 
+import importlib.metadata
 import packaging.version
 from mypy import nodes, types, typevars
 from mypy.plugin import AttributeContext, Plugin
+
+
+method_namespaces: Sequence[str] = [
+    entry_point.value
+    for entry_point in importlib.metadata.entry_points(group="inmanta.mypy.methods")
+]
 
 
 class ClientMethodsPlugin(Plugin):
@@ -99,10 +106,14 @@ class ClientMethodsPlugin(Plugin):
         if client_attr is None or "." in client_attr:
             return None
 
-        # TODO: what about inmanta-lsm methods?
-        node: Optional[nodes.SymbolTableNode] = self.lookup_fully_qualified(
-            f"inmanta.protocol.methods_v2.{client_attr}"
-        ) or self.lookup_fully_qualified(f"inmanta.protocol.methods.{client_attr}")
+        node: Optional[nodes.SymbolTableNode] = next(
+            (
+                lookup
+                for namespace in method_namespaces
+                if (lookup := self.lookup_fully_qualified(f"{namespace}.{client_attr}"))is not None
+            ),
+            None,
+        )
 
         if node is None:
             return None
