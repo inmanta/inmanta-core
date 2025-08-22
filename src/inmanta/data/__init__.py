@@ -5423,44 +5423,95 @@ class Resource(BaseDocument):
         return [dict(record) for record in resource_records]
 
     @classmethod
-    async def get_resources_since_version_raw(
+    async def get_resources_for_version_raw(
         cls,
         environment: uuid.UUID,
         *,
-        since: Optional[int],
+        version: Optional[int] = None,
+        # TODO: make non-optional or support None
+        projection: Optional[Collection[typing.LiteralString]],
+        connection: Optional[Connection] = None,
+    # TODO: only optional if version is None?
+    ) -> Optional[tuple[int, inmanta.types.ResourceSets]]:
+        # TODO: docstring
+        version_query: typing.LiteralString = (
+            "SELECT $2::int AS version"
+            if version is not None
+            else f"""\
+                SELECT MAX(version) AS version
+                FROM {ConfigurationModel.table_name()}
+                WHERE
+                    environment = $1
+                    AND released = true
+            """
+        )
+        # TODO: also apply this for the other query
+        projection_selector: typing.LiteralString = ", ".join(f"r.{col}" for col in projection)
+
+        query: typing.LiteralString = f"""
+            WITH version AS (
+                {version_query}
+            )
+            SELECT
+                cm.version,
+                rs.name AS resource_set_name,
+                rscm.resource_set_id,
+                {projection_selector}
+            FROM version AS version
+            INNER JOIN {ConfigurationModel.table_name()} AS cm
+                ON cm.environment = $1
+                AND cm.version = version.version
+            INNER JOIN resource_set_configuration_model AS rscm
+                ON rscm.environment = $1
+                AND rscm.model = cm.version
+            INNER JOIN {ResourceSet.table_name()} AS rs
+                ON rs.environment = rscm.environment
+                AND rs.id = rscm.resource_set_id
+            INNER JOIN {cls.table_name()} AS r
+                ON r.environment = rs.environment
+                AND r.resource_set_id = rs.id
+        """
+        resource_records = await cls._fetch_query(
+            query,
+            cls._get_value(environment),
+            connection=connection,
+        )
+        if not resource_records:
+            return None
+        sets: inmanta.types.ResourceSets = defaultdict(list)
+        resource_set_name: Optional[str]
+        records: Iterator[asyncpg.Record]
+        for resource_set_name, records in itertools.groupby(records, key=lambda r: r["resource_set_name"]):
+            record: asyncpg.Record
+            for record in records:
+                sets[resource_set_name].append(
+                    {k: record[k] for k in projection}
+                )
+        return (version, sets)
+
+    @classmethod
+    async def get_partial_resources_since_version_raw(
+        cls,
+        environment: uuid.UUID,
+        *,
+        since: int,
         connection: Optional[Connection] = None,
     ) -> list[tuple[int, inmanta.types.ResourceSets]]:
         # TODO: method docstring: empty sets = deleted sets & mention that it's a partial result
         """
         Returns all released model versions with associated resources since (excluding) the given model version.
         Returns resources as raw dicts with the requested fields
-        :param since: The boundary version (excluding). If None, returns only the latest released version.
+
+        :param since: The boundary version (excluding).
         """
-
-        boundary_query: typing.LiteralString = (
-            "SELECT $2::int AS version"
-            if since is not None
-            # TODO: if since is None, should fetch ALL resources, not a partial. That's a vastly different query.
-            #       Or, alternatively, make sure model_pairs is a single 'NULL, version' row
-            #       => make it a separate method!!!
-            else f"""\
-                SELECT MAX(version) AS version
-                FROM {ConfigurationModel.table_name()}
-                WHERE released=TRUE AND environment=$1
-                """
-        )
-
         # TODO: does this return a sane result if there are no newer versions?
         query: typing.LiteralString = f"""\
-        WITH boundary AS (
-            -- TODO: inline
-            {boundary_query}
-        ), models AS (
+        WITH models AS (
             SELECT *
             FROM {ConfigurationModel.table_name()} AS cm
             WHERE cm.environment = $1
-                AND cm.version > (SELECT version FROM boundary) - 1
-                AND cm.released is TRUE
+                AND cm.version > $2::int - 1
+                AND cm.released IS true
         ), rs_with_name AS (
             SELECT
                 rscm.*
@@ -5534,10 +5585,9 @@ class Resource(BaseDocument):
                 # left join with resource_set did not match => no diff in export
                 result.append((version, {}))
                 continue
-            model_sets: inmanta.types.ResourceSets = defaultdict(list)
             resource_set_name: Optional[str]
+            model_sets: inmanta.types.ResourceSets = defaultdict(list)
             for resource_set_name, records in itertools.groupby(records, key=lambda r: r["resource_set_name"]):
-                model_sets[resource_set_name] = []
                 record, records = more_itertools.spy(records)
                 if record["resource_id"] is None:
                     # left join with resource did not match => empty or deleted resource set

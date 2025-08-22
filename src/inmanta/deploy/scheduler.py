@@ -149,8 +149,8 @@ class ModelVersion:
     ) -> Self:
         resources: list[dict[ResourceIdStr, ResourceIntent]] = []
         sets: dict[Optional[str], set[ResourceIdStr]]= {}
-        requires: dict[ResourceIdStr, Set[ResourceIdStr]]
-        undefined: set[ResourceIdStr}
+        requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
+        undefined: set[ResourceIdStr] = set()
         for resource_set, set_resources in resource_sets.items():
             sets[resource_set] = set()
             for resource in set_resources:
@@ -709,13 +709,23 @@ class ResourceScheduler(TaskManager):
             #   case a new notification will be / have been sent and blocked on the intent locked until we're done here.
             # So if we end up with a race, we can be confident that we'll always process the associated notification soon.
             partial: bool = self._state.version > 0
-            resources_by_version: Sequence[tuple[int, types.ResourceSets]] = (
-                await data.Resource.get_resources_since_version_raw(
+            resources_by_version: Sequence[tuple[int, types.ResourceSets]]
+            if partial:
+                resources_by_version = await data.Resource.get_partial_resources_since_version_raw(
                     self.environment,
-                    since=self._state.version if partial else None,
+                    since=self._state.version,
                     connection=con,
                 )
-            )
+            else:
+                full_version: Optional[
+                    tuple[int, types.ResourceSets]
+                ] = await data.Resource.get_resources_for_version_raw(
+                    self.environment,
+                    projection=ResourceRecord.__required_keys__,
+                    connection=con,
+                )
+                resources_by_version = [full_version] if full_version is not None else []
+
             new_versions: Sequence[ModelVersion] = [
                 ModelVersion.from_db_records(
                     version,
@@ -784,7 +794,7 @@ class ResourceScheduler(TaskManager):
                     if len(resources) > 0:
                         resource_sets[resource_set] = resources
                     else:
-                        with contextlib.suppress(KeyError)
+                        with contextlib.suppress(KeyError):
                             del resource_sets[resource_set]
             else:
                 known_resources = intent.keys() | (self._state.intent.keys() if partial else set())

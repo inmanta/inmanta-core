@@ -225,6 +225,7 @@ class ModelState:
 
         result = ModelState(version=last_processed_model_version)
         resource_records: Sequence[Mapping[str, object]] = (
+            # TODO
             await data.Resource.get_resources_for_version_raw_with_persistent_state(
                 environment=environment,
                 version=last_processed_model_version,
