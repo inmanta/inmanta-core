@@ -658,6 +658,20 @@ class ExecutorManager(abc.ABC, typing.Generic[E]):
         """
 
     @abc.abstractmethod
+    def get_environent_manager(self) -> VirtualEnvironmentManager | None:
+        """
+        Returns the VirtualEnvironmentManager used by this ExecutorManager or None if this
+        ExecutorManager doesn't have a VirtualEnvironmentManager.
+        """
+
+    @abc.abstractmethod
+    async def stop_all_executors(self) -> list[E]:
+        """
+        Stop all executors started by the ExecutorManager.
+        """
+        pass
+
+    @abc.abstractmethod
     async def stop_for_agent(self, agent_name: str) -> list[E]:
         """
         Indicate that all executors for this agent can be stopped.

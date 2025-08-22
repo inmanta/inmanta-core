@@ -502,7 +502,7 @@ def notify_timer_update(tid: uuid.UUID) -> None:
     path="/executors/remove_venvs",
     operation="DELETE",
     server_agent=True,
-    timeout=5,
+    timeout=10,
     arg_options=methods.AGENT_ENV_OPTS,
     client_types=[],
     enforce_auth=False,

@@ -1610,6 +1610,7 @@ class ResourceScheduler(TaskManager):
         """
         self._deployment_suspended = True
         await asyncio.gather(*[worker.stop() for worker in self._workers.values()])
+        self._work.add_poison_pill_to_agent_queues(reason="Stopping deployments to remove all executor venvs.")
         await asyncio.gather(*[worker.join() for worker in self._workers.values()])
 
     async def resume_deployments(self) -> None:

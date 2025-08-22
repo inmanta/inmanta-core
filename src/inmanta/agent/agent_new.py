@@ -25,7 +25,7 @@ from typing import Optional
 import inmanta.server.config as opt
 from inmanta import config, const, data, protocol
 from inmanta.agent import config as cfg
-from inmanta.agent import forking_executor
+from inmanta.agent import executor, forking_executor
 from inmanta.agent.reporting import collect_report
 from inmanta.const import AGENT_SCHEDULER_ID
 from inmanta.data.model import DataBaseReport, SchedulerStatusReport
@@ -66,7 +66,7 @@ class Agent(SessionEndpoint):
 
         assert self._env_id is not None
 
-        self.executor_manager: forking_executor.MPManager = self.create_executor_manager()
+        self.executor_manager: executor.ExecutorManager[executor.Executor] = self.create_executor_manager()
         self.scheduler = scheduler.ResourceScheduler(self._env_id, self.executor_manager, self._client)
         self.working = False
 
@@ -80,7 +80,7 @@ class Agent(SessionEndpoint):
 
         await super().start()
 
-    def create_executor_manager(self) -> forking_executor.MPManager:
+    def create_executor_manager(self) -> executor.ExecutorManager[executor.Executor]:
         assert self._env_id is not None
         return forking_executor.MPManager(
             self.thread_pool,
@@ -135,12 +135,19 @@ class Agent(SessionEndpoint):
         """
         Remove all the venvs used by the executors of this agent.
         """
+        environment_manager: executor.VirtualEnvironmentManager | None = self.executor_manager.get_environent_manager()
+        if not environment_manager:
+            raise Exception(
+                "Calling the remove_executor_venvs endpoint while running against an ExecutorManager that doesn't have"
+                " a VirtualEnvironmentManager. This can happen while running the test suite using"
+                " the agent fixture. In that case all executors run in the same process as the server."
+                " So there are no venvs to cleanup."
+            )
         try:
             # Stop all deployments and stop all executors
             await self.scheduler.suspend_deployments()
             await self.executor_manager.stop_all_executors()
             # Remove venvs
-            environment_manager = self.executor_manager.get_environent_manager()
             await environment_manager.remove_all_venvs()
         finally:
             # Resume deployments again
