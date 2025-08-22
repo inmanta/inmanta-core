@@ -317,7 +317,7 @@ class ResourceH(inmanta.agent.handler.CRUDHandler[Resource]):
     assert len(os.listdir(venvs_dir)) == 1
 
     # Trigger removal of executor venvs
-    result = await client.all_agents_action(tid=environment, action=const.AllAgentAction.remove_all_executor_venvs.value)
+    result = await client.all_agents_action(tid=environment, action=const.AllAgentAction.remove_all_agent_venvs.value)
     assert result.code == 200
 
     # Assert that the Python environment is gone

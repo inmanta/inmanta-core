@@ -436,12 +436,25 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
         folders = [file for file in self.envs_dir.iterdir() if file.is_dir()]
         for folder in folders:
             if folder.name in self.pool:
-                await self.pool[folder.name].request_shutdown()
+                # The ExecutorVirtualEnvironment is managed by this VirtualEnvironmentManager.
+                # Rely on the normal shutdown flow to clean up all datastructures correctly.
+                virtual_environment = self.pool[folder.name]
+                future: asyncio.Future[None] = asyncio.Future()
+
+                async def venv_cleanup_is_done(exec_virt_env: resourcepool.PoolMember[resourcepool.TPoolID]) -> None:
+                    future.set_result(None)
+
+                virtual_environment.termination_listeners.append(venv_cleanup_is_done)
+                await virtual_environment.request_shutdown()
+                await future
             else:
-                virtual_environment = ExecutorVirtualEnvironment(
-                    env_path=str(self.envs_dir / folder), io_threadpool=self.thread_pool
-                )
-                await asyncio.get_running_loop().run_in_executor(self.thread_pool, virtual_environment.remove_venv)
+                # This should normally not happen, unless somebody added a directory manually
+                # to the venv directory while the server was running. Let's clean it up anyway.
+                fq_path = os.path.join(self.envs_dir, folder.name)
+                try:
+                    await asyncio.get_running_loop().run_in_executor(self.thread_pool, shutil.rmtree, fq_path)
+                except Exception:
+                    LOGGER.exception("An error occurred while removing the venv located %s", fq_path)
 
     async def init_environment_map(self) -> None:
         """
