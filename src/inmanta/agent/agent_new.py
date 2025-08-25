@@ -130,6 +130,29 @@ class Agent(SessionEndpoint):
         await self.scheduler.join()
         LOGGER.info("Scheduler stopped for environment %s", self.environment)
 
+    @protocol.handle(methods_v2.remove_executor_venvs)
+    async def remove_executor_venvs(self) -> None:
+        """
+        Remove all the venvs used by the executors of this agent.
+        """
+        environment_manager: executor.VirtualEnvironmentManager | None = self.executor_manager.get_environent_manager()
+        if not environment_manager:
+            raise Exception(
+                "Calling the remove_executor_venvs endpoint while running against an ExecutorManager that doesn't have"
+                " a VirtualEnvironmentManager. This can happen while running the test suite using"
+                " the agent fixture. In that case all executors run in the same process as the server."
+                " So there are no venvs to cleanup."
+            )
+        try:
+            # Stop all deployments and stop all executors
+            await self.scheduler.suspend_deployments(reason="removing all agent venvs")
+            await self.executor_manager.stop_all_executors()
+            # Remove venvs
+            await environment_manager.remove_all_venvs()
+        finally:
+            # Resume deployments again
+            await self.scheduler.resume_deployments()
+
     @protocol.handle(methods.set_state)
     async def set_state(self, agent: Optional[str], enabled: bool) -> Apireturn:
         if agent == AGENT_SCHEDULER_ID:
