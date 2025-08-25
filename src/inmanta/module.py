@@ -1513,7 +1513,7 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
     :param environment_settings: The environment settings that need to be configured on the server for this project.
                                  The settings will be applied on the server when the `inmanta export` command is run.
                                  Environment settings specified here cannot be updated via the regular API endpoints
-                                 to update environment settings as long as they are in this list.
+                                 to update environment settings as long as they are in this dictionary.
     """
 
     _raw_parser: typing.ClassVar[type[YamlParser]] = YamlParser

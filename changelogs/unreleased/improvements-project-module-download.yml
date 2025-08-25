@@ -1,0 +1,4 @@
+---
+description: "Improvements for the `inmanta module download` and `inmanta project download` command."
+change-type: patch
+destination-branches: [master, iso8]
