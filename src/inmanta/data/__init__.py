@@ -54,13 +54,20 @@ from inmanta import const, resources, util
 from inmanta.const import NAME_RESOURCE_ACTION_LOGGER, AgentStatus, LogLevel, ResourceState
 from inmanta.data import model as m
 from inmanta.data import schema
-from inmanta.data.model import AuthMethod, BaseModel, PagingBoundaries, PipConfig, api_boundary_datetime_normalizer
+from inmanta.data.model import AuthMethod, BaseModel, PagingBoundaries, PipConfig
 from inmanta.data.sqlalchemy import AgentModules, InmantaModule, ModuleFiles
 from inmanta.deploy import state
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config
 from inmanta.stable_api import stable_api
-from inmanta.types import JsonType, PrimitiveTypes, ResourceIdStr, ResourceType, ResourceVersionIdStr
+from inmanta.types import (
+    JsonType,
+    PrimitiveTypes,
+    ResourceIdStr,
+    ResourceType,
+    ResourceVersionIdStr,
+    api_boundary_datetime_normalizer,
+)
 from inmanta.util import parse_timestamp
 from sqlalchemy import URL, AdaptedConnection, NullPool
 from sqlalchemy.dialects import registry

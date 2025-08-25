@@ -23,7 +23,7 @@ import logging
 import time
 import uuid
 from collections.abc import Sequence
-from typing import Any, Callable, Optional, Union
+from typing import Any, Callable, Literal, Optional, Union
 
 import pydantic
 
@@ -32,7 +32,6 @@ from inmanta.agent.handler import Commander
 from inmanta.ast import CompilerException, Namespace, UnknownException
 from inmanta.ast.entity import Entity
 from inmanta.config import Option, is_list, is_uuid_opt
-from inmanta.const import ResourceState
 from inmanta.data import model
 from inmanta.data.model import PipConfig
 from inmanta.execute.proxy import DynamicProxy, ProxyContext, ProxyMode
@@ -40,7 +39,7 @@ from inmanta.execute.runtime import Instance
 from inmanta.module import Project
 from inmanta.resources import Id, IgnoreResourceException, Resource, resource, to_id
 from inmanta.stable_api import stable_api
-from inmanta.types import ResourceVersionIdStr
+from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 from inmanta.util import get_compiler_version, hash_file
 
 LOGGER = logging.getLogger(__name__)
@@ -131,9 +130,9 @@ class Exporter:
         self.options = options
 
         self._resources: ResourceDict = {}
-        self._resource_sets: dict[str, Optional[str]] = {}
+        self._resource_sets: dict[ResourceIdStr, Optional[str]] = {}
         self._removed_resource_sets: set[str] = set()
-        self._resource_state: dict[str, ResourceState] = {}
+        self._resource_state: dict[ResourceIdStr, Literal[const.ResourceState.available, const.ResourceState.undefined]] = {}
         self._unknown_objects: set[str] = set()
         # Actual version (placeholder for partial export) is set as soon as export starts.
         self._version: Optional[int] = None
@@ -214,7 +213,7 @@ class Exporter:
         :param types: All Inmanta types present in the model. Maps the name of the type to the corresponding entity.
         :param resource_mapping: Maps in-model instances of resources to their deserialized Resource representation.
         """
-        resource_sets: dict[str, Optional[str]] = {}
+        resource_sets: dict[ResourceIdStr, Optional[str]] = {}
         resource_set_instances: list["Instance"] = (
             types["std::ResourceSet"].get_all_instances() if "std::ResourceSet" in types else []
         )
@@ -224,7 +223,7 @@ class Exporter:
             resources_in_set: list[Instance] = resource_set_instance.get_attribute("resources").get_value()
             for resource_in_set in resources_in_set:
                 if resource_in_set in resource_mapping:
-                    resource_id: str = resource_mapping[resource_in_set].id.resource_str()
+                    resource_id: ResourceIdStr = resource_mapping[resource_in_set].id.resource_str()
                     if resource_id in resource_sets and resource_sets[resource_id] != name:
                         raise CompilerException(
                             f"resource '{resource_id}' can not be part of multiple ResourceSets: "
@@ -378,7 +377,10 @@ class Exporter:
         resource_sets_to_remove: Optional[Sequence[str]] = None,
         allow_handler_code_update: bool = False,
         export_env_var_settings: bool = True,
-    ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, ResourceState]]]:
+    ) -> (
+        tuple[int, ResourceDict]
+        | tuple[int, ResourceDict, dict[ResourceIdStr, Literal[const.ResourceState.available, const.ResourceState.undefined]]]
+    ):
         """
         Run the export functions. Return value for partial json export uses 0 as version placeholder.
 
@@ -623,6 +625,7 @@ class Exporter:
                     **kwargs,
                 )
             else:
+                assert version is not None
                 result = self.client.put_version(
                     tid=tid,
                     version=version,
