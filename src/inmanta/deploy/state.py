@@ -196,7 +196,7 @@ class ModelState:
 
     version: int
     intent: dict["ResourceIdStr", ResourceIntent] = dataclasses.field(default_factory=dict)
-    resource_sets: dict[Optional[str], "ResourceIdStr"] = dataclasses.field(default_factory=dict)
+    resource_sets: dict[Optional[str], Set["ResourceIdStr"]] = dataclasses.field(default_factory=dict)
     requires: RequiresProvidesMapping = dataclasses.field(default_factory=RequiresProvidesMapping)
     resource_state: dict["ResourceIdStr", ResourceState] = dataclasses.field(default_factory=dict)
     # resources with a known or assumed difference between intent and actual state

@@ -21,6 +21,7 @@ import asyncio
 import contextlib
 import datetime
 import enum
+import functools
 import itertools
 import logging
 import typing
@@ -147,7 +148,7 @@ class ModelVersion:
         *,
         partial: bool,
     ) -> Self:
-        resources: list[dict[ResourceIdStr, ResourceIntent]] = []
+        resources: dict[ResourceIdStr, ResourceIntent] = {}
         sets: dict[Optional[str], set[ResourceIdStr]]= {}
         requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
         undefined: set[ResourceIdStr] = set()
@@ -169,7 +170,7 @@ class ModelVersion:
         return cls(
             version=version,
             resources=resources,
-            resource_sets=resource_sets,
+            resource_sets=sets,
             requires=requires,
             undefined=undefined,
             partial=partial,
@@ -664,24 +665,20 @@ class ResourceScheduler(TaskManager):
         Raises KeyError if no specific version has been provided and no released versions exist.
         """
         async with self.state_update_manager.get_connection(connection) as con:
-            if version is None:
-                # Fetch the latest released model version
-                cm_version = await ConfigurationModel.get_latest_version(self.environment, connection=con)
-                if cm_version is None:
-                    raise KeyError()
-                version = cm_version.version
-
-            resources_from_db = await data.Resource.get_resources_for_version_raw(
-                environment=self.environment,
+            model: Optional[
+                tuple[int, types.ResourceSets]
+            ] = await data.Resource.get_resources_for_version_raw(
+                self.environment,
                 version=version,
                 projection=ResourceRecord.__required_keys__,
                 connection=con,
             )
+            if model is None:
+                raise KeyError()
 
-            # TODO: update this call to be resource-set aware
             return ModelVersion.from_db_records(
-                version,
-                resources_from_db,  # type: ignore
+                version=model[0],
+                resource_sets=model[1],  # type: ignore
                 partial=False,
             )
 
@@ -784,10 +781,17 @@ class ResourceScheduler(TaskManager):
             # known resources that are in scope for this partial export, i.e. resources in exported sets
             known_resources: Set[ResourceIdStr]
             if model.partial:
-                known_resources = (
-                    # get resources in set from tracked resource set, falling back to state's resource set if appropriate
-                    resource_sets.get(resource_set, self._state.resources_sets.get(resource_set, set()) if partial else set())
-                    for resource_set in model.resource_sets.keys()
+                known_resources = functools.reduce(
+                    set.union,
+                    (
+                        # get resources in set from tracked resource set, falling back to state's resource set if appropriate
+                        resource_sets.get(
+                            resource_set,
+                            self._state.resource_sets.get(resource_set, set()) if partial else set()
+                        )
+                        for resource_set in model.resource_sets.keys()
+                    ),
+                    set(),
                 )
                 # update resource sets mapping
                 for resource_set, resources in model.resource_sets.items():

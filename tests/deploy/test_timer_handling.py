@@ -227,7 +227,7 @@ async def test_config_update(inmanta_config, make_resource_minimal, environment,
                 resources=resources,
                 requires=make_requires(resources),
                 undefined={ResourceIdStr(rid3)},
-                resource_sets={None: ResourceIdStr(r["resource_id"]) for r in resources},
+                resource_sets={None: set(resources.keys())},
                 partial=False,
             )
         ]
