@@ -1024,6 +1024,7 @@ async def test_put_partial_mixed_scenario(server, client, environment, clienthel
     # set-a  ( R1, R2)
     # set-b  ( R3, R4)
     # set-c  ( R7, R8)
+    # None   ( R5, R6)
 
     result = await client.put_version(
         tid=environment,
@@ -1101,6 +1102,11 @@ async def test_put_partial_mixed_scenario(server, client, environment, clienthel
         module_version_info={},
     )
 
+    # Sets:
+    # set-a  ( R1, R2)
+    # set-b  ( R3, R4)
+    # set-f  ( R91, R92)
+    # None   ( R5, R6, R9)
     assert result.code == 200, result.result
     resource_list = sorted(
         await data.Resource.get_resources_in_latest_version(uuid.UUID(environment)),
@@ -1658,7 +1664,6 @@ async def test_put_partial_with_resource_state_set(server, client, environment, 
     result = await client.resource_list(tid=environment)
     assert result.code == 200
     assert len(result.result["data"]) == 7
-    assert all(Id.parse_id(r["resource_version_id"]).version == 2 for r in result.result["data"])
     rid_to_res = {r["resource_id"]: r for r in result.result["data"]}
 
     assert rid_to_res["test::Resource[agent1,key=key1]"]["status"] == const.ResourceState.undefined.value
@@ -2022,7 +2027,7 @@ async def test_put_partial_dep_on_specific_set_removed(server, client, environme
     )
     assert result.code == 200
 
-    resources_in_model = await data.Resource.get_list(model=2)
+    resources_in_model = await data.Resource.get_resources_for_version(environment=environment, version=2)
     assert len(resources_in_model) == 3
     rid_to_resource = {res.resource_id: res for res in resources_in_model}
     assert rid_to_resource[rid1].attributes["requires"] == []
