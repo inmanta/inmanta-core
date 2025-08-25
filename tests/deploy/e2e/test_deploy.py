@@ -39,6 +39,7 @@ from utils import (
     log_contains,
     resource_action_consistency_check,
     retry_limited,
+    retry_limited_assertion,
     wait_full_success,
     wait_until_deployment_finishes,
 )
@@ -1380,14 +1381,17 @@ async def test_resource_status(resource_container, server, client, clienthelper,
             ResourceIdStr("test::Resource[agent1,key=key5]"): const.ResourceState.available,
         },
     )
-    await assert_states(
-        {
+    # deploy resources tends to escape from its wait, retry here.
+    await retry_limited_assertion(
+        assert_states,
+        1,
+        expected_states={
             ResourceIdStr("test::Resource[agent1,key=key1]"): ReleasedResourceState.deployed,
             ResourceIdStr("test::Resource[agent1,key=key2]"): ReleasedResourceState.deployed,
             ResourceIdStr("test::Resource[agent1,key=key3]"): ReleasedResourceState.deployed,
             ResourceIdStr("test::Resource[agent1,key=key4]"): ReleasedResourceState.undefined,
             ResourceIdStr("test::Resource[agent1,key=key5]"): ReleasedResourceState.skipped_for_undefined,
-        }
+        },
     )
     result = await data.ResourcePersistentState.get_list(environment=environment)
     result_per_resource_id = {r.resource_id: r for r in result}

@@ -367,3 +367,61 @@ class ResourceH(inmanta.agent.handler.CRUDHandler[Resource]):
 
     # Assert we have a Python environment again
     assert len(os.listdir(venvs_dir)) == 1
+
+
+async def test_recovery_virtual_environment_manager(tmpdir, pip_index, async_finalizer):
+    """
+    Verify that the VirtualEnvironmentManager removes venvs that were not correctly initialized.
+    """
+    # Make sure there is no interference with the job that cleans up unused venvs.
+    assert agent_config.executor_venv_retention_time.get() >= 3600
+
+    venv_manager = executor.VirtualEnvironmentManager(
+        envs_dir=tmpdir,
+        thread_pool=concurrent.futures.ThreadPoolExecutor(
+            max_workers=1,
+        ),
+    )
+    await venv_manager.start()
+    async_finalizer.add(venv_manager.request_shutdown)
+    env_id = uuid.uuid4()
+    pip_config = PipConfig(index_url=pip_index.url)
+    blueprint1 = executor.EnvBlueprint(
+        environment_id=env_id,
+        pip_config=pip_config,
+        requirements=("pkg1",),
+        python_version=sys.version_info[:2],
+    )
+    blueprint2 = executor.EnvBlueprint(
+        environment_id=env_id,
+        pip_config=pip_config,
+        requirements=(),
+        python_version=sys.version_info[:2],
+    )
+    venv1, venv2 = await asyncio.gather(
+        venv_manager.get_environment(blueprint1),
+        venv_manager.get_environment(blueprint2),
+    )
+    await venv_manager.request_shutdown()
+    await venv_manager.join()
+
+    assert len(os.listdir(tmpdir)) == 2
+
+    # Make venv1 corrupt
+    os.remove(venv1.inmanta_venv_status_file)
+
+    venv_manager = executor.VirtualEnvironmentManager(
+        envs_dir=tmpdir,
+        thread_pool=concurrent.futures.ThreadPoolExecutor(
+            max_workers=1,
+        ),
+    )
+    await venv_manager.start()
+    async_finalizer.add(venv_manager.request_shutdown)
+
+    # Assert venv1 was removed
+    venv_dirs = os.listdir(tmpdir)
+    assert venv_dirs == [venv2.folder_name]
+
+    await venv_manager.request_shutdown()
+    await venv_manager.join()
