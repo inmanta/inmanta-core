@@ -82,9 +82,6 @@ class ClientMethodsPlugin(Plugin):
                 assert client_call is not None
                 return_type = client_call.copy_modified(args=[default_return_type_flattened])
 
-            def drop[T](s: Sequence[T], i: int) -> list[T]:
-                return [*s[:i], *s[i + 1 :]]
-
             return method.copy_modified(ret_type=return_type)
 
         return hook
