@@ -1604,19 +1604,21 @@ class ResourceScheduler(TaskManager):
                 discrepancies=discrepancy_map,
             )
 
-    async def suspend_deployments(self) -> None:
+    async def suspend_deployments(self, reason: str) -> None:
         """
         Suspend all deployment operations. All other scheduler functionality remains active.
         """
+        LOGGER.info("Suspending all deployment operations: %s", reason)
         self._deployment_suspended = True
         await asyncio.gather(*[worker.stop() for worker in self._workers.values()])
-        self._work.add_poison_pill_to_agent_queues(reason="Stopping deployments to remove all executor venvs.")
+        self._work.add_poison_pill_to_agent_queues(reason=reason)
         await asyncio.gather(*[worker.join() for worker in self._workers.values()])
 
     async def resume_deployments(self) -> None:
         """
         Resume all deployment operations.
         """
+        LOGGER.info("Resuming all deployment operations.")
         self._deployment_suspended = False
         await self.refresh_all_agent_states_from_db()
 

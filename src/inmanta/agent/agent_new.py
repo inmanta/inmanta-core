@@ -145,7 +145,7 @@ class Agent(SessionEndpoint):
             )
         try:
             # Stop all deployments and stop all executors
-            await self.scheduler.suspend_deployments()
+            await self.scheduler.suspend_deployments(reason="removing all agent venvs")
             await self.executor_manager.stop_all_executors()
             # Remove venvs
             await environment_manager.remove_all_venvs()
