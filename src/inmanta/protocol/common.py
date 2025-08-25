@@ -47,8 +47,7 @@ from tornado.httpclient import HTTPRequest
 
 import typing_extensions
 from inmanta import const, execute, types, util
-from inmanta.protocol import auth
-from inmanta.protocol import exceptions
+from inmanta.protocol import auth, exceptions
 from inmanta.protocol.openapi import model as openapi_model
 from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes, BaseModel, DateTimeNormalizerModel, HandlerType, JsonType, ReturnTypes
