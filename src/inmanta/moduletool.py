@@ -698,6 +698,9 @@ When a development release is done using the \--dev option, this command:
             output_dir=directory,
             dependencies=[module_requirement.get_python_package_requirement()],
             ignore_transitive_dependencies=True,
+            # We only need to download a single package, so no compatibilty issues are possible.
+            # Setting this to False increases the performance.
+            ensure_compatible_versions=False,
         )
         assert len(paths_module_sources) == 1
         # Install in editable mode if requested
@@ -1913,6 +1916,7 @@ class PythonPackageToSourceConverter:
         ignore_transitive_dependencies: bool,
         constraints: Sequence[util.CanonicalRequirement] | None = None,
         pip_config: model.PipConfig | None = None,
+        ensure_compatible_versions: bool = True,
     ) -> list[str]:
         """
         This method:
@@ -1923,6 +1927,8 @@ class PythonPackageToSourceConverter:
 
         :param ignore_transitive_dependencies: False iff also download and extract the Inmanta modules
                                                that are transitive dependencies of the given dependencies.
+        :param ensure_compatible_versions: Make sure that the downloaded packages have versions that are
+                                           compatible with each other.
         """
         if not dependencies:
             return []
@@ -1937,6 +1943,7 @@ class PythonPackageToSourceConverter:
                 ignore_transitive_dependencies=ignore_transitive_dependencies,
                 download_dir=download_dir,
                 pip_config=pip_config,
+                ensure_compatible_versions=ensure_compatible_versions,
             )
             # Extract the packages and convert to source format
             extract_dir = os.path.join(path_tmp_dir, "extract")
@@ -1947,7 +1954,8 @@ class PythonPackageToSourceConverter:
                 self._convert_to_source_format(path_extracted_pkg, inmanta_module_name)
                 # Move to desired output directory
                 path_pkg_in_output_dir = os.path.join(output_dir, inmanta_module_name)
-                assert not os.path.exists(path_pkg_in_output_dir)
+                if os.path.exists(path_pkg_in_output_dir):
+                    shutil.rmtree(path_pkg_in_output_dir)
                 shutil.move(src=path_extracted_pkg, dst=path_pkg_in_output_dir)
                 result.append(path_pkg_in_output_dir)
         return result
@@ -1959,6 +1967,7 @@ class PythonPackageToSourceConverter:
         ignore_transitive_dependencies: bool,
         download_dir: str,
         pip_config: model.PipConfig | None,
+        ensure_compatible_versions: bool,
     ) -> list[str]:
         """
         Download the source distribution packages for the given requirements into the download_dir.
@@ -1968,34 +1977,40 @@ class PythonPackageToSourceConverter:
         assert not os.listdir(download_dir)
 
         with tempfile.TemporaryDirectory() as path_tmp_dir:
-            # Stage 1: Perform download with all dependencies, so that we know the exact version we need.
-            env.process_env.download_distributions(
-                output_directory=path_tmp_dir,
-                pip_config=pip_config,
-                dependencies=dependencies,
-                constraints=constraints,
-                no_deps=False,
-            )
-            # Fetch the packages and their exact versions
-            requirements_exact_version: list[util.CanonicalRequirement] = []
-            dependencies_pkg_names: set[str] = {d.name for d in dependencies}
-            for filename in os.listdir(path_tmp_dir):
-                if not filename.startswith("inmanta_module_"):
-                    # Not an Inmanta module
-                    continue
-                pkg_name, version = util.get_pkg_name_and_version(filename)
-                if ignore_transitive_dependencies and pkg_name not in dependencies_pkg_names:
-                    # It's a transitive dependency we can ignore
-                    continue
-                requirements_exact_version.append(util.parse_requirement(f"{pkg_name}=={version}"))
+            # Stage 1: Determine which versions to download
+            requirements: list[util.CanonicalRequirement]
+            if not ensure_compatible_versions:
+                requirements = list(dependencies)
+            else:
+                # Perform download with all dependencies, so that we know the exact version we need.
+                env.process_env.download_distributions(
+                    output_directory=path_tmp_dir,
+                    pip_config=pip_config,
+                    dependencies=dependencies,
+                    constraints=constraints,
+                    no_deps=False,
+                )
+                # Fetch the packages and their exact versions
+                requirements = []
+                dependencies_pkg_names: set[str] = {d.name for d in dependencies}
+                for filename in os.listdir(path_tmp_dir):
+                    if not filename.startswith("inmanta_module_"):
+                        # Not an Inmanta module
+                        continue
+                    pkg_name, version = util.get_pkg_name_and_version(filename)
+                    if ignore_transitive_dependencies and pkg_name not in dependencies_pkg_names:
+                        # It's a transitive dependency we can ignore
+                        continue
+                    requirements.append(util.parse_requirement(f"{pkg_name}=={version}"))
 
             # Stage 2: Download the correct versions of the requested packages as source distribution.
-            for req in requirements_exact_version:
+            for req in requirements:
                 try:
                     env.process_env.download_distributions(
                         output_directory=download_dir,
                         pip_config=pip_config,
                         dependencies=[req],
+                        constraints=constraints,
                         no_deps=True,
                         # Setting no_binary to :all: would imply that `pip download` downloads dependencies
                         # (e.g. setuptools) of these modules in source format as well. This would make the
