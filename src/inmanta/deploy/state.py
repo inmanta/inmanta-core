@@ -30,6 +30,7 @@ from typing import Optional, Self, cast
 
 import asyncpg
 
+import inmanta.types
 from inmanta import const, resources
 from inmanta.types import ResourceIdStr
 from inmanta.util.collections import BidirectionalManyMapping
@@ -224,13 +225,13 @@ class ModelState:
             return None
 
         result = ModelState(version=last_processed_model_version)
-        resource_records: Sequence[Mapping[str, object]] = (
+        model: Optional[tuple[int, inmanta.types.ResourceSets]] = (
             # TODO
-            await data.Resource.get_resources_for_version_raw_with_persistent_state(
+            await data.Resource.get_resources_for_version_raw(
                 environment=environment,
                 version=last_processed_model_version,
-                projection=["resource_id", "attributes", "attribute_hash"],
-                projection_persistent=[
+                projection=("resource_id", "attributes", "attribute_hash"),
+                projection_persistent=(
                     "is_orphan",
                     "is_undefined",
                     "current_intent_attribute_hash",
@@ -240,16 +241,17 @@ class ModelState:
                     "last_success",
                     "last_deploy",
                     "last_produced_events",
-                ],
-                project_attributes=[
+                ),
+                project_attributes=(
                     "requires",
                     const.RESOURCE_ATTRIBUTE_SEND_EVENTS,
                     const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS,
-                ],
+                ),
                 connection=connection,
             )
         )
-        if not resource_records:
+        # TODO: review. Can be simplified once get_resources_for_version_raw contract is better defined
+        if not model or not model[1]:
             configuration_model: Optional[data.ConfigurationModel] = await data.ConfigurationModel.get_one(
                 environment=environment, version=last_processed_model_version, released=True, connection=connection
             )
@@ -257,10 +259,16 @@ class ModelState:
                 # the version does not exist at all (anymore)
                 return None
             # otherwise it's simply an empty version => continue with normal flow
-        by_resource_id: Mapping[ResourceIdStr, Mapping[str, object]] = {
-            ResourceIdStr(cast(str, r["resource_id"])): r for r in resource_records
+
+        # build intermediate lookup collection
+        type ResourceSetStr = Optional[str]
+        by_resource_id: Mapping[ResourceIdStr, tuple[ResourceSetStr, Mapping[str, object]]] = {
+            ResourceIdStr(cast(str, r["resource_id"])): (rs, r)
+            for rs, resource_records in model[1].items()
+            for r in resource_records
         }
-        for resource_id, res in by_resource_id.items():
+
+        for resource_id, (resource_set, res) in by_resource_id.items():
             # Populate state
 
             compliance_status: Compliance
@@ -299,6 +307,9 @@ class ModelState:
                 attributes=res["attributes"],
             )
             result.intent[resource_id] = resource_intent
+
+            # Populate resource sets
+            result.resource_sets.setdefault(resource_set, set()).add(resource_id)
 
             # Populate resources_by_agent
             result.resources_by_agent[resource_intent.id.agent_name].add(resource_id)

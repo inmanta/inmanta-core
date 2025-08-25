@@ -5410,13 +5410,14 @@ class Resource(BaseDocument):
         environment: uuid.UUID,
         *,
         version: Optional[int] = None,
-        # TODO: make non-optional or support None
         projection: Optional[Collection[typing.LiteralString]],
+        projection_persistent: Collection[typing.LiteralString] = (),
+        project_attributes: Collection[typing.LiteralString] = (),
         connection: Optional[Connection] = None,
     # TODO: only optional if version is None?
     # TODO: bit weird to return version when version was parameter
     ) -> Optional[tuple[int, inmanta.types.ResourceSets]]:
-        # TODO: docstring
+        # TODO: docstring. Also mention projection_persistent and project_attributes and their default behavior. Borrow from ..._with_persistent_state method
         version_query: typing.LiteralString = (
             "SELECT $2::int AS version"
             if version is not None
@@ -5428,8 +5429,32 @@ class Resource(BaseDocument):
                     AND released = true
             """
         )
-        # TODO: also apply this for the other query
-        projection_selector: typing.LiteralString = ", ".join(f"r.{col}" for col in projection)
+        # TODO: also apply r_projection_selector for the other query?
+        r_projection_selector: Sequence[typing.LiteralString] = [f"r.{col}" for col in projection]
+        rps_projection_selector: Sequence[typing.LiteralString] = [f"rps.{col}" for col in projection_persistent]
+        attributes_projection_selector: Sequence[typing.LiteralString] = [
+            f"r.attributes->'{v}' AS {v}" for v in project_attributes
+        ]
+
+        projection_keys: typing.Sequence[typing.LiteralString] = list(
+            itertools.chain(projection, projection_persistent, project_attributes)
+        )
+        # TODO: raise ValueError if len(projection_keys) != len(set(projection_keys))?
+        projection_selectors: typing.LiteralString = ", ".join(
+            itertools.chain(
+                r_projection_selector, rps_projection_selector, attributes_projection_selector
+            )
+        )
+
+        rps_join: typing.LiteralString
+        if rps_projection_selector:
+            rps_join = f"""\
+                INNER JOIN {ResourcePersistentState.table_name()} AS rps
+                    ON rps.environment = r.environment
+                    AND rps.resource_id = r.resource_id
+            """
+        else:
+            rps_join = ""
 
         query: typing.LiteralString = f"""
             WITH version AS (
@@ -5439,7 +5464,7 @@ class Resource(BaseDocument):
                 cm.version,
                 rs.name AS resource_set_name,
                 rscm.resource_set_id,
-                {projection_selector}
+                {projection_selectors}
             FROM version AS version
             INNER JOIN {ConfigurationModel.table_name()} AS cm
                 ON cm.environment = $1
@@ -5453,6 +5478,7 @@ class Resource(BaseDocument):
             INNER JOIN {cls.table_name()} AS r
                 ON r.environment = rs.environment
                 AND r.resource_set_id = rs.id
+            {rps_join}
         """
         resource_records = await cls._fetch_query(
             query,
@@ -5465,7 +5491,7 @@ class Resource(BaseDocument):
         spy: Sequence[asyncpg.Record]
         spy, records = more_itertools.spy(resource_records)
         if not spy:
-            # TODO: review. What if version was given but does not exist? LEFT JOIN after all?
+            # TODO: review. What if version was given but does not exist? LEFT JOIN after all? IMPORTANT FOR DB RESTORE
             # no records
             return (version, {}) if version is not None else None
         db_version: int = spy[0]["version"]
@@ -5476,7 +5502,7 @@ class Resource(BaseDocument):
             for record in records:
                 version = resource_records
                 sets[resource_set_name].append(
-                    {k: record[k] for k in projection}
+                    {k: record[k] for k in projection_keys}
                 )
         return (db_version, sets)
 
@@ -5593,6 +5619,7 @@ class Resource(BaseDocument):
             result.append((version, model_sets))
         return result
 
+    # TODO: delete
     @classmethod
     async def get_resources_for_version_raw_with_persistent_state(
         cls,
@@ -5624,10 +5651,17 @@ class Resource(BaseDocument):
             json_projection = ""
 
         query = f"""
-        SELECT {collect_projection(projection, 'r')}, {collect_projection(projection_persistent, 'rps')} {json_projection}
-        FROM {cls.table_name()} r JOIN resource_persistent_state rps
-                                    ON r.environment=rps.environment AND r.resource_id = rps.resource_id
-        WHERE r.environment=$1 AND r.model = $2;
+        SELECT
+            {collect_projection(projection, 'r')},
+            {collect_projection(projection_persistent, 'rps')}
+            {json_projection}
+        FROM {cls.table_name()} AS r
+        JOIN resource_persistent_state AS rps
+            ON r.environment=rps.environment
+            AND r.resource_id = rps.resource_id
+        WHERE
+            r.environment=$1
+            AND r.model = $2
         """
         resource_records = await cls._fetch_query(query, environment, version, connection=connection)
         resources = [dict(record) for record in resource_records]
