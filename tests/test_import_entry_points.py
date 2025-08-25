@@ -102,6 +102,9 @@ def test_import_protocol(import_entry_point) -> None:
     assert import_entry_point("inmanta.protocol.auth") == 0
     assert import_entry_point("inmanta.protocol.common") == 0
     assert import_entry_point("inmanta.protocol.exceptions") == 0
+    # for mypy plugin
+    assert import_entry_point("inmanta.protocol.methods") == 0
+    assert import_entry_point("inmanta.protocol.methods_v2") == 0
 
 
 def test_import_const(import_entry_point) -> None:

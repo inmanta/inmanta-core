@@ -19,14 +19,15 @@ Contact: code@inmanta.com
 import logging
 import re
 from asyncio import CancelledError
-from typing import TYPE_CHECKING, Any, AnyStr, Optional
+from collections.abc import Mapping, Sequence
+from typing import TYPE_CHECKING, AnyStr, Optional
 from urllib.parse import unquote
 
 import tornado.simple_httpclient
 from tornado.httpclient import AsyncHTTPClient, HTTPError, HTTPRequest, HTTPResponse
 
 from inmanta import config as inmanta_config
-from inmanta import tracing
+from inmanta import tracing, types
 from inmanta.const import INMANTA_MT_HEADER
 from inmanta.protocol import common
 from inmanta.protocol.rest import RESTBase
@@ -96,9 +97,9 @@ class RESTClient(RESTBase):
 
         return "%s://%s:%d" % (protocol, host, port)
 
-    async def call(
-        self, properties: common.MethodProperties, args: list[object], kwargs: Optional[dict[str, Any]] = None
-    ) -> common.Result:
+    async def call[R: types.ReturnTypes](
+        self, properties: common.MethodProperties[R], args: Sequence[object], kwargs: Optional[Mapping[str, object]] = None
+    ) -> common.Result[R]:
         if kwargs is None:
             kwargs = {}
 
@@ -171,9 +172,9 @@ class RESTClient(RESTBase):
         if self.forced_instance:
             self.client.close()
 
-    def _decode_response(
-        self, response: HTTPResponse, properties: common.MethodProperties, environment: str | None
-    ) -> common.Result:
+    def _decode_response[R: types.ReturnTypes](
+        self, response: HTTPResponse, properties: common.MethodProperties[R], environment: str | None
+    ) -> common.Result[R]:
         content_type = response.headers.get(common.CONTENT_TYPE, None)
 
         if content_type is None or content_type == common.JSON_CONTENT:

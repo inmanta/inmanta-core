@@ -19,17 +19,18 @@ Contact: code@inmanta.com
 # This file defines named type definition for the Inmanta code base
 
 import builtins
+import datetime
 import uuid
-from collections.abc import Coroutine, Mapping, Sequence
-from datetime import datetime
-from typing import TYPE_CHECKING, Any, Callable, NewType, Optional, Union
+from collections.abc import Coroutine, Generator, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Callable, ClassVar, NewType, Optional, Union
 
 import pydantic
 import typing_inspect
 
+from inmanta.stable_api import stable_api
+
 if TYPE_CHECKING:
     # Include imports from other modules here and use the quoted annotation in the definition to prevent import loops
-    from inmanta.data.model import BaseModel  # noqa: F401
     from inmanta.protocol.common import ReturnValue  # noqa: F401
 
 
@@ -42,8 +43,55 @@ else:
 
     DataclassProtocol = _typeshed.DataclassInstance
 
+
+def api_boundary_datetime_normalizer(value: datetime.datetime) -> datetime.datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=datetime.timezone.utc)
+    else:
+        return value
+
+
+@stable_api
+class DateTimeNormalizerModel(pydantic.BaseModel):
+    """
+    A model that normalizes all datetime values to be timezone aware. Assumes that all naive timestamps represent UTC times.
+    """
+
+    @pydantic.field_validator("*", mode="after")
+    @classmethod
+    def validator_timezone_aware_timestamps(cls: type, value: object) -> object:
+        """
+        Ensure that all datetime times are timezone aware.
+        """
+        if isinstance(value, datetime.datetime):
+            return api_boundary_datetime_normalizer(value)
+        else:
+            return value
+
+
+@stable_api
+class BaseModel(DateTimeNormalizerModel):
+    """
+    Base class for all data objects in Inmanta
+    """
+
+    # Populate models with the value property of enums, rather than the raw enum.
+    # This is useful to serialise model.dict() later
+    model_config: ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(use_enum_values=True)
+
+
 # kept for backwards compatibility
 StrictNonIntBool = pydantic.StrictBool
+
+
+type AsyncioGenerator[R] = Generator[object, None, R]
+"""
+Asyncio-compatible generator as returned from a sync function, e.g. __await__.
+"""
+type AsyncioCoroutine[R] = Coroutine[object, None, R]
+"""
+Coroutine for use with asyncio, where we don't care about yield and send types.
+"""
 
 
 def issubclass(sub: type, super: Union[type, tuple[type, ...]]) -> bool:
@@ -55,23 +103,33 @@ def issubclass(sub: type, super: Union[type, tuple[type, ...]]) -> bool:
     return builtins.issubclass(sub, super)
 
 
-PrimitiveTypes = Optional[uuid.UUID | bool | int | float | datetime | str]
-SimpleTypes = Union["BaseModel", PrimitiveTypes]
+PrimitiveTypes = Optional[uuid.UUID | bool | int | float | datetime.datetime | str]
+type SimpleTypes = BaseModel | PrimitiveTypes
 
 JsonType = dict[str, Any]
 ReturnTupple = tuple[int, Optional[JsonType]]
 type StrictJson = dict[str, StrictJson] | list[StrictJson] | str | int | float | bool | None
 
+type StrMapping[T] = Mapping[str, T] | Mapping[ResourceIdStr, T] | Mapping[ResourceVersionIdStr, T]
 
-ArgumentTypes = Union[SimpleTypes, Sequence[SimpleTypes], Mapping[str, SimpleTypes]]
+type SinglePageTypes = SimpleTypes | StrMapping[ArgumentTypes]
+# only simple types allowed within list args, not dicts or lists.
+# Typed as Sequence for necessity (covariance), though runtime checks and method overloads require list in practice.
+# This is an unfortunate limitation of the Python type system, related to str being a Sequence, among other things.
+# Luckily, list is the more conventional return type for method annotations, so as long as that convention is followed,
+# it should not cause any trouble. And if it does after all, the only consequence will be that paging will not be supported
+# through the Python client.
+type PageableTypes = Sequence[SimpleTypes]
 
-ReturnTypes = Optional[ArgumentTypes]
-MethodReturn = Union[ReturnTypes, "ReturnValue[ReturnTypes]"]
-MethodType = Callable[..., MethodReturn]
+type ArgumentTypes = SinglePageTypes | PageableTypes
+type ReturnTypes = SinglePageTypes | PageableTypes
 
-Apireturn = Union[int, ReturnTupple, "ReturnValue[ReturnTypes]", "ReturnValue[None]", ReturnTypes]
-Warnings = Optional[list[str]]
-HandlerType = Callable[..., Coroutine[Any, Any, Apireturn]]
+type MethodReturn = ReturnTypes | "ReturnValue[ReturnTypes]"
+type MethodType = Callable[..., MethodReturn]
+
+type Apireturn = int | ReturnTupple | "ReturnValue[ReturnTypes]" | "ReturnValue[None]" | ReturnTypes
+type Warnings = Optional[list[str]]
+type HandlerType = Callable[..., AsyncioCoroutine[Apireturn]]
 
 
 ResourceVersionIdStr = NewType("ResourceVersionIdStr", str)  # Part of the stable API
