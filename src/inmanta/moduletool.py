@@ -349,6 +349,7 @@ compatible with the dependencies specified by the updated modules.
             constraints=constraints,
             ignore_transitive_dependencies=False,
             pip_config=project.metadata.pip,
+            override_if_already_exists=True,
         )
         if paths_python_packages and install:
             env.process_env.install_for_config(
@@ -1917,6 +1918,7 @@ class PythonPackageToSourceConverter:
         constraints: Sequence[util.CanonicalRequirement] | None = None,
         pip_config: model.PipConfig | None = None,
         ensure_compatible_versions: bool = True,
+        override_if_already_exists: bool = False,
     ) -> list[str]:
         """
         This method:
@@ -1929,6 +1931,8 @@ class PythonPackageToSourceConverter:
                                                that are transitive dependencies of the given dependencies.
         :param ensure_compatible_versions: Make sure that the downloaded packages have versions that are
                                            compatible with each other.
+        :param override_if_already_exists: True iff any directory in the output directory that already exists
+                                           will be overriden. Otherwise an exception is raised.
         """
         if not dependencies:
             return []
@@ -1955,7 +1959,10 @@ class PythonPackageToSourceConverter:
                 # Move to desired output directory
                 path_pkg_in_output_dir = os.path.join(output_dir, inmanta_module_name)
                 if os.path.exists(path_pkg_in_output_dir):
-                    shutil.rmtree(path_pkg_in_output_dir)
+                    if override_if_already_exists:
+                        shutil.rmtree(path_pkg_in_output_dir)
+                    else:
+                        raise Exception(f"Directory {path_pkg_in_output_dir} already exists")
                 shutil.move(src=path_extracted_pkg, dst=path_pkg_in_output_dir)
                 result.append(path_pkg_in_output_dir)
         return result
