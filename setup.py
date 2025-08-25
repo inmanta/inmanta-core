@@ -128,5 +128,9 @@ setup(
             "inmanta = inmanta.app:app",
             "inmanta-initial-user-setup = inmanta.user_setup:main",
         ],
+        "inmanta.mypy.methods": [
+            "methods_v2 = inmanta.protocol.methods_v2",
+            "methods = inmanta.protocol.methods",
+        ]
     },
 )

@@ -937,7 +937,7 @@ class AgentManager(ServerSlice, SessionListener):
                 agent = const.AGENT_SCHEDULER_ID
                 client = self.get_agent_client(env_id, agent)
                 if client is not None:
-                    await client.get_parameter(str(env_id), agent, res.to_dict())
+                    await client.get_parameter(env_id, agent, res.to_dict())
 
                 self._fact_resource_block_set[resource_id] = now
 
