@@ -326,7 +326,7 @@ class ResourceH(inmanta.agent.handler.CRUDHandler[Resource]):
     # Verify notifications
     result = await client.list_notifications(tid=environment)
     assert result.code == 200
-    start_removal_notification=[n for n in result.result["data"] if n["title"] == "Deployment operations suspended"]
+    start_removal_notification=[n for n in result.result["data"] if n["title"] == "Agent operations suspended"]
     # TODO: FIX
     assert len(start_removal_notification) == 1
 
