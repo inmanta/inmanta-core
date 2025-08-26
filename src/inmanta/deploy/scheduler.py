@@ -121,23 +121,30 @@ class ResourceRecord(typing.TypedDict):
     attribute_hash: str
 
 
-# TODO: consider if the patch is complete
-
-
 @dataclass(frozen=True)
 class ModelVersion:
     """
     A version of the model to be managed by the scheduler.
+
+    If partial is True, contains only those resources that changed since the previous version. Deleted resource sets are
+    modelled as empty sets.
+
+    :param version: The version of the model
+    :param resources: Intent of all resources in this model. Scoped to the resources from `resource_sets` for a partial model.
+    :param resource_sets: All resource sets (in the model, or the diff with the previous version for a partial model), with the
+        resources that belong to them.
+    :param requires: The requires relation of all resources. Resources without requires may be absent.
+    :param undefined: Set of all resources that are undefined.
+    :param partial: Whether this is a full or partial model version. Partial model versions only contain the resource sets that
+        were changed (including new or deleted) since the previous version. For each of those resource sets, they contain all
+        its resources.
     """
-    # TODO: how to model deleted sets? empty list or deleted_sets? The former => docstring
 
     version: int
     resources: Mapping[ResourceIdStr, ResourceIntent]
-    # TODO: the comment below is false. Figure out why it was there. Is it an invariant of new_version()?
-    resource_sets: Mapping[Optional[str], Set[ResourceIdStr]]  # must always contain at least the shared set
+    resource_sets: Mapping[Optional[str], Set[ResourceIdStr]]
     requires: Mapping[ResourceIdStr, Set[ResourceIdStr]]
     undefined: Set[ResourceIdStr]
-    # TODO: how to set this?
     partial: bool
 
     @classmethod
@@ -781,17 +788,15 @@ class ResourceScheduler(TaskManager):
             # known resources that are in scope for this partial export, i.e. resources in exported sets
             known_resources: Set[ResourceIdStr]
             if model.partial:
-                known_resources = functools.reduce(
-                    set.union,
-                    (
+                known_resources = set().union(
+                    *(
                         # get resources in set from tracked resource set, falling back to state's resource set if appropriate
                         resource_sets.get(
                             resource_set,
                             self._state.resource_sets.get(resource_set, set()) if partial else set()
                         )
                         for resource_set in model.resource_sets.keys()
-                    ),
-                    set(),
+                    )
                 )
                 # update resource sets mapping
                 for resource_set, resources in model.resource_sets.items():
@@ -806,7 +811,6 @@ class ResourceScheduler(TaskManager):
                 partial = False
                 resource_sets = dict(model.resource_sets)
 
-            # TODO: review
             for resource in known_resources - model.resources.keys():
                 with contextlib.suppress(KeyError):
                     del intent[resource]

@@ -226,7 +226,6 @@ class ModelState:
 
         result = ModelState(version=last_processed_model_version)
         model: Optional[tuple[int, inmanta.types.ResourceSets]] = (
-            # TODO
             await data.Resource.get_resources_for_version_raw(
                 environment=environment,
                 version=last_processed_model_version,
