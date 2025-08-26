@@ -29,7 +29,7 @@ import uuid
 import warnings
 from abc import ABC, abstractmethod
 from collections import abc, defaultdict
-from collections.abc import AsyncIterator, Awaitable, Callable, Collection, Iterable, Sequence, Set
+from collections.abc import AsyncIterator, Awaitable, Callable, Collection, Iterable, Iterator, Sequence, Set
 from configparser import RawConfigParser
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from itertools import chain
@@ -5455,9 +5455,7 @@ class Resource(BaseDocument):
         if len(projection_keys) != len(set(projection_keys)):
             raise ValueError("Projection keys must not overlap")
         projection_selectors: typing.LiteralString = ", ".join(
-            itertools.chain(
-                r_projection_selector, rps_projection_selector, attributes_projection_selector
-            )
+            itertools.chain(r_projection_selector, rps_projection_selector, attributes_projection_selector)
         )
 
         rps_join: typing.LiteralString
@@ -5517,9 +5515,7 @@ class Resource(BaseDocument):
         for resource_set_name, records in itertools.groupby(records, key=lambda r: r["resource_set_name"]):
             for record in records:
                 version = resource_records
-                sets[resource_set_name].append(
-                    {k: record[k] for k in projection_keys}
-                )
+                sets[resource_set_name].append({k: record[k] for k in projection_keys})
         return (db_version, sets)
 
     @classmethod
@@ -5638,9 +5634,7 @@ class Resource(BaseDocument):
                     continue
                 record: asyncpg.Record
                 for record in records:
-                    model_sets[resource_set_name].append(
-                        {k: record[k] for k in projection}
-                    )
+                    model_sets[resource_set_name].append({k: record[k] for k in projection})
             result.append((version, model_sets))
         return result
 

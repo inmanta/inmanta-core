@@ -21,13 +21,12 @@ import asyncio
 import contextlib
 import datetime
 import enum
-import functools
 import itertools
 import logging
 import typing
 import uuid
 from abc import abstractmethod
-from collections.abc import Collection, Mapping, Sequence, Set
+from collections.abc import Mapping, Sequence, Set
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional, Self
@@ -37,7 +36,7 @@ import asyncpg
 from inmanta import const, data, types
 from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
-from inmanta.data import ConfigurationModel, Environment
+from inmanta.data import Environment
 from inmanta.data.model import Discrepancy, SchedulerStatusReport
 from inmanta.deploy import timers, work
 from inmanta.deploy.persistence import ToDbUpdateManager
@@ -156,7 +155,7 @@ class ModelVersion:
         partial: bool,
     ) -> Self:
         resources: dict[ResourceIdStr, ResourceIntent] = {}
-        sets: dict[Optional[str], set[ResourceIdStr]]= {}
+        sets: dict[Optional[str], set[ResourceIdStr]] = {}
         requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
         undefined: set[ResourceIdStr] = set()
         for resource_set, set_resources in resource_sets.items():
@@ -169,9 +168,7 @@ class ModelVersion:
                     attribute_hash=resource["attribute_hash"],
                     attributes=resource["attributes"],
                 )
-                requires[resource_id] = {
-                    Id.parse_id(req).resource_str() for req in resource["attributes"].get("requires", [])
-                }
+                requires[resource_id] = {Id.parse_id(req).resource_str() for req in resource["attributes"].get("requires", [])}
                 if resource["is_undefined"]:
                     undefined.add(resource_id)
         return cls(
@@ -672,9 +669,7 @@ class ResourceScheduler(TaskManager):
         Raises KeyError if no specific version has been provided and no released versions exist.
         """
         async with self.state_update_manager.get_connection(connection) as con:
-            model: Optional[
-                tuple[int, types.ResourceSets]
-            ] = await data.Resource.get_resources_for_version_raw(
+            model: Optional[tuple[int, types.ResourceSets]] = await data.Resource.get_resources_for_version_raw(
                 self.environment,
                 version=version,
                 projection=ResourceRecord.__required_keys__,
@@ -722,9 +717,7 @@ class ResourceScheduler(TaskManager):
                     connection=con,
                 )
             else:
-                full_version: Optional[
-                    tuple[int, types.ResourceSets]
-                ] = await data.Resource.get_resources_for_version_raw(
+                full_version: Optional[tuple[int, types.ResourceSets]] = await data.Resource.get_resources_for_version_raw(
                     self.environment,
                     projection=ResourceRecord.__required_keys__,
                     connection=con,
@@ -793,8 +786,7 @@ class ResourceScheduler(TaskManager):
                     *(
                         # get resources in set from tracked resource set, falling back to state's resource set if appropriate
                         resource_sets.get(
-                            resource_set,
-                            self._state.resource_sets.get(resource_set, set()) if partial else set()
+                            resource_set, self._state.resource_sets.get(resource_set, set()) if partial else set()
                         )
                         for resource_set in model.resource_sets.keys()
                     )
