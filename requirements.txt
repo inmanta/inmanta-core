@@ -14,11 +14,11 @@ docstring-parser==0.17.0
 email-validator==2.2.0
 furo==2025.7.19
 graphviz==0.21
-inmanta-dev-dependencies==2.172.0
+inmanta-dev-dependencies==2.174.0
 inmanta-module-std
 inmanta-sphinx==2.3.0
 jinja2==3.1.6
-logfire==4.3.4
+logfire==4.3.5
 more-itertools==10.7.0
 myst-parser==4.0.1
 openapi_spec_validator==0.7.2
@@ -54,7 +54,7 @@ time-machine==2.19.0
 toml==0.10.2
 tornado==6.5.2
 types-python-dateutil==2.9.0.20250822
-types-PyYAML==6.0.12.20250809
+types-PyYAML==6.0.12.20250822
 types-setuptools==80.9.0.20250822
 types-toml==0.10.8.20240310
 typing_inspect==0.9.0
