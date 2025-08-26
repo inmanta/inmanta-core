@@ -559,7 +559,8 @@ def all_agents_action(tid: uuid.UUID, action: AllAgentAction) -> None:
                                               suspended. The removal of the agent venvs will happen asynchronously
                                               with respect to this API call. It might take a long time until the
                                               venvs are actually removed, because all executing agent operations
-                                              will be allowed to finish first.
+                                              will be allowed to finish first. As such, a long deploy operation
+                                              might delay the removal of the venvs considerably.
 
     :raises Forbidden: The given environment has been halted and the action is pause/unpause,
                         or the environment is not halted and the action is related to the on_resume behavior
