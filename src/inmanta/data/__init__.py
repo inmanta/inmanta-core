@@ -5418,6 +5418,7 @@ class Resource(BaseDocument):
     # TODO: bit weird to return version when version was parameter
     ) -> Optional[tuple[int, inmanta.types.ResourceSets]]:
         # TODO: docstring. Also mention projection_persistent and project_attributes and their default behavior. Borrow from ..._with_persistent_state method
+        #       Also mention empty model vs nonexistent model
         version_query: typing.LiteralString = (
             "SELECT $2::int AS version"
             if version is not None
@@ -5449,7 +5450,7 @@ class Resource(BaseDocument):
         rps_join: typing.LiteralString
         if rps_projection_selector:
             rps_join = f"""\
-                INNER JOIN {ResourcePersistentState.table_name()} AS rps
+                LEFT JOIN {ResourcePersistentState.table_name()} AS rps
                     ON rps.environment = r.environment
                     AND rps.resource_id = r.resource_id
             """
@@ -5469,13 +5470,13 @@ class Resource(BaseDocument):
             INNER JOIN {ConfigurationModel.table_name()} AS cm
                 ON cm.environment = $1
                 AND cm.version = version.version
-            INNER JOIN resource_set_configuration_model AS rscm
+            LEFT JOIN resource_set_configuration_model AS rscm
                 ON rscm.environment = $1
                 AND rscm.model = cm.version
-            INNER JOIN {ResourceSet.table_name()} AS rs
+            LEFT JOIN {ResourceSet.table_name()} AS rs
                 ON rs.environment = rscm.environment
                 AND rs.id = rscm.resource_set_id
-            INNER JOIN {cls.table_name()} AS r
+            LEFT JOIN {cls.table_name()} AS r
                 ON r.environment = rs.environment
                 AND r.resource_set_id = rs.id
             {rps_join}
@@ -5495,6 +5496,9 @@ class Resource(BaseDocument):
             # no records
             return (version, {}) if version is not None else None
         db_version: int = spy[0]["version"]
+        if spy[0]["resource_set_id"] is None:
+            # LEFT JOIN produced no resource sets => empty model
+            return (db_version, {})
 
         sets: inmanta.types.ResourceSets = defaultdict(list)
         resource_set_name: Optional[str]
@@ -5557,6 +5561,7 @@ class Resource(BaseDocument):
         SELECT
             model_pairs.new AS version,
             diff.name AS resource_set_name,
+            diff.old_resource_set_id,
             diff.resource_set_id,
             r.resource_id,
             r.attributes,
@@ -5569,6 +5574,7 @@ class Resource(BaseDocument):
                 -- if the set exists in only one of the models, report that one
                 COALESCE(rs_new.name, rs_old.name) AS name,
                 -- we're only interested in the latest id, or the absence of it
+                rs_old.resource_set_id AS old_resource_set_id,
                 rs_new.resource_set_id
             FROM (SELECT * FROM rs_with_name WHERE model = model_pairs.old) AS rs_old
             FULL JOIN (SELECT * FROM rs_with_name WHERE model = model_pairs.new) AS rs_new
@@ -5595,17 +5601,19 @@ class Resource(BaseDocument):
         result: list[Model] = []
         version: int
         records: Iterator[asyncpg.Record]
-        spy: Sequence[asyncpg.Record]
         for version, records in itertools.groupby(resource_records, key=lambda r: r["version"]):
+            spy: Sequence[asyncpg.Record]
             spy, records = more_itertools.spy(records)
             assert spy  # groupby can not produce empty groups
-            if spy[0]["resource_set_id"] is None:
+            # TODO: is there a better way than to include old_resource_set_id?
+            if spy[0]["resource_set_id"] is None and spy[0]["old_resource_set_id"] is None:
                 # left join with resource_set did not match => no diff in export
                 result.append((version, {}))
                 continue
             resource_set_name: Optional[str]
-            model_sets: inmanta.types.ResourceSets = defaultdict(list)
+            model_sets: inmanta.types.ResourceSets = {}
             for resource_set_name, records in itertools.groupby(records, key=lambda r: r["resource_set_name"]):
+                model_sets[resource_set_name] = []  # add even if there are no resources, to indicate an empty / deleted set
                 spy, records = more_itertools.spy(records)
                 assert spy  # groupby can not produce empty groups
                 if spy[0]["resource_id"] is None:

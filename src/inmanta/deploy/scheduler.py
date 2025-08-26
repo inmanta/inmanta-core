@@ -1005,7 +1005,10 @@ class ResourceScheduler(TaskManager):
             self._state.version = model.version
             if model.partial:
                 for resource_set, resources in model.resource_sets.items():
-                    self._state.resource_sets[resource_set] = resources
+                    if resources:
+                        self._state.resource_sets[resource_set] = resources
+                    else:
+                        del self._state.resource_sets[resource_set]
             else:
                 self._state.resource_sets = dict(model.resource_sets)
             # update resource intent
