@@ -21,6 +21,7 @@ import os
 import subprocess
 import sys
 import uuid
+from datetime import datetime
 
 import pytest
 
@@ -28,7 +29,7 @@ from inmanta import config, const, data
 from inmanta.agent import config as agent_config
 from inmanta.agent import executor
 from inmanta.data import PipConfig, model
-from utils import PipIndex, get_compiler_version, wait_until_deployment_finishes, retry_limited
+from utils import PipIndex, get_compiler_version, retry_limited, wait_until_deployment_finishes
 
 
 async def test_blueprint_hash_consistency(tmpdir):
@@ -320,15 +321,27 @@ class ResourceH(inmanta.agent.handler.CRUDHandler[Resource]):
     result = await client.all_agents_action(tid=environment, action=const.AllAgentAction.remove_all_agent_venvs.value)
     assert result.code == 200
 
-    # Wait until the venv is deleted
-    retry_limited(lambda: len(os.listdir(venvs_dir)) == 0, timeout=10)
+    async def venv_removal_finished() -> bool:
+        result = await client.list_notifications(tid=environment)
+        assert result.code == 200
+        return any(n for n in result.result["data"] if n["title"] == "Agent venv removal finished")
+
+    await retry_limited(venv_removal_finished, timeout=10)
+
+    # Assert that the venv was removed
+    assert len(os.listdir(venvs_dir)) == 0
 
     # Verify notifications
     result = await client.list_notifications(tid=environment)
     assert result.code == 200
-    start_removal_notification=[n for n in result.result["data"] if n["title"] == "Agent operations suspended"]
-    # TODO: FIX
+    start_removal_notification = [n for n in result.result["data"] if n["title"] == "Agent operations suspended"]
     assert len(start_removal_notification) == 1
+    end_removal_notification = [n for n in result.result["data"] if n["title"] == "Agent venv removal finished"]
+    assert len(end_removal_notification) == 1
+    assert not any(n for n in result.result["data"] if n["title"] == "Agent venv removal failed")
+    assert datetime.fromisoformat(start_removal_notification[0]["created"]) < datetime.fromisoformat(
+        end_removal_notification[0]["created"]
+    )
 
     # Trigger a new deployment
     version = await clienthelper.get_version()

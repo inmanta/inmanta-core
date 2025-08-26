@@ -16,6 +16,7 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import datetime
 import logging
 import os
 import uuid
@@ -145,7 +146,7 @@ class Agent(SessionEndpoint):
             )
         try:
             await data.Notification(
-                environment=env.id,
+                environment=self._env_id,
                 created=datetime.datetime.now().astimezone(),
                 title="Agent operations suspended",
                 message="Agent operations are temporarily suspended, because the user requested to remove the agent venvs.",
@@ -156,17 +157,17 @@ class Agent(SessionEndpoint):
             await self.executor_manager.stop_all_executors()
             # Remove venvs
             await environment_manager.remove_all_venvs()
-        except Exception:
+        except Exception as e:
             await data.Notification(
-                environment=env.id,
+                environment=self._env_id,
                 created=datetime.datetime.now().astimezone(),
                 title="Agent venv removal failed",
-                message=f"Failed to remove agent venvs: {result.result['message'] if result.result is not None else ''}",
+                message=f"Failed to remove agent venvs: {e}",
                 severity=const.NotificationSeverity.error,
             ).insert()
         else:
             await data.Notification(
-                environment=env.id,
+                environment=self._env_id,
                 created=datetime.datetime.now().astimezone(),
                 title="Agent venv removal finished",
                 message="The agent venvs were successfully removed. Resuming agent operations.",

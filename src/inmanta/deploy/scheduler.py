@@ -1625,4 +1625,3 @@ class ResourceScheduler(TaskManager):
         LOGGER.info("Resuming all deployment operations.")
         self._deployment_suspended = False
         await self.refresh_all_agent_states_from_db()
-
