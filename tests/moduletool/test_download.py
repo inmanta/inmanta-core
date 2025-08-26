@@ -357,6 +357,7 @@ def test_project_module_with_dependencies(pip_index: str, snippetcompiler_clean)
         snippet="",
         install_project=False,
         python_requires=[
+            module.InmantaModuleRequirement.parse("mod1").get_python_package_requirement(),
             module.InmantaModuleRequirement.parse("mod2").get_python_package_requirement(),
         ],
         use_pip_config_file=False,

@@ -699,9 +699,6 @@ When a development release is done using the \--dev option, this command:
             output_dir=directory,
             dependencies=[module_requirement.get_python_package_requirement()],
             ignore_transitive_dependencies=True,
-            # We only need to download a single package, so no compatibilty issues are possible.
-            # Setting this to False increases the performance.
-            ensure_compatible_versions=False,
         )
         assert len(paths_module_sources) == 1
         # Install in editable mode if requested
@@ -1917,7 +1914,6 @@ class PythonPackageToSourceConverter:
         ignore_transitive_dependencies: bool,
         constraints: Sequence[util.CanonicalRequirement] | None = None,
         pip_config: model.PipConfig | None = None,
-        ensure_compatible_versions: bool = True,
         override_if_already_exists: bool = False,
     ) -> list[str]:
         """
@@ -1929,8 +1925,6 @@ class PythonPackageToSourceConverter:
 
         :param ignore_transitive_dependencies: False iff also download and extract the Inmanta modules
                                                that are transitive dependencies of the given dependencies.
-        :param ensure_compatible_versions: Make sure that the downloaded packages have versions that are
-                                           compatible with each other.
         :param override_if_already_exists: True iff any directory in the output directory that already exists
                                            will be overriden. Otherwise an exception is raised.
         """
@@ -1947,7 +1941,6 @@ class PythonPackageToSourceConverter:
                 ignore_transitive_dependencies=ignore_transitive_dependencies,
                 download_dir=download_dir,
                 pip_config=pip_config,
-                ensure_compatible_versions=ensure_compatible_versions,
             )
             # Extract the packages and convert to source format
             extract_dir = os.path.join(path_tmp_dir, "extract")
@@ -1974,7 +1967,6 @@ class PythonPackageToSourceConverter:
         ignore_transitive_dependencies: bool,
         download_dir: str,
         pip_config: model.PipConfig | None,
-        ensure_compatible_versions: bool,
     ) -> list[str]:
         """
         Download the source distribution packages for the given requirements into the download_dir.
@@ -1986,7 +1978,8 @@ class PythonPackageToSourceConverter:
         with tempfile.TemporaryDirectory() as path_tmp_dir:
             # Stage 1: Determine which versions to download
             requirements: list[util.CanonicalRequirement]
-            if not ensure_compatible_versions:
+            if len(dependencies) == 1 and not constraints:
+                # We only have one dependency, so we cannot have any version conflicts between dependencies.
                 requirements = list(dependencies)
             else:
                 # Perform download with all dependencies, so that we know the exact version we need.
