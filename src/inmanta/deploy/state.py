@@ -197,7 +197,7 @@ class ModelState:
 
     version: int
     intent: dict["ResourceIdStr", ResourceIntent] = dataclasses.field(default_factory=dict)
-    resource_sets: dict[Optional[str], Set["ResourceIdStr"]] = dataclasses.field(default_factory=dict)
+    resource_sets: dict[Optional[str], set["ResourceIdStr"]] = dataclasses.field(default_factory=dict)
     requires: RequiresProvidesMapping = dataclasses.field(default_factory=RequiresProvidesMapping)
     resource_state: dict["ResourceIdStr", ResourceState] = dataclasses.field(default_factory=dict)
     # resources with a known or assumed difference between intent and actual state
@@ -318,7 +318,7 @@ class ModelState:
                     # Check whether the resource should be deployed because of an outstanding event.
                     last_success = res["last_success"] or const.DATETIME_MIN_UTC
                     for req in requires:
-                        req_res = by_resource_id[req]
+                        _, req_res = by_resource_id[req]
                         assert req_res is not None
                         last_produced_events = req_res["last_produced_events"]
                         if (

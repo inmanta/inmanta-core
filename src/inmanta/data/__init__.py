@@ -5510,12 +5510,10 @@ class Resource(BaseDocument):
             # LEFT JOIN produced no resource sets => empty model
             return (db_version, {})
 
-        sets: inmanta.types.ResourceSets = defaultdict(list)
-        resource_set_name: Optional[str]
-        for resource_set_name, records in itertools.groupby(records, key=lambda r: r["resource_set_name"]):
-            for record in records:
-                version = resource_records
-                sets[resource_set_name].append({k: record[k] for k in projection_keys})
+        sets: inmanta.types.ResourceSets = {
+            resource_set_name: [{k: record[k] for k in projection_keys} for record in records]
+            for resource_set_name, records in itertools.groupby(records, key=lambda r: r["resource_set_name"])
+        }
         return (db_version, sets)
 
     @classmethod

@@ -150,7 +150,7 @@ class ModelVersion:
     def from_db_records(
         cls: type[Self],
         version: int,
-        resource_sets: Mapping[Optional[str], Sequence[types.ResourceDict]],
+        resource_sets: Mapping[Optional[str], Sequence[ResourceRecord]],
         *,
         partial: bool,
     ) -> Self:
@@ -1003,11 +1003,11 @@ class ResourceScheduler(TaskManager):
             if model.partial:
                 for resource_set, resources in model.resource_sets.items():
                     if resources:
-                        self._state.resource_sets[resource_set] = resources
+                        self._state.resource_sets[resource_set] = set(resources)
                     else:
                         del self._state.resource_sets[resource_set]
             else:
-                self._state.resource_sets = dict(model.resource_sets)
+                self._state.resource_sets = {name: set(s) for name, s in model.resource_sets.items()}
             # update resource intent
             for resource in up_to_date_resources:
                 # Registers resource and removes from the dirty set
