@@ -249,15 +249,9 @@ class ModelState:
                 connection=connection,
             )
         )
-        # TODO: review. Can be simplified once get_resources_for_version_raw contract is better defined
-        if not model or not model[1]:
-            configuration_model: Optional[data.ConfigurationModel] = await data.ConfigurationModel.get_one(
-                environment=environment, version=last_processed_model_version, released=True, connection=connection
-            )
-            if configuration_model is None:
-                # the version does not exist at all (anymore)
-                return None
-            # otherwise it's simply an empty version => continue with normal flow
+        if not model:
+            # the version does not exist at all (anymore)
+            return None
 
         # build intermediate lookup collection
         type ResourceSetStr = Optional[str]

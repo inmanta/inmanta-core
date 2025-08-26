@@ -5410,15 +5410,28 @@ class Resource(BaseDocument):
         environment: uuid.UUID,
         *,
         version: Optional[int] = None,
-        projection: Optional[Collection[typing.LiteralString]],
+        projection: Collection[typing.LiteralString],
         projection_persistent: Collection[typing.LiteralString] = (),
         project_attributes: Collection[typing.LiteralString] = (),
         connection: Optional[Connection] = None,
-    # TODO: only optional if version is None?
-    # TODO: bit weird to return version when version was parameter
     ) -> Optional[tuple[int, inmanta.types.ResourceSets]]:
-        # TODO: docstring. Also mention projection_persistent and project_attributes and their default behavior. Borrow from ..._with_persistent_state method
-        #       Also mention empty model vs nonexistent model
+        """
+        Returns resources grouped by resource set for the given version (released or not). If no version is specified, returns
+        the resources for the latest released version.
+
+        :param version: The version for which to return the resources. If not specified, returns resources for the latest
+            released version.
+        :param projection: The resource columns to include in the returned resource dictionaries.
+            Must not overlap with other projection parameters.
+        :param projection_persistent: The resource_persistent_state columns to include in the returned resource dictionaries.
+            Must not overlap with other projection parameters.
+        :param project_attributes: The resource attributes to include as top-level keys in the returned resource dictionaries.
+            Must not overlap with other projection parameters.
+
+        :returns: Tuple of the requested model version and the resources it contains, grouped by resource set. Returns None iff
+            the requested model version does not exist (anymore). If the model exists but contains no resources, the resource
+            sets collection will simply be empty.
+        """
         version_query: typing.LiteralString = (
             "SELECT $2::int AS version"
             if version is not None
@@ -5430,7 +5443,6 @@ class Resource(BaseDocument):
                     AND released = true
             """
         )
-        # TODO: also apply r_projection_selector for the other query?
         r_projection_selector: Sequence[typing.LiteralString] = [f"r.{col}" for col in projection]
         rps_projection_selector: Sequence[typing.LiteralString] = [f"rps.{col}" for col in projection_persistent]
         attributes_projection_selector: Sequence[typing.LiteralString] = [
@@ -5440,7 +5452,8 @@ class Resource(BaseDocument):
         projection_keys: typing.Sequence[typing.LiteralString] = list(
             itertools.chain(projection, projection_persistent, project_attributes)
         )
-        # TODO: raise ValueError if len(projection_keys) != len(set(projection_keys))?
+        if len(projection_keys) != len(set(projection_keys)):
+            raise ValueError("Projection keys must not overlap")
         projection_selectors: typing.LiteralString = ", ".join(
             itertools.chain(
                 r_projection_selector, rps_projection_selector, attributes_projection_selector
@@ -5492,9 +5505,8 @@ class Resource(BaseDocument):
         spy: Sequence[asyncpg.Record]
         spy, records = more_itertools.spy(resource_records)
         if not spy:
-            # TODO: review. What if version was given but does not exist? LEFT JOIN after all? IMPORTANT FOR DB RESTORE
-            # no records
-            return (version, {}) if version is not None else None
+            # requested version does not exist
+            return None
         db_version: int = spy[0]["version"]
         if spy[0]["resource_set_id"] is None:
             # LEFT JOIN produced no resource sets => empty model
@@ -5516,16 +5528,25 @@ class Resource(BaseDocument):
         environment: uuid.UUID,
         *,
         since: int,
+        projection: Collection[typing.LiteralString],
         connection: Optional[Connection] = None,
     ) -> list[tuple[int, inmanta.types.ResourceSets]]:
-        # TODO: method docstring: empty sets = deleted sets & mention that it's a partial result
         """
         Returns all released model versions with associated resources since (excluding) the given model version.
-        Returns resources as raw dicts with the requested fields
+        Returned versions are returned as partial versions. In other words, only resource sets that changed since the previous
+        version are included. Resource sets that were deleted are represented as empty sets.
+
+        Note that a partial model version on this layer does not map one on one with how it was exported. Notably, if a partial
+        model version contains the shared set, it will contain all of its resources, rather than only those that were present in
+        the associated export.
 
         :param since: The boundary version (excluding).
+        :param projection: The resource columns to include in the returned resource dictionaries.
+            Must not overlap with other projection parameters.
+
+        :returns: A list of model versions and resources, gruped by resource set.
         """
-        # TODO: does this return a sane result if there are no newer versions?
+        projection_selectors: typing.LiteralString = ", ".join([f"r.{col}" for col in projection])
         query: typing.LiteralString = f"""\
         WITH models AS (
             SELECT *
@@ -5560,13 +5581,12 @@ class Resource(BaseDocument):
         )
         SELECT
             model_pairs.new AS version,
+            -- each row of the diff will always have at least one of the resource set ids set.
+            -- => if both are NULL, there were no records at all on the rhs of the LEFT JOIN
+            (diff.old_resource_set_id IS NULL AND diff.resource_set_id IS NULL) AS empty_model,
             diff.name AS resource_set_name,
-            diff.old_resource_set_id,
             diff.resource_set_id,
-            r.resource_id,
-            r.attributes,
-            r.attribute_hash,
-            r.is_undefined
+            {projection_selectors}
         FROM model_pairs
         LEFT JOIN LATERAL (
             -- DISTINCT because join results in two null rows for shared set. ORDER BY below ensures we keep the latest one
@@ -5593,7 +5613,6 @@ class Resource(BaseDocument):
         resource_records = await cls._fetch_query(
             query,
             cls._get_value(environment),
-            # TODO: consider how to handle the since=None case
             cls._get_value(since),
             connection=connection,
         )
@@ -5605,9 +5624,7 @@ class Resource(BaseDocument):
             spy: Sequence[asyncpg.Record]
             spy, records = more_itertools.spy(records)
             assert spy  # groupby can not produce empty groups
-            # TODO: is there a better way than to include old_resource_set_id?
-            if spy[0]["resource_set_id"] is None and spy[0]["old_resource_set_id"] is None:
-                # left join with resource_set did not match => no diff in export
+            if spy[0]["empty_model"]:
                 result.append((version, {}))
                 continue
             resource_set_name: Optional[str]
@@ -5622,67 +5639,10 @@ class Resource(BaseDocument):
                 record: asyncpg.Record
                 for record in records:
                     model_sets[resource_set_name].append(
-                        {k: record[k] for k in ("resource_id", "attributes", "attribute_hash", "is_undefined")}
+                        {k: record[k] for k in projection}
                     )
             result.append((version, model_sets))
         return result
-
-    # TODO: delete
-    @classmethod
-    async def get_resources_for_version_raw_with_persistent_state(
-        cls,
-        environment: uuid.UUID,
-        version: int,
-        *,
-        projection: Optional[Collection[typing.LiteralString]],
-        projection_persistent: Optional[Collection[typing.LiteralString]],
-        project_attributes: Optional[Collection[typing.LiteralString]] = None,
-        connection: Optional[Connection] = None,
-    ) -> list[dict[str, object]]:
-        """This method performs none of the mangling required to produce valid resources!
-
-        project_attributes performs a projection on the json attributes of the resources table. If the attribute does not exist,
-        it is left out of the result dict.
-
-        all projections must be disjoint, as they become named fields in the output record
-        """
-
-        def collect_projection(projection: Optional[Collection[str]], prefix: str) -> str:
-            if not projection:
-                return f"{prefix}.*"
-            else:
-                return ",".join(f"{prefix}.{field}" for field in projection)
-
-        if project_attributes:
-            json_projection = "," + ",".join(f"r.attributes->'{v}' as {v}" for v in project_attributes)
-        else:
-            json_projection = ""
-
-        query = f"""
-        SELECT
-            {collect_projection(projection, 'r')},
-            {collect_projection(projection_persistent, 'rps')}
-            {json_projection}
-        FROM {cls.table_name()} AS r
-        JOIN resource_persistent_state AS rps
-            ON r.environment=rps.environment
-            AND r.resource_id = rps.resource_id
-        WHERE
-            r.environment=$1
-            AND r.model = $2
-        """
-        resource_records = await cls._fetch_query(query, environment, version, connection=connection)
-        resources = [dict(record) for record in resource_records]
-        return resources
-
-    @classmethod
-    async def get_latest_version(cls, environment: uuid.UUID, resource_id: ResourceIdStr) -> Optional["Resource"]:
-        resources = await cls.get_list(
-            order_by_column="model", order="DESC", limit=1, environment=environment, resource_id=resource_id
-        )
-        if len(resources) > 0:
-            return resources[0]
-        return None
 
     @staticmethod
     def get_details_from_resource_id(resource_id: ResourceIdStr) -> m.ResourceIdDetails:
