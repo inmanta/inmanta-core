@@ -1,5 +1,5 @@
 ---
-description: Added support to remove all the Python environments used by the agents in a certain environment.
+description: Added an API endpoint to remove all the Python environments used by the agents in a certain environment.
 issue-nr: 9260
 issue-repo: inmanta-core
 change-type: minor
