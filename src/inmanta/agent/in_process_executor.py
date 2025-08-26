@@ -540,7 +540,7 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         self.executors.clear()
         self._running = True
 
-    def get_environent_manager(self) -> None:
+    def get_environment_manager(self) -> None:
         return None
 
     async def stop_all_executors(self) -> list[InProcessExecutor]:

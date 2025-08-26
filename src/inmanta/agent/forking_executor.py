@@ -1037,7 +1037,7 @@ class MPManager(
         self.agent_map: collections.defaultdict[str, set[MPExecutor]] = collections.defaultdict(set)
         self.max_executors_per_agent = inmanta.agent.config.agent_executor_cap.get()
 
-    def get_environent_manager(self) -> VirtualEnvironmentManager:
+    def get_environment_manager(self) -> VirtualEnvironmentManager:
         """
         Returns the VirtualEnvironmentManager used to create Python environments for the executors.
         """

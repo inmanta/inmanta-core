@@ -679,7 +679,7 @@ class ExecutorManager(abc.ABC, typing.Generic[E]):
         """
 
     @abc.abstractmethod
-    def get_environent_manager(self) -> VirtualEnvironmentManager | None:
+    def get_environment_manager(self) -> VirtualEnvironmentManager | None:
         """
         Returns the VirtualEnvironmentManager used by this ExecutorManager or None if this
         ExecutorManager doesn't have a VirtualEnvironmentManager.

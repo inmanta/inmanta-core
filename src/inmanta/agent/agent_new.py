@@ -135,7 +135,7 @@ class Agent(SessionEndpoint):
         """
         Remove all the venvs used by the executors of this agent.
         """
-        environment_manager: executor.VirtualEnvironmentManager | None = self.executor_manager.get_environent_manager()
+        environment_manager: executor.VirtualEnvironmentManager | None = self.executor_manager.get_environment_manager()
         if not environment_manager:
             raise Exception(
                 "Calling the remove_executor_venvs endpoint while running against an ExecutorManager that doesn't have"
@@ -144,11 +144,34 @@ class Agent(SessionEndpoint):
                 " So there are no venvs to cleanup."
             )
         try:
+            await data.Notification(
+                environment=env.id,
+                created=datetime.datetime.now().astimezone(),
+                title="Agent operations suspended",
+                message="Agent operations are temporarily suspended, because the user requested to remove the agent venvs.",
+                severity=const.NotificationSeverity.info,
+            ).insert()
             # Stop all deployments and stop all executors
             await self.scheduler.suspend_deployments(reason="removing all agent venvs")
             await self.executor_manager.stop_all_executors()
             # Remove venvs
             await environment_manager.remove_all_venvs()
+        except Exception:
+            await data.Notification(
+                environment=env.id,
+                created=datetime.datetime.now().astimezone(),
+                title="Agent venv removal failed",
+                message=f"Failed to remove agent venvs: {result.result['message'] if result.result is not None else ''}",
+                severity=const.NotificationSeverity.error,
+            ).insert()
+        else:
+            await data.Notification(
+                environment=env.id,
+                created=datetime.datetime.now().astimezone(),
+                title="Agent venv removal finished",
+                message="The agent venvs were successfully removed. Resuming agent operations.",
+                severity=const.NotificationSeverity.info,
+            ).insert()
         finally:
             # Resume deployments again
             await self.scheduler.resume_deployments()

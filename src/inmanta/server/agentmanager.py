@@ -315,11 +315,7 @@ class AgentManager(ServerSlice, SessionListener):
         """
         agent_client = self.get_agent_client(tid=env.id, endpoint=AGENT_SCHEDULER_ID, live_agent_only=False)
         if agent_client:
-            result = await agent_client.remove_executor_venvs()
-            if result.code != 200:
-                raise Exception(
-                    f"Failed to remove executor venvs: {result.result['message'] if result.result is not None else ''}"
-                )
+            self.add_background_task(agent_client.remove_executor_venvs())
         else:
             raise Conflict(f"No scheduler process is running for environment {env.id}")
 

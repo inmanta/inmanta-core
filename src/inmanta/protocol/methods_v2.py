@@ -503,9 +503,10 @@ def notify_timer_update(tid: uuid.UUID) -> None:
     path="/executors/remove_venvs",
     operation="DELETE",
     server_agent=True,
-    timeout=10,
+    timeout=5,
     arg_options=methods.AGENT_ENV_OPTS,
     client_types=[],
+    reply=False,
     enforce_auth=False,
 )
 def remove_executor_venvs() -> None:
@@ -530,7 +531,7 @@ def agent_action(tid: uuid.UUID, name: str, action: AgentAction) -> None:
                     * pause: A paused agent cannot execute any deploy operations.
                     * unpause: A unpaused agent will be able to execute deploy operations.
                     * keep_paused_on_resume: The agent will still be paused when the environment is resumed
-                    * unpause_on_resume: The agent will be unpaused when the environment is resumed
+                    * unpause_on_resume: The agent will be unpaused when the environment is resumed.
 
     :raises Forbidden: The given environment has been halted and the action is pause/unpause,
                         or the environment is not halted and the action is related to the on_resume behavior
@@ -554,8 +555,9 @@ def all_agents_action(tid: uuid.UUID, action: AllAgentAction) -> None:
                     * keep_paused_on_resume: The agents will still be paused when the environment is resumed
                     * unpause_on_resume: The agents will be unpaused when the environment is resumed
                     * remove_all_agent_venvs: Remove all agent venvs in the given environment. During this
-                                              process the deployment operation in the environment are temporarily
-                                              halted.
+                                              process the agent operations in that environment are temporarily
+                                              halted. The removal of the agent venvs will happen asynchronously
+                                              with respect to this API call.
 
     :raises Forbidden: The given environment has been halted and the action is pause/unpause,
                         or the environment is not halted and the action is related to the on_resume behavior

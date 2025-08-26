@@ -178,7 +178,7 @@ class DummyManager(executor.ExecutorManager[executor.Executor]):
             self.executors[agent_name] = DummyExecutor()
         return self.executors[agent_name]
 
-    def get_environent_manager(self) -> None:
+    def get_environment_manager(self) -> None:
         return None
 
     async def stop_all_executors(self) -> list[DummyExecutor]:

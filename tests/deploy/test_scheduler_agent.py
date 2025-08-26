@@ -2463,7 +2463,7 @@ class BrokenDummyManager(executor.ExecutorManager[executor.Executor]):
     async def stop_for_agent(self, agent_name: str) -> list[DummyExecutor]:
         pass
 
-    def get_environent_manager(self) -> None:
+    def get_environment_manager(self) -> None:
         return None
 
     async def stop_all_executors(self) -> list[DummyExecutor]:

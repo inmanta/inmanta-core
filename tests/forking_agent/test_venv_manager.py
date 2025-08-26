@@ -28,7 +28,7 @@ from inmanta import config, const, data
 from inmanta.agent import config as agent_config
 from inmanta.agent import executor
 from inmanta.data import PipConfig, model
-from utils import PipIndex, get_compiler_version, wait_until_deployment_finishes
+from utils import PipIndex, get_compiler_version, wait_until_deployment_finishes, retry_limited
 
 
 async def test_blueprint_hash_consistency(tmpdir):
@@ -320,8 +320,15 @@ class ResourceH(inmanta.agent.handler.CRUDHandler[Resource]):
     result = await client.all_agents_action(tid=environment, action=const.AllAgentAction.remove_all_agent_venvs.value)
     assert result.code == 200
 
-    # Assert that the Python environment is gone
-    assert len(os.listdir(venvs_dir)) == 0
+    # Wait until the venv is deleted
+    retry_limited(lambda: len(os.listdir(venvs_dir)) == 0, timeout=10)
+
+    # Verify notifications
+    result = await client.list_notifications(tid=environment)
+    assert result.code == 200
+    start_removal_notification=[n for n in result.result["data"] if n["title"] == "Deployment operations suspended"]
+    # TODO: FIX
+    assert len(start_removal_notification) == 1
 
     # Trigger a new deployment
     version = await clienthelper.get_version()
