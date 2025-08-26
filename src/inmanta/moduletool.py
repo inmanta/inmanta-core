@@ -349,6 +349,7 @@ compatible with the dependencies specified by the updated modules.
             constraints=constraints,
             ignore_transitive_dependencies=False,
             pip_config=project.metadata.pip,
+            override_if_already_exists=True,
         )
         if paths_python_packages and install:
             env.process_env.install_for_config(
@@ -1913,6 +1914,7 @@ class PythonPackageToSourceConverter:
         ignore_transitive_dependencies: bool,
         constraints: Sequence[util.CanonicalRequirement] | None = None,
         pip_config: model.PipConfig | None = None,
+        override_if_already_exists: bool = False,
     ) -> list[str]:
         """
         This method:
@@ -1923,6 +1925,8 @@ class PythonPackageToSourceConverter:
 
         :param ignore_transitive_dependencies: False iff also download and extract the Inmanta modules
                                                that are transitive dependencies of the given dependencies.
+        :param override_if_already_exists: True iff any directory in the output directory that already exists
+                                           will be overriden. Otherwise an exception is raised.
         """
         if not dependencies:
             return []
@@ -1947,7 +1951,11 @@ class PythonPackageToSourceConverter:
                 self._convert_to_source_format(path_extracted_pkg, inmanta_module_name)
                 # Move to desired output directory
                 path_pkg_in_output_dir = os.path.join(output_dir, inmanta_module_name)
-                assert not os.path.exists(path_pkg_in_output_dir)
+                if os.path.exists(path_pkg_in_output_dir):
+                    if override_if_already_exists:
+                        shutil.rmtree(path_pkg_in_output_dir)
+                    else:
+                        raise Exception(f"Directory {path_pkg_in_output_dir} already exists")
                 shutil.move(src=path_extracted_pkg, dst=path_pkg_in_output_dir)
                 result.append(path_pkg_in_output_dir)
         return result
@@ -1968,34 +1976,41 @@ class PythonPackageToSourceConverter:
         assert not os.listdir(download_dir)
 
         with tempfile.TemporaryDirectory() as path_tmp_dir:
-            # Stage 1: Perform download with all dependencies, so that we know the exact version we need.
-            env.process_env.download_distributions(
-                output_directory=path_tmp_dir,
-                pip_config=pip_config,
-                dependencies=dependencies,
-                constraints=constraints,
-                no_deps=False,
-            )
-            # Fetch the packages and their exact versions
-            requirements_exact_version: list[util.CanonicalRequirement] = []
-            dependencies_pkg_names: set[str] = {d.name for d in dependencies}
-            for filename in os.listdir(path_tmp_dir):
-                if not filename.startswith("inmanta_module_"):
-                    # Not an Inmanta module
-                    continue
-                pkg_name, version = util.get_pkg_name_and_version(filename)
-                if ignore_transitive_dependencies and pkg_name not in dependencies_pkg_names:
-                    # It's a transitive dependency we can ignore
-                    continue
-                requirements_exact_version.append(util.parse_requirement(f"{pkg_name}=={version}"))
+            # Stage 1: Determine which versions to download
+            requirements: list[util.CanonicalRequirement]
+            if len(dependencies) == 1 and not constraints:
+                # We only have one dependency, so we cannot have any version conflicts between dependencies.
+                requirements = list(dependencies)
+            else:
+                # Perform download with all dependencies, so that we know the exact version we need.
+                env.process_env.download_distributions(
+                    output_directory=path_tmp_dir,
+                    pip_config=pip_config,
+                    dependencies=dependencies,
+                    constraints=constraints,
+                    no_deps=False,
+                )
+                # Fetch the packages and their exact versions
+                requirements = []
+                dependencies_pkg_names: set[str] = {d.name for d in dependencies}
+                for filename in os.listdir(path_tmp_dir):
+                    if not filename.startswith("inmanta_module_"):
+                        # Not an Inmanta module
+                        continue
+                    pkg_name, version = util.get_pkg_name_and_version(filename)
+                    if ignore_transitive_dependencies and pkg_name not in dependencies_pkg_names:
+                        # It's a transitive dependency we can ignore
+                        continue
+                    requirements.append(util.parse_requirement(f"{pkg_name}=={version}"))
 
             # Stage 2: Download the correct versions of the requested packages as source distribution.
-            for req in requirements_exact_version:
+            for req in requirements:
                 try:
                     env.process_env.download_distributions(
                         output_directory=download_dir,
                         pip_config=pip_config,
                         dependencies=[req],
+                        constraints=constraints,
                         no_deps=True,
                         # Setting no_binary to :all: would imply that `pip download` downloads dependencies
                         # (e.g. setuptools) of these modules in source format as well. This would make the
