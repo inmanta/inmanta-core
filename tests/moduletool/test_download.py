@@ -86,7 +86,6 @@ def execute_module_download(module_req: str, install: bool, download_dir: str | 
     if download_dir is None:
         download_dir = os.getcwd()
     module_name: str = module.InmantaModuleRequirement.parse(module_req).name
-    assert not os.listdir(download_dir)
     m = moduletool.ModuleTool()
     m.download(module_req=module_req, install=install, directory=download_dir)
     files = os.listdir(download_dir)
@@ -164,6 +163,11 @@ def test_module_download(tmpdir, monkeypatch, tmpvenv_active, pip_index: str):
         module_dir=mod.path, module_name="minimalv2module", has_files_dir=False, has_templates_dir=False, has_tests_dir=False
     )
     assert mod.version == version.Version("1.1.1")
+
+    with pytest.raises(Exception) as excinfo:
+        execute_module_download(module_req="minimalv2module", install=False, download_dir=download_dir)
+
+    assert f"Directory {os.path.join(download_dir, 'minimalv2module')} already exists" in str(excinfo.value)
 
 
 def test_module_download_cwd(tmpdir, monkeypatch, tmpvenv_active, pip_index: str):
@@ -265,12 +269,21 @@ def test_project_download_with_version_constraint(
     """
     python_requires: list[Requirement]
     project_requires: list[module.InmantaModuleRequirement] | None
-    if add_constraint_project_yml:
-        python_requires = [module.InmantaModuleRequirement.parse("elaboratev2module").get_python_package_requirement()]
-        project_requires = [module.InmantaModuleRequirement.parse("elaboratev2module~=1.0")]
-    else:
-        python_requires = [module.InmantaModuleRequirement.parse("elaboratev2module~=1.0").get_python_package_requirement()]
-        project_requires = None
+
+    def get_requires(
+        constraint: str,
+    ) -> tuple[list[module.InmantaModuleRequirement], list[module.InmantaModuleRequirement] | None]:
+        if add_constraint_project_yml:
+            python_requires = [module.InmantaModuleRequirement.parse("elaboratev2module").get_python_package_requirement()]
+            project_requires = [module.InmantaModuleRequirement.parse(f"elaboratev2module{constraint}")]
+        else:
+            python_requires = [
+                module.InmantaModuleRequirement.parse(f"elaboratev2module{constraint}").get_python_package_requirement()
+            ]
+            project_requires = None
+        return python_requires, project_requires
+
+    python_requires, project_requires = get_requires("~=1.0")
     snippetcompiler_clean.setup_for_snippet(
         snippet="",
         install_project=already_installed,
@@ -288,6 +301,22 @@ def test_project_download_with_version_constraint(
     assert len(os.listdir(downloadpath)) == 1
     pkgs_installed_in_editable_mode = env.process_env.get_installed_packages(only_editable=True)
     assert pkgs_installed_in_editable_mode["inmanta-module-elaboratev2module"] == version.Version("1.2.3")
+
+    # Re-execute project download command with a different constraint.
+    python_requires, project_requires = get_requires("==2.3.4")
+    snippetcompiler_clean.setup_for_snippet(
+        snippet="",
+        install_project=already_installed,
+        python_requires=python_requires,
+        project_requires=project_requires,
+        use_pip_config_file=False,
+        index_url=pip_index,
+    )
+    project_tool.download(install=True)
+
+    assert len(os.listdir(downloadpath)) == 1
+    pkgs_installed_in_editable_mode = env.process_env.get_installed_packages(only_editable=True)
+    assert pkgs_installed_in_editable_mode["inmanta-module-elaboratev2module"] == version.Version("2.3.4")
 
 
 def test_project_download_pip_config(pip_index: str, snippetcompiler_clean):
@@ -328,6 +357,7 @@ def test_project_module_with_dependencies(pip_index: str, snippetcompiler_clean)
         snippet="",
         install_project=False,
         python_requires=[
+            module.InmantaModuleRequirement.parse("mod1").get_python_package_requirement(),
             module.InmantaModuleRequirement.parse("mod2").get_python_package_requirement(),
         ],
         use_pip_config_file=False,
