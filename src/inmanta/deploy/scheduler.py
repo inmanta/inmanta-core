@@ -224,6 +224,8 @@ class TaskRunner:
         self._scheduler = scheduler
         self._task: typing.Optional[asyncio.Task[None]] = None
         self._notify_tasks: dict[uuid.UUID, asyncio.Task[None]] = {}
+        # Lock to prevent race conditions on the running state of this TaskRunner
+        self._notify_lock = asyncio.Lock()
 
     async def start(self) -> None:
         assert (
@@ -255,19 +257,19 @@ class TaskRunner:
                         reference to the associated asyncio.Task object in `self._notify_tasks`. This value is None otherwise.
         """
         try:
-            should_be_running = (
-                await self._scheduler.should_be_running()
-                and await self._scheduler.should_runner_be_running(endpoint=self.endpoint)
-                and not self._scheduler.is_deployment_suspended()
-            )
+            async with self._notify_lock:
+                should_be_running = (
+                    await self._scheduler.should_be_running()
+                    and await self._scheduler.should_runner_be_running(endpoint=self.endpoint)
+                )
 
-            match self.status:
-                case AgentStatus.STARTED if not should_be_running:
-                    await self.stop()
-                case AgentStatus.STOPPED if should_be_running:
-                    await self.start()
-                case AgentStatus.STOPPING if should_be_running:
-                    self.status = AgentStatus.STARTED
+                match self.status:
+                    case AgentStatus.STARTED if not should_be_running:
+                        await self.stop()
+                    case AgentStatus.STOPPED if should_be_running:
+                        await self.start()
+                    case AgentStatus.STOPPING if should_be_running:
+                        self.status = AgentStatus.STARTED
         finally:
             if task_id:
                 del self._notify_tasks[task_id]
@@ -1056,6 +1058,8 @@ class ResourceScheduler(TaskManager):
         :param endpoint: The name of the agent
         """
         await data.Agent.insert_if_not_exist(environment=self.environment, endpoint=endpoint)
+        if self._deployment_suspended:
+            return False
         current_agent = await data.Agent.get(env=self.environment, endpoint=endpoint)
         return not current_agent.paused
 
@@ -1606,7 +1610,7 @@ class ResourceScheduler(TaskManager):
 
     async def suspend_deployments(self, reason: str) -> None:
         """
-        Suspend all deployment operations. All other scheduler functionality remains active.
+        Suspend all agent operations. All other scheduler functionality remains active.
         """
         LOGGER.info("Suspending all deployment operations: %s", reason)
         self._deployment_suspended = True
@@ -1616,14 +1620,9 @@ class ResourceScheduler(TaskManager):
 
     async def resume_deployments(self) -> None:
         """
-        Resume all deployment operations.
+        Resume all agent operations.
         """
         LOGGER.info("Resuming all deployment operations.")
         self._deployment_suspended = False
         await self.refresh_all_agent_states_from_db()
 
-    def is_deployment_suspended(self) -> bool:
-        """
-        Return True iff the deployment operations for this scheduler are currently suspended.
-        """
-        return self._deployment_suspended
