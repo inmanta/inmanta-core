@@ -36,7 +36,7 @@ requires = [
     "toml~=0.10 ",
     "setproctitle~=1.3",
     "SQLAlchemy~=2.0",
-    "strawberry-sqlalchemy-mapper==0.6.4",
+    "strawberry-sqlalchemy-mapper==0.7.0",
     "jsonpath-ng~=1.7",
 ]
 
@@ -130,5 +130,9 @@ setup(
             "inmanta = inmanta.app:app",
             "inmanta-initial-user-setup = inmanta.user_setup:main",
         ],
+        "inmanta.mypy.methods": [
+            "methods_v2 = inmanta.protocol.methods_v2",
+            "methods = inmanta.protocol.methods",
+        ]
     },
 )

@@ -999,11 +999,16 @@ async def agent_factory(server, client, monkeypatch) -> AsyncIterator[Callable[[
     global DISABLE_STATE_CHECK
     try:
         if not DISABLE_STATE_CHECK:
-            # Set data.RESET_DEPLOY_PROGRESS_ON_START back to False in all of the environments of the created agents
-            # Because this teardown asserts that the state is correct on restart and this setting breaks that assertion
             all_environments = {agent.environment for agent in agents}
             for environment in all_environments:
-                await client.set_setting(environment, data.RESET_DEPLOY_PROGRESS_ON_START, False)
+                # Make sure that the scheduler doesn't deploy anything anymore, because this would alter
+                # the last_deploy timestamp in the resource_state.
+                result = await client.all_agents_action(tid=environment, action=const.AgentAction.pause.value)
+                assert result.code == 200
+                # Set data.RESET_DEPLOY_PROGRESS_ON_START back to False in all of the environments of the created agents
+                # Because this teardown asserts that the state is correct on restart and this setting breaks that assertion
+                result = await client.set_setting(environment, data.RESET_DEPLOY_PROGRESS_ON_START, False)
+                assert result.code == 200
             for agent in agents:
                 await agent.stop_working()
                 the_state = copy.deepcopy(dict(agent.scheduler._state.resource_state))
@@ -1382,6 +1387,7 @@ class SnippetCompilationTest(KeepOnFail):
         index_url: Optional[str] = None,
         extra_index_url: list[str] = [],
         main_file: str = "main.cf",
+        pre: bool | None = None,
     ) -> Project:
         """
         Sets up the project to compile a snippet of inmanta DSL. Activates the compiler environment (and patches
@@ -1420,6 +1426,7 @@ class SnippetCompilationTest(KeepOnFail):
             index_url,
             extra_index_url,
             main_file,
+            pre=pre,
         )
 
         dirty_venv = autostd or install_project or install_v2_modules or self.re_check_venv or python_requires
@@ -1490,6 +1497,7 @@ class SnippetCompilationTest(KeepOnFail):
         main_file: str = "main.cf",
         ministd: bool = False,
         environment_settings: dict[str, EnvSettingType] | None = None,
+        pre: bool | None = None,
     ) -> None:
         add_to_module_path = add_to_module_path if add_to_module_path is not None else []
         python_package_sources = python_package_sources if python_package_sources is not None else []
@@ -1535,6 +1543,11 @@ class SnippetCompilationTest(KeepOnFail):
             if extra_index_url:
                 cfg.write(
                     f"""                extra_index_url: [{", ".join(url for url in extra_index_url)}]
+"""
+                )
+            if pre is not None:
+                cfg.write(
+                    f"""                pre: {str(pre).lower()}
 """
                 )
             if environment_settings:
@@ -1617,7 +1630,6 @@ class SnippetCompilationTest(KeepOnFail):
         return export.run(
             types,
             scopes,
-            model_export=False,
             include_status=include_status,
             partial_compile=partial_compile,
             resource_sets_to_remove=resource_sets_to_remove,

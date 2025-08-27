@@ -231,9 +231,7 @@ async def test_agents_paging(server, client, env_with_agents: None, environment:
     }
     assert result.result["metadata"] == {"total": 2, "before": 2, "after": 0, "page_size": 1}
 
-    result = await client.get_agents(environment)
-    assert result.code == 200
-    all_agents = result.result["data"]
+    all_agents = await client.get_agents(environment).value()
     assert len(all_agents) == 9
 
     result = await client.get_agents(environment)

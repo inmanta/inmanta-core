@@ -24,7 +24,7 @@ import traceback
 import typing
 import uuid
 from abc import ABC, abstractmethod
-from collections import abc
+from collections.abc import Awaitable, Mapping, Sequence
 from concurrent.futures import Future
 from functools import partial
 from typing import Any, Callable, Generic, Optional, TypeVar, Union, cast, overload
@@ -35,7 +35,7 @@ import inmanta
 from inmanta import const, data, protocol, resources, tracing
 from inmanta.agent.cache import AgentCache
 from inmanta.const import ParameterSource, ResourceState
-from inmanta.data.model import AttributeStateChange, BaseModel, DiscoveredResource, LinkedDiscoveredResource
+from inmanta.data.model import AttributeStateChange, BaseModel, LinkedDiscoveredResource
 from inmanta.protocol import Result, json_encode
 from inmanta.stable_api import stable_api
 from inmanta.types import ResourceIdStr, SimpleTypes
@@ -546,7 +546,7 @@ class HandlerAPI(ABC, Generic[TResource]):
         self,
         ctx: HandlerContext,
         resource: TResource,
-        requires: abc.Mapping[ResourceIdStr, ResourceState],
+        requires: Mapping[ResourceIdStr, ResourceState],
     ) -> None:
         """
         Main entrypoint of the handler that will be called by the agent to deploy a resource on the server.
@@ -562,7 +562,7 @@ class HandlerAPI(ABC, Generic[TResource]):
         :param requires: A dictionary mapping the resource id of each dependency of the given resource to its resource state.
         """
 
-        def _call_resource_did_dependency_change() -> typing.Awaitable[Result]:
+        def _call_resource_did_dependency_change() -> Awaitable[Result[bool]]:
             return self.get_client().resource_did_dependency_change(
                 tid=self._agent.environment, rvid=resource.id.resource_version_str()
             )
@@ -580,8 +580,8 @@ class HandlerAPI(ABC, Generic[TResource]):
             return result.result["data"]
 
         def filter_resources_by_state(
-            reqs: abc.Mapping[ResourceIdStr, ResourceState], states: typing.Set[ResourceState]
-        ) -> abc.Mapping[ResourceIdStr, ResourceState]:
+            reqs: Mapping[ResourceIdStr, ResourceState], states: typing.Set[ResourceState]
+        ) -> Mapping[ResourceIdStr, ResourceState]:
             """
             Return a sub-dictionary of dependencies of this resource.
             Only keeping dependencies that are in a state that is in the provided set.
@@ -717,7 +717,7 @@ class HandlerAPI(ABC, Generic[TResource]):
         """
         return {}
 
-    def run_sync(self, func: typing.Callable[[], abc.Awaitable[T]]) -> T:
+    def run_sync(self, func: typing.Callable[[], Awaitable[T]]) -> T:
         """
         Run the given async function on the ioloop of the agent. It will block the current thread until the future
         resolves.
@@ -761,7 +761,7 @@ class HandlerAPI(ABC, Generic[TResource]):
         :return: The content in the form of a bytestring or none is the content does not exist.
         """
 
-        def call() -> abc.Awaitable[Result]:
+        def call() -> Awaitable[Result]:
             return self.get_client().get_file(hash_id)
 
         result = self.run_sync(call)
@@ -784,7 +784,7 @@ class HandlerAPI(ABC, Generic[TResource]):
         :return: True if the file is available on the server.
         """
 
-        def call() -> typing.Awaitable[Result]:
+        def call() -> Awaitable[Result]:
             return self.get_client().stat_file(hash_id)
 
         result = self.run_sync(call)
@@ -798,7 +798,7 @@ class HandlerAPI(ABC, Generic[TResource]):
         :param content: A byte string with the content
         """
 
-        def call() -> abc.Awaitable[Result]:
+        def call() -> Awaitable[Result]:
             return self.get_client().upload_file(id=hash_id, content=base64.b64encode(content).decode("ascii"))
 
         try:
@@ -858,7 +858,7 @@ class ResourceHandler(HandlerAPI[TResource]):
         current = self.check_resource(ctx, resource)
         return self._diff(current, resource)
 
-    def do_changes(self, ctx: HandlerContext, resource: TResource, changes: abc.Mapping[str, abc.Mapping[str, object]]) -> None:
+    def do_changes(self, ctx: HandlerContext, resource: TResource, changes: Mapping[str, Mapping[str, object]]) -> None:
         """
         Do the changes required to bring the resource on this system in the state of the given resource.
 
@@ -1109,9 +1109,7 @@ class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered])
         return {}
 
     @abstractmethod
-    def discover_resources(
-        self, ctx: HandlerContext, discovery_resource: TDiscovery
-    ) -> abc.Mapping[ResourceIdStr, TDiscovered]:
+    def discover_resources(self, ctx: HandlerContext, discovery_resource: TDiscovery) -> Mapping[ResourceIdStr, TDiscovered]:
         """
         This method implements the resource discovery logic. This method will be called
         by the handler during deployment of the corresponding discovery resource.
@@ -1131,15 +1129,15 @@ class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered])
             self.pre(ctx, resource)
 
             def _call_discovered_resource_create_batch(
-                discovered_resources: abc.Sequence[DiscoveredResource],
-            ) -> typing.Awaitable[Result]:
+                discovered_resources: Sequence[LinkedDiscoveredResource],
+            ) -> Awaitable[Result]:
                 return self.get_client().discovered_resource_create_batch(
                     tid=self._agent.environment,
                     discovered_resources=discovered_resources,
                 )
 
-            discovered_resources_raw: abc.Mapping[ResourceIdStr, TDiscovered] = self.discover_resources(ctx, resource)
-            discovered_resources: abc.Sequence[LinkedDiscoveredResource] = [
+            discovered_resources_raw: Mapping[ResourceIdStr, TDiscovered] = self.discover_resources(ctx, resource)
+            discovered_resources: Sequence[LinkedDiscoveredResource] = [
                 LinkedDiscoveredResource(
                     discovered_resource_id=resource_id,
                     values=values.model_dump(),
