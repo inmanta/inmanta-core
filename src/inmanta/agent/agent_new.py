@@ -136,14 +136,6 @@ class Agent(SessionEndpoint):
         """
         Remove all the venvs used by the executors of this agent.
         """
-        environment_manager: executor.VirtualEnvironmentManager | None = self.executor_manager.get_environment_manager()
-        if not environment_manager:
-            raise Exception(
-                "Calling the remove_executor_venvs endpoint while running against an ExecutorManager that doesn't have"
-                " a VirtualEnvironmentManager. This can happen while running the test suite using"
-                " the agent fixture. In that case all executors run in the same process as the server."
-                " So there are no venvs to cleanup."
-            )
         try:
             await data.Notification(
                 environment=self._env_id,
@@ -156,7 +148,7 @@ class Agent(SessionEndpoint):
             await self.scheduler.suspend_deployments(reason="removing all agent venvs")
             await self.executor_manager.stop_all_executors()
             # Remove venvs
-            await environment_manager.remove_all_venvs()
+            await self._remove_executor_venvs()
         except Exception as e:
             await data.Notification(
                 environment=self._env_id,
@@ -176,6 +168,20 @@ class Agent(SessionEndpoint):
         finally:
             # Resume deployments again
             await self.scheduler.resume_deployments()
+
+    async def _remove_executor_venvs(self) -> None:
+        """
+        This method was created to be able to monkeypatch it in testing.
+        """
+        environment_manager: executor.VirtualEnvironmentManager | None = self.executor_manager.get_environment_manager()
+        if not environment_manager:
+            raise Exception(
+                "Calling the remove_executor_venvs endpoint while running against an ExecutorManager that doesn't have"
+                " a VirtualEnvironmentManager. This can happen while running the test suite using"
+                " the agent fixture. In that case all executors run in the same process as the server."
+                " So there are no venvs to cleanup."
+            )
+        await environment_manager.remove_all_venvs()
 
     @protocol.handle(methods.set_state)
     async def set_state(self, agent: Optional[str], enabled: bool) -> Apireturn:

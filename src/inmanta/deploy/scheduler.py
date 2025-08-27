@@ -294,7 +294,6 @@ class TaskRunner:
                 LOGGER.exception(
                     "Task %s for agent %s has failed and the exception was not properly handled", work_item.task, self.endpoint
                 )
-
             self._scheduler._work.agent_queues.task_done(self.endpoint, work_item.task)
 
         self.status = AgentStatus.STOPPED
