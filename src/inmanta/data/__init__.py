@@ -5516,6 +5516,11 @@ class Resource(BaseDocument):
         }
         return (db_version, sets)
 
+    # TODO: consider if test coverage is sufficient. Consider:
+    #   - this method unit test
+    #       - some resource sets that are not changed between versions
+    #       - multiple versions
+    #   - scheduler behavior for partial
     @classmethod
     async def get_partial_resources_since_version_raw(
         cls,
@@ -5540,6 +5545,7 @@ class Resource(BaseDocument):
 
         :returns: A list of model versions and resources, gruped by resource set.
         """
+        # TODO: returns nothing if the old model no longer exists / has not been released. Is sort of to be expected, because it wouldn't be partial otherwise
         projection_selectors: typing.LiteralString = ", ".join([f"r.{col}" for col in projection])
         query: typing.LiteralString = f"""\
         WITH models AS (
