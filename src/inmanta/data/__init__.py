@@ -5491,6 +5491,7 @@ class Resource(BaseDocument):
                 ON r.environment = rs.environment
                 AND r.resource_set_id = rs.id
             {rps_join}
+            ORDER BY rs.name, r.resource_id
         """
         resource_records = await cls._fetch_query(
             query,
@@ -5516,7 +5517,6 @@ class Resource(BaseDocument):
         }
         return (db_version, sets)
 
-    # TODO: test coverage: scheduler behavior for partial
     @classmethod
     async def get_partial_resources_since_version_raw(
         cls,
@@ -5542,6 +5542,7 @@ class Resource(BaseDocument):
         :returns: A list of model versions and resources, gruped by resource set.
         """
         # TODO: returns nothing if the old model no longer exists / has not been released. Is sort of to be expected, because it wouldn't be partial otherwise
+        #           Make decision + add test
         projection_selectors: typing.LiteralString = ", ".join([f"r.{col}" for col in projection])
         query: typing.LiteralString = f"""\
         WITH models AS (
@@ -5558,7 +5559,6 @@ class Resource(BaseDocument):
             INNER JOIN resource_set_configuration_model AS rscm
                 ON rscm.environment = cm.environment
                 AND rscm.model = cm.version
-            -- TODO: get some data on how this performs vs name in rscm
             INNER JOIN {ResourceSet.table_name()} AS rs
                 ON rs.environment = rscm.environment
                 AND rs.id = rscm.resource_set_id

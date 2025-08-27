@@ -326,6 +326,7 @@ class TaskRunner:
         return self.status == AgentStatus.STARTED
 
 
+# TODO: tests for partial?
 class ResourceScheduler(TaskManager):
     """
     Scheduler for resource actions. Reads resource state from the database and accepts deploy, dry-run, ... requests from the

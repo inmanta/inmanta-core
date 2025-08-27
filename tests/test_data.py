@@ -2907,12 +2907,15 @@ async def test_get_current_resource_state(server, environment, client, clienthel
 @ pytest.mark.slowtest
 async def test_get_partial_resources_since_version_raw(environment, server, postgresql_client, client):
     """
-    Verify the behavior of the get_partial_resources_since_version_raw method, used by the scheduler to apply partial versions.
+    Verify the behavior of the get_partial_resources_since_version_raw and get_resources_for_version_raw methods,
+    used by the scheduler to apply partial and full versions respectively.
     """
     nb_resource_sets: int = 100
     nb_resources_per_set: int = 100
 
     def get_resource_set_names(partial_size: int) -> Iterator[str]:
+        if partial_size == 0:
+            return iter(())
         return (str(i) for i in range(1, nb_resource_sets + 1, max(nb_resource_sets // partial_size, 1)))
 
     def get_resource_id(resource_set: str, index: int, *, version: Optional[int] = None) -> ResourceVersionIdStr:
@@ -2936,7 +2939,7 @@ async def test_get_partial_resources_since_version_raw(environment, server, post
         version=version,
         module_version_info={},
         resources=[
-            {"id": get_resource_id(s, i, version=version), "requires": []}
+            {"id": get_resource_id(s, i, version=version), "requires": [], "exported": version}
             for s in get_resource_set_names(nb_resource_sets)
             for i in range(nb_resources_per_set)
         ],
@@ -2952,12 +2955,15 @@ async def test_get_partial_resources_since_version_raw(environment, server, post
     await release()
 
     all_models: list[tuple[int, object]] = []
+    full_models: list[tuple[int, object]] = []
     partial_size: int  # number of resource sets in a partial export
-    for iteration, partial_size in enumerate([1, 5, 10]):
+    for iteration, partial_size in enumerate([0, 1, 3, 10, 25]):  # choose size for partially overlapping sets
         base_version: int = iteration + 1
+        new_version: int = base_version + 1
+
         # build up data sets before starting timer
         resources = [
-            {"id": get_resource_id(s, i, version=0), "requires": []}
+            {"id": get_resource_id(s, i, version=0), "requires": [], "exported": new_version}
             for s in get_resource_set_names(partial_size)
             for i in range(nb_resources_per_set)
         ]
@@ -2990,27 +2996,93 @@ async def test_get_partial_resources_since_version_raw(environment, server, post
         )
         fetch_done: float = time.monotonic()
 
+        full_fetch_start: float = time.monotonic()
+        full_model = await data.Resource.get_resources_for_version_raw(
+            # don't specify version to get latest one. Further down we test behavior with version specified
+            environment=environment,
+            projection=["resource_id"],
+            project_attributes=["exported"],
+            connection=postgresql_client,
+        )
+        full_fetch_done: float = time.monotonic()
+
         # show with pytest -s
         print(
             f"with {iteration+1:>4,} older versions with {nb_resource_sets:>4,} resource sets of size"
             f" {nb_resources_per_set:>4,} each, an export for {partial_size:>4,} resource sets took"
-            f" {1000* (insert_done - insert_start) :>5,.0f}ms to export and {1000* (fetch_done - fetch_start) :>3,.0f}ms"
-            " to fetch"
+            f" {1000* (insert_done - insert_start) :>5,.0f}ms to export, {1000* (fetch_done - fetch_start) :>3,.0f}ms"
+            f" to fetch and {1000* (full_fetch_done - full_fetch_start) :>3,.0f}ms to fetch the full version"
         )
 
         # verify the result
         assert len(models) == 1
         version, resource_sets = models[0]
-        assert version == base_version + 1
-        assert resource_sets.keys() == set(str(i) for i in range(1, nb_resource_sets + 1, max(nb_resource_sets // partial_size, 1)))
+        assert version == new_version
+        assert resource_sets.keys() == set(get_resource_set_names(partial_size))
         for resource_set, resources in resource_sets.items():
             assert {r["resource_id"] for r in resources} == {
                 f"mymodule::Myresource[myagent,id={resource_set}-{i}]" for i in range(nb_resources_per_set)
             }
-            assert len(resources) == nb_resources_per_set
         all_models.extend(models)
 
-    # verify that the method can fetch multiple models at once, as a sequence of partial diffs
+        assert full_model is not None
+        assert full_model[0] == version
+        assert full_model[1].keys() == set(str(i) for i in range(1, nb_resource_sets + 1))
+        for resource_set, resources in full_model[1].items():
+            expected_version: int
+            for version, version_sets in reversed(all_models):
+                if resource_set in version_sets:
+                    expected_version = version
+                    break
+            else:
+                expected_version = 1
+
+            assert {r["resource_id"] for r in resources} == {
+                f"mymodule::Myresource[myagent,id={resource_set}-{i}]" for i in range(nb_resources_per_set)
+            }
+            assert all(r["exported"] == expected_version for r in resources)
+        full_models.append(full_model)
+
+    # verify get_resources_for_version_raw behavior with version specified
+    for full_model in full_models:
+        by_version = await data.Resource.get_resources_for_version_raw(
+            environment=environment,
+            version=full_model[0],
+            projection=["resource_id"],
+            project_attributes=["exported"],
+            connection=postgresql_client,
+        )
+        assert by_version == full_model
+
+    resources_for_non_existent_version = await data.Resource.get_resources_for_version_raw(
+        environment=environment,
+        version=new_version + 1,
+        projection=["resource_id"],
+        project_attributes=["exported"],
+        connection=postgresql_client,
+    )
+    assert resources_for_non_existent_version is None
+
+    # push a new version without releasing it
+    base_version = new_version
+    new_version += 1
+    result = await client.put_partial(
+        tid=environment,
+        module_version_info={},
+        resources=[],
+        resource_sets={},
+    )
+
+    resources_for_non_released_version = await data.Resource.get_resources_for_version_raw(
+        environment=environment,
+        version=new_version + 1,
+        projection=["resource_id"],
+        project_attributes=["exported"],
+        connection=postgresql_client,
+    )
+    assert resources_for_non_released_version is None
+
+    # verify that the method can fetch multiple models at once, as a sequence of partial diffs, and excludes the non-released
     models = await data.Resource.get_partial_resources_since_version_raw(
         environment=environment,
         since=1,
@@ -3018,5 +3090,3 @@ async def test_get_partial_resources_since_version_raw(environment, server, post
         connection=postgresql_client,
     )
     assert models == all_models
-
-    # TODO: test get_resources_for_version_raw as well!
