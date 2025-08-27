@@ -4953,7 +4953,7 @@ class ResourceSet(BaseDocument):
                         # - 2 unchanged resource sets
                         # It means we have a bug somewhere
                         raise Exception(
-                            f"Resource set with name {name} appears more than once on version {version} of the model."
+                            f"Resource set with name {name} appears more than once on version {version} of the model. "
                             "This should not be possible. Please create a support ticket. "
                             f"Updated resource sets: {updated_resource_sets}"
                         )
@@ -5166,7 +5166,7 @@ class ResourceSet(BaseDocument):
         Deletes resources that will no longer have a valid resource set
 
         :param environment: The environment from which to delete the resource sets
-        :param version: The version from to delete from the resource_set_configuration_model table.
+        :param version: The version to delete from the resource_set_configuration_model table.
             None if we want to delete every version (i.e. when clearing the environment).
         :param connection: The connection to use
         """
