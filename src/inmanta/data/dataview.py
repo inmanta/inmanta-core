@@ -540,6 +540,8 @@ class ResourceView(DataView[ResourceStatusOrder, model.LatestReleasedResource]):
         return {"deploy_summary": str(self.deploy_summary)}
 
     def get_base_query(self) -> SimpleQueryBuilder:
+        prelude="""
+        """ if self.drop_orphans else """"""
         new_query_builder = SimpleQueryBuilder(
             select_clause="SELECT *",
             prelude=f"""
@@ -555,18 +557,22 @@ class ResourceView(DataView[ResourceStatusOrder, model.LatestReleasedResource]):
                             WHEN EXISTS (
                                 SELECT 1
                                 FROM resource AS r
-                                WHERE r.environment = rps.environment AND r.resource_id = rps.resource_id AND r.model = (
+                                INNER JOIN resource_set_configuration_model AS rscm
+                                    ON r.environment=rscm.environment AND r.resource_set_id=rscm.resource_set_id
+                                WHERE r.environment=rps.environment AND r.resource_id=rps.resource_id AND rscm.model=(
                                     SELECT version FROM latest_version
                                 )
                             ) THEN (SELECT version FROM latest_version)
                             -- only if the resource does not exist in the latest released version, search for the latest
                             -- version it does exist in
                             ELSE (
-                                SELECT MAX(r.model)
+                                SELECT MAX(rscm.model)
                                 FROM resource AS r
-                                JOIN configurationmodel AS m
-                                    ON r.environment = m.environment AND r.model = m.version AND m.released = TRUE
-                                WHERE r.environment = rps.environment AND r.resource_id = rps.resource_id
+                                INNER JOIN resource_set_configuration_model AS rscm
+                                    ON r.environment=rscm.environment AND r.resource_set_id=rscm.resource_set_id
+                                INNER JOIN configurationmodel AS m
+                                    ON rscm.environment=m.environment AND rscm.model=m.version AND m.released=TRUE
+                                WHERE r.environment=rps.environment AND r.resource_id=rps.resource_id
                             )
                         END AS version
                     FROM resource_persistent_state AS rps
@@ -578,7 +584,7 @@ class ResourceView(DataView[ResourceStatusOrder, model.LatestReleasedResource]):
                         rps.resource_type,
                         rps.agent,
                         rps.resource_id_value,
-                        r.model,
+                        rscm.model,
                         rps.environment,
                         {const.SQL_RESOURCE_STATUS_SELECTOR} AS status
                     FROM versioned_resource_state AS rps
@@ -966,10 +972,13 @@ class ResourceLogsView(DataView[ResourceLogOrder, ResourceLog]):
                 -- Get all resource action in the given environment for the given resource_id
                 WITH actions AS (
                     SELECT  ra.*
-                    FROM {Resource.table_name()} AS r INNER JOIN resourceaction_resource AS rr ON (
+                    FROM esource_set_configuration_model AS rscm
+                    INNER JOIN {Resource.table_name()} AS r
+                        ON rscm.environment=r.environment AND rscm.resource_set_id=r.resource_set_id
+                    INNER JOIN resourceaction_resource AS rr ON (
                                                           r.environment=rr.environment
                                                           AND r.resource_id=rr.resource_id
-                                                          AND r.model=rr.resource_version
+                                                          AND rscm.model=rr.resource_version
                                                       )
                                                       INNER JOIN {ResourceAction.table_name()} AS ra ON (
                                                           rr.resource_action_id=ra.action_id

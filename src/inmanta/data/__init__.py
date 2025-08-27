@@ -3214,15 +3214,26 @@ class UnknownParameter(BaseDocument):
                  is not exported by the partial compile)
         """
         query = f"""
+            WITH resources_with_version AS (
+                SELECT r.resource_id,
+                       r.resource_set,
+                       r.environment,
+                       rscm.model
+                FROM resource_set_configuration_model AS rscm
+                INNER JOIN {Resource.table_name()} AS r
+                    ON rscm.environment=r.environment AND rscm.resource_set_id=rscm.resource_set_id
+                WHERE rscm.environment=$1 AND rscm.version=$2
+            )
             SELECT u.*
-            FROM {cls.table_name()} AS u LEFT JOIN {Resource.table_name()} AS r
-                ON u.environment=r.environment AND u.version=r.model AND u.resource_id=r.resource_id
+            FROM {cls.table_name()} AS u
+            LEFT JOIN resources_with_version AS rwv
+                ON u.environment=rwv.environment AND u.version=rwv.model AND u.resource_id=rwv.resource_id
             WHERE
                 u.environment=$1
                 AND u.version=$2
                 AND u.resolved IS FALSE
-                AND (r.resource_id IS NULL OR NOT r.resource_id=ANY($4))
-                AND (r.resource_set IS NULL OR NOT r.resource_set=ANY($3))
+                AND (rwv.resource_id IS NULL OR NOT rwv.resource_id=ANY($4))
+                AND (rwv.resource_set IS NULL OR NOT rwv.resource_set=ANY($3))
         """
         async with cls.get_connection(connection) as con:
             result = await con.fetch(
@@ -5119,7 +5130,6 @@ class ResourceSet(BaseDocument):
             -- insert resources
             INSERT INTO public.resource(
                 environment,
-                model,
                 resource_id,
                 resource_type,
                 resource_id_value,
@@ -5132,7 +5142,6 @@ class ResourceSet(BaseDocument):
             )
             SELECT
                 $1,
-                $2,
                 r.resource_id,
                 r.resource_type,
                 r.resource_id_value,
@@ -5422,13 +5431,15 @@ class Resource(BaseDocument):
         """
         query = f"""
             SELECT DISTINCT ON (r.resource_id)
-                r.model,
+                rscm.model,
                 r.resource_id,
                 {const.SQL_RESOURCE_STATUS_SELECTOR} AS status
             FROM {Resource.table_name()} AS r
+                INNER JOIN resource_set_configuration_model AS rscm
+                    ON r.environment=rscm.environment AND r.resource_set_id=rscm.resource_set_id
                 INNER JOIN resource_persistent_state AS rps ON rps.environment=r.environment AND r.resource_id=rps.resource_id
             WHERE r.environment=$1 AND NOT rps.is_orphan
-            ORDER BY r.resource_id, r.model DESC
+            ORDER BY r.resource_id, rscm.model DESC
         """
         results = await cls.select_query(query, [env], no_obj=True, connection=connection)
         if not results:
@@ -6450,8 +6461,11 @@ class ConfigurationModel(BaseDocument):
             UPDATE {self.table_name()} AS c_outer
             SET total=(
                 SELECT COUNT(*)
-                FROM {self.table_name()} AS c INNER JOIN {Resource.table_name()} AS r
-                     ON c.environment = r.environment AND c.version=r.model
+                FROM {self.table_name()} AS c
+                INNER JOIN resource_set_configuration_model AS rscm
+                    ON c.environment=rscm.environment AND c.version=rscm.model
+                INNER JOIN {Resource.table_name()} AS r
+                    ON rscm.environment=r.environment AND rscm.resource_set_id=r.resource_set_id
                 WHERE c.environment=$1 AND c.version=$2
             )
             WHERE c_outer.environment=$1 AND c_outer.version=$2
