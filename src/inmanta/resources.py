@@ -451,8 +451,6 @@ class Resource(metaclass=ResourceMeta):
                 value = mthd(exporter, model_object)
             elif hasattr(cls, "map") and field_name in cls.map:
                 value = cls.map[field_name](exporter, model_object)
-            elif isinstance(model_object, proxy.DynamicProxy):
-                value = getattr(model_object._allow_references(), field_name)
             else:
                 value = getattr(model_object, field_name)
 
@@ -495,12 +493,13 @@ class Resource(metaclass=ResourceMeta):
         obj_id = resource_cls.object_to_id(model_object, entity_name, options["name"], options["agent"])
         obj = resource_cls(obj_id)
 
-        # map all fields
-        reference_collector = ReferenceCollector(obj)
-        fields: dict[str, object] = {
-            field: resource_cls.map_field(exporter, entity_name, field, model_object, reference_collector)
-            for field in resource_cls.fields
-        }
+        with proxy.exportcontext:
+            # map all fields
+            reference_collector = ReferenceCollector(obj)
+            fields: dict[str, object] = {
+                field: resource_cls.map_field(exporter, entity_name, field, model_object, reference_collector)
+                for field in resource_cls.fields
+            }
 
         fields[const.RESOURCE_ATTRIBUTE_REFERENCES] = list(reference_collector.references.values())
         fields[const.RESOURCE_ATTRIBUTE_MUTATORS] = reference_collector.mutators
