@@ -2904,7 +2904,7 @@ async def test_get_current_resource_state(server, environment, client, clienthel
     assert state is const.ResourceState.undefined
 
 
-@ pytest.mark.slowtest
+@pytest.mark.slowtest
 async def test_get_partial_resources_since_version_raw(environment, server, postgresql_client, client):
     """
     Verify the behavior of the get_partial_resources_since_version_raw and get_resources_for_version_raw methods,
@@ -2920,11 +2920,7 @@ async def test_get_partial_resources_since_version_raw(environment, server, post
 
     def get_resource_id(resource_set: str, index: int, *, version: Optional[int] = None) -> ResourceVersionIdStr:
         without_version = ResourceIdStr(f"mymodule::Myresource[myagent,id={resource_set}-{index}]")
-        return (
-            ResourceVersionIdStr(f"{without_version},v={version}")
-            if version is not None
-            else without_version
-        )
+        return ResourceVersionIdStr(f"{without_version},v={version}") if version is not None else without_version
 
     async def release() -> None:
         """
@@ -2944,9 +2940,7 @@ async def test_get_partial_resources_since_version_raw(environment, server, post
             for i in range(nb_resources_per_set)
         ],
         resource_sets={
-            get_resource_id(s, i): s
-            for s in get_resource_set_names(nb_resource_sets)
-            for i in range(nb_resources_per_set)
+            get_resource_id(s, i): s for s in get_resource_set_names(nb_resource_sets) for i in range(nb_resources_per_set)
         },
         compiler_version="0",
     )
@@ -2968,9 +2962,7 @@ async def test_get_partial_resources_since_version_raw(environment, server, post
             for i in range(nb_resources_per_set)
         ]
         resource_sets = {
-            get_resource_id(s, i): s
-            for s in get_resource_set_names(partial_size)
-            for i in range(nb_resources_per_set)
+            get_resource_id(s, i): s for s in get_resource_set_names(partial_size) for i in range(nb_resources_per_set)
         }
 
         insert_start: float = time.monotonic()
@@ -3008,10 +3000,10 @@ async def test_get_partial_resources_since_version_raw(environment, server, post
 
         # show with pytest -s
         print(
-            f"with {iteration+1:>4,} older versions with {nb_resource_sets:>4,} resource sets of size"
-            f" {nb_resources_per_set:>4,} each, an export for {partial_size:>4,} resource sets took"
-            f" {1000* (insert_done - insert_start) :>5,.0f}ms to export, {1000* (fetch_done - fetch_start) :>3,.0f}ms"
-            f" to fetch and {1000* (full_fetch_done - full_fetch_start) :>3,.0f}ms to fetch the full version"
+            f"with {iteration + 1 : >4,} older versions with {nb_resource_sets : >4,} resource sets of size"
+            f" {nb_resources_per_set : >4,} each, an export for {partial_size : >4,} resource sets took"
+            f" {1000 * (insert_done - insert_start) : >5,.0f}ms to export, {1000 * (fetch_done - fetch_start) : >3,.0f}ms"
+            f" to fetch and {1000 * (full_fetch_done - full_fetch_start) : >3,.0f}ms to fetch the full version"
         )
 
         # verify the result
