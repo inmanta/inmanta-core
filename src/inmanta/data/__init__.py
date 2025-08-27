@@ -2879,7 +2879,11 @@ class Environment(BaseDocument):
                 "DELETE FROM public.resourceaction_resource WHERE environment=$1", self.id, connection=con
             )
             await ResourceAction.delete_all(environment=self.id, connection=con)
-            await ResourceSet.clear_resource_sets(environment=self.id, connection=con)
+            await self._execute_query(
+                "DELETE FROM public.resource_set_configuration_model WHERE environment=$1", self.id, connection=con
+            )
+            await ResourceSet.delete_all(environment=self.id, connection=con)
+            await Resource.delete_all(environment=self.id, connection=con)
             await ConfigurationModel.delete_all(environment=self.id, connection=con)
             await ResourcePersistentState.delete_all(environment=self.id, connection=con)
             await Scheduler.delete_all(environment=self.id, connection=con)
@@ -4840,7 +4844,7 @@ class ResourcePersistentState(BaseDocument):
             return state.Compliance.NON_COMPLIANT
 
 
-class InvalidResourceSetMigrationException(Exception):
+class InvalidResourceSetMigration(Exception):
     """
     Raise this exception when a resource is migrated to another resource set in a partial compile
     """
@@ -4972,7 +4976,7 @@ class ResourceSet(BaseDocument):
                 f"to {cls.get_printable_name_for_resource_set(resource_sets["new"])}"
                 for rid, resource_sets in rid_to_resource_sets.items()
             )
-            raise InvalidResourceSetMigrationException(msg)
+            raise InvalidResourceSetMigration(msg)
 
     @classmethod
     async def insert_sets_and_resources(
@@ -5155,25 +5159,24 @@ class ResourceSet(BaseDocument):
             )
 
     @classmethod
-    async def clear_resource_sets(
+    async def clear_resource_sets_in_version(
         cls,
         environment: uuid.UUID,
-        version: int | None = None,
+        version: int,
         *,
         connection: asyncpg.connection.Connection,
     ) -> None:
         """
-        Deletes entries on resource_set_configuration_model that relate to this environment and version (if applicable).
+        Deletes entries on resource_set_configuration_model that relate to this environment and version.
         Deletes resource sets that no longer have entries in resource_set_configuration_model
-        Deletes resources that will no longer have a valid resource set
+        Deletes resources associated with those resource sets.
 
         :param environment: The environment from which to delete the resource sets
         :param version: The version to delete from the resource_set_configuration_model table.
-            None if we want to delete every version (i.e. when clearing the environment).
         :param connection: The connection to use
         """
-        resource_sets_to_delete = (
-            """
+
+        query = """
         WITH deleted_resource_set_versions AS (
             DELETE FROM resource_set_configuration_model AS rscm
             WHERE rscm.environment=$1 AND rscm.model=$2
@@ -5192,18 +5195,6 @@ class ResourceSet(BaseDocument):
             ) AND rs.environment=$1
             AND rscm.resource_set_id is NULL
         ),
-        """
-            if version is not None
-            else """
-        WITH resource_sets_to_delete AS (
-            DELETE FROM resource_set_configuration_model AS rscm
-            WHERE rscm.environment=$1
-            RETURNING rscm.resource_set_id AS id
-        ),
-        """
-        )
-        query = f"""
-        {resource_sets_to_delete}
         resources_to_delete AS (
             DELETE FROM resource AS r
             WHERE r.resource_set_id IN (
@@ -5219,8 +5210,7 @@ class ResourceSet(BaseDocument):
             )
             AND rs.environment=$1
         """
-        values = [environment, version] if version is not None else [environment]
-        await cls._execute_query(query, *values, connection=connection)
+        await cls._execute_query(query, environment, version, connection=connection)
 
 
 @stable_api
@@ -6346,7 +6336,7 @@ class ConfigurationModel(BaseDocument):
                 connection=con,
             )
             await ResourceAction.delete_all(environment=self.environment, version=self.version, connection=con)
-            await ResourceSet.clear_resource_sets(environment=self.environment, version=self.version, connection=con)
+            await ResourceSet.clear_resource_sets_in_version(environment=self.environment, version=self.version, connection=con)
             await self.delete(connection=con)
 
             # Delete facts when the resources in this version are the only
