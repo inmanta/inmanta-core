@@ -54,13 +54,20 @@ from inmanta import const, resources, util
 from inmanta.const import NAME_RESOURCE_ACTION_LOGGER, AgentStatus, LogLevel, ResourceState
 from inmanta.data import model as m
 from inmanta.data import schema
-from inmanta.data.model import AuthMethod, BaseModel, PagingBoundaries, PipConfig, api_boundary_datetime_normalizer
+from inmanta.data.model import AuthMethod, BaseModel, PagingBoundaries, PipConfig
 from inmanta.data.sqlalchemy import AgentModules, InmantaModule, ModuleFiles
 from inmanta.deploy import state
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config
 from inmanta.stable_api import stable_api
-from inmanta.types import JsonType, PrimitiveTypes, ResourceIdStr, ResourceType, ResourceVersionIdStr
+from inmanta.types import (
+    JsonType,
+    PrimitiveTypes,
+    ResourceIdStr,
+    ResourceType,
+    ResourceVersionIdStr,
+    api_boundary_datetime_normalizer,
+)
 from inmanta.util import parse_timestamp
 from sqlalchemy import URL, AdaptedConnection, NullPool
 from sqlalchemy.dialects import registry
@@ -235,7 +242,7 @@ class ArgumentCollector:
         self.offset = offset
         self.de_duplicate = de_duplicate
 
-    def __call__(self, entry: object) -> str:
+    def __call__(self, entry: object) -> typing.LiteralString:
         if self.de_duplicate and entry in self.args:
             return "$" + str(self.args.index(entry) + 1 + self.offset)
         self.args.append(entry)
@@ -2359,6 +2366,7 @@ class Setting:
         update_model: bool = False,
         agent_restart: bool = False,
         allowed_values: Optional[list[m.EnvSettingType]] = None,
+        section: Optional[str] = None,
     ) -> None:
         """
         :param name: The name of the setting.
@@ -2372,6 +2380,7 @@ class Setting:
         :param update_model: Update the configuration model (git pull on project and repos)
         :param agent_restart: Restart autostarted agents when this settings is updated.
         :param allowed_values: list of possible values (if type is enum)
+        :param section: the config section this parameter should go into, optional for backward compatibility with <iso9
         """
         self.name: str = name
         self.typ: str = typ
@@ -2382,6 +2391,7 @@ class Setting:
         self.update = update_model
         self.agent_restart = agent_restart
         self.allowed_values = allowed_values
+        self.section = section
 
     @property
     def default(self) -> Optional[m.EnvSettingType]:
@@ -2400,6 +2410,7 @@ class Setting:
             "update": self.update,
             "agent_restart": self.agent_restart,
             "allowed_values": self.allowed_values,
+            "section": self.section,
         }
 
     def to_dto(self) -> m.EnvironmentSetting:
@@ -2412,6 +2423,7 @@ class Setting:
             update_model=self.update,
             agent_restart=self.agent_restart,
             allowed_values=self.allowed_values,
+            section=self.section,
         )
 
 
@@ -2568,6 +2580,7 @@ class Environment(BaseDocument):
             doc="When this boolean is set to true, the orchestrator will automatically release a new version "
             "that was compiled by the orchestrator itself.",
             validator=convert_boolean,
+            section="deploy",
         ),
         AUTOSTART_AGENT_DEPLOY_INTERVAL: Setting(
             name=AUTOSTART_AGENT_DEPLOY_INTERVAL,
@@ -2587,6 +2600,7 @@ class Environment(BaseDocument):
             ),
             validator=validate_cron_or_int,
             agent_restart=False,
+            section="agent",
         ),
         AUTOSTART_AGENT_REPAIR_INTERVAL: Setting(
             name=AUTOSTART_AGENT_REPAIR_INTERVAL,
@@ -2606,6 +2620,7 @@ class Environment(BaseDocument):
             ),
             validator=validate_cron_or_int,
             agent_restart=False,
+            section="agent",
         ),
         RESET_DEPLOY_PROGRESS_ON_START: Setting(
             name=RESET_DEPLOY_PROGRESS_ON_START,
@@ -2619,6 +2634,7 @@ class Environment(BaseDocument):
                 " on). Enable this in case there are issues with restoring the deployment state at restart."
             ),
             agent_restart=True,
+            section="scheduler",
         ),
         AUTOSTART_ON_START: Setting(
             name=AUTOSTART_ON_START,
@@ -2626,6 +2642,7 @@ class Environment(BaseDocument):
             typ="bool",
             validator=convert_boolean,
             doc="Automatically start agents when the server starts instead of only just in time.",
+            section="agent",
         ),
         SERVER_COMPILE: Setting(
             name=SERVER_COMPILE,
@@ -2633,6 +2650,7 @@ class Environment(BaseDocument):
             typ="bool",
             validator=convert_boolean,
             doc="Allow the server to compile the configuration model.",
+            section="compiler",
         ),
         AUTO_FULL_COMPILE: Setting(
             name=AUTO_FULL_COMPILE,
@@ -2646,6 +2664,7 @@ class Environment(BaseDocument):
                 " compilation may have to wait in the compile queue for some time, depending on the size of the queue and the"
                 " RECOMPILE_BACKOFF environment setting. This setting has no effect when server_compile is disabled."
             ),
+            section="compiler",
         ),
         RESOURCE_ACTION_LOGS_RETENTION: Setting(
             name=RESOURCE_ACTION_LOGS_RETENTION,
@@ -2653,6 +2672,7 @@ class Environment(BaseDocument):
             typ="int",
             validator=convert_int,
             doc="The number of days to retain resource-action logs",
+            section="storage",
         ),
         AVAILABLE_VERSIONS_TO_KEEP: Setting(
             name=AVAILABLE_VERSIONS_TO_KEEP,
@@ -2660,6 +2680,7 @@ class Environment(BaseDocument):
             typ="int",
             validator=convert_int,
             doc="The number of versions to keep stored in the database, excluding the latest released version.",
+            section="storage",
         ),
         PROTECTED_ENVIRONMENT: Setting(
             name=PROTECTED_ENVIRONMENT,
@@ -2667,6 +2688,7 @@ class Environment(BaseDocument):
             typ="bool",
             validator=convert_boolean,
             doc="When set to true, this environment cannot be cleared or deleted.",
+            section="environment",
         ),
         NOTIFICATION_RETENTION: Setting(
             name=NOTIFICATION_RETENTION,
@@ -2674,6 +2696,7 @@ class Environment(BaseDocument):
             typ="int",
             validator=convert_int,
             doc="The number of days to retain notifications for",
+            section="storage",
         ),
         RECOMPILE_BACKOFF: Setting(
             name=RECOMPILE_BACKOFF,
@@ -2682,6 +2705,7 @@ class Environment(BaseDocument):
             validator=convert_positive_float,
             doc="""The number of seconds to wait before the server may attempt to do a new recompile.
                     Recompiles are triggered after facts updates for example.""",
+            section="compiler",
         ),
         ENVIRONMENT_METRICS_RETENTION: Setting(
             name=ENVIRONMENT_METRICS_RETENTION,
@@ -2690,6 +2714,7 @@ class Environment(BaseDocument):
             doc="The number of hours that environment metrics have to be retained before they are cleaned up. "
             "Default=336 hours (2 weeks). Set to 0 to disable automatic cleanups.",
             validator=convert_int,
+            section="storage",
         ),
     }
 
@@ -2854,7 +2879,7 @@ class Environment(BaseDocument):
                 "DELETE FROM public.resourceaction_resource WHERE environment=$1", self.id, connection=con
             )
             await ResourceAction.delete_all(environment=self.id, connection=con)
-            await Resource.delete_all(environment=self.id, connection=con)
+            await ResourceSet.clear_resource_sets(environment=self.id, connection=con)
             await ConfigurationModel.delete_all(environment=self.id, connection=con)
             await ResourcePersistentState.delete_all(environment=self.id, connection=con)
             await Scheduler.delete_all(environment=self.id, connection=con)
@@ -4835,6 +4860,16 @@ class ResourcePersistentState(BaseDocument):
             return state.Compliance.NON_COMPLIANT
 
 
+class InvalidResourceSetMigrationException(Exception):
+    """
+    Raise this exception when a resource is migrated to another resource set in a partial compile
+    """
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.message = message
+
+
 class ResourceSet(BaseDocument):
     """
     A set of resources
@@ -4920,19 +4955,32 @@ class ResourceSet(BaseDocument):
             for record in records:
                 resource_id = str(record["resource_id"])
                 resource_set_names = list(record["name"])
-                if len(resource_set_names) != 2:
-                    raise BadRequest(
-                        f"Resource {resource_id} appears on version {version} in these resource sets: {resource_set_names}"
+                if len(resource_set_names) > 2:
+                    # Should never be possible for a resource id to be present in more than 2 resource sets at this stage
+                    # suggests a bug in one of the sql queries
+                    raise Exception(
+                        f"Resource {resource_id} appears in {len(resource_set_names)} resource sets "
+                        f"on version {version}: {resource_set_names}."
+                        "This should not be possible. Please create a support ticket. "
+                        f"Updated resource sets: {updated_resource_sets}"
                     )
                 rid_to_resource_sets[resource_id] = {}
                 for name in resource_set_names:
                     key = "new" if name in updated_resource_sets else "old"
                     if key in rid_to_resource_sets[resource_id]:
-                        raise BadRequest(
-                            f"Resource set with name {name} appears more than once on version {version} of the model"
+                        # Should never be possible for a resource id to be present in either:
+                        # - 2 updated resource sets
+                        # - 2 unchanged resource sets
+                        # It means we have a bug somewhere
+                        raise Exception(
+                            f"Resource set with name {name} appears more than once on version {version} of the model."
+                            "This should not be possible. Please create a support ticket. "
+                            f"Updated resource sets: {updated_resource_sets}"
                         )
                     rid_to_resource_sets[resource_id][key] = name
 
+            # This is the only case that should be reachable by the user.
+            # The other 2 are just fail safes
             msg = (
                 "The following Resource(s) cannot be migrated to a different resource set using a partial compile, "
                 "a full compile is necessary for this process:\n"
@@ -4942,7 +4990,7 @@ class ResourceSet(BaseDocument):
                 f"to {cls.get_printable_name_for_resource_set(resource_sets["new"])}"
                 for rid, resource_sets in rid_to_resource_sets.items()
             )
-            raise BadRequest(msg)
+            raise InvalidResourceSetMigrationException(msg)
 
     @classmethod
     async def insert_sets_and_resources(
@@ -4956,18 +5004,17 @@ class ResourceSet(BaseDocument):
         connection: asyncpg.connection.Connection,
     ) -> None:
         """
-        Inserts resources and resource sets.
-        Links resource sets to the target version.
-        In case of a full compile, we expect to receive every resource set,
-            so we insert those and link them to the target version
-        In case of a partial compile we:
-            - link every resource_set that was present in the base version to the target version
-            - delete every link in the target version to resource sets that were deleted or are going to be updated
-            - insert the updated resource sets into the database and link them to the target version
-            - insert the updated resources into the database and link them to the appropriate resource sets.
-        If a resource from a specific resource set is present in updated_resources, all other resources from that resource
-        set are expected to be present as well, including if that resource is part of the shared set.
-        The shared resource set is treated as any other.
+        Inserts resources and resource sets and links resource sets to the target version.
+
+        In case of a full compile, expects to receive every resource set.
+
+        In case of a partial compile, expects to receive all sets with changes, and all resources for those sets (including
+        the shared set, which is treated like any other). We insert the updated resource sets and we link to the target version:
+            - The resource sets that we just updated
+            - Every resource set in the base version except:
+                - Resource sets we want to delete
+                - Resource sets with the same name as one of the updated resource sets (they are now outdated)
+
         :param environment: The environment of these resources.
         :param target_version: The version which we want to link the resource sets to
         :param updated_resources: A list of resources to insert.
@@ -4982,26 +5029,32 @@ class ResourceSet(BaseDocument):
         is_partial_update = base_version is not None
 
         updated_resource_sets: set[str | None] = set()
-        resource_data: list[object] = list()
+        resource_data: dict[str, list[object]] = defaultdict(list)
         for r in updated_resources:
-            resource_data.append(
-                {
-                    "resource_id": str(r.resource_id),
-                    "agent": r.agent,
-                    "attributes": r.attributes,
-                    "attribute_hash": util.make_attribute_hash(r.resource_id, r.attributes),
-                    "resource_type": r.resource_type,
-                    "resource_id_value": r.resource_id_value,
-                    "is_undefined": r.is_undefined,
-                    "resource_set": r.resource_set,
-                }
-            )
             updated_resource_sets.add(r.resource_set)
+            resource_data["resource_id"].append(str(r.resource_id))
+            resource_data["resource_type"].append(r.resource_type)
+            resource_data["resource_id_value"].append(r.resource_id_value)
+            resource_data["agent"].append(r.agent)
+            resource_data["attributes"].append(r.attributes)
+            resource_data["attribute_hash"].append(util.make_attribute_hash(r.resource_id, r.attributes))
+            resource_data["is_undefined"].append(r.is_undefined)
+            resource_data["resource_set"].append(r.resource_set)
+        resource_data_db: dict[str, object] = {k: cls._get_value(v) for k, v in resource_data.items()}
+
+        # common arguments to all queries
+        # $1: environment
+        # $2: target_version
+        common_values: tuple[object, object] = (cls._get_value(environment), cls._get_value(target_version))
 
         if is_partial_update:
+            # copy all old sets except for the ones that are being exported or deleted in this partial update
             deleted_resource_sets = deleted_resource_sets if deleted_resource_sets is not None else set()
+            has_shared_resource_set = None in updated_resource_sets
+
             # link every resource_set that was present in the base version to the target version
-            bump_old_sets = """
+            await cls._execute_query(
+                f"""\
                 INSERT INTO public.resource_set_configuration_model(
                     environment,
                     model,
@@ -5014,70 +5067,56 @@ class ResourceSet(BaseDocument):
                 FROM public.resource_set_configuration_model AS rscm
                 WHERE rscm.environment=$1
                     AND rscm.model=$3
-            """
-            await cls._execute_query(bump_old_sets, environment, target_version, base_version, connection=connection)
-            resource_set_links_to_delete = updated_resource_sets | deleted_resource_sets
-            has_shared_resource_set = None in resource_set_links_to_delete
-            # delete every link in the target version to resource sets that were deleted or are going to be updated
-            delete_outdated_resource_sets = f"""
-                DELETE FROM public.resource_set_configuration_model AS rscm
-                USING public.resource_set AS rs
-                WHERE rscm.environment=rs.environment
-                    AND rscm.resource_set_id=rs.id
-                    AND rscm.environment=$1
-                    AND rscm.model=$2
-                    AND (
-                        (rs.name=ANY($3::text[]))
-                        {'OR rs.name IS NOT DISTINCT FROM NULL' if has_shared_resource_set else ''}
+                    AND NOT (
+                        SELECT rs.name = ANY($4::text[]) {'OR rs.name IS NULL' if has_shared_resource_set else ''}
+                        FROM resource_set AS rs
+                        WHERE
+                            rs.environment = rscm.environment
+                            AND rs.id = rscm.resource_set_id
                     )
-            """
-            await cls._execute_query(
-                delete_outdated_resource_sets, environment, target_version, resource_set_links_to_delete, connection=connection
+                """,
+                *common_values,
+                cls._get_value(base_version),
+                cls._get_value((updated_resource_sets | deleted_resource_sets) - {None}),
+                connection=connection,
             )
 
-        # insert the updated resource sets into the database and link them to the target version
-        insert_resource_sets = """
-            WITH resource_set_names(name) AS (
-                SELECT UNNEST($3::text[])
-            ),
-            inserted_resource_set_ids(id) AS (
+        # insert the updated resource sets and resources into the database and link everything together
+        # (resource -> set and set -> model)
+        await cls._execute_query(
+            """\
+            -- insert resource sets and keep track of name-id mapping
+            WITH inserted_resource_sets AS (
                 INSERT INTO public.resource_set (environment, id, name)
                 SELECT
                     $1,
                     gen_random_uuid() AS id,
-                    rs.name
-                FROM resource_set_names AS rs
-                RETURNING id
-            )
-            INSERT INTO public.resource_set_configuration_model(
-               environment,
-               model,
-               resource_set_id
-            )
-            SELECT
-                $1,
-                $2,
-                irs.id
-            FROM inserted_resource_set_ids AS irs
-        """
-
-        await cls._fetch_query(insert_resource_sets, environment, target_version, updated_resource_sets, connection=connection)
-
-        # insert the updated resources into the database and link them to the appropriate resource sets.
-        insert_resources = """
-            WITH resource_data AS (
-                SELECT *
-                FROM jsonb_to_recordset($3::jsonb) AS r(
-                    resource_id text,
-                    agent text,
-                    attributes jsonb,
-                    attribute_hash text,
-                    resource_type text,
-                    resource_id_value text,
-                    is_undefined boolean,
-                    resource_set text
+                    UNNEST($3::text[])
+                RETURNING name, id
+            -- link resource sets to model version
+            ), linked_resource_sets AS (
+                INSERT INTO public.resource_set_configuration_model(
+                   environment,
+                   model,
+                   resource_set_id
                 )
+                SELECT
+                    $1,
+                    $2,
+                    irs.id
+                FROM inserted_resource_sets AS irs
+            ), resource_data AS (
+                SELECT
+                    UNNEST($4::text[]) AS resource_id,
+                    UNNEST($5::text[]) AS resource_type,
+                    UNNEST($6::text[]) AS resource_id_value,
+                    UNNEST($7::text[]) AS agent,
+                    UNNEST($8::jsonb[]) AS attributes,
+                    UNNEST($9::text[]) AS attribute_hash,
+                    UNNEST($10::boolean[]) AS is_undefined,
+                    UNNEST($11::text[]) AS resource_set
             )
+            -- insert resources
             INSERT INTO public.resource(
                 environment,
                 model,
@@ -5085,9 +5124,9 @@ class ResourceSet(BaseDocument):
                 resource_type,
                 resource_id_value,
                 agent,
-                is_undefined,
                 attributes,
                 attribute_hash,
+                is_undefined,
                 resource_set,
                 resource_set_id
             )
@@ -5098,25 +5137,30 @@ class ResourceSet(BaseDocument):
                 r.resource_type,
                 r.resource_id_value,
                 r.agent,
-                r.is_undefined,
                 r.attributes,
                 r.attribute_hash,
+                r.is_undefined,
                 rs.name,
                 rs.id
             FROM resource_data AS r
-            INNER JOIN public.resource_set AS rs
+            -- this join has been tested to be up to four times faster than joining with
+            -- resource_configuration_model, even if the latter would have the name column directly
+            -- (for 5k models, 5k sets, updating 1-1000 sets, with 100-10k resources per set).
+            -- Order of magnitude for reference: 0.5s when updating 10 sets with 1k resources per set.
+            INNER JOIN inserted_resource_sets AS rs
                 ON r.resource_set IS NOT DISTINCT FROM rs.name
-            INNER JOIN public.resource_set_configuration_model AS rscm
-                ON rs.environment=rscm.environment
-                AND rs.id=rscm.resource_set_id
-            WHERE rscm.model=$2 AND rscm.environment=$1
-        """
-
-        await cls._execute_query(
-            insert_resources,
-            environment,
-            target_version,
-            json.dumps(resource_data),
+            """,
+            *common_values,
+            cls._get_value(updated_resource_sets),
+            # insert as separate arrays rather than jsonb because jsob has a size limit
+            resource_data_db.get("resource_id", []),
+            resource_data_db.get("resource_type", []),
+            resource_data_db.get("resource_id_value", []),
+            resource_data_db.get("agent", []),
+            resource_data_db.get("attributes", []),
+            resource_data_db.get("attribute_hash", []),
+            resource_data_db.get("is_undefined", []),
+            resource_data_db.get("resource_set", []),
             connection=connection,
         )
 
@@ -5127,6 +5171,74 @@ class ResourceSet(BaseDocument):
                 updated_resource_sets=updated_resource_sets,
                 connection=connection,
             )
+
+    @classmethod
+    async def clear_resource_sets(
+        cls,
+        environment: uuid.UUID,
+        version: int | None = None,
+        *,
+        connection: asyncpg.connection.Connection,
+    ) -> None:
+        """
+        Deletes entries on resource_set_configuration_model that relate to this environment and version (if applicable).
+        Deletes resource sets that no longer have entries in resource_set_configuration_model
+        Deletes resources that will no longer have a valid resource set
+
+        :param environment: The environment from which to delete the resource sets
+        :param version: The version from to delete from the resource_set_configuration_model table.
+            None if we want to delete every version (i.e. when clearing the environment).
+        :param connection: The connection to use
+        """
+        resource_sets_to_delete = (
+            """
+        WITH deleted_resource_set_versions AS (
+            DELETE FROM resource_set_configuration_model AS rscm
+            WHERE rscm.environment=$1 AND rscm.model=$2
+            RETURNING rscm.resource_set_id
+        ),
+        -- check resource_sets that no longer have an entry on resource_set_configuration_model
+        -- these are to be deleted
+        resource_sets_to_delete AS (
+            SELECT rs.id
+            FROM  resource_set AS rs
+            LEFT JOIN resource_set_configuration_model AS rscm
+                ON rs.id=rscm.resource_set_id AND rs.environment=rscm.environment
+            WHERE rs.id IN (
+                SELECT resource_set_id
+                FROM deleted_resource_set_versions
+            ) AND rs.environment=$1
+            AND rscm.resource_set_id is NULL
+        ),
+        """
+            if version is not None
+            else """
+        WITH resource_sets_to_delete AS (
+            DELETE FROM resource_set_configuration_model AS rscm
+            WHERE rscm.environment=$1
+            RETURNING rscm.resource_set_id AS id
+        ),
+        """
+        )
+        query = f"""
+        {resource_sets_to_delete}
+        resources_to_delete AS (
+            DELETE FROM resource AS r
+            WHERE r.resource_set_id IN (
+                SELECT id
+                FROM resource_sets_to_delete
+            )
+            AND r.environment=$1
+        )
+        DELETE FROM resource_set AS rs
+        WHERE rs.id IN (
+                SELECT id
+                FROM resource_sets_to_delete
+            )
+            AND rs.environment=$1
+        """
+        values = [environment, version] if version is not None else [environment]
+        await cls._execute_query(query, *values, connection=connection)
 
     async def insert_with_link_to_configuration_model(
         self, versions: list[int] | None = None, connection: Optional[asyncpg.connection.Connection] = None
@@ -5679,7 +5791,7 @@ class Resource(BaseDocument):
         SELECT DISTINCT ON (resource_id)
             first.resource_id,
             cm.date as first_generated_time,
-\\            rscm.model as first_model,
+            rscm.model as first_model,
             latest.model AS latest_model,
             latest.resource_id as latest_resource_id,
             latest.resource_type,
@@ -6295,7 +6407,7 @@ class ConfigurationModel(BaseDocument):
                 connection=con,
             )
             await ResourceAction.delete_all(environment=self.environment, version=self.version, connection=con)
-            await Resource.delete_all(environment=self.environment, model=self.version, connection=con)
+            await ResourceSet.clear_resource_sets(environment=self.environment, version=self.version, connection=con)
             await self.delete(connection=con)
 
             # Delete facts when the resources in this version are the only

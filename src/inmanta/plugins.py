@@ -16,7 +16,6 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import asyncio
 import collections.abc
 import dataclasses
 import functools
@@ -159,9 +158,8 @@ class Context:
         :return: The result of the async call.
         :raises ConnectionRefusedError: When the function timeouts this exception is raised.
         """
-        with_timeout: abc.Awaitable[T] = asyncio.wait_for(function(), timeout)
         try:
-            return util.ensure_event_loop().run_until_complete(with_timeout)
+            return util.wait_sync(function(), timeout=timeout)
         except TimeoutError:
             raise ConnectionRefusedError()
 
