@@ -11,7 +11,7 @@ crontab==1.0.5
 cryptography==45.0.6
 docstring-parser==0.17.0
 # documentation
-email-validator==2.2.0
+email-validator==2.3.0
 furo==2025.7.19
 graphviz==0.21
 inmanta-dev-dependencies==2.174.0
