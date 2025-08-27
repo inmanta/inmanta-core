@@ -24,7 +24,7 @@ import time
 import uuid
 from collections import abc
 from datetime import UTC
-from typing import Optional, cast
+from typing import Iterator, Optional, cast
 
 import asyncpg
 import pytest
@@ -33,10 +33,11 @@ from asyncpg import Connection, ForeignKeyViolationError, Pool
 import utils
 from inmanta import const, data, util
 from inmanta.const import AgentStatus, LogLevel
+from inmanta.data import model  # noqa
 from inmanta.data import ArgumentCollector, QueryType
 from inmanta.deploy import state
 from inmanta.resources import Id
-from inmanta.types import ResourceVersionIdStr
+from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 
 
 async def make_resource_set(environment: uuid.UUID) -> data.ResourceSet:
@@ -2901,3 +2902,121 @@ async def test_get_current_resource_state(server, environment, client, clienthel
         rid="std::testing::NullResource[agent1,name=test1]",
     )
     assert state is const.ResourceState.undefined
+
+
+@ pytest.mark.slowtest
+async def test_get_partial_resources_since_version_raw(environment, server, postgresql_client, client):
+    """
+    Verify the behavior of the get_partial_resources_since_version_raw method, used by the scheduler to apply partial versions.
+    """
+    nb_resource_sets: int = 100
+    nb_resources_per_set: int = 100
+
+    def get_resource_set_names(partial_size: int) -> Iterator[str]:
+        return (str(i) for i in range(1, nb_resource_sets + 1, max(nb_resource_sets // partial_size, 1)))
+
+    def get_resource_id(resource_set: str, index: int, *, version: Optional[int] = None) -> ResourceVersionIdStr:
+        without_version = ResourceIdStr(f"mymodule::Myresource[myagent,id={resource_set}-{index}]")
+        return (
+            ResourceVersionIdStr(f"{without_version},v={version}")
+            if version is not None
+            else without_version
+        )
+
+    async def release() -> None:
+        """
+        Mark all versions as released, without actually releasing it.
+        """
+        await postgresql_client.execute("UPDATE configurationmodel SET released=true")
+
+    # set up initial state by releasing a single base version
+    version: int = (await client.reserve_version(tid=environment)).result["data"]
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        module_version_info={},
+        resources=[
+            {"id": get_resource_id(s, i, version=version), "requires": []}
+            for s in get_resource_set_names(nb_resource_sets)
+            for i in range(nb_resources_per_set)
+        ],
+        resource_sets={
+            get_resource_id(s, i): s
+            for s in get_resource_set_names(nb_resource_sets)
+            for i in range(nb_resources_per_set)
+        },
+        compiler_version="0",
+    )
+    # TODO: use result.value()
+    assert result.code == 200, result.result
+    await release()
+
+    all_models: list[tuple[int, object]] = []
+    partial_size: int  # number of resource sets in a partial export
+    for iteration, partial_size in enumerate([1, 5, 10]):
+        base_version: int = iteration + 1
+        # build up data sets before starting timer
+        resources = [
+            {"id": get_resource_id(s, i, version=0), "requires": []}
+            for s in get_resource_set_names(partial_size)
+            for i in range(nb_resources_per_set)
+        ]
+        resource_sets = {
+            get_resource_id(s, i): s
+            for s in get_resource_set_names(partial_size)
+            for i in range(nb_resources_per_set)
+        }
+
+        insert_start: float = time.monotonic()
+        result = await client.put_partial(
+            tid=environment,
+            module_version_info={},
+            resources=resources,
+            resource_sets=resource_sets,
+        )
+        assert result.code == 200, result.result
+        insert_done: float = time.monotonic()
+
+        await release()
+        # Tell postgres to analyze after major update. During normal operation this is handled by autovacuum daemon
+        await postgresql_client.execute("ANALYZE")
+
+        fetch_start: float = time.monotonic()
+        models = await data.Resource.get_partial_resources_since_version_raw(
+            environment=environment,
+            since=base_version,
+            projection=["resource_id"],
+            connection=postgresql_client,
+        )
+        fetch_done: float = time.monotonic()
+
+        # show with pytest -s
+        print(
+            f"with {iteration+1:>4,} older versions with {nb_resource_sets:>4,} resource sets of size"
+            f" {nb_resources_per_set:>4,} each, an export for {partial_size:>4,} resource sets took"
+            f" {1000* (insert_done - insert_start) :>5,.0f}ms to export and {1000* (fetch_done - fetch_start) :>3,.0f}ms"
+            " to fetch"
+        )
+
+        # verify the result
+        assert len(models) == 1
+        version, resource_sets = models[0]
+        assert version == base_version + 1
+        assert resource_sets.keys() == set(str(i) for i in range(1, nb_resource_sets + 1, max(nb_resource_sets // partial_size, 1)))
+        for resource_set, resources in resource_sets.items():
+            assert {r["resource_id"] for r in resources} == {
+                f"mymodule::Myresource[myagent,id={resource_set}-{i}]" for i in range(nb_resources_per_set)
+            }
+            assert len(resources) == nb_resources_per_set
+        all_models.extend(models)
+
+    # verify that the method can fetch multiple models at once, as a sequence of partial diffs
+    models = await data.Resource.get_partial_resources_since_version_raw(
+        environment=environment,
+        since=1,
+        projection=["resource_id"],
+        connection=postgresql_client,
+    )
+    assert models == all_models
+
+    # TODO: test get_resources_for_version_raw as well!

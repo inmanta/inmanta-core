@@ -5516,11 +5516,7 @@ class Resource(BaseDocument):
         }
         return (db_version, sets)
 
-    # TODO: consider if test coverage is sufficient. Consider:
-    #   - this method unit test
-    #       - some resource sets that are not changed between versions
-    #       - multiple versions
-    #   - scheduler behavior for partial
+    # TODO: test coverage: scheduler behavior for partial
     @classmethod
     async def get_partial_resources_since_version_raw(
         cls,
@@ -5608,7 +5604,7 @@ class Resource(BaseDocument):
         LEFT JOIN {cls.table_name()} as r
             ON r.environment = $1
             AND r.resource_set_id = diff.resource_set_id
-        ORDER BY model_pairs.new, diff.name
+        ORDER BY model_pairs.new, diff.name, r.resource_id
         """
         resource_records = await cls._fetch_query(
             query,
