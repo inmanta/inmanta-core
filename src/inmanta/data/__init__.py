@@ -5196,7 +5196,7 @@ class ResourceSet(BaseDocument):
         WITH resource_sets_to_delete AS (
             DELETE FROM resource_set_configuration_model AS rscm
             WHERE rscm.environment=$1
-            RETURNING rscm.resource_set_id
+            RETURNING rscm.resource_set_id AS id
         ),
         """
         )

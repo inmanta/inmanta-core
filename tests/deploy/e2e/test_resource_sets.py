@@ -141,6 +141,23 @@ async def test_resource_sets_via_put_version(server, client, environment, client
     assert len(res_sets) == 4
     assert set([rs.name for rs in res_sets]) == {None, "set-a", "set-b", "set-c"}
 
+    # Test clear_resource_sets
+    async with data.ResourceSet.get_connection() as con:
+        # Clear version only
+        await data.ResourceSet.clear_resource_sets(environment=env_id, version=version, connection=con)
+        res_sets = await data.ResourceSet.get_resource_sets_in_version(environment=env_id, version=version, connection=con)
+        assert len(res_sets) == 0
+
+        # Assert it did not change other versions
+        version -= 1
+        res_sets = await data.ResourceSet.get_resource_sets_in_version(environment=env_id, version=version)
+        assert len(res_sets) == 3
+
+        # Clear entire environment
+        await data.ResourceSet.clear_resource_sets(environment=env_id, connection=con)
+        res_sets = await data.ResourceSet.get_resource_sets_in_version(environment=env_id, version=version)
+        assert len(res_sets) == 0
+
     # also assert pip config can be None on put_version
     pip_config_result = await client.get_pip_config(
         tid=environment,
