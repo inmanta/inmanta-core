@@ -3222,7 +3222,7 @@ class UnknownParameter(BaseDocument):
                 FROM resource_set_configuration_model AS rscm
                 INNER JOIN {Resource.table_name()} AS r
                     ON rscm.environment=r.environment AND rscm.resource_set_id=rscm.resource_set_id
-                WHERE rscm.environment=$1 AND rscm.version=$2
+                WHERE rscm.environment=$1 AND rscm.model=$2
             )
             SELECT u.*
             FROM {cls.table_name()} AS u
@@ -5277,7 +5277,6 @@ class Resource(BaseDocument):
     A specific version of a resource. This entity contains the desired state of a resource.
 
     :param environment: The environment this resource version is defined in
-    :param model: The version of the configuration model this resource state is associated with
     :param resource_id: The id of the resource (without the version)
     :param resource_type: The type of the resource
     :param resource_id_value: The attribute value from the resource id
@@ -5293,7 +5292,6 @@ class Resource(BaseDocument):
     __primary_key__ = ("environment", "model", "resource_id")
 
     environment: uuid.UUID
-    model: int
 
     # ID related
     resource_id: ResourceIdStr
@@ -5762,7 +5760,6 @@ class Resource(BaseDocument):
 
         attr = dict(
             environment=environment,
-            model=vid.version,
             resource_id=vid.resource_str(),
             resource_type=vid.entity_type,
             agent=vid.agent_name,
@@ -6007,25 +6004,13 @@ class Resource(BaseDocument):
         self.__mangle_dict(dct)
         return dct
 
-    def to_dto(self, include_resource_version_in_requires: bool = True) -> m.Resource:
+    def to_dto(self) -> m.Resource:
         attributes = self.attributes.copy()
-
-        if "requires" in self.attributes and include_resource_version_in_requires:
-            version = self.model
-            attributes["requires"] = [resources.Id.set_version_in_id(id, version) for id in self.attributes["requires"]]
-
-        if include_resource_version_in_requires:
-            # Due to a bug, the version field has always been present in the attributes dictionary.
-            # This bug has been fixed in the database. For backwards compatibility reason we here make sure that the
-            # version field is present in the attributes dictionary served out via the API.
-            attributes["version"] = self.model
 
         return m.Resource(
             environment=self.environment,
-            model=self.model,
             resource_id=self.resource_id,
             resource_type=self.resource_type,
-            resource_version_id=resources.Id.set_version_in_id(self.resource_id, self.model),
             agent=self.agent,
             attributes=attributes,
             is_undefined=self.is_undefined,

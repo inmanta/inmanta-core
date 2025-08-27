@@ -592,9 +592,12 @@ class ResourceView(DataView[ResourceStatusOrder, model.LatestReleasedResource]):
                     {'' if self.drop_orphans else 'LEFT'} JOIN resource AS r
                         ON r.environment = rps.environment
                           AND r.resource_id = rps.resource_id
+                    INNER JOIN resource_set_configuration_model AS rscm
+                        ON r.environment=rscm.environment
+                        AND r.resource_set_id=rscm.resource_set_id
            -- shortcut the version selection to the latest one iff we wish to exclude orphans
            -- => no per-resource MAX required + wider index application
-                          AND r.model = {'(SELECT version FROM latest_version)' if self.drop_orphans else 'rps.version'}
+                          AND rscm.model = {'(SELECT version FROM latest_version)' if self.drop_orphans else 'rps.version'}
                     WHERE rps.environment = $1
                 )
             """,
@@ -867,16 +870,19 @@ class ResourceHistoryView(DataView[ResourceHistoryOrder, ResourceHistory]):
                 WITH resourcewithsequenceids AS (
                   SELECT
                     attribute_hash,
-                    model,
+                    rscm.model,
                     attributes,
                     date,
                     ROW_NUMBER() OVER (ORDER BY date) - ROW_NUMBER() OVER (
                       PARTITION BY attribute_hash
                       ORDER BY date
                     ) AS seqid
-                  FROM resource JOIN configurationmodel cm
-                    ON resource.model = cm.version AND resource.environment = cm.environment
-                  WHERE resource.environment = $1 AND resource_id = $2 AND cm.released = TRUE
+                  FROM resource AS r
+                  INNER JOIN resource_set_configuration_model AS rscm
+                    ON r.resource_set_id=rscm.resource_set_id AND r.environment=rscm.environment
+                  INNER JOIN configurationmodel AS cm
+                    ON rscm.environment=cm.environment AND rscm.model=cm.version
+                  WHERE r.environment=$1 AND r.resource_id=$2 AND cm.released=TRUE
                 )
             """,
             select_clause="SELECT attribute_hash, date, attributes, model",

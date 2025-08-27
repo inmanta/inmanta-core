@@ -364,10 +364,8 @@ class ResourceMinimal(BaseModel):
 
 class Resource(BaseModel):
     environment: uuid.UUID
-    model: int
     resource_id: ResourceIdStr
     resource_type: ResourceType
-    resource_version_id: ResourceVersionIdStr
     resource_id_value: str
     agent: str
     attributes: JsonType

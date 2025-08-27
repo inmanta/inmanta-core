@@ -1448,12 +1448,6 @@ async def test_serialization_attributes_of_resource_to_api(client, server, envir
     resource_dao = result[0]
     assert "version" not in resource_dao.attributes
 
-    # Ensure that the serialization of the resource DAO contains the version field in the attributes dictionary
-    resource_dto = resource_dao.to_dto()
-    assert resource_dto.attributes["version"] == version
-    resource_dct = resource_dao.to_dict()
-    assert resource_dct["attributes"]["version"] == version
-
     # Retrieve the resource via the API and ensure that the version field is present in the attributes dictionary
     result = await client.resource_history(environment, resource_id)
     assert result.code == 200

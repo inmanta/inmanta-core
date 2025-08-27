@@ -200,7 +200,7 @@ class PartialUpdateMerger:
             )
         )
         updated_and_shared_resources_old_dto: abc.Mapping[ResourceIdStr, ResourceDTO] = {
-            k: v.to_dto(include_resource_version_in_requires=False) for k, v in updated_and_shared_resources_old.items()
+            k: v.to_dto() for k, v in updated_and_shared_resources_old.items()
         }
         rids_deleted_resource_sets: abc.Set[ResourceIdStr] = {
             rid
@@ -846,11 +846,6 @@ class OrchestrationService(protocol.ServerSlice):
             raise BadRequest(f"The version number used ({version}) is not positive")
 
         for r in rid_to_resource.values():
-            if r.model != version:
-                raise BadRequest(
-                    f"The resource version of resource {r.resource_version_id} does not match the version argument "
-                    f"(version: {version})"
-                )
             # Populate resource_sets with the shared set
             if r.resource_set is None:
                 resource_sets[r.resource_id] = None
@@ -1134,7 +1129,7 @@ class OrchestrationService(protocol.ServerSlice):
                 if not base_model.is_suitable_for_partial_compiles:
                     resources_in_base_version = await data.Resource.get_resources_for_version(env.id, base_version)
                     resource_set_validator = ResourceSetValidator(
-                        [r.to_dto(include_resource_version_in_requires=False) for r in resources_in_base_version]
+                        [r.to_dto() for r in resources_in_base_version]
                     )
                     try:
                         resource_set_validator.ensure_no_cross_resource_set_dependencies()
