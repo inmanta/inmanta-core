@@ -4952,8 +4952,10 @@ class ResourceSet(BaseDocument):
                         # - 2 updated resource sets
                         # - 2 unchanged resource sets
                         # It means we have a bug somewhere
+                        resource_set_type = "updated" if key == "new" else "unchanged"
                         raise Exception(
-                            f"Resource set with name {name} appears more than once on version {version} of the model. "
+                            f"Resource {resource_id} appears in multiple {resource_set_type} resource sets: "
+                            f"[{name}, {rid_to_resource_sets[resource_id]}] on version {version} of the model. "
                             "This should not be possible. Please create a support ticket. "
                             f"Updated resource sets: {updated_resource_sets}"
                         )
