@@ -177,9 +177,7 @@ class Exporter:
                         res = Resource.create_from_model(
                             self,
                             resource_type,
-                            DynamicProxy.return_value(
-                                instance, context=ProxyContext(path=f"<{instance}>")
-                            ),
+                            DynamicProxy.return_value(instance, context=ProxyContext(path=f"<{instance}>")),
                         )
                         resource_mapping[instance] = res
                         self.add_resource(res)

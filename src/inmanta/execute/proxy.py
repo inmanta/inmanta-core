@@ -21,7 +21,7 @@ import enum
 from collections.abc import Iterator, Mapping, Sequence
 from copy import copy
 from dataclasses import is_dataclass
-from typing import TYPE_CHECKING, Callable, Optional, Self, Union, ContextManager
+from typing import TYPE_CHECKING, Callable, ContextManager, Optional, Self, Union
 
 # Keep UnsetException, UnknownException and AttributeNotFound in place for backward compat with <iso8
 from inmanta import references
@@ -61,12 +61,14 @@ class ProxyMode(enum.Enum):
     PLUGIN = enum.auto()
     EXPORT = enum.auto()
 
+
 global_proxy_mode: ProxyMode = ProxyMode.PLUGIN
 """
 This variable controls the behavior of all proxy objects
 
 It is global variable for performance reasons. Dynamic proxies are extremely performance sensitive because the are use a lot
 """
+
 
 class ExportContext(ContextManager[None]):
 
@@ -77,6 +79,7 @@ class ExportContext(ContextManager[None]):
     def __exit__(self, exc_type, exc_val, exc_tb):
         global global_proxy_mode
         global_proxy_mode = ProxyMode.PLUGIN
+
 
 exportcontext = ExportContext()
 
@@ -102,7 +105,7 @@ class ProxyContext:
 
     __slots__ = ("path", "validated", "allow_reference_values")
 
-    def __init__(self, path: str,  validated: bool = True,     allow_reference_values: Optional[bool] = None) -> None:
+    def __init__(self, path: str, validated: bool = True, allow_reference_values: Optional[bool] = None) -> None:
         self.path = path
         self.validated = validated
         self.allow_reference_values = allow_reference_values
@@ -132,7 +135,7 @@ class ProxyContext:
             return self
         return ProxyContext(
             path=self.path,
-            validated= vmode,
+            validated=vmode,
             allow_reference_values=None,
         )
 
