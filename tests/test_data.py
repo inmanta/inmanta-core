@@ -3060,6 +3060,14 @@ async def test_get_partial_resources_since_version_raw(environment, server, post
             projection=["resource_id"],
             connection=postgresql_client,
         )
+    # or when it does exist but it is already the latest
+    no_partial_updates = await data.Resource.get_partial_resources_since_version_raw(
+        environment=environment,
+        since=new_version,
+        projection=["resource_id"],
+        connection=postgresql_client,
+    )
+    assert no_partial_updates == []
 
     # push a new version without releasing it
     base_version = new_version
@@ -3071,14 +3079,26 @@ async def test_get_partial_resources_since_version_raw(environment, server, post
         resource_sets={},
     ).value()
 
+    # get_resources_for_version_raw can fetch non-released versions when requested
     resources_for_non_released_version = await data.Resource.get_resources_for_version_raw(
         environment=environment,
-        version=new_version + 1,
+        version=new_version,
         projection=["resource_id"],
         project_attributes=["exported"],
         connection=postgresql_client,
     )
-    assert resources_for_non_released_version is None
+    assert resources_for_non_released_version is not None
+    assert resources_for_non_released_version[0] == new_version
+    # but default is still latest released
+    latest_released_version = await data.Resource.get_resources_for_version_raw(
+        environment=environment,
+        version=None,
+        projection=["resource_id"],
+        project_attributes=["exported"],
+        connection=postgresql_client,
+    )
+    assert latest_released_version is not None
+    assert latest_released_version[0] == new_version - 1
 
     # verify that the method can fetch multiple models at once, as a sequence of partial diffs, and excludes the non-released
     models = await data.Resource.get_partial_resources_since_version_raw(

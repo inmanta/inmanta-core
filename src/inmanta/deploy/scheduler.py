@@ -691,8 +691,8 @@ class ResourceScheduler(TaskManager):
 
         Must be called under intent lock.
         """
-        resources_by_version: Sequence[tuple[int, types.ResourceSets]]
         if self._state.version > 0:
+            resources_by_version: Sequence[tuple[int, types.ResourceSets]]
             try:
                 # read new versions as partial updates
                 resources_by_version = await data.Resource.get_partial_resources_since_version_raw(
@@ -720,7 +720,12 @@ class ResourceScheduler(TaskManager):
                 ]
 
         # no existing state => read a full version
-        return [await self._get_single_model_version_from_db(version=None, connection=connection)]
+        try:
+            latest_version: ModelVersion = await self._get_single_model_version_from_db(version=None, connection=connection)
+        except KeyError:
+            return []
+        else:
+            return [latest_version]
 
     async def read_version(
         self,

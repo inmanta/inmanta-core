@@ -5730,6 +5730,14 @@ class Resource(BaseDocument):
             cls._get_value(since),
             connection=connection,
         )
+
+        assert resource_records
+        if not resource_records[0]["exists"]:
+            raise PartialBaseMissing()
+        if len(resource_records) == 1 and resource_records[0]["version"] is None:
+            # LEFT JOIN with model_pairs resulted in None row => no new versions
+            return []
+
         type Model = tuple[int, inmanta.types.ResourceSets]
         result: list[Model] = []
         version: int
@@ -5738,8 +5746,6 @@ class Resource(BaseDocument):
             spy: Sequence[asyncpg.Record]
             spy, records = more_itertools.spy(records)
             assert spy  # groupby can not produce empty groups
-            if not spy[0]["exists"]:
-                raise PartialBaseMissing()
             if spy[0]["empty_model"]:
                 result.append((version, {}))
                 continue
