@@ -2883,7 +2883,7 @@ class Environment(BaseDocument):
                 "DELETE FROM public.resource_set_configuration_model WHERE environment=$1", self.id, connection=con
             )
             await ResourceSet.delete_all(environment=self.id, connection=con)
-            await Resource.delete_all(environment=self.id, connection=con)
+            # Resources are deleted via cascade
             await ConfigurationModel.delete_all(environment=self.id, connection=con)
             await ResourcePersistentState.delete_all(environment=self.id, connection=con)
             await Scheduler.delete_all(environment=self.id, connection=con)
@@ -5169,7 +5169,7 @@ class ResourceSet(BaseDocument):
         """
         Deletes entries on resource_set_configuration_model that relate to this environment and version.
         Deletes resource sets that no longer have entries in resource_set_configuration_model
-        Deletes resources associated with those resource sets.
+        Deletes resources associated with those resource sets (via cascade).
 
         :param environment: The environment from which to delete the resource sets
         :param version: The version to delete from the resource_set_configuration_model table.
@@ -5194,14 +5194,6 @@ class ResourceSet(BaseDocument):
                 FROM deleted_resource_set_versions
             ) AND rs.environment=$1
             AND rscm.resource_set_id is NULL
-        ),
-        resources_to_delete AS (
-            DELETE FROM resource AS r
-            WHERE r.resource_set_id IN (
-                SELECT id
-                FROM resource_sets_to_delete
-            )
-            AND r.environment=$1
         )
         DELETE FROM resource_set AS rs
         WHERE rs.id IN (
