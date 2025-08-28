@@ -141,7 +141,7 @@ class Agent(SessionEndpoint):
                 environment=self._env_id,
                 created=datetime.datetime.now().astimezone(),
                 title="Agent operations suspended",
-                message="Agent operations are temporarily suspended, because the user requested to remove the agent venvs.",
+                message="Agent operations are temporarily suspended because the user requested to remove the agent venvs.",
                 severity=const.NotificationSeverity.info,
             ).insert()
             # Stop all deployments and stop all executors
