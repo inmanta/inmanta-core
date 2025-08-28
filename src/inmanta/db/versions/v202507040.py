@@ -66,22 +66,7 @@ async def update(connection: Connection) -> None:
         r.resource_set,
         r.model,
         gen_random_uuid() AS id
-    FROM public.resource r
-    WHERE r.resource_set IS NOT NULL
-
-    UNION ALL
-
-    -- Null resource sets
-    SELECT DISTINCT ON (
-            r.environment,
-            r.model
-        )
-        r.environment,
-        NULL,
-        r.model,
-        gen_random_uuid() AS id
-    FROM public.resource r
-    WHERE r.resource_set IS NULL;
+    FROM public.resource r;
 
 
     INSERT INTO public.resource_set (environment, id, name)
@@ -107,7 +92,9 @@ async def update(connection: Connection) -> None:
 
     ALTER TABLE public.resource
     ADD CONSTRAINT resource_resource_set_id_environment_fkey
-        FOREIGN KEY (resource_set_id, environment) REFERENCES public.resource_set(id, environment) ON DELETE CASCADE;
+        FOREIGN KEY (resource_set_id, environment) REFERENCES public.resource_set(id, environment) ON DELETE CASCADE,
+    ALTER COLUMN resource_set_id SET NOT NULL;
+
 
     -- for selecting resource set WHERE name=... AND version=...
     -- Tested for 5000 model versions, with 5000 different but like-named sets each:

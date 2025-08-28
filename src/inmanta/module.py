@@ -1513,7 +1513,7 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
     :param environment_settings: The environment settings that need to be configured on the server for this project.
                                  The settings will be applied on the server when the `inmanta export` command is run.
                                  Environment settings specified here cannot be updated via the regular API endpoints
-                                 to update environment settings as long as they are in this list.
+                                 to update environment settings as long as they are in this dictionary.
     """
 
     _raw_parser: typing.ClassVar[type[YamlParser]] = YamlParser
@@ -1956,6 +1956,23 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             loader.unload_inmanta_plugins()
         loader.PluginModuleFinder.reset()
 
+    def get_all_dependencies_and_constraints(
+        self,
+    ) -> tuple[Sequence[inmanta.util.CanonicalRequirement], Sequence[inmanta.util.CanonicalRequirement]]:
+        """
+        Returns a tuple that contains all the dependencies and constraints that should be used when
+        installing this project. The first element in the tuple contains the dependencies. The second
+        element contains the constraints.
+        """
+        dependencies: Sequence[inmanta.util.CanonicalRequirement] = [
+            inmanta.util.parse_requirement(req) for req in self.get_all_python_requirements_as_list()
+        ]
+        constraints: Sequence[inmanta.util.CanonicalRequirement] = [
+            InmantaModuleRequirement(inmanta.util.parse_requirement(requirement=spec)).get_python_package_requirement()
+            for spec in self._metadata.requires
+        ]
+        return dependencies, constraints
+
     def install_modules(self, *, bypass_module_cache: bool = False, update: bool = False) -> None:
         """
         Installs all modules.
@@ -1967,28 +1984,19 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             self.use_virtual_env()
 
         # install all dependencies
-        dependencies: Sequence[inmanta.util.CanonicalRequirement] = [
-            inmanta.util.parse_requirement(req) for req in self.get_all_python_requirements_as_list()
-        ]
+        dependencies: Sequence[inmanta.util.CanonicalRequirement]
+        constraints: Sequence[inmanta.util.CanonicalRequirement]
+        dependencies, constraints = self.get_all_dependencies_and_constraints()
         if len(dependencies) > 0:
             modules_pre = self.module_source.take_v2_modules_snapshot(header="Module versions before installation:")
-            constraints: Sequence[inmanta.util.CanonicalRequirement] = [
-                InmantaModuleRequirement(inmanta.util.parse_requirement(requirement=spec)).get_python_package_requirement()
-                for spec in self._metadata.requires
-            ]
-            with tempfile.NamedTemporaryFile() as fd:
-                if constraints:
-                    fd.write("\n".join(str(c) for c in constraints).encode())
-                    fd.seek(0)
-
-                # upgrade both direct and transitive module dependencies: eager upgrade strategy
-                self.virtualenv.install_for_config(
-                    dependencies,
-                    constraint_files=[fd.name],
-                    config=self.metadata.pip,
-                    upgrade=update,
-                    upgrade_strategy=env.PipUpgradeStrategy.EAGER,
-                )
+            # upgrade both direct and transitive module dependencies: eager upgrade strategy
+            self.virtualenv.install_for_config(
+                dependencies,
+                config=self.metadata.pip,
+                upgrade=update,
+                upgrade_strategy=env.PipUpgradeStrategy.EAGER,
+                constraints=constraints,
+            )
             self.module_source.log_snapshot_difference_v2_modules(
                 modules_pre, header="Successfully installed modules for project"
             )

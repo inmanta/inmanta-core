@@ -1,0 +1,4 @@
+---
+description: "Remove arguments from inmanta export that are no longer used."
+change-type: major
+destination-branches: [master]

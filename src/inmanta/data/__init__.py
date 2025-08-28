@@ -55,13 +55,20 @@ from inmanta import const, resources, util
 from inmanta.const import NAME_RESOURCE_ACTION_LOGGER, AgentStatus, LogLevel, ResourceState
 from inmanta.data import model as m
 from inmanta.data import schema
-from inmanta.data.model import AuthMethod, BaseModel, PagingBoundaries, PipConfig, api_boundary_datetime_normalizer
+from inmanta.data.model import AuthMethod, BaseModel, PagingBoundaries, PipConfig
 from inmanta.data.sqlalchemy import AgentModules, InmantaModule, ModuleFiles
 from inmanta.deploy import state
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config
 from inmanta.stable_api import stable_api
-from inmanta.types import JsonType, PrimitiveTypes, ResourceIdStr, ResourceType, ResourceVersionIdStr
+from inmanta.types import (
+    JsonType,
+    PrimitiveTypes,
+    ResourceIdStr,
+    ResourceType,
+    ResourceVersionIdStr,
+    api_boundary_datetime_normalizer,
+)
 from inmanta.util import parse_timestamp
 from sqlalchemy import URL, AdaptedConnection, NullPool
 from sqlalchemy.dialects import registry
@@ -2360,6 +2367,7 @@ class Setting:
         update_model: bool = False,
         agent_restart: bool = False,
         allowed_values: Optional[list[m.EnvSettingType]] = None,
+        section: Optional[str] = None,
     ) -> None:
         """
         :param name: The name of the setting.
@@ -2373,6 +2381,7 @@ class Setting:
         :param update_model: Update the configuration model (git pull on project and repos)
         :param agent_restart: Restart autostarted agents when this settings is updated.
         :param allowed_values: list of possible values (if type is enum)
+        :param section: the config section this parameter should go into, optional for backward compatibility with <iso9
         """
         self.name: str = name
         self.typ: str = typ
@@ -2383,6 +2392,7 @@ class Setting:
         self.update = update_model
         self.agent_restart = agent_restart
         self.allowed_values = allowed_values
+        self.section = section
 
     @property
     def default(self) -> Optional[m.EnvSettingType]:
@@ -2401,6 +2411,7 @@ class Setting:
             "update": self.update,
             "agent_restart": self.agent_restart,
             "allowed_values": self.allowed_values,
+            "section": self.section,
         }
 
     def to_dto(self) -> m.EnvironmentSetting:
@@ -2413,6 +2424,7 @@ class Setting:
             update_model=self.update,
             agent_restart=self.agent_restart,
             allowed_values=self.allowed_values,
+            section=self.section,
         )
 
 
@@ -2569,6 +2581,7 @@ class Environment(BaseDocument):
             doc="When this boolean is set to true, the orchestrator will automatically release a new version "
             "that was compiled by the orchestrator itself.",
             validator=convert_boolean,
+            section="deploy",
         ),
         AUTOSTART_AGENT_DEPLOY_INTERVAL: Setting(
             name=AUTOSTART_AGENT_DEPLOY_INTERVAL,
@@ -2588,6 +2601,7 @@ class Environment(BaseDocument):
             ),
             validator=validate_cron_or_int,
             agent_restart=False,
+            section="agent",
         ),
         AUTOSTART_AGENT_REPAIR_INTERVAL: Setting(
             name=AUTOSTART_AGENT_REPAIR_INTERVAL,
@@ -2607,6 +2621,7 @@ class Environment(BaseDocument):
             ),
             validator=validate_cron_or_int,
             agent_restart=False,
+            section="agent",
         ),
         RESET_DEPLOY_PROGRESS_ON_START: Setting(
             name=RESET_DEPLOY_PROGRESS_ON_START,
@@ -2620,6 +2635,7 @@ class Environment(BaseDocument):
                 " on). Enable this in case there are issues with restoring the deployment state at restart."
             ),
             agent_restart=True,
+            section="scheduler",
         ),
         AUTOSTART_ON_START: Setting(
             name=AUTOSTART_ON_START,
@@ -2627,6 +2643,7 @@ class Environment(BaseDocument):
             typ="bool",
             validator=convert_boolean,
             doc="Automatically start agents when the server starts instead of only just in time.",
+            section="agent",
         ),
         SERVER_COMPILE: Setting(
             name=SERVER_COMPILE,
@@ -2634,6 +2651,7 @@ class Environment(BaseDocument):
             typ="bool",
             validator=convert_boolean,
             doc="Allow the server to compile the configuration model.",
+            section="compiler",
         ),
         AUTO_FULL_COMPILE: Setting(
             name=AUTO_FULL_COMPILE,
@@ -2647,6 +2665,7 @@ class Environment(BaseDocument):
                 " compilation may have to wait in the compile queue for some time, depending on the size of the queue and the"
                 " RECOMPILE_BACKOFF environment setting. This setting has no effect when server_compile is disabled."
             ),
+            section="compiler",
         ),
         RESOURCE_ACTION_LOGS_RETENTION: Setting(
             name=RESOURCE_ACTION_LOGS_RETENTION,
@@ -2654,6 +2673,7 @@ class Environment(BaseDocument):
             typ="int",
             validator=convert_int,
             doc="The number of days to retain resource-action logs",
+            section="storage",
         ),
         AVAILABLE_VERSIONS_TO_KEEP: Setting(
             name=AVAILABLE_VERSIONS_TO_KEEP,
@@ -2661,6 +2681,7 @@ class Environment(BaseDocument):
             typ="int",
             validator=convert_int,
             doc="The number of versions to keep stored in the database, excluding the latest released version.",
+            section="storage",
         ),
         PROTECTED_ENVIRONMENT: Setting(
             name=PROTECTED_ENVIRONMENT,
@@ -2668,6 +2689,7 @@ class Environment(BaseDocument):
             typ="bool",
             validator=convert_boolean,
             doc="When set to true, this environment cannot be cleared or deleted.",
+            section="environment",
         ),
         NOTIFICATION_RETENTION: Setting(
             name=NOTIFICATION_RETENTION,
@@ -2675,6 +2697,7 @@ class Environment(BaseDocument):
             typ="int",
             validator=convert_int,
             doc="The number of days to retain notifications for",
+            section="storage",
         ),
         RECOMPILE_BACKOFF: Setting(
             name=RECOMPILE_BACKOFF,
@@ -2683,6 +2706,7 @@ class Environment(BaseDocument):
             validator=convert_positive_float,
             doc="""The number of seconds to wait before the server may attempt to do a new recompile.
                     Recompiles are triggered after facts updates for example.""",
+            section="compiler",
         ),
         ENVIRONMENT_METRICS_RETENTION: Setting(
             name=ENVIRONMENT_METRICS_RETENTION,
@@ -2691,6 +2715,7 @@ class Environment(BaseDocument):
             doc="The number of hours that environment metrics have to be retained before they are cleaned up. "
             "Default=336 hours (2 weeks). Set to 0 to disable automatic cleanups.",
             validator=convert_int,
+            section="storage",
         ),
     }
 
@@ -2855,6 +2880,10 @@ class Environment(BaseDocument):
                 "DELETE FROM public.resourceaction_resource WHERE environment=$1", self.id, connection=con
             )
             await ResourceAction.delete_all(environment=self.id, connection=con)
+            await self._execute_query(
+                "DELETE FROM public.resource_set_configuration_model WHERE environment=$1", self.id, connection=con
+            )
+            await ResourceSet.delete_all(environment=self.id, connection=con)
             await Resource.delete_all(environment=self.id, connection=con)
             await ConfigurationModel.delete_all(environment=self.id, connection=con)
             await ResourcePersistentState.delete_all(environment=self.id, connection=con)
@@ -4816,6 +4845,16 @@ class ResourcePersistentState(BaseDocument):
             return state.Compliance.NON_COMPLIANT
 
 
+class InvalidResourceSetMigration(Exception):
+    """
+    Raise this exception when a resource is migrated to another resource set in a partial compile
+    """
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.message = message
+
+
 class ResourceSet(BaseDocument):
     """
     A set of resources
@@ -4901,19 +4940,34 @@ class ResourceSet(BaseDocument):
             for record in records:
                 resource_id = str(record["resource_id"])
                 resource_set_names = list(record["name"])
-                if len(resource_set_names) != 2:
-                    raise BadRequest(
-                        f"Resource {resource_id} appears on version {version} in these resource sets: {resource_set_names}"
+                if len(resource_set_names) > 2:
+                    # Should never be possible for a resource id to be present in more than 2 resource sets at this stage
+                    # suggests a bug in one of the sql queries
+                    raise Exception(
+                        f"Resource {resource_id} appears in {len(resource_set_names)} resource sets "
+                        f"on version {version}: {resource_set_names}."
+                        "This should not be possible. Please create a support ticket. "
+                        f"Updated resource sets: {updated_resource_sets}"
                     )
                 rid_to_resource_sets[resource_id] = {}
                 for name in resource_set_names:
                     key = "new" if name in updated_resource_sets else "old"
                     if key in rid_to_resource_sets[resource_id]:
-                        raise BadRequest(
-                            f"Resource set with name {name} appears more than once on version {version} of the model"
+                        # Should never be possible for a resource id to be present in either:
+                        # - 2 updated resource sets
+                        # - 2 unchanged resource sets
+                        # It means we have a bug somewhere
+                        resource_set_type = "updated" if key == "new" else "unchanged"
+                        raise Exception(
+                            f"Resource {resource_id} appears in multiple {resource_set_type} resource sets: "
+                            f"[{name}, {rid_to_resource_sets[resource_id]}] on version {version} of the model. "
+                            "This should not be possible. Please create a support ticket. "
+                            f"Updated resource sets: {updated_resource_sets}"
                         )
                     rid_to_resource_sets[resource_id][key] = name
 
+            # This is the only case that should be reachable by the user.
+            # The other 2 are just fail safes
             msg = (
                 "The following Resource(s) cannot be migrated to a different resource set using a partial compile, "
                 "a full compile is necessary for this process:\n"
@@ -4923,7 +4977,7 @@ class ResourceSet(BaseDocument):
                 f"to {cls.get_printable_name_for_resource_set(resource_sets["new"])}"
                 for rid, resource_sets in rid_to_resource_sets.items()
             )
-            raise BadRequest(msg)
+            raise InvalidResourceSetMigration(msg)
 
     @classmethod
     async def insert_sets_and_resources(
@@ -5104,6 +5158,60 @@ class ResourceSet(BaseDocument):
                 updated_resource_sets=updated_resource_sets,
                 connection=connection,
             )
+
+    @classmethod
+    async def clear_resource_sets_in_version(
+        cls,
+        environment: uuid.UUID,
+        version: int,
+        *,
+        connection: asyncpg.connection.Connection,
+    ) -> None:
+        """
+        Deletes entries on resource_set_configuration_model that relate to this environment and version.
+        Deletes resource sets that no longer have entries in resource_set_configuration_model
+        Deletes resources associated with those resource sets.
+
+        :param environment: The environment from which to delete the resource sets
+        :param version: The version to delete from the resource_set_configuration_model table.
+        :param connection: The connection to use
+        """
+
+        query = """
+        WITH deleted_resource_set_versions AS (
+            DELETE FROM resource_set_configuration_model AS rscm
+            WHERE rscm.environment=$1 AND rscm.model=$2
+            RETURNING rscm.resource_set_id
+        ),
+        -- check resource_sets that no longer have an entry on resource_set_configuration_model
+        -- these are to be deleted
+        resource_sets_to_delete AS (
+            SELECT rs.id
+            FROM  resource_set AS rs
+            LEFT JOIN resource_set_configuration_model AS rscm
+                ON rs.id=rscm.resource_set_id AND rs.environment=rscm.environment
+            WHERE rs.id IN (
+                SELECT resource_set_id
+                FROM deleted_resource_set_versions
+            ) AND rs.environment=$1
+            AND rscm.resource_set_id is NULL
+        ),
+        resources_to_delete AS (
+            DELETE FROM resource AS r
+            WHERE r.resource_set_id IN (
+                SELECT id
+                FROM resource_sets_to_delete
+            )
+            AND r.environment=$1
+        )
+        DELETE FROM resource_set AS rs
+        WHERE rs.id IN (
+                SELECT id
+                FROM resource_sets_to_delete
+            )
+            AND rs.environment=$1
+        """
+        await cls._execute_query(query, environment, version, connection=connection)
 
 
 @stable_api
@@ -6341,7 +6449,7 @@ class ConfigurationModel(BaseDocument):
                 connection=con,
             )
             await ResourceAction.delete_all(environment=self.environment, version=self.version, connection=con)
-            await Resource.delete_all(environment=self.environment, model=self.version, connection=con)
+            await ResourceSet.clear_resource_sets_in_version(environment=self.environment, version=self.version, connection=con)
             await self.delete(connection=con)
 
             # Delete facts when the resources in this version are the only

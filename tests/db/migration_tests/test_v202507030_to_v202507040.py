@@ -49,8 +49,9 @@ async def test_add_resource_set_table(
 
     records = await postgresql_client.fetch(
         """
-        SELECT rs.name, rscm.* FROM public.resource_set_configuration_model AS rscm
-        LEFT JOIN public.resource_set AS rs
+        SELECT rs.name, rscm.*
+        FROM public.resource_set_configuration_model AS rscm
+        JOIN public.resource_set AS rs
             ON rs.environment=rscm.environment AND rs.id=rscm.resource_set_id
         ORDER BY rs.name
         """

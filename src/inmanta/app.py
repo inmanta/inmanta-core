@@ -395,7 +395,6 @@ def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Se
         action="store_true",
         default=False,
     )
-    parser.add_argument("-m", dest="model", help="Also export the complete model", action="store_true", default=False)
     parser.add_argument("--server_address", dest="server", help="The address of the server to submit the model to")
     parser.add_argument("--server_port", dest="port", help="The port of the server to submit the model to")
     parser.add_argument("--token", dest="token", help="The token to auth to the server")
@@ -416,13 +415,6 @@ def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Se
         help="JSON metadata why this compile happened. If a non-json string is "
         "passed it is used as the 'message' attribute in the metadata.",
         default=None,
-    )
-    parser.add_argument(
-        "--model-export",
-        dest="model_export",
-        help="Export the configuration model to the server as metadata.",
-        action="store_true",
-        default=False,
     )
     parser.add_argument(
         "--export-plugin",
@@ -590,7 +582,6 @@ def export(options: argparse.Namespace) -> None:
                 types,
                 scopes,
                 metadata=metadata,
-                model_export=options.model_export,
                 export_plugin=options.export_plugin,
                 partial_compile=options.partial_compile,
                 resource_sets_to_remove=list(resource_sets_to_remove),

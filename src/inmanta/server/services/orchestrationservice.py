@@ -910,14 +910,17 @@ class OrchestrationService(protocol.ServerSlice):
                 raise ServerError("The given version is already defined. Versions should be unique.")
 
             all_ids: set[Id] = {Id.parse_id(rid, version) for rid in rid_to_resource.keys()}
-            await data.ResourceSet.insert_sets_and_resources(
-                environment=env.id,
-                updated_resources=list(rid_to_resource.values()),
-                target_version=version,
-                base_version=partial_base_version,
-                deleted_resource_sets=deleted_resource_sets_as_set,
-                connection=connection,
-            )
+            try:
+                await data.ResourceSet.insert_sets_and_resources(
+                    environment=env.id,
+                    updated_resources=list(rid_to_resource.values()),
+                    target_version=version,
+                    base_version=partial_base_version,
+                    deleted_resource_sets=deleted_resource_sets_as_set,
+                    connection=connection,
+                )
+            except data.InvalidResourceSetMigration as e:
+                raise BadRequest(e.message)
             await cm.recalculate_total(connection=connection)
             await data.UnknownParameter.insert_many(unknowns, connection=connection)
 
