@@ -337,8 +337,8 @@ class AgentManager(ServerSlice, SessionListener):
                 await self._set_unpause_on_resume(env, should_be_unpaused_on_resume=False, endpoint=name)
             case AgentAction.unpause_on_resume:
                 await self._set_unpause_on_resume(env, should_be_unpaused_on_resume=True, endpoint=name)
-            case _:
-                assert_never(f"Unknown agent action: {action.name}")
+            case _ as _never:
+                assert_never(_never)
 
     async def _update_paused_status_agent(
         self,
