@@ -16,6 +16,7 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import contextvars
 import dataclasses
 import enum
 from collections.abc import Iterator, Mapping, Sequence
@@ -62,7 +63,7 @@ class ProxyMode(enum.Enum):
     EXPORT = enum.auto()
 
 
-global_proxy_mode: ProxyMode = ProxyMode.PLUGIN
+global_proxy_mode: contextvars.ContextVar[ProxyMode] = contextvars.ContextVar("global_proxy_mode", default=ProxyMode.PLUGIN)
 """
 This variable controls the behavior of all proxy objects
 
@@ -73,12 +74,10 @@ It is global variable for performance reasons. Dynamic proxies are extremely per
 class ExportContext(ContextManager[None]):
 
     def __enter__(self) -> None:
-        global global_proxy_mode
-        global_proxy_mode = ProxyMode.EXPORT
+        global_proxy_mode.set(ProxyMode.EXPORT)
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        global global_proxy_mode
-        global_proxy_mode = ProxyMode.PLUGIN
+        global_proxy_mode.set(ProxyMode.PLUGIN)
 
 
 exportcontext = ExportContext()
@@ -119,6 +118,8 @@ class ProxyContext:
         return ProxyContext(
             path=self.path + relative_path,
             validated=self.validated,
+            # we're proxying elements one level deeper than the current context
+            # => reset allow_reference_values to default behavior
             allow_reference_values=None,
         )
 
@@ -130,7 +131,7 @@ class ProxyContext:
         )
 
     def descend(self) -> "ProxyContext":
-        vmode = global_proxy_mode is ProxyMode.EXPORT
+        vmode = global_proxy_mode.get() is ProxyMode.EXPORT
         if vmode == self.validated:
             return self
         return ProxyContext(
@@ -314,7 +315,6 @@ class DynamicProxy:
 
         return DynamicProxy(
             value,
-            # TODO: review!!!
             # DSL instances are a black box as far as boundary validation is concerned
             # => from here on out, consider the object not validated, except during export
             context=context.descend(),
