@@ -4557,8 +4557,8 @@ class ResourceAction(BaseDocument):
             # Step 1: Get the resource
             # also check we are currently deploying
 
-            resource: Optional[Resource] = await Resource.get_one(
-                environment=env.id, resource_id=resource_id_str, model=resource_id.version, connection=connection
+            resource: Optional[Resource] = await Resource.get_resource_for_version(
+                environment=env.id, resource_id=resource_id_str, version=resource_id.version, connection=connection
             )
 
             if resource is None:
@@ -5308,19 +5308,14 @@ class Resource(BaseDocument):
     resource_set: Optional[str] = None
     resource_set_id: uuid.UUID
 
-    # Methods for backward compatibility
-    @property
-    def resource_version_id(self) -> ResourceVersionIdStr:
-        # This field was removed from the DB, this method keeps code compatibility
-        return resources.Id.set_version_in_id(self.resource_id, self.model)
-
     @classmethod
-    def __mangle_dict(cls, record: dict) -> None:
+    def __mangle_dict(cls, record: dict, version: int | None = None) -> None:
         """
         Transform the dict of attributes as it exists here/in the database to the backward compatible form
         Operates in-place
         """
-        version = record["model"]
+        if version is None:
+            raise Exception("someone used mangle_dict -.-")
         parsed_id = resources.Id.parse_id(record["resource_id"])
         parsed_id.set_version(version)
         record["resource_version_id"] = parsed_id.resource_version_str()
@@ -5378,26 +5373,25 @@ class Resource(BaseDocument):
     async def get_resources(
         cls,
         environment: uuid.UUID,
-        resource_version_ids: list[ResourceVersionIdStr],
+        version: int,
+        resource_ids: list[ResourceIdStr],
         lock: Optional[RowLockMode] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> list["Resource"]:
         """
         Get all resources listed in resource_version_ids
         """
-        if not resource_version_ids:
-            return []
         query_lock: str = lock.value if lock is not None else ""
 
-        def convert_or_ignore(rvid: ResourceVersionIdStr) -> resources.Id | None:
+        def convert_or_ignore(rvid: ResourceIdStr) -> resources.Id | None:
             """Method to retain backward compatibility, ignore bad ID's"""
             try:
                 return resources.Id.parse_resource_version_id(rvid)
             except ValueError:
                 return None
 
-        parsed_rv = (convert_or_ignore(id) for id in resource_version_ids)
-        effective_parsed_rv = [id for id in parsed_rv if id is not None]
+        parsed_rv = (convert_or_ignore(id) for id in resource_ids)
+        effective_parsed_rv = [id.resource_str() for id in parsed_rv if id is not None]
 
         if not effective_parsed_rv:
             return []
@@ -5408,14 +5402,12 @@ class Resource(BaseDocument):
                 INNER JOIN {cls.table_name()} AS r
                     ON rscm.environment=r.environment
                     AND rscm.resource_set_id=r.resource_set_id
-                INNER JOIN unnest($2::resource_id_version_pair[]) requested(resource_id, model)
-                    ON rscm.model=requested.model AND r.resource_id=requested.resource_id
-                WHERE rscm.environment=$1
+                WHERE rscm.environment=$1 AND rscm.model=$2 AND r.resource_id=ANY($3::uuid[])
             {query_lock}
         """
         out = await cls.select_query(
             query,
-            [cls._get_value(environment), [(id.resource_str(), id.get_version()) for id in effective_parsed_rv]],
+            [cls._get_value(environment), version, effective_parsed_rv],
             connection=connection,
         )
         return out
@@ -5587,7 +5579,7 @@ class Resource(BaseDocument):
                 async for record in con.cursor(query, *values):
                     if no_obj:
                         record = dict(record)
-                        cls.__mangle_dict(record)
+                        cls.__mangle_dict(record, version)
                         resources_list.append(record)
                     else:
                         resources_list.append(cls(from_postgres=True, **record))
@@ -5737,6 +5729,25 @@ class Resource(BaseDocument):
         )
 
     @classmethod
+    async def get_resource_for_version(cls, environment: uuid.UUID, resource_id: ResourceIdStr, version: int, connection: Optional[asyncpg.connection.Connection] = None) -> Optional["Resource"]:
+        """
+        Get a resource with this id for this version
+        """
+        query = f"""
+                SELECT r.*
+                FROM resource AS r
+                INNER JOIN resource_set_configuration_model AS rscm
+                    ON r.environment=rscm.environment AND r.resource_set_id=rscm.resource_set_id
+                WHERE r.environment=$1 AND r.resource_id=$2 AND rscm.model=$3
+                """
+        records = await cls.select_query(
+            query, [environment, resource_id, version], connection=connection
+        )
+        if not records:
+            return None
+        return records[0]
+
+    @classmethod
     async def get(
         cls,
         environment: uuid.UUID,
@@ -5747,10 +5758,9 @@ class Resource(BaseDocument):
         Get a resource with the given resource version id
         """
         parsed_id = resources.Id.parse_id(resource_version_id)
-        value = await cls.get_one(
-            environment=environment, resource_id=parsed_id.resource_str(), model=parsed_id.version, connection=connection
-        )
-        return value
+        return await cls.get_resource_for_version(environment, parsed_id.resource_str(), parsed_id.version, connection)
+
+
 
     @classmethod
     def new(
@@ -5902,7 +5912,7 @@ class Resource(BaseDocument):
             return None
         resource = cls(from_postgres=True, **result[0])
         parsed_id = resources.Id.parse_id(resource.resource_id)
-        parsed_id.set_version(resource.model)
+        parsed_id.set_version(version)
         return m.VersionedResourceDetails(
             resource_id=resource.resource_id,
             resource_version_id=parsed_id.resource_version_str(),
@@ -5910,7 +5920,7 @@ class Resource(BaseDocument):
             agent=resource.agent,
             id_attribute=parsed_id.attribute,
             id_attribute_value=resource.resource_id_value,
-            version=resource.model,
+            version=version,
             attributes=resource.attributes,
         )
 
@@ -6360,12 +6370,18 @@ class ConfigurationModel(BaseDocument):
         """
         Returns a list of all agents that have resources defined in this configuration model
         """
-        (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
-        query = "SELECT DISTINCT agent FROM " + Resource.table_name() + " WHERE " + filter_statement
+        query = f"""
+            SELECT DISTINCT agent
+            FROM {Resource.table_name()} AS r
+            INNER JOIN resource_set_configuration_model AS rscm
+                ON r.environment=rscm.environment
+                AND r.resource_set_id=rscm.resource_set_id
+            WHERE r.environment=$1 AND rscm.model=$2
+            """
         result = []
         async with cls.get_connection(connection) as con:
             async with con.transaction():
-                async for record in con.cursor(query, *values):
+                async for record in con.cursor(query, environment,version):
                     result.append(record["agent"])
         return result
 

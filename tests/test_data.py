@@ -211,14 +211,15 @@ async def test_project_cascade_delete(init_dataclasses_and_load_schema):
         for i in range(5):
             name = "file" + str(i)
             key = "std::testing::NullResource[agent1,name=" + name + "]"
+            rvid = key + ",v=%d" % version
             res1 = data.Resource.new(
                 environment=env.id,
-                resource_version_id=key + ",v=%d" % version,
+                resource_version_id=rvid,
                 resource_set=resource_set,
                 attributes={"name": name},
             )
             await res1.insert()
-            resource_ids.append((res1.environment, res1.resource_version_id))
+            resource_ids.append((res1.environment, rvid))
 
         unknown_parameter = data.UnknownParameter(name="test", environment=env.id, version=version, source="")
         await unknown_parameter.insert()
@@ -240,7 +241,7 @@ async def test_project_cascade_delete(init_dataclasses_and_load_schema):
         assert func(await data.Agent.get_one(environment=agent.environment, name=agent.name))
         for environment, resource_version_id in resource_ids:
             id = Id.parse_id(resource_version_id)
-            assert func(await data.Resource.get_one(environment=environment, resource_id=id.resource_str(), model=id.version))
+            assert func(await data.Resource.get_resource_for_version(environment=environment, resource_id=id.resource_str(), version=id.version))
         assert func(await data.UnknownParameter.get_by_id(unknown_parameter.id))
 
     # Setup two environments
@@ -323,14 +324,15 @@ async def test_environment_cascade_content_only(init_dataclasses_and_load_schema
     for i in range(5):
         name = "file" + str(i)
         key = "std::testing::NullResource[agent1,name=" + name + "]"
+        rvid = key + ",v=%d" % version
         res1 = data.Resource.new(
             environment=env.id,
-            resource_version_id=key + ",v=%d" % version,
+            resource_version_id=rvid,
             resource_set=resource_set,
             attributes={"name": name},
         )
         await res1.insert()
-        resource_ids.append((res1.environment, res1.resource_version_id))
+        resource_ids.append((res1.environment, rvid))
 
     resource_version_ids = [
         f"std::testing::NullResource[agent1,name=file0],v={version}",
@@ -360,7 +362,7 @@ async def test_environment_cascade_content_only(init_dataclasses_and_load_schema
     for environment, resource_version_id in resource_ids:
         id = Id.parse_id(resource_version_id)
         assert (
-            await data.Resource.get_one(environment=environment, resource_id=id.resource_str(), model=id.version)
+            await data.Resource.get_resource_for_version(environment=environment, resource_id=id.resource_str(), version=id.version)
         ) is not None
     assert await data.ResourceAction.get_by_id(resource_action.action_id) is not None
     assert (await data.UnknownParameter.get_by_id(unknown_parameter.id)) is not None
@@ -376,7 +378,7 @@ async def test_environment_cascade_content_only(init_dataclasses_and_load_schema
     assert (await data.Agent.get_one(environment=agent.environment, name=agent.name)) is None
     for environment, resource_version_id in resource_ids:
         id = Id.parse_id(resource_version_id)
-        assert (await data.Resource.get_one(environment=environment, resource_id=id.resource_str(), model=id.version)) is None
+        assert (await data.Resource.get_resource_for_version(environment=environment, resource_id=id.resource_str(), version=id.version)) is None
     assert await data.ResourceAction.get_by_id(resource_action.action_id) is None
     assert (await data.UnknownParameter.get_by_id(unknown_parameter.id)) is None
     assert (await env.get(data.AUTO_DEPLOY)) is True
@@ -970,7 +972,7 @@ async def test_model_delete_cascade(init_dataclasses_and_load_schema):
     assert (await data.ConfigurationModel.get_list()) == []
     id = Id.parse_resource_version_id(resource.resource_version_id)
     assert (
-        await data.Resource.get_one(environment=resource.environment, resource_id=id.resource_str(), model=id.version)
+        await data.Resource.get_resource_for_version(environment=resource.environment, resource_id=id.resource_str(), version=id.version)
     ) is None
     assert (await data.UnknownParameter.get_by_id(unknown_parameter.id)) is None
 
@@ -1384,9 +1386,10 @@ async def test_escaped_resources(init_dataclasses_and_load_schema):
     resource_set = await make_resource_set(env.id, [version])
 
     routes = {"8.0.0.0/8": "1.2.3.4", "0.0.0.0/0": "127.0.0.1"}
+    rvid = "std::testing::NullResource[agent1,name=router],v=%d" % version
     res = data.Resource.new(
         environment=env.id,
-        resource_version_id="std::testing::NullResource[agent1,name=router],v=%d" % version,
+        resource_version_id=rvid,
         resource_set=resource_set,
         attributes={"name": "router", "purge_on_delete": True, "purged": False, "routes": routes},
     )
@@ -2224,16 +2227,17 @@ async def test_resources_json(init_dataclasses_and_load_schema):
     await cm.insert()
 
     resource_set = await make_resource_set(env.id, [version])
+    rvid = "std::testing::NullResource[agent1,name=file1],v=%s" % version
     res1 = data.Resource.new(
         environment=env.id,
-        resource_version_id="std::testing::NullResource[agent1,name=file1],v=%s" % version,
+        resource_version_id=rvid,
         resource_set=resource_set,
         attributes={"attr": [{"a": 1, "b": "c"}]},
     )
     await res1.insert()
 
-    id = Id.parse_resource_version_id(res1.resource_version_id)
-    res = await data.Resource.get_one(environment=res1.environment, resource_id=id.resource_str(), model=id.version)
+    id = Id.parse_resource_version_id(rvid)
+    res = await data.Resource.get_resource_for_version(environment=res1.environment, resource_id=id.resource_str(), version=id.version)
 
     assert res1.attributes == res.attributes
 
@@ -2293,9 +2297,10 @@ async def test_query_resource_actions_simple(init_dataclasses_and_load_schema):
     motd_first_start_time = datetime.datetime.now()
 
     async def make_file_resourceaction(version, offset=0, name="motd", log_level=logging.INFO):
+        rvid=f"std::testing::NullResource[agent1,name={name}],v={version}"
         res1 = data.Resource.new(
             environment=env.id,
-            resource_version_id=f"std::testing::NullResource[agent1,name={name}],v={version}",
+            resource_version_id=rvid,
             resource_set=await make_resource_set(env.id, [version]),
             attributes={"attr": [{"a": 1, "b": "c"}], "name": name},
         )
@@ -2304,7 +2309,7 @@ async def test_query_resource_actions_simple(init_dataclasses_and_load_schema):
         resource_action = data.ResourceAction(
             environment=env.id,
             version=version,
-            resource_version_ids=[res1.resource_version_id],
+            resource_version_ids=[rvid],
             action_id=action_id,
             action=const.ResourceAction.deploy,
             started=motd_first_start_time + datetime.timedelta(minutes=offset),
@@ -2324,14 +2329,15 @@ async def test_query_resource_actions_simple(init_dataclasses_and_load_schema):
     for i in range(5):
         name = "file" + str(i)
         key = "std::testing::NullResource[agent1,name=" + name + "]"
+        rvid = key + ",v=%d" % version
         res1 = data.Resource.new(
             environment=env.id,
-            resource_version_id=key + ",v=%d" % version,
+            resource_version_id=rvid,
             resource_set=resource_set,
             attributes={"name": name},
         )
         await res1.insert()
-        resource_ids.append((res1.environment, res1.resource_version_id))
+        resource_ids.append((res1.environment, rvid))
 
     # Add resource actions for file
     for i in range(5):

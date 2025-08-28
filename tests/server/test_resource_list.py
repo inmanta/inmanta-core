@@ -131,9 +131,9 @@ async def test_has_only_one_version_from_resource(server, client):
     # This version has both resources so we can populate just this version
     await data.ResourcePersistentState.populate_for_version(environment=env.id, model_version=version)
 
+    version = 2
     resource_set = data.ResourceSet(environment=env.id, id=uuid.uuid4())
     await resource_set.insert_with_link_to_configuration_model(versions=[version])
-    version = 2
     res1_v2 = data.Resource.new(
         environment=env.id,
         resource_version_id=res1_key + ",v=%d" % version,
@@ -149,9 +149,9 @@ async def test_has_only_one_version_from_resource(server, client):
     )
     await res2_v2.insert()
 
+    version = 3
     resource_set = data.ResourceSet(environment=env.id, id=uuid.uuid4())
     await resource_set.insert_with_link_to_configuration_model(versions=[version])
-    version = 3
     res1_v3 = data.Resource.new(
         environment=env.id,
         resource_version_id=res1_key + ",v=%d" % version,
@@ -163,9 +163,9 @@ async def test_has_only_one_version_from_resource(server, client):
     # This will mark res2 as an orphan since it is not on version 3
     await data.ResourcePersistentState.mark_as_orphan(environment=env.id, resource_ids={ResourceIdStr(res2_key)})
 
+    version = 4
     resource_set = data.ResourceSet(environment=env.id, id=uuid.uuid4())
     await resource_set.insert_with_link_to_configuration_model(versions=[version])
-    version = 4
     res1_v4 = data.Resource.new(
         environment=env.id,
         resource_version_id=res1_key + ",v=%d" % version,
