@@ -2490,12 +2490,12 @@ async def test_remove_agent_venvs(environment, agent: TestAgent, make_resource_m
     )
 
     # Wait until rid1 is deploying
-    await retry_limited(lambda: rid1 in executor1.deploys, timeout=10)
+    await retry_limited_fast(lambda: rid1 in executor1.deploys, timeout=10)
 
     # Request removal of all agent venvs.
     # Assign task to a variable to prevent it from being garbage collected.
     remove_executor_venvs_task = asyncio.create_task(agent.remove_executor_venvs())  # noqa: F841
-    await retry_limited(lambda: agent.scheduler._deployment_suspended, timeout=10)
+    await retry_limited_fast(lambda: agent.scheduler._deployment_suspended, timeout=10)
 
     # Verify that we are waiting for the ongoing deployment to finish, before removing the venvs.
     assert not _remove_executor_venvs_method_was_called
@@ -2504,7 +2504,7 @@ async def test_remove_agent_venvs(environment, agent: TestAgent, make_resource_m
     executor1.deploys[rid1].set_result(const.HandlerResourceState.deployed)
 
     ## Now the venv removal should start
-    await retry_limited(lambda: _remove_executor_venvs_method_was_called, timeout=10)
+    await retry_limited_fast(lambda: _remove_executor_venvs_method_was_called, timeout=10)
 
     ## As long as the removal is in progress, no new deployments should be started
     assert not executor1.deploys
@@ -2513,7 +2513,7 @@ async def test_remove_agent_venvs(environment, agent: TestAgent, make_resource_m
     continue_remove_executor_venv_method.set_result(None)
 
     # Now the deployment of rid2 should start
-    await retry_limited(lambda: rid2 in executor1.deploys, timeout=10)
+    await retry_limited_fast(lambda: rid2 in executor1.deploys, timeout=10)
     # Finish the deployment of rid2
     executor1.deploys[rid2].set_result(const.HandlerResourceState.deployed)
 
