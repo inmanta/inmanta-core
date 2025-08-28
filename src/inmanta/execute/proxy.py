@@ -22,6 +22,7 @@ import enum
 from collections.abc import Iterator, Mapping, Sequence
 from copy import copy
 from dataclasses import is_dataclass
+from types import TracebackType
 from typing import TYPE_CHECKING, Callable, ContextManager, Optional, Self, Union
 
 # Keep UnsetException, UnknownException and AttributeNotFound in place for backward compat with <iso8
@@ -76,7 +77,9 @@ class ExportContext(ContextManager[None]):
     def __enter__(self) -> None:
         global_proxy_mode.set(ProxyMode.EXPORT)
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self, exc_type: type[BaseException] | None, exc_val: BaseException | None, traceback: TracebackType | None
+    ) -> None:
         global_proxy_mode.set(ProxyMode.PLUGIN)
 
 

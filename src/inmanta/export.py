@@ -148,8 +148,7 @@ class Exporter:
         for t in types:
             if self.types is not None and t in self.types:
                 proxies[t] = [
-                    DynamicProxy.return_value(i, context=ProxyContext(path=f"<{i}>", mode=ProxyMode.EXPORT))
-                    for i in self.types[t].get_all_instances()
+                    DynamicProxy.return_value(i, context=ProxyContext(path=f"<{i}>")) for i in self.types[t].get_all_instances()
                 ]
             else:
                 proxies[t] = []
