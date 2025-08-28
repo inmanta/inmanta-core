@@ -116,6 +116,13 @@ as `A -> B`, meaning A should be locked before B in any transaction that acquire
 """
 
 
+class PartialBaseMissing(ValueError):
+    """
+    A base version was provided in the context of a partial export / partial model read, but the base version does not exist
+    or does not meet criteria.
+    """
+
+
 @enum.unique
 class QueryType(str, enum.Enum):
     def _generate_next_value_(name, start: int, count: int, last_values: abc.Sequence[object]) -> str:  # noqa: N805
@@ -5643,17 +5650,25 @@ class Resource(BaseDocument):
         model version contains the shared set, it will contain all of its resources, rather than only those that were present in
         the associated export.
 
-        :param since: The boundary version (excluding).
+        :param since: The boundary version (excluding). This version should exist and be released.
         :param projection: The resource columns to include in the returned resource dictionaries.
             Must not overlap with other projection parameters.
 
         :returns: A list of model versions and resources, gruped by resource set.
+        :raises PartialBaseMissing: The `since` version does not exist or has not been released.
         """
-        # TODO: returns nothing if the old model no longer exists / has not been released. Is sort of to be expected, because it wouldn't be partial otherwise
-        #           Make decision + add test
         projection_selectors: typing.LiteralString = ", ".join([f"r.{col}" for col in projection])
         query: typing.LiteralString = f"""\
-        WITH models AS (
+        WITH
+        reference_model AS (
+            SELECT EXISTS(
+                SELECT *
+                FROM {ConfigurationModel.table_name()} AS cm
+                WHERE cm.environment = $1
+                    AND cm.version = $2::int
+                    AND cm.released IS true
+            ) AS exists
+        ), models AS (
             SELECT *
             FROM {ConfigurationModel.table_name()} AS cm
             WHERE cm.environment = $1
@@ -5684,6 +5699,7 @@ class Resource(BaseDocument):
             WHERE old != new
         )
         SELECT
+            reference_model.exists,
             model_pairs.new AS version,
             -- each row of the diff will always have at least one of the resource set ids set.
             -- => if both are NULL, there were no records at all on the rhs of the LEFT JOIN
@@ -5691,7 +5707,8 @@ class Resource(BaseDocument):
             diff.name AS resource_set_name,
             diff.resource_set_id,
             {projection_selectors}
-        FROM model_pairs
+        FROM reference_model
+        LEFT JOIN model_pairs ON true
         LEFT JOIN LATERAL (
             -- DISTINCT because join results in two null rows for shared set. ORDER BY below ensures we keep the latest one
             SELECT DISTINCT ON (rs_new.name, rs_old.name)
@@ -5728,6 +5745,8 @@ class Resource(BaseDocument):
             spy: Sequence[asyncpg.Record]
             spy, records = more_itertools.spy(records)
             assert spy  # groupby can not produce empty groups
+            if not spy[0]["exists"]:
+                raise PartialBaseMissing()
             if spy[0]["empty_model"]:
                 result.append((version, {}))
                 continue

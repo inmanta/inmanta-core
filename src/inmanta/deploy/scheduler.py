@@ -685,6 +685,44 @@ class ResourceScheduler(TaskManager):
                 partial=False,
             )
 
+    async def _get_partial_model_versions_from_db(self, *, connection: asyncpg.connection.Connection) -> list[ModelVersion]:
+        """
+        Returns a list of partial model versions from the database, relative to the currently active version. If no version
+        is active yet, returns a single full version (the latest released one) instead.
+
+        Must be called under intent lock.
+        """
+        resources_by_version: Sequence[tuple[int, types.ResourceSets]]
+        if self._state.version > 0:
+            try:
+                # read new versions as partial updates
+                resources_by_version = await data.Resource.get_partial_resources_since_version_raw(
+                    self.environment,
+                    since=self._state.version,
+                    projection=ResourceRecord.__required_keys__,
+                    connection=connection,
+                )
+            except data.PartialBaseMissing:
+                # should not happen, but be defensive: fall back to reading full version
+                LOGGER.warning(
+                    "The currently active version (%s) no longer exists in the database. Resource scheduler will fall back"
+                    " to reading the latest version from the database in full. This should really never happen, please"
+                    " report this bug.",
+                    self._state.version,
+                )
+            else:
+                return [
+                    ModelVersion.from_db_records(
+                        version,
+                        resources,  # type: ignore
+                        partial=True,
+                    )
+                    for version, resources in resources_by_version
+                ]
+
+        # no existing state => read a full version
+        return [await self._get_single_model_version_from_db(version=None, connection=connection)]
+
     async def read_version(
         self,
         *,
@@ -708,34 +746,8 @@ class ResourceScheduler(TaskManager):
             # - a new version was released after we started processing this communication or is being released now, in which
             #   case a new notification will be / have been sent and blocked on the intent locked until we're done here.
             # So if we end up with a race, we can be confident that we'll always process the associated notification soon.
-            partial: bool = self._state.version > 0
-            resources_by_version: Sequence[tuple[int, types.ResourceSets]]
-            if partial:
-                resources_by_version = await data.Resource.get_partial_resources_since_version_raw(
-                    self.environment,
-                    since=self._state.version,
-                    projection=ResourceRecord.__required_keys__,
-                    connection=con,
-                )
-            else:
-                full_version: Optional[tuple[int, types.ResourceSets]] = await data.Resource.get_resources_for_version_raw(
-                    self.environment,
-                    projection=ResourceRecord.__required_keys__,
-                    connection=con,
-                )
-                resources_by_version = [full_version] if full_version is not None else []
-
-            new_versions: Sequence[ModelVersion] = [
-                ModelVersion.from_db_records(
-                    version,
-                    resources,  # type: ignore
-                    partial=partial,
-                )
-                for version, resources in resources_by_version
-            ]
-
             await self._new_version(
-                new_versions,
+                await self._get_partial_model_versions_from_db(connection=con),
                 reason="a new version was released",
                 connection=con,
             )

@@ -3046,6 +3046,7 @@ async def test_get_partial_resources_since_version_raw(environment, server, post
         )
         assert by_version == full_model
 
+    # verify both methods' behavior when the specified version doesn't exist
     resources_for_non_existent_version = await data.Resource.get_resources_for_version_raw(
         environment=environment,
         version=new_version + 1,
@@ -3054,6 +3055,13 @@ async def test_get_partial_resources_since_version_raw(environment, server, post
         connection=postgresql_client,
     )
     assert resources_for_non_existent_version is None
+    with pytest.raises(data.PartialBaseMissing):
+        await data.Resource.get_partial_resources_since_version_raw(
+            environment=environment,
+            since=new_version + 1,
+            projection=["resource_id"],
+            connection=postgresql_client,
+        )
 
     # push a new version without releasing it
     base_version = new_version
