@@ -2929,7 +2929,7 @@ async def test_get_partial_resources_since_version_raw(environment, server, post
         await postgresql_client.execute("UPDATE configurationmodel SET released=true")
 
     # set up initial state by releasing a single base version
-    version: int = (await client.reserve_version(tid=environment)).result["data"]
+    version: int = await client.reserve_version(tid=environment).value()
     result = await client.put_version(
         tid=environment,
         version=version,
@@ -2944,7 +2944,6 @@ async def test_get_partial_resources_since_version_raw(environment, server, post
         },
         compiler_version="0",
     )
-    # TODO: use result.value()
     assert result.code == 200, result.result
     await release()
 
@@ -2966,13 +2965,12 @@ async def test_get_partial_resources_since_version_raw(environment, server, post
         }
 
         insert_start: float = time.monotonic()
-        result = await client.put_partial(
+        await client.put_partial(
             tid=environment,
             module_version_info={},
             resources=resources,
             resource_sets=resource_sets,
-        )
-        assert result.code == 200, result.result
+        ).value()
         insert_done: float = time.monotonic()
 
         await release()
@@ -3066,12 +3064,12 @@ async def test_get_partial_resources_since_version_raw(environment, server, post
     # push a new version without releasing it
     base_version = new_version
     new_version += 1
-    result = await client.put_partial(
+    await client.put_partial(
         tid=environment,
         module_version_info={},
         resources=[],
         resource_sets={},
-    )
+    ).value()
 
     resources_for_non_released_version = await data.Resource.get_resources_for_version_raw(
         environment=environment,
