@@ -5714,7 +5714,9 @@ class Resource(BaseDocument):
         return resources
 
     @classmethod
-    async def get_latest_version(cls, environment: uuid.UUID, resource_id: ResourceIdStr, connection: Optional[asyncpg.connection.Connection] = None) -> Optional["Resource"]:
+    async def get_latest_version(
+        cls, environment: uuid.UUID, resource_id: ResourceIdStr, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> Optional["Resource"]:
         query = f"""
                 SELECT r.*
                 FROM resource AS r
@@ -5726,9 +5728,7 @@ class Resource(BaseDocument):
                     WHERE environment=$1
                 )
                 """
-        records = await cls.select_query(
-            query, [environment, resource_id], connection=connection
-        )
+        records = await cls.select_query(query, [environment, resource_id], connection=connection)
         if not records:
             return None
         return records[0]
@@ -5744,7 +5744,13 @@ class Resource(BaseDocument):
         )
 
     @classmethod
-    async def get_resource_for_version(cls, environment: uuid.UUID, resource_id: ResourceIdStr, version: int, connection: Optional[asyncpg.connection.Connection] = None) -> Optional["Resource"]:
+    async def get_resource_for_version(
+        cls,
+        environment: uuid.UUID,
+        resource_id: ResourceIdStr,
+        version: int,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> Optional["Resource"]:
         """
         Get a resource with this id for this version
         """
@@ -5755,9 +5761,7 @@ class Resource(BaseDocument):
                     ON r.environment=rscm.environment AND r.resource_set_id=rscm.resource_set_id
                 WHERE r.environment=$1 AND r.resource_id=$2 AND rscm.model=$3
                 """
-        records = await cls.select_query(
-            query, [environment, resource_id, version], connection=connection
-        )
+        records = await cls.select_query(query, [environment, resource_id, version], connection=connection)
         if not records:
             return None
         return records[0]
@@ -5774,8 +5778,6 @@ class Resource(BaseDocument):
         """
         parsed_id = resources.Id.parse_id(resource_version_id)
         return await cls.get_resource_for_version(environment, parsed_id.resource_str(), parsed_id.version, connection)
-
-
 
     @classmethod
     def new(
@@ -6396,7 +6398,7 @@ class ConfigurationModel(BaseDocument):
         result = []
         async with cls.get_connection(connection) as con:
             async with con.transaction():
-                async for record in con.cursor(query, environment,version):
+                async for record in con.cursor(query, environment, version):
                     result.append(record["agent"])
         return result
 

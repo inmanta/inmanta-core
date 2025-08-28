@@ -309,7 +309,7 @@ class PartialUpdateMerger:
             else:
                 # Old shared resource not referenced by partial compile
                 res_old = self.shared_resources_old[rid_shared_resource]
-                res = res_old.model_copy(update={"model": self.version}, deep=True)
+                res = res_old.model_copy(deep=True)
                 res = self._clean_requires_of_old_shared_resource(res)
                 update = True
             result.append(res)

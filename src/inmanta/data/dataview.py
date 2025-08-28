@@ -679,9 +679,12 @@ class ResourcesInVersionView(DataView[VersionedResourceOrder, model.VersionedRes
 
     def get_base_query(self) -> SimpleQueryBuilder:
         query_builder = SimpleQueryBuilder(
-            select_clause="SELECT resource_id, attributes, resource_type, agent, resource_id_value, environment",
-            from_clause=f" FROM {data.Resource.table_name()}",
-            filter_statements=["environment = $1", "model = $2"],
+            select_clause="SELECT r.resource_id, r.attributes, r.resource_type, r.agent, r.resource_id_value, r.environment",
+            from_clause=""" FROM resource AS r
+            INNER JOIN resource_set_configuration_model AS rscm
+                ON r.environment=rscm.environment
+                AND r.resource_set_id=rscm.resource_set_id""",
+            filter_statements=["r.environment=$1", "rscm.model=$2"],
             values=[self.environment.id, self.version],
         )
         return query_builder

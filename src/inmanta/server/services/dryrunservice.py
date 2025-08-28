@@ -96,9 +96,7 @@ class DyrunService(protocol.ServerSlice):
         async with self.dryrun_lock:
             undeployable_ids = model.get_undeployable()
             undeployable_version_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in undeployable_ids]
-            undeployable = await data.Resource.get_resources(
-                environment=env.id, resource_version_ids=undeployable_version_ids
-            )
+            undeployable = await data.Resource.get_resources(environment=env.id, resource_version_ids=undeployable_version_ids)
             await self._save_resources_without_changes_to_dryrun(
                 dryrun_id=dryrun.id, resources=undeployable, version=version_id, diff_status=ResourceDiffStatus.undefined
             )
@@ -106,7 +104,7 @@ class DyrunService(protocol.ServerSlice):
             skip_undeployable_ids = model.get_skipped_for_undeployable()
             skip_undeployable_version_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in skip_undeployable_ids]
             skipundeployable = await data.Resource.get_resources(
-                environment=env.id,resource_version_ids=skip_undeployable_version_ids
+                environment=env.id, resource_version_ids=skip_undeployable_version_ids
             )
             await self._save_resources_without_changes_to_dryrun(
                 dryrun_id=dryrun.id,
