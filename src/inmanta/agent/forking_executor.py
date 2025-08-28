@@ -97,14 +97,7 @@ import inmanta.types
 import inmanta.util
 from inmanta import const, tracing
 from inmanta.agent import executor, resourcepool
-from inmanta.agent.executor import DeployReport, FailedInmantaModules, GetFactReport
-from inmanta.agent.executor import (
-    DeployReport,
-    FailedInmantaModules,
-    GetFactReport,
-    ModuleLoadingException,
-    VirtualEnvironmentManager,
-)
+from inmanta.agent.executor import DeployReport, FailedInmantaModules, GetFactReport, VirtualEnvironmentManager
 from inmanta.agent.resourcepool import PoolManager, PoolMember
 from inmanta.const import LOGGER_NAME_EXECUTOR
 from inmanta.loader import get_inmanta_module_name

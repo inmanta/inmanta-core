@@ -24,7 +24,6 @@ from collections.abc import Mapping, Sequence
 from typing import Literal, Optional, Union
 
 import inmanta.types
-from inmanta import const
 from inmanta.const import AgentAction, AllAgentAction, ApiDocsFormat, Change, ClientType, ParameterSource, ResourceState
 from inmanta.data import model
 from inmanta.data.model import DataBaseReport, LinkedDiscoveredResource, PipConfig
