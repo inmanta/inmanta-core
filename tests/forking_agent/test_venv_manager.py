@@ -15,7 +15,6 @@ Contact: code@inmanta.com
 import asyncio
 import base64
 import concurrent.futures
-import hashlib
 import json
 import os
 import subprocess
@@ -25,10 +24,10 @@ from datetime import datetime
 
 import pytest
 
-from inmanta import config, const, data
+from inmanta import config, const, data, util
 from inmanta.agent import config as agent_config
 from inmanta.agent import executor
-from inmanta.data import PipConfig, model
+from inmanta.data import PipConfig
 from utils import PipIndex, get_compiler_version, retry_limited, wait_until_deployment_finishes
 
 
@@ -275,27 +274,17 @@ class ResourceH(inmanta.agent.handler.CRUDHandler[Resource]):
         pass
 
     """
-    sha1sum = hashlib.new("sha1")
-    sha1sum.update(content.encode())
-    hv1: str = sha1sum.hexdigest()
-    await client.upload_file(hv1, content=base64.b64encode(content.encode()).decode("ascii"))
 
-    module_source_metadata = model.ModuleSourceMetadata(
-        name="inmanta_plugins.test",
-        hash_value=hv1,
-        is_byte_code=False,
+    content_encoded = content.encode()
+    content_hash = util.hash_file(content_encoded)
+    result = await client.upload_file(id=content_hash, content=base64.b64encode(content_encoded).decode("ascii"))
+    assert result.code == 200
+    result = await client.upload_code_batched(
+        tid=environment,
+        id=version,
+        resources={"test::Resource": {content_hash: ("inmanta_plugins/test/__init__.py", "inmanta_plugins.test", [])}},
     )
-
-    module_version_info = {
-        "test": model.InmantaModule(
-            name="test",
-            version="0.0.0",
-            files_in_module=[module_source_metadata],
-            requirements=[],
-            for_agents=["agent1", "agent2"],
-        )
-    }
-
+    assert result.code == 200
     result = await client.put_version(
         tid=environment,
         version=version,
@@ -304,7 +293,6 @@ class ResourceH(inmanta.agent.handler.CRUDHandler[Resource]):
         unknowns=[],
         version_info={},
         compiler_version=get_compiler_version(),
-        module_version_info=module_version_info,
     )
     assert result.code == 200
     result = await client.release_version(tid=environment, id=version)
@@ -365,6 +353,12 @@ class ResourceH(inmanta.agent.handler.CRUDHandler[Resource]):
             "requires": [],
         },
     ]
+    result = await client.upload_code_batched(
+        tid=environment,
+        id=version,
+        resources={"test::Resource": {content_hash: ("inmanta_plugins/test/__init__.py", "inmanta_plugins.test", [])}},
+    )
+    assert result.code == 200
     result = await client.put_version(
         tid=environment,
         version=version,
@@ -373,7 +367,6 @@ class ResourceH(inmanta.agent.handler.CRUDHandler[Resource]):
         unknowns=[],
         version_info={},
         compiler_version=get_compiler_version(),
-        module_version_info=module_version_info,
     )
     assert result.code == 200
     result = await client.release_version(tid=environment, id=version)
