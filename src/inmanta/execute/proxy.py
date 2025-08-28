@@ -104,7 +104,7 @@ class ProxyContext:
 
     __slots__ = ("path", "validated", "allow_reference_values")
 
-    def __init__(self, path: str, validated: bool = True, allow_reference_values: Optional[bool] = None) -> None:
+    def __init__(self, *, path: str, validated: bool = True, allow_reference_values: Optional[bool] = None) -> None:
         self.path = path
         self.validated = validated
         self.allow_reference_values = allow_reference_values
