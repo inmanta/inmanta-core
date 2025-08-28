@@ -5181,26 +5181,16 @@ class ResourceSet(BaseDocument):
             DELETE FROM resource_set_configuration_model AS rscm
             WHERE rscm.environment=$1 AND rscm.model=$2
             RETURNING rscm.resource_set_id
-        ),
-        -- check resource_sets that no longer have an entry on resource_set_configuration_model
-        -- these are to be deleted
-        resource_sets_to_delete AS (
-            SELECT rs.id
-            FROM  resource_set AS rs
-            LEFT JOIN resource_set_configuration_model AS rscm
-                ON rs.id=rscm.resource_set_id AND rs.environment=rscm.environment
-            WHERE rs.id IN (
-                SELECT resource_set_id
-                FROM deleted_resource_set_versions
-            ) AND rs.environment=$1
-            AND rscm.resource_set_id is NULL
         )
         DELETE FROM resource_set AS rs
-        WHERE rs.id IN (
-                SELECT id
-                FROM resource_sets_to_delete
+        USING deleted_resource_set_versions AS del_rscm
+            WHERE rs.id=del_rscm.resource_set_id
+            AND NOT EXISTS (
+                SELECT 1
+                FROM resource_set_configuration_model AS rscm
+                WHERE environment=$1
+                AND rscm.resource_set_id=rs.id
             )
-            AND rs.environment=$1
         """
         await cls._execute_query(query, environment, version, connection=connection)
 
