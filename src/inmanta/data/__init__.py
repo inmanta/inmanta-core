@@ -5677,6 +5677,7 @@ class Resource(BaseDocument):
             INNER JOIN {ResourceSet.table_name()} AS rs
                 ON rs.environment = rscm.environment
                 AND rs.id = rscm.resource_set_id
+        -- pairwise (two-by-two) model versions to build the diff incrementally
         ), model_pairs AS (
             SELECT *
             FROM (

@@ -326,7 +326,6 @@ class TaskRunner:
         return self.status == AgentStatus.STARTED
 
 
-# TODO: tests for partial?
 class ResourceScheduler(TaskManager):
     """
     Scheduler for resource actions. Reads resource state from the database and accepts deploy, dry-run, ... requests from the
@@ -792,7 +791,7 @@ class ResourceScheduler(TaskManager):
 
             # Update resource sets and check for deleted resources.
 
-            # known resources that are in scope for this partial export, i.e. resources in exported sets
+            # known resources that are in scope for this model version update, i.e. resources in exported sets
             known_resources: Set[ResourceIdStr]
             if model.partial:
                 known_resources = set().union(
@@ -812,6 +811,8 @@ class ResourceScheduler(TaskManager):
                         with contextlib.suppress(KeyError):
                             del resource_sets[resource_set]
             else:
+                # unless we read a full version in a previous iteration, `intent` represents partial intent,
+                # i.e. an overlay on top of the state's intent
                 known_resources = intent.keys() | (self._state.intent.keys() if partial else set())
                 # from now on we track all resource sets
                 partial = False
@@ -1018,7 +1019,8 @@ class ResourceScheduler(TaskManager):
                     if resources:
                         self._state.resource_sets[resource_set] = set(resources)
                     else:
-                        del self._state.resource_sets[resource_set]
+                        with contextlib.suppress(KeyError):
+                            del self._state.resource_sets[resource_set]
             else:
                 self._state.resource_sets = {name: set(s) for name, s in model.resource_sets.items()}
             # update resource intent
