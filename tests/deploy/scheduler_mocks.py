@@ -182,6 +182,13 @@ class DummyManager(executor.ExecutorManager[executor.Executor]):
             self.executors[agent_name] = DummyExecutor()
         return self.executors[agent_name]
 
+    def get_environment_manager(self) -> None:
+        return None
+
+    async def stop_all_executors(self) -> list[DummyExecutor]:
+        for ex in self.executors.values():
+            await ex.stop()
+
     async def stop_for_agent(self, agent_name: str) -> list[DummyExecutor]:
         pass
 
