@@ -144,6 +144,8 @@ class ProxyContext:
         )
 
     def should_allow_references(self) -> bool:
+        if global_proxy_mode.get() is ProxyMode.EXPORT:
+            return True
         return self.allow_reference_values if self.allow_reference_values is not None else self.validated
 
 

@@ -399,13 +399,13 @@ class Resource(metaclass=ResourceMeta):
 
                 agent_value = getattr(agent_value, el)
 
-                if isinstance(agent_value, references.Reference):
-                    current_path: str = ".".join(path_elements[: i + 1])
-                    raise ResourceException(
-                        "Encountered reference in resource's agent attribute. Agent attribute values can not be references."
-                        f" Encountered at attribute {current_path!r} of resource instance {model_object}"
-                    )
-
+            except inmanta.ast.UnexpectedReference:
+                # Clean up exception
+                current_path: str = ".".join(path_elements[: i + 1])
+                raise ResourceException(
+                    "Encountered reference in resource's agent attribute. Agent attribute values can not be references."
+                    f" Encountered at attribute {current_path!r} of resource instance {model_object}"
+                )
             except (ResourceException, inmanta.ast.UnsetException, inmanta.ast.UnknownException):
                 raise
             except Exception:
@@ -413,9 +413,10 @@ class Resource(metaclass=ResourceMeta):
                     "Unable to get the name of agent %s belongs to. In path %s, '%s' does not exist"
                     % (model_object, agent_attribute, el)
                 )
-
-        attribute_value = cls.map_field(None, entity_name, attribute_name, model_object)
-        if isinstance(attribute_value, references.Reference):
+        try:
+            attribute_value = cls.map_field(None, entity_name, attribute_name, model_object)
+        except inmanta.ast.UnexpectedReference:
+            # Clean up exception
             raise ResourceException(
                 "Encountered reference in resource's id attribute. Id attribute values can not be references."
                 f" Encountered at attribute {attribute_name!r} of resource instance {model_object}"
