@@ -28,6 +28,7 @@ from logging import DEBUG
 import py
 import pytest
 
+import packaging
 from inmanta import data
 from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
@@ -77,23 +78,37 @@ async def agent(server, environment, deactive_venv):
     await a.stop()
 
 
+@pytest.mark.parametrize("project_constraint", ["", "multi-version<2.0.0"])
 @pytest.mark.slowtest
 async def test_agent_installs_dependency_containing_extras(
     server_pre_start,
     server,
     client,
-    monkeypatch,
     index_with_pkgs_containing_optional_deps: str,
     clienthelper,
     environment,
     agent,
+    project_constraint,
 ) -> None:
     """
     Test whether the agent code loading works correctly when a python dependency is provided that contains extras.
     """
-    content = "file content".encode()
-    hash = hash_file(content)
-    body = base64.b64encode(content).decode("ascii")
+
+    async def upload_file(content: str) -> str:
+        content = content.encode()
+
+        _hash = hash_file(content)
+        body = base64.b64encode(content).decode("ascii")
+
+        res = await client.upload_file(id=_hash, content=body)
+        assert res.code == 200
+        return _hash
+
+    source_content = "file_content"
+    _hash = await upload_file(source_content)
+    constraints_file_hash = None
+    if project_constraint:
+        constraints_file_hash = await upload_file(project_constraint)
 
     module_version_info = {
         "test": InmantaModuleDTO(
@@ -103,16 +118,14 @@ async def test_agent_installs_dependency_containing_extras(
                 ModuleSourceMetadata(
                     name="inmanta_plugins.test",
                     is_byte_code=False,
-                    hash_value=hash,
+                    hash_value=_hash,
                 )
             ],
-            requirements=["pkg[optional-a]"],
+            requirements=["pkg[optional-a]", "multi-version"],
             for_agents=["agent1"],
+            constraints_file_hash=constraints_file_hash,
         )
     }
-
-    res = await client.upload_file(id=hash, content=body)
-    assert res.code == 200
 
     version = await clienthelper.get_version()
     resources = [
@@ -144,7 +157,7 @@ async def test_agent_installs_dependency_containing_extras(
         agent_name="agent1",
     )
 
-    assert install_spec[0].blueprint.sources[0].source == b"file content"
+    assert install_spec[0].blueprint.sources[0].source == source_content.encode()
     await agent.executor_manager.get_executor("agent1", "localhost", install_spec)
 
     installed_packages = process_env.get_installed_packages()
@@ -162,7 +175,14 @@ async def test_agent_installs_dependency_containing_extras(
 
         assert not must_contain
 
-    check_packages(package_list=installed_packages, must_contain={"pkg", "dep-a"}, must_not_contain={"dep-b", "dep-c"})
+    check_packages(
+        package_list=installed_packages, must_contain={"pkg", "dep-a", "multi-version"}, must_not_contain={"dep-b", "dep-c"}
+    )
+
+    if project_constraint:
+        assert installed_packages["multi-version"] == packaging.version.Version("1.0.0")
+    else:
+        assert installed_packages["multi-version"] == packaging.version.Version("2.0.0")
 
 
 async def test_get_code(

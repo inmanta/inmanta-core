@@ -33,6 +33,7 @@ from importlib.machinery import ModuleSpec, SourcelessFileLoader
 from itertools import chain
 from typing import TYPE_CHECKING, Optional
 
+import inmanta.export as export
 from inmanta import const, module
 from inmanta.data.model import InmantaModule, ModuleSource
 from inmanta.stable_api import stable_api
@@ -85,6 +86,12 @@ class CodeManager:
         # Map of [inmanta_module_name, inmanta module]
         self.module_version_info: dict[str, "InmantaModule"] = {}
 
+        # Content of the file containing python package constraints
+        # set at the project level that have to be enforced when installing packages
+        # in the agents venv.
+        self._project_constraints: str | None = None
+        self._project_constraints_hash: str | None = None
+
     def build_agent_map(self, resources: dict["Id", "Resource"]) -> None:
         """
         Construct a map of which agents are registered to deploy which resource type.
@@ -94,9 +101,26 @@ class CodeManager:
         for id in resources:
             self._types_to_agent[id.entity_type].add(id.agent_name)
 
+    def register_project_constraints(self, exporter: export.Exporter) -> None:
+        """
+        Helper method to retrieve all package constraints defined at the project level and compile them
+        into a constraint file.
+
+        This file will be uploaded to the db and used by the agents when installing
+        packages into their venv.
+        """
+        constraints: list[str] = module.Project.get().get_all_constraints()
+        if constraints:
+            content: str = "\n".join(constraints)
+            self._project_constraints = content
+            self._project_constraints_hash = exporter.upload_file(content)
+        else:
+            self._project_constraints = None
+            self._project_constraints_hash = None
+
     def register_code(self, type_name: str, instance: object) -> None:
         """Register the given type_object under the type_name and register the source associated with this type object.
-        This method assumes the build_agent_map method was called first.
+        This method assumes the build_agent_map method and the register_project_constraints method were called first.
 
         :param type_name: The inmanta type name for which the source of type_object will be registered.
             For example std::testing::NullResource
@@ -135,13 +159,15 @@ class CodeManager:
 
         files_metadata = [module_source.metadata for module_source in module_sources]
         requirements = self.get_inmanta_module_requirements(inmanta_module_name)
-        module_version = self.get_module_version(requirements, files_metadata)
+
+        module_version = self.get_module_version(requirements, files_metadata, self._project_constraints_hash)
 
         self.module_version_info[inmanta_module_name] = InmantaModule(
             name=inmanta_module_name,
             version=module_version,
             files_in_module=files_metadata,
             requirements=list(requirements),
+            constraints_file_hash=self._project_constraints_hash,
             for_agents=[],
         )
 
@@ -172,14 +198,20 @@ class CodeManager:
         """Get the list of python requirements associated with this inmanta module"""
         project: module.Project = module.Project.get()
         mod: module.Module = project.modules[module_name]
+
         if project.metadata.agent_install_dependency_modules:
             _requires = mod.get_all_python_requirements_as_list()
         else:
             _requires = mod.get_strict_python_requirements_as_list()
+
+        _, constraints = project.get_all_dependencies_and_constraints()
+
         return set(_requires)
 
     @staticmethod
-    def get_module_version(requirements: set[str], module_sources: Sequence["ModuleSourceMetadata"]) -> str:
+    def get_module_version(
+        requirements: set[str], module_sources: Sequence["ModuleSourceMetadata"], constraints_file_hash: str | None = None
+    ) -> str:
         module_version_hash = hashlib.new("sha1")
 
         for module_source in sorted(module_sources, key=lambda f: f.hash_value):
@@ -187,6 +219,9 @@ class CodeManager:
 
         for requirement in sorted(requirements):
             module_version_hash.update(str(requirement).encode())
+
+        if constraints_file_hash is not None:
+            module_version_hash.update(constraints_file_hash.encode())
 
         return module_version_hash.hexdigest()
 
@@ -197,6 +232,9 @@ class CodeManager:
                 return info.source
 
         raise KeyError("No file found with this hash")
+
+    def get_project_constraints(self) -> tuple[str, str]:
+        return self._project_constraints
 
 
 class CodeLoader:

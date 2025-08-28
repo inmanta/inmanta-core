@@ -64,6 +64,7 @@ class InmantaModule(Base):
     version: Mapped[str] = mapped_column(String)
     environment: Mapped[uuid.UUID] = mapped_column(UUID)
     requirements: Mapped[list[str]] = mapped_column(ARRAY(String()))
+    constraints_file_hash: Mapped[str] = mapped_column(String)
 
     @classmethod
     async def register_modules(
@@ -73,7 +74,7 @@ class InmantaModule(Base):
         This is the first phase of code registration:
         For all provided modules, this method will write to the database:
             - the version being registered for this module. (This is a hash derived from
-                the content of the files in this module and from its requirements)
+                the content of the files in this module, from its requirements and from the hash of the constraints file)
             - which files belong to this module for this version.
 
         Any attempt to register a module or file again is silently ignored.
@@ -92,12 +93,14 @@ class InmantaModule(Base):
                 name,
                 version,
                 environment,
-                requirements
+                requirements,
+                constraints_file_hash
             ) VALUES(
                 $1,
                 $2,
                 $3,
-                $4
+                $4,
+                $5
             )
             ON CONFLICT DO NOTHING;
         """
@@ -124,7 +127,13 @@ class InmantaModule(Base):
             await connection.executemany(
                 insert_modules_query,
                 [
-                    (inmanta_module_name, inmanta_module_data.version, environment, inmanta_module_data.requirements)
+                    (
+                        inmanta_module_name,
+                        inmanta_module_data.version,
+                        environment,
+                        inmanta_module_data.requirements,
+                        inmanta_module_data.constraints_file_hash,
+                    )
                     for inmanta_module_name, inmanta_module_data in modules.items()
                 ],
             )
