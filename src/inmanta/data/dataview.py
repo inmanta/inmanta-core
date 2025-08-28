@@ -997,7 +997,7 @@ class ResourceLogsView(DataView[ResourceLogOrder, ResourceLog]):
                 -- Get all resource action in the given environment for the given resource_id
                 WITH actions AS (
                     SELECT  ra.*
-                    FROM esource_set_configuration_model AS rscm
+                    FROM resource_set_configuration_model AS rscm
                     INNER JOIN {Resource.table_name()} AS r
                         ON rscm.environment=r.environment AND rscm.resource_set_id=r.resource_set_id
                     INNER JOIN resourceaction_resource AS rr ON (

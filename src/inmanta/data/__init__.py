@@ -5373,8 +5373,7 @@ class Resource(BaseDocument):
     async def get_resources(
         cls,
         environment: uuid.UUID,
-        version: int,
-        resource_ids: list[ResourceIdStr],
+        resource_version_ids: list[ResourceVersionIdStr],
         lock: Optional[RowLockMode] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> list["Resource"]:
@@ -5383,15 +5382,15 @@ class Resource(BaseDocument):
         """
         query_lock: str = lock.value if lock is not None else ""
 
-        def convert_or_ignore(rvid: ResourceIdStr) -> resources.Id | None:
+        def convert_or_ignore(rvid: ResourceVersionIdStr) -> resources.Id | None:
             """Method to retain backward compatibility, ignore bad ID's"""
             try:
                 return resources.Id.parse_resource_version_id(rvid)
             except ValueError:
                 return None
 
-        parsed_rv = (convert_or_ignore(id) for id in resource_ids)
-        effective_parsed_rv = [id.resource_str() for id in parsed_rv if id is not None]
+        parsed_rv = (convert_or_ignore(id) for id in resource_version_ids)
+        effective_parsed_rv = [id for id in parsed_rv if id is not None]
 
         if not effective_parsed_rv:
             return []
@@ -5402,12 +5401,15 @@ class Resource(BaseDocument):
                 INNER JOIN {cls.table_name()} AS r
                     ON rscm.environment=r.environment
                     AND rscm.resource_set_id=r.resource_set_id
-                WHERE rscm.environment=$1 AND rscm.model=$2 AND r.resource_id=ANY($3::uuid[])
+                INNER JOIN unnest($2::resource_id_version_pair[]) AS requested(resource_id, model)
+                    ON r.resource_id=requested.resource_id
+                    AND rscm.model=requested.model
+                WHERE rscm.environment=$1
             {query_lock}
         """
         out = await cls.select_query(
             query,
-            [cls._get_value(environment), version, effective_parsed_rv],
+            [cls._get_value(environment), [(id.resource_str(), id.get_version()) for id in effective_parsed_rv]],
             connection=connection,
         )
         return out
@@ -5531,16 +5533,18 @@ class Resource(BaseDocument):
         """
         Returns the count for each resource_type over all resources in the model's latest version
         """
-        query_latest_model = f"""
-            SELECT max(version)
-            FROM {ConfigurationModel.table_name()}
-            WHERE environment=$1
-        """
         query = f"""
-            SELECT resource_type, count(*) as count
-            FROM {Resource.table_name()}
-            WHERE environment=$1 AND model=({query_latest_model})
-            GROUP BY resource_type;
+            SELECT r.resource_type, count(*) as count
+            FROM {Resource.table_name()} AS r
+            INNER JOIN resource_set_configuration_model AS rscm
+                ON r.environment=rscm.environment
+                AND r.resource_set_id=rscm.resource_set_id
+            WHERE r.environment=$1 AND rscm.model=(
+                SELECT max(version)
+                FROM {ConfigurationModel.table_name()}
+                WHERE environment=$1
+            )
+            GROUP BY r.resource_type;
         """
         values = [cls._get_value(environment)]
         result: dict[str, int] = {}
@@ -5710,13 +5714,24 @@ class Resource(BaseDocument):
         return resources
 
     @classmethod
-    async def get_latest_version(cls, environment: uuid.UUID, resource_id: ResourceIdStr) -> Optional["Resource"]:
-        resources = await cls.get_list(
-            order_by_column="model", order="DESC", limit=1, environment=environment, resource_id=resource_id
+    async def get_latest_version(cls, environment: uuid.UUID, resource_id: ResourceIdStr, connection: Optional[asyncpg.connection.Connection] = None) -> Optional["Resource"]:
+        query = f"""
+                SELECT r.*
+                FROM resource AS r
+                INNER JOIN resource_set_configuration_model AS rscm
+                    ON r.environment=rscm.environment AND r.resource_set_id=rscm.resource_set_id
+                WHERE r.environment=$1 AND r.resource_id=$2 AND rscm.model=(
+                    SELECT max(version)
+                    FROM {ConfigurationModel.table_name()}
+                    WHERE environment=$1
+                )
+                """
+        records = await cls.select_query(
+            query, [environment, resource_id], connection=connection
         )
-        if len(resources) > 0:
-            return resources[0]
-        return None
+        if not records:
+            return None
+        return records[0]
 
     @staticmethod
     def get_details_from_resource_id(resource_id: ResourceIdStr) -> m.ResourceIdDetails:
@@ -5766,14 +5781,14 @@ class Resource(BaseDocument):
     def new(
         cls, environment: uuid.UUID, resource_version_id: ResourceVersionIdStr, resource_set: ResourceSet, **kwargs: object
     ) -> "Resource":
-        vid = resources.Id.parse_id(resource_version_id)
+        rid = resources.Id.parse_id(resource_version_id)
 
         attr = dict(
             environment=environment,
-            resource_id=vid.resource_str(),
-            resource_type=vid.entity_type,
-            agent=vid.agent_name,
-            resource_id_value=vid.attribute_value,
+            resource_id=rid.resource_str(),
+            resource_type=rid.entity_type,
+            agent=rid.agent_name,
+            resource_id_value=rid.attribute_value,
             resource_set=resource_set.name,
             resource_set_id=resource_set.id,
         )
