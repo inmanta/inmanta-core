@@ -540,6 +540,12 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         self.executors.clear()
         self._running = True
 
+    def get_environment_manager(self) -> None:
+        return None
+
+    async def stop_all_executors(self) -> list[InProcessExecutor]:
+        raise NotImplementedError("Not used")
+
     async def stop_for_agent(self, agent_name: str) -> list[InProcessExecutor]:
         if agent_name in self.executors:
             out = self.executors[agent_name]

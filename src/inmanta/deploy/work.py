@@ -299,7 +299,7 @@ class AgentQueues:
         self._tasks_by_resource[task.resource][task] = item
         self._get_queue(task.id.agent_name).put_nowait(item)
 
-    def send_shutdown(self) -> None:
+    def send_shutdown(self, reason: str = "Scheduler shutdown") -> None:
         """
         Wake up all workers after shutdown is signalled
         """
@@ -307,7 +307,7 @@ class AgentQueues:
             task=tasks.PoisonPill(resource=ResourceIdStr("system::Terminate[all,stop=True]")),
             priority=TaskPriority.TERMINATED,
             requested_at=-1,
-            reason="Scheduler shutdown",
+            reason=reason,
         )
         for queue in self._agent_queues.values():
             queue.put_nowait(poison_pill)
@@ -396,6 +396,9 @@ class ScheduledWork:
     def reset(self) -> None:
         self.agent_queues.reset()
         self._waiting.clear()
+
+    def add_poison_pill_to_agent_queues(self, reason: str) -> None:
+        self.agent_queues.send_shutdown(reason=reason)
 
     def deploy_with_context(
         self,
