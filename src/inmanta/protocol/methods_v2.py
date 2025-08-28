@@ -485,7 +485,6 @@ def remove_executor_venvs() -> None:
     """
 
 
-@auth(auth_label=const.CoreAuthorizationLabel.AGENT_PAUSE_RESUME, read_only=False, environment_param="tid")
 @typedmethod(
     path="/agent/<name>/<action>", operation="POST", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
