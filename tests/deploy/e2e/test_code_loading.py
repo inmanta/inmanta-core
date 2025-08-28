@@ -18,7 +18,6 @@ Contact: code@inmanta.com
 
 import asyncio
 import base64
-import hashlib
 import logging
 import os
 import pathlib
@@ -119,7 +118,6 @@ async def test_agent_installs_dependency_containing_extras(
     server,
     client,
     environment,
-    monkeypatch,
     index_with_pkgs_containing_optional_deps: str,
     clienthelper,
     agent,
@@ -163,6 +161,8 @@ def test():
         version=version,
         resource_types=["test::Test"],
     )
+
+    assert install_spec[0].blueprint.sources[0].source == source_content.encode()
     await agent.executor_manager.get_executor("agent1", "localhost", install_spec)
 
     installed_packages = process_env.get_installed_packages()
@@ -180,7 +180,9 @@ def test():
 
         assert not must_contain
 
-    check_packages(package_list=installed_packages, must_contain={"pkg", "dep-a"}, must_not_contain={"dep-b", "dep-c"})
+    check_packages(
+        package_list=installed_packages, must_contain={"pkg", "dep-a", "multi-version"}, must_not_contain={"dep-b", "dep-c"}
+    )
 
 
 async def test_agent_code_loading_with_failure(
@@ -333,6 +335,12 @@ raise Exception("Fail code loading")
 
     result = await client.get_resource_actions(tid=environment, resource_type="test::Test", agent="agent", log_severity="ERROR")
     assert result.code == 200
+    assert any(
+        "All resources of type `test::Test` failed to install handler code dependencies" in log_line["msg"]
+        for resource_action in result.result["data"]
+        for log_line in resource_action["messages"]
+    )
+
 
     def check_for_message(data, must_be_present: str) -> None:
         """
@@ -350,3 +358,10 @@ raise Exception("Fail code loading")
 
     expected_error_message = "Agent agent failed to load the following modules: test."
     check_for_message(data=result.result["data"], must_be_present=expected_error_message)
+
+    result = await client.get_resource_actions(
+        tid=environment, resource_type="test::ResourceBBB", agent="agent1", log_severity="ERROR"
+    )
+    assert result.code == 200
+    check_for_message(data=result.result["data"], must_be_present=expected_error_message)
+
