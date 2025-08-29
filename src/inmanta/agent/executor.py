@@ -260,7 +260,7 @@ class ExecutorBlueprint(EnvBlueprint):
             environment_id=self.environment_id,
             pip_config=self.pip_config,
             requirements=self.requirements,
-            constraints=self.constraints,
+            constraints_file_hash=self.constraints_file_hash,
             python_version=self.python_version,
         )
 
