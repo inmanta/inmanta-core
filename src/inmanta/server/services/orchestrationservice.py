@@ -914,7 +914,7 @@ class OrchestrationService(protocol.ServerSlice):
                     deleted_resource_sets=deleted_resource_sets_as_set,
                     connection=connection,
                 )
-            except data.InvalidResourceSetMigrationException as e:
+            except data.InvalidResourceSetMigration as e:
                 raise BadRequest(e.message)
             await cm.recalculate_total(connection=connection)
             await data.UnknownParameter.insert_many(unknowns, connection=connection)
