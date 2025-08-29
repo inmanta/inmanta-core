@@ -110,9 +110,9 @@ class EnvBlueprint:
     environment_id: uuid.UUID
     pip_config: PipConfig
     requirements: Sequence[str]
-    constraints_file_hash: str | None
-    constraints: str
-    _hash_cache: Optional[str] = dataclasses.field(default=None, init=False, repr=False)
+    constraints_file_hash: str | None = dataclasses.field(default=None, kw_only=True)
+    constraints: str | None = dataclasses.field(default=None, kw_only=True)
+    _hash_cache: str | None = dataclasses.field(default=None, init=False, repr=False)
     python_version: tuple[int, int]
 
     def __post_init__(self) -> None:
