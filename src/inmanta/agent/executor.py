@@ -329,7 +329,7 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
     :param env_path: The file system path where the virtual environment should be created or exists.
     """
 
-    def __init__(self, env_path: str, io_threadpool: ThreadPoolExecutor, blueprint: EnvBlueprint):
+    def __init__(self, env_path: str, io_threadpool: ThreadPoolExecutor, blueprint: EnvBlueprint | None = None):
         PythonEnvironment.__init__(self, env_path=env_path)
         resourcepool.PoolMember.__init__(self, my_id=os.path.basename(env_path))
         self.inmanta_venv_status_file: pathlib.Path = pathlib.Path(self.env_path) / const.INMANTA_VENV_STATUS_FILENAME
@@ -339,7 +339,7 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
 
         LOGGER.debug("init ExecutorVirtualEnvironment %s", str(blueprint))
 
-        if blueprint.constraints_file_hash is not None:
+        if blueprint and blueprint.constraints_file_hash is not None:
             self.constraint_file = pathlib.Path(self.env_path) / blueprint.constraints_file_hash
             with self.constraint_file.open("w", encoding="utf-8") as f:
                 f.write(blueprint.constraints)
