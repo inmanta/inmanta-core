@@ -168,7 +168,7 @@ class EnvBlueprint:
         constraints = ",".join(self.constraints.splitlines()) if self.constraints else ""
         return (
             f"EnvBlueprint(environment_id={self.environment_id}, requirements=[{str(req)}], "
-            f"constraints=[{constraints}], "
+            f"constraints=[{constraints}], constraint_file_hash={self.constraints_file_hash}"
             f"pip={self.pip_config}, python_version={self.python_version})"
         )
 
@@ -226,8 +226,8 @@ class ExecutorBlueprint(EnvBlueprint):
 
     def blueprint_hash(self) -> str:
         """
-        Generate a stable hash for an ExecutorBlueprint instance by serializing its pip_config, sources
-        and requirements in a sorted, consistent manner. This ensures that the hash value is
+        Generate a stable hash for an ExecutorBlueprint instance by serializing its pip_config, sources,
+        requirements and constraints in a sorted, consistent manner. This ensures that the hash value is
         independent of the order of requirements and consistent across interpreter sessions.
         Also cache the hash to only compute it once.
         """
@@ -336,6 +336,8 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         self.folder_name: str = pathlib.Path(self.env_path).name
         self.io_threadpool = io_threadpool
         self.constraint_file: pathlib.Path | None = None
+
+        LOGGER.debug("init ExecutorVirtualEnvironment %s", str(blueprint))
 
         if blueprint.constraints_file_hash is not None:
             self.constraint_file = pathlib.Path(self.env_path) / blueprint.constraints_file_hash
