@@ -270,13 +270,6 @@ class PartialUpdateMerger:
                     f"to {data.ResourceSet.get_printable_name_for_resource_set(res.resource_set)}."
                 )
 
-            if res.resource_set is None and inmanta.util.make_attribute_hash(
-                res.resource_id, res.attributes
-            ) != inmanta.util.make_attribute_hash(
-                matching_resource_old_model.resource_id, matching_resource_old_model.attributes
-            ):
-                raise BadRequest(f"Resource ({res.resource_id}) without a resource set cannot be updated via a partial compile")
-
             resource_set_validator = ResourceSetValidator(new_updated_and_shared_resources.values())
             try:
                 resource_set_validator.ensure_no_cross_resource_set_dependencies()
@@ -297,9 +290,16 @@ class PartialUpdateMerger:
         update: bool = False
         for rid_shared_resource in all_rids_shared_resources:
             if rid_shared_resource in shared_resources_new and rid_shared_resource in self.shared_resources_old:
-                # Merge requires shared resource
                 old_shared_resource = self.shared_resources_old[rid_shared_resource]
                 new_shared_resource = shared_resources_new[rid_shared_resource]
+                # Check if shared resource is updated
+                if inmanta.util.make_attribute_hash(
+                    rid_shared_resource, old_shared_resource.attributes
+                ) != inmanta.util.make_attribute_hash(rid_shared_resource, new_shared_resource.attributes):
+                    raise BadRequest(
+                        f"Resource ({rid_shared_resource}) without a resource set cannot be updated via a partial compile"
+                    )
+                # If not, merge requires
                 update = self._merge_requires_of_shared_resource(old_shared_resource, new_shared_resource)
                 res = new_shared_resource
             elif rid_shared_resource in shared_resources_new:
@@ -609,8 +609,6 @@ class OrchestrationService(protocol.ServerSlice):
 
             rid_to_resource[resource_id] = ResourceDTO(
                 environment=env_id,
-                model=model,
-                resource_version_id=resource_version_id.resource_version_str(),
                 resource_id=resource_id,
                 resource_type=resource_version_id.entity_type,
                 agent=agent,

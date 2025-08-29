@@ -5736,7 +5736,7 @@ class Resource(BaseDocument):
         """
         query = f"""
                 SELECT r.*
-                FROM resource AS r
+                FROM {Resource.table_name()} AS r
                 INNER JOIN resource_set_configuration_model AS rscm
                     ON r.environment=rscm.environment AND r.resource_set_id=rscm.resource_set_id
                 WHERE r.environment=$1 AND r.resource_id=$2 AND rscm.model=$3
@@ -6011,8 +6011,9 @@ class Resource(BaseDocument):
         self.__mangle_dict(dct, version)
         return dct
 
-    def to_dict(self) -> dict[str,object]:
+    def to_dict(self) -> dict[str, object]:
         raise Exception("someone is using the old to_dict")
+
     def to_dto(self) -> m.Resource:
         attributes = self.attributes.copy()
 
@@ -6418,33 +6419,8 @@ class ConfigurationModel(BaseDocument):
                 connection=con,
             )
             await ResourceAction.delete_all(environment=self.environment, version=self.version, connection=con)
-            result = await self._execute_query(
-                f"""
-                        SELECT * FROM resource_set_configuration_model
-                    """,
-                connection=connection,
-            )
-            result2 = await self._execute_query(
-                f"""
-                        SELECT * FROM resource_set
-                    """,
-                connection=connection,
-            )
             await ResourceSet.clear_resource_sets_in_version(environment=self.environment, version=self.version, connection=con)
             await self.delete(connection=con)
-
-            result = await self._execute_query(
-                f"""
-                        SELECT * FROM resource_set_configuration_model
-                    """,
-                connection=connection,
-            )
-            result2 = await self._execute_query(
-                f"""
-                        SELECT * FROM resource_set
-                    """,
-                connection=connection,
-            )
 
             # Delete facts when the resources in this version are the only
             await self._execute_query(

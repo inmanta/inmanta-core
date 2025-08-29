@@ -28,10 +28,9 @@ import inmanta.resources
 from inmanta import config, const, module
 from inmanta.ast import CompilerException, ExternalException, RuntimeException
 from inmanta.const import ResourceState
-from inmanta.data import Environment, Resource
+from inmanta.data import Resource
 from inmanta.export import DependencyCycleException
 from inmanta.module import InmantaModuleRequirement
-from inmanta.server import SLICE_RESOURCE
 from inmanta.server.server import Server
 from utils import LogSequence
 
@@ -308,7 +307,6 @@ async def test_server_export(snippetcompiler, server: Server, client, environmen
             environment=environment, resource_id=resource.id.resource_str(), version=version
         )
         assert resource
-
 
 
 async def test_dict_export_server(snippetcompiler, server, client, environment):
