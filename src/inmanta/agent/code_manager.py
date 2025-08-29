@@ -28,6 +28,7 @@ from inmanta.agent.executor import ModuleInstallSpec
 from inmanta.data.model import LEGACY_PIP_DEFAULT, ModuleSource, ModuleSourceMetadata, PipConfig
 from inmanta.util.async_lru import async_lru_cache
 from sqlalchemy import and_, select
+from sqlalchemy.orm import aliased
 
 LOGGER = logging.getLogger(__name__)
 
@@ -55,17 +56,38 @@ class CodeManager:
 
         :return: list of ModuleInstallSpec for this agent and this model version.
         """
+        # installation_constraints = (
+        #     select(
+        #         models.InmantaModule.constraints_file_hash,
+        #         models.File.content,
+        #     )
+        #     .join(
+        #         models.File,
+        #         models.InmantaModule.constraints_file_hash == models.File.content_hash,
+        #     )
+        #     .where(
+        #         models.AgentModules.environment == environment,
+        #         models.AgentModules.agent_name == agent_name,
+        #         models.AgentModules.cm_version == model_version,
+        #     )
+        # )
 
         module_install_specs = []
+
+        constraint_file = aliased(models.File)
+        source_file = aliased(models.File)
+
         modules_for_agent = (
             select(
                 models.AgentModules.inmanta_module_name,
                 models.AgentModules.inmanta_module_version,
                 models.InmantaModule.requirements,
+                models.InmantaModule.constraints_file_hash,
                 models.ModuleFiles.python_module_name,
                 models.ModuleFiles.file_content_hash,
                 models.ModuleFiles.is_byte_code,
-                models.File.content,
+                source_file.content.label("source_file_content"),
+                constraint_file.content.label("constraint_file_content"),
                 models.ConfigurationModel.pip_config,
             )
             .join(
@@ -85,8 +107,13 @@ class CodeManager:
                 ),
             )
             .join(
-                models.File,
-                models.ModuleFiles.file_content_hash == models.File.content_hash,
+                source_file,
+                models.ModuleFiles.file_content_hash == source_file.content_hash,
+            )
+            .join(
+                constraint_file,
+                models.InmantaModule.constraints_file_hash == constraint_file.content_hash,
+                isouter=True,
             )
             .join(
                 models.ConfigurationModel,
@@ -104,6 +131,11 @@ class CodeManager:
         )
 
         async with data.get_session() as session:
+            # result = await session.execute(installation_constraints)
+            # try:
+            #     constraints = result.one()
+            # except (MultipleResultsFound, NoResultFound) as e:
+            #     raise CouldNotResolveCode(agent_name, model_version) from e
             result = await session.execute(modules_for_agent)
             for module_name, rows in itertools.groupby(result.all(), key=lambda r: r.inmanta_module_name):
                 rows_list = list(rows)
@@ -127,12 +159,14 @@ class CodeManager:
                                         hash_value=row.file_content_hash,
                                         is_byte_code=row.is_byte_code,
                                     ),
-                                    source=row.content,
+                                    source=row.source_file_content,
                                 )
                                 for row in rows_list
                             ],
                             python_version=sys.version_info[:2],
                             environment_id=environment,
+                            constraints_file_hash=rows_list[0].constraints_file_hash,
+                            constraints=rows_list[0].constraint_file_content,
                         ),
                     )
                 )

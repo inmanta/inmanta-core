@@ -1163,6 +1163,8 @@ class InmantaModule(BaseModel):
         the python files in this module as well as the python requirements of this module.
     :param files_in_module: The list of python files composing this inmanta module.
     :param requirements: The list of python requirements this inmanta module requires.
+    :param constraints_file_hash: Hash of the constraint file. These constraints are defined at the project level
+        and will be enforced when installing packages on the agent(s).
     :param for_agents: The list of agent names that require to install this inmanta module to
         deploy resources.
     """
@@ -1171,4 +1173,5 @@ class InmantaModule(BaseModel):
     version: InmantaModuleVersion
     files_in_module: list[ModuleSourceMetadata]
     requirements: list[str]
+    constraints_file_hash: str | None
     for_agents: list[AgentName]

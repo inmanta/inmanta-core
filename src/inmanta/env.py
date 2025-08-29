@@ -747,7 +747,7 @@ class PythonEnvironment:
         LOGGER.info("Initializing virtual environment at %s", self.env_path)
 
         # check if the virtual env exists
-        if os.path.isdir(self.env_path) and os.listdir(self.env_path):
+        if self.is_correctly_initialized():
             self.can_activate()
         else:
             path = os.path.realpath(self.env_path)
@@ -765,6 +765,9 @@ class PythonEnvironment:
             # Venv was created using an older version of Inmanta -> Update pip binary and set sitecustomize.py file
             self._write_pip_binary()
             self._write_pth_file()
+
+    def is_correctly_initialized(self) -> bool:
+        return os.path.isdir(self.env_path) and bool(os.listdir(self.env_path))
 
     def can_activate(self) -> None:
         """
