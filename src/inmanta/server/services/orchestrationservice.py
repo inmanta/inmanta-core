@@ -591,9 +591,6 @@ class OrchestrationService(protocol.ServerSlice):
                 if field not in {"id", "version"}:
                     attributes[field] = value
 
-            # Update the version fields
-            model = set_version if set_version is not None else version_part_of_resource_id
-
             # find cross agent dependencies
             agent = resource_version_id.agent_name
             if "requires" not in attributes:
