@@ -142,3 +142,7 @@ ResourceType = NewType("ResourceType", str)
 """
     The type of the resource
 """
+
+
+type ResourceDict = dict[str, object]
+type ResourceSets = dict[Optional[str], list[ResourceDict]]
