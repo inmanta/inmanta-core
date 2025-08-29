@@ -1355,8 +1355,8 @@ class OrchestrationService(protocol.ServerSlice):
     ) -> list[ResourceDiff]:
         await self._validate_version_parameters(env.id, from_version, to_version)
 
-        from_version_resources = await data.Resource.get_list(environment=env.id, model=from_version)
-        to_version_resources = await data.Resource.get_list(environment=env.id, model=to_version)
+        from_version_resources = await data.Resource.get_resources_for_version(environment=env.id, version=from_version)
+        to_version_resources = await data.Resource.get_resources_for_version(environment=env.id, version=to_version)
 
         from_state = diff.Version(self.convert_resources(from_version_resources))
         to_state = diff.Version(self.convert_resources(to_version_resources))

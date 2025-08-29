@@ -340,8 +340,8 @@ async def test_put_partial_replace_resource_set(server, client, environment, cli
     assert result.result["data"] == version + 1
     resource_list = await data.Resource.get_resources_in_latest_version(uuid.UUID(environment))
     assert len(resource_list) == 1
-    assert resource_list[0].resource_version_id == "test::Resource[agent1,key=key2],v=2"
-    assert resource_list[0].model == 2
+    assert resource_list[0].resource_id == "test::Resource[agent1,key=key2]"
+    assert resource_list[0].attributes["value"] == resources_partial[0]["value"]
     assert len(resource_list[0].attributes["requires"]) == 0
     resource_sets_from_db = {resource.resource_id: resource.resource_set for resource in resource_list}
     assert resource_sets_from_db == {"test::Resource[agent1,key=key2]": "set-a"}

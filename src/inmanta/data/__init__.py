@@ -5289,7 +5289,7 @@ class Resource(BaseDocument):
     :param resource_set_id: The id of the resource set this resource belongs to.
     """
 
-    __primary_key__ = ("environment", "model", "resource_id")
+    __primary_key__ = ("environment", "resource_id", "resource_set_id")
 
     environment: uuid.UUID
 
@@ -5309,13 +5309,11 @@ class Resource(BaseDocument):
     resource_set_id: uuid.UUID
 
     @classmethod
-    def __mangle_dict(cls, record: dict, version: int | None = None) -> None:
+    def __mangle_dict(cls, record: dict, version: int) -> None:
         """
         Transform the dict of attributes as it exists here/in the database to the backward compatible form
         Operates in-place
         """
-        if version is None:
-            raise Exception("someone used mangle_dict -.-")
         parsed_id = resources.Id.parse_id(record["resource_id"])
         parsed_id.set_version(version)
         record["resource_version_id"] = parsed_id.resource_version_str()
@@ -6025,12 +6023,14 @@ class Resource(BaseDocument):
             return []
         return list(self.attributes["requires"])
 
-    def to_dict(self) -> dict[str, object]:
+    def to_versioned_dict(self, version: int) -> dict[str, object]:
         self.make_hash()
         dct = super().to_dict()
-        self.__mangle_dict(dct)
+        self.__mangle_dict(dct, version)
         return dct
 
+    def to_dict(self) -> dict[str,object]:
+        raise Exception("someone is using the old to_dict")
     def to_dto(self) -> m.Resource:
         attributes = self.attributes.copy()
 

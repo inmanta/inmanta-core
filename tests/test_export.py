@@ -304,11 +304,11 @@ async def test_server_export(snippetcompiler, server: Server, client, environmen
         resource = inmanta.resources.Resource.deserialize(res["attributes"])
         assert resource.version == resource.id.version == version
 
-    resources = await server.get_slice(SLICE_RESOURCE).get_resources_in_latest_version(
-        environment=await Environment.get_by_id(environment)
-    )
+        resource = await Resource.get_resource_for_version(
+            environment=environment, resource_id=resource.id.resource_str(), version=version
+        )
+        assert resource
 
-    assert resources[0].attributes["version"] == version
 
 
 async def test_dict_export_server(snippetcompiler, server, client, environment):
