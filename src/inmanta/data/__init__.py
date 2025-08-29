@@ -2359,7 +2359,7 @@ class Setting:
         self,
         name: str,
         typ: str,
-        default: Optional[m.EnvSettingType] = None,
+        default: m.EnvSettingType,
         doc: Optional[str] = None,
         validator: Optional[Callable[[m.EnvSettingType], m.EnvSettingType]] = None,
         recompile: bool = False,
@@ -2746,17 +2746,16 @@ class Environment(BaseDocument):
         return cls._settings[setting_name].default
 
     @classmethod
-    def get_setting_definitions_for_api(cls, settings: dict[str, m.EnvironmentSettingDetails]) -> dict[str, model.EnvironmentSettingDefinitionAPI]:
+    def get_setting_definitions_for_api(
+        cls, settings: dict[str, m.EnvironmentSettingDetails]
+    ) -> dict[str, m.EnvironmentSettingDefinitionAPI]:
         """
         Returns a dictionary that maps each of the given settings to their definitions as they would be served out over the API.
         """
-        return {
-            name: cls._settings[name].get_setting_definition_for_api(details)
-            for name, details in settings.items()
-        }
+        return {name: cls._settings[name].get_setting_definition_for_api(details) for name, details in settings.items()}
 
     async def list_settings(self) -> dict[str, m.EnvironmentSettingDetails]:
-        return self.settings.settings.model_copy(deep=True)
+        return {k: v.model_copy(deep=True) for k, v in self.settings.settings.items()}
 
     async def get(self, key: str, connection: Optional[asyncpg.connection.Connection] = None) -> m.EnvSettingType:
         """

@@ -280,21 +280,13 @@ class EnvironmentSetting(BaseModel):
 
     name: str
     type: str
-    default: EnvSettingType
-    doc: str
+    default: Optional[EnvSettingType]
+    doc: Optional[str]
     recompile: bool
     update_model: bool
     agent_restart: bool
     allowed_values: Optional[list[EnvSettingType]] = None
     section: Optional[str] = None
-
-
-class EnvironmentSettingDefinitionAPI(EnvironmentSetting):
-    """
-    The definition of an environment setting as served out over the API.
-    """
-    protected: bool = False
-    protected_by: ProtectedBy | None = None
 
 
 class ProtectedBy(str, Enum):
@@ -316,6 +308,15 @@ class ProtectedBy(str, Enum):
                 assert_never(unreachable)
 
 
+class EnvironmentSettingDefinitionAPI(EnvironmentSetting):
+    """
+    The definition of an environment setting as served out over the API.
+    """
+
+    protected: bool = False
+    protected_by: ProtectedBy | None = None
+
+
 class EnvironmentSettingDetails(BaseModel):
     """
     A class that stores the value and other metadata about an environment setting.
@@ -335,7 +336,7 @@ class EnvironmentSettingDetails(BaseModel):
 class EnvironmentSettingsReponse(BaseModel):
 
     settings: dict[str, EnvSettingType]
-    definition: dict[str, EnvironmentSetting]
+    definition: dict[str, EnvironmentSettingDefinitionAPI]
 
 
 class ModelMetadata(BaseModel):
