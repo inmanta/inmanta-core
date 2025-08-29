@@ -2406,6 +2406,9 @@ class Setting:
     ) -> m.EnvironmentSettingDefinitionAPI:
         """
         Returns the definition of the given setting as it would be served out over the API.
+
+        :param setting_details: The setting details as stored in the database or None if this
+                                setting is not present in the database.
         """
         return m.EnvironmentSettingDefinitionAPI(
             name=self.name,
@@ -2764,9 +2767,6 @@ class Environment(BaseDocument):
             setting_name: setting_def.get_setting_definition_for_api(setting_details=settings.get(setting_name, None))
             for setting_name, setting_def in cls._settings.items()
         }
-
-    async def list_settings(self) -> dict[str, m.EnvironmentSettingDetails]:
-        return {k: v.model_copy(deep=True) for k, v in self.settings.settings.items()}
 
     async def get(self, key: str, connection: Optional[asyncpg.connection.Connection] = None) -> m.EnvSettingType:
         """

@@ -280,8 +280,8 @@ class EnvironmentSetting(BaseModel):
 
     name: str
     type: str
-    default: Optional[EnvSettingType]
-    doc: Optional[str]
+    default: EnvSettingType
+    doc: str
     recompile: bool
     update_model: bool
     agent_restart: bool
