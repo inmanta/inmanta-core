@@ -96,6 +96,11 @@ class ProxyContext:
     contain references that are not (can not be) declared. Since we require reference support to always be explicit, we have
     to reject reference values in such cases.
 
+    The global_proxy_mode determines the overall behavior:
+    1. when in export mode, references are always allowed
+    2. when in plugin mode, reference access is controlled by allow_reference_values and validated
+
+
     :param validated: True iff the object to proxy has been validated at the plugin boundary.
     :param allow_reference_values: Allow references for values accessed through this proxy. Either because they have been
         declared and validated, or because explicitly requested. Defaults to allow references iff the object has been
@@ -134,12 +139,12 @@ class ProxyContext:
         )
 
     def descend(self) -> "ProxyContext":
-        vmode = global_proxy_mode.get() is ProxyMode.EXPORT
-        if vmode == self.validated:
+        """We descend one level, we are no longer validated"""
+        if not self.validated:
             return self
         return ProxyContext(
             path=self.path,
-            validated=vmode,
+            validated=False,
             allow_reference_values=None,
         )
 
