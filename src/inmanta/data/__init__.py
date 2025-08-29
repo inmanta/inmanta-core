@@ -5183,14 +5183,12 @@ class ResourceSet(BaseDocument):
             RETURNING rscm.resource_set_id
         )
         DELETE FROM resource_set AS rs
-        USING deleted_resource_set_versions AS del_rscm
-            WHERE rs.id=del_rscm.resource_set_id
-            AND NOT EXISTS (
-                SELECT 1
-                FROM resource_set_configuration_model AS rscm
-                WHERE environment=$1
-                AND rscm.resource_set_id=rs.id
-            )
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM resource_set_configuration_model AS rscm
+            WHERE environment=$1
+            AND rscm.resource_set_id=rs.id AND rscm.model!=$2
+        )
         """
         await cls._execute_query(query, environment, version, connection=connection)
 
@@ -6318,8 +6316,33 @@ class ConfigurationModel(BaseDocument):
                 connection=con,
             )
             await ResourceAction.delete_all(environment=self.environment, version=self.version, connection=con)
+            result = await self._execute_query(
+                f"""
+                        SELECT * FROM resource_set_configuration_model
+                    """,
+                connection=connection,
+            )
+            result2 = await self._execute_query(
+                f"""
+                        SELECT * FROM resource_set
+                    """,
+                connection=connection,
+            )
             await ResourceSet.clear_resource_sets_in_version(environment=self.environment, version=self.version, connection=con)
             await self.delete(connection=con)
+
+            result = await self._execute_query(
+                f"""
+                        SELECT * FROM resource_set_configuration_model
+                    """,
+                connection=connection,
+            )
+            result2 = await self._execute_query(
+                f"""
+                        SELECT * FROM resource_set
+                    """,
+                connection=connection,
+            )
 
             # Delete facts when the resources in this version are the only
             await self._execute_query(

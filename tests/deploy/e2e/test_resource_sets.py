@@ -143,6 +143,12 @@ async def test_resource_sets_via_put_version(server, client, environment, client
 
     # Test clear_resource_sets_in_version
     async with data.ResourceSet.get_connection() as con:
+        total_resource_sets = await data.ResourceSet.get_list(connection=con)
+        # 4 version2 + 3 version1
+        assert len(total_resource_sets) == 7
+        total_resources = await data.Resource.get_list(connection=con)
+        # 4 version2 + 4 version1
+        assert len(total_resources) == 8
         # Clear version only
         await data.ResourceSet.clear_resource_sets_in_version(environment=env_id, version=version, connection=con)
         res_sets = await data.ResourceSet.get_resource_sets_in_version(environment=env_id, version=version, connection=con)
@@ -152,6 +158,12 @@ async def test_resource_sets_via_put_version(server, client, environment, client
         version -= 1
         res_sets = await data.ResourceSet.get_resource_sets_in_version(environment=env_id, version=version)
         assert len(res_sets) == 3
+        total_resource_sets = await data.ResourceSet.get_list(connection=con)
+        # 3 version1
+        assert len(total_resource_sets) == 3
+        total_resources = await data.Resource.get_list(connection=con)
+        # 4 version1
+        assert len(total_resources) == 4
 
     # also assert pip config can be None on put_version
     pip_config_result = await client.get_pip_config(
