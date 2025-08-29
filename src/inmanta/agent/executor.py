@@ -150,13 +150,13 @@ class EnvBlueprint:
             self.environment_id,
             self.pip_config,
             set(self.requirements),
-            set(self.constraints_file_hash),
+            self.constraints_file_hash,
             self.python_version,
         ) == (
             other.environment_id,
             other.pip_config,
             set(other.requirements),
-            set(other.constraints_file_hash),
+            other.constraints_file_hash,
             other.python_version,
         )
 
@@ -344,7 +344,7 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
 
         LOGGER.debug("init ExecutorVirtualEnvironment %s", str(blueprint))
 
-        if blueprint and blueprint.constraints_file_hash is not None:
+        if blueprint and blueprint.constraints_file_hash is not None and blueprint.constraints:
             self.constraint_file = pathlib.Path(self.env_path) / blueprint.constraints_file_hash
             with self.constraint_file.open("w", encoding="utf-8") as f:
                 f.write(blueprint.constraints)
@@ -524,7 +524,7 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
             is_new = True
 
         if is_new:
-            if member_id.constraints_file_hash:
+            if member_id.constraints_file_hash and member_id.constraints:
                 constraint_file: str = os.path.join(self.envs_dir, env_dir_name, member_id.constraints_file_hash)
                 with open(constraint_file, "w") as fd:
                     fd.write(member_id.constraints)

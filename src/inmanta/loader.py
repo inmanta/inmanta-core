@@ -109,7 +109,7 @@ class CodeManager:
         This file will be uploaded to the db and used by the agents when installing
         packages into their venv.
         """
-        constraints: list[str] = module.Project.get().get_all_constraints()
+        constraints: Sequence[str] = module.Project.get().get_all_constraints()
         if constraints:
             content: str = "\n".join(constraints)
             self._project_constraints = content
@@ -233,7 +233,8 @@ class CodeManager:
 
         raise KeyError("No file found with this hash")
 
-    def get_project_constraints(self) -> tuple[str, str]:
+    # TODO remove ?
+    def get_project_constraints(self) -> str | None:
         return self._project_constraints
 
 
