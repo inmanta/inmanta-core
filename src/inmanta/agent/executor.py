@@ -201,6 +201,9 @@ class ExecutorBlueprint(EnvBlueprint):
         requirements = list({req for cd in code for req in cd.blueprint.requirements})
         constraints_file_hash = {cd.blueprint.constraints_file_hash for cd in code}
         assert len(constraints_file_hash) == 1
+        constraints = {cd.blueprint.constraints for cd in code}
+        assert len(constraints) == 1
+
         pip_configs = [cd.blueprint.pip_config for cd in code]
         python_versions = [cd.blueprint.python_version for cd in code]
         if not pip_configs:
@@ -221,6 +224,7 @@ class ExecutorBlueprint(EnvBlueprint):
             sources=sources,
             requirements=requirements,
             constraints_file_hash=constraints_file_hash.pop(),
+            constraints=constraints.pop(),
             python_version=base_python_version,
         )
 
@@ -261,6 +265,7 @@ class ExecutorBlueprint(EnvBlueprint):
             pip_config=self.pip_config,
             requirements=self.requirements,
             constraints_file_hash=self.constraints_file_hash,
+            constraints=self.constraints,
             python_version=self.python_version,
         )
 
