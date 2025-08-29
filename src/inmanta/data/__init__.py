@@ -5176,21 +5176,31 @@ class ResourceSet(BaseDocument):
         :param connection: The connection to use
         """
 
-        query = """
-        WITH deleted_resource_set_versions AS (
+        # Delete all links from the resource set to this version
+        await cls._execute_query(
+            """
             DELETE FROM resource_set_configuration_model AS rscm
             WHERE rscm.environment=$1 AND rscm.model=$2
             RETURNING rscm.resource_set_id
+            """,
+            environment,
+            version,
+            connection=connection,
         )
-        DELETE FROM resource_set AS rs
-        WHERE NOT EXISTS (
-            SELECT 1
-            FROM resource_set_configuration_model AS rscm
-            WHERE environment=$1
-            AND rscm.resource_set_id=rs.id AND rscm.model!=$2
+        # Delete resource sets that are no longer linked to a configuration model
+        await cls._execute_query(
+            """
+            DELETE FROM resource_set AS rs
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM resource_set_configuration_model AS rscm
+                WHERE environment=$1
+                AND rscm.resource_set_id=rs.id
+            )
+            """,
+            environment,
+            connection=connection,
         )
-        """
-        await cls._execute_query(query, environment, version, connection=connection)
 
 
 @stable_api
