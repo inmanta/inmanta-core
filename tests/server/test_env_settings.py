@@ -41,15 +41,6 @@ def check_only_contains_default_setting(settings_dict: Mapping[str, object]) -> 
         assert setting_value == get_environment_setting_default(setting_name)
 
 
-def assert_not_protected(settings_dict: Mapping[str, model.EnvironmentSettingDetails]) -> None:
-    """
-    Assert that the environment settings, in the given settings_dict, are not protected.
-    """
-    for value in settings_dict.values():
-        assert not value.protected
-        assert value.protected_by is None
-
-
 async def test_api_return_type(client, server, environment):
     """
     https://github.com/inmanta/inmanta-core/pull/6574 changed the type of AUTOSTART_AGENT_REPAIR_INTERVAL and
@@ -131,11 +122,9 @@ async def test_environment_settings_v2(client_v2, server, environment_default):
     assert "settings" in response.result["data"]
     assert "definition" in response.result["data"]
     assert "auto_deploy" in response.result["data"]["definition"]
-    settings_dict = response.result["data"]["settings"]
-    settings_v2_dict = response.result["data"]["settings_v2"]
-    assert settings_dict.keys() == settings_v2_dict.keys()
-    check_only_contains_default_setting(settings_dict)
-    assert_not_protected({key: model.EnvironmentSettingDetails(**value) for key, value in settings_v2_dict.items()})
+    for value in response.result["data"]["definition"].values():
+        assert not value["protected"]
+        assert value["protected_by"] is None
 
     response = await client_v2.environment_settings_set(tid=environment_default, id="auto_deploy", value=False)
     assert response.code == 200
@@ -378,13 +367,13 @@ async def test_protect_environment_settings(environment, server, client):
         """
         result = await client.environment_settings_list(tid=environment)
         assert result.code == 200
-        for setting_name, setting_details in result.result["data"]["settings_v2"].items():
+        for setting_name, definition in result.result["data"]["definition"].items():
             if setting_name in protected_settings:
-                assert setting_details["protected"]
-                assert model.ProtectedBy(setting_details["protected_by"]) is model.ProtectedBy.project_yml
+                assert definition["protected"]
+                assert model.ProtectedBy(definition["protected_by"]) is model.ProtectedBy.project_yml
             else:
-                assert not setting_details["protected"]
-                assert setting_details["protected_by"] is None
+                assert not definition["protected"]
+                assert definition["protected_by"] is None
 
     # Mark settings are protected
     result = await client.protected_environment_settings_set_batch(
@@ -409,10 +398,10 @@ async def test_protect_environment_settings(environment, server, client):
     # Verify that the value of the setting hasn't changed and that the setting is still protected
     result = await client.environment_setting_get(tid=environment, id=data.AUTO_DEPLOY)
     assert result.code == 200
-    setting_details = result.result["data"]["settings_v2"][data.AUTO_DEPLOY]
-    assert setting_details["value"] is False
-    assert setting_details["protected"] is True
-    assert model.ProtectedBy(setting_details["protected_by"]) is model.ProtectedBy.project_yml
+    assert result.result["data"]["settings"][data.AUTO_DEPLOY] is False
+    definition = result.result["data"]["definition"][data.AUTO_DEPLOY]
+    assert definition["protected"] is True
+    assert model.ProtectedBy(definition["protected_by"]) is model.ProtectedBy.project_yml
 
     # Update set of protected settings
     result = await client.protected_environment_settings_set_batch(
@@ -430,6 +419,6 @@ async def test_protect_environment_settings(environment, server, client):
     # Verify that the value of the setting hasn't changed and that the setting is still protected
     result = await client.environment_setting_get(tid=environment, id=data.AUTO_DEPLOY)
     assert result.code == 200
-    assert result.result["data"]["settings_v2"][data.AUTO_DEPLOY]["value"] is True
-    assert result.result["data"]["settings_v2"][data.AUTO_DEPLOY]["protected"] is False
-    assert result.result["data"]["settings_v2"][data.AUTO_DEPLOY]["protected_by"] is None
+    assert result.result["data"]["settings"][data.AUTO_DEPLOY] is True
+    assert result.result["data"]["definition"][data.AUTO_DEPLOY]["protected"] is False
+    assert result.result["data"]["definition"][data.AUTO_DEPLOY]["protected_by"] is None
