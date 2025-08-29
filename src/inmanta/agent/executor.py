@@ -344,10 +344,17 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
 
         LOGGER.debug("init ExecutorVirtualEnvironment %s", str(blueprint))
 
-        if blueprint and blueprint.constraints_file_hash is not None and blueprint.constraints:
-            self.constraint_file = pathlib.Path(self.env_path) / blueprint.constraints_file_hash
+        self.blueprint = blueprint
+
+    def _write_constraint_file(self):
+        if self.blueprint and self.blueprint.constraints_file_hash is not None and self.blueprint.constraints:
+            self.constraint_file = pathlib.Path(self.env_path) / self.blueprint.constraints_file_hash
             with self.constraint_file.open("wb+") as f:
-                f.write(blueprint.constraints)
+                f.write(self.blueprint.constraints)
+
+    def init_env(self) -> None:
+        super().init_env()
+        self._write_constraint_file()
 
     async def create_and_install_environment(self, blueprint: EnvBlueprint) -> None:
         """
