@@ -289,6 +289,14 @@ class EnvironmentSetting(BaseModel):
     section: Optional[str] = None
 
 
+class EnvironmentSettingDefinitionAPI(EnvironmentSetting):
+    """
+    The definition of an environment setting as served out over the API.
+    """
+    protected: bool = False
+    protected_by: ProtectedBy | None = None
+
+
 class ProtectedBy(str, Enum):
     """
     An enum that indicates the reason why an environment setting can be protected.
@@ -325,14 +333,8 @@ class EnvironmentSettingDetails(BaseModel):
 
 
 class EnvironmentSettingsReponse(BaseModel):
-    """
-    :param settings_v2: This attribute aims to replace the `settings` attribute. Next to the value
-                        of the setting this field contains additional information such as whether
-                        the setting is protected or not.
-    """
 
     settings: dict[str, EnvSettingType]
-    settings_v2: dict[str, EnvironmentSettingDetails]
     definition: dict[str, EnvironmentSetting]
 
 

@@ -2401,6 +2401,24 @@ class Setting:
         else:
             return self._default
 
+    def get_setting_definition_for_api(self, setting_details: m.EnvironmentSettingDetails) -> m.EnvironmentSettingDefinitionAPI:
+        """
+        Returns the definition of the given setting as it would be served out over the API.
+        """
+        return m.EnvironmentSettingDefinitionAPI(
+            name=self.name,
+            type=self.typ,
+            default=self._default,
+            doc=self.doc,
+            recompile=self.recompile,
+            update_model=self.update,
+            agent_restart=self.agent_restart,
+            allowed_values=self.allowed_values,
+            section=self.section,
+            protected=setting_details.protected,
+            protected_by=setting_details.protected_by,
+        )
+
     def to_dict(self) -> JsonType:
         return {
             "type": self.typ,
@@ -2719,13 +2737,26 @@ class Environment(BaseDocument):
     }
 
     @classmethod
-    def get_setting_definition(cls, setting_name: str) -> Setting:
+    def get_default_for_setting(cls, setting_name: str) -> Optional[m.EnvSettingType]:
         """
-        Return the definition of the setting with the given name.
+        Returns the default value for the setting with the given name.
         """
         if setting_name not in cls._settings:
             raise KeyError()
-        return cls._settings[setting_name]
+        return cls._settings[setting_name].default
+
+    @classmethod
+    def get_setting_definitions_for_api(cls, settings: dict[str, m.EnvironmentSettingDetails]) -> dict[str, model.EnvironmentSettingDefinitionAPI]:
+        """
+        Returns a dictionary that maps each of the given settings to their definitions as they would be served out over the API.
+        """
+        return {
+            name: cls._settings[name].get_setting_definition_for_api(details)
+            for name, details in settings.items()
+        }
+
+    async def list_settings(self) -> dict[str, m.EnvironmentSettingDetails]:
+        return self.settings.settings.model_copy(deep=True)
 
     async def get(self, key: str, connection: Optional[asyncpg.connection.Connection] = None) -> m.EnvSettingType:
         """
