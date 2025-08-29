@@ -45,7 +45,7 @@ async def env_with_facts(environment, client) -> tuple[str, list[str], list[str]
     ).insert()
 
     resource_set = data.ResourceSet(environment=env_id, id=uuid.uuid4())
-    await resource_set.insert()
+    await resource_set.insert_with_link_to_configuration_model(versions=[version])
     name = "file1"
     resource_id = f"std::testing::NullResource[agent1,name={name}]"
     res1_v1 = data.Resource.new(

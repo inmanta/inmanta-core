@@ -77,7 +77,7 @@ class DyrunService(protocol.ServerSlice):
             raise Conflict(f"The environment {env.name}({env.id}) is halted")
 
         # fetch all resource in this cm and create a list of distinct agents
-        rvs = await data.Resource.get_list(model=version_id, environment=env.id)
+        rvs = await data.Resource.get_resources_for_version(environment=env.id, version=version_id)
 
         # Create a dryrun document
         dryrun = await data.DryRun.create(environment=env.id, model=version_id, todo=len(rvs), total=len(rvs))
@@ -98,7 +98,7 @@ class DyrunService(protocol.ServerSlice):
             undeployable_version_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in undeployable_ids]
             undeployable = await data.Resource.get_resources(environment=env.id, resource_version_ids=undeployable_version_ids)
             await self._save_resources_without_changes_to_dryrun(
-                dryrun_id=dryrun.id, resources=undeployable, diff_status=ResourceDiffStatus.undefined
+                dryrun_id=dryrun.id, resources=undeployable, version=version_id, diff_status=ResourceDiffStatus.undefined
             )
 
             skip_undeployable_ids = model.get_skipped_for_undeployable()
@@ -107,28 +107,38 @@ class DyrunService(protocol.ServerSlice):
                 environment=env.id, resource_version_ids=skip_undeployable_version_ids
             )
             await self._save_resources_without_changes_to_dryrun(
-                dryrun_id=dryrun.id, resources=skipundeployable, diff_status=ResourceDiffStatus.skipped_for_undefined
+                dryrun_id=dryrun.id,
+                resources=skipundeployable,
+                version=version_id,
+                diff_status=ResourceDiffStatus.skipped_for_undefined,
             )
 
             resources_with_agents_down = [
                 res
                 for res in rvs
-                if res.resource_version_id not in undeployable_version_ids
-                and res.resource_version_id not in skip_undeployable_version_ids
+                if res.resource_id not in undeployable_ids
+                and res.resource_id not in skip_undeployable_ids
                 and res.agent in paused_agents
             ]
             await self._save_resources_without_changes_to_dryrun(
-                dryrun_id=dryrun.id, resources=resources_with_agents_down, diff_status=ResourceDiffStatus.agent_down
+                dryrun_id=dryrun.id,
+                resources=resources_with_agents_down,
+                version=version_id,
+                diff_status=ResourceDiffStatus.agent_down,
             )
 
         return dryrun
 
     async def _save_resources_without_changes_to_dryrun(
-        self, dryrun_id: uuid.UUID, resources: list[data.Resource], diff_status: Optional[ResourceDiffStatus] = None
+        self,
+        dryrun_id: uuid.UUID,
+        resources: list[data.Resource],
+        version: int,
+        diff_status: Optional[ResourceDiffStatus] = None,
     ) -> None:
         for res in resources:
             parsed_id = Id.parse_id(res.resource_id)
-            parsed_id.set_version(res.model)
+            parsed_id.set_version(version)
             payload = {
                 "changes": {},
                 "id_fields": {
@@ -136,7 +146,7 @@ class DyrunService(protocol.ServerSlice):
                     "agent_name": res.agent,
                     "attribute": parsed_id.attribute,
                     "attribute_value": parsed_id.attribute_value,
-                    "version": res.model,
+                    "version": version,
                 },
                 "id": parsed_id.resource_version_str(),
             }

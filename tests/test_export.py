@@ -28,12 +28,11 @@ import inmanta.resources
 from inmanta import config, const, module
 from inmanta.ast import CompilerException, ExternalException, RuntimeException
 from inmanta.const import ResourceState
-from inmanta.data import Environment, Resource
+from inmanta.data import Resource
 from inmanta.export import DependencyCycleException
 from inmanta.module import InmantaModuleRequirement
-from inmanta.server import SLICE_RESOURCE
 from inmanta.server.server import Server
-from utils import LogSequence
+from utils import LogSequence, wait_for_version
 
 
 async def assert_resource_set_assignment(environment, assignment: dict[str, Optional[str]]) -> None:
@@ -304,11 +303,10 @@ async def test_server_export(snippetcompiler, server: Server, client, environmen
         resource = inmanta.resources.Resource.deserialize(res["attributes"])
         assert resource.version == resource.id.version == version
 
-    resources = await server.get_slice(SLICE_RESOURCE).get_resources_in_latest_version(
-        environment=await Environment.get_by_id(environment)
-    )
-
-    assert resources[0].attributes["version"] == version
+        resource = await Resource.get_resource_for_version(
+            environment=environment, resource_id=resource.id.resource_str(), version=version
+        )
+        assert resource
 
 
 async def test_dict_export_server(snippetcompiler, server, client, environment):
@@ -562,6 +560,9 @@ async def test_resource_set(snippetcompiler, modules_dir: str, environment, clie
             soft_delete=soft_delete,
         )
 
+    res = await client.reserve_version(environment)
+    assert res.code == 200
+    version = res.result["data"]
     # Full compile
     await export_model(
         model="""
@@ -580,6 +581,7 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
         """,
         partial_compile=False,
     )
+    await wait_for_version(client, environment, version)
     await assert_resource_set_assignment(
         environment,
         assignment={
@@ -592,7 +594,7 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
             "the_resource_z": None,
         },
     )
-
+    version += 1
     # Partial compile
     await export_model(
         model="""
@@ -610,6 +612,7 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
         partial_compile=True,
         resource_sets_to_remove=["resource_set_2"],
     )
+    await wait_for_version(client, environment, version)
     await assert_resource_set_assignment(
         environment,
         assignment={
@@ -647,11 +650,13 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
             )
 
     else:
+        version += 1
         await export_model(
             model=model,
             partial_compile=True,
             resource_sets_to_remove=["resource_set_5"],
         )
+        await wait_for_version(client, environment, version)
         await assert_resource_set_assignment(
             environment,
             assignment={

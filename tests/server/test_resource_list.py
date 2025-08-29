@@ -69,7 +69,7 @@ async def test_resource_list_no_released_version(server, client):
     name = "file1"
     key = f"std::testing::NullResource[agent1,name={name}]"
     resource_set = data.ResourceSet(environment=env.id, id=uuid.uuid4())
-    await resource_set.insert()
+    await resource_set.insert_with_link_to_configuration_model(versions=[version])
     res1_v1 = data.Resource.new(
         environment=env.id,
         resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),
@@ -113,7 +113,7 @@ async def test_has_only_one_version_from_resource(server, client):
 
     version = 1
     resource_set = data.ResourceSet(environment=env.id, id=uuid.uuid4())
-    await resource_set.insert()
+    await resource_set.insert_with_link_to_configuration_model(versions=[version])
     res1_v1 = data.Resource.new(
         environment=env.id,
         resource_version_id=res1_key + ",v=%d" % version,
@@ -131,9 +131,9 @@ async def test_has_only_one_version_from_resource(server, client):
     # This version has both resources so we can populate just this version
     await data.ResourcePersistentState.populate_for_version(environment=env.id, model_version=version)
 
-    resource_set = data.ResourceSet(environment=env.id, id=uuid.uuid4())
-    await resource_set.insert()
     version = 2
+    resource_set = data.ResourceSet(environment=env.id, id=uuid.uuid4())
+    await resource_set.insert_with_link_to_configuration_model(versions=[version])
     res1_v2 = data.Resource.new(
         environment=env.id,
         resource_version_id=res1_key + ",v=%d" % version,
@@ -149,9 +149,9 @@ async def test_has_only_one_version_from_resource(server, client):
     )
     await res2_v2.insert()
 
-    resource_set = data.ResourceSet(environment=env.id, id=uuid.uuid4())
-    await resource_set.insert()
     version = 3
+    resource_set = data.ResourceSet(environment=env.id, id=uuid.uuid4())
+    await resource_set.insert_with_link_to_configuration_model(versions=[version])
     res1_v3 = data.Resource.new(
         environment=env.id,
         resource_version_id=res1_key + ",v=%d" % version,
@@ -163,9 +163,9 @@ async def test_has_only_one_version_from_resource(server, client):
     # This will mark res2 as an orphan since it is not on version 3
     await data.ResourcePersistentState.mark_as_orphan(environment=env.id, resource_ids={ResourceIdStr(res2_key)})
 
-    resource_set = data.ResourceSet(environment=env.id, id=uuid.uuid4())
-    await resource_set.insert()
     version = 4
+    resource_set = data.ResourceSet(environment=env.id, id=uuid.uuid4())
+    await resource_set.insert_with_link_to_configuration_model(versions=[version])
     res1_v4 = data.Resource.new(
         environment=env.id,
         resource_version_id=res1_key + ",v=%d" % version,
@@ -220,7 +220,7 @@ async def env_with_resources(server, client):
         key = f"{resource_type}[{agent},path={path}]"
         for version in versions:
             resource_set = data.ResourceSet(environment=environment, id=uuid.uuid4())
-            await resource_set.insert()
+            await resource_set.insert_with_link_to_configuration_model(versions=[version])
             res = data.Resource.new(
                 environment=environment,
                 resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),
@@ -989,7 +989,7 @@ async def test_resources_paging_performance(client, environment, very_big_env: i
             # Pages 1-3
             async def time_call() -> typing.Union[float, dict[str, str]]:
                 start = time.monotonic()
-                result = await client.resource_list(environment, deploy_summary=True, filter=filter, limit=10, sort=order)
+                result = await client.resource_list(environment, deploy_summary=True, filter=filter, limit=220, sort=order)
                 assert result.code == 200
                 assert result.result["metadata"]["total"] == totalcount
                 return (time.monotonic() - start) * 1000, result.result.get("links", {})

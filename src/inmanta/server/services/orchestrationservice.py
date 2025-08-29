@@ -200,7 +200,7 @@ class PartialUpdateMerger:
             )
         )
         updated_and_shared_resources_old_dto: abc.Mapping[ResourceIdStr, ResourceDTO] = {
-            k: v.to_dto(include_resource_version_in_requires=False) for k, v in updated_and_shared_resources_old.items()
+            k: v.to_dto() for k, v in updated_and_shared_resources_old.items()
         }
         rids_deleted_resource_sets: abc.Set[ResourceIdStr] = {
             rid
@@ -270,13 +270,6 @@ class PartialUpdateMerger:
                     f"to {data.ResourceSet.get_printable_name_for_resource_set(res.resource_set)}."
                 )
 
-            if res.resource_set is None and inmanta.util.make_attribute_hash(
-                res.resource_id, res.attributes
-            ) != inmanta.util.make_attribute_hash(
-                matching_resource_old_model.resource_id, matching_resource_old_model.attributes
-            ):
-                raise BadRequest(f"Resource ({res.resource_id}) without a resource set cannot be updated via a partial compile")
-
             resource_set_validator = ResourceSetValidator(new_updated_and_shared_resources.values())
             try:
                 resource_set_validator.ensure_no_cross_resource_set_dependencies()
@@ -297,9 +290,16 @@ class PartialUpdateMerger:
         update: bool = False
         for rid_shared_resource in all_rids_shared_resources:
             if rid_shared_resource in shared_resources_new and rid_shared_resource in self.shared_resources_old:
-                # Merge requires shared resource
                 old_shared_resource = self.shared_resources_old[rid_shared_resource]
                 new_shared_resource = shared_resources_new[rid_shared_resource]
+                # Check if shared resource is updated
+                if inmanta.util.make_attribute_hash(
+                    rid_shared_resource, old_shared_resource.attributes
+                ) != inmanta.util.make_attribute_hash(rid_shared_resource, new_shared_resource.attributes):
+                    raise BadRequest(
+                        f"Resource ({rid_shared_resource}) without a resource set cannot be updated via a partial compile"
+                    )
+                # If not, merge requires
                 update = self._merge_requires_of_shared_resource(old_shared_resource, new_shared_resource)
                 res = new_shared_resource
             elif rid_shared_resource in shared_resources_new:
@@ -309,7 +309,7 @@ class PartialUpdateMerger:
             else:
                 # Old shared resource not referenced by partial compile
                 res_old = self.shared_resources_old[rid_shared_resource]
-                res = res_old.model_copy(update={"model": self.version}, deep=True)
+                res = res_old.model_copy(deep=True)
                 res = self._clean_requires_of_old_shared_resource(res)
                 update = True
             result.append(res)
@@ -591,9 +591,6 @@ class OrchestrationService(protocol.ServerSlice):
                 if field not in {"id", "version"}:
                     attributes[field] = value
 
-            # Update the version fields
-            model = set_version if set_version is not None else version_part_of_resource_id
-
             # find cross agent dependencies
             agent = resource_version_id.agent_name
             if "requires" not in attributes:
@@ -609,8 +606,6 @@ class OrchestrationService(protocol.ServerSlice):
 
             rid_to_resource[resource_id] = ResourceDTO(
                 environment=env_id,
-                model=model,
-                resource_version_id=resource_version_id.resource_version_str(),
                 resource_id=resource_id,
                 resource_type=resource_version_id.entity_type,
                 agent=agent,
@@ -846,11 +841,6 @@ class OrchestrationService(protocol.ServerSlice):
             raise BadRequest(f"The version number used ({version}) is not positive")
 
         for r in rid_to_resource.values():
-            if r.model != version:
-                raise BadRequest(
-                    f"The resource version of resource {r.resource_version_id} does not match the version argument "
-                    f"(version: {version})"
-                )
             # Populate resource_sets with the shared set
             if r.resource_set is None:
                 resource_sets[r.resource_id] = None
@@ -1133,9 +1123,7 @@ class OrchestrationService(protocol.ServerSlice):
                 base_version: int = base_model.version
                 if not base_model.is_suitable_for_partial_compiles:
                     resources_in_base_version = await data.Resource.get_resources_for_version(env.id, base_version)
-                    resource_set_validator = ResourceSetValidator(
-                        [r.to_dto(include_resource_version_in_requires=False) for r in resources_in_base_version]
-                    )
+                    resource_set_validator = ResourceSetValidator([r.to_dto() for r in resources_in_base_version])
                     try:
                         resource_set_validator.ensure_no_cross_resource_set_dependencies()
                     except CrossResourceSetDependencyError as e:
@@ -1362,8 +1350,8 @@ class OrchestrationService(protocol.ServerSlice):
     ) -> list[ResourceDiff]:
         await self._validate_version_parameters(env.id, from_version, to_version)
 
-        from_version_resources = await data.Resource.get_list(environment=env.id, model=from_version)
-        to_version_resources = await data.Resource.get_list(environment=env.id, model=to_version)
+        from_version_resources = await data.Resource.get_resources_for_version(environment=env.id, version=from_version)
+        to_version_resources = await data.Resource.get_resources_for_version(environment=env.id, version=to_version)
 
         from_state = diff.Version(self.convert_resources(from_version_resources))
         to_state = diff.Version(self.convert_resources(to_version_resources))

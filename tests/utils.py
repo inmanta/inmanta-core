@@ -902,22 +902,38 @@ async def resource_action_consistency_check():
 
     async def get_data(postgresql_client):
         post_ra_one = await postgresql_client.fetch(
-            """SELECT ra.action_id, r.environment, r.resource_id, r.model FROM public.resourceaction as ra
-                    INNER JOIN public.resource as r
-                    ON r.resource_id || ',v=' || r.model = ANY(ra.resource_version_ids)
+            """SELECT
+                ra.action_id,
+                r.environment,
+                r.resource_id,
+                rscm.model
+                FROM resource_set_configuration_model AS rscm
+                INNER JOIN resource AS r
+                    ON rscm.environment=r.environment
+                    AND rscm.resource_set_id=r.resource_set_id
+                INNER JOIN resourceaction as ra
+                    ON r.resource_id || ',v=' || rscm.model = ANY(ra.resource_version_ids)
                     AND r.environment = ra.environment
             """
         )
         post_ra_one_set = {(r[0], r[1], r[2], r[3]) for r in post_ra_one}
 
         post_ra_two = await postgresql_client.fetch(
-            """SELECT ra.action_id, r.environment, r.resource_id, r.model FROM public.resource as r
-                    INNER JOIN public.resourceaction_resource as jt
-                         ON r.environment = jt.environment
-                        AND r.resource_id = jt.resource_id
-                        AND r.model = jt.resource_version
-                    INNER JOIN public.resourceaction as ra
-                        ON ra.action_id = jt.resource_action_id
+            """SELECT
+                ra.action_id,
+                r.environment,
+                r.resource_id,
+                rscm.model
+            FROM resource_set_configuration_model AS rscm
+            INNER JOIN resource AS r
+                ON rscm.environment=r.environment
+                AND rscm.resource_set_id=r.resource_set_id
+            INNER JOIN public.resourceaction_resource as jt
+                 ON r.environment = jt.environment
+                AND r.resource_id = jt.resource_id
+                AND rscm.model = jt.resource_version
+            INNER JOIN public.resourceaction as ra
+                ON ra.action_id = jt.resource_action_id
             """
         )
         post_ra_two_set = {(r[0], r[1], r[2], r[3]) for r in post_ra_two}
