@@ -111,7 +111,7 @@ class EnvBlueprint:
     pip_config: PipConfig
     requirements: Sequence[str]
     constraints_file_hash: str | None = dataclasses.field(default=None, kw_only=True)
-    constraints: str | None = dataclasses.field(default=None, kw_only=True)
+    constraints: bytes | None = dataclasses.field(default=None, kw_only=True)
     _hash_cache: str | None = dataclasses.field(default=None, init=False, repr=False)
     python_version: tuple[int, int]
 
@@ -165,10 +165,10 @@ class EnvBlueprint:
 
     def __str__(self) -> str:
         req = ",".join(str(req) for req in self.requirements)
-        # constraints = ",".join(self.constraints.splitlines()) if self.constraints else ""
+        constraints = self.constraints.decode() if self.constraints else ""
         return (
             f"EnvBlueprint(environment_id={self.environment_id}, requirements=[{str(req)}], "
-            f"constraints=[{self.constraints}], constraint_file_hash={self.constraints_file_hash}"
+            f"constraints=[{constraints}], constraint_file_hash={self.constraints_file_hash}"
             f"pip={self.pip_config}, python_version={self.python_version})"
         )
 
@@ -346,7 +346,7 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
 
         if blueprint and blueprint.constraints_file_hash is not None and blueprint.constraints:
             self.constraint_file = pathlib.Path(self.env_path) / blueprint.constraints_file_hash
-            with self.constraint_file.open("w", encoding="utf-8") as f:
+            with self.constraint_file.open("wb+") as f:
                 f.write(blueprint.constraints)
 
     async def create_and_install_environment(self, blueprint: EnvBlueprint) -> None:
@@ -526,7 +526,7 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
         if is_new:
             if member_id.constraints_file_hash and member_id.constraints:
                 constraint_file: str = os.path.join(self.envs_dir, env_dir_name, member_id.constraints_file_hash)
-                with open(constraint_file, "w") as fd:
+                with open(constraint_file, "wb") as fd:
                     fd.write(member_id.constraints)
 
             LOGGER.info("Creating venv for content %s, content hash: %s", str(member_id), internal_id)

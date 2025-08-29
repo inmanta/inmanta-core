@@ -615,7 +615,7 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
                     )
                     if module_install_spec.blueprint.constraints_file_hash and module_install_spec.blueprint.constraints:
                         constraint_file: str = os.path.join(os.curdir, module_install_spec.blueprint.constraints_file_hash)
-                        with open(constraint_file, "w") as fd:
+                        with open(constraint_file, "wb") as fd:
                             fd.write(module_install_spec.blueprint.constraints)
                     await self._install(module_install_spec.blueprint)
 
