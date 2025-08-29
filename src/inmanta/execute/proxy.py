@@ -138,16 +138,6 @@ class ProxyContext:
             allow_reference_values=True,
         )
 
-    def descend(self) -> "ProxyContext":
-        """We descend one level, we are no longer validated"""
-        if not self.validated:
-            return self
-        return ProxyContext(
-            path=self.path,
-            validated=False,
-            allow_reference_values=None,
-        )
-
     def should_allow_references(self) -> bool:
         if global_proxy_mode.get() is ProxyMode.EXPORT:
             return True
@@ -327,7 +317,15 @@ class DynamicProxy:
             value,
             # DSL instances are a black box as far as boundary validation is concerned
             # => from here on out, consider the object not validated, except during export
-            context=context.descend(),
+            context=(
+                ProxyContext(
+                    path=context.path,
+                    validated=False,
+                    allow_reference_values=None,
+                )
+                if context.validated
+                else context
+            ),
         )
 
     def _return_value(self, value: object, *, relative_path: str) -> object:
