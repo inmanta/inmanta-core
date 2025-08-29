@@ -165,7 +165,7 @@ class EnvBlueprint:
 
     def __str__(self) -> str:
         req = ",".join(str(req) for req in self.requirements)
-        constraints = ",".join(self.constraints.splitlines()) if self.constraints else ""
+        # constraints = ",".join(self.constraints.splitlines()) if self.constraints else ""
         return (
             f"EnvBlueprint(environment_id={self.environment_id}, requirements=[{str(req)}], "
             f"constraints=[{constraints}], constraint_file_hash={self.constraints_file_hash}"
