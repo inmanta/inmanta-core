@@ -32,7 +32,7 @@ from inmanta.data import Resource
 from inmanta.export import DependencyCycleException
 from inmanta.module import InmantaModuleRequirement
 from inmanta.server.server import Server
-from utils import LogSequence
+from utils import LogSequence, wait_for_version
 
 
 async def assert_resource_set_assignment(environment, assignment: dict[str, Optional[str]]) -> None:
@@ -560,6 +560,9 @@ async def test_resource_set(snippetcompiler, modules_dir: str, environment, clie
             soft_delete=soft_delete,
         )
 
+    res = await client.reserve_version(environment)
+    assert res.code == 200
+    version = res.result["data"]
     # Full compile
     await export_model(
         model="""
@@ -578,6 +581,7 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
         """,
         partial_compile=False,
     )
+    await wait_for_version(client, environment, version)
     await assert_resource_set_assignment(
         environment,
         assignment={
@@ -590,7 +594,7 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
             "the_resource_z": None,
         },
     )
-
+    version += 1
     # Partial compile
     await export_model(
         model="""
@@ -608,6 +612,7 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
         partial_compile=True,
         resource_sets_to_remove=["resource_set_2"],
     )
+    await wait_for_version(client, environment, version)
     await assert_resource_set_assignment(
         environment,
         assignment={
@@ -645,11 +650,13 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
             )
 
     else:
+        version += 1
         await export_model(
             model=model,
             partial_compile=True,
             resource_sets_to_remove=["resource_set_5"],
         )
+        await wait_for_version(client, environment, version)
         await assert_resource_set_assignment(
             environment,
             assignment={
