@@ -34,7 +34,8 @@ from inmanta.ast.entity import Entity
 from inmanta.config import Option, is_list, is_uuid_opt
 from inmanta.data import model
 from inmanta.data.model import PipConfig
-from inmanta.execute.proxy import DynamicProxy, ProxyContext, exportcontext
+from inmanta.execute import proxy
+from inmanta.execute.proxy import DynamicProxy, ProxyContext
 from inmanta.execute.runtime import Instance
 from inmanta.module import Project
 from inmanta.resources import Id, IgnoreResourceException, Resource, resource, to_id
@@ -261,7 +262,7 @@ class Exporter:
         if name not in Exporter.__export_functions:
             raise Exception("Export function %s does not exist." % name)
 
-        with exportcontext:
+        with proxy.exportcontext:
             types, function = Exporter.__export_functions[name]
             if len(types) > 0:
                 function(self, types=self._get_instance_proxies_of_types(types))
