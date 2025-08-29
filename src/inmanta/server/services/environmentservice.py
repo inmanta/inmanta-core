@@ -271,14 +271,12 @@ class EnvironmentService(protocol.ServerSlice):
 
     @handle(methods.list_settings, env="tid")
     async def list_settings(self, env: data.Environment) -> Apireturn:
-        settings: dict[str, model.EnvironmentSettingDetails] = {
-            setting_name: details
-            for setting_name, details in (await env.list_settings()).items()
-            if setting_name in data.Environment._settings.keys()
+        setting_details: dict[str, model.EnvironmentSettingDetails] = {
+            k: env.settings.get(k) for k in sorted(env.settings.settings.keys()) if k in data.Environment._settings.keys()
         }
-        values = {setting_name: settings[setting_name].value for setting_name in sorted(settings.keys())}
-        setting_definitions = dict(sorted(data.Environment.get_setting_definitions_for_api(settings).items()))
-        return 200, {"settings": values, "metadata": setting_definitions}
+        settings = {setting_name: details.value for setting_name, details in setting_details.items()}
+        setting_definitions = dict(sorted(data.Environment.get_setting_definitions_for_api(setting_details).items()))
+        return 200, {"settings": settings, "metadata": setting_definitions}
 
     @handle(methods.set_setting, env="tid", key="id")
     async def set_setting(self, env: data.Environment, key: str, value: model.EnvSettingType) -> Apireturn:
@@ -300,12 +298,8 @@ class EnvironmentService(protocol.ServerSlice):
 
     @handle(methods.get_setting, env="tid", key="id")
     async def get_setting(self, env: data.Environment, key: str) -> Apireturn:
-        settings: dict[str, model.EnvironmentSettingDetails] = {
-            setting_name: details
-            for setting_name, details in (await env.list_settings()).items()
-            if setting_name in data.Environment._settings.keys()
-        }
-        return 200, {"value": settings[key].value, "metadata": data.Environment.get_setting_definitions_for_api(settings)}
+        setting = await self.environment_setting_get(env, key)
+        return 200, {"value": setting.settings[key], "metadata": setting.definition}
 
     @handle(methods.delete_setting, env="tid", key="id")
     async def delete_setting(self, env: data.Environment, key: str) -> Apireturn:
@@ -539,14 +533,12 @@ class EnvironmentService(protocol.ServerSlice):
 
     @handle(methods_v2.environment_settings_list, env="tid")
     async def environment_settings_list(self, env: data.Environment) -> model.EnvironmentSettingsReponse:
-        settings: dict[str, model.EnvironmentSettingDetails] = {
-            setting_name: details
-            for setting_name, details in (await env.list_settings()).items()
-            if setting_name in data.Environment._settings.keys()
+        setting_details: dict[str, model.EnvironmentSettingDetails] = {
+            k: env.settings.get(k) for k in sorted(env.settings.settings.keys()) if k in data.Environment._settings.keys()
         }
-        values = {setting_name: settings[setting_name].value for setting_name in sorted(settings.keys())}
-        setting_definitions = dict(sorted(data.Environment.get_setting_definitions_for_api(settings).items()))
-        return model.EnvironmentSettingsReponse(settings=values, definition=setting_definitions)
+        settings = {setting_name: details.value for setting_name, details in setting_details.items()}
+        setting_definitions = dict(sorted(data.Environment.get_setting_definitions_for_api(setting_details).items()))
+        return model.EnvironmentSettingsReponse(settings=settings, definition=setting_definitions)
 
     @handle(methods_v2.environment_settings_set, env="tid", key="id")
     async def environment_settings_set(self, env: data.Environment, key: str, value: model.EnvSettingType) -> ReturnValue[None]:
@@ -572,14 +564,10 @@ class EnvironmentService(protocol.ServerSlice):
     @handle(methods_v2.environment_setting_get, env="tid", key="id")
     async def environment_setting_get(self, env: data.Environment, key: str) -> model.EnvironmentSettingsReponse:
         try:
-            settings: dict[str, model.EnvironmentSettingDetails] = {
-                setting_name: details
-                for setting_name, details in (await env.list_settings()).items()
-                if setting_name in data.Environment._settings.keys()
-            }
-            setting_definitions = data.Environment.get_setting_definitions_for_api(settings)
+            value = await env.get(key)
+            setting_definitions = data.Environment.get_setting_definitions_for_api(env.settings.get_all())
             return model.EnvironmentSettingsReponse(
-                settings={key: settings[key].value},
+                settings={key: value},
                 definition=setting_definitions,
             )
         except KeyError:

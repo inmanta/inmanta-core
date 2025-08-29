@@ -2401,7 +2401,9 @@ class Setting:
         else:
             return self._default
 
-    def get_setting_definition_for_api(self, setting_details: m.EnvironmentSettingDetails) -> m.EnvironmentSettingDefinitionAPI:
+    def get_setting_definition_for_api(
+        self, setting_details: m.EnvironmentSettingDetails | None
+    ) -> m.EnvironmentSettingDefinitionAPI:
         """
         Returns the definition of the given setting as it would be served out over the API.
         """
@@ -2415,8 +2417,8 @@ class Setting:
             agent_restart=self.agent_restart,
             allowed_values=self.allowed_values,
             section=self.section,
-            protected=setting_details.protected,
-            protected_by=setting_details.protected_by,
+            protected=setting_details.protected if setting_details else False,
+            protected_by=setting_details.protected_by if setting_details else None,
         )
 
     def to_dict(self) -> JsonType:
@@ -2457,6 +2459,12 @@ class EnvironmentSettingsContainer(BaseModel):
         Return True iff the given setting_name is present in this settings container.
         """
         return setting_name in self.settings
+
+    def get_all(self) -> dict[str, m.EnvironmentSettingDetails]:
+        return {k: v.model_copy(deep=True) for k, v in self.settings.items()}
+
+    def get(self, setting_name: str) -> m.EnvironmentSettingDetails:
+        return self.settings[setting_name]
 
     def get_value(self, setting_name: str) -> m.EnvSettingType:
         """
@@ -2752,7 +2760,10 @@ class Environment(BaseDocument):
         """
         Returns a dictionary that maps each of the given settings to their definitions as they would be served out over the API.
         """
-        return {name: cls._settings[name].get_setting_definition_for_api(details) for name, details in settings.items()}
+        return {
+            setting_name: setting_def.get_setting_definition_for_api(setting_details=settings.get(setting_name, None))
+            for setting_name, setting_def in cls._settings.items()
+        }
 
     async def list_settings(self) -> dict[str, m.EnvironmentSettingDetails]:
         return {k: v.model_copy(deep=True) for k, v in self.settings.settings.items()}
