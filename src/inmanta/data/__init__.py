@@ -2359,7 +2359,7 @@ class Setting:
         self,
         name: str,
         typ: str,
-        default: m.EnvSettingType,
+        default: Optional[m.EnvSettingType],
         doc: Optional[str] = None,
         validator: Optional[Callable[[m.EnvSettingType], m.EnvSettingType]] = None,
         recompile: bool = False,
