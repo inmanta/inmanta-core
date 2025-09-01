@@ -51,9 +51,10 @@ async def assert_resource_set_assignment(environment, assignment: dict[str, Opti
             for r in await Resource.get_list()
         ]
         all_resource_sets = [f"name: {r.name}, id: {r.id}" for r in await ResourceSet.get_list()]
+        all_rscm = [f"rs_id: {r['resource_set_id']}, rs_name: {r['name']}, version: {r['model']}" for r in await ResourceSet.get_resource_set_configuration_model()]
         assert len(resources) == len(
             assignment
-        ), f" actual {actual_assignment} != expected {assignment}. All resources: \n{'\n'.join(all_resources)} \n All resource_sets: \n {'\n'.join(all_resource_sets)}"
+        ), f" actual {actual_assignment} != expected {assignment}. All resources: \n{'\n'.join(all_resources)} \n All resource_sets: \n {'\n'.join(all_resource_sets)} \n All rscm: \n {'\n'.join(all_rscm)}"
     assert actual_assignment == assignment
 
 
