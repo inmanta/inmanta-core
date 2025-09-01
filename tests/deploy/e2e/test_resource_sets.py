@@ -36,6 +36,74 @@ from inmanta.types import ResourceIdStr
 from inmanta.util import get_compiler_version
 
 
+async def test_put_partial_copies_unchanged_resource_sets(server, client, environment, clienthelper):
+    """
+    Check if unchanged resource sets are present in the latest version after a put_partial
+    """
+    version = await clienthelper.get_version()
+    resources = [
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": "test::Resource[agent1,key=key1],v=%d" % version,
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "key": "key2",
+            "value": "value2",
+            "id": "test::Resource[agent1,key=key2],v=%d" % version,
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "key": "shared_key",
+            "value": "shared_value",
+            "id": "test::Resource[agent1,key=shared_key],v=%d" % version,
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+    ]
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        resource_state={},
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+        resource_sets={"test::Resource[agent1,key=key1]": "set-1", "test::Resource[agent1,key=key2]": "set-2"},
+        module_version_info={},
+    )
+    assert result.code == 200
+    resources_partial = [
+        {
+            "key": "key1",
+            "value": "value123",
+            "id": "test::Resource[agent1,key=key1],v=0",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+    ]
+
+    result = await client.put_partial(
+        tid=environment,
+        resources=resources_partial,
+        resource_state={},
+        unknowns=[],
+        version_info=None,
+        resource_sets={"test::Resource[agent1,key=key1]": "set-1"},
+        module_version_info={},
+    )
+    assert result.code == 200
+    resource_list = await data.Resource.get_resources_in_latest_version(uuid.UUID(environment))
+    assert len(resource_list) == 3
+
+
 async def test_resource_sets_via_put_version(server, client, environment, clienthelper):
     version = await clienthelper.get_version()
 
