@@ -2263,13 +2263,6 @@ def index_with_pkgs_containing_optional_deps() -> str:
                 path=os.path.join(tmpdirname, pkg_name),
                 publish_index=pip_index,
             )
-        for version in ["1.0.0", "2.0.0"]:
-            utils.create_python_package(
-                name="multi-version",
-                pkg_version=Version(version),
-                path=os.path.join(tmpdirname, f"multi-version-v{version}"),
-                publish_index=pip_index,
-            )
         yield pip_index.url
 
 
