@@ -15,6 +15,7 @@ Contact: code@inmanta.com
 import asyncio
 import datetime
 import logging
+import os
 import typing
 import uuid
 from asyncio import InvalidStateError, Lock
@@ -24,6 +25,7 @@ from concurrent.futures.thread import ThreadPoolExecutor
 from typing import Any, Optional
 
 import inmanta.agent.cache
+import inmanta.loader as loader
 import inmanta.protocol
 import inmanta.util
 from inmanta import const, data, env, tracing
@@ -32,7 +34,6 @@ from inmanta.agent.executor import DeployReport, DryrunReport, FailedInmantaModu
 from inmanta.agent.handler import HandlerAPI, SkipResource, SkipResourceForDependencies
 from inmanta.const import NAME_RESOURCE_ACTION_LOGGER, ParameterSource
 from inmanta.data.model import AttributeStateChange
-from inmanta.loader import CodeLoader
 from inmanta.references import MutatorMissingError, ReferenceMissingError
 from inmanta.resources import Resource
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
@@ -514,14 +515,14 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         self.executors: dict[str, InProcessExecutor] = {}
         self._creation_locks: inmanta.util.NamedLock = inmanta.util.NamedLock()
 
-        self._loader: CodeLoader | None = None
+        self._loader: loader.CodeLoader | None = None
         self._env: env.VirtualEnv | None = None
         self._running = False
 
         if code_loader:
             self._env = env.VirtualEnv(env_dir)
             self._env.use_virtual_env()
-            self._loader = CodeLoader(code_dir, clean=True)
+            self._loader = loader.CodeLoader(code_dir, clean=True)
             # Lock to ensure only one actual install runs at a time
             self._loader_lock: asyncio.Lock = Lock()
             # Keep track for each inmanta module of the last loaded version
@@ -612,7 +613,12 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
                         module_install_spec.module_name,
                         module_install_spec.module_version,
                     )
+                    if module_install_spec.blueprint.constraints_file_hash and module_install_spec.blueprint.constraints:
+                        constraint_file: str = os.path.join(os.curdir, module_install_spec.blueprint.constraints_file_hash)
+                        with open(constraint_file, "wb") as fd:
+                            fd.write(module_install_spec.blueprint.constraints)
                     await self._install(module_install_spec.blueprint)
+
                     self.logger.debug(
                         "Installed module %s version=%s",
                         module_install_spec.module_name,
@@ -646,5 +652,7 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
                 self._env.install_for_config,
                 inmanta.util.parse_requirements(blueprint.requirements),
                 blueprint.pip_config,
+                False,
+                [blueprint.constraints_file_hash] if blueprint.constraints_file_hash else None,
             )
             await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, blueprint.sources)
