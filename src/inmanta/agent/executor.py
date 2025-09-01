@@ -224,7 +224,7 @@ class ExecutorBlueprint(EnvBlueprint):
             sources=sources,
             requirements=requirements,
             constraints_file_hash=constraints_file_hash.pop(),
-            constraints=constraints.pop(),  # TODO what if these sets are empty ?
+            constraints=constraints.pop(),
             python_version=base_python_version,
         )
 
