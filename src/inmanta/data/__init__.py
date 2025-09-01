@@ -5573,6 +5573,14 @@ class Resource(BaseDocument):
         else:
             rps_join = ""
 
+        # We query the database for all resources in the latest version.
+        # Structure of the result table:
+        #   returns 0 rows iff the requested version (version number / latest released) does not exist
+        #   columns:
+        #       - version NOT NULL
+        #       - resource_set_name -> NULL is name of the shared set
+        #       - resource_set_id -> NULL iff LEFT JOIN didn't match any resource sets => model exists but is empty
+        #       - <projection_fields> -> NULL iff LEFT join didn't match any resources => empty resource set
         query: typing.LiteralString = f"""
             WITH version AS (
                 {version_query}
@@ -5648,22 +5656,43 @@ class Resource(BaseDocument):
         :raises PartialBaseMissing: The `since` version does not exist or has not been released.
         """
         projection_selectors: typing.LiteralString = ", ".join([f"r.{col}" for col in projection])
+
+        # We query the database for all resources in all released versions since the requested one. For each version, we
+        # request the diff with the previous version.
+        # Structure of the result table:
+        #   returns at least 1 row (all LEFT JOINs)
+        #   columns: "RETURN" marker between column specifications implies that all following fields will be NULL depending on
+        #       the previous result, regardless of the "NULL IFF" semantics in the fields' own description.
+        #
+        #       - exists NOT NULL -> false iff the `since` model doesn't exist at all.
+        #       RETURN if not exists
+        #       - version -> NULL iff no newer released versions were found
+        #       RETURN if version is NULL
+        #       - empty_model NOT NULL -> true iff the model has no resource sets
+        #       RETURN if empty_model
+        #       - resource_set_name -> NULL is name of the shared set
+        #       - resource_set_id: resource set id in the new version iff it differs from the previous version
+        #           -> NULL iff resource set with this name was deleted in this version
+        #       - <projection_fields> -> NULL iff LEFT join didn't match any resources => empty resource set
         query: typing.LiteralString = f"""\
         WITH
+        -- `since` model iff it exists and has been released
         reference_model AS (
             SELECT EXISTS(
                 SELECT *
                 FROM {ConfigurationModel.table_name()} AS cm
                 WHERE cm.environment = $1
                     AND cm.version = $2::int
-                    AND cm.released IS true
+                    AND cm.released
             ) AS exists
+        -- all released models starting from `since`
         ), models AS (
             SELECT *
             FROM {ConfigurationModel.table_name()} AS cm
             WHERE cm.environment = $1
                 AND cm.version > $2::int - 1
-                AND cm.released IS true
+                AND cm.released
+        -- resource_set_configuration_model for relevant versions with resource_set.name joined in
         ), rs_with_name AS (
             SELECT
                 rscm.*,
@@ -5700,6 +5729,11 @@ class Resource(BaseDocument):
             {projection_selectors}
         FROM reference_model
         LEFT JOIN model_pairs ON true
+        -- Calculate the diff by joining pairwise with both versions' resource sets.
+        -- Returns only differing sets:
+        --  - name -> NULL is name of shared set
+        --  - old_resource_set_id -> NULL if no set with this name existed in old version
+        --  - new_resource_set_id -> NULL if set with this name was deleted in new version
         LEFT JOIN LATERAL (
             -- DISTINCT because join results in two null rows for shared set. ORDER BY below ensures we keep the latest one
             SELECT DISTINCT ON (rs_new.name, rs_old.name)
@@ -5717,6 +5751,7 @@ class Resource(BaseDocument):
             ORDER BY rs_new.name, rs_old.name, rs_new.resource_set_id NULLS LAST
         ) AS diff
         ON true
+        -- fetch all resources for the relevant sets
         LEFT JOIN {cls.table_name()} as r
             ON r.environment = $1
             AND r.resource_set_id = diff.resource_set_id
