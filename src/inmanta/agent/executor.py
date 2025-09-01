@@ -346,7 +346,7 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
 
         self.blueprint = blueprint
 
-    def _write_constraint_file(self):
+    def _write_constraint_file(self) -> None:
         if self.blueprint and self.blueprint.constraints_file_hash is not None and self.blueprint.constraints:
             self.constraint_file = pathlib.Path(self.env_path) / self.blueprint.constraints_file_hash
             with self.constraint_file.open("wb+") as f:
