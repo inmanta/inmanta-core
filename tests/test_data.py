@@ -2909,6 +2909,23 @@ async def test_get_partial_resources_since_version_raw(environment, server, post
     """
     Verify the behavior of the get_partial_resources_since_version_raw and get_resources_for_version_raw methods,
     used by the scheduler to apply partial and full versions respectively.
+
+    Setup:
+        - Generate `nb_resource_sets` sets with integers as names
+        - Each set contains `nb_resources_per_set` resources
+        - Resource ids are predictable: `...,id={resource_set}-{resource_index}`
+        - Resources contain a single attribute (other than required ones) `exported`: the version in which it was exported
+
+    Test approach:
+        for a few different `partial_size` sizes of partial:
+            - Choose `partial_size` resource sets, evenly distributed over all sets (e.g. sets 1, 11, 21, ...)
+            - Regenerate these sets as described in setup and do a `put_partial` and release
+            - Verify results of `get_partial_resources_since_version_raw` and `get_resources_for_version_raw`:
+                Verify that the methods return only the differing resource sets, and the appropriate resources
+                for those sets.
+
+        Verify behavior of the two methods for some special scenarios: multiple versions, non-released versions,
+        deleted sets, ...
     """
     nb_resource_sets: int = 100
     nb_resources_per_set: int = 100
@@ -2922,11 +2939,12 @@ async def test_get_partial_resources_since_version_raw(environment, server, post
         without_version = ResourceIdStr(f"mymodule::Myresource[myagent,id={resource_set}-{index}]")
         return ResourceVersionIdStr(f"{without_version},v={version}") if version is not None else without_version
 
-    async def release() -> None:
+    async def release(version: Optional[int] = None) -> None:
         """
         Mark all versions as released, without actually releasing it.
         """
-        await postgresql_client.execute("UPDATE configurationmodel SET released=true")
+        condition = f"WHERE version = {version}" if version is not None else ""
+        await postgresql_client.execute(f"UPDATE configurationmodel SET released=true {condition}")
 
     # set up initial state by releasing a single base version
     version: int = await client.reserve_version(tid=environment).value()
@@ -3108,3 +3126,28 @@ async def test_get_partial_resources_since_version_raw(environment, server, post
         connection=postgresql_client,
     )
     assert models == all_models
+
+    # delete a resource set
+    base_version = new_version
+    new_version += 1
+    await client.put_partial(
+        tid=environment,
+        module_version_info={},
+        resources=[],
+        resource_sets={},
+        removed_resource_sets=["10"],
+    ).value()
+
+    await release(version=new_version)
+
+    # verify that the partial diff contains the deleted set as empty
+    models = await data.Resource.get_partial_resources_since_version_raw(
+        environment=environment,
+        since=base_version - 1,  # -1 because previous version was not released
+        projection=["resource_id"],
+        connection=postgresql_client,
+    )
+    assert len(models) == 1
+    version, resource_sets = models[0]
+    assert version == new_version
+    assert resource_sets == {"10": []}
