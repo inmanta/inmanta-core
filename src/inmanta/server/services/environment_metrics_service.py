@@ -36,9 +36,8 @@ from inmanta.data import (
     Environment,
     EnvironmentMetricsGauge,
     EnvironmentMetricsTimer,
-    Setting,
 )
-from inmanta.data.model import EnvironmentMetricsResult
+from inmanta.data.model import EnvironmentMetricsResult, EnvSettingType
 from inmanta.protocol import methods_v2
 from inmanta.protocol.decorators import handle
 from inmanta.protocol.exceptions import BadRequest
@@ -188,10 +187,12 @@ class EnvironmentMetricsService(protocol.ServerSlice):
             USING env_and_delete_before_timestamp AS e_to_dt
             WHERE emt.environment=e_to_dt.id AND emt.timestamp < e_to_dt.delete_before_timestamp
             """
-            environment_metrics_retention_setting: Setting = Environment.get_setting_definition(ENVIRONMENT_METRICS_RETENTION)
+            default_metrics_retention_time: EnvSettingType | None = Environment.get_default_for_setting(
+                ENVIRONMENT_METRICS_RETENTION
+            )
             values = [
                 ENVIRONMENT_METRICS_RETENTION,
-                environment_metrics_retention_setting.default,
+                default_metrics_retention_time,
                 datetime.now().astimezone(),
             ]
             await con.execute(query, *values)

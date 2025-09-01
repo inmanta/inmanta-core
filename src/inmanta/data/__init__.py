@@ -2401,6 +2401,29 @@ class Setting:
         else:
             return self._default
 
+    def get_setting_definition_for_api(
+        self, setting_details: m.EnvironmentSettingDetails | None
+    ) -> m.EnvironmentSettingDefinitionAPI:
+        """
+        Returns the definition of the given setting as it would be served out over the API.
+
+        :param setting_details: The setting details as stored in the database or None if this
+                                setting is not present in the database.
+        """
+        return m.EnvironmentSettingDefinitionAPI(
+            name=self.name,
+            type=self.typ,
+            default=self._default,
+            doc=self.doc,
+            recompile=self.recompile,
+            update_model=self.update,
+            agent_restart=self.agent_restart,
+            allowed_values=self.allowed_values,
+            section=self.section,
+            protected=setting_details.protected if setting_details else False,
+            protected_by=setting_details.protected_by if setting_details else None,
+        )
+
     def to_dict(self) -> JsonType:
         return {
             "type": self.typ,
@@ -2439,6 +2462,12 @@ class EnvironmentSettingsContainer(BaseModel):
         Return True iff the given setting_name is present in this settings container.
         """
         return setting_name in self.settings
+
+    def get_all(self) -> dict[str, m.EnvironmentSettingDetails]:
+        return {k: v.model_copy(deep=True) for k, v in self.settings.items()}
+
+    def get(self, setting_name: str) -> m.EnvironmentSettingDetails:
+        return self.settings[setting_name]
 
     def get_value(self, setting_name: str) -> m.EnvSettingType:
         """
@@ -2719,13 +2748,25 @@ class Environment(BaseDocument):
     }
 
     @classmethod
-    def get_setting_definition(cls, setting_name: str) -> Setting:
+    def get_default_for_setting(cls, setting_name: str) -> Optional[m.EnvSettingType]:
         """
-        Return the definition of the setting with the given name.
+        Returns the default value for the setting with the given name.
         """
         if setting_name not in cls._settings:
             raise KeyError()
-        return cls._settings[setting_name]
+        return cls._settings[setting_name].default
+
+    @classmethod
+    def get_setting_definitions_for_api(
+        cls, settings: dict[str, m.EnvironmentSettingDetails]
+    ) -> dict[str, m.EnvironmentSettingDefinitionAPI]:
+        """
+        Returns a dictionary that maps each of the given settings to their definitions as they would be served out over the API.
+        """
+        return {
+            setting_name: setting_def.get_setting_definition_for_api(setting_details=settings.get(setting_name, None))
+            for setting_name, setting_def in cls._settings.items()
+        }
 
     async def get(self, key: str, connection: Optional[asyncpg.connection.Connection] = None) -> m.EnvSettingType:
         """
