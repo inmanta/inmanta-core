@@ -28,7 +28,7 @@ import inmanta.resources
 from inmanta import config, const, module
 from inmanta.ast import CompilerException, ExternalException, RuntimeException
 from inmanta.const import ResourceState
-from inmanta.data import Resource
+from inmanta.data import Resource, ResourceSet
 from inmanta.export import DependencyCycleException
 from inmanta.module import InmantaModuleRequirement
 from inmanta.server.server import Server
@@ -45,7 +45,15 @@ async def assert_resource_set_assignment(environment, assignment: dict[str, Opti
     """
     resources = await Resource.get_resources_in_latest_version(environment=environment)
     actual_assignment = {r.attributes["key"]: r.resource_set for r in resources}
-    assert len(resources) == len(assignment), f" actual {actual_assignment} != expected {assignment}"
+    if len(resources) == len(assignment):
+        all_resources = [
+            f"rid: {r.resource_id}, resource_set: {r.resource_set}, resource_set_id: {r.resource_set_id}"
+            for r in await Resource.get_list()
+        ]
+        all_resource_sets = [f"name: {r.name}, id: {r.id}" for r in await ResourceSet.get_list()]
+        assert len(resources) == len(
+            assignment
+        ), f" actual {actual_assignment} != expected {assignment}. All resources: \n{'\n'.join(all_resources)} \n All resource_sets: \n {'\n'.join(all_resource_sets)}"
     assert actual_assignment == assignment
 
 
