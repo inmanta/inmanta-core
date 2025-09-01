@@ -2418,7 +2418,6 @@ class Setting:
             update_model=self.update,
             agent_restart=self.agent_restart,
             allowed_values=self.allowed_values,
-            section=self.section,
             protected=setting_details.protected if setting_details else False,
             protected_by=setting_details.protected_by if setting_details else None,
         )
