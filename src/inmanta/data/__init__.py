@@ -5644,7 +5644,7 @@ class Resource(BaseDocument):
         :param projection: The resource columns to include in the returned resource dictionaries.
             Must not overlap with other projection parameters.
 
-        :returns: A list of model versions and resources, gruped by resource set.
+        :returns: A list of model versions and resources, grouped by resource set.
         :raises PartialBaseMissing: The `since` version does not exist or has not been released.
         """
         projection_selectors: typing.LiteralString = ", ".join([f"r.{col}" for col in projection])
