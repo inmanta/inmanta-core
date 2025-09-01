@@ -1059,8 +1059,6 @@ class MPManager(
             raise ValueError(f"{self.__class__.__name__}.get_executor() expects at least one resource install specification")
 
         blueprint = executor.ExecutorBlueprint.from_specs(code)
-        LOGGER.info("Retrieved blueprint %s.", blueprint)
-
         executor_id = executor.ExecutorId(agent_name, agent_uri, blueprint)
 
         # Use pool manager
