@@ -45,7 +45,7 @@ async def assert_resource_set_assignment(environment, assignment: dict[str, Opti
     """
     resources = await Resource.get_resources_in_latest_version(environment=environment)
     actual_assignment = {r.attributes["key"]: r.resource_set for r in resources}
-    if len(resources) == len(assignment):
+    if len(resources) != len(assignment):
         all_resources = [
             f"rid: {r.resource_id}, resource_set: {r.resource_set}, resource_set_id: {r.resource_set_id}"
             for r in await Resource.get_list()
