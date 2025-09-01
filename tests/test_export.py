@@ -32,7 +32,7 @@ from inmanta.data import Resource
 from inmanta.export import DependencyCycleException
 from inmanta.module import InmantaModuleRequirement
 from inmanta.server.server import Server
-from utils import LogSequence, wait_for_version
+from utils import LogSequence
 
 
 async def assert_resource_set_assignment(environment, assignment: dict[str, Optional[str]]) -> None:
@@ -44,8 +44,8 @@ async def assert_resource_set_assignment(environment, assignment: dict[str, Opti
                        belong to.
     """
     resources = await Resource.get_resources_in_latest_version(environment=environment)
-    assert len(resources) == len(assignment)
     actual_assignment = {r.attributes["key"]: r.resource_set for r in resources}
+    assert len(resources) == len(assignment), f" actual {actual_assignment} != expected {assignment}"
     assert actual_assignment == assignment
 
 
@@ -581,7 +581,6 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
         """,
         partial_compile=False,
     )
-    await wait_for_version(client, environment, version)
     await assert_resource_set_assignment(
         environment,
         assignment={
@@ -612,7 +611,6 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
         partial_compile=True,
         resource_sets_to_remove=["resource_set_2"],
     )
-    await wait_for_version(client, environment, version)
     await assert_resource_set_assignment(
         environment,
         assignment={
@@ -656,7 +654,6 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
             partial_compile=True,
             resource_sets_to_remove=["resource_set_5"],
         )
-        await wait_for_version(client, environment, version)
         await assert_resource_set_assignment(
             environment,
             assignment={
