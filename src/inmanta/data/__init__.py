@@ -5184,33 +5184,31 @@ class ResourceSet(BaseDocument):
         :param connection: The connection to use
         """
 
-        query = """
-        WITH deleted_resource_set_versions AS (
+        # Delete all links from the resource set to this version
+        await cls._execute_query(
+            """
             DELETE FROM resource_set_configuration_model AS rscm
             WHERE rscm.environment=$1 AND rscm.model=$2
             RETURNING rscm.resource_set_id
-        ),
-        -- check resource_sets that no longer have an entry on resource_set_configuration_model
-        -- these are to be deleted
-        resource_sets_to_delete AS (
-            SELECT rs.id
-            FROM  resource_set AS rs
-            LEFT JOIN resource_set_configuration_model AS rscm
-                ON rs.id=rscm.resource_set_id AND rs.environment=rscm.environment
-            WHERE rs.id IN (
-                SELECT resource_set_id
-                FROM deleted_resource_set_versions
-            ) AND rs.environment=$1
-            AND rscm.resource_set_id is NULL
+            """,
+            environment,
+            version,
+            connection=connection,
         )
-        DELETE FROM resource_set AS rs
-        WHERE rs.id IN (
-                SELECT id
-                FROM resource_sets_to_delete
+        # Delete resource sets that are no longer linked to a configuration model
+        await cls._execute_query(
+            """
+            DELETE FROM resource_set AS rs
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM resource_set_configuration_model AS rscm
+                WHERE environment=$1
+                AND rscm.resource_set_id=rs.id
             )
-            AND rs.environment=$1
-        """
-        await cls._execute_query(query, environment, version, connection=connection)
+            """,
+            environment,
+            connection=connection,
+        )
 
 
 @stable_api
