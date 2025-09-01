@@ -613,12 +613,7 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
                         module_install_spec.module_name,
                         module_install_spec.module_version,
                     )
-                    if module_install_spec.blueprint.constraints_file_hash and module_install_spec.blueprint.constraints:
-                        constraint_file: str = os.path.join(os.curdir, module_install_spec.blueprint.constraints_file_hash)
-                        with open(constraint_file, "wb") as fd:
-                            fd.write(module_install_spec.blueprint.constraints)
                     await self._install(module_install_spec.blueprint)
-
                     self.logger.debug(
                         "Installed module %s version=%s",
                         module_install_spec.module_name,
@@ -652,7 +647,5 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
                 self._env.install_for_config,
                 inmanta.util.parse_requirements(blueprint.requirements),
                 blueprint.pip_config,
-                False,
-                [blueprint.constraints_file_hash] if blueprint.constraints_file_hash else None,
             )
             await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, blueprint.sources)
