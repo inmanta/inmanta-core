@@ -645,7 +645,7 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
             files_in_module=[module_source_metadata1],
             requirements=[],
             for_agents=["agent_X", "agent_Y"],
-            constraints_file_hash=None
+            constraints_file_hash=None,
         )
     }
 
@@ -715,7 +715,7 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
             files_in_module=[module_source_metadata2],
             requirements=[],
             for_agents=["agent_X"],
-            constraints_file_hash=None
+            constraints_file_hash=None,
         )
     }
 

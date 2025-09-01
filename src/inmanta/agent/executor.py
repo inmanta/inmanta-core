@@ -168,7 +168,7 @@ class EnvBlueprint:
         constraints = self.constraints.decode() if self.constraints else ""
         return (
             f"EnvBlueprint(environment_id={self.environment_id}, requirements=[{str(req)}], "
-            f"constraints=[{constraints}], constraint_file_hash={self.constraints_file_hash}"
+            f"constraints=[{constraints}], constraint_file_hash={self.constraints_file_hash}, "
             f"pip={self.pip_config}, python_version={self.python_version})"
         )
 
@@ -224,7 +224,7 @@ class ExecutorBlueprint(EnvBlueprint):
             sources=sources,
             requirements=requirements,
             constraints_file_hash=constraints_file_hash.pop(),
-            constraints=constraints.pop(),
+            constraints=constraints.pop(),  # TODO what if these sets are empty ?
             python_version=base_python_version,
         )
 
@@ -334,7 +334,7 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
     :param env_path: The file system path where the virtual environment should be created or exists.
     """
 
-    def __init__(self, env_path: str, io_threadpool: ThreadPoolExecutor, blueprint: EnvBlueprint | None = None):
+    def __init__(self, env_path: str, io_threadpool: ThreadPoolExecutor):
         PythonEnvironment.__init__(self, env_path=env_path)
         resourcepool.PoolMember.__init__(self, my_id=os.path.basename(env_path))
         self.inmanta_venv_status_file: pathlib.Path = pathlib.Path(self.env_path) / const.INMANTA_VENV_STATUS_FILENAME
@@ -342,19 +342,11 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         self.io_threadpool = io_threadpool
         self.constraint_file: pathlib.Path | None = None
 
-        LOGGER.debug("init ExecutorVirtualEnvironment %s", str(blueprint))
-
-        self.blueprint = blueprint
-
-    def _write_constraint_file(self) -> None:
-        if self.blueprint and self.blueprint.constraints_file_hash is not None and self.blueprint.constraints:
-            self.constraint_file = pathlib.Path(self.env_path) / self.blueprint.constraints_file_hash
-            with self.constraint_file.open("wb+") as f:
-                f.write(self.blueprint.constraints)
-
-    def init_env(self) -> None:
-        super().init_env()
-        self._write_constraint_file()
+    def _write_constraint_file(self, blueprint: EnvBlueprint) -> None:
+        if blueprint.constraints_file_hash is not None and blueprint.constraints:
+            self.constraint_file = pathlib.Path(self.env_path) / blueprint.constraints_file_hash
+            with self.constraint_file.open("wb") as f:
+                f.write(blueprint.constraints)
 
     async def create_and_install_environment(self, blueprint: EnvBlueprint) -> None:
         """
@@ -365,6 +357,7 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         """
         req: list[str] = list(blueprint.requirements)
         await asyncio.get_running_loop().run_in_executor(self.io_threadpool, self.init_env)
+        self._write_constraint_file(blueprint)
         if len(req):  # install_for_config expects at least 1 requirement or a path to install
             await self.async_install_for_config(
                 requirements=[packaging.requirements.Requirement(requirement_string=e) for e in req],
@@ -515,7 +508,7 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
             )
             is_new = False  # Returning the path and False for existing directory
 
-        process_environment = ExecutorVirtualEnvironment(env_dir, self.thread_pool, member_id)
+        process_environment = ExecutorVirtualEnvironment(env_dir, self.thread_pool)
 
         loop = asyncio.get_running_loop()
 
@@ -531,11 +524,6 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
             is_new = True
 
         if is_new:
-            if member_id.constraints_file_hash and member_id.constraints:
-                constraint_file: str = os.path.join(self.envs_dir, env_dir_name, member_id.constraints_file_hash)
-                with open(constraint_file, "wb") as fd:
-                    fd.write(member_id.constraints)
-
             LOGGER.info("Creating venv for content %s, content hash: %s", str(member_id), internal_id)
             await process_environment.create_and_install_environment(member_id)
         return process_environment

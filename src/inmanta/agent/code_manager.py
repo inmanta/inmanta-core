@@ -56,22 +56,6 @@ class CodeManager:
 
         :return: list of ModuleInstallSpec for this agent and this model version.
         """
-        # installation_constraints = (
-        #     select(
-        #         models.InmantaModule.constraints_file_hash,
-        #         models.File.content,
-        #     )
-        #     .join(
-        #         models.File,
-        #         models.InmantaModule.constraints_file_hash == models.File.content_hash,
-        #     )
-        #     .where(
-        #         models.AgentModules.environment == environment,
-        #         models.AgentModules.agent_name == agent_name,
-        #         models.AgentModules.cm_version == model_version,
-        #     )
-        # )
-
         module_install_specs = []
 
         constraint_file = aliased(models.File)
@@ -131,11 +115,6 @@ class CodeManager:
         )
 
         async with data.get_session() as session:
-            # result = await session.execute(installation_constraints)
-            # try:
-            #     constraints = result.one()
-            # except (MultipleResultsFound, NoResultFound) as e:
-            #     raise CouldNotResolveCode(agent_name, model_version) from e
             result = await session.execute(modules_for_agent)
             for module_name, rows in itertools.groupby(result.all(), key=lambda r: r.inmanta_module_name):
                 rows_list = list(rows)

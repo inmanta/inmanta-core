@@ -89,7 +89,6 @@ class CodeManager:
         # Content of the file containing python package constraints
         # set at the project level that have to be enforced when installing packages
         # in the agents venv.
-        self._project_constraints: str | None = None
         self._project_constraints_hash: str | None = None
 
     def build_agent_map(self, resources: dict["Id", "Resource"]) -> None:
@@ -112,10 +111,8 @@ class CodeManager:
         constraints: Sequence[str] = module.Project.get().get_all_constraints()
         if constraints:
             content: str = "\n".join(constraints)
-            self._project_constraints = content
             self._project_constraints_hash = exporter.upload_file(content)
         else:
-            self._project_constraints = None
             self._project_constraints_hash = None
 
     def register_code(self, type_name: str, instance: object) -> None:
@@ -232,10 +229,6 @@ class CodeManager:
                 return info.source
 
         raise KeyError("No file found with this hash")
-
-    # TODO remove ?
-    def get_project_constraints(self) -> str | None:
-        return self._project_constraints
 
 
 class CodeLoader:
