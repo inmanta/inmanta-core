@@ -678,6 +678,12 @@ class Resource(metaclass=ResourceMeta):
         for k, v in kwargs.items():
             setattr(res, k, v)
 
+        # Resources are copied in the hanlder, the cache has to be retained!
+        res._resolved = self._resolved
+        # In every case, share caches with child
+        res._references = self._references
+        res._references_model = self._references_model
+
         return res
 
     def serialize(self) -> JsonType:
