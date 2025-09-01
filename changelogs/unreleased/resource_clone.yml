@@ -1,0 +1,5 @@
+description: Fix bug in Resource.clone, where reference cache was not retained
+change-type: patch
+destination-branches: [master, iso8]
+sections:
+  bugfix: "{{description}}"
