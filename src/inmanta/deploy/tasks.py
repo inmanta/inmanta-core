@@ -89,7 +89,7 @@ class Task(abc.ABC):
             environment=task_manager.environment, model_version=version, agent_name=agent_name
         )
 
-        logger_for_agent(agent_name).info("Retrieve code %s", code)
+        logger_for_agent(agent_name).debug("Retrieve code %s", code)  # TODO way too noisy: remove or trim
         # Get executor
         my_executor: executor.Executor = await task_manager.executor_manager.get_executor(
             agent_name=agent_name, agent_uri="NO_URI", code=code

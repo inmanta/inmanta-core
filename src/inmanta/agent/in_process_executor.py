@@ -15,7 +15,6 @@ Contact: code@inmanta.com
 import asyncio
 import datetime
 import logging
-import os
 import typing
 import uuid
 from asyncio import InvalidStateError, Lock
