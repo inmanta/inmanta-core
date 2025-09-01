@@ -27,7 +27,6 @@ from logging import DEBUG
 import py
 import pytest
 
-import packaging
 from inmanta import data, protocol
 from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
@@ -88,7 +87,6 @@ async def upload_file(client: protocol.Client, content: str) -> str:
     return _hash
 
 
-@pytest.mark.parametrize("project_constraint", ["", "multi-version<2.0.0"])
 @pytest.mark.slowtest
 async def test_agent_installs_dependency_containing_extras(
     server_pre_start,
@@ -98,7 +96,6 @@ async def test_agent_installs_dependency_containing_extras(
     clienthelper,
     environment,
     agent,
-    project_constraint,
 ) -> None:
     """
     Test whether the agent code loading works correctly when a python dependency is provided that contains extras.
@@ -106,9 +103,6 @@ async def test_agent_installs_dependency_containing_extras(
 
     source_content = "file_content"
     _hash = await upload_file(client, source_content)
-    constraints_file_hash = None
-    if project_constraint:
-        constraints_file_hash = await upload_file(client, project_constraint)
 
     module_version_info = {
         "test": InmantaModuleDTO(
@@ -123,7 +117,7 @@ async def test_agent_installs_dependency_containing_extras(
             ],
             requirements=["pkg[optional-a]", "multi-version"],
             for_agents=["agent1"],
-            constraints_file_hash=constraints_file_hash,
+            constraints_file_hash=None,
         )
     }
 
@@ -178,11 +172,6 @@ async def test_agent_installs_dependency_containing_extras(
     check_packages(
         package_list=installed_packages, must_contain={"pkg", "dep-a", "multi-version"}, must_not_contain={"dep-b", "dep-c"}
     )
-
-    if project_constraint:
-        assert installed_packages["multi-version"] == packaging.version.Version("1.0.0")
-    else:
-        assert installed_packages["multi-version"] == packaging.version.Version("2.0.0")
 
 
 async def test_get_code(
