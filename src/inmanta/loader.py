@@ -101,7 +101,7 @@ class CodeManager:
         for id in resources:
             self._types_to_agent[id.entity_type].add(id.agent_name)
 
-    def register_project_constraints(self, exporter: export.Exporter) -> None:
+    def register_project_constraints(self, exporter: "export.Exporter") -> None:
         """
         Helper method to retrieve all package constraints defined at the project level and compile them
         into a constraint file.
