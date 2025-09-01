@@ -669,18 +669,22 @@ class ResourceScheduler(TaskManager):
         Raises KeyError if no specific version has been provided and no released versions exist.
         """
         async with self.state_update_manager.get_connection(connection) as con:
-            model: Optional[tuple[int, types.ResourceSets]] = await data.Resource.get_resources_for_version_raw(
-                self.environment,
-                version=version,
-                projection=ResourceRecord.__required_keys__,
-                connection=con,
+            model: Optional[tuple[int, types.ResourceSets[dict[str, object]]]] = (
+                await data.Resource.get_resources_for_version_raw(
+                    self.environment,
+                    version=version,
+                    projection=ResourceRecord.__required_keys__,
+                    connection=con,
+                )
             )
             if model is None:
                 raise KeyError()
 
+            # Can not be typed properly due to limitations of TypedDict, but we know we requested ResourceRecord's keys
+            resource_sets = typing.cast(types.ResourceSets[ResourceRecord], model[1])
             return ModelVersion.from_db_records(
                 version=model[0],
-                resource_sets=model[1],  # type: ignore
+                resource_sets=resource_sets,
                 partial=False,
             )
 
@@ -692,7 +696,7 @@ class ResourceScheduler(TaskManager):
         Must be called under intent lock.
         """
         if self._state.version > 0:
-            resources_by_version: Sequence[tuple[int, types.ResourceSets]]
+            resources_by_version: Sequence[tuple[int, types.ResourceSets[dict[str, object]]]]
             try:
                 # read new versions as partial updates
                 resources_by_version = await data.Resource.get_partial_resources_since_version_raw(
@@ -713,7 +717,9 @@ class ResourceScheduler(TaskManager):
                 return [
                     ModelVersion.from_db_records(
                         version,
-                        resources,  # type: ignore
+                        # Can not be typed properly due to limitations of TypedDict,
+                        # but we know we requested ResourceRecord's keys
+                        typing.cast(types.ResourceSets[ResourceRecord], resources),
                         partial=True,
                     )
                     for version, resources in resources_by_version

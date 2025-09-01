@@ -5519,7 +5519,7 @@ class Resource(BaseDocument):
         projection_persistent: Collection[typing.LiteralString] = (),
         project_attributes: Collection[typing.LiteralString] = (),
         connection: Optional[Connection] = None,
-    ) -> Optional[tuple[int, inmanta.types.ResourceSets]]:
+    ) -> Optional[tuple[int, inmanta.types.ResourceSets[dict[str, object]]]]:
         """
         Returns resources grouped by resource set for the given version (released or not). If no version is specified, returns
         the resources for the latest released version.
@@ -5616,7 +5616,7 @@ class Resource(BaseDocument):
             # LEFT JOIN produced no resource sets => empty model
             return (db_version, {})
 
-        sets: inmanta.types.ResourceSets = {
+        sets: inmanta.types.ResourceSets[dict[str, object]] = {
             resource_set_name: [{k: record[k] for k in projection_keys} for record in records]
             for resource_set_name, records in itertools.groupby(records, key=lambda r: r["resource_set_name"])
         }
@@ -5630,7 +5630,7 @@ class Resource(BaseDocument):
         since: int,
         projection: Collection[typing.LiteralString],
         connection: Optional[Connection] = None,
-    ) -> list[tuple[int, inmanta.types.ResourceSets]]:
+    ) -> list[tuple[int, inmanta.types.ResourceSets[dict[str, object]]]]:
         """
         Returns all released model versions with associated resources since (excluding) the given model version.
         Returned versions are returned as partial versions. In other words, only resource sets that changed since the previous
@@ -5736,7 +5736,7 @@ class Resource(BaseDocument):
             # LEFT JOIN with model_pairs resulted in None row => no new versions
             return []
 
-        type Model = tuple[int, inmanta.types.ResourceSets]
+        type Model = tuple[int, inmanta.types.ResourceSets[dict[str, object]]]
         result: list[Model] = []
         version: int
         records: Iterator[asyncpg.Record]
@@ -5748,7 +5748,7 @@ class Resource(BaseDocument):
                 result.append((version, {}))
                 continue
             resource_set_name: Optional[str]
-            model_sets: inmanta.types.ResourceSets = {}
+            model_sets: inmanta.types.ResourceSets[dict[str, object]] = {}
             for resource_set_name, records in itertools.groupby(records, key=lambda r: r["resource_set_name"]):
                 model_sets[resource_set_name] = []  # add even if there are no resources, to indicate an empty / deleted set
                 spy, records = more_itertools.spy(records)

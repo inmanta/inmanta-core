@@ -225,27 +225,29 @@ class ModelState:
             return None
 
         result = ModelState(version=last_processed_model_version)
-        model: Optional[tuple[int, inmanta.types.ResourceSets]] = await data.Resource.get_resources_for_version_raw(
-            environment=environment,
-            version=last_processed_model_version,
-            projection=("resource_id", "attributes", "attribute_hash"),
-            projection_persistent=(
-                "is_orphan",
-                "is_undefined",
-                "current_intent_attribute_hash",
-                "last_deployed_attribute_hash",
-                "last_deploy_result",
-                "blocked",
-                "last_success",
-                "last_deploy",
-                "last_produced_events",
-            ),
-            project_attributes=(
-                "requires",
-                const.RESOURCE_ATTRIBUTE_SEND_EVENTS,
-                const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS,
-            ),
-            connection=connection,
+        model: Optional[tuple[int, inmanta.types.ResourceSets[dict[str, object]]]] = (
+            await data.Resource.get_resources_for_version_raw(
+                environment=environment,
+                version=last_processed_model_version,
+                projection=("resource_id", "attributes", "attribute_hash"),
+                projection_persistent=(
+                    "is_orphan",
+                    "is_undefined",
+                    "current_intent_attribute_hash",
+                    "last_deployed_attribute_hash",
+                    "last_deploy_result",
+                    "blocked",
+                    "last_success",
+                    "last_deploy",
+                    "last_produced_events",
+                ),
+                project_attributes=(
+                    "requires",
+                    const.RESOURCE_ATTRIBUTE_SEND_EVENTS,
+                    const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS,
+                ),
+                connection=connection,
+            )
         )
         if not model:
             # the version does not exist at all (anymore)
