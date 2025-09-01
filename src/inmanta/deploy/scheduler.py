@@ -785,17 +785,21 @@ class ResourceScheduler(TaskManager):
         if not new_versions:
             raise ValueError("Expected at least one new model version")
 
+        # Sequentially apply versions in new_versions and build up a view on the model state.
+        #
+        # partial == True iff this view is a partial view on the intent, i.e. relative to the current state's intent,
+        # in the sense that it only contains the diff. False if it represents all intent.
+        # Concretely, will be False once (if) we process a non-partial version from new_versions.
+        partial: bool = True
+        # Each variable below keeps track of what has been modified so far.
         version: int
         intent: dict[ResourceIdStr, ResourceIntent] = {}
-        resource_sets: dict[Optional[str], Set[ResourceIdStr]] = {}
+        resource_sets: dict[Optional[str], Set[ResourceIdStr]] = {}  # deleted sets are represented by an empty set
         resource_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
         # keep track of all new resource intent and all changes of intent relative to the currently managed version
         intent_changes: dict[ResourceIdStr, ResourceIntentChange] = {}
         # all undefined resources in the new model versions. Newer version information overrides older ones.
         undefined: set[ResourceIdStr] = set()
-        # True iff the above represents a partial view on the intent, i.e. relative to the current state's intent.
-        # False if it represents all intent
-        partial: bool = True
 
         for model in new_versions:
             version = model.version
@@ -814,13 +818,10 @@ class ResourceScheduler(TaskManager):
                         for resource_set in model.resource_sets.keys()
                     )
                 )
-                # update resource sets mapping
-                for resource_set, resources in model.resource_sets.items():
-                    if len(resources) > 0:
-                        resource_sets[resource_set] = resources
-                    else:
-                        with contextlib.suppress(KeyError):
-                            del resource_sets[resource_set]
+                # Update resource sets mapping. Do not drop empty / deleted resource sets yet, because that would remove
+                # them from the partial view. We need to keep track of them so that the final resulting model version
+                # has them as empty sets in its diff. Only then can they be cleaned up from the scheduler's model state.
+                resource_sets.update(model.resource_sets)
             else:
                 # unless we read a full version in a previous iteration, `intent` represents partial intent,
                 # i.e. an overlay on top of the state's intent
