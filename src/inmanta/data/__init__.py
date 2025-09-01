@@ -5010,22 +5010,6 @@ class ResourceSet(BaseDocument):
             raise InvalidResourceSetMigration(msg)
 
     @classmethod
-    async def get_resource_set_configuration_model(
-        cls,
-        *,
-        connection: Optional[asyncpg.connection.Connection] = None
-    ) -> Sequence[Record]:
-        return await cls.select_query(
-            """
-            SELECT * FROM resource_set_configuration_model AS rscm
-            LEFT JOIN resource_set AS rs
-            ON rscm.environment=rs.environment AND rscm.resource_set_id=rs.id
-            """,
-            values=[],
-            no_obj=True,
-            connection=connection
-        )
-    @classmethod
     async def insert_sets_and_resources(
         cls,
         environment: uuid.UUID,
