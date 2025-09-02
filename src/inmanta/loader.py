@@ -201,8 +201,6 @@ class CodeManager:
         else:
             _requires = mod.get_strict_python_requirements_as_list()
 
-        _, constraints = project.get_all_dependencies_and_constraints()
-
         return set(_requires)
 
     @staticmethod

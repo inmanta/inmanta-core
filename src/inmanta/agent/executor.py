@@ -111,7 +111,7 @@ class EnvBlueprint:
     pip_config: PipConfig
     requirements: Sequence[str]
     constraints_file_hash: str | None = dataclasses.field(default=None, kw_only=True)
-    constraints: bytes | None = dataclasses.field(default=None, kw_only=True)
+    constraints: str | None = dataclasses.field(default=None, kw_only=True)
     _hash_cache: str | None = dataclasses.field(default=None, init=False, repr=False)
     python_version: tuple[int, int]
 
@@ -165,7 +165,7 @@ class EnvBlueprint:
 
     def __str__(self) -> str:
         req = ",".join(str(req) for req in self.requirements)
-        constraints = self.constraints.decode() if self.constraints else ""
+        constraints = self.constraints if self.constraints else ""
         return (
             f"EnvBlueprint(environment_id={self.environment_id}, requirements=[{str(req)}], "
             f"constraints=[{constraints}], constraint_file_hash={self.constraints_file_hash}, "
@@ -199,6 +199,11 @@ class ExecutorBlueprint(EnvBlueprint):
         assert len(env_ids) == 1
         sources = list({source for cd in code for source in cd.blueprint.sources})
         requirements = list({req for cd in code for req in cd.blueprint.requirements})
+
+        # The constraints_file_hash and constraints sets should always contain
+        # exactly one element:
+        #  - {None} and {None} if no constraint is set at the project level
+        #  - {unique_hash} and {unique_content} across all modules otherwise
         constraints_file_hash = {cd.blueprint.constraints_file_hash for cd in code}
         assert len(constraints_file_hash) == 1
         constraints = {cd.blueprint.constraints for cd in code}
@@ -344,8 +349,8 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
 
     def _write_constraint_file(self, blueprint: EnvBlueprint) -> None:
         if blueprint.constraints_file_hash is not None and blueprint.constraints:
-            self.constraint_file = pathlib.Path(self.env_path) / blueprint.constraints_file_hash
-            with self.constraint_file.open("wb") as f:
+            self.constraint_file = pathlib.Path(self.env_path) / "requirements.txt"
+            with self.constraint_file.open("w") as f:
                 f.write(blueprint.constraints)
 
     async def create_and_install_environment(self, blueprint: EnvBlueprint) -> None:

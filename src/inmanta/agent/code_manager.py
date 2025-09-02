@@ -124,6 +124,7 @@ class CodeManager:
                 _pip_config = rows_list[0].pip_config
                 assert all(row.pip_config == _pip_config for row in rows_list)
                 pip_config = LEGACY_PIP_DEFAULT if _pip_config is None else PipConfig(**_pip_config)
+                constraints = rows_list[0].constraint_file_content.decode() if rows_list[0].constraint_file_content else None
                 module_install_specs.append(
                     ModuleInstallSpec(
                         module_name=module_name,
@@ -145,7 +146,7 @@ class CodeManager:
                             python_version=sys.version_info[:2],
                             environment_id=environment,
                             constraints_file_hash=rows_list[0].constraints_file_hash,
-                            constraints=rows_list[0].constraint_file_content,
+                            constraints=constraints,
                         ),
                     )
                 )
