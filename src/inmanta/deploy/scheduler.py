@@ -26,17 +26,17 @@ import logging
 import typing
 import uuid
 from abc import abstractmethod
-from collections.abc import Collection, Mapping, Sequence, Set
+from collections.abc import Mapping, Sequence, Set
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional, Self
 
 import asyncpg
 
-from inmanta import const, data
+from inmanta import const, data, types
 from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
-from inmanta.data import ConfigurationModel, Environment
+from inmanta.data import Environment
 from inmanta.data.model import Discrepancy, SchedulerStatusReport
 from inmanta.deploy import timers, work
 from inmanta.deploy.persistence import ToDbUpdateManager
@@ -124,32 +124,60 @@ class ResourceRecord(typing.TypedDict):
 class ModelVersion:
     """
     A version of the model to be managed by the scheduler.
+
+    If partial is True, contains only those resources that changed since the previous version. Deleted resource sets are
+    modelled as empty sets.
+
+    :param version: The version of the model
+    :param resources: Intent of all resources in this model. Scoped to the resources from `resource_sets` for a partial model.
+    :param resource_sets: All resource sets (in the model, or the diff with the previous version for a partial model), with the
+        resources that belong to them.
+    :param requires: The requires relation of all resources. Resources without requires may be absent.
+    :param undefined: Set of all resources that are undefined.
+    :param partial: Whether this is a full or partial model version. Partial model versions only contain the resource sets that
+        were changed (including new or deleted) since the previous version. For each of those resource sets, they contain all
+        its resources.
     """
 
     version: int
     resources: Mapping[ResourceIdStr, ResourceIntent]
+    resource_sets: Mapping[Optional[str], Set[ResourceIdStr]]
     requires: Mapping[ResourceIdStr, Set[ResourceIdStr]]
     undefined: Set[ResourceIdStr]
+    partial: bool
 
     @classmethod
-    def from_db_records(cls: type[Self], version: int, resources: Collection[ResourceRecord]) -> Self:
-        return cls(
-            version=version,
-            resources={
-                ResourceIdStr(resource["resource_id"]): ResourceIntent(
-                    resource_id=ResourceIdStr(resource["resource_id"]),
+    def from_db_records(
+        cls: type[Self],
+        version: int,
+        resource_sets: Mapping[Optional[str], Sequence[ResourceRecord]],
+        *,
+        partial: bool,
+    ) -> Self:
+        resources: dict[ResourceIdStr, ResourceIntent] = {}
+        sets: dict[Optional[str], set[ResourceIdStr]] = {}
+        requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
+        undefined: set[ResourceIdStr] = set()
+        for resource_set, set_resources in resource_sets.items():
+            sets[resource_set] = set()
+            for resource in set_resources:
+                resource_id = ResourceIdStr(resource["resource_id"])
+                sets[resource_set].add(resource_id)
+                resources[resource_id] = ResourceIntent(
+                    resource_id=resource_id,
                     attribute_hash=resource["attribute_hash"],
                     attributes=resource["attributes"],
                 )
-                for resource in resources
-            },
-            requires={
-                ResourceIdStr(resource["resource_id"]): {
-                    Id.parse_id(req).resource_str() for req in resource["attributes"].get("requires", [])
-                }
-                for resource in resources
-            },
-            undefined={ResourceIdStr(resource["resource_id"]) for resource in resources if resource["is_undefined"]},
+                requires[resource_id] = {Id.parse_id(req).resource_str() for req in resource["attributes"].get("requires", [])}
+                if resource["is_undefined"]:
+                    undefined.add(resource_id)
+        return cls(
+            version=version,
+            resources=resources,
+            resource_sets=sets,
+            requires=requires,
+            undefined=undefined,
+            partial=partial,
         )
 
 
@@ -644,24 +672,69 @@ class ResourceScheduler(TaskManager):
         Raises KeyError if no specific version has been provided and no released versions exist.
         """
         async with self.state_update_manager.get_connection(connection) as con:
-            if version is None:
-                # Fetch the latest released model version
-                cm_version = await ConfigurationModel.get_latest_version(self.environment, connection=con)
-                if cm_version is None:
-                    raise KeyError()
-                version = cm_version.version
-
-            resources_from_db = await data.Resource.get_resources_for_version_raw(
-                environment=self.environment,
-                version=version,
-                projection=ResourceRecord.__required_keys__,
-                connection=con,
+            model: Optional[tuple[int, types.ResourceSets[dict[str, object]]]] = (
+                await data.Resource.get_resources_for_version_raw(
+                    self.environment,
+                    version=version,
+                    projection=ResourceRecord.__required_keys__,
+                    connection=con,
+                )
             )
+            if model is None:
+                raise KeyError()
 
+            # Can not be typed properly due to limitations of TypedDict, but we know we requested ResourceRecord's keys
+            resource_sets = typing.cast(types.ResourceSets[ResourceRecord], model[1])
             return ModelVersion.from_db_records(
-                version,
-                resources_from_db,  # type: ignore
+                version=model[0],
+                resource_sets=resource_sets,
+                partial=False,
             )
+
+    async def _get_partial_model_versions_from_db(self, *, connection: asyncpg.connection.Connection) -> list[ModelVersion]:
+        """
+        Returns a list of partial model versions from the database, relative to the currently active version. If no version
+        is active yet, returns a single full version (the latest released one) instead.
+
+        Must be called under intent lock.
+        """
+        if self._state.version > 0:
+            resources_by_version: Sequence[tuple[int, types.ResourceSets[dict[str, object]]]]
+            try:
+                # read new versions as partial updates
+                resources_by_version = await data.Resource.get_partial_resources_since_version_raw(
+                    self.environment,
+                    since=self._state.version,
+                    projection=ResourceRecord.__required_keys__,
+                    connection=connection,
+                )
+            except data.PartialBaseMissing:
+                # should not happen, but be defensive: fall back to reading full version
+                LOGGER.warning(
+                    "The currently active version (%s) no longer exists in the database. Resource scheduler will fall back"
+                    " to reading the latest version from the database in full. This should really never happen, please"
+                    " report this bug.",
+                    self._state.version,
+                )
+            else:
+                return [
+                    ModelVersion.from_db_records(
+                        version,
+                        # Can not be typed properly due to limitations of TypedDict,
+                        # but we know we requested ResourceRecord's keys
+                        typing.cast(types.ResourceSets[ResourceRecord], resources),
+                        partial=True,
+                    )
+                    for version, resources in resources_by_version
+                ]
+
+        # no existing state => read a full version
+        try:
+            latest_version: ModelVersion = await self._get_single_model_version_from_db(version=None, connection=connection)
+        except KeyError:
+            return []
+        else:
+            return [latest_version]
 
     async def read_version(
         self,
@@ -686,23 +759,8 @@ class ResourceScheduler(TaskManager):
             # - a new version was released after we started processing this communication or is being released now, in which
             #   case a new notification will be / have been sent and blocked on the intent locked until we're done here.
             # So if we end up with a race, we can be confident that we'll always process the associated notification soon.
-            resources_by_version: Sequence[tuple[int, Sequence[Mapping[str, object]]]] = (
-                await data.Resource.get_resources_since_version_raw(
-                    self.environment,
-                    since=self._state.version if self._state.version > 0 else None,
-                    connection=con,
-                )
-            )
-            new_versions: Sequence[ModelVersion] = [
-                ModelVersion.from_db_records(
-                    version,
-                    resources,  # type: ignore
-                )
-                for version, resources in resources_by_version
-            ]
-
             await self._new_version(
-                new_versions,
+                await self._get_partial_model_versions_from_db(connection=con),
                 reason="a new version was released",
                 connection=con,
             )
@@ -730,8 +788,16 @@ class ResourceScheduler(TaskManager):
         if not new_versions:
             raise ValueError("Expected at least one new model version")
 
+        # Sequentially apply versions in new_versions and build up a view on the model state.
+        #
+        # partial == True iff this view is a partial view on the intent, i.e. relative to the current state's intent,
+        # in the sense that it only contains the diff. False if it represents all intent.
+        # Concretely, will be False once (if) we process a non-partial version from new_versions.
+        partial: bool = True
+        # Each variable below keeps track of what has been modified so far.
         version: int
         intent: dict[ResourceIdStr, ResourceIntent] = {}
+        resource_sets: dict[Optional[str], Set[ResourceIdStr]] = {}  # deleted sets are represented by an empty set
         resource_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
         # keep track of all new resource intent and all changes of intent relative to the currently managed version
         intent_changes: dict[ResourceIdStr, ResourceIntentChange] = {}
@@ -740,8 +806,34 @@ class ResourceScheduler(TaskManager):
 
         for model in new_versions:
             version = model.version
-            # resources that don't exist anymore in this version
-            for resource in (self._state.intent.keys() | intent.keys()) - model.resources.keys():
+
+            # Update resource sets and check for deleted resources.
+
+            # known resources that are in scope for this model version update, i.e. resources in exported sets
+            known_resources: Set[ResourceIdStr]
+            if model.partial:
+                known_resources = set().union(
+                    *(
+                        # get resources in set from tracked resource set, falling back to state's resource set if appropriate
+                        resource_sets.get(
+                            resource_set, self._state.resource_sets.get(resource_set, set()) if partial else set()
+                        )
+                        for resource_set in model.resource_sets.keys()
+                    )
+                )
+                # Update resource sets mapping. Do not drop empty / deleted resource sets yet, because that would remove
+                # them from the partial view. We need to keep track of them so that the final resulting model version
+                # has them as empty sets in its diff. Only then can they be cleaned up from the scheduler's model state.
+                resource_sets.update(model.resource_sets)
+            else:
+                # unless we read a full version in a previous iteration, `intent` represents partial intent,
+                # i.e. an overlay on top of the state's intent
+                known_resources = intent.keys() | (self._state.intent.keys() if partial else set())
+                # from now on we track all resource sets
+                partial = False
+                resource_sets = dict(model.resource_sets)
+
+            for resource in known_resources - model.resources.keys():
                 with contextlib.suppress(KeyError):
                     del intent[resource]
                     del resource_requires[resource]
@@ -803,8 +895,10 @@ class ResourceScheduler(TaskManager):
             ModelVersion(
                 version=version,
                 resources=intent,
+                resource_sets=resource_sets,
                 requires=resource_requires,
                 undefined=undefined,
+                partial=partial,
             ),
             intent_changes,
         )
@@ -826,7 +920,8 @@ class ResourceScheduler(TaskManager):
 
         :param up_to_date_resources: Set of resources that are to be considered in an assumed good state due to a previously
             successful deploy for the same intent. Should not include any blocked resources. Mostly intended for the very first
-            version when the scheduler is started with a fresh state.
+            version when the scheduler is started with a fresh state. Must be present in the latest version in the
+            new versions list.
         :param last_deploy_time: last known deploy time of all resources. only intended for the very first
             version when the scheduler is started with a fresh state.
             It must contain ALL resources as it is used to start the timers
@@ -932,8 +1027,17 @@ class ResourceScheduler(TaskManager):
         #   and has to be even apart from motivations 2-3, it may interleave with
         # 2. clarity: it clearly signifies that this is the atomic and performance-sensitive part
         async with self._scheduler_lock:
-            # update model version
+            # update model version and resource set mapping
             self._state.version = model.version
+            if model.partial:
+                for resource_set, resources in model.resource_sets.items():
+                    if resources:
+                        self._state.resource_sets[resource_set] = set(resources)
+                    else:
+                        with contextlib.suppress(KeyError):
+                            del self._state.resource_sets[resource_set]
+            else:
+                self._state.resource_sets = {name: set(s) for name, s in model.resource_sets.items()}
             # update resource intent
             for resource in up_to_date_resources:
                 # Registers resource and removes from the dirty set
