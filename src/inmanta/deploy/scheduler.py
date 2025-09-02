@@ -46,6 +46,7 @@ from inmanta.deploy.work import TaskPriority
 from inmanta.protocol import Client
 from inmanta.resources import Id
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
+from inmanta.vendor import pyformance
 
 LOGGER = logging.getLogger(__name__)
 NB_ITERATIONS_PASS_IO_LOOP: int = 100
@@ -749,18 +750,19 @@ class ResourceScheduler(TaskManager):
         """
         if not self._running:
             return
-        async with self._intent_lock, self.state_update_manager.get_connection(connection) as con:
-            # Note: we're not very sensitive to races on the latest released version here. The server will always notify us
-            # *after* a new version is released. So we'll always be in one of two scenearios:
-            # - the latest released version was released before we started processing this notification
-            # - a new version was released after we started processing this communication or is being released now, in which
-            #   case a new notification will be / have been sent and blocked on the intent locked until we're done here.
-            # So if we end up with a race, we can be confident that we'll always process the associated notification soon.
-            await self._new_version(
-                await self._get_partial_model_versions_from_db(connection=con),
-                reason="a new version was released",
-                connection=con,
-            )
+        with pyformance.timer("internal.scheduler.read_version").time():
+            async with self._intent_lock, self.state_update_manager.get_connection(connection) as con:
+                # Note: we're not very sensitive to races on the latest released version here. The server will always notify us
+                # *after* a new version is released. So we'll always be in one of two scenearios:
+                # - the latest released version was released before we started processing this notification
+                # - a new version was released after we started processing this communication or is being released now, in which
+                #   case a new notification will be / have been sent and blocked on the intent locked until we're done here.
+                # So if we end up with a race, we can be confident that we'll always process the associated notification soon.
+                await self._new_version(
+                    await self._get_partial_model_versions_from_db(connection=con),
+                    reason="a new version was released",
+                    connection=con,
+                )
 
     async def _get_intent_changes(
         self,

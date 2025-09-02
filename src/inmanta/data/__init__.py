@@ -70,6 +70,7 @@ from inmanta.types import (
     api_boundary_datetime_normalizer,
 )
 from inmanta.util import parse_timestamp
+from inmanta.vendor import pyformance
 from sqlalchemy import URL, AdaptedConnection, NullPool
 from sqlalchemy.dialects import registry
 from sqlalchemy.dialects.postgresql.asyncpg import PGDialect_asyncpg
@@ -5047,128 +5048,131 @@ class ResourceSet(BaseDocument):
 
             has_shared_resource_set = None in updated_resource_sets
             # link every resource_set that was present in the base version to the target version
+            with pyformance.timer("sql.insert_sets_and_resources.copy_sets").time():
+                await cls._execute_query(
+                    f"""\
+                    INSERT INTO public.resource_set_configuration_model(
+                        environment,
+                        model,
+                        resource_set_id
+                    )
+                    SELECT
+                        $1,
+                        $2,
+                        rscm.resource_set_id
+                    FROM public.resource_set_configuration_model AS rscm
+                    INNER JOIN resource_set AS rs
+                        ON rscm.environment=rs.environment
+                        AND rscm.resource_set_id=rs.id
+                    WHERE rscm.environment=$1
+                        AND rscm.model=$3
+                        -- only insert resource sets that are not on updated_resource_sets --
+                        AND (
+                            SELECT rs.name = ANY($4::text[]) {'OR rs.name IS NULL' if has_shared_resource_set else ''}
+                            FROM resource_set AS rs
+                            WHERE
+                                rs.environment = rscm.environment
+                                AND rs.id = rscm.resource_set_id
+                        ) IS NOT true
+                    """,
+                    *common_values,
+                    cls._get_value(base_version),
+                    cls._get_value((updated_resource_sets | deleted_resource_sets) - {None}),
+                    connection=connection,
+                )
+
+        # insert the updated resource sets and resources into the database and link everything together
+        # (resource -> set and set -> model)
+        with pyformance.timer("sql.insert_sets_and_resources.insert").time():
             await cls._execute_query(
-                f"""\
-                INSERT INTO public.resource_set_configuration_model(
+                """\
+                -- insert resource sets and keep track of name-id mapping
+                WITH inserted_resource_sets AS (
+                    INSERT INTO public.resource_set (environment, id, name)
+                    SELECT
+                        $1,
+                        gen_random_uuid() AS id,
+                        UNNEST($3::text[])
+                    RETURNING name, id
+                -- link resource sets to model version
+                ), linked_resource_sets AS (
+                    INSERT INTO public.resource_set_configuration_model(
+                       environment,
+                       model,
+                       resource_set_id
+                    )
+                    SELECT
+                        $1,
+                        $2,
+                        irs.id
+                    FROM inserted_resource_sets AS irs
+                ), resource_data AS (
+                    SELECT
+                        UNNEST($4::text[]) AS resource_id,
+                        UNNEST($5::text[]) AS resource_type,
+                        UNNEST($6::text[]) AS resource_id_value,
+                        UNNEST($7::text[]) AS agent,
+                        UNNEST($8::jsonb[]) AS attributes,
+                        UNNEST($9::text[]) AS attribute_hash,
+                        UNNEST($10::boolean[]) AS is_undefined,
+                        UNNEST($11::text[]) AS resource_set
+                )
+                -- insert resources
+                INSERT INTO public.resource(
                     environment,
                     model,
+                    resource_id,
+                    resource_type,
+                    resource_id_value,
+                    agent,
+                    attributes,
+                    attribute_hash,
+                    is_undefined,
+                    resource_set,
                     resource_set_id
                 )
                 SELECT
                     $1,
                     $2,
-                    rscm.resource_set_id
-                FROM public.resource_set_configuration_model AS rscm
-                INNER JOIN resource_set AS rs
-                    ON rscm.environment=rs.environment
-                    AND rscm.resource_set_id=rs.id
-                WHERE rscm.environment=$1
-                    AND rscm.model=$3
-                    -- only insert resource sets that are not on updated_resource_sets --
-                    AND (
-                        SELECT rs.name = ANY($4::text[]) {'OR rs.name IS NULL' if has_shared_resource_set else ''}
-                        FROM resource_set AS rs
-                        WHERE
-                            rs.environment = rscm.environment
-                            AND rs.id = rscm.resource_set_id
-                    ) IS NOT true
+                    r.resource_id,
+                    r.resource_type,
+                    r.resource_id_value,
+                    r.agent,
+                    r.attributes,
+                    r.attribute_hash,
+                    r.is_undefined,
+                    rs.name,
+                    rs.id
+                FROM resource_data AS r
+                -- this join has been tested to be up to four times faster than joining with
+                -- resource_configuration_model, even if the latter would have the name column directly
+                -- (for 5k models, 5k sets, updating 1-1000 sets, with 100-10k resources per set).
+                -- Order of magnitude for reference: 0.5s when updating 10 sets with 1k resources per set.
+                INNER JOIN inserted_resource_sets AS rs
+                    ON r.resource_set IS NOT DISTINCT FROM rs.name
                 """,
                 *common_values,
-                cls._get_value(base_version),
-                cls._get_value((updated_resource_sets | deleted_resource_sets) - {None}),
+                cls._get_value(updated_resource_sets),
+                # insert as separate arrays rather than jsonb because jsob has a size limit
+                resource_data_db.get("resource_id", []),
+                resource_data_db.get("resource_type", []),
+                resource_data_db.get("resource_id_value", []),
+                resource_data_db.get("agent", []),
+                resource_data_db.get("attributes", []),
+                resource_data_db.get("attribute_hash", []),
+                resource_data_db.get("is_undefined", []),
+                resource_data_db.get("resource_set", []),
                 connection=connection,
             )
-
-        # insert the updated resource sets and resources into the database and link everything together
-        # (resource -> set and set -> model)
-        await cls._execute_query(
-            """\
-            -- insert resource sets and keep track of name-id mapping
-            WITH inserted_resource_sets AS (
-                INSERT INTO public.resource_set (environment, id, name)
-                SELECT
-                    $1,
-                    gen_random_uuid() AS id,
-                    UNNEST($3::text[])
-                RETURNING name, id
-            -- link resource sets to model version
-            ), linked_resource_sets AS (
-                INSERT INTO public.resource_set_configuration_model(
-                   environment,
-                   model,
-                   resource_set_id
-                )
-                SELECT
-                    $1,
-                    $2,
-                    irs.id
-                FROM inserted_resource_sets AS irs
-            ), resource_data AS (
-                SELECT
-                    UNNEST($4::text[]) AS resource_id,
-                    UNNEST($5::text[]) AS resource_type,
-                    UNNEST($6::text[]) AS resource_id_value,
-                    UNNEST($7::text[]) AS agent,
-                    UNNEST($8::jsonb[]) AS attributes,
-                    UNNEST($9::text[]) AS attribute_hash,
-                    UNNEST($10::boolean[]) AS is_undefined,
-                    UNNEST($11::text[]) AS resource_set
-            )
-            -- insert resources
-            INSERT INTO public.resource(
-                environment,
-                model,
-                resource_id,
-                resource_type,
-                resource_id_value,
-                agent,
-                attributes,
-                attribute_hash,
-                is_undefined,
-                resource_set,
-                resource_set_id
-            )
-            SELECT
-                $1,
-                $2,
-                r.resource_id,
-                r.resource_type,
-                r.resource_id_value,
-                r.agent,
-                r.attributes,
-                r.attribute_hash,
-                r.is_undefined,
-                rs.name,
-                rs.id
-            FROM resource_data AS r
-            -- this join has been tested to be up to four times faster than joining with
-            -- resource_configuration_model, even if the latter would have the name column directly
-            -- (for 5k models, 5k sets, updating 1-1000 sets, with 100-10k resources per set).
-            -- Order of magnitude for reference: 0.5s when updating 10 sets with 1k resources per set.
-            INNER JOIN inserted_resource_sets AS rs
-                ON r.resource_set IS NOT DISTINCT FROM rs.name
-            """,
-            *common_values,
-            cls._get_value(updated_resource_sets),
-            # insert as separate arrays rather than jsonb because jsob has a size limit
-            resource_data_db.get("resource_id", []),
-            resource_data_db.get("resource_type", []),
-            resource_data_db.get("resource_id_value", []),
-            resource_data_db.get("agent", []),
-            resource_data_db.get("attributes", []),
-            resource_data_db.get("attribute_hash", []),
-            resource_data_db.get("is_undefined", []),
-            resource_data_db.get("resource_set", []),
-            connection=connection,
-        )
 
         if is_partial_update:
-            await cls.validate_resource_sets_in_version(
-                environment=environment,
-                version=target_version,
-                updated_resource_sets=updated_resource_sets,
-                connection=connection,
-            )
+            with pyformance.timer("sql.insert_sets_and_resources.validate").time():
+                await cls.validate_resource_sets_in_version(
+                    environment=environment,
+                    version=target_version,
+                    updated_resource_sets=updated_resource_sets,
+                    connection=connection,
+                )
 
     @classmethod
     async def clear_resource_sets_in_version(
@@ -5610,12 +5614,13 @@ class Resource(BaseDocument):
             {rps_join}
             ORDER BY rs.name, r.resource_id
         """
-        resource_records = await cls._fetch_query(
-            query,
-            cls._get_value(environment),
-            *([version] if version is not None else []),
-            connection=connection,
-        )
+        with pyformance.timer("sql.get_resources_for_version_raw").time():
+            resource_records = await cls._fetch_query(
+                query,
+                cls._get_value(environment),
+                *([version] if version is not None else []),
+                connection=connection,
+            )
 
         records: Iterator[asyncpg.Record]
         spy: Sequence[asyncpg.Record]
@@ -5761,12 +5766,13 @@ class Resource(BaseDocument):
             AND r.resource_set_id = diff.resource_set_id
         ORDER BY model_pairs.new, diff.name, r.resource_id
         """
-        resource_records = await cls._fetch_query(
-            query,
-            cls._get_value(environment),
-            cls._get_value(since),
-            connection=connection,
-        )
+        with pyformance.timer("sql.get_partial_resources_since_version_raw").time():
+            resource_records = await cls._fetch_query(
+                query,
+                cls._get_value(environment),
+                cls._get_value(since),
+                connection=connection,
+            )
 
         assert resource_records
         if not resource_records[0]["exists"]:
