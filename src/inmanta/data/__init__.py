@@ -29,7 +29,7 @@ import uuid
 import warnings
 from abc import ABC, abstractmethod
 from collections import abc, defaultdict
-from collections.abc import AsyncIterator, Awaitable, Callable, Collection, Iterable, Sequence, Set
+from collections.abc import AsyncIterator, Awaitable, Callable, Collection, Iterable, Iterator, Sequence, Set
 from configparser import RawConfigParser
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from itertools import chain
@@ -39,6 +39,7 @@ from uuid import UUID
 
 import asyncpg
 import dateutil
+import more_itertools
 import pydantic
 import pydantic.tools
 import typing_inspect
@@ -69,6 +70,7 @@ from inmanta.types import (
     api_boundary_datetime_normalizer,
 )
 from inmanta.util import parse_timestamp
+from inmanta.vendor import pyformance
 from sqlalchemy import URL, AdaptedConnection, NullPool
 from sqlalchemy.dialects import registry
 from sqlalchemy.dialects.postgresql.asyncpg import PGDialect_asyncpg
@@ -113,6 +115,13 @@ as `A -> B`, meaning A should be locked before B in any transaction that acquire
 - Agentprocess -> Agentinstance -> Agent
 - ResourcePersistentState -> Scheduler
 """
+
+
+class PartialBaseMissing(ValueError):
+    """
+    A base version was provided in the context of a partial export / partial model read, but the base version does not exist
+    or does not meet criteria.
+    """
 
 
 @enum.unique
@@ -5070,126 +5079,129 @@ class ResourceSet(BaseDocument):
 
             has_shared_resource_set = None in updated_resource_sets
             # link every resource_set that was present in the base version to the target version
+            with pyformance.timer("sql.insert_sets_and_resources.copy_sets").time():
+                await cls._execute_query(
+                    f"""\
+                    INSERT INTO public.resource_set_configuration_model(
+                        environment,
+                        model,
+                        resource_set_id
+                    )
+                    SELECT
+                        $1,
+                        $2,
+                        rscm.resource_set_id
+                    FROM public.resource_set_configuration_model AS rscm
+                    INNER JOIN resource_set AS rs
+                        ON rscm.environment=rs.environment
+                        AND rscm.resource_set_id=rs.id
+                    WHERE rscm.environment=$1
+                        AND rscm.model=$3
+                        -- only insert resource sets that are not on updated_resource_sets --
+                        AND (
+                            SELECT rs.name = ANY($4::text[]) {'OR rs.name IS NULL' if has_shared_resource_set else ''}
+                            FROM resource_set AS rs
+                            WHERE
+                                rs.environment = rscm.environment
+                                AND rs.id = rscm.resource_set_id
+                        ) IS NOT true
+                    """,
+                    *common_values,
+                    cls._get_value(base_version),
+                    cls._get_value((updated_resource_sets | deleted_resource_sets) - {None}),
+                    connection=connection,
+                )
+
+        # insert the updated resource sets and resources into the database and link everything together
+        # (resource -> set and set -> model)
+        with pyformance.timer("sql.insert_sets_and_resources.insert").time():
             await cls._execute_query(
-                f"""\
-                INSERT INTO public.resource_set_configuration_model(
+                """\
+                -- insert resource sets and keep track of name-id mapping
+                WITH inserted_resource_sets AS (
+                    INSERT INTO public.resource_set (environment, id, name)
+                    SELECT
+                        $1,
+                        gen_random_uuid() AS id,
+                        UNNEST($3::text[])
+                    RETURNING name, id
+                -- link resource sets to model version
+                ), linked_resource_sets AS (
+                    INSERT INTO public.resource_set_configuration_model(
+                       environment,
+                       model,
+                       resource_set_id
+                    )
+                    SELECT
+                        $1,
+                        $2,
+                        irs.id
+                    FROM inserted_resource_sets AS irs
+                ), resource_data AS (
+                    SELECT
+                        UNNEST($4::text[]) AS resource_id,
+                        UNNEST($5::text[]) AS resource_type,
+                        UNNEST($6::text[]) AS resource_id_value,
+                        UNNEST($7::text[]) AS agent,
+                        UNNEST($8::jsonb[]) AS attributes,
+                        UNNEST($9::text[]) AS attribute_hash,
+                        UNNEST($10::boolean[]) AS is_undefined,
+                        UNNEST($11::text[]) AS resource_set
+                )
+                -- insert resources
+                INSERT INTO public.resource(
                     environment,
-                    model,
+                    resource_id,
+                    resource_type,
+                    resource_id_value,
+                    agent,
+                    attributes,
+                    attribute_hash,
+                    is_undefined,
+                    resource_set,
                     resource_set_id
                 )
                 SELECT
                     $1,
-                    $2,
-                    rscm.resource_set_id
-                FROM public.resource_set_configuration_model AS rscm
-                INNER JOIN resource_set AS rs
-                    ON rscm.environment=rs.environment
-                    AND rscm.resource_set_id=rs.id
-                WHERE rscm.environment=$1
-                    AND rscm.model=$3
-                    -- only insert resource sets that are not on updated_resource_sets --
-                    AND (
-                        SELECT rs.name = ANY($4::text[]) {'OR rs.name IS NULL' if has_shared_resource_set else ''}
-                        FROM resource_set AS rs
-                        WHERE
-                            rs.environment = rscm.environment
-                            AND rs.id = rscm.resource_set_id
-                    ) IS NOT true
+                    r.resource_id,
+                    r.resource_type,
+                    r.resource_id_value,
+                    r.agent,
+                    r.attributes,
+                    r.attribute_hash,
+                    r.is_undefined,
+                    rs.name,
+                    rs.id
+                FROM resource_data AS r
+                -- this join has been tested to be up to four times faster than joining with
+                -- resource_configuration_model, even if the latter would have the name column directly
+                -- (for 5k models, 5k sets, updating 1-1000 sets, with 100-10k resources per set).
+                -- Order of magnitude for reference: 0.5s when updating 10 sets with 1k resources per set.
+                INNER JOIN inserted_resource_sets AS rs
+                    ON r.resource_set IS NOT DISTINCT FROM rs.name
                 """,
                 *common_values,
-                cls._get_value(base_version),
-                cls._get_value((updated_resource_sets | deleted_resource_sets) - {None}),
+                cls._get_value(updated_resource_sets),
+                # insert as separate arrays rather than jsonb because jsob has a size limit
+                resource_data_db.get("resource_id", []),
+                resource_data_db.get("resource_type", []),
+                resource_data_db.get("resource_id_value", []),
+                resource_data_db.get("agent", []),
+                resource_data_db.get("attributes", []),
+                resource_data_db.get("attribute_hash", []),
+                resource_data_db.get("is_undefined", []),
+                resource_data_db.get("resource_set", []),
                 connection=connection,
             )
-
-        # insert the updated resource sets and resources into the database and link everything together
-        # (resource -> set and set -> model)
-        await cls._execute_query(
-            """\
-            -- insert resource sets and keep track of name-id mapping
-            WITH inserted_resource_sets AS (
-                INSERT INTO public.resource_set (environment, id, name)
-                SELECT
-                    $1,
-                    gen_random_uuid() AS id,
-                    UNNEST($3::text[])
-                RETURNING name, id
-            -- link resource sets to model version
-            ), linked_resource_sets AS (
-                INSERT INTO public.resource_set_configuration_model(
-                   environment,
-                   model,
-                   resource_set_id
-                )
-                SELECT
-                    $1,
-                    $2,
-                    irs.id
-                FROM inserted_resource_sets AS irs
-            ), resource_data AS (
-                SELECT
-                    UNNEST($4::text[]) AS resource_id,
-                    UNNEST($5::text[]) AS resource_type,
-                    UNNEST($6::text[]) AS resource_id_value,
-                    UNNEST($7::text[]) AS agent,
-                    UNNEST($8::jsonb[]) AS attributes,
-                    UNNEST($9::text[]) AS attribute_hash,
-                    UNNEST($10::boolean[]) AS is_undefined,
-                    UNNEST($11::text[]) AS resource_set
-            )
-            -- insert resources
-            INSERT INTO public.resource(
-                environment,
-                resource_id,
-                resource_type,
-                resource_id_value,
-                agent,
-                attributes,
-                attribute_hash,
-                is_undefined,
-                resource_set,
-                resource_set_id
-            )
-            SELECT
-                $1,
-                r.resource_id,
-                r.resource_type,
-                r.resource_id_value,
-                r.agent,
-                r.attributes,
-                r.attribute_hash,
-                r.is_undefined,
-                rs.name,
-                rs.id
-            FROM resource_data AS r
-            -- this join has been tested to be up to four times faster than joining with
-            -- resource_configuration_model, even if the latter would have the name column directly
-            -- (for 5k models, 5k sets, updating 1-1000 sets, with 100-10k resources per set).
-            -- Order of magnitude for reference: 0.5s when updating 10 sets with 1k resources per set.
-            INNER JOIN inserted_resource_sets AS rs
-                ON r.resource_set IS NOT DISTINCT FROM rs.name
-            """,
-            *common_values,
-            cls._get_value(updated_resource_sets),
-            # insert as separate arrays rather than jsonb because jsob has a size limit
-            resource_data_db.get("resource_id", []),
-            resource_data_db.get("resource_type", []),
-            resource_data_db.get("resource_id_value", []),
-            resource_data_db.get("agent", []),
-            resource_data_db.get("attributes", []),
-            resource_data_db.get("attribute_hash", []),
-            resource_data_db.get("is_undefined", []),
-            resource_data_db.get("resource_set", []),
-            connection=connection,
-        )
 
         if is_partial_update:
-            await cls.validate_resource_sets_in_version(
-                environment=environment,
-                version=target_version,
-                updated_resource_sets=updated_resource_sets,
-                connection=connection,
-            )
+            with pyformance.timer("sql.insert_sets_and_resources.validate").time():
+                await cls.validate_resource_sets_in_version(
+                    environment=environment,
+                    version=target_version,
+                    updated_resource_sets=updated_resource_sets,
+                    connection=connection,
+                )
 
     @classmethod
     async def clear_resource_sets_in_version(
@@ -5577,145 +5589,291 @@ class Resource(BaseDocument):
     async def get_resources_for_version_raw(
         cls,
         environment: uuid.UUID,
-        version: int,
-        projection: Optional[Collection[typing.LiteralString]],
         *,
+        version: Optional[int] = None,
+        projection: Collection[typing.LiteralString],
+        projection_persistent: Collection[typing.LiteralString] = (),
+        project_attributes: Collection[typing.LiteralString] = (),
         connection: Optional[Connection] = None,
-    ) -> list[dict[str, object]]:
-        if not projection:
-            projection = "r.*"
-        else:
-            projection = ",".join([f"r.{p}" for p in projection])
-        query = f"""
-            SELECT {projection}
-                FROM resource_set_configuration_model AS rscm
-                INNER JOIN {Resource.table_name()} AS r
-                    ON rscm.environment=r.environment
-                    AND rscm.resource_set_id=r.resource_set_id
-                WHERE rscm.environment=$1 AND rscm.model=$2
+    ) -> Optional[tuple[int, inmanta.types.ResourceSets[dict[str, object]]]]:
         """
-        resource_records = await cls._fetch_query(query, environment, version, connection=connection)
-        return [dict(record) for record in resource_records]
+        Returns resources grouped by resource set for the given version (released or not). If no version is specified, returns
+        the resources for the latest released version.
+
+        :param version: The version for which to return the resources. If not specified, returns resources for the latest
+            released version.
+        :param projection: The resource columns to include in the returned resource dictionaries.
+            Must not overlap with other projection parameters.
+        :param projection_persistent: The resource_persistent_state columns to include in the returned resource dictionaries.
+            Must not overlap with other projection parameters.
+        :param project_attributes: The resource attributes to include as top-level keys in the returned resource dictionaries.
+            Must not overlap with other projection parameters.
+
+        :returns: Tuple of the requested model version and the resources it contains, grouped by resource set. Returns None iff
+            the requested model version does not exist (anymore). If the model exists but contains no resources, the resource
+            sets collection will simply be empty.
+        """
+        version_query: typing.LiteralString = (
+            "SELECT $2::int AS version"
+            if version is not None
+            else f"""\
+                SELECT MAX(version) AS version
+                FROM {ConfigurationModel.table_name()}
+                WHERE
+                    environment = $1
+                    AND released = true
+            """
+        )
+        r_projection_selector: Sequence[typing.LiteralString] = [f"r.{col}" for col in projection]
+        rps_projection_selector: Sequence[typing.LiteralString] = [f"rps.{col}" for col in projection_persistent]
+        attributes_projection_selector: Sequence[typing.LiteralString] = [
+            f"r.attributes->'{v}' AS {v}" for v in project_attributes
+        ]
+
+        projection_keys: typing.Sequence[typing.LiteralString] = list(
+            itertools.chain(projection, projection_persistent, project_attributes)
+        )
+        if len(projection_keys) != len(set(projection_keys)):
+            raise ValueError("Projection keys must not overlap")
+        projection_selectors: typing.LiteralString = ", ".join(
+            itertools.chain(r_projection_selector, rps_projection_selector, attributes_projection_selector)
+        )
+
+        rps_join: typing.LiteralString
+        if rps_projection_selector:
+            rps_join = f"""\
+                LEFT JOIN {ResourcePersistentState.table_name()} AS rps
+                    ON rps.environment = r.environment
+                    AND rps.resource_id = r.resource_id
+            """
+        else:
+            rps_join = ""
+
+        # We query the database for all resources in the latest version.
+        # Structure of the result table:
+        #   returns 0 rows iff the requested version (version number / latest released) does not exist
+        #   columns:
+        #       - version NOT NULL
+        #       - resource_set_name -> NULL is name of the shared set
+        #       - resource_set_id -> NULL iff LEFT JOIN didn't match any resource sets => model exists but is empty
+        #       - <projection_fields> -> NULL iff LEFT join didn't match any resources => empty resource set
+        query: typing.LiteralString = f"""
+            WITH version AS (
+                {version_query}
+            )
+            SELECT
+                cm.version,
+                rs.name AS resource_set_name,
+                rscm.resource_set_id,
+                {projection_selectors}
+            FROM version AS version
+            INNER JOIN {ConfigurationModel.table_name()} AS cm
+                ON cm.environment = $1
+                AND cm.version = version.version
+            LEFT JOIN resource_set_configuration_model AS rscm
+                ON rscm.environment = $1
+                AND rscm.model = cm.version
+            LEFT JOIN {ResourceSet.table_name()} AS rs
+                ON rs.environment = rscm.environment
+                AND rs.id = rscm.resource_set_id
+            LEFT JOIN {cls.table_name()} AS r
+                ON r.environment = rs.environment
+                AND r.resource_set_id = rs.id
+            {rps_join}
+            ORDER BY rs.name, r.resource_id
+        """
+        with pyformance.timer("sql.get_resources_for_version_raw").time():
+            resource_records = await cls._fetch_query(
+                query,
+                cls._get_value(environment),
+                *([version] if version is not None else []),
+                connection=connection,
+            )
+
+        records: Iterator[asyncpg.Record]
+        spy: Sequence[asyncpg.Record]
+        spy, records = more_itertools.spy(resource_records)
+        if not spy:
+            # requested version does not exist
+            return None
+        db_version: int = spy[0]["version"]
+        if spy[0]["resource_set_id"] is None:
+            # LEFT JOIN produced no resource sets => empty model
+            return (db_version, {})
+
+        sets: inmanta.types.ResourceSets[dict[str, object]] = {
+            resource_set_name: [{k: record[k] for k in projection_keys} for record in records]
+            for resource_set_name, records in itertools.groupby(records, key=lambda r: r["resource_set_name"])
+        }
+        return (db_version, sets)
 
     @classmethod
-    async def get_resources_since_version_raw(
+    async def get_partial_resources_since_version_raw(
         cls,
         environment: uuid.UUID,
         *,
-        since: Optional[int],
+        since: int,
+        projection: Collection[typing.LiteralString],
         connection: Optional[Connection] = None,
-    ) -> list[tuple[int, list[dict[str, object]]]]:
+    ) -> list[tuple[int, inmanta.types.ResourceSets[dict[str, object]]]]:
         """
         Returns all released model versions with associated resources since (excluding) the given model version.
-        Returns resources as raw dicts with the requested fields
-        :param since: The boundary version (excluding). If None, returns only the latest released version.
+        Returned versions are returned as partial versions. In other words, only resource sets that changed since the previous
+        version are included. Resource sets that were deleted are represented as empty sets.
+
+        Note that a partial model version on this layer does not map one on one with how it was exported. Notably, if a partial
+        model version contains the shared set, it will contain all of its resources, rather than only those that were present in
+        the associated export.
+
+        :param since: The boundary version (excluding). This version should exist and be released.
+        :param projection: The resource columns to include in the returned resource dictionaries.
+            Must not overlap with other projection parameters.
+
+        :returns: A list of model versions and resources, grouped by resource set.
+        :raises PartialBaseMissing: The `since` version does not exist or has not been released.
         """
+        projection_selectors: typing.LiteralString = ", ".join([f"r.{col}" for col in projection])
 
-        boundary_query: typing.LiteralString = (
-            "SELECT $2::int AS version"
-            if since is not None
-            else f""" \
-                            SELECT MAX(version) AS version
-                            FROM {ConfigurationModel.table_name()}
-                            WHERE released=TRUE AND environment=$1
-                            """
-        )
-
-        query: typing.LiteralString = f"""
-            WITH boundary AS (
-                {boundary_query}
+        # We query the database for all resources in all released versions since the requested one. For each version, we
+        # request the diff with the previous version.
+        # Structure of the result table:
+        #   returns at least 1 row (all LEFT JOINs)
+        #   columns: "RETURN" marker between column specifications implies that all following fields will be NULL depending on
+        #       the previous result, regardless of the "NULL IFF" semantics in the fields' own description.
+        #
+        #       - exists NOT NULL -> false iff the `since` model doesn't exist at all.
+        #       RETURN if not exists
+        #       - version -> NULL iff no newer released versions were found
+        #       RETURN if version is NULL
+        #       - empty_model NOT NULL -> true iff the model has no resource sets
+        #       RETURN if empty_model
+        #       - resource_set_name -> NULL is name of the shared set
+        #       - resource_set_id: resource set id in the new version iff it differs from the previous version
+        #           -> NULL iff resource set with this name was deleted in this version
+        #       - <projection_fields> -> NULL iff LEFT join didn't match any resources => empty resource set
+        query: typing.LiteralString = f"""\
+        WITH
+        -- `since` model iff it exists and has been released
+        reference_model AS (
+            SELECT EXISTS(
+                SELECT *
+                FROM {ConfigurationModel.table_name()} AS cm
+                WHERE cm.environment = $1
+                    AND cm.version = $2::int
+                    AND cm.released
+            ) AS exists
+        -- all released models starting from `since`
+        ), models AS (
+            SELECT *
+            FROM {ConfigurationModel.table_name()} AS cm
+            WHERE cm.environment = $1
+                AND cm.version > $2::int - 1
+                AND cm.released
+        -- resource_set_configuration_model for relevant versions with resource_set.name joined in
+        ), rs_with_name AS (
+            SELECT
+                rscm.*,
+                rs.name
+            FROM models AS cm
+            INNER JOIN resource_set_configuration_model AS rscm
+                ON rscm.environment = cm.environment
+                AND rscm.model = cm.version
+            INNER JOIN {ResourceSet.table_name()} AS rs
+                ON rs.environment = rscm.environment
+                AND rs.id = rscm.resource_set_id
+        -- pairwise (two-by-two) model versions to build the diff incrementally
+        ), model_pairs AS (
+            SELECT *
+            FROM (
+                SELECT
+                    first_value(version) OVER pairs AS old,
+                    last_value(version) OVER pairs AS new
+                FROM models AS cm
+                WINDOW pairs AS (ORDER BY cm.version ROWS 1 PRECEDING)
+                ORDER BY cm.version
             )
-            SELECT m.version, r.resource_id, r.attributes, r.attribute_hash, r.is_undefined
-            FROM {ConfigurationModel.table_name()} as m
-            LEFT JOIN public.resource_set_configuration_model as rscm
-                ON m.environment=rscm.environment AND m.version=rscm.model
-            LEFT JOIN {cls.table_name()} as r
-                ON rscm.resource_set_id=r.resource_set_id
-            WHERE m.environment=$1
-                AND m.version > (SELECT version FROM boundary) - 1
-                AND m.released is TRUE
-            ORDER BY m.version ASC
-        """
-        query_values = [cls._get_value(environment), since] if since is not None else [cls._get_value(environment)]
-        resource_records = await cls._fetch_query(
-            query,
-            *query_values,
-            connection=connection,
+            -- drop first row where there is no PRECEDING for the window function
+            WHERE old != new
         )
-        result: list[tuple[int, list[dict[str, object]]]] = []
-        for version, raw_resources in itertools.groupby(resource_records, key=lambda r: r["version"]):
-            parsed_resources: list[dict[str, object]] = []
-            for raw_resource in raw_resources:
-                if raw_resource["resource_id"] is None:
-                    # left join produced no resources
+        SELECT
+            reference_model.exists,
+            model_pairs.new AS version,
+            -- each row of the diff will always have at least one of the resource set ids set.
+            -- => if both are NULL, there were no records at all on the rhs of the LEFT JOIN
+            (diff.old_resource_set_id IS NULL AND diff.resource_set_id IS NULL) AS empty_model,
+            diff.name AS resource_set_name,
+            diff.resource_set_id,
+            {projection_selectors}
+        FROM reference_model
+        LEFT JOIN model_pairs ON true
+        -- Calculate the diff by joining pairwise with both versions' resource sets.
+        -- Returns only differing sets:
+        --  - name -> NULL is name of shared set
+        --  - old_resource_set_id -> NULL if no set with this name existed in old version
+        --  - new_resource_set_id -> NULL if set with this name was deleted in new version
+        LEFT JOIN LATERAL (
+            -- DISTINCT because join results in two null rows for shared set. ORDER BY below ensures we keep the latest one
+            SELECT DISTINCT ON (rs_new.name, rs_old.name)
+                -- if the set exists in only one of the models, report that one
+                COALESCE(rs_new.name, rs_old.name) AS name,
+                -- we're only interested in the latest id, or the absence of it
+                rs_old.resource_set_id AS old_resource_set_id,
+                rs_new.resource_set_id
+            FROM (SELECT * FROM rs_with_name WHERE model = model_pairs.old) AS rs_old
+            FULL JOIN (SELECT * FROM rs_with_name WHERE model = model_pairs.new) AS rs_new
+                ON rs_old.name = rs_new.name
+            -- filter out all sets that remained unchanged
+            WHERE rs_new.resource_set_id IS DISTINCT FROM rs_old.resource_set_id
+            -- make sure SELECT DISTINCT matches the new id for the shared set, if it exists
+            ORDER BY rs_new.name, rs_old.name, rs_new.resource_set_id NULLS LAST
+        ) AS diff
+        ON true
+        -- fetch all resources for the relevant sets
+        LEFT JOIN {cls.table_name()} as r
+            ON r.environment = $1
+            AND r.resource_set_id = diff.resource_set_id
+        ORDER BY model_pairs.new, diff.name, r.resource_id
+        """
+        with pyformance.timer("sql.get_partial_resources_since_version_raw").time():
+            resource_records = await cls._fetch_query(
+                query,
+                cls._get_value(environment),
+                cls._get_value(since),
+                connection=connection,
+            )
+
+        assert resource_records
+        if not resource_records[0]["exists"]:
+            raise PartialBaseMissing()
+        if len(resource_records) == 1 and resource_records[0]["version"] is None:
+            # LEFT JOIN with model_pairs resulted in None row => no new versions
+            return []
+
+        type Model = tuple[int, inmanta.types.ResourceSets[dict[str, object]]]
+        result: list[Model] = []
+        version: int
+        records: Iterator[asyncpg.Record]
+        for version, records in itertools.groupby(resource_records, key=lambda r: r["version"]):
+            spy: Sequence[asyncpg.Record]
+            spy, records = more_itertools.spy(records)
+            assert spy  # groupby can not produce empty groups
+            if spy[0]["empty_model"]:
+                result.append((version, {}))
+                continue
+            resource_set_name: Optional[str]
+            model_sets: inmanta.types.ResourceSets[dict[str, object]] = {}
+            for resource_set_name, records in itertools.groupby(records, key=lambda r: r["resource_set_name"]):
+                model_sets[resource_set_name] = []  # add even if there are no resources, to indicate an empty / deleted set
+                spy, records = more_itertools.spy(records)
+                assert spy  # groupby can not produce empty groups
+                if spy[0]["resource_id"] is None:
+                    # left join with resource did not match => empty or deleted resource set
                     continue
-                resource: dict[str, object] = dict(raw_resource)
-                parsed_resources.append(resource)
-            result.append((version, parsed_resources))
+                record: asyncpg.Record
+                for record in records:
+                    model_sets[resource_set_name].append({k: record[k] for k in projection})
+            result.append((version, model_sets))
         return result
-
-    @classmethod
-    async def get_resources_for_version_raw_with_persistent_state(
-        cls,
-        environment: uuid.UUID,
-        version: int,
-        *,
-        projection: Optional[Collection[typing.LiteralString]],
-        projection_persistent: Optional[Collection[typing.LiteralString]],
-        project_attributes: Optional[Collection[typing.LiteralString]] = None,
-        connection: Optional[Connection] = None,
-    ) -> list[dict[str, object]]:
-        """This method performs none of the mangling required to produce valid resources!
-
-        project_attributes performs a projection on the json attributes of the resources table. If the attribute does not exist,
-        it is left out of the result dict.
-
-        all projections must be disjoint, as they become named fields in the output record
-        """
-
-        def collect_projection(projection: Optional[Collection[str]], prefix: str) -> str:
-            if not projection:
-                return f"{prefix}.*"
-            else:
-                return ",".join(f"{prefix}.{field}" for field in projection)
-
-        if project_attributes:
-            json_projection = "," + ",".join(f"r.attributes->'{v}' as {v}" for v in project_attributes)
-        else:
-            json_projection = ""
-
-        query = f"""
-        SELECT {collect_projection(projection, 'r')}, {collect_projection(projection_persistent, 'rps')} {json_projection}
-        FROM {cls.table_name()} AS r
-        JOIN resource_persistent_state AS rps
-            ON r.environment=rps.environment AND r.resource_id = rps.resource_id
-        JOIN resource_set_configuration_model AS rscm
-            ON r.environment=rscm.environment AND r.resource_set_id=rscm.resource_set_id
-        WHERE r.environment=$1 AND rscm.model = $2;
-        """
-        resource_records = await cls._fetch_query(query, environment, version, connection=connection)
-        resources = [dict(record) for record in resource_records]
-        return resources
-
-    @classmethod
-    async def get_latest_version(
-        cls, environment: uuid.UUID, resource_id: ResourceIdStr, connection: Optional[asyncpg.connection.Connection] = None
-    ) -> Optional["Resource"]:
-        query = f"""
-                SELECT r.*
-                FROM resource AS r
-                INNER JOIN resource_set_configuration_model AS rscm
-                    ON r.environment=rscm.environment AND r.resource_set_id=rscm.resource_set_id
-                WHERE r.environment=$1 AND r.resource_id=$2 AND rscm.model=(
-                    SELECT max(version)
-                    FROM {ConfigurationModel.table_name()}
-                    WHERE environment=$1
-                )
-                """
-        records = await cls.select_query(query, [environment, resource_id], connection=connection)
-        if not records:
-            return None
-        return records[0]
 
     @staticmethod
     def get_details_from_resource_id(resource_id: ResourceIdStr) -> m.ResourceIdDetails:
