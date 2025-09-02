@@ -5037,9 +5037,10 @@ class ResourceSet(BaseDocument):
             # copy all old sets except for the ones that are being exported or deleted in this partial update
             deleted_resource_sets = deleted_resource_sets if deleted_resource_sets is not None else set()
 
+            has_shared_resource_set = None in updated_resource_sets
             # link every resource_set that was present in the base version to the target version
             await cls._execute_query(
-                """\
+                f"""\
                 INSERT INTO public.resource_set_configuration_model(
                     environment,
                     model,
@@ -5056,16 +5057,17 @@ class ResourceSet(BaseDocument):
                 WHERE rscm.environment=$1
                     AND rscm.model=$3
                     -- only insert resource sets that are not on updated_resource_sets --
-                    AND NOT EXISTS (
-                      SELECT 1
-                      FROM UNNEST($4::text[]) AS updated_resource_sets(name)
-                      -- IS NOT DISTINCT is required for the comparison to the shared resource set rs.name=NULL --
-                      WHERE rs.name IS NOT DISTINCT FROM updated_resource_sets.name
-                    )
+                    AND (
+                        SELECT rs.name = ANY($4::text[]) {'OR rs.name IS NULL' if has_shared_resource_set else ''}
+                        FROM resource_set AS rs
+                        WHERE
+                            rs.environment = rscm.environment
+                            AND rs.id = rscm.resource_set_id
+                    ) IS NOT true
                 """,
                 *common_values,
                 cls._get_value(base_version),
-                cls._get_value((updated_resource_sets | deleted_resource_sets)),
+                cls._get_value((updated_resource_sets | deleted_resource_sets) - {None}),
                 connection=connection,
             )
 
