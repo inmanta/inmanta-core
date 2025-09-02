@@ -820,7 +820,7 @@ class DesiredStateVersionView(DataView[DesiredStateVersionOrder, DesiredStateVer
                                            version_info -> 'export_metadata' ->> 'type' as type,
                                           (CASE WHEN cm.version = {scheduled_version} THEN 'active'
                                               WHEN cm.version > {scheduled_version} THEN 'candidate'
-                                              WHEN cm.version < {scheduled_version} AND cm.released=TRUE THEN 'retired'
+                                              WHEN cm.version < {scheduled_version} AND cm.released THEN 'retired'
                                               ELSE 'skipped_candidate'
                                           END) as status,
                                           cm.released as released""",
@@ -904,7 +904,7 @@ class ResourceHistoryView(DataView[ResourceHistoryOrder, ResourceHistory]):
                     ON r.resource_set_id=rscm.resource_set_id AND r.environment=rscm.environment
                   INNER JOIN configurationmodel AS cm
                     ON rscm.environment=cm.environment AND rscm.model=cm.version
-                  WHERE r.environment=$1 AND r.resource_id=$2 AND cm.released=TRUE
+                  WHERE r.environment=$1 AND r.resource_id=$2 AND cm.released
                 )
             """,
             select_clause="SELECT attribute_hash, date, attributes, model",

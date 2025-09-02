@@ -6013,7 +6013,7 @@ class Resource(BaseDocument):
                 ON r.environment=rscm.environment AND r.resource_set_id=rscm.resource_set_id
             JOIN configurationmodel AS cm
                 ON rscm.environment=cm.environment AND rscm.model=cm.version
-            WHERE r.environment=$1 AND r.resource_id=$2 AND cm.released=TRUE
+            WHERE r.environment=$1 AND r.resource_id=$2 AND cm.released
             ORDER BY resource_id, model desc
             ) as latest
         /* The 'first' values correspond to the first time the attribute hash was the same as in
@@ -6025,7 +6025,7 @@ class Resource(BaseDocument):
             ON rscm.model=cm.version AND rscm.environment=cm.environment
         INNER JOIN resource_persistent_state AS rps
             ON rps.resource_id=first.resource_id AND first.environment=rps.environment
-        WHERE first.environment=$1 AND first.resource_id=$2 AND cm.released=TRUE
+        WHERE first.environment=$1 AND first.resource_id=$2 AND cm.released
         ORDER BY first.resource_id, rscm.model asc;
         """
         values = [cls._get_value(env), cls._get_value(resource_id)]
@@ -6078,18 +6078,9 @@ class Resource(BaseDocument):
     async def get_versioned_resource_details(
         cls, environment: uuid.UUID, version: int, resource_id: ResourceIdStr
     ) -> Optional[m.VersionedResourceDetails]:
-        query = f"""
-            SELECT r.*
-            FROM {cls.table_name()} AS r
-            INNER JOIN resource_set_configuration_model AS rscm
-                ON r.environment=rscm.environment AND r.resource_set_id=rscm.resource_set_id
-            WHERE rscm.environment=$1 AND rscm.model=$2 AND r.resource_id=$3
-        """
-
-        result = await cls._fetch_query(query, environment, version, resource_id)
-        if not result:
+        resource = await cls.get_resource_for_version(environment, resource_id, version)
+        if not resource:
             return None
-        resource = cls(from_postgres=True, **result[0])
         parsed_id = resources.Id.parse_id(resource.resource_id)
         parsed_id.set_version(version)
         return m.VersionedResourceDetails(

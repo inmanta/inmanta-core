@@ -130,7 +130,6 @@ async def test_dryrun_and_deploy(server, client, resource_container, environment
 
     async def dryrun_finished():
         result = await client.dryrun_list(environment, version)
-        print(result.result["dryruns"][0])
         return result.result["dryruns"][0]["todo"] == 0
 
     await retry_limited(dryrun_finished, 10)

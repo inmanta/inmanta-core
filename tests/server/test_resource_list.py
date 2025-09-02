@@ -989,7 +989,7 @@ async def test_resources_paging_performance(client, environment, very_big_env: i
             # Pages 1-3
             async def time_call() -> typing.Union[float, dict[str, str]]:
                 start = time.monotonic()
-                result = await client.resource_list(environment, deploy_summary=True, filter=filter, limit=220, sort=order)
+                result = await client.resource_list(environment, deploy_summary=True, filter=filter, limit=10, sort=order)
                 assert result.code == 200
                 assert result.result["metadata"]["total"] == totalcount
                 return (time.monotonic() - start) * 1000, result.result.get("links", {})

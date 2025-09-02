@@ -44,8 +44,8 @@ async def assert_resource_set_assignment(environment, assignment: dict[str, Opti
                        belong to.
     """
     resources = await Resource.get_resources_in_latest_version(environment=environment)
-    actual_assignment = {r.attributes["key"]: r.resource_set for r in resources}
     assert len(resources) == len(assignment)
+    actual_assignment = {r.attributes["key"]: r.resource_set for r in resources}
     assert actual_assignment == assignment
 
 
@@ -560,9 +560,6 @@ async def test_resource_set(snippetcompiler, modules_dir: str, environment, clie
             soft_delete=soft_delete,
         )
 
-    res = await client.reserve_version(environment)
-    assert res.code == 200
-    version = res.result["data"]
     # Full compile
     await export_model(
         model="""
@@ -593,7 +590,7 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
             "the_resource_z": None,
         },
     )
-    version += 1
+
     # Partial compile
     await export_model(
         model="""
@@ -648,7 +645,6 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
             )
 
     else:
-        version += 1
         await export_model(
             model=model,
             partial_compile=True,
