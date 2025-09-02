@@ -498,7 +498,7 @@ class ResourceScheduler(TaskManager):
                             AND rscm.resource_set_id=r.resource_set_id
                         WHERE rscm.environment=$1
                             AND rscm.model=(SELECT MAX(cm.version)
-                                              FROM {ConfigurationModel.table_name()} AS cm
+                                              FROM {data.ConfigurationModel.table_name()} AS cm
                                               WHERE cm.environment=$1)
                     )
                     UPDATE {data.ResourcePersistentState.table_name()} AS rps
