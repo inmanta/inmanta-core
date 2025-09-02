@@ -240,7 +240,7 @@ class ExecutorBlueprint(EnvBlueprint):
                 "environment_id": str(self.environment_id),
                 "pip_config": self.pip_config.model_dump(),
                 "requirements": self.requirements,
-                "constraint_file": self.constraints_file_hash,
+                "constraint_file_hash": self.constraints_file_hash,
                 # Use the hash values and name to create a stable identity
                 "sources": [
                     [source.metadata.hash_value, source.metadata.name, source.metadata.is_byte_code] for source in self.sources
