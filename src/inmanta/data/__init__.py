@@ -4446,10 +4446,7 @@ class ResourceAction(BaseDocument):
         exclude_changes: Optional[list[const.Change]] = None,
     ) -> list["ResourceAction"]:
         query = """SELECT DISTINCT ra.*
-                    FROM public.configurationmodel as cm
-                    INNER JOIN public.resource_set_configuration_model as rscm
-                        ON cm.environment=rscm.environment
-                        AND cm.version=rscm.model
+                    FROM public.resource_set_configuration_model as rscm
                     INNER JOIN public.resource as r
                         ON r.resource_set_id=rscm.resource_set_id
                         AND r.environment=rscm.environment
@@ -5255,7 +5252,9 @@ class ResourceSet(BaseDocument):
     ) -> None:
         """
         Inserts the ResourceSet into the database and creates a link to the configuration models in the versions argument.
-        :param versions: The versions of the configuration model this ResourceSet belongs to
+
+        Used for testing only.
+        :param versions: The versions of the configuration model this ResourceSet belongs to.
         """
         async with self.get_connection(connection) as con:
             await self.insert(con)
@@ -5340,8 +5339,8 @@ class Resource(BaseDocument):
             raise Exception("Argument resource_version_id is not a resource_version_id")
         version = resource_version_id.version
         query = """
-            WITH resources_in_version AS (
-                SELECT r.attributes
+            WITH resource_requires_in_version AS (
+                SELECT (r.attributes->'requires')::jsonb AS requires
                 FROM resource_set_configuration_model AS rscm
                 INNER JOIN resource AS r ON
                     rscm.environment=r.environment AND
@@ -5352,7 +5351,7 @@ class Resource(BaseDocument):
             FROM resource_persistent_state AS r1
             WHERE r1.environment=$1
                   AND (
-                      SELECT (r2.attributes->'requires')::jsonb
+                      SELECT requires
                       FROM resources_in_version AS r2
                   ) ? r1.resource_id
         """
