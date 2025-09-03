@@ -5350,7 +5350,7 @@ class Resource(BaseDocument):
             WHERE r1.environment=$1
                   AND (
                       SELECT requires
-                      FROM resources_in_version AS r2
+                      FROM resource_requires_in_version AS r2
                   ) ? r1.resource_id
         """
         values = [
