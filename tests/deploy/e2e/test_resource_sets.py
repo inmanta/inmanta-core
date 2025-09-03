@@ -2031,12 +2031,13 @@ async def test_put_partial_with_unknowns(server, client, environment, clienthelp
         assert not uk.resolved
 
     unknowns_by_rid = {uk.resource_id: uk for uk in await data.UnknownParameter.get_list(environment=environment, version=2)}
-    assert len(unknowns_by_rid) == 3
+    assert len(unknowns_by_rid) == 4
     assert "test::Resource[agent1,key=key1]" in unknowns_by_rid
     assert "" in unknowns_by_rid
     assert "test::Resource[agent1,key=key5]" in unknowns_by_rid
     assert_unknown(unknowns_by_rid["test::Resource[agent1,key=key1]"], "unknown_1", "test::Resource[agent1,key=key1]")
     assert_unknown(unknowns_by_rid[""], "unknown_3", "")
+    assert_unknown(unknowns_by_rid["test::Resource[agent1,key=key4]"], "unknown_4", "test::Resource[agent1,key=key4]")
     assert_unknown(unknowns_by_rid["test::Resource[agent1,key=key5]"], "unknown_5", "test::Resource[agent1,key=key5]")
 
 

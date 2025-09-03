@@ -3230,26 +3230,21 @@ class UnknownParameter(BaseDocument):
                  is not exported by the partial compile)
         """
         query = f"""
-            WITH resources_with_version AS (
-                SELECT r.resource_id,
-                       r.resource_set,
-                       r.environment,
-                       rscm.model
-                FROM resource_set_configuration_model AS rscm
-                INNER JOIN {Resource.table_name()} AS r
-                    ON rscm.environment=r.environment AND rscm.resource_set_id=r.resource_set_id
-                WHERE rscm.environment=$1 AND rscm.model=$2
-            )
             SELECT u.*
             FROM {cls.table_name()} AS u
-            LEFT JOIN resources_with_version AS rwv
-                ON u.environment=rwv.environment AND u.version=rwv.model AND u.resource_id=rwv.resource_id
+            LEFT JOIN resource_set_configuration_model AS rscm
+                ON rscm.environment = u.environment
+                AND rscm.model = u.version
+            LEFT JOIN {Resource.table_name()} AS r
+                ON r.environment = rscm.environment
+                AND r.resource_set_id = rscm.resource_set_id
+                AND r.resource_id = u.resource_id
             WHERE
                 u.environment=$1
                 AND u.version=$2
                 AND u.resolved IS FALSE
-                AND (rwv.resource_id IS NULL OR NOT rwv.resource_id=ANY($4))
-                AND (rwv.resource_set IS NULL OR NOT rwv.resource_set=ANY($3))
+                AND (r.resource_id IS NULL OR NOT r.resource_id=ANY($4))
+                AND (r.resource_set IS NULL OR NOT r.resource_set=ANY($3))
         """
         async with cls.get_connection(connection) as con:
             result = await con.fetch(
