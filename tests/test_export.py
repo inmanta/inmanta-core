@@ -609,9 +609,7 @@ exp::Test3(
     "soft_delete",
     [True, False],
 )
-async def test_resource_set(
-    snippetcompiler, modules_dir: str, environment, client, agent, soft_delete: bool, local_module_package_index
-) -> None:
+async def test_resource_set(snippetcompiler, modules_dir: str, environment, client, agent, soft_delete: bool) -> None:
     """
     Test that resource sets are exported correctly, when a full compile or an incremental compile is done.
     """
@@ -623,11 +621,8 @@ async def test_resource_set(
     ) -> None:
         snippetcompiler.setup_for_snippet(
             model,
-            install_project=True,
-            index_url=local_module_package_index,
             extra_index_url=["example.inmanta.com/index"],
             autostd=True,
-            python_requires=[inmanta.util.parse_requirement(requirement="std~=1.2.3")],
         )
         await snippetcompiler.do_export_and_deploy(
             partial_compile=partial_compile,

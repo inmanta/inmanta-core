@@ -745,6 +745,51 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
         expected_source=b"#The code",
     )
 
+    # 4) Make sure we can provide new agents with already registered code:
+    module_version_info = {
+        "test": InmantaModuleDTO(
+            name="test",
+            version="0.0.0",
+            files_in_module=[module_source_metadata1],
+            requirements=[],
+            for_agents=["agent_Z"],
+            constraints_file_hash=None,
+        )
+    }
+    resources = [
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": "test::ResType_A[agent_Z,key=key1],v=0",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+    ]
+    resource_sets = {
+        "test::ResType_A[agent_Z,key=key1]": "set-b",
+    }
+
+    result = await client.put_partial(
+        tid=environment,
+        resources=resources,
+        resource_state={},
+        unknowns=[],
+        version_info={},
+        resource_sets=resource_sets,
+        module_version_info=module_version_info,
+    )
+    assert result.code == 200
+
+    await check_code_for_version(
+        version=3,
+        environment=environment,
+        codemanager=codemanager,
+        agent_names=["agent_X", "agent_Y", "agent_Z"],
+        module_name="test",
+        expected_source=b"#The code",
+    )
+
     # 5) Make sure we can provide agents with new modules:
 
     content = "#Yet some other code"
