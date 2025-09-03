@@ -571,7 +571,7 @@ async def check_code_for_version(
                 assert len(module.blueprint.sources) == 1
                 assert module.blueprint.sources[0].source == expected_source
                 if expected_constraints is not None:
-                    assert module.blueprint.constraints == expected_constraints.encode()
+                    assert module.blueprint.constraints == expected_constraints
                 else:
                     assert module.blueprint.constraints is None
                 break
@@ -745,51 +745,6 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
         expected_source=b"#The code",
     )
 
-    # 4) Make sure we can provide new agents with already registered code:
-    module_version_info = {
-        "test": InmantaModuleDTO(
-            name="test",
-            version="0.0.0",
-            files_in_module=[module_source_metadata1],
-            requirements=[],
-            for_agents=["agent_Z"],
-            constraints_file_hash=None,
-        )
-    }
-    resources = [
-        {
-            "key": "key1",
-            "value": "value1",
-            "id": "test::ResType_A[agent_Z,key=key1],v=0",
-            "send_event": False,
-            "purged": False,
-            "requires": [],
-        },
-    ]
-    resource_sets = {
-        "test::ResType_A[agent_Z,key=key1]": "set-b",
-    }
-
-    result = await client.put_partial(
-        tid=environment,
-        resources=resources,
-        resource_state={},
-        unknowns=[],
-        version_info={},
-        resource_sets=resource_sets,
-        module_version_info=module_version_info,
-    )
-    assert result.code == 200
-
-    await check_code_for_version(
-        version=3,
-        environment=environment,
-        codemanager=codemanager,
-        agent_names=["agent_X", "agent_Y", "agent_Z"],
-        module_name="test",
-        expected_source=b"#The code",
-    )
-
     # 5) Make sure we can provide agents with new modules:
 
     content = "#Yet some other code"
@@ -894,10 +849,12 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
 
 
 @pytest.mark.parametrize("auto_start_agent", [True])
-async def test_project_constraints_in_agent_code_install(server, client, environment, clienthelper):
+async def test_project_constraints_in_agent_code_install(server, client, agent, environment, clienthelper):
     """
     Check that registered constraints get propagated into the agents' venv blueprints.
 
+    The test_process_manager test in test_agent_executor.py checks that these constraints
+    are taken into account during agent code install.
     """
     codemanager = CodeManager()
 
@@ -936,7 +893,7 @@ async def test_project_constraints_in_agent_code_install(server, client, environ
         is_byte_code=False,
     )
 
-    module_version_info = {
+    module_version_info_v0 = {
         "test": InmantaModuleDTO(
             name="test",
             version="0.0.0",
@@ -955,7 +912,7 @@ async def test_project_constraints_in_agent_code_install(server, client, environ
         unknowns=[],
         version_info={},
         compiler_version=get_compiler_version(),
-        module_version_info=module_version_info,
+        module_version_info=module_version_info_v0,
         resource_sets={"test::ResType_A[agent_X,key=key1]": "set-a", "test::ResType_A[agent_Y,key=key1]": "set-b"},
     )
 
@@ -971,7 +928,12 @@ async def test_project_constraints_in_agent_code_install(server, client, environ
         expected_constraints=constraints,
     )
 
-    module_version_info = {
+    # do a deploy
+    result = await client.release_version(environment, version)
+    assert result.code == 200
+    assert result.result["model"]["released"]
+
+    module_version_info_v1 = {
         "test": InmantaModuleDTO(
             name="test",
             version="1.0.0",
@@ -991,18 +953,39 @@ async def test_project_constraints_in_agent_code_install(server, client, environ
         unknowns=[],
         version_info={},
         compiler_version=get_compiler_version(),
-        module_version_info=module_version_info,
+        module_version_info=module_version_info_v1,
         resource_sets={"test::ResType_A[agent_X,key=key1]": "set-a", "test::ResType_A[agent_Y,key=key1]": "set-b"},
     )
 
     assert result.code == 200
 
     await check_code_for_version(
-        version=version,
+        version=2,
         environment=environment,
         codemanager=codemanager,
         agent_names=["agent_X", "agent_Y"],
         module_name="test",
         expected_source=b"#The code",
         expected_constraints=None,
+    )
+    res = await client.release_version(tid=environment, id=version)
+    assert res.code == 200
+
+    await wait_until_deployment_finishes(client, environment, version=version)
+
+    result = await client.put_partial(
+        tid=environment,
+        resources=get_resources(0),
+        resource_state={},
+        unknowns=[],
+        version_info={},
+        module_version_info=module_version_info_v0,
+        resource_sets={"test::ResType_A[agent_X,key=key1]": "set-a", "test::ResType_A[agent_Y,key=key1]": "set-b"},
+    )
+    assert result.code == 400
+    assert result.result["message"] == (
+        "Invalid request: Cannot perform partial export because the source code for module test in this partial version is "
+        "different from the currently registered source code. Consider running a full export instead. Alternatively, if you "
+        "are sure the new code is compatible and want to forcefully update, you can bypass this version check with the "
+        "`--allow-handler-code-update` CLI option."
     )

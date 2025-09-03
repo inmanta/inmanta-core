@@ -19,6 +19,7 @@ Contact: code@inmanta.com
 import json
 import logging
 import os
+import uuid
 from collections.abc import Mapping
 from typing import Optional
 
@@ -26,6 +27,7 @@ import pytest
 
 import inmanta.resources
 from inmanta import config, const, module
+from inmanta.agent.code_manager import CodeManager
 from inmanta.ast import CompilerException, ExternalException, RuntimeException
 from inmanta.const import ResourceState
 from inmanta.data import Environment, Resource
@@ -33,7 +35,8 @@ from inmanta.export import DependencyCycleException
 from inmanta.module import InmantaModuleRequirement
 from inmanta.server import SLICE_RESOURCE
 from inmanta.server.server import Server
-from utils import LogSequence
+from packaging.version import Version
+from utils import LogSequence, PipIndex, create_python_package
 
 
 async def assert_resource_set_assignment(environment, assignment: dict[str, Optional[str]]) -> None:
@@ -330,6 +333,71 @@ a = exp::Test2(mydict={"a":"b"}, mylist=["a","b"])
     assert result.result["versions"][0]["total"] == 1
 
 
+async def test_project_constraints_at_exporter_boundary(snippetcompiler, server, client, environment, capsys, tmpdir):
+
+    index: PipIndex = PipIndex(str(tmpdir.join("index")))
+    for v in ("1.0.0", "2.0.0"):
+        create_python_package(
+            "dependency_package",
+            Version(v),
+            str(tmpdir.join(f"dependency_package-{v}")),
+            publish_index=index,
+        )
+
+    config.Config.set("config", "environment", environment)
+    snippetcompiler.setup_for_snippet(
+        """
+import many_dependencies
+
+a = many_dependencies::Test(name="my_test_resource")
+""",
+        autostd=True,
+        index_url=index.url,
+        extra_index_url=["https://pypi.org/simple"],
+    )
+
+    await snippetcompiler.do_export_and_deploy()
+
+    result = await client.list_versions(tid=environment)
+    assert result.code == 200
+    assert len(result.result["versions"]) == 1
+    assert result.result["versions"][0]["total"] == 1
+
+    codemanager = CodeManager()
+    module_install_specs = await codemanager.get_code(environment=uuid.UUID(environment), model_version=1, agent_name="agent")
+
+    for module_install_spec in module_install_specs:
+        assert module_install_spec.blueprint.constraints is None
+
+    constraints = [
+        "dependency-package<2.0.0",
+        "jinja2<3.1.6",
+    ]
+
+    snippetcompiler.setup_for_snippet(
+        """
+import many_dependencies
+
+a = many_dependencies::Test(name="my_test_resource")
+""",
+        autostd=True,
+        python_requires=[inmanta.util.parse_requirement(requirement=constraint) for constraint in constraints],
+        index_url=index.url,
+        extra_index_url=["https://pypi.org/simple"],
+    )
+
+    await snippetcompiler.do_export_and_deploy()
+
+    result = await client.list_versions(tid=environment)
+    assert result.code == 200
+    assert len(result.result["versions"]) == 2
+    assert result.result["versions"][1]["total"] == 1
+
+    module_install_specs = await codemanager.get_code(environment=uuid.UUID(environment), model_version=2, agent_name="agent")
+    for module_install_spec in module_install_specs:
+        assert module_install_spec.blueprint.constraints == "\n".join(constraints)
+
+
 async def test_old_compiler(server, client, environment):
     result = await client.put_version(
         tid=environment,
@@ -541,7 +609,9 @@ exp::Test3(
     "soft_delete",
     [True, False],
 )
-async def test_resource_set(snippetcompiler, modules_dir: str, environment, client, agent, soft_delete: bool) -> None:
+async def test_resource_set(
+    snippetcompiler, modules_dir: str, environment, client, agent, soft_delete: bool, local_module_package_index
+) -> None:
     """
     Test that resource sets are exported correctly, when a full compile or an incremental compile is done.
     """
@@ -553,8 +623,11 @@ async def test_resource_set(snippetcompiler, modules_dir: str, environment, clie
     ) -> None:
         snippetcompiler.setup_for_snippet(
             model,
+            install_project=True,
+            index_url=local_module_package_index,
             extra_index_url=["example.inmanta.com/index"],
             autostd=True,
+            python_requires=[inmanta.util.parse_requirement(requirement="std~=1.2.3")],
         )
         await snippetcompiler.do_export_and_deploy(
             partial_compile=partial_compile,
