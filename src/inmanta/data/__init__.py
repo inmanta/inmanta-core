@@ -5531,33 +5531,6 @@ class Resource(BaseDocument):
         return result
 
     @classmethod
-    async def get_resource_type_count_for_latest_version(cls, environment: uuid.UUID) -> dict[str, int]:
-        """
-        Returns the count for each resource_type over all resources in the model's latest version
-        """
-        query = f"""
-            SELECT r.resource_type, count(*) as count
-            FROM {Resource.table_name()} AS r
-            INNER JOIN resource_set_configuration_model AS rscm
-                ON r.environment=rscm.environment
-                AND r.resource_set_id=rscm.resource_set_id
-            WHERE r.environment=$1 AND rscm.model=(
-                SELECT max(version)
-                FROM {ConfigurationModel.table_name()}
-                WHERE environment=$1
-            )
-            GROUP BY r.resource_type;
-        """
-        values = [cls._get_value(environment)]
-        result: dict[str, int] = {}
-        async with cls.get_connection() as con:
-            async with con.transaction():
-                async for record in con.cursor(query, *values):
-                    assert isinstance(record["count"], int)
-                    result[str(record["resource_type"])] = record["count"]
-        return result
-
-    @classmethod
     async def get_resources_for_version(
         cls,
         environment: uuid.UUID,
