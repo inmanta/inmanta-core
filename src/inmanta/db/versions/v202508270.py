@@ -24,12 +24,8 @@ async def update(connection: Connection) -> None:
     Drop column 'model' from resource table.
     """
     schema = """
-    ALTER TABLE public.resourceaction_resource
-        DROP CONSTRAINT resourceaction_resource_environment_resource_id_resource_v_fkey;
-
-
     ALTER TABLE public.resource
-        DROP COLUMN model,
-        ADD CONSTRAINT resource_pkey PRIMARY KEY (environment, resource_id, resource_set_id);
+        DROP COLUMN model CASCADE,
+        ADD CONSTRAINT resource_pkey PRIMARY KEY (environment, resource_set_id, resource_id);
     """
     await connection.execute(schema)

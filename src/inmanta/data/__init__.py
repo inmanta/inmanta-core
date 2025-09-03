@@ -3079,7 +3079,8 @@ class Parameter(BaseDocument):
         """
         query = f"""
         WITH resources_in_latest_released_version AS (
-            SELECT r.*
+            SELECT r.environment,
+                   r.resource_id
             FROM resource_set_configuration_model AS rscm
             INNER JOIN {Resource.table_name()} AS r
                 ON rscm.environment=r.environment
@@ -3087,11 +3088,13 @@ class Parameter(BaseDocument):
             WHERE rscm.model=(
                     SELECT max(c.version)
                     FROM {ConfigurationModel.table_name()} AS c
-                    WHERE c.released
+                    WHERE c.released AND rscm.environment=c.environment
                 )
         )
         SELECT p.*
-        FROM {cls.table_name()} AS p INNER JOIN {Environment.table_name()} AS e ON p.environment=e.id
+        FROM {cls.table_name()} AS p
+        INNER JOIN {Environment.table_name()} AS e
+            ON p.environment=e.id
         WHERE NOT e.halted
             AND p.updated < $1
             AND p.expires
@@ -3234,7 +3237,7 @@ class UnknownParameter(BaseDocument):
                        rscm.model
                 FROM resource_set_configuration_model AS rscm
                 INNER JOIN {Resource.table_name()} AS r
-                    ON rscm.environment=r.environment AND rscm.resource_set_id=rscm.resource_set_id
+                    ON rscm.environment=r.environment AND rscm.resource_set_id=r.resource_set_id
                 WHERE rscm.environment=$1 AND rscm.model=$2
             )
             SELECT u.*
@@ -4444,10 +4447,10 @@ class ResourceAction(BaseDocument):
     ) -> list["ResourceAction"]:
         query = """SELECT DISTINCT ra.*
                     FROM public.configurationmodel as cm
-                    LEFT JOIN public.resource_set_configuration_model as rscm
+                    INNER JOIN public.resource_set_configuration_model as rscm
                         ON cm.environment=rscm.environment
                         AND cm.version=rscm.model
-                    LEFT JOIN public.resource as r
+                    INNER JOIN public.resource as r
                         ON r.resource_set_id=rscm.resource_set_id
                         AND r.environment=rscm.environment
                     INNER JOIN public.resourceaction_resource as jt
@@ -5338,12 +5341,12 @@ class Resource(BaseDocument):
         version = resource_version_id.version
         query = """
             WITH resources_in_version AS (
-                SELECT r.*
+                SELECT r.attributes
                 FROM resource_set_configuration_model AS rscm
                 INNER JOIN resource AS r ON
                     rscm.environment=r.environment AND
                     rscm.resource_set_id=r.resource_set_id
-                WHERE rscm.environment=$1 AND rscm.model=$2
+                WHERE rscm.environment=$1 AND rscm.model=$2 AND r.resource_id=$3
             )
             SELECT r1.resource_id, r1.last_non_deploying_status
             FROM resource_persistent_state AS r1
@@ -5351,7 +5354,6 @@ class Resource(BaseDocument):
                   AND (
                       SELECT (r2.attributes->'requires')::jsonb
                       FROM resources_in_version AS r2
-                      WHERE r2.resource_id=$3
                   ) ? r1.resource_id
         """
         values = [
@@ -5376,6 +5378,9 @@ class Resource(BaseDocument):
         """
         Get all resources listed in resource_version_ids
         """
+        if not resource_version_ids:
+            return []
+
         query_lock: str = lock.value if lock is not None else ""
 
         def convert_or_ignore(rvid: ResourceVersionIdStr) -> resources.Id | None:
@@ -5498,7 +5503,8 @@ class Resource(BaseDocument):
         values = [cls._get_value(environment)]
         query = f"""
             WITH resource_sets_in_latest_version AS (
-                SELECT rscm.resource_set_id
+                SELECT rscm.resource_set_id,
+                       rscm.environment
                 FROM resource_set_configuration_model AS rscm
                 WHERE rscm.environment=$1 AND rscm.model=(SELECT MAX(cm.version)
                                                   FROM {ConfigurationModel.table_name()} AS cm
@@ -5507,7 +5513,7 @@ class Resource(BaseDocument):
             SELECT r.*
             FROM {Resource.table_name()} AS r
             JOIN resource_sets_in_latest_version AS rsv
-                ON r.resource_set_id=rsv.resource_set_id
+                ON r.environment=rsv.environment AND r.resource_set_id=rsv.resource_set_id
             WHERE r.environment=$1"""
         if resource_type:
             query += " AND r.resource_type=$2"
