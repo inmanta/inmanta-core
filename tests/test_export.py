@@ -334,7 +334,10 @@ a = exp::Test2(mydict={"a":"b"}, mylist=["a","b"])
 
 
 async def test_project_constraints_at_exporter_boundary(snippetcompiler, server, client, environment, capsys, tmpdir):
-
+    """
+    Test that constraints set in the requirements.txt of the project are propagated into the agent's EnvBlueprint
+    during the export flow.
+    """
     index: PipIndex = PipIndex(str(tmpdir.join("index")))
     for v in ("1.0.0", "2.0.0"):
         create_python_package(

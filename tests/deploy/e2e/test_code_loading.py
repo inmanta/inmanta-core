@@ -894,7 +894,7 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
 
 
 @pytest.mark.parametrize("auto_start_agent", [True])
-async def test_project_constraints_in_agent_code_install(server, client, agent, environment, clienthelper):
+async def test_project_constraints_in_agent_code_install(server, client, environment, clienthelper):
     """
     Check that registered constraints get propagated into the agents' venv blueprints.
 
