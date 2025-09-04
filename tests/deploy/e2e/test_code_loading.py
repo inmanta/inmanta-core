@@ -18,8 +18,8 @@ Contact: code@inmanta.com
 
 import asyncio
 import base64
-import logging
 import hashlib
+import logging
 import os
 import pathlib
 import py_compile

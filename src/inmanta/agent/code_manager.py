@@ -88,12 +88,15 @@ class CodeManager:
             #  - {None} and {None} if no constraint is set at the project level
 
             assert len(constraints_file_hash) == 1, f"{constraints_file_hash=}"
+            _constraints_file_hash: str | None = constraints_file_hash.pop()
+            constraints: str | None = None
 
-            response: protocol.Result = self._client.get_file(constraints_file_hash)
-            if response.code != 200 or response.result is None:
-                raise Exception(f"Failed to fetch constraints file with hash {constraints_file_hash}.")
+            if _constraints_file_hash is not None:
+                response: protocol.Result = await self._client.get_file(_constraints_file_hash)
+                if response.code != 200 or response.result is None:
+                    raise Exception(f"Failed to fetch constraints file with hash {constraints_file_hash}.")
 
-            constraints: str = base64.b64decode(response.result["content"]).decode()
+                constraints = base64.b64decode(response.result["content"]).decode()
 
             resource_install_spec = ResourceInstallSpec(
                 resource_type,
@@ -104,7 +107,7 @@ class CodeManager:
                     requirements=list(requirements),
                     sources=sources,
                     python_version=sys.version_info[:2],
-                    constraints_file_hash=constraints_file_hash[0],
+                    constraints_file_hash=_constraints_file_hash,
                     constraints=constraints,
                 ),
             )
