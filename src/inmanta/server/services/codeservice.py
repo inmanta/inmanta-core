@@ -63,12 +63,13 @@ class CodeService(protocol.ServerSlice):
                 if not isinstance(refs, (list, tuple)):
                     raise BadRequest("All values in the sources map must be lists or tuple")
                 if (
-                    len(refs) != 3
+                    len(refs) != 4
                     or not isinstance(refs[0], str)
                     or not isinstance(refs[1], str)
                     or not isinstance(refs[2], list)
+                    or not (isinstance(refs[3], str) or refs[3] is None)
                 ):
-                    raise BadRequest("The values in the source map should be of the form (filename, module, [requirements])")
+                    raise BadRequest(f"The values in the source map should be of the form (filename, module, [requirements], constraint_file_hash) got {refs}")
 
         # list of file hashes
         allrefs = [ref for sourcemap in resources.values() for ref in sourcemap.keys()]
@@ -111,7 +112,11 @@ class CodeService(protocol.ServerSlice):
             for code_hash, (file_name, module, requires, constraints_file_hash) in code.source_refs.items():
                 sources.append(
                     model.Source(
-                        hash=code_hash, is_byte_code=file_name.endswith(".pyc"), module_name=module, requirements=requires, constraints_file_hash=constraints_file_hash
+                        hash=code_hash,
+                        is_byte_code=file_name.endswith(".pyc"),
+                        module_name=module,
+                        requirements=requires,
+                        constraints_file_hash=constraints_file_hash,
                     )
                 )
 

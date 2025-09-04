@@ -116,7 +116,9 @@ def upload_code(conn: protocol.SyncClient, tid: uuid.UUID, version: int, code_ma
     # }
     constraints_file_hash: str | None = code_manager.get_project_constraints_file_hash()
     source_map = {
-        resource_name: {source.hash: (source.path, source.module_name, source.requires, constraints_file_hash) for source in sources}
+        resource_name: {
+            source.hash: (source.path, source.module_name, source.requires, constraints_file_hash) for source in sources
+        }
         for resource_name, sources in code_manager.get_types()
     }
 
@@ -543,7 +545,14 @@ class Exporter:
 
         return resources
 
-    def deploy_code(self, conn: protocol.SyncClient, tid: uuid.UUID, version: Optional[int] = None, *, code_manager: "inmanta.loader.CodeManager") -> None:
+    def deploy_code(
+        self,
+        conn: protocol.SyncClient,
+        tid: uuid.UUID,
+        version: Optional[int] = None,
+        *,
+        code_manager: "inmanta.loader.CodeManager",
+    ) -> None:
         """Deploy code to the server"""
         if version is None:
             version = int(time.time())

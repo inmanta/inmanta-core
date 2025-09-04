@@ -220,7 +220,7 @@ class CodeManager:
         """Get a list of all registered types"""
         return ((type_name, [self.__file_info[path] for path in files]) for type_name, files in self.__type_file.items())
 
-    def get_project_constraints_file_hash(self) -> str | None :
+    def get_project_constraints_file_hash(self) -> str | None:
         return self._project_constraints_hash
 
 

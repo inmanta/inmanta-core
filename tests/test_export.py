@@ -366,7 +366,7 @@ a = many_dependencies::Test(name="my_test_resource")
     assert len(result.result["versions"]) == 1
     assert result.result["versions"][0]["total"] == 1
 
-    codemanager = CodeManager()
+    codemanager = CodeManager(client)
     module_install_specs = await codemanager.get_code(environment=uuid.UUID(environment), model_version=1, agent_name="agent")
 
     for module_install_spec in module_install_specs:

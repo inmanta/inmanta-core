@@ -40,6 +40,7 @@ logger = logging.getLogger(__name__)
 def code_for(bp: executor.ExecutorBlueprint) -> list[executor.ResourceInstallSpec]:
     return [executor.ResourceInstallSpec("test::Test", 5, bp)]
 
+
 @pytest.fixture
 def set_custom_executor_policy(server_config):
     """
@@ -53,7 +54,6 @@ def set_custom_executor_policy(server_config):
     yield
 
     inmanta.agent.config.agent_executor_cap.set(str(old_cap_value))
-
 
 
 async def test_process_manager(

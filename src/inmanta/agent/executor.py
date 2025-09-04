@@ -35,6 +35,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional, Sequence, cast
 from uuid import UUID
 
+import inmanta.loader
 import packaging.requirements
 from inmanta import const
 from inmanta.agent import config as cfg
@@ -44,7 +45,6 @@ from inmanta.const import Change
 from inmanta.data import LogLine
 from inmanta.data.model import AttributeStateChange, PipConfig
 from inmanta.env import PythonEnvironment
-from inmanta.loader import ModuleSource
 from inmanta.resources import Id
 from inmanta.types import JsonType, ResourceIdStr, ResourceType, ResourceVersionIdStr
 
@@ -179,7 +179,7 @@ class EnvBlueprint:
 class ExecutorBlueprint(EnvBlueprint):
     """Extends EnvBlueprint to include sources for the executor environment."""
 
-    sources: Sequence[ModuleSource]
+    sources: Sequence["inmanta.loader.ModuleSource"]
     _hash_cache: Optional[str] = dataclasses.field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:

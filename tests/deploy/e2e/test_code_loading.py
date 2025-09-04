@@ -19,6 +19,7 @@ Contact: code@inmanta.com
 import asyncio
 import base64
 import logging
+import hashlib
 import os
 import pathlib
 import py_compile
@@ -29,8 +30,7 @@ from logging import DEBUG
 
 import pytest
 
-from inmanta import config
-from inmanta import data, protocol
+from inmanta import config, data, protocol
 from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
 from inmanta.agent.code_manager import CodeManager
@@ -78,7 +78,7 @@ async def agent(server, environment, deactive_venv):
 
 
 async def make_source_structure(
-    into: dict[str, tuple[str, str, list[str]]],
+    into: dict[str, tuple[str, str, list[str], str | None]],
     file: str,
     module: str,
     source: str,
@@ -89,7 +89,7 @@ async def make_source_structure(
     """
     :param into: dict to populate:
         - key = hash value of the file
-        - value = tuple (file_name, module, dependencies)
+        - value = tuple (file_name, module, dependencies, constraints_file_hash)
     """
     with tempfile.TemporaryDirectory() as tmpdirname:
         if byte_code:
@@ -108,9 +108,10 @@ async def make_source_structure(
         sha1sum = hashlib.new("sha1")
         sha1sum.update(data)
         hv: str = sha1sum.hexdigest()
-        into[hv] = (file_name, module, dependencies)
+        into[hv] = (file_name, module, dependencies, None)
         await client.upload_file(hv, content=base64.b64encode(data).decode("ascii"))
         return hv
+
 
 async def upload_file(client: protocol.Client, content: str) -> str:
     content = content.encode()
@@ -448,7 +449,6 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
     content = "#The code"
     hv1: str = await upload_file(client, content)
 
-
     result = await client.put_version(
         tid=environment,
         version=version,
@@ -508,8 +508,6 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
 
     altered_content = "#The OTHER code"
     hv2: str = await upload_file(client, altered_content)
-
-
 
     result = await client.put_partial(
         tid=environment,
@@ -578,7 +576,6 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
 
     content = "#Yet some other code"
     hv3: str = await upload_file(client, content)
-
 
     resources = [
         {
@@ -670,7 +667,7 @@ async def test_project_constraints_in_agent_code_install(server, client, environ
     The test_process_manager test in test_agent_executor.py checks that these constraints
     are taken into account during agent code install.
     """
-    codemanager = CodeManager()
+    codemanager = CodeManager(client)
 
     version = await clienthelper.get_version()
 

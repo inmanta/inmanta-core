@@ -23,11 +23,11 @@ import sys
 import uuid
 from typing import Collection
 
+import inmanta.loader
 from inmanta import protocol
 from inmanta.agent import executor
 from inmanta.agent.executor import ResourceInstallSpec
 from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig
-from inmanta.loader import ModuleSource
 from inmanta.protocol import Client, SyncClient
 from inmanta.types import ResourceType
 from inmanta.util.async_lru import async_lru_cache
@@ -69,12 +69,12 @@ class CodeManager:
         if result.code == 200 and result.result is not None:
             sync_client = SyncClient(client=self._client, ioloop=asyncio.get_running_loop())
             requirements: set[str] = set()
-            constraints_file_hash: set[str] = set()
-            sources: list["ModuleSource"] = []
+            constraints_file_hash: set[str | None] = set()
+            sources: list["inmanta.loader.ModuleSource"] = []
             # Encapsulate source code details in ``ModuleSource`` objects
             for source in result.result["data"]:
                 sources.append(
-                    ModuleSource(
+                    inmanta.loader.ModuleSource(
                         name=source["module_name"],
                         is_byte_code=source["is_byte_code"],
                         hash_value=source["hash"],
@@ -82,12 +82,12 @@ class CodeManager:
                     )
                 )
                 requirements.update(source["requirements"])
-                constraints_file_hash.update(source["constraints_file_hash"])
+                constraints_file_hash.update({source["constraints_file_hash"]})
             # The constraints_file_hash and constraints sets should always contain
             # exactly one element:
             #  - {None} and {None} if no constraint is set at the project level
 
-            assert len(constraints_file_hash) == 1
+            assert len(constraints_file_hash) == 1, f"{constraints_file_hash=}"
 
             response: protocol.Result = self._client.get_file(constraints_file_hash)
             if response.code != 200 or response.result is None:
