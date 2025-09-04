@@ -1023,63 +1023,6 @@ async def test_model_get_version_nr_latest_version(init_dataclasses_and_load_sch
     assert await data.ConfigurationModel.get_version_nr_latest_version(uuid.uuid4()) is None
 
 
-async def test_get_latest_resource(init_dataclasses_and_load_schema):
-    project = data.Project(name="test")
-    await project.insert()
-
-    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
-    await env.insert()
-
-    key = "std::testing::NullResource[agent1,name=motd]"
-    assert (await data.Resource.get_latest_version(env.id, key)) is None
-
-    version = 1
-    cm2 = data.ConfigurationModel(
-        environment=env.id,
-        version=version,
-        date=datetime.datetime.now(),
-        total=1,
-        version_info={},
-        released=False,
-        is_suitable_for_partial_compiles=False,
-    )
-    await cm2.insert()
-    resource_set = await make_resource_set(env.id, [version])
-
-    res11 = data.Resource.new(
-        environment=env.id,
-        resource_version_id=key + ",v=%d" % version,
-        resource_set=resource_set,
-        attributes={"name": "motd", "purge_on_delete": True, "purged": False},
-    )
-    await res11.insert()
-
-    version = 2
-    cm2 = data.ConfigurationModel(
-        environment=env.id,
-        version=version,
-        date=datetime.datetime.now(),
-        total=1,
-        version_info={},
-        released=False,
-        is_suitable_for_partial_compiles=False,
-    )
-    await cm2.insert()
-
-    resource_set = await make_resource_set(env.id, [version])
-
-    res12 = data.Resource.new(
-        environment=env.id,
-        resource_version_id=key + ",v=%d" % version,
-        resource_set=resource_set,
-        attributes={"name": "motd2", "purge_on_delete": True, "purged": True},
-    )
-    await res12.insert()
-
-    res = await data.Resource.get_latest_version(env.id, key)
-    assert res.attributes["name"] == "motd2"
-
-
 async def test_order_by_validation(init_dataclasses_and_load_schema):
     """Test the validation of the order by column names and the sort order value. This test case checks that wrong values
     are rejected. Other test cases validate that the parameters work.

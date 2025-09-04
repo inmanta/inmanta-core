@@ -5287,7 +5287,7 @@ class Resource(BaseDocument):
     :param resource_set_id: The id of the resource set this resource belongs to.
     """
 
-    __primary_key__ = ("environment", "resource_id", "resource_set_id")
+    __primary_key__ = ("environment", "resource_set_id", "resource_id")
 
     environment: uuid.UUID
 
@@ -5417,19 +5417,17 @@ class Resource(BaseDocument):
         cls, env: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None
     ) -> tuple[Optional[int], abc.Mapping[ResourceIdStr, ResourceState]]:
         """
-        Fetches the states of all the resources in the given environment, excluding orphans
+        Fetches the states of the resources in the latest scheduled version.
         """
         query = f"""
-            SELECT DISTINCT ON (r.resource_id)
-                rscm.model,
-                r.resource_id,
+            SELECT
+                rps.last_deployed_version AS model,
+                rps.resource_id,
                 {const.SQL_RESOURCE_STATUS_SELECTOR} AS status
-            FROM {Resource.table_name()} AS r
-                INNER JOIN resource_set_configuration_model AS rscm
-                    ON r.environment=rscm.environment AND r.resource_set_id=rscm.resource_set_id
-                INNER JOIN resource_persistent_state AS rps ON rps.environment=r.environment AND r.resource_id=rps.resource_id
-            WHERE r.environment=$1 AND NOT rps.is_orphan
-            ORDER BY r.resource_id, rscm.model DESC
+            FROM {ResourcePersistentState.table_name()} AS rps
+            INNER JOIN {Scheduler.table_name()} AS s
+                ON rps.environment=s.environment AND rps.last_deployed_version=s.last_processed_model_version
+            WHERE rps.environment=$1 AND NOT rps.is_orphan AND rps.last_deployed_version IS NOT NULL
         """
         results = await cls.select_query(query, [env], no_obj=True, connection=connection)
         if not results:
@@ -5851,26 +5849,6 @@ class Resource(BaseDocument):
             result.append((version, model_sets))
         return result
 
-    @classmethod
-    async def get_latest_version(
-        cls, environment: uuid.UUID, resource_id: ResourceIdStr, connection: Optional[asyncpg.connection.Connection] = None
-    ) -> Optional["Resource"]:
-        query = f"""
-                SELECT r.*
-                FROM resource AS r
-                INNER JOIN resource_set_configuration_model AS rscm
-                    ON r.environment=rscm.environment AND r.resource_set_id=rscm.resource_set_id
-                WHERE r.environment=$1 AND r.resource_id=$2 AND rscm.model=(
-                    SELECT max(version)
-                    FROM {ConfigurationModel.table_name()}
-                    WHERE environment=$1
-                )
-                """
-        records = await cls.select_query(query, [environment, resource_id], connection=connection)
-        if not records:
-            return None
-        return records[0]
-
     @staticmethod
     def get_details_from_resource_id(resource_id: ResourceIdStr) -> m.ResourceIdDetails:
         parsed_id = resources.Id.parse_id(resource_id)
@@ -6161,7 +6139,7 @@ class Resource(BaseDocument):
         return dct
 
     def to_dict(self) -> dict[str, object]:
-        raise Exception("someone is using the old to_dict")
+        assert False, "Use `Resource.to_versioned_dict` to create a dict instead"
 
     def to_dto(self) -> m.Resource:
         attributes = self.attributes.copy()
