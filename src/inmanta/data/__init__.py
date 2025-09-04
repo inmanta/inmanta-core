@@ -3078,18 +3078,11 @@ class Parameter(BaseDocument):
         Retrieve the list of parameters that were updated before a specified datetime for environments that are not halted
         """
         query = f"""
-        WITH resources_in_latest_released_version AS (
-            SELECT r.environment,
-                   r.resource_id
-            FROM resource_set_configuration_model AS rscm
-            INNER JOIN {Resource.table_name()} AS r
-                ON rscm.environment=r.environment
-                AND rscm.resource_set_id=r.resource_set_id
-            WHERE rscm.model=(
-                    SELECT max(c.version)
-                    FROM {ConfigurationModel.table_name()} AS c
-                    WHERE c.released AND rscm.environment=c.environment
-                )
+        WITH latest_released_version AS(
+            SELECT max(c.version) AS version, c.environment
+            FROM {ConfigurationModel.table_name()} AS c
+            WHERE c.released
+            GROUP BY c.environment
         )
         SELECT p.*
         FROM {cls.table_name()} AS p
@@ -3104,7 +3097,13 @@ class Parameter(BaseDocument):
                 OR p.resource_id = ''
                 OR EXISTS(
                     SELECT 1
-                    FROM resources_in_latest_released_version AS r
+                    FROM {Resource.table_name()} AS r
+                    INNER JOIN resource_set_configuration_model AS rscm
+                        ON rscm.environment=r.environment
+                        AND rscm.resource_set_id=r.resource_set_id
+                    INNER JOIN latest_released_version AS lrv
+                        ON rscm.model=lrv.version
+                        AND rscm.environment=lrv.environment
                     WHERE r.environment=p.environment
                         AND r.resource_id=p.resource_id
                 )
