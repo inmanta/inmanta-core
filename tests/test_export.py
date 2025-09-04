@@ -333,7 +333,7 @@ a = exp::Test2(mydict={"a":"b"}, mylist=["a","b"])
     assert result.result["versions"][0]["total"] == 1
 
 
-async def test_project_constraints_at_exporter_boundary(snippetcompiler, server, client, environment, capsys, tmpdir):
+async def test_project_constraints_at_exporter_boundary(snippetcompiler, server, client, environment, tmpdir):
     """
     Test that constraints set in the requirements.txt of the project are propagated into the agent's EnvBlueprint
     during the export flow.
@@ -356,7 +356,6 @@ a = many_dependencies::Test(name="my_test_resource")
 """,
         autostd=True,
         index_url=index.url,
-        extra_index_url=["https://pypi.org/simple"],
     )
 
     await snippetcompiler.do_export_and_deploy()

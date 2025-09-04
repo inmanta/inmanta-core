@@ -119,19 +119,27 @@ class CodeManager:
             for module_name, rows in itertools.groupby(result.all(), key=lambda r: r.inmanta_module_name):
                 rows_list = list(rows)
                 assert rows_list
-                assert len({row.inmanta_module_version for row in rows_list}) == 1
 
-                _pip_config = rows_list[0].pip_config
-                assert all(row.pip_config == _pip_config for row in rows_list)
+                first_row = rows_list[0]
+                for row in rows_list:
+
+                    # The following attributes should be consistent across all modules in this version
+                    assert row.inmanta_module_version == first_row.inmanta_module_version
+                    assert row.pip_config == first_row.pip_config
+                    assert {row.requirements} == {first_row.requirements}
+                    assert row.constraint_file_content == first_row.constraint_file_content
+                    assert row.constraints_file_hash == first_row.constraints_file_hash
+
+                _pip_config = first_row.pip_config
                 pip_config = LEGACY_PIP_DEFAULT if _pip_config is None else PipConfig(**_pip_config)
-                constraints = rows_list[0].constraint_file_content.decode() if rows_list[0].constraint_file_content else None
+                constraints = first_row.constraint_file_content.decode() if first_row.constraint_file_content else None
                 module_install_specs.append(
                     ModuleInstallSpec(
                         module_name=module_name,
-                        module_version=rows_list[0].inmanta_module_version,
+                        module_version=first_row.inmanta_module_version,
                         blueprint=executor.ExecutorBlueprint(
                             pip_config=pip_config,
-                            requirements=rows_list[0].requirements,
+                            requirements=first_row.requirements,
                             sources=[
                                 ModuleSource(
                                     metadata=ModuleSourceMetadata(
@@ -145,7 +153,7 @@ class CodeManager:
                             ],
                             python_version=sys.version_info[:2],
                             environment_id=environment,
-                            constraints_file_hash=rows_list[0].constraints_file_hash,
+                            constraints_file_hash=first_row.constraints_file_hash,
                             constraints=constraints,
                         ),
                     )
