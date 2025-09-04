@@ -1,0 +1,5 @@
+description: Added postgres test case for index used on join and where combination
+change-type: patch
+destination-branches:
+  - master
+  - iso8
