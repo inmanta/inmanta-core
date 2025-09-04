@@ -99,13 +99,24 @@ def upload_code(conn: protocol.SyncClient, tid: uuid.UUID, version: int, code_ma
     #
     # source_map = {
     #    "mymodule::Mytype": {
-    #      'abc123': ('/path/to/__init__.py', 'inmanta_plugins.mymodule.Mytype', <requirements if any>),
-    #      'def456': ('/path/to/utils.py', 'inmanta_plugins.mymodule.Mytype', <requirements if any>)
+    #      'abc123': (
+    #         '/path/to/__init__.py',
+    #         'inmanta_plugins.mymodule.Mytype',
+    #         <requirements if any>,
+    #         <constraints_file_hash if any>
+    #      ),
+    #      'def456': (
+    #         '/path/to/utils.py',
+    #         'inmanta_plugins.mymodule.Mytype',
+    #         <requirements if any>,
+    #         <constraints_file_hash if any>
+    #      )
     #    },
     # ...other types would be included as well
     # }
+    constraints_file_hash: str | None = code_manager.get_project_constraints_file_hash()
     source_map = {
-        resource_name: {source.hash: (source.path, source.module_name, source.requires) for source in sources}
+        resource_name: {source.hash: (source.path, source.module_name, source.requires, constraints_file_hash) for source in sources}
         for resource_name, sources in code_manager.get_types()
     }
 
@@ -532,12 +543,11 @@ class Exporter:
 
         return resources
 
-    def deploy_code(self, conn: protocol.SyncClient, tid: uuid.UUID, version: Optional[int] = None, code_manager: "inmanta.loader.CodeManager") -> None:
+    def deploy_code(self, conn: protocol.SyncClient, tid: uuid.UUID, version: Optional[int] = None, *, code_manager: "inmanta.loader.CodeManager") -> None:
         """Deploy code to the server"""
         if version is None:
             version = int(time.time())
 
-        code_manager = loader.CodeManager()
         LOGGER.info("Sending resources and handler source to server")
 
         code_manager.register_project_constraints(self)
@@ -595,7 +605,7 @@ class Exporter:
 
         # partial exports use the same code as the version they're based on
         if not partial_compile:
-            self.deploy_code(conn, tid, version, code_manager)
+            self.deploy_code(conn, tid, version, code_manager=code_manager)
 
         LOGGER.info("Uploading %d files", len(self._file_store))
 

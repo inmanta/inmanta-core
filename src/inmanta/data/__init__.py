@@ -6427,7 +6427,7 @@ class Code(BaseDocument):
         {code_hash:(file_name, provider.__module__, source_code, [req])}
     :param requires: Python requires for the source code above
     :param source_refs: file hashes refering to files in the file store
-        {code_hash:(file_name, provider.__module__, [req])}
+        {code_hash:(file_name, provider.__module__, [req], constraint_file_hash)}
     """
 
     __primary_key__ = ("environment", "resource", "version")
@@ -6435,7 +6435,7 @@ class Code(BaseDocument):
     environment: uuid.UUID
     resource: str
     version: int
-    source_refs: Optional[dict[str, tuple[str, str, list[str]]]] = None
+    source_refs: Optional[dict[str, tuple[str, str, list[str], str]]] = None
 
     @classmethod
     async def get_version(cls, environment: uuid.UUID, version: int, resource: str) -> Optional["Code"]:

@@ -108,10 +108,10 @@ class CodeService(protocol.ServerSlice):
 
         # Get all module code pertaining to this env/version/resource
         if code.source_refs is not None:
-            for code_hash, (file_name, module, requires) in code.source_refs.items():
+            for code_hash, (file_name, module, requires, constraints_file_hash) in code.source_refs.items():
                 sources.append(
                     model.Source(
-                        hash=code_hash, is_byte_code=file_name.endswith(".pyc"), module_name=module, requirements=requires
+                        hash=code_hash, is_byte_code=file_name.endswith(".pyc"), module_name=module, requirements=requires, constraints_file_hash=constraints_file_hash
                     )
                 )
 

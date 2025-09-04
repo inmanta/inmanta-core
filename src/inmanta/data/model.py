@@ -758,6 +758,7 @@ class Source(BaseModel):
     is_byte_code: bool
     module_name: str
     requirements: list[str]
+    constraints_file_hash: str | None
 
 
 class EnvironmentMetricsResult(BaseModel):

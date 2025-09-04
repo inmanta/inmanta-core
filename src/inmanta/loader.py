@@ -135,6 +135,11 @@ class CodeManager:
         # Cache of module to source info
         self.__module_to_source_info: dict[str, list[SourceInfo]] = {}
 
+        # Content of the file containing python package constraints
+        # set at the project level that have to be enforced when installing packages
+        # in the agents venv.
+        self._project_constraints_hash: str | None = None
+
     def register_project_constraints(self, exporter: "export.Exporter") -> None:
         """
         Helper method to retrieve all package constraints defined at the project level and compile them
@@ -214,6 +219,9 @@ class CodeManager:
     def get_types(self) -> Iterable[tuple[str, list[SourceInfo]]]:
         """Get a list of all registered types"""
         return ((type_name, [self.__file_info[path] for path in files]) for type_name, files in self.__type_file.items())
+
+    def get_project_constraints_file_hash(self) -> str | None :
+        return self._project_constraints_hash
 
 
 @dataclass(frozen=True)

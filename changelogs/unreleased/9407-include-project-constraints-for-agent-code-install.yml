@@ -3,6 +3,6 @@ description: >
   enforced in the virtual environments of the agents.
 issue-nr: 9407
 change-type: minor
-destination-branches: [master, iso8]
+destination-branches: [iso8]
 sections:
   feature: "{{description}}"

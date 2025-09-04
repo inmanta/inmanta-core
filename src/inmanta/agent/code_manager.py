@@ -17,6 +17,7 @@ Contact: code@inmanta.com
 """
 
 import asyncio
+import base64
 import logging
 import sys
 import uuid
@@ -68,6 +69,7 @@ class CodeManager:
         if result.code == 200 and result.result is not None:
             sync_client = SyncClient(client=self._client, ioloop=asyncio.get_running_loop())
             requirements: set[str] = set()
+            constraints_file_hash: set[str] = set()
             sources: list["ModuleSource"] = []
             # Encapsulate source code details in ``ModuleSource`` objects
             for source in result.result["data"]:
@@ -80,6 +82,19 @@ class CodeManager:
                     )
                 )
                 requirements.update(source["requirements"])
+                constraints_file_hash.update(source["constraints_file_hash"])
+            # The constraints_file_hash and constraints sets should always contain
+            # exactly one element:
+            #  - {None} and {None} if no constraint is set at the project level
+
+            assert len(constraints_file_hash) == 1
+
+            response: protocol.Result = self._client.get_file(constraints_file_hash)
+            if response.code != 200 or response.result is None:
+                raise Exception(f"Failed to fetch constraints file with hash {constraints_file_hash}.")
+
+            constraints: str = base64.b64decode(response.result["content"]).decode()
+
             resource_install_spec = ResourceInstallSpec(
                 resource_type,
                 version,
@@ -89,6 +104,8 @@ class CodeManager:
                     requirements=list(requirements),
                     sources=sources,
                     python_version=sys.version_info[:2],
+                    constraints_file_hash=constraints_file_hash[0],
+                    constraints=constraints,
                 ),
             )
             return resource_install_spec
