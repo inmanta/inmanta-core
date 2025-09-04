@@ -308,8 +308,12 @@ class PartialUpdateMerger:
                 update = True
             else:
                 # Old shared resource not referenced by partial compile
-                res_old = self.shared_resources_old[rid_shared_resource]
-                res = self._clean_requires_of_old_shared_resource(res_old)
+                res = self.shared_resources_old[rid_shared_resource]
+                # Cleanup the requires relationship for shared resources that are not present in the partial compile
+                # and that were copied from the old version of the model.
+                res.attributes["requires"] = [
+                    rid for rid in res.attributes["requires"] if self._should_keep_dependency_old_shared_resources(rid)
+                ]
                 update = True
             result.append(res)
         return result if update else None
@@ -327,16 +331,6 @@ class PartialUpdateMerger:
             # will be present in the resources that are part of the partial compile.
             return False
         return True
-
-    def _clean_requires_of_old_shared_resource(self, resource: ResourceDTO) -> ResourceDTO:
-        """
-        Cleanup the requires relationship for shared resources that are not present in the partial compile
-        and that were copied from the old version of the model.
-        """
-        resource.attributes["requires"] = [
-            rid for rid in resource.attributes["requires"] if self._should_keep_dependency_old_shared_resources(rid)
-        ]
-        return resource
 
     def _merge_requires_of_shared_resource(self, old: ResourceDTO, new: ResourceDTO) -> bool:
         """
@@ -551,11 +545,9 @@ class OrchestrationService(protocol.ServerSlice):
         resources: list[JsonType],
         resource_state: dict[ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]],
         resource_sets: dict[ResourceIdStr, Optional[str]],
-        set_version: Optional[int] = None,
     ) -> dict[ResourceIdStr, ResourceDTO]:
         """
         This method converts the resources sent to the put_version or put_partial endpoint to DTO Resource objects.
-        The resulting resource objects will have their model field set to set_version if provided.
 
         An exception will be raised when one of the following constraints is not satisfied:
             * A resource present in the resource_sets parameter is not present in the resources dictionary.
@@ -1142,7 +1134,6 @@ class OrchestrationService(protocol.ServerSlice):
                     resources=resources,
                     resource_state=resource_state,
                     resource_sets=resource_sets,
-                    set_version=version,
                 )
 
                 updated_resource_sets: abc.Set[str] = {sr_name for sr_name in resource_sets.values() if sr_name is not None}

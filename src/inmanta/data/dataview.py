@@ -540,8 +540,9 @@ class ResourceView(DataView[ResourceStatusOrder, model.LatestReleasedResource]):
         return {"deploy_summary": str(self.deploy_summary)}
 
     def get_base_query(self) -> SimpleQueryBuilder:
-        prelude = (
-            f"""
+        prelude: str
+        if self.drop_orphans:
+            prelude = f"""
             WITH latest_version AS (
                     SELECT MAX(public.configurationmodel.version) as version
                     FROM public.configurationmodel
@@ -567,8 +568,8 @@ class ResourceView(DataView[ResourceStatusOrder, model.LatestReleasedResource]):
                     WHERE rps.environment=$1 AND NOT rps.is_orphan
                 )
         """
-            if self.drop_orphans
-            else f"""
+        else:
+            prelude = f"""
                 WITH latest_version AS (
                     SELECT MAX(public.configurationmodel.version) as version
                     FROM public.configurationmodel
@@ -616,7 +617,6 @@ class ResourceView(DataView[ResourceStatusOrder, model.LatestReleasedResource]):
                     WHERE r.environment=$1
                 )
             """
-        )
         new_query_builder = SimpleQueryBuilder(
             select_clause="SELECT *",
             prelude=prelude,
