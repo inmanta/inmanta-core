@@ -747,7 +747,7 @@ class PythonEnvironment:
         LOGGER.info("Initializing virtual environment at %s", self.env_path)
 
         # check if the virtual env exists
-        if os.path.isdir(self.env_path) and bool(os.listdir(self.env_path)):
+        if os.path.isdir(self.env_path) and os.listdir(self.env_path):
             self.can_activate()
         else:
             path = os.path.realpath(self.env_path)
