@@ -5421,13 +5421,13 @@ class Resource(BaseDocument):
         """
         query = f"""
             SELECT
-                rps.last_deployed_version AS model,
+                s.last_processed_model_version AS model,
                 rps.resource_id,
                 {const.SQL_RESOURCE_STATUS_SELECTOR} AS status
             FROM {ResourcePersistentState.table_name()} AS rps
             INNER JOIN {Scheduler.table_name()} AS s
-                ON rps.environment=s.environment AND rps.last_deployed_version=s.last_processed_model_version
-            WHERE rps.environment=$1 AND NOT rps.is_orphan AND rps.last_deployed_version IS NOT NULL
+                ON rps.environment=s.environment
+            WHERE rps.environment=$1 AND NOT rps.is_orphan
         """
         results = await cls.select_query(query, [env], no_obj=True, connection=connection)
         if not results:

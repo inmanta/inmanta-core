@@ -1078,6 +1078,7 @@ async def test_get_resources(init_dataclasses_and_load_schema):
 
 
 async def test_model_get_resources_for_version(init_dataclasses_and_load_schema):
+
     project = data.Project(name="test")
     await project.insert()
 
@@ -1189,6 +1190,11 @@ async def test_model_get_resources_for_version(init_dataclasses_and_load_schema)
     await rps_su.update_fields(blocked=state.Blocked.BLOCKED)
 
     # Assert state of resources
+
+    # Mock a scheduler
+    scheduler = data.Scheduler(environment=env.id, last_processed_model_version=3)
+    await scheduler.insert()
+
     version, states = await data.Resource.get_latest_resource_states(env.id)
     assert version == 3
     assert states[d.resource_str()] == const.ResourceState.deployed
