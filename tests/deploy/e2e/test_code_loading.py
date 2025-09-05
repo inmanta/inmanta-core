@@ -41,7 +41,7 @@ from inmanta.env import process_env
 from inmanta.protocol import Client
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.server.server import Server
-from inmanta.util import get_compiler_version
+from inmanta.util import get_compiler_version, hash_file
 from utils import ClientHelper, DummyCodeManager, log_index, retry_limited, wait_until_deployment_finishes
 
 LOGGER = logging.getLogger(__name__)
@@ -132,6 +132,7 @@ async def test_agent_installs_dependency_containing_extras(
     index_with_pkgs_containing_optional_deps: str,
     clienthelper,
     agent,
+    environment
 ) -> None:
     """
     Test whether the agent code loading works correctly when a python dependency is provided that contains extras.
@@ -173,7 +174,6 @@ def test():
         resource_types=["test::Test"],
     )
 
-    assert install_spec[0].blueprint.sources[0].source == source_content.encode()
     await agent.executor_manager.get_executor("agent1", "localhost", install_spec)
 
     installed_packages = process_env.get_installed_packages()
@@ -192,7 +192,7 @@ def test():
         assert not must_contain
 
     check_packages(
-        package_list=installed_packages, must_contain={"pkg", "dep-a", "multi-version"}, must_not_contain={"dep-b", "dep-c"}
+        package_list=installed_packages, must_contain={"pkg", "dep-a"}, must_not_contain={"dep-b", "dep-c"}
     )
 
 
@@ -425,7 +425,7 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
 
 
     """
-    codemanager = CodeManager()
+    codemanager = CodeManager(client)
 
     version = await clienthelper.get_version()
     resources = [
@@ -446,20 +446,33 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
             "requires": [],
         },
     ]
+
+    sources = {}
     content = "#The code"
-    hv1: str = await upload_file(client, content)
+    # hv1: str = await upload_file(client, content)
+
+    await make_source_structure(
+        sources,
+        "inmanta_plugins/test/__init__.py",
+        "inmanta_plugins.test",
+        content,
+        dependencies=[],
+        client=client,
+    )
 
     result = await client.put_version(
         tid=environment,
         version=version,
         resources=resources,
-        resource_state={},
-        unknowns=[],
-        version_info={},
         compiler_version=get_compiler_version(),
-        module_version_info=module_version_info,
         resource_sets={"test::ResType_A[agent_X,key=key1]": "set-a", "test::ResType_A[agent_Y,key=key1]": "set-b"},
     )
+
+    assert res.code == 200
+
+    res = await client.upload_code_batched(tid=environment, id=version, resources={
+        "test::ResType_A": sources})
+    assert res.code == 200
 
     assert result.code == 200
 

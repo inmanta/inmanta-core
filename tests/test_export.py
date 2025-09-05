@@ -367,7 +367,11 @@ a = many_dependencies::Test(name="my_test_resource")
     assert result.result["versions"][0]["total"] == 1
 
     codemanager = CodeManager(client)
-    module_install_specs = await codemanager.get_code(environment=uuid.UUID(environment), model_version=1, agent_name="agent")
+    module_install_specs, _ = await codemanager.get_code(
+        environment=environment,
+        version=1,
+        resource_types=["many_dependencies::Test"],
+    )
 
     for module_install_spec in module_install_specs:
         assert module_install_spec.blueprint.constraints is None
@@ -396,7 +400,11 @@ a = many_dependencies::Test(name="my_test_resource")
     assert len(result.result["versions"]) == 2
     assert result.result["versions"][1]["total"] == 1
 
-    module_install_specs = await codemanager.get_code(environment=uuid.UUID(environment), model_version=2, agent_name="agent")
+    module_install_specs, _ = await codemanager.get_code(
+        environment=environment,
+        version=2,
+        resource_types=["many_dependencies::Test"],
+    )
     for module_install_spec in module_install_specs:
         assert module_install_spec.blueprint.constraints == "\n".join(constraints)
 
