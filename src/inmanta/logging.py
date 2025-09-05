@@ -444,8 +444,13 @@ class LoggingConfigBuilder:
                     "propagate": True,
                     "handlers": ["core_tornado_debug_log_handler"],
                 },
+                # Prevent SQLAlchemy from producing too many/superfluous log messages
                 "sqlalchemy.engine": {
-                    "level": "INFO",
+                    "level": "WARNING",
+                    "propagate": True,
+                },
+                "inmanta.data.NullerPool": {
+                    "level": "WARNING",
                     "propagate": True,
                 },
             }
