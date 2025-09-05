@@ -1955,7 +1955,7 @@ async def test_put_partial_with_unknowns(server, client, environment, clienthelp
             "purged": False,
             "requires": [],
         }
-        for i in range(1, 5)
+        for i in range(1, 6)
     ]
     resource_sets = {
         "test::Resource[agent1,key=key1]": "set-a",
@@ -1968,6 +1968,7 @@ async def test_put_partial_with_unknowns(server, client, environment, clienthelp
         {"resource": "test::Resource[agent1,key=key2]", "parameter": "unknown_2", "source": "fact"},
         {"resource": "", "parameter": "unknown_3", "source": "fact"},
         {"resource": "test::Resource[agent1,key=key4]", "parameter": "unknown_4", "source": "fact"},
+        {"resource": "test::Resource[agent1,key=key5]", "parameter": "unknown_5", "source": "fact"},
     ]
     result = await client.put_version(
         tid=environment,
@@ -1995,18 +1996,18 @@ async def test_put_partial_with_unknowns(server, client, environment, clienthelp
     # Partial compile
     resources_partial = [
         {
-            "key": "key5",
+            "key": "key6",
             "version": 0,
-            "id": "test::Resource[agent1,key=key5],v=0",
+            "id": "test::Resource[agent1,key=key6],v=0",
             "send_event": False,
             "purged": False,
             "requires": [],
         },
     ]
     resource_sets = {
-        "test::Resource[agent1,key=key5]": "set-b",
+        "test::Resource[agent1,key=key6]": "set-b",
     }
-    unknowns = [{"resource": "test::Resource[agent1,key=key5]", "parameter": "unknown_5", "source": "fact"}]
+    unknowns = [{"resource": "test::Resource[agent1,key=key6]", "parameter": "unknown_6", "source": "fact"}]
     result = await client.put_partial(
         tid=environment,
         resources=resources_partial,
@@ -2031,13 +2032,15 @@ async def test_put_partial_with_unknowns(server, client, environment, clienthelp
         assert not uk.resolved
 
     unknowns_by_rid = {uk.resource_id: uk for uk in await data.UnknownParameter.get_list(environment=environment, version=2)}
-    assert len(unknowns_by_rid) == 3
+    assert len(unknowns_by_rid) == 4
     assert "test::Resource[agent1,key=key1]" in unknowns_by_rid
     assert "" in unknowns_by_rid
     assert "test::Resource[agent1,key=key5]" in unknowns_by_rid
+    assert "test::Resource[agent1,key=key6]" in unknowns_by_rid
     assert_unknown(unknowns_by_rid["test::Resource[agent1,key=key1]"], "unknown_1", "test::Resource[agent1,key=key1]")
     assert_unknown(unknowns_by_rid[""], "unknown_3", "")
     assert_unknown(unknowns_by_rid["test::Resource[agent1,key=key5]"], "unknown_5", "test::Resource[agent1,key=key5]")
+    assert_unknown(unknowns_by_rid["test::Resource[agent1,key=key6]"], "unknown_6", "test::Resource[agent1,key=key6]")
 
 
 async def test_put_partial_dep_on_specific_set_removed(server, client, environment, clienthelper, agent) -> None:

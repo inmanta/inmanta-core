@@ -24,7 +24,6 @@ from typing import Optional
 
 import pytest
 
-import inmanta.resources
 from inmanta import config, const, module
 from inmanta.ast import CompilerException, ExternalException, RuntimeException
 from inmanta.const import ResourceState
@@ -295,14 +294,8 @@ async def test_server_export(snippetcompiler, server: Server, client, environmen
     assert len(result.result["versions"]) == 1
     assert result.result["versions"][0]["total"] == 1
 
-    version = result.result["versions"][0]["version"]
     result = await client.get_version(tid=environment, id=result.result["versions"][0]["version"])
     assert result.code == 200
-
-    for res in result.result["resources"]:
-        res["attributes"]["id"] = res["id"]
-        resource = inmanta.resources.Resource.deserialize(res["attributes"])
-        assert resource.version == resource.id.version == version
 
     resources = await server.get_slice(SLICE_RESOURCE).get_resources_in_latest_version(
         environment=await Environment.get_by_id(environment)

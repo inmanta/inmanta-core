@@ -883,7 +883,6 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, mo
             deploy_counter = deploy_counter + 1
             rid = ResourceIdStr(resource["resource_id"])
             action_id = uuid.uuid4()
-            rvid = ResourceVersionIdStr(resource["resource_version_id"])
             deploy_intent = await dummy_scheduler.deploy_start(action_id, rid)
             if "sub=4]" in rid:
                 # never finish deploying r4
@@ -892,7 +891,7 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, mo
                 await dummy_scheduler.deploy_done(
                     deploy_intent,
                     DeployReport(
-                        rvid=rvid,
+                        rvid=ResourceVersionIdStr(f"{rid},v={version}"),
                         action_id=action_id,
                         resource_state=(
                             const.HandlerResourceState.failed
@@ -915,9 +914,9 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, mo
             LOGGER.warning("deploys: %d, tenant: %d, iteration: %d", deploy_counter, tenant, iteration)
             # Since we are using null_agent we need to manually mark orphans
             if iteration == 0:
-                first_iteration_resources[tenant] = {Id.parse_id(res["id"]).resource_str() for res in resources}
+                first_iteration_resources[tenant] = {Id.parse_id(res["resource_id"]).resource_str() for res in resources}
             elif iteration == 1:
-                new_rids = {Id.parse_id(res["id"]).resource_str() for res in resources}
+                new_rids = {Id.parse_id(res["resource_id"]).resource_str() for res in resources}
                 orphans = first_iteration_resources[tenant] - new_rids
                 await dummy_scheduler.state_update_manager.mark_as_orphan(environment=environment, resource_ids=orphans)
 

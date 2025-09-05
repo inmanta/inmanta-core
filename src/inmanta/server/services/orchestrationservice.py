@@ -493,7 +493,9 @@ class OrchestrationService(protocol.ServerSlice):
             if bool(include_logs):
                 actions: list[data.ResourceAction] = []
                 res_dict["actions"] = actions
-                resource_action_lookup[res_dict["resource_version_id"]] = actions
+                rvid = Id.parse_id(res_dict["resource_id"])
+                rvid.set_version(version_id)
+                resource_action_lookup[rvid.resource_version_str()] = actions
 
         if include_logs:
             # get all logs, unsorted

@@ -295,7 +295,6 @@ src/inmanta/data/__init__.py:0: error: Argument "validator" to "Setting" has inc
 src/inmanta/data/__init__.py:0: error: Argument "version" to "CompileDetails" has incompatible type "object"; expected "int | None"  [arg-type]
 src/inmanta/data/__init__.py:0: error: Argument 1 of "insert_many" is incompatible with supertype "BaseDocument"; supertype defines the argument type as "Sequence[BaseDocument]"  [override]
 src/inmanta/data/__init__.py:0: error: Argument 1 to "__init__" of "BaseDocument" has incompatible type "**dict[str, object]"; expected "bool"  [arg-type]
-src/inmanta/data/__init__.py:0: error: Argument 1 to "__mangle_dict" of "Resource" has incompatible type "Record"; expected "dict[Any, Any]"  [arg-type]
 src/inmanta/data/__init__.py:0: error: Argument 1 to "_execute_query" of "BaseDocument" has incompatible type "dict[str, object]"; expected "str"  [arg-type]
 src/inmanta/data/__init__.py:0: error: Argument 1 to "_get_composed_filter" of "BaseDocument" has incompatible type "**dict[str, object]"; expected "int"  [arg-type]
 src/inmanta/data/__init__.py:0: error: Argument 1 to "_get_composed_filter" of "BaseDocument" has incompatible type "**dict[str, object]"; expected "int"  [arg-type]
