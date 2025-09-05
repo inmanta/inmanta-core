@@ -27,6 +27,7 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 from inmanta import const, data
 from inmanta.server import config
+from utils import insert_with_link_to_configuration_model
 
 # This resource ID has some garbage characters, to make sure the queries are good
 resource_id_a = r"std::testing::NullResource[agent1,name=/tmp#/%%/\_file1.txt]"
@@ -54,7 +55,7 @@ async def env_with_logs(client, server, environment: str):
         await cm.insert()
 
         resource_set = data.ResourceSet(environment=env_id, id=uuid.uuid4())
-        await resource_set.insert()
+        await insert_with_link_to_configuration_model(resource_set, versions=[i])
         resource_set_per_version[i] = resource_set
 
     msg_timings = []
@@ -318,7 +319,7 @@ async def test_log_without_kwargs(server, client, environment: str):
     ).insert()
 
     resource_set = data.ResourceSet(environment=env_id, id=uuid.uuid4())
-    await resource_set.insert()
+    await insert_with_link_to_configuration_model(resource_set, versions=[1])
     res1 = data.Resource.new(
         environment=env_id,
         resource_version_id=f"{resource_id_a},v=1",
@@ -376,7 +377,7 @@ async def test_log_nested_kwargs(server, client, environment: str):
     ).insert()
 
     resource_set = data.ResourceSet(environment=env_id, id=uuid.uuid4())
-    await resource_set.insert()
+    await insert_with_link_to_configuration_model(resource_set, versions=[1])
     res1 = data.Resource.new(
         environment=env_id,
         resource_version_id=f"{resource_id_a},v=1",

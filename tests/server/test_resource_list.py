@@ -69,7 +69,7 @@ async def test_resource_list_no_released_version(server, client):
     name = "file1"
     key = f"std::testing::NullResource[agent1,name={name}]"
     resource_set = data.ResourceSet(environment=env.id, id=uuid.uuid4())
-    await resource_set.insert()
+    await utils.insert_with_link_to_configuration_model(resource_set, versions=[version])
     res1_v1 = data.Resource.new(
         environment=env.id,
         resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),
@@ -113,7 +113,7 @@ async def test_has_only_one_version_from_resource(server, client):
 
     version = 1
     resource_set = data.ResourceSet(environment=env.id, id=uuid.uuid4())
-    await resource_set.insert()
+    await utils.insert_with_link_to_configuration_model(resource_set, versions=[version])
     res1_v1 = data.Resource.new(
         environment=env.id,
         resource_version_id=res1_key + ",v=%d" % version,
@@ -131,9 +131,9 @@ async def test_has_only_one_version_from_resource(server, client):
     # This version has both resources so we can populate just this version
     await data.ResourcePersistentState.populate_for_version(environment=env.id, model_version=version)
 
-    resource_set = data.ResourceSet(environment=env.id, id=uuid.uuid4())
-    await resource_set.insert()
     version = 2
+    resource_set = data.ResourceSet(environment=env.id, id=uuid.uuid4())
+    await utils.insert_with_link_to_configuration_model(resource_set, versions=[version])
     res1_v2 = data.Resource.new(
         environment=env.id,
         resource_version_id=res1_key + ",v=%d" % version,
@@ -149,9 +149,9 @@ async def test_has_only_one_version_from_resource(server, client):
     )
     await res2_v2.insert()
 
-    resource_set = data.ResourceSet(environment=env.id, id=uuid.uuid4())
-    await resource_set.insert()
     version = 3
+    resource_set = data.ResourceSet(environment=env.id, id=uuid.uuid4())
+    await utils.insert_with_link_to_configuration_model(resource_set, versions=[version])
     res1_v3 = data.Resource.new(
         environment=env.id,
         resource_version_id=res1_key + ",v=%d" % version,
@@ -163,9 +163,9 @@ async def test_has_only_one_version_from_resource(server, client):
     # This will mark res2 as an orphan since it is not on version 3
     await data.ResourcePersistentState.mark_as_orphan(environment=env.id, resource_ids={ResourceIdStr(res2_key)})
 
-    resource_set = data.ResourceSet(environment=env.id, id=uuid.uuid4())
-    await resource_set.insert()
     version = 4
+    resource_set = data.ResourceSet(environment=env.id, id=uuid.uuid4())
+    await utils.insert_with_link_to_configuration_model(resource_set, versions=[version])
     res1_v4 = data.Resource.new(
         environment=env.id,
         resource_version_id=res1_key + ",v=%d" % version,
@@ -220,7 +220,7 @@ async def env_with_resources(server, client):
         key = f"{resource_type}[{agent},path={path}]"
         for version in versions:
             resource_set = data.ResourceSet(environment=environment, id=uuid.uuid4())
-            await resource_set.insert()
+            await utils.insert_with_link_to_configuration_model(resource_set, versions=[version])
             res = data.Resource.new(
                 environment=environment,
                 resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),
@@ -883,7 +883,6 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, mo
             deploy_counter = deploy_counter + 1
             rid = ResourceIdStr(resource["resource_id"])
             action_id = uuid.uuid4()
-            rvid = ResourceVersionIdStr(resource["resource_version_id"])
             deploy_intent = await dummy_scheduler.deploy_start(action_id, rid)
             if "sub=4]" in rid:
                 # never finish deploying r4
@@ -892,7 +891,7 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, mo
                 await dummy_scheduler.deploy_done(
                     deploy_intent,
                     DeployReport(
-                        rvid=rvid,
+                        rvid=ResourceVersionIdStr(f"{rid},v={version}"),
                         action_id=action_id,
                         resource_state=(
                             const.HandlerResourceState.failed
@@ -915,9 +914,9 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, mo
             LOGGER.warning("deploys: %d, tenant: %d, iteration: %d", deploy_counter, tenant, iteration)
             # Since we are using null_agent we need to manually mark orphans
             if iteration == 0:
-                first_iteration_resources[tenant] = {Id.parse_id(res["id"]).resource_str() for res in resources}
+                first_iteration_resources[tenant] = {Id.parse_id(res["resource_id"]).resource_str() for res in resources}
             elif iteration == 1:
-                new_rids = {Id.parse_id(res["id"]).resource_str() for res in resources}
+                new_rids = {Id.parse_id(res["resource_id"]).resource_str() for res in resources}
                 orphans = first_iteration_resources[tenant] - new_rids
                 await dummy_scheduler.state_update_manager.mark_as_orphan(environment=environment, resource_ids=orphans)
 
