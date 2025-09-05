@@ -42,7 +42,7 @@ from inmanta.server import config as opt
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 from inmanta.util import get_compiler_version
-from utils import log_contains, log_doesnt_contain, retry_limited
+from utils import insert_with_link_to_configuration_model, log_contains, log_doesnt_contain, retry_limited
 
 LOGGER = logging.getLogger(__name__)
 
@@ -817,7 +817,7 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
         )
         await cm.insert()
         resource_set = data.ResourceSet(environment=env.id, id=uuid.uuid4())
-        await resource_set.insert_with_link_to_configuration_model(versions=[i])
+        await insert_with_link_to_configuration_model(resource_set, versions=[i])
         res1 = data.Resource.new(
             environment=env.id,
             resource_version_id="std::testing::NullResource[agent1,name=motd],v=%s" % str(i),
@@ -959,7 +959,7 @@ async def test_send_in_progress(server, client, environment, agent):
         version: int,
     ) -> None:
         resource_set = data.ResourceSet(environment=env_id, id=uuid.uuid4())
-        await resource_set.insert_with_link_to_configuration_model(versions=[version])
+        await insert_with_link_to_configuration_model(resource_set, versions=[version])
         r1 = data.Resource.new(
             environment=env_id,
             resource_version_id=resource_version_id,
@@ -1037,7 +1037,7 @@ async def test_send_in_progress_action_id_conflict(server, client, environment, 
     rvid_r1_v1 = ResourceVersionIdStr(f"std::testing::NullResource[agent1,name=file1],v={model_version}")
 
     resource_set = data.ResourceSet(environment=env_id, id=uuid.uuid4())
-    await resource_set.insert_with_link_to_configuration_model(versions=[model_version])
+    await insert_with_link_to_configuration_model(resource_set, versions=[model_version])
     await data.Resource.new(
         environment=env_id,
         resource_version_id=rvid_r1_v1,
@@ -1243,7 +1243,7 @@ async def test_send_deploy_done_error_handling(server, client, environment, agen
     rvid_r1_v1 = ResourceVersionIdStr(f"std::testing::NullResource[agent1,name=file1],v={model_version}")
 
     resource_set = data.ResourceSet(environment=env_id, id=uuid.uuid4())
-    await resource_set.insert_with_link_to_configuration_model(versions=[model_version])
+    await insert_with_link_to_configuration_model(resource_set, versions=[model_version])
     # Create resource
     await data.Resource.new(
         environment=env_id,
@@ -1353,7 +1353,7 @@ async def test_cleanup_old_agents(server, client, env1_halted, env2_halted):
     resource_id = f"std::testing::NullResource[agent4,name={name}]"
 
     resource_set = data.ResourceSet(environment=env1.id, id=uuid.uuid4())
-    await resource_set.insert_with_link_to_configuration_model(versions=[version])
+    await insert_with_link_to_configuration_model(resource_set, versions=[version])
     await data.Resource.new(
         environment=env1.id,
         resource_version_id=ResourceVersionIdStr(f"{resource_id},v={version}"),

@@ -31,6 +31,7 @@ from inmanta.const import ResourceState
 from inmanta.deploy.state import Blocked
 from inmanta.types import ResourceVersionIdStr
 from inmanta.util import parse_timestamp
+from utils import insert_with_link_to_configuration_model
 
 
 @pytest.fixture
@@ -125,7 +126,7 @@ async def env_with_resources(server, client):
 
         if (environment, version) not in resource_set_per_version:
             resource_set = data.ResourceSet(environment=environment, id=uuid4())
-            await resource_set.insert_with_link_to_configuration_model(versions=[version])
+            await insert_with_link_to_configuration_model(resource_set, versions=[version])
             resource_set_per_version[(environment, version)] = resource_set
 
         res = data.Resource.new(

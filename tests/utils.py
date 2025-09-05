@@ -1266,3 +1266,24 @@ def read_file(file_name: str) -> str:
     """
     with open(file_name, "r") as fh:
         return fh.read()
+
+
+async def insert_with_link_to_configuration_model(resource_set: data.ResourceSet, versions: list[int] | None = None) -> None:
+    """
+    Inserts the ResourceSet into the database and creates a link to the configuration models in the versions argument.
+    :param resource_set: The resource set to create
+    :param versions: The versions of the configuration model this ResourceSet belongs to
+    """
+    async with resource_set.get_connection() as con:
+        await resource_set.insert(con)
+        if versions is not None and len(versions) > 0:
+            query = """
+            INSERT INTO public.resource_set_configuration_model(
+                environment,
+                resource_set_id,
+                model
+            )
+            SELECT $1, $2, UNNEST($3::int[])
+            ON CONFLICT DO NOTHING;
+            """
+            await con.execute(query, resource_set.environment, resource_set.id, versions)

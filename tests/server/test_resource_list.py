@@ -69,7 +69,7 @@ async def test_resource_list_no_released_version(server, client):
     name = "file1"
     key = f"std::testing::NullResource[agent1,name={name}]"
     resource_set = data.ResourceSet(environment=env.id, id=uuid.uuid4())
-    await resource_set.insert_with_link_to_configuration_model(versions=[version])
+    await utils.insert_with_link_to_configuration_model(resource_set, versions=[version])
     res1_v1 = data.Resource.new(
         environment=env.id,
         resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),
@@ -113,7 +113,7 @@ async def test_has_only_one_version_from_resource(server, client):
 
     version = 1
     resource_set = data.ResourceSet(environment=env.id, id=uuid.uuid4())
-    await resource_set.insert_with_link_to_configuration_model(versions=[version])
+    await utils.insert_with_link_to_configuration_model(resource_set, versions=[version])
     res1_v1 = data.Resource.new(
         environment=env.id,
         resource_version_id=res1_key + ",v=%d" % version,
@@ -133,7 +133,7 @@ async def test_has_only_one_version_from_resource(server, client):
 
     version = 2
     resource_set = data.ResourceSet(environment=env.id, id=uuid.uuid4())
-    await resource_set.insert_with_link_to_configuration_model(versions=[version])
+    await utils.insert_with_link_to_configuration_model(resource_set, versions=[version])
     res1_v2 = data.Resource.new(
         environment=env.id,
         resource_version_id=res1_key + ",v=%d" % version,
@@ -151,7 +151,7 @@ async def test_has_only_one_version_from_resource(server, client):
 
     version = 3
     resource_set = data.ResourceSet(environment=env.id, id=uuid.uuid4())
-    await resource_set.insert_with_link_to_configuration_model(versions=[version])
+    await utils.insert_with_link_to_configuration_model(resource_set, versions=[version])
     res1_v3 = data.Resource.new(
         environment=env.id,
         resource_version_id=res1_key + ",v=%d" % version,
@@ -165,7 +165,7 @@ async def test_has_only_one_version_from_resource(server, client):
 
     version = 4
     resource_set = data.ResourceSet(environment=env.id, id=uuid.uuid4())
-    await resource_set.insert_with_link_to_configuration_model(versions=[version])
+    await utils.insert_with_link_to_configuration_model(resource_set, versions=[version])
     res1_v4 = data.Resource.new(
         environment=env.id,
         resource_version_id=res1_key + ",v=%d" % version,
@@ -220,7 +220,7 @@ async def env_with_resources(server, client):
         key = f"{resource_type}[{agent},path={path}]"
         for version in versions:
             resource_set = data.ResourceSet(environment=environment, id=uuid.uuid4())
-            await resource_set.insert_with_link_to_configuration_model(versions=[version])
+            await utils.insert_with_link_to_configuration_model(resource_set, versions=[version])
             res = data.Resource.new(
                 environment=environment,
                 resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),

@@ -42,7 +42,7 @@ from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 
 async def make_resource_set(environment: uuid.UUID, version: list[int]) -> data.ResourceSet:
     resource_set = data.ResourceSet(environment=environment, id=uuid.uuid4())
-    await resource_set.insert_with_link_to_configuration_model(versions=version)
+    await utils.insert_with_link_to_configuration_model(resource_set, versions=version)
     return resource_set
 
 
