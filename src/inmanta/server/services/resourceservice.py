@@ -205,7 +205,7 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
     ) -> Apireturn:
         # Validate resource version id
         try:
-            rvid = Id.parse_resource_version_id(resource_id)
+            Id.parse_resource_version_id(resource_id)
         except ValueError:
             return 400, {"message": f"{resource_id} is not a valid resource version id"}
 
@@ -224,7 +224,7 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
                     environment=env.id, resource_version_id=resource_id, action=action_name, limit=log_limit, connection=con
                 )
 
-            return 200, {"resource": resv.to_versioned_dict(rvid.version), "logs": actions}
+            return 200, {"resource": resv, "logs": actions}
 
     # This endpoint doesn't have a method associated yet.
     # Intended for use by other slices

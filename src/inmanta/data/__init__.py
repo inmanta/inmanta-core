@@ -6109,15 +6109,6 @@ class Resource(BaseDocument):
             return []
         return list(self.attributes["requires"])
 
-    def to_versioned_dict(self, version: int) -> dict[str, object]:
-        self.make_hash()
-        dct = super().to_dict()
-        self.__mangle_dict(dct, version)
-        return dct
-
-    def to_dict(self) -> dict[str, object]:
-        assert False, "Use `Resource.to_versioned_dict` to create a dict instead"
-
     def to_dto(self) -> m.Resource:
         attributes = self.attributes.copy()
 

@@ -1260,7 +1260,7 @@ async def test_get_resources_in_latest_version(init_dataclasses_and_load_schema)
         resource_set=resource_set,
         attributes={"name": "motd1", "purge_on_delete": True, "purged": False},
     )
-    assert resource.to_versioned_dict(version=2) == expected_resource.to_versioned_dict(version=2)
+    assert resource == expected_resource
 
     cm = data.ConfigurationModel(
         environment=env.id,
