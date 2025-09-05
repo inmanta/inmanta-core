@@ -558,7 +558,7 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
         if self._results:
             if self._received_any_concrete:
                 raise InvalidCompilerState(
-                   self, "list comprehension helper got set_unknown after some (known) elements were received"
+                    self, "list comprehension helper got set_unknown after some (known) elements were received"
                 )
             if len(self._results) > 1:
                 raise InvalidCompilerState(
