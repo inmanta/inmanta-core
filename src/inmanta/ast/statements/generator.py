@@ -356,7 +356,7 @@ class ListComprehension(RawResumer, ExpressionStatement):
 
         # indicate to helper that we're done
         if isinstance(iterable, Unknown):
-            collector_helper.set_unknown()
+            collector_helper.set_unknown(resolver, queue)
         elif not isinstance(iterable, list):
             raise TypingException(
                 self, f"A list comprehension can only be applied to lists and relations, got {type(iterable).__name__}"
@@ -470,7 +470,7 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
     after (we may have to wait for value expressions' requires).
     """
 
-    __slots__ = ("statement", "resolver", "queue", "lhs", "_results", "_complete", "final_result")
+    __slots__ = ("statement", "resolver", "queue", "lhs", "_results", "_complete", "_received_any_concrete", "final_result")
 
     def __init__(
         self,
@@ -488,6 +488,8 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
         self._results: list[VariableABC[object]] = []
         # have we received all elements?
         self._complete: bool = False
+        # have we received any concrete (not Unknown) values?
+        self._received_any_concrete: bool = False
         # collector for the final result
         self.final_result: ResultVariable[object] = ResultVariable()
 
@@ -517,6 +519,7 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
             self.statement.copy_location(value_expression)
         else:
             value_expression = self.statement.value_expression
+            self._received_any_concrete = True
 
         # execute the value expression and the guard
         guarded_expression: ExpressionStatement
@@ -547,15 +550,29 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
 
         return False
 
-    def set_unknown(self) -> None:
+    def set_unknown(self, resolver: Resolver, queue: QueueScheduler) -> None:
         """
         Set the final result to be an unknown. No elements should be gradually received in this case.
         Mutually exclusive with `complete`.
         """
-        if self._results and not all(isinstance(result, Unknown) for result in self._results):
-            raise InvalidCompilerState(
-                self, "list comprehension helper got set_unknown after some (known) elements where received"
-            )
+        if self._results:
+            if self._received_any_concrete:
+                raise InvalidCompilerState(
+                   self, "list comprehension helper got set_unknown after some (known) elements were received"
+                )
+            if len(self._results) > 1:
+                raise InvalidCompilerState(
+                    self,
+                    (
+                        "list comprehension iterable resulted in a single unknown"
+                        " after more than one unknown elements were received gradually"
+                    ),
+                )
+            if self.lhs is not None:
+                # we may have already propagated this unknown value gradually. We must not set the final result to a *different*
+                # unknown for consistency => simply await the unknown result
+                RawUnit(queue, resolver, dict(enumerate(self._results)), resumer=self)
+                return
         self.final_result.set_value(Unknown(self.statement), self.statement.location)
 
     def complete(self, all_values: abc.Sequence[object], resolver: Resolver, queue: QueueScheduler) -> None:
