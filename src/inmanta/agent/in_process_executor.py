@@ -24,6 +24,7 @@ from concurrent.futures.thread import ThreadPoolExecutor
 from typing import Any, Optional
 
 import inmanta.agent.cache
+import inmanta.loader as loader
 import inmanta.protocol
 import inmanta.util
 from inmanta import const, data, env, tracing
@@ -32,7 +33,6 @@ from inmanta.agent.executor import DeployReport, DryrunReport, FailedInmantaModu
 from inmanta.agent.handler import HandlerAPI, SkipResource, SkipResourceForDependencies
 from inmanta.const import NAME_RESOURCE_ACTION_LOGGER, ParameterSource
 from inmanta.data.model import AttributeStateChange
-from inmanta.loader import CodeLoader
 from inmanta.resources import Resource
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 from inmanta.util import NamedLock, join_threadpools
@@ -504,14 +504,14 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         self.executors: dict[str, InProcessExecutor] = {}
         self._creation_locks: inmanta.util.NamedLock = inmanta.util.NamedLock()
 
-        self._loader: CodeLoader | None = None
+        self._loader: loader.CodeLoader | None = None
         self._env: env.VirtualEnv | None = None
         self._running = False
 
         if code_loader:
             self._env = env.VirtualEnv(env_dir)
             self._env.use_virtual_env()
-            self._loader = CodeLoader(code_dir, clean=True)
+            self._loader = loader.CodeLoader(code_dir, clean=True)
             # Lock to ensure only one actual install runs at a time
             self._loader_lock: asyncio.Lock = Lock()
             # Keep track for each resource type of the last loaded version

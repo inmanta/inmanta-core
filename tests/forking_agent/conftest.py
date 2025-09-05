@@ -79,7 +79,13 @@ def pip_index(tmp_path_factory) -> utils.PipIndex:
     utils.create_python_package(
         name="pkg1",
         pkg_version=version.Version("1.0.0"),
-        path=os.path.join(tmpdir, "pkg1"),
+        path=os.path.join(tmpdir, "pkg1_v1.0.0"),
+        publish_index=pip_index,
+    )
+    utils.create_python_package(
+        name="pkg1",
+        pkg_version=version.Version("2.0.0"),
+        path=os.path.join(tmpdir, "pkg1_v2.0.0"),
         publish_index=pip_index,
     )
     utils.create_python_package(
