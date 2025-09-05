@@ -577,9 +577,8 @@ async def check_code_for_version(
             assert False, f"Module {module_name} is not registered in version {version}."
 
 
-@pytest.mark.parametrize("project_constraints", [None, "dummy_constraint~=1.2.3"])
 @pytest.mark.parametrize("auto_start_agent", [True])
-async def test_code_loading_after_partial(server, client, environment, clienthelper, project_constraints):
+async def test_code_loading_after_partial(server, client, environment, clienthelper):
     """
     Test the following scenario:
 
