@@ -445,7 +445,7 @@ class LoggingConfigBuilder:
                     "handlers": ["core_tornado_debug_log_handler"],
                 },
                 "sqlalchemy.engine": {
-                    "level": "INFO",
+                    "level": "WARNING",
                     "propagate": True,
                 },
             }

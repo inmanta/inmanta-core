@@ -16,6 +16,7 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import re
 import logging
 import os.path
 import sys
@@ -591,3 +592,27 @@ async def test_output_default_logging_cmd(inmanta_config, tmp_path):
         "The config being generated will be a template, but the given filename doesn't end with the .tmpl suffix."
         in stderr.decode()
     )
+
+
+async def test_sqlalchemy_logs(server, client, environment, caplog) -> None:
+    """
+    Verify that we don't produce sqlalchemy logs at INFO level or lower.
+    """
+    with caplog.at_level(logging.DEBUG):
+        # Perform a query that relies on SQLAlchemy
+        query = """
+        {
+            environments {
+                edges {
+                    node {
+                      id
+                    }
+                }
+            }
+        }
+        """
+        result = await client.graphql(query=query)
+        assert result.code == 200
+        # Verify that we don't have logs that contain queries.
+        assert not re.search(r"SELECT.*FROM", caplog.text, flags=re.DOTALL)
+
