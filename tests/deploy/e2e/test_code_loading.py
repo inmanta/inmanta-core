@@ -468,7 +468,7 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
         resource_sets={"test::ResType_A[agent_X,key=key1]": "set-a", "test::ResType_A[agent_Y,key=key1]": "set-b"},
     )
 
-    assert res.code == 200
+    assert result.code == 200
 
     res = await client.upload_code_batched(tid=environment, id=version, resources={
         "test::ResType_A": sources})
@@ -505,7 +505,6 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
         unknowns=[],
         version_info={},
         resource_sets=resource_sets,
-        module_version_info=module_version_info,
     )
     assert result.code == 200
     await check_code_for_version(
@@ -529,7 +528,6 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
         unknowns=[],
         version_info={},
         resource_sets=resource_sets,
-        module_version_info=mismatched_module_version_info,
     )
 
     assert result.code == 400
