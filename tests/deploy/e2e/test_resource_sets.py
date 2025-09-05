@@ -24,10 +24,7 @@ import uuid
 from collections import abc
 from typing import Optional
 
-import pytest
-
 import utils
-from deploy.scheduler_mocks import DummyExecutor, DummyManager
 from inmanta import const, data, util
 from inmanta.agent import executor
 from inmanta.data.model import ModuleSourceMetadata
@@ -434,11 +431,10 @@ async def test_put_partial_merge_not_in_resource_set(server, client, environment
         assert r.model == 2
 
 
-async def test_put_partial_migrate_resource_to_other_resource_set(server, client, environment, clienthelper, agent):
+async def test_put_partial_migrate_resource_to_other_resource_set(server, client, environment, clienthelper):
     """
     Resources cannot migrate to a different resource set using a partial compile.
     """
-    await clienthelper.set_auto_deploy(True)
     version = await clienthelper.get_version()
     resources = [
         {
@@ -880,13 +876,12 @@ async def test_resource_sets_dependency_graph(server, client, environment, clien
     )
 
 
-async def test_put_partial_mixed_scenario(server, client, environment, clienthelper, agent):
+async def test_put_partial_mixed_scenario(server, client, environment, clienthelper):
     """
     A test that starts with: resources in several different resource sets and resources in the shared set.
     The partial update does: An update of a subset of the resources sets an addition of shared resources
     and adds a new resource_set and removes one.
     """
-    await clienthelper.set_auto_deploy(True)
     version = await clienthelper.get_version()
     resources = [
         {
@@ -1904,7 +1899,6 @@ async def test_put_partial_dep_on_specific_set_removed(server, client, environme
     Ensure that the put_partial endpoint correctly updates the requires/provides relationship when a resource A from the shared
     resource set depends on a resource B from a specific resource set and this dependency is removed by a partial compile.
     """
-    await clienthelper.set_auto_deploy(True)
     version = await clienthelper.get_version()
     rid1 = "test::Resource[agent1,key=key1]"
     rid2 = "test::Resource[agent2,key=key2]"

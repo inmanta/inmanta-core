@@ -1,3 +1,21 @@
+"""
+Copyright 2025 Inmanta
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+Contact: code@inmanta.com
+"""
+
 # Every resource has change and send_event for maximal deploy activity
 import uuid
 from collections import defaultdict
@@ -6,7 +24,6 @@ from typing import Callable
 import pytest
 
 from deploy.scheduler_mocks import DummyManager
-from inmanta.data import AUTOSTART_AGENT_DEPLOY_INTERVAL, AUTOSTART_AGENT_REPAIR_INTERVAL
 from inmanta.util import get_compiler_version
 from utils import ClientHelper
 
@@ -37,7 +54,7 @@ def make_shared_set(resouce_version=0, size=2, revision=0):
             "version": resouce_version,
             "send_event": True,
             "purged": False,
-            "requires": [f"test::Resource[agent1,key=shared{i-1}],v={resouce_version}"],
+            "requires": [f"test::Resource[agent1,key=shared{i - 1}],v={resouce_version}"],
         }
         for i in range(2, size + 1)
     ]
@@ -68,7 +85,7 @@ def make_set(
             "version": resouce_version,
             "send_event": True,
             "purged": False,
-            "requires": [f"test::Resource[agent1,key={set_id}-{i-1}],v={resouce_version}"] if i != 0 else [],
+            "requires": [f"test::Resource[agent1,key={set_id}-{i - 1}],v={resouce_version}"] if i != 0 else [],
         }
         for i in range(size)
     ]
@@ -163,7 +180,6 @@ async def test_partial_compile_scenarios_end_to_end(
         assert result.code == 200
         summary = result.result["metadata"]["deploy_summary"]
         assert summary["total"] == total_size
-
 
     # Put full (with shared set)
     version = await clienthelper.get_version()
