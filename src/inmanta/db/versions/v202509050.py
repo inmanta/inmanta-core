@@ -23,9 +23,6 @@ async def update(connection: Connection) -> None:
     """
     Create resource_set table
     """
-    # TODO: consider value of separate resource table vs name in rscm:
-    #   -> name in rscm has 10% better performance on copy query
-    #   -> but less relational integrity
     schema = """
     -- add and populate resource_set table --
 
@@ -93,7 +90,9 @@ async def update(connection: Connection) -> None:
     ALTER TABLE public.resource
     ADD CONSTRAINT resource_resource_set_id_environment_fkey
         FOREIGN KEY (resource_set_id, environment) REFERENCES public.resource_set(id, environment) ON DELETE CASCADE,
-    ALTER COLUMN resource_set_id SET NOT NULL;
+    ALTER COLUMN resource_set_id SET NOT NULL,
+    DROP COLUMN model CASCADE,
+    ADD CONSTRAINT resource_pkey PRIMARY KEY (environment, resource_set_id, resource_id);
 
 
     -- for selecting resource set WHERE name=... AND version=...

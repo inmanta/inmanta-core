@@ -30,7 +30,7 @@ part = file_name_regex.match(__name__)[1]
 
 
 @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), f"dumps/v{part}.sql"))
-async def test_add_resource_set_table(
+async def test_add_resource_set_table_and_drop_model(
     postgresql_client: asyncpg.Connection, migrate_db_from: abc.Callable[[], abc.Awaitable[None]]
 ) -> None:
 

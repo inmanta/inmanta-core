@@ -49,7 +49,9 @@ async def test_drop_status_column(
         ResourceIdStr("test::Resource[agent1,key=key7]"): const.ResourceState.deployed,
     }
     version, states = await data.Resource.get_latest_resource_states(env.id)
-    assert version == 3
+    # Version 3 is not yet released.
+    # get_latest_resource_states fetches the latest resource states processed by the scheduler
+    assert version == 2
     assert states == expected_outcome
 
     for key, value in expected_outcome.items():
