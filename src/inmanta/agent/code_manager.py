@@ -83,13 +83,16 @@ class CodeManager:
                 )
                 requirements.update(source["requirements"])
                 constraints_file_hash.update({source["constraints_file_hash"]})
-            # The constraints_file_hash and constraints sets should always contain
-            # exactly one element:
-            #  - {None} and {None} if no constraint is set at the project level
 
-            assert len(constraints_file_hash) == 1, f"{constraints_file_hash=}"
-            _constraints_file_hash: str | None = constraints_file_hash.pop()
+            # The constraints_file_hash set should always contain
+            # exactly one element:
+            #  - {None} if no constraint is set at the project level
+            #  - {unique_hash} across all sources otherwise
+            _constraints_file_hash: str | None = None
             constraints: str | None = None
+            if constraints_file_hash:
+                assert len(constraints_file_hash) == 1, f"{constraints_file_hash=}"
+                _constraints_file_hash = constraints_file_hash.pop()
 
             if _constraints_file_hash is not None:
                 response: protocol.Result = await self._client.get_file(_constraints_file_hash)

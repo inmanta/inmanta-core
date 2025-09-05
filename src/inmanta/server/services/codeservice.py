@@ -70,7 +70,8 @@ class CodeService(protocol.ServerSlice):
                     or not (isinstance(refs[3], str) or refs[3] is None)
                 ):
                     raise BadRequest(
-                        f"The values in the source map should be of the form (filename, module, [requirements], constraint_file_hash) got {refs}"
+                        "The values in the source map should be of the form (filename, module, [requirements], "
+                        f"constraint_file_hash) got {refs}"
                     )
 
         # list of file hashes

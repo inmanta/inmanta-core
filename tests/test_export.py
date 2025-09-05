@@ -19,7 +19,6 @@ Contact: code@inmanta.com
 import json
 import logging
 import os
-import uuid
 from collections.abc import Mapping
 from typing import Optional
 
@@ -333,7 +332,7 @@ a = exp::Test2(mydict={"a":"b"}, mylist=["a","b"])
     assert result.result["versions"][0]["total"] == 1
 
 
-async def test_project_constraints_at_exporter_boundary(snippetcompiler, server, client, environment, capsys, tmpdir):
+async def test_project_constraints_at_exporter_boundary(snippetcompiler, server, client, environment, tmpdir, agent):
     """
     Test that constraints set in the requirements.txt of the project are propagated into the agent's EnvBlueprint
     during the export flow.
@@ -366,13 +365,14 @@ a = many_dependencies::Test(name="my_test_resource")
     assert len(result.result["versions"]) == 1
     assert result.result["versions"][0]["total"] == 1
 
-    codemanager = CodeManager(client)
+    codemanager = CodeManager(agent._client)
     module_install_specs, _ = await codemanager.get_code(
         environment=environment,
         version=1,
         resource_types=["many_dependencies::Test"],
     )
 
+    assert len(module_install_specs) > 0
     for module_install_spec in module_install_specs:
         assert module_install_spec.blueprint.constraints is None
 
@@ -405,6 +405,8 @@ a = many_dependencies::Test(name="my_test_resource")
         version=2,
         resource_types=["many_dependencies::Test"],
     )
+    assert len(module_install_specs) > 0
+
     for module_install_spec in module_install_specs:
         assert module_install_spec.blueprint.constraints == "\n".join(constraints)
 
