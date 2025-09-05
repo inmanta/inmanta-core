@@ -36,6 +36,74 @@ from inmanta.types import ResourceIdStr
 from inmanta.util import get_compiler_version
 
 
+async def test_put_partial_copies_unchanged_resource_sets(server, client, environment, clienthelper):
+    """
+    Check if unchanged resource sets are present in the latest version after a put_partial
+    """
+    version = await clienthelper.get_version()
+    resources = [
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": "test::Resource[agent1,key=key1],v=%d" % version,
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "key": "key2",
+            "value": "value2",
+            "id": "test::Resource[agent1,key=key2],v=%d" % version,
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "key": "shared_key",
+            "value": "shared_value",
+            "id": "test::Resource[agent1,key=shared_key],v=%d" % version,
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+    ]
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        resource_state={},
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+        resource_sets={"test::Resource[agent1,key=key1]": "set-1", "test::Resource[agent1,key=key2]": "set-2"},
+        module_version_info={},
+    )
+    assert result.code == 200
+    resources_partial = [
+        {
+            "key": "key1",
+            "value": "value123",
+            "id": "test::Resource[agent1,key=key1],v=0",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+    ]
+
+    result = await client.put_partial(
+        tid=environment,
+        resources=resources_partial,
+        resource_state={},
+        unknowns=[],
+        version_info=None,
+        resource_sets={"test::Resource[agent1,key=key1]": "set-1"},
+        module_version_info={},
+    )
+    assert result.code == 200
+    resource_list = await data.Resource.get_resources_in_latest_version(uuid.UUID(environment))
+    assert len(resource_list) == 3
+
+
 async def test_resource_sets_via_put_version(server, client, environment, clienthelper):
     version = await clienthelper.get_version()
 
@@ -58,40 +126,42 @@ async def test_resource_sets_via_put_version(server, client, environment, client
         "parameter are not present in the resources list: test::Resource[agent1,key=key1]"
     ) in result.result["message"]
 
-    resources = [
-        {
-            "key": "key1",
-            "value": "value1",
-            "id": "test::Resource[agent1,key=key1],v=%d" % version,
-            "send_event": False,
-            "purged": False,
-            "requires": ["test::Resource[agent1,key=key2]"],
-        },
-        {
-            "key": "key2",
-            "value": "value2",
-            "id": "test::Resource[agent1,key=key2],v=%d" % version,
-            "send_event": False,
-            "requires": [],
-            "purged": False,
-        },
-        {
-            "key": "key3",
-            "value": None,
-            "id": "test::Resource[agent1,key=key3],v=%d" % version,
-            "send_event": False,
-            "requires": [],
-            "purged": False,
-        },
-        {
-            "key": "key4",
-            "value": None,
-            "id": "test::Resource[agent1,key=key4],v=%d" % version,
-            "send_event": False,
-            "requires": [],
-            "purged": False,
-        },
-    ]
+    def make_resources(version: int):
+        return [
+            {
+                "key": "key1",
+                "value": "value1",
+                "id": "test::Resource[agent1,key=key1],v=%d" % version,
+                "send_event": False,
+                "purged": False,
+                "requires": ["test::Resource[agent1,key=key2]"],
+            },
+            {
+                "key": "key2",
+                "value": "value2",
+                "id": "test::Resource[agent1,key=key2],v=%d" % version,
+                "send_event": False,
+                "requires": [],
+                "purged": False,
+            },
+            {
+                "key": "key3",
+                "value": None,
+                "id": "test::Resource[agent1,key=key3],v=%d" % version,
+                "send_event": False,
+                "requires": [],
+                "purged": False,
+            },
+            {
+                "key": "key4",
+                "value": None,
+                "id": "test::Resource[agent1,key=key4],v=%d" % version,
+                "send_event": False,
+                "requires": [],
+                "purged": False,
+            },
+        ]
+
     resource_sets = {
         "test::Resource[agent1,key=key1]": "set-a",
         "test::Resource[agent1,key=key2]": "set-b",
@@ -100,7 +170,7 @@ async def test_resource_sets_via_put_version(server, client, environment, client
     result = await client.put_version(
         tid=environment,
         version=version,
-        resources=resources,
+        resources=make_resources(version),
         resource_state={},
         unknowns=[],
         version_info={},
@@ -114,6 +184,54 @@ async def test_resource_sets_via_put_version(server, client, environment, client
     resource_sets_from_db = {resource.resource_id: resource.resource_set for resource in resource_list}
     expected_resource_sets = {**resource_sets, "test::Resource[agent1,key=key4]": None}
     assert resource_sets_from_db == expected_resource_sets
+
+    env_id = uuid.UUID(environment)
+    res_sets = await data.ResourceSet.get_resource_sets_in_version(environment=env_id, version=version)
+    assert len(res_sets) == 3
+    assert set([rs.name for rs in res_sets]) == set(resource_sets_from_db.values())
+
+    # Check to see if new resource sets are added and the old ones are present in this version
+    version = await clienthelper.get_version()
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=make_resources(version),
+        resource_state={},
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+        resource_sets={**resource_sets, "test::Resource[agent1,key=key4]": "set-c"},
+        module_version_info={},
+    )
+    assert result.code == 200
+
+    res_sets = await data.ResourceSet.get_resource_sets_in_version(environment=env_id, version=version)
+    assert len(res_sets) == 4
+    assert set([rs.name for rs in res_sets]) == {None, "set-a", "set-b", "set-c"}
+
+    # Test clear_resource_sets_in_version
+    async with data.ResourceSet.get_connection() as con:
+        total_resource_sets = await data.ResourceSet.get_list(connection=con)
+        # 4 version2 + 3 version1
+        assert len(total_resource_sets) == 7
+        total_resources = await data.Resource.get_list(connection=con)
+        # 4 version2 + 4 version1
+        assert len(total_resources) == 8
+        # Clear version only
+        await data.ResourceSet.clear_resource_sets_in_version(environment=env_id, version=version, connection=con)
+        res_sets = await data.ResourceSet.get_resource_sets_in_version(environment=env_id, version=version, connection=con)
+        assert len(res_sets) == 0
+
+        # Assert it did not change other versions
+        version -= 1
+        res_sets = await data.ResourceSet.get_resource_sets_in_version(environment=env_id, version=version)
+        assert len(res_sets) == 3
+        total_resource_sets = await data.ResourceSet.get_list(connection=con)
+        # 3 version1
+        assert len(total_resource_sets) == 3
+        total_resources = await data.Resource.get_list(connection=con)
+        # 4 version1
+        assert len(total_resources) == 4
 
     # also assert pip config can be None on put_version
     pip_config_result = await client.get_pip_config(
@@ -466,6 +584,11 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
         module_version_info={},
     )
     assert result.code == 200
+    env_id = uuid.UUID(environment)
+    res_sets_1 = await data.ResourceSet.get_resource_sets_in_version(environment=env_id, version=version)
+    assert len(res_sets_1) == 2
+    assert {r.name for r in res_sets_1} == {"set-a-old", "set-b-old"}
+
     resources_partial = [
         {
             "key": "key1",
@@ -518,6 +641,13 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
 
     assert result.code == 200, result.result
 
+    res_sets_2 = await data.ResourceSet.get_resource_sets_in_version(environment=env_id, version=version + 1)
+    assert len(res_sets_2) == 2
+    assert {r.name for r in res_sets_1} == {"set-a-old", "set-b-old"}
+
+    # Assert that the ids of the resource sets are different because both of them had changes
+    assert {r.id for r in res_sets_1}.isdisjoint({r.id for r in res_sets_2})
+
     # Swap the new sets and removal of the old one
     result = await client.put_partial(
         tid=environment,
@@ -532,6 +662,10 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
 
     assert result.code == 200, result.result
 
+    res_sets = await data.ResourceSet.get_resource_sets_in_version(environment=env_id, version=version + 2)
+    assert len(res_sets) == 2
+    assert {r.name for r in res_sets} == {"set-a-new", "set-b-new"}
+
     # Allow move into shared
     result = await client.put_partial(
         tid=environment,
@@ -545,6 +679,10 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
     )
 
     assert result.code == 200, result.result
+
+    res_sets = await data.ResourceSet.get_resource_sets_in_version(environment=env_id, version=version + 3)
+    assert len(res_sets) == 2
+    assert {r.name for r in res_sets} == {"set-a-new", None}
 
     resource_list = await data.Resource.get_resources_in_latest_version(uuid.UUID(environment))
     resource_sets_from_db = {resource.resource_id: resource.resource_set for resource in resource_list}
@@ -632,6 +770,10 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
         module_version_info={},
     )
     assert result.code == 200
+
+    res_sets = await data.ResourceSet.get_resource_sets_in_version(environment=env_id, version=version)
+    assert len(res_sets) == 1
+    assert res_sets[0].name == "set-a-old"
 
     # Try to move on part of require-provide to new resource set, updating both sets
     version = 0

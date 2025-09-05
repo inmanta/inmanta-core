@@ -179,6 +179,7 @@ else:
 logger = logging.getLogger(__name__)
 
 TABLES_TO_KEEP = [x.table_name() for x in data._classes] + [
+    "resource_set_configuration_model",
     "resourceaction_resource",
     "inmanta_module",
     "agent_modules",

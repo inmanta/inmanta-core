@@ -54,10 +54,13 @@ async def env_with_resources(server, client):
 
     async def create_resource(agent: str, name: str, resource_type: str, versions: list[int], environment: UUID = env.id):
         for version in versions:
+            resource_set = data.ResourceSet(environment=environment, id=uuid.uuid4())
+            await resource_set.insert()
             key = f"{resource_type}[{agent},name={name}]"
             res = data.Resource.new(
                 environment=environment,
                 resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),
+                resource_set=resource_set,
                 attributes={"name": name, "v": version, "version": version},
             )
             await res.insert()

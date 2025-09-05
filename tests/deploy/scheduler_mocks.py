@@ -349,8 +349,10 @@ class TestScheduler(ResourceScheduler):
         return ModelVersion(
             version=version,
             resources=self.mock_versions[version],
+            resource_sets={None: set(self.mock_versions[version].keys())},
             requires={},
             undefined=set(),
+            partial=False,
         )
 
 

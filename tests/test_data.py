@@ -24,7 +24,7 @@ import time
 import uuid
 from collections import abc
 from datetime import UTC
-from typing import Optional, cast
+from typing import Iterator, Optional, cast
 
 import asyncpg
 import pytest
@@ -33,10 +33,17 @@ from asyncpg import Connection, ForeignKeyViolationError, Pool
 import utils
 from inmanta import const, data, util
 from inmanta.const import AgentStatus, LogLevel
+from inmanta.data import model  # noqa
 from inmanta.data import ArgumentCollector, QueryType
 from inmanta.deploy import state
 from inmanta.resources import Id
-from inmanta.types import ResourceVersionIdStr
+from inmanta.types import ResourceIdStr, ResourceVersionIdStr
+
+
+async def make_resource_set(environment: uuid.UUID) -> data.ResourceSet:
+    resource_set = data.ResourceSet(environment=environment, id=uuid.uuid4())
+    await resource_set.insert()
+    return resource_set
 
 
 async def test_connect_too_small_connection_pool(postgres_db, database_name: str):
@@ -199,12 +206,18 @@ async def test_project_cascade_delete(init_dataclasses_and_load_schema):
         version = int(time.time())
         cm = data.ConfigurationModel(version=version, environment=env.id, is_suitable_for_partial_compiles=False)
         await cm.insert()
+        resource_set = await make_resource_set(env.id)
 
         resource_ids = []
         for i in range(5):
             name = "file" + str(i)
             key = "std::testing::NullResource[agent1,name=" + name + "]"
-            res1 = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version, attributes={"name": name})
+            res1 = data.Resource.new(
+                environment=env.id,
+                resource_version_id=key + ",v=%d" % version,
+                resource_set=resource_set,
+                attributes={"name": name},
+            )
             await res1.insert()
             resource_ids.append((res1.environment, res1.resource_version_id))
 
@@ -305,12 +318,18 @@ async def test_environment_cascade_content_only(init_dataclasses_and_load_schema
     version = int(time.time())
     cm = data.ConfigurationModel(version=version, environment=env.id, is_suitable_for_partial_compiles=False)
     await cm.insert()
+    resource_set = await make_resource_set(env.id)
 
     resource_ids = []
     for i in range(5):
         name = "file" + str(i)
         key = "std::testing::NullResource[agent1,name=" + name + "]"
-        res1 = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version, attributes={"name": name})
+        res1 = data.Resource.new(
+            environment=env.id,
+            resource_version_id=key + ",v=%d" % version,
+            resource_set=resource_set,
+            attributes={"name": name},
+        )
         await res1.insert()
         resource_ids.append((res1.environment, res1.resource_version_id))
 
@@ -758,10 +777,13 @@ async def test_config_model(init_dataclasses_and_load_schema):
         is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
+    resource_set = await make_resource_set(env.id)
 
     # create resources
     key = "std::testing::NullResource[agent1,name=motd]"
-    res1 = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version, attributes={"name": "motd"})
+    res1 = data.Resource.new(
+        environment=env.id, resource_version_id=key + ",v=%d" % version, resource_set=resource_set, attributes={"name": "motd"}
+    )
     await res1.insert()
 
     agents = await data.ConfigurationModel.get_agents(env.id, version)
@@ -858,11 +880,13 @@ async def test_model_get_list(init_dataclasses_and_load_schema):
                 is_suitable_for_partial_compiles=False,
             )
             await cm.insert()
+            resource_set = await make_resource_set(env.id)
 
             for r in range(3):
                 res = data.Resource.new(
                     environment=env.id,
                     resource_version_id=f"std::testing::NullResource[agent1,name=file{r}],v={i}",
+                    resource_set=resource_set,
                     attributes={"purge_on_delete": False, "name": f"file{r}"},
                 )
                 await res.insert()
@@ -891,11 +915,14 @@ async def test_model_serialization(init_dataclasses_and_load_schema):
     )
     await cm.insert()
 
+    resource_set = await make_resource_set(env.id)
+
     name = "file"
     key = "std::testing::NullResource[agent1,name=" + name + "]"
     resource = data.Resource.new(
         environment=env.id,
         resource_version_id=key + ",v=%d" % version,
+        resource_set=resource_set,
         attributes={"name": name},
     )
     await resource.insert()
@@ -929,7 +956,11 @@ async def test_model_delete_cascade(init_dataclasses_and_load_schema):
 
     name = "file"
     key = "std::testing::NullResource[agent1,name=" + name + "]"
-    resource = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version, attributes={"name": name})
+    resource_set = await make_resource_set(env.id)
+
+    resource = data.Resource.new(
+        environment=env.id, resource_version_id=key + ",v=%d" % version, resource_set=resource_set, attributes={"name": name}
+    )
     await resource.insert()
 
     unknown_parameter = data.UnknownParameter(name="test", environment=env.id, version=version, source="")
@@ -998,9 +1029,12 @@ async def test_get_latest_resource(init_dataclasses_and_load_schema):
         is_suitable_for_partial_compiles=False,
     )
     await cm2.insert()
+    resource_set = await make_resource_set(env.id)
+
     res11 = data.Resource.new(
         environment=env.id,
         resource_version_id=key + ",v=%d" % version,
+        resource_set=resource_set,
         attributes={"name": "motd", "purge_on_delete": True, "purged": False},
     )
     await res11.insert()
@@ -1016,9 +1050,13 @@ async def test_get_latest_resource(init_dataclasses_and_load_schema):
         is_suitable_for_partial_compiles=False,
     )
     await cm2.insert()
+
+    resource_set = await make_resource_set(env.id)
+
     res12 = data.Resource.new(
         environment=env.id,
         resource_version_id=key + ",v=%d" % version,
+        resource_set=resource_set,
         attributes={"name": "motd", "purge_on_delete": True, "purged": True},
     )
     await res12.insert()
@@ -1058,11 +1096,14 @@ async def test_get_resources(init_dataclasses_and_load_schema):
     )
     await cm1.insert()
 
+    resource_set = await make_resource_set(env.id)
+
     resource_ids = []
     for i in range(1, 11):
         res = data.Resource.new(
             environment=env.id,
             resource_version_id="std::testing::NullResource[agent1,name=file%d],v=%d" % (i, version),
+            resource_set=resource_set,
             attributes={"name": "motd", "purge_on_delete": True, "purged": False},
         )
         await res.insert()
@@ -1098,10 +1139,13 @@ async def test_model_get_resources_for_version(init_dataclasses_and_load_schema)
         is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
+    resource_set = await make_resource_set(env.id)
+
     for i in range(1, 11):
         res = data.Resource.new(
             environment=env.id,
             resource_version_id="std::testing::NullResource[agent1,name=file%d],v=%d" % (i, version),
+            resource_set=resource_set,
             attributes={"name": "motd", "purge_on_delete": True, "purged": False},
         )
         await res.insert()
@@ -1119,10 +1163,14 @@ async def test_model_get_resources_for_version(init_dataclasses_and_load_schema)
         is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
+
+    resource_set = await make_resource_set(env.id)
+
     for i in range(11, 21):
         res = data.Resource.new(
             environment=env.id,
             resource_version_id="std::testing::NullResource[agent2,path=file%d],v=%d" % (i, version),
+            resource_set=resource_set,
             attributes={"name": "motd", "purge_on_delete": True, "purged": False},
         )
         await res.insert()
@@ -1140,10 +1188,13 @@ async def test_model_get_resources_for_version(init_dataclasses_and_load_schema)
         )
         await cm.insert()
 
+    resource_set = await make_resource_set(env.id)
+
     async def make_with_status(i, is_undefined=False):
         res = data.Resource.new(
             environment=env.id,
             resource_version_id="std::testing::NullResource[agent3,path=file%d],v=3" % i,
+            resource_set=resource_set,
             is_undefined=is_undefined,
             attributes={"path": "motd", "purge_on_delete": True, "purged": False},
         )
@@ -1219,10 +1270,13 @@ async def test_get_resources_in_latest_version(init_dataclasses_and_load_schema)
             is_suitable_for_partial_compiles=False,
         )
         await cm.insert()
+        resource_set = await make_resource_set(env.id)
+
         for i in range(1, 3):
             res = data.Resource.new(
                 environment=env.id,
                 resource_version_id="std::testing::NullResource[agent1,name=file%d],v=%d" % (i, version),
+                resource_set=resource_set,
                 attributes={"name": f"motd{i}", "purge_on_delete": True, "purged": False},
             )
             await res.insert()
@@ -1237,6 +1291,7 @@ async def test_get_resources_in_latest_version(init_dataclasses_and_load_schema)
     expected_resource = data.Resource.new(
         environment=env.id,
         resource_version_id="std::testing::NullResource[agent1,name=file1],v=2",
+        resource_set=resource_set,
         attributes={"name": "motd1", "purge_on_delete": True, "purged": False},
     )
     assert resource.to_dict() == expected_resource.to_dict()
@@ -1275,11 +1330,14 @@ async def test_model_get_resources_for_version_optional_args(init_dataclasses_an
     )
     await cm.insert()
 
+    resource_set = await make_resource_set(env.id)
+
     async def insert_resource(env_id, version, agent_name, name, is_undefined):
         resource_version_id = f"std::testing::NullResource[{agent_name},name={name}],v={version}"
         resource = data.Resource.new(
             environment=env_id,
             resource_version_id=resource_version_id,
+            resource_set=resource_set,
             attributes={"name": name, "version": version},
             is_undefined=is_undefined,
         )
@@ -1324,11 +1382,13 @@ async def test_escaped_resources(init_dataclasses_and_load_schema):
         is_suitable_for_partial_compiles=False,
     )
     await cm1.insert()
+    resource_set = await make_resource_set(env.id)
 
     routes = {"8.0.0.0/8": "1.2.3.4", "0.0.0.0/0": "127.0.0.1"}
     res = data.Resource.new(
         environment=env.id,
         resource_version_id="std::testing::NullResource[agent1,name=router],v=%d" % version,
+        resource_set=resource_set,
         attributes={"name": "router", "purge_on_delete": True, "purged": False, "routes": routes},
     )
     await res.insert()
@@ -1362,16 +1422,19 @@ async def test_resource_hash(init_dataclasses_and_load_schema):
     res1 = data.Resource.new(
         environment=env.id,
         resource_version_id="std::testing::NullResource[agent1,name=file1],v=1",
+        resource_set=await make_resource_set(env.id),
         attributes={"name": "file1", "purge_on_delete": True, "purged": False},
     )
     res2 = data.Resource.new(
         environment=env.id,
         resource_version_id="std::testing::NullResource[agent1,name=file1],v=2",
+        resource_set=await make_resource_set(env.id),
         attributes={"name": "file1", "purge_on_delete": True, "purged": False},
     )
     res3 = data.Resource.new(
         environment=env.id,
         resource_version_id="std::testing::NullResource[agent1,name=file1],v=3",
+        resource_set=await make_resource_set(env.id),
         attributes={"name": "file1", "purge_on_delete": True, "purged": True},
     )
     await res1.insert()
@@ -1426,9 +1489,11 @@ async def test_get_resource_type_count_for_latest_version(init_dataclasses_and_l
     )
     await cm1.insert()
 
+    resource_set = await make_resource_set(env.id)
     res1_1 = data.Resource.new(
         environment=env.id,
         resource_version_id="std::testing::NullResource[agent1,name=file1],v=%s" % version,
+        resource_set=resource_set,
         attributes={"name": "file1"},
     )
     await res1_1.insert()
@@ -1438,6 +1503,7 @@ async def test_get_resource_type_count_for_latest_version(init_dataclasses_and_l
     res2_1 = data.Resource.new(
         environment=env.id,
         resource_version_id="std::testing::NullResource[agent1,name=file2],v=%s" % version,
+        resource_set=resource_set,
         attributes={"name": "file2"},
     )
     await res2_1.insert()
@@ -1456,9 +1522,11 @@ async def test_get_resource_type_count_for_latest_version(init_dataclasses_and_l
     )
     await cm2.insert()
 
+    resource_set = await make_resource_set(env.id)
     res2_2 = data.Resource.new(
         environment=env.id,
         resource_version_id="std::testing::NullResource[agent1,name=file2],v=%s" % version,
+        resource_set=resource_set,
         attributes={"name": "file2"},
     )
     await res2_2.insert()
@@ -1466,8 +1534,7 @@ async def test_get_resource_type_count_for_latest_version(init_dataclasses_and_l
     await assert_expected_count({"std::testing::NullResource": 1})  # 1 NullResource resource in model v2
 
     res3_2 = data.Resource.new(
-        environment=env.id,
-        resource_version_id="std::Dummy[agent1,path=/etc/file3],v=%s" % version,
+        environment=env.id, resource_version_id="std::Dummy[agent1,path=/etc/file3],v=%s" % version, resource_set=resource_set
     )
     await res3_2.insert()
 
@@ -1499,9 +1566,12 @@ async def test_resource_action(init_dataclasses_and_load_schema):
     )
     await cm.insert()
 
+    resource_set = await make_resource_set(env.id)
+
     res1 = data.Resource.new(
         environment=env.id,
         resource_version_id="std::testing::NullResource[agent1,name=file1],v=1",
+        resource_set=resource_set,
         attributes={"name": "file2"},
     )
     await res1.insert()
@@ -1509,6 +1579,7 @@ async def test_resource_action(init_dataclasses_and_load_schema):
     res2 = data.Resource.new(
         environment=env.id,
         resource_version_id="std::testing::NullResource[agent1,name=file2],v=1",
+        resource_set=resource_set,
         attributes={"name": "file2"},
     )
     await res2.insert()
@@ -1582,10 +1653,12 @@ async def test_resource_action_get_logs(init_dataclasses_and_load_schema):
     )
     await cm.insert()
 
+    resource_set = await make_resource_set(env.id)
     rv_id = f"std::testing::NullResource[agent1,name=motd],v={version}"
     res1 = data.Resource.new(
         environment=env.id,
         resource_version_id=rv_id,
+        resource_set=resource_set,
         attributes={"name": "file2"},
     )
     await res1.insert()
@@ -1674,9 +1747,11 @@ async def test_data_document_recursion(init_dataclasses_and_load_schema):
     )
     await cm.insert()
 
+    resource_set = await make_resource_set(env.id)
     res1 = data.Resource.new(
         environment=env.id,
         resource_version_id="std::testing::NullResource[agent1,name=file1],v=1",
+        resource_set=resource_set,
         attributes={"name": "file2"},
     )
     await res1.insert()
@@ -1716,9 +1791,11 @@ async def test_get_updated_before_active_env(init_dataclasses_and_load_schema, h
     )
     await cm1.insert()
 
+    resource_set = await make_resource_set(env.id)
     res = data.Resource.new(
         environment=env.id,
         resource_version_id=f"test::SetExpiringFact[agent1,key=key1],v={version}",
+        resource_set=resource_set,
         attributes={"key": "key1", "purge_on_delete": True, "purged": False},
     )
     await res.insert()
@@ -2008,7 +2085,7 @@ async def test_match_tables_in_db_against_table_definitions_in_orm(
     table_names_in_database = [x["table_name"] for x in table_names]
     table_names_in_classes_list = [x.table_name() for x in data._classes]
     # Schema management table and join tables are not in the classes list.
-    join_tables = {"schemamanager", "resourceaction_resource", "role_assignment"}
+    join_tables = {"schemamanager", "resourceaction_resource", "role_assignment", "resource_set_configuration_model"}
     # The following tables are not in the classes list, they are managed via the sqlalchemy ORM.
     sql_alchemy_tables: set[str] = {"inmanta_module", "module_files", "agent_modules"}
     assert len(table_names_in_classes_list) + len(join_tables) + len(sql_alchemy_tables) == len(table_names_in_database)
@@ -2046,10 +2123,12 @@ async def test_purgelog_test(init_dataclasses_and_load_schema, env1_halted, env2
             is_suitable_for_partial_compiles=False,
         )
         await cm.insert()
+        resource_set = await make_resource_set(env.id)
 
         res1 = data.Resource.new(
             environment=env.id,
             resource_version_id="std::testing::NullResource[agent1,name=file1],v=1",
+            resource_set=resource_set,
             attributes={"name": "file2"},
         )
         await res1.insert()
@@ -2073,6 +2152,7 @@ async def test_purgelog_test(init_dataclasses_and_load_schema, env1_halted, env2
         res2 = data.Resource.new(
             environment=env.id,
             resource_version_id="std::testing::NullResource[agent1,name=file2],v=1",
+            resource_set=resource_set,
             attributes={"name": "file2"},
         )
         await res2.insert()
@@ -2144,9 +2224,11 @@ async def test_resources_json(init_dataclasses_and_load_schema):
     )
     await cm.insert()
 
+    resource_set = await make_resource_set(env.id)
     res1 = data.Resource.new(
         environment=env.id,
         resource_version_id="std::testing::NullResource[agent1,name=file1],v=%s" % version,
+        resource_set=resource_set,
         attributes={"attr": [{"a": 1, "b": "c"}]},
     )
     await res1.insert()
@@ -2215,6 +2297,7 @@ async def test_query_resource_actions_simple(init_dataclasses_and_load_schema):
         res1 = data.Resource.new(
             environment=env.id,
             resource_version_id=f"std::testing::NullResource[agent1,name={name}],v={version}",
+            resource_set=await make_resource_set(env.id),
             attributes={"attr": [{"a": 1, "b": "c"}], "name": name},
         )
         await res1.insert()
@@ -2238,10 +2321,16 @@ async def test_query_resource_actions_simple(init_dataclasses_and_load_schema):
 
     # Add resource for file
     resource_ids = []
+    resource_set = await make_resource_set(env.id)
     for i in range(5):
         name = "file" + str(i)
         key = "std::testing::NullResource[agent1,name=" + name + "]"
-        res1 = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version, attributes={"name": name})
+        res1 = data.Resource.new(
+            environment=env.id,
+            resource_version_id=key + ",v=%d" % version,
+            resource_set=resource_set,
+            attributes={"name": name},
+        )
         await res1.insert()
         resource_ids.append((res1.environment, res1.resource_version_id))
 
@@ -2260,7 +2349,9 @@ async def test_query_resource_actions_simple(init_dataclasses_and_load_schema):
     # Add resource and resourceaction for host
     key = "std::Host[agent1,name=host1]"
     resource_version_id = key + ",v=%d" % version
-    res1 = data.Resource.new(environment=env.id, resource_version_id=resource_version_id, attributes={"name": "host1"})
+    res1 = data.Resource.new(
+        environment=env.id, resource_version_id=resource_version_id, resource_set=resource_set, attributes={"name": "host1"}
+    )
     await res1.insert()
     resource_action = data.ResourceAction(
         environment=env.id,
@@ -2275,7 +2366,9 @@ async def test_query_resource_actions_simple(init_dataclasses_and_load_schema):
     # Add resource and resourceaction for host with different agent
     key = "std::Host[agent2,name=host1]"
     resource_version_id = key + ",v=%d" % version
-    res1 = data.Resource.new(environment=env.id, resource_version_id=resource_version_id, attributes={"name": "host1"})
+    res1 = data.Resource.new(
+        environment=env.id, resource_version_id=resource_version_id, resource_set=resource_set, attributes={"name": "host1"}
+    )
     await res1.insert()
     resource_action = data.ResourceAction(
         environment=env.id,
@@ -2402,9 +2495,11 @@ async def test_query_resource_actions_non_unique_timestamps(init_dataclasses_and
         await cm.insert()
 
     for i in range(1, 12):
+
         res1 = data.Resource.new(
             environment=env.id,
             resource_version_id="std::testing::NullResource[agent1,name=motd],v=%s" % str(i),
+            resource_set=await make_resource_set(env.id),
             attributes={"attr": [{"a": 1, "b": "c"}], "name": "motd"},
         )
         await res1.insert()
@@ -2556,11 +2651,13 @@ async def test_get_last_non_deploying_state_for_dependencies(init_dataclasses_an
     async def make_resource_with_last_non_deploying_status(
         last_non_deploying_status: const.NonDeployingResourceState,
         resource_version_id: str,
+        resource_set: data.ResourceSet,
         attributes: dict[str, object],
     ) -> data.Resource:
         r1 = data.Resource.new(
             environment=env.id,
             resource_version_id=resource_version_id,
+            resource_set=resource_set,
             attributes=attributes,
         )
         await r1.insert()
@@ -2573,24 +2670,30 @@ async def test_get_last_non_deploying_state_for_dependencies(init_dataclasses_an
             last_non_deploying_status=last_non_deploying_status,
         )
 
+    resource_set_v1 = await make_resource_set(env.id)
+
     await make_resource_with_last_non_deploying_status(
         last_non_deploying_status=const.NonDeployingResourceState.available,
         resource_version_id=rvid_r1_v1,
+        resource_set=resource_set_v1,
         attributes={"purge_on_delete": False, "requires": [rid_r2_v1, rid_r3_v1, rid_r4_v1]},
     )
     await make_resource_with_last_non_deploying_status(
         last_non_deploying_status=const.NonDeployingResourceState.deployed,
         resource_version_id=rvid_r2_v1,
+        resource_set=resource_set_v1,
         attributes={"purge_on_delete": False, "requires": []},
     )
     await make_resource_with_last_non_deploying_status(
         last_non_deploying_status=const.NonDeployingResourceState.failed,
         resource_version_id=rvid_r3_v1,
+        resource_set=resource_set_v1,
         attributes={"purge_on_delete": False, "requires": []},
     )
     await make_resource_with_last_non_deploying_status(
         last_non_deploying_status=const.NonDeployingResourceState.available,
         resource_version_id=rvid_r4_v1,
+        resource_set=resource_set_v1,
         attributes={"purge_on_delete": False, "requires": []},
     )
 
@@ -2617,29 +2720,36 @@ async def test_get_last_non_deploying_state_for_dependencies(init_dataclasses_an
     rvid_r4_v2 = cast(ResourceVersionIdStr, "std::testing::NullResource[agent1,name=file4],v=2")
     rvid_r5_v2 = cast(ResourceVersionIdStr, "std::testing::NullResource[agent1,name=file5],v=2")
 
+    resource_set_v2 = await make_resource_set(env.id)
+
     await make_resource_with_last_non_deploying_status(
         last_non_deploying_status=const.NonDeployingResourceState.skipped,
         resource_version_id=rvid_r1_v2,
+        resource_set=resource_set_v2,
         attributes={"purge_on_delete": False, "requires": [rid_r2_v2, rid_r3_v2]},
     )
     await make_resource_with_last_non_deploying_status(
         last_non_deploying_status=const.NonDeployingResourceState.failed,
         resource_version_id=rvid_r2_v2,
+        resource_set=resource_set_v2,
         attributes={"purge_on_delete": False, "requires": []},
     )
     await make_resource_with_last_non_deploying_status(
         last_non_deploying_status=const.NonDeployingResourceState.deployed,
         resource_version_id=rvid_r3_v2,
+        resource_set=resource_set_v2,
         attributes={"purge_on_delete": False, "requires": []},
     )
     await make_resource_with_last_non_deploying_status(
         last_non_deploying_status=const.NonDeployingResourceState.deployed,
         resource_version_id=rvid_r4_v2,
+        resource_set=resource_set_v2,
         attributes={"purge_on_delete": False, "requires": [rid_r3_v2]},
     )
     await make_resource_with_last_non_deploying_status(
         last_non_deploying_status=const.NonDeployingResourceState.deployed,
         resource_version_id=rvid_r5_v2,
+        resource_set=resource_set_v2,
         attributes={"purge_on_delete": False, "requires": []},
     )
 
@@ -2792,3 +2902,252 @@ async def test_get_current_resource_state(server, environment, client, clienthel
         rid="std::testing::NullResource[agent1,name=test1]",
     )
     assert state is const.ResourceState.undefined
+
+
+@pytest.mark.slowtest
+async def test_get_partial_resources_since_version_raw(environment, server, postgresql_client, client):
+    """
+    Verify the behavior of the get_partial_resources_since_version_raw and get_resources_for_version_raw methods,
+    used by the scheduler to apply partial and full versions respectively.
+
+    Setup:
+        - Generate `nb_resource_sets` sets with integers as names
+        - Each set contains `nb_resources_per_set` resources
+        - Resource ids are predictable: `...,id={resource_set}-{resource_index}`
+        - Resources contain a single attribute (other than required ones) `exported`: the version in which it was exported
+
+    Test approach:
+        for a few different `partial_size` sizes of partial:
+            - Choose `partial_size` resource sets, evenly distributed over all sets (e.g. sets 1, 11, 21, ...)
+            - Regenerate these sets as described in setup and do a `put_partial` and release
+            - Verify results of `get_partial_resources_since_version_raw` and `get_resources_for_version_raw`:
+                Verify that the methods return only the differing resource sets, and the appropriate resources
+                for those sets.
+
+        Verify behavior of the two methods for some special scenarios: multiple versions, non-released versions,
+        deleted sets, ...
+    """
+    nb_resource_sets: int = 100
+    nb_resources_per_set: int = 100
+
+    def get_resource_set_names(partial_size: int) -> Iterator[str]:
+        if partial_size == 0:
+            return iter(())
+        return (str(i) for i in range(1, nb_resource_sets + 1, max(nb_resource_sets // partial_size, 1)))
+
+    def get_resource_id(resource_set: str, index: int, *, version: Optional[int] = None) -> ResourceVersionIdStr:
+        without_version = ResourceIdStr(f"mymodule::Myresource[myagent,id={resource_set}-{index}]")
+        return ResourceVersionIdStr(f"{without_version},v={version}") if version is not None else without_version
+
+    async def release(version: Optional[int] = None) -> None:
+        """
+        Mark all versions as released, without actually releasing it.
+        """
+        condition = f"WHERE version = {version}" if version is not None else ""
+        await postgresql_client.execute(f"UPDATE configurationmodel SET released=true {condition}")
+
+    # set up initial state by releasing a single base version
+    version: int = await client.reserve_version(tid=environment).value()
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        module_version_info={},
+        resources=[
+            {"id": get_resource_id(s, i, version=version), "requires": [], "exported": version}
+            for s in get_resource_set_names(nb_resource_sets)
+            for i in range(nb_resources_per_set)
+        ],
+        resource_sets={
+            get_resource_id(s, i): s for s in get_resource_set_names(nb_resource_sets) for i in range(nb_resources_per_set)
+        },
+        compiler_version="0",
+    )
+    assert result.code == 200, result.result
+    await release()
+
+    all_models: list[tuple[int, object]] = []
+    full_models: list[tuple[int, object]] = []
+    partial_size: int  # number of resource sets in a partial export
+    for iteration, partial_size in enumerate([0, 1, 3, 10, 25]):  # choose size for partially overlapping sets
+        base_version: int = iteration + 1
+        new_version: int = base_version + 1
+
+        # build up data sets before starting timer
+        resources = [
+            {"id": get_resource_id(s, i, version=0), "requires": [], "exported": new_version}
+            for s in get_resource_set_names(partial_size)
+            for i in range(nb_resources_per_set)
+        ]
+        resource_sets = {
+            get_resource_id(s, i): s for s in get_resource_set_names(partial_size) for i in range(nb_resources_per_set)
+        }
+
+        insert_start: float = time.monotonic()
+        await client.put_partial(
+            tid=environment,
+            module_version_info={},
+            resources=resources,
+            resource_sets=resource_sets,
+        ).value()
+        insert_done: float = time.monotonic()
+
+        await release()
+        # Tell postgres to analyze after major update. During normal operation this is handled by autovacuum daemon
+        await postgresql_client.execute("ANALYZE")
+
+        fetch_start: float = time.monotonic()
+        models = await data.Resource.get_partial_resources_since_version_raw(
+            environment=environment,
+            since=base_version,
+            projection=["resource_id"],
+            connection=postgresql_client,
+        )
+        fetch_done: float = time.monotonic()
+
+        full_fetch_start: float = time.monotonic()
+        full_model = await data.Resource.get_resources_for_version_raw(
+            # don't specify version to get latest one. Further down we test behavior with version specified
+            environment=environment,
+            projection=["resource_id"],
+            project_attributes=["exported"],
+            connection=postgresql_client,
+        )
+        full_fetch_done: float = time.monotonic()
+
+        # show with pytest -s
+        print(
+            f"with {iteration + 1 : >4,} older versions with {nb_resource_sets : >4,} resource sets of size"
+            f" {nb_resources_per_set : >4,} each, an export for {partial_size : >4,} resource sets took"
+            f" {1000 * (insert_done - insert_start) : >5,.0f}ms to export, {1000 * (fetch_done - fetch_start) : >3,.0f}ms"
+            f" to fetch and {1000 * (full_fetch_done - full_fetch_start) : >3,.0f}ms to fetch the full version"
+        )
+
+        # verify the result
+        assert len(models) == 1
+        version, resource_sets = models[0]
+        assert version == new_version
+        assert resource_sets.keys() == set(get_resource_set_names(partial_size))
+        for resource_set, resources in resource_sets.items():
+            assert {r["resource_id"] for r in resources} == {
+                f"mymodule::Myresource[myagent,id={resource_set}-{i}]" for i in range(nb_resources_per_set)
+            }
+        all_models.extend(models)
+
+        assert full_model is not None
+        assert full_model[0] == version
+        assert full_model[1].keys() == set(str(i) for i in range(1, nb_resource_sets + 1))
+        for resource_set, resources in full_model[1].items():
+            expected_version: int
+            for version, version_sets in reversed(all_models):
+                if resource_set in version_sets:
+                    expected_version = version
+                    break
+            else:
+                expected_version = 1
+
+            assert {r["resource_id"] for r in resources} == {
+                f"mymodule::Myresource[myagent,id={resource_set}-{i}]" for i in range(nb_resources_per_set)
+            }
+            assert all(r["exported"] == expected_version for r in resources)
+        full_models.append(full_model)
+
+    # verify get_resources_for_version_raw behavior with version specified
+    for full_model in full_models:
+        by_version = await data.Resource.get_resources_for_version_raw(
+            environment=environment,
+            version=full_model[0],
+            projection=["resource_id"],
+            project_attributes=["exported"],
+            connection=postgresql_client,
+        )
+        assert by_version == full_model
+
+    # verify both methods' behavior when the specified version doesn't exist
+    resources_for_non_existent_version = await data.Resource.get_resources_for_version_raw(
+        environment=environment,
+        version=new_version + 1,
+        projection=["resource_id"],
+        project_attributes=["exported"],
+        connection=postgresql_client,
+    )
+    assert resources_for_non_existent_version is None
+    with pytest.raises(data.PartialBaseMissing):
+        await data.Resource.get_partial_resources_since_version_raw(
+            environment=environment,
+            since=new_version + 1,
+            projection=["resource_id"],
+            connection=postgresql_client,
+        )
+    # or when it does exist but it is already the latest
+    no_partial_updates = await data.Resource.get_partial_resources_since_version_raw(
+        environment=environment,
+        since=new_version,
+        projection=["resource_id"],
+        connection=postgresql_client,
+    )
+    assert no_partial_updates == []
+
+    # push a new version without releasing it
+    base_version = new_version
+    new_version += 1
+    await client.put_partial(
+        tid=environment,
+        module_version_info={},
+        resources=[],
+        resource_sets={},
+    ).value()
+
+    # get_resources_for_version_raw can fetch non-released versions when requested
+    resources_for_non_released_version = await data.Resource.get_resources_for_version_raw(
+        environment=environment,
+        version=new_version,
+        projection=["resource_id"],
+        project_attributes=["exported"],
+        connection=postgresql_client,
+    )
+    assert resources_for_non_released_version is not None
+    assert resources_for_non_released_version[0] == new_version
+    # but default is still latest released
+    latest_released_version = await data.Resource.get_resources_for_version_raw(
+        environment=environment,
+        version=None,
+        projection=["resource_id"],
+        project_attributes=["exported"],
+        connection=postgresql_client,
+    )
+    assert latest_released_version is not None
+    assert latest_released_version[0] == new_version - 1
+
+    # verify that the method can fetch multiple models at once, as a sequence of partial diffs, and excludes the non-released
+    models = await data.Resource.get_partial_resources_since_version_raw(
+        environment=environment,
+        since=1,
+        projection=["resource_id"],
+        connection=postgresql_client,
+    )
+    assert models == all_models
+
+    # delete a resource set
+    base_version = new_version
+    new_version += 1
+    await client.put_partial(
+        tid=environment,
+        module_version_info={},
+        resources=[],
+        resource_sets={},
+        removed_resource_sets=["10"],
+    ).value()
+
+    await release(version=new_version)
+
+    # verify that the partial diff contains the deleted set as empty
+    models = await data.Resource.get_partial_resources_since_version_raw(
+        environment=environment,
+        since=base_version - 1,  # -1 because previous version was not released
+        projection=["resource_id"],
+        connection=postgresql_client,
+    )
+    assert len(models) == 1
+    version, resource_sets = models[0]
+    assert version == new_version
+    assert resource_sets == {"10": []}

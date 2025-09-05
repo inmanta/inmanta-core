@@ -221,7 +221,16 @@ async def test_config_update(inmanta_config, make_resource_minimal, environment,
     }
 
     await scheduler._new_version(
-        [ModelVersion(version=5, resources=resources, requires=make_requires(resources), undefined={ResourceIdStr(rid3)})]
+        [
+            ModelVersion(
+                version=5,
+                resources=resources,
+                requires=make_requires(resources),
+                undefined={ResourceIdStr(rid3)},
+                resource_sets={None: set(resources.keys())},
+                partial=False,
+            )
+        ]
     )
 
     def done():
