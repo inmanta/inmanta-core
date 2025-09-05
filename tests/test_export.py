@@ -28,9 +28,10 @@ import inmanta.resources
 from inmanta import config, const, module
 from inmanta.ast import CompilerException, ExternalException, RuntimeException
 from inmanta.const import ResourceState
-from inmanta.data import Resource
+from inmanta.data import Environment, Resource
 from inmanta.export import DependencyCycleException
 from inmanta.module import InmantaModuleRequirement
+from inmanta.server import SLICE_RESOURCE
 from inmanta.server.server import Server
 from utils import LogSequence
 
@@ -303,10 +304,12 @@ async def test_server_export(snippetcompiler, server: Server, client, environmen
         resource = inmanta.resources.Resource.deserialize(res["attributes"])
         assert resource.version == resource.id.version == version
 
-        resource = await Resource.get_resource_for_version(
-            environment=environment, resource_id=resource.id.resource_str(), version=version
-        )
-        assert resource
+    resources = await server.get_slice(SLICE_RESOURCE).get_resources_in_latest_version(
+        environment=await Environment.get_by_id(environment)
+    )
+    assert len(resources) == len(result.result["resources"])
+    assert len(resources) == 1
+    assert resources[0].resource_id == result.result["resources"][0]["resource_id"]
 
 
 async def test_dict_export_server(snippetcompiler, server, client, environment):

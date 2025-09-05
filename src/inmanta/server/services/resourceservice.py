@@ -42,6 +42,7 @@ from inmanta.data.model import (
     LatestReleasedResource,
     LinkedDiscoveredResource,
     ReleasedResourceDetails,
+    Resource,
     ResourceAction,
     ResourceHistory,
     ResourceLog,
@@ -58,7 +59,7 @@ from inmanta.server import config as opt
 from inmanta.server import extensions, protocol
 from inmanta.server.services.environmentlistener import EnvironmentAction, EnvironmentListener
 from inmanta.server.validate_filter import InvalidFilter
-from inmanta.types import Apireturn, JsonType, ResourceIdStr, ResourceVersionIdStr
+from inmanta.types import Apireturn, JsonType, PrimitiveTypes, ResourceIdStr, ResourceType, ResourceVersionIdStr
 
 resource_discovery = extensions.BoolFeature(
     slice=SLICE_RESOURCE,
@@ -224,6 +225,20 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
                 )
 
             return 200, {"resource": resv.to_versioned_dict(rvid.version), "logs": actions}
+
+    # This endpoint doesn't have a method associated yet.
+    # Intended for use by other slices
+    async def get_resources_in_latest_version(
+        self,
+        environment: data.Environment,
+        resource_type: Optional[ResourceType] = None,
+        attributes: dict[PrimitiveTypes, PrimitiveTypes] = {},
+        connection: Optional[Connection] = None,
+    ) -> list[Resource]:
+        result = await data.Resource.get_resources_in_latest_version(
+            environment.id, resource_type, attributes, connection=connection
+        )
+        return [r.to_dto() for r in result]
 
     @handle(methods_v2.get_resource_actions, env="tid")
     async def get_resource_actions(
