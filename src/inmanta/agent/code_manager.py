@@ -28,6 +28,7 @@ from inmanta.agent.executor import ModuleInstallSpec
 from inmanta.data.model import LEGACY_PIP_DEFAULT, ModuleSource, ModuleSourceMetadata, PipConfig
 from inmanta.util.async_lru import async_lru_cache
 from sqlalchemy import and_, select
+from sqlalchemy.orm import aliased
 
 LOGGER = logging.getLogger(__name__)
 
@@ -55,17 +56,22 @@ class CodeManager:
 
         :return: list of ModuleInstallSpec for this agent and this model version.
         """
-
         module_install_specs = []
+
+        constraint_file = aliased(models.File)
+        source_file = aliased(models.File)
+
         modules_for_agent = (
             select(
                 models.AgentModules.inmanta_module_name,
                 models.AgentModules.inmanta_module_version,
                 models.InmantaModule.requirements,
+                models.InmantaModule.constraints_file_hash,
                 models.ModuleFiles.python_module_name,
                 models.ModuleFiles.file_content_hash,
                 models.ModuleFiles.is_byte_code,
-                models.File.content,
+                source_file.content.label("source_file_content"),
+                constraint_file.content.label("constraint_file_content"),
                 models.ConfigurationModel.pip_config,
             )
             .join(
@@ -85,8 +91,13 @@ class CodeManager:
                 ),
             )
             .join(
-                models.File,
-                models.ModuleFiles.file_content_hash == models.File.content_hash,
+                source_file,
+                models.ModuleFiles.file_content_hash == source_file.content_hash,
+            )
+            .join(
+                constraint_file,
+                models.InmantaModule.constraints_file_hash == constraint_file.content_hash,
+                isouter=True,
             )
             .join(
                 models.ConfigurationModel,
@@ -108,18 +119,27 @@ class CodeManager:
             for module_name, rows in itertools.groupby(result.all(), key=lambda r: r.inmanta_module_name):
                 rows_list = list(rows)
                 assert rows_list
-                assert len({row.inmanta_module_version for row in rows_list}) == 1
 
-                _pip_config = rows_list[0].pip_config
-                assert all(row.pip_config == _pip_config for row in rows_list)
+                first_row = rows_list[0]
+                for row in rows_list:
+
+                    # The following attributes should be consistent across all modules in this version
+                    assert row.inmanta_module_version == first_row.inmanta_module_version
+                    assert row.pip_config == first_row.pip_config
+                    assert set(row.requirements) == set(first_row.requirements)
+                    assert row.constraint_file_content == first_row.constraint_file_content
+                    assert row.constraints_file_hash == first_row.constraints_file_hash
+
+                _pip_config = first_row.pip_config
                 pip_config = LEGACY_PIP_DEFAULT if _pip_config is None else PipConfig(**_pip_config)
+                constraints = first_row.constraint_file_content.decode() if first_row.constraint_file_content else None
                 module_install_specs.append(
                     ModuleInstallSpec(
                         module_name=module_name,
-                        module_version=rows_list[0].inmanta_module_version,
+                        module_version=first_row.inmanta_module_version,
                         blueprint=executor.ExecutorBlueprint(
                             pip_config=pip_config,
-                            requirements=rows_list[0].requirements,
+                            requirements=first_row.requirements,
                             sources=[
                                 ModuleSource(
                                     metadata=ModuleSourceMetadata(
@@ -127,12 +147,14 @@ class CodeManager:
                                         hash_value=row.file_content_hash,
                                         is_byte_code=row.is_byte_code,
                                     ),
-                                    source=row.content,
+                                    source=row.source_file_content,
                                 )
                                 for row in rows_list
                             ],
                             python_version=sys.version_info[:2],
                             environment_id=environment,
+                            constraints_file_hash=first_row.constraints_file_hash,
+                            constraints=constraints,
                         ),
                     )
                 )
