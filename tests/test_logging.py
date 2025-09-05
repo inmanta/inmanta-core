@@ -16,9 +16,9 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import re
 import logging
 import os.path
+import re
 import sys
 import uuid
 from asyncio import TimeoutError, subprocess, wait_for
@@ -615,4 +615,3 @@ async def test_sqlalchemy_logs(server, client, environment, caplog) -> None:
         assert result.code == 200
         # Verify that we don't have logs that contain queries.
         assert not re.search(r"SELECT.*FROM", caplog.text, flags=re.DOTALL)
-
