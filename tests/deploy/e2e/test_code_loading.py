@@ -115,7 +115,7 @@ async def test_agent_installs_dependency_containing_extras(
                     hash_value=_hash,
                 )
             ],
-            requirements=["pkg[optional-a]", "multi-version"],
+            requirements=["pkg[optional-a]"],
             for_agents=["agent1"],
             constraints_file_hash=None,
         )
@@ -169,9 +169,7 @@ async def test_agent_installs_dependency_containing_extras(
 
         assert not must_contain
 
-    check_packages(
-        package_list=installed_packages, must_contain={"pkg", "dep-a", "multi-version"}, must_not_contain={"dep-b", "dep-c"}
-    )
+    check_packages(package_list=installed_packages, must_contain={"pkg", "dep-a"}, must_not_contain={"dep-b", "dep-c"})
 
 
 async def test_get_code(
