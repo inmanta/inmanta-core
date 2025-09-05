@@ -1260,7 +1260,8 @@ async def test_get_resources_in_latest_version(init_dataclasses_and_load_schema)
         resource_set=resource_set,
         attributes={"name": "motd1", "purge_on_delete": True, "purged": False},
     )
-    assert resource == expected_resource
+    expected_resource.make_hash()
+    assert resource.to_dict() == expected_resource.to_dict()
 
     cm = data.ConfigurationModel(
         environment=env.id,
