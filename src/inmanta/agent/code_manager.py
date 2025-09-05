@@ -126,7 +126,7 @@ class CodeManager:
                     # The following attributes should be consistent across all modules in this version
                     assert row.inmanta_module_version == first_row.inmanta_module_version
                     assert row.pip_config == first_row.pip_config
-                    assert {row.requirements} == {first_row.requirements}
+                    assert set(row.requirements) == set(first_row.requirements)
                     assert row.constraint_file_content == first_row.constraint_file_content
                     assert row.constraints_file_hash == first_row.constraints_file_hash
 
