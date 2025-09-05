@@ -5531,7 +5531,6 @@ class Resource(BaseDocument):
                 async for record in con.cursor(query, *values):
                     if no_obj:
                         record = dict(record)
-                        cls.__mangle_dict(record, version)
                         resources_list.append(record)
                     else:
                         resources_list.append(cls(from_postgres=True, **record))
