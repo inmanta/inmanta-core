@@ -38,8 +38,11 @@ loggers:
     level: DEBUG
     propagate: true
   sqlalchemy.engine:
-    level: INFO
+    level: WARNING
     propagate: true
+  inmanta.data.NullerPool:
+     level: WARNING
+     propagate: true
 root:
   handlers:
   - server_handler
