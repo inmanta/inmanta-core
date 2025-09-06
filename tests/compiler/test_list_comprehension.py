@@ -704,11 +704,27 @@ def test_list_comprehension_unknown(snippetcompiler) -> None:
                     for x in c3_helper.values
                 ]
             )
+            # gradual execution where the iterable itself is unknown
+            c4 = Collector(
+                values=[
+                    1
+                    for x in tests::unknown()
+                ]
+            )
+            c5 = Collector(
+                values=[
+                    1
+                    for x in tests::unknown()
+                    if not std::is_unknown(x)
+                ]
+            )
             l10 = std::select(std::key_sort(tests::convert_unknowns(c1.values, Value(n=-1)), "n"), "n")
             l101 = std::select(std::key_sort(tests::convert_unknowns(c11.values, Value(n=-1)), "n"), "n")
             l102 = std::select(std::key_sort(tests::convert_unknowns(c12.values, Value(n=-1)), "n"), "n")
             l11 = std::select(std::key_sort(tests::convert_unknowns(c2.values, Value(n=-1)), "n"), "n")
             l12 = std::select(std::key_sort(tests::convert_unknowns(c3.values, Value(n=-1)), "n"), "n")
+            l13 = std::select(std::key_sort(tests::convert_unknowns(c4.values, Value(n=-1)), "n"), "n")
+            l14 = c5.values
 
             assert = true
             assert = std::is_unknown(l1)
@@ -726,6 +742,8 @@ def test_list_comprehension_unknown(snippetcompiler) -> None:
             assert = not std::is_unknown(l10)
             assert = not std::is_unknown(l11)
             assert = not std::is_unknown(l12)
+            assert = not std::is_unknown(l13)
+            assert = not std::is_unknown(l14)
 
             l2_unknowns = [1, 2, "unknown"]
             l2_unknowns = tests::convert_unknowns(l2, "unknown")
@@ -766,6 +784,10 @@ def test_list_comprehension_unknown(snippetcompiler) -> None:
             l11 = [-1, 1, 2]
 
             l12 = [-1, 1]
+
+            l13 = [-1]
+
+            l14 = []
             """.strip(
                 "\n"
             )
