@@ -5280,41 +5280,6 @@ class Resource(BaseDocument):
     resource_set: Optional[str] = None
     resource_set_id: uuid.UUID
 
-    @classmethod
-    async def get_last_non_deploying_state_for_dependencies(
-        cls, environment: uuid.UUID, resource_version_id: "resources.Id", connection: Optional[Connection] = None
-    ) -> dict[ResourceVersionIdStr, ResourceState]:
-        """
-        Return the last state of each dependency of the given resource that was not 'deploying'.
-        """
-        if not resource_version_id.is_resource_version_id_obj():
-            raise Exception("Argument resource_version_id is not a resource_version_id")
-        version = resource_version_id.version
-        query = """
-            WITH resource_requires_in_version AS (
-                SELECT (r.attributes->'requires')::jsonb AS requires
-                FROM resource_set_configuration_model AS rscm
-                INNER JOIN resource AS r ON
-                    rscm.environment=r.environment AND
-                    rscm.resource_set_id=r.resource_set_id
-                WHERE rscm.environment=$1 AND rscm.model=$2 AND r.resource_id=$3
-            )
-            SELECT r1.resource_id, r1.last_non_deploying_status
-            FROM resource_persistent_state AS r1
-            WHERE r1.environment=$1
-                  AND (
-                      SELECT requires
-                      FROM resource_requires_in_version AS r2
-                  ) ? r1.resource_id
-        """
-        values = [
-            cls._get_value(environment),
-            cls._get_value(version),
-            resource_version_id.resource_str(),
-        ]
-        result = await cls._fetch_query(query, *values, connection=connection)
-        return {r["resource_id"] + ",v=" + str(version): const.ResourceState(r["last_non_deploying_status"]) for r in result}
-
     def make_hash(self) -> None:
         self.attribute_hash = util.make_attribute_hash(self.resource_id, self.attributes)
 
@@ -5863,24 +5828,6 @@ class Resource(BaseDocument):
         attr.update(kwargs)
 
         return cls(**attr)
-
-    def copy_for_partial_compile(self, new_version: int) -> "Resource":
-        """
-        Create a new resource dao instance from this dao instance. Only creates the object without inserting it.
-        The new instance will have the given version.
-        """
-        return Resource(
-            environment=self.environment,
-            model=new_version,
-            resource_id=self.resource_id,
-            resource_type=self.resource_type,
-            resource_id_value=self.resource_id_value,
-            agent=self.agent,
-            attributes=self.attributes.copy(),
-            attribute_hash=self.attribute_hash,
-            is_undefined=self.is_undefined,
-            resource_set=self.resource_set,
-        )
 
     @classmethod
     async def get_released_resource_details(
