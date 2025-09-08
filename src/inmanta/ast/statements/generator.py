@@ -467,7 +467,7 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
     after (we may have to wait for value expressions' requires).
     """
 
-    __slots__ = ("statement", "resolver", "queue", "lhs", "_results", "_complete", "_received_any_concrete", "final_result")
+    __slots__ = ("statement", "resolver", "queue", "lhs", "_results", "_complete", "_is_known", "final_result")
 
     def __init__(
         self,
@@ -486,7 +486,7 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
         # have we received all elements?
         self._complete: bool = False
         # have we received any concrete (not Unknown) values?
-        self._received_any_concrete: bool = False
+        self._is_known: bool = False
         # collector for the final result
         self.final_result: ResultVariable[object] = ResultVariable()
 
@@ -516,7 +516,7 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
             self.statement.copy_location(value_expression)
         else:
             value_expression = self.statement.value_expression
-            self._received_any_concrete = True
+            self._is_known = True
 
         # execute the value expression and the guard
         guarded_expression: ExpressionStatement
@@ -547,7 +547,6 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
 
         return False
 
-    # TODO: bugfix entry
     def complete(
         self,
         all_values: abc.Sequence[object] | Unknown,
@@ -556,11 +555,13 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
     ) -> None:
         """
         Indicate that all results have been received. No further calls to `receive_result` should be done after this.
+
+        :param all_values: The final value for the iterable this list comprehension iterates over. Unknown if the iterable
+            itself turns out to be unknown. Unknown elements are reported simply as values in `all_values`.
         """
         if self._results:
-            # TODO: keep track of the unknown instead?
             if isinstance(all_values, Unknown):
-                if self._received_any_concrete:
+                if self._is_known:
                     raise InvalidCompilerState(
                         self, "list comprehension helper got final value as Unknown after some (known) elements were received"
                     )
