@@ -44,7 +44,7 @@ def set_custom_executor_policy(server_config):
     """
     old_cap_value = inmanta.agent.config.agent_executor_cap.get()
 
-    # Keep only 2 executors per agent
+    # Keep 4 executors per agent
     inmanta.agent.config.agent_executor_cap.set("4")
 
     yield
