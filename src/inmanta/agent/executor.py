@@ -193,7 +193,6 @@ class ExecutorBlueprint(EnvBlueprint):
         sources = list({source for cd in code for source in cd.blueprint.sources})
         requirements = list({req for cd in code for req in cd.blueprint.requirements})
 
-
         pip_configs = [cd.blueprint.pip_config for cd in code]
         python_versions = [cd.blueprint.python_version for cd in code]
         if not pip_configs:

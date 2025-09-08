@@ -27,7 +27,7 @@ from inmanta.agent import executor
 from inmanta.agent.executor import ModuleInstallSpec
 from inmanta.data.model import LEGACY_PIP_DEFAULT, ModuleSource, ModuleSourceMetadata, PipConfig
 from inmanta.util.async_lru import async_lru_cache
-from sqlalchemy import and_, select
+from sqlalchemy import String, and_, cast, select
 from sqlalchemy.orm import aliased
 
 LOGGER = logging.getLogger(__name__)
@@ -60,6 +60,7 @@ class CodeManager:
 
         constraint_file = aliased(models.File)
         source_file = aliased(models.File)
+        constraint_file_hash = cast(models.ConfigurationModel.pip_config.op("->>")("constraint-file-hash"), String)
 
         modules_for_agent = (
             select(
@@ -94,16 +95,16 @@ class CodeManager:
                 models.ModuleFiles.file_content_hash == source_file.content_hash,
             )
             .join(
-                constraint_file,
-                models.ConfigurationModel.pip_config["constraints_file_hash"] == constraint_file.content_hash,
-                isouter=True,
-            )
-            .join(
                 models.ConfigurationModel,
                 and_(
                     models.AgentModules.cm_version == models.ConfigurationModel.version,
                     models.AgentModules.environment == models.ConfigurationModel.environment,
                 ),
+            )
+            .join(
+                constraint_file,
+                constraint_file.content_hash == constraint_file_hash,
+                isouter=True,
             )
             .where(
                 models.AgentModules.environment == environment,
