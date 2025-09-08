@@ -4777,14 +4777,6 @@ class ResourcePersistentState(BaseDocument):
         """
         await cls._execute_query(
             f"""
-            WITH resources_in_version AS (
-                SELECT r.*
-                FROM resource_set_configuration_model AS rscm
-                INNER JOIN {Resource.table_name()} AS r
-                    ON rscm.environment=r.environment
-                    AND rscm.resource_set_id=r.resource_set_id
-                WHERE rscm.environment=$1 AND rscm.model=$2
-            )
             INSERT INTO {cls.table_name()} (
                 environment,
                 resource_id,
@@ -4815,7 +4807,11 @@ class ResourcePersistentState(BaseDocument):
                     THEN 'BLOCKED'
                     ELSE 'NOT_BLOCKED'
                 END
-            FROM resources_in_version AS r
+            FROM resource_set_configuration_model AS rscm
+            INNER JOIN {Resource.table_name()} AS r
+                ON rscm.environment=r.environment
+                AND rscm.resource_set_id=r.resource_set_id
+            WHERE rscm.environment=$1 AND rscm.model=$2
             ON CONFLICT DO NOTHING
             """,
             environment,
@@ -5475,18 +5471,14 @@ class Resource(BaseDocument):
         """
         values = [cls._get_value(environment)]
         query = f"""
-            WITH resource_sets_in_latest_version AS (
-                SELECT rscm.resource_set_id,
-                       rscm.environment
-                FROM resource_set_configuration_model AS rscm
-                WHERE rscm.environment=$1 AND rscm.model=(SELECT MAX(cm.version)
-                                                  FROM {ConfigurationModel.table_name()} AS cm
-                                                  WHERE cm.environment=$1)
-            )
             SELECT r.*
             FROM {Resource.table_name()} AS r
-            JOIN resource_sets_in_latest_version AS rsv
-                ON r.environment=rsv.environment AND r.resource_set_id=rsv.resource_set_id
+            INNER JOIN resource_set_configuration_model AS rscm
+                ON r.environment=rscm.environment
+                AND r.resource_set_id=rscm.resource_set_id
+            WHERE rscm.environment=$1 AND rscm.model=(SELECT MAX(cm.version)
+                                              FROM {ConfigurationModel.table_name()} AS cm
+                                              WHERE cm.environment=$1)
             WHERE r.environment=$1"""
         if resource_type:
             query += " AND r.resource_type=$2"
@@ -5960,7 +5952,9 @@ class Resource(BaseDocument):
         ORDER BY first.resource_id, rscm.model asc;
         """
         values = [cls._get_value(env), cls._get_value(resource_id)]
-        result = await cls.select_query(query, values, no_obj=True)
+
+        with pyformance.timer("sql.get_released_resource_details.get_first_and_latest").time():
+            result = await cls.select_query(query, values, no_obj=True)
 
         if not result:
             return None
@@ -5989,7 +5983,9 @@ class Resource(BaseDocument):
         WHERE r.environment=$1 AND cm.released AND r.resource_id = ANY($2)
         ORDER BY r.resource_id, cm.version DESC;
         """
-        status_result = await cls.select_query(status_query, [cls._get_value(env), cls._get_value(requires)], no_obj=True)
+
+        with pyformance.timer("sql.get_released_resource_details.get_status_of_each_requires").time():
+            status_result = await cls.select_query(status_query, [cls._get_value(env), cls._get_value(requires)], no_obj=True)
 
         return m.ReleasedResourceDetails(
             resource_id=record["latest_resource_id"],
@@ -6302,19 +6298,20 @@ class ConfigurationModel(BaseDocument):
                 pip_config
         """
         async with cls.get_connection(connection) as con:
-            result = await con.fetchrow(
-                query,
-                env_id,
-                version,
-                datetime.datetime.now().astimezone(),
-                total,
-                cls._get_value(version_info),
-                undeployable,
-                skipped_for_undeployable,
-                partial_base,
-                updated_resource_sets | deleted_resource_sets,
-                cls._get_value(pip_config),
-            )
+            with pyformance.timer("sql.configuration_model.create_for_partial_compile").time():
+                result = await con.fetchrow(
+                    query,
+                    env_id,
+                    version,
+                    datetime.datetime.now().astimezone(),
+                    total,
+                    cls._get_value(version_info),
+                    undeployable,
+                    skipped_for_undeployable,
+                    partial_base,
+                    updated_resource_sets | deleted_resource_sets,
+                    cls._get_value(pip_config),
+                )
             # Make mypy happy
             assert result is not None
             if not result["base_version_found"]:
