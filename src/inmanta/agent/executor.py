@@ -110,8 +110,6 @@ class EnvBlueprint:
     environment_id: uuid.UUID
     pip_config: PipConfig
     requirements: Sequence[str]
-    constraints_file_hash: str | None = dataclasses.field(default=None, kw_only=True)
-    constraints: str | None = dataclasses.field(default=None, kw_only=True)
     _hash_cache: str | None = dataclasses.field(default=None, init=False, repr=False)
     python_version: tuple[int, int]
 
@@ -121,8 +119,8 @@ class EnvBlueprint:
 
     def blueprint_hash(self) -> str:
         """
-        Generate a stable hash for an EnvBlueprint instance by serializing its pip_config, requirements
-        and constraints in a sorted, consistent manner. This ensures that the hash value is
+        Generate a stable hash for an EnvBlueprint instance by serializing its pip_config and requirements
+        in a sorted, consistent manner. This ensures that the hash value is
         independent of the order of requirements/constraints and consistent across interpreter sessions.
         Also cache the hash to only compute it once.
         """
@@ -131,7 +129,6 @@ class EnvBlueprint:
                 "environment_id": str(self.environment_id),
                 "pip_config": self.pip_config.model_dump(),
                 "requirements": self.requirements,
-                "constraints_file_hash": self.constraints_file_hash,
                 "python_version": self.python_version,
             }
 
@@ -150,13 +147,11 @@ class EnvBlueprint:
             self.environment_id,
             self.pip_config,
             set(self.requirements),
-            self.constraints_file_hash,
             self.python_version,
         ) == (
             other.environment_id,
             other.pip_config,
             set(other.requirements),
-            other.constraints_file_hash,
             other.python_version,
         )
 
@@ -165,10 +160,8 @@ class EnvBlueprint:
 
     def __str__(self) -> str:
         req = ",".join(str(req) for req in self.requirements)
-        constraints = self.constraints if self.constraints else ""
         return (
             f"EnvBlueprint(environment_id={self.environment_id}, requirements=[{str(req)}], "
-            f"constraints=[{constraints}], constraint_file_hash={self.constraints_file_hash}, "
             f"pip={self.pip_config}, python_version={self.python_version})"
         )
 
@@ -351,10 +344,10 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         Write the constraint file defined in the blueprint to disk and return the path
         to it, or None if no such constraint file is defined.
         """
-        if blueprint.constraints_file_hash is not None and blueprint.constraints:
+        if blueprint.pip_config.constraints_file_hash is not None and blueprint.pip_config.constraints:
             constraint_file_path = pathlib.Path(self.env_path) / "requirements.txt"
             with constraint_file_path.open("w") as f:
-                f.write(blueprint.constraints)
+                f.write(blueprint.pip_config.constraints)
             return str(constraint_file_path)
 
         return None
@@ -373,7 +366,6 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
             await self.async_install_for_config(
                 requirements=[packaging.requirements.Requirement(requirement_string=e) for e in req],
                 config=blueprint.pip_config,
-                upgrade=True,
                 constraint_files=[constraint_file] if constraint_file else None,
             )
 

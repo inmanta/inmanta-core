@@ -66,7 +66,6 @@ class CodeManager:
                 models.AgentModules.inmanta_module_name,
                 models.AgentModules.inmanta_module_version,
                 models.InmantaModule.requirements,
-                models.InmantaModule.constraints_file_hash,
                 models.ModuleFiles.python_module_name,
                 models.ModuleFiles.file_content_hash,
                 models.ModuleFiles.is_byte_code,
@@ -96,7 +95,7 @@ class CodeManager:
             )
             .join(
                 constraint_file,
-                models.InmantaModule.constraints_file_hash == constraint_file.content_hash,
+                models.ConfigurationModel.pip_config["constraints_file_hash"] == constraint_file.content_hash,
                 isouter=True,
             )
             .join(
@@ -128,11 +127,14 @@ class CodeManager:
                     assert row.pip_config == first_row.pip_config
                     assert set(row.requirements) == set(first_row.requirements)
                     assert row.constraint_file_content == first_row.constraint_file_content
-                    assert row.constraints_file_hash == first_row.constraints_file_hash
 
-                _pip_config = first_row.pip_config
-                pip_config = LEGACY_PIP_DEFAULT if _pip_config is None else PipConfig(**_pip_config)
                 constraints = first_row.constraint_file_content.decode() if first_row.constraint_file_content else None
+                _pip_config = first_row.pip_config
+                pip_config = (
+                    LEGACY_PIP_DEFAULT
+                    if _pip_config is None
+                    else PipConfig(**_pip_config, constraints_file_content=constraints)
+                )
                 module_install_specs.append(
                     ModuleInstallSpec(
                         module_name=module_name,
@@ -153,8 +155,6 @@ class CodeManager:
                             ],
                             python_version=sys.version_info[:2],
                             environment_id=environment,
-                            constraints_file_hash=first_row.constraints_file_hash,
-                            constraints=constraints,
                         ),
                     )
                 )

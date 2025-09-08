@@ -108,12 +108,12 @@ class CodeManager:
         This file will be uploaded to the db and used by the agents when installing
         packages into their venv.
         """
-        constraints: Sequence[str] = module.Project.get().get_all_constraints()
+        _project = module.Project.get()
+        constraints: Sequence[str] = _project.get_all_constraints()
         if constraints:
             content: str = "\n".join(constraints)
-            self._project_constraints_hash = exporter.upload_file(content)
-        else:
-            self._project_constraints_hash = None
+            _project_constraints_hash = exporter.upload_file(content)
+            _project.set_constraint_file_hash(_project_constraints_hash)
 
     def register_code(self, type_name: str, instance: object) -> None:
         """Register the given type_object under the type_name and register the source associated with this type object.
@@ -157,14 +157,13 @@ class CodeManager:
         files_metadata = [module_source.metadata for module_source in module_sources]
         requirements = self.get_inmanta_module_requirements(inmanta_module_name)
 
-        module_version = self.get_module_version(requirements, files_metadata, self._project_constraints_hash)
+        module_version = self.get_module_version(requirements, files_metadata)
 
         self.module_version_info[inmanta_module_name] = InmantaModule(
             name=inmanta_module_name,
             version=module_version,
             files_in_module=files_metadata,
             requirements=list(requirements),
-            constraints_file_hash=self._project_constraints_hash,
             for_agents=[],
         )
 
@@ -204,9 +203,7 @@ class CodeManager:
         return set(_requires)
 
     @staticmethod
-    def get_module_version(
-        requirements: set[str], module_sources: Sequence["ModuleSourceMetadata"], constraints_file_hash: str | None = None
-    ) -> str:
+    def get_module_version(requirements: set[str], module_sources: Sequence["ModuleSourceMetadata"]) -> str:
         module_version_hash = hashlib.new("sha1")
 
         for module_source in sorted(module_sources, key=lambda f: f.hash_value):
@@ -214,9 +211,6 @@ class CodeManager:
 
         for requirement in sorted(requirements):
             module_version_hash.update(str(requirement).encode())
-
-        if constraints_file_hash is not None:
-            module_version_hash.update(constraints_file_hash.encode())
 
         return module_version_hash.hexdigest()
 

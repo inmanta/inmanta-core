@@ -35,7 +35,6 @@ from inmanta.ast import CompilerException, Namespace, UnknownException
 from inmanta.ast.entity import Entity
 from inmanta.config import Option, is_list, is_uuid_opt
 from inmanta.data import model
-from inmanta.data.model import PipConfig
 from inmanta.execute.proxy import DynamicProxy, ProxyContext, ProxyMode
 from inmanta.execute.runtime import Instance
 from inmanta.resources import Id, IgnoreResourceException, Resource, resource, to_id
@@ -455,7 +454,6 @@ class Exporter:
                 metadata,
                 partial_compile,
                 list(self._removed_resource_sets),
-                project.metadata.pip,
                 allow_handler_code_update=allow_handler_code_update,
             )
             LOGGER.info("Committed resources with version %d", self._version)
@@ -558,7 +556,6 @@ class Exporter:
         metadata: dict[str, str],
         partial_compile: bool,
         resource_sets_to_remove: list[str],
-        pip_config: PipConfig,
         allow_handler_code_update: bool = False,
     ) -> int:
         """
@@ -644,6 +641,8 @@ class Exporter:
             return result
 
         # Backward compatibility with ISO6 servers
+        project = inmanta.module.Project.get()
+        pip_config = project.metadata.pip
         result = do_put(pip_config=pip_config)
         if (
             result.code == 400
