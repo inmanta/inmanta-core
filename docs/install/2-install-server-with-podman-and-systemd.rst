@@ -194,7 +194,7 @@ Start the server with systemd
 #############################
 
 With the quadlet project, we can write simplified unit files for pod and containers and let podman generate the corresponding systemd services.
-To learn more about quadlet and how podman integrates nicely with systemd, please refer to `podman's documentation <https://docs.podman.io/en/latest/markdown/podman-systemd.unit.5.html>`_.
+To learn more about quadlet and how podman integrates nicely with systemd, please refer to `podman's documentation <https://docs.podman.io/en/latest/markdown/podman-quadlet.7.html>`_.
 
 Step 1: Install the required files
 ----------------------------------
@@ -446,7 +446,7 @@ Setting environment variables
 The inmanta server will share any environment variable it received from podman with all its compiler and agent sub processes.  So if you need
 to make some environment variables available to the compiler or agent, you can simply tell podman to pass them on to the orchestrator container.
 In the example shown above, this can be done by using either of the ``Environment`` or ``EnvironmentFile`` options in the orchestrator container unit (``inmanta-orchestrator-server.container``).
-More details about these options can be found in `podman's documentation <https://docs.podman.io/en/latest/markdown/podman-systemd.unit.5.html#container-units-container>`_.
+More details about these options can be found in `podman's documentation <https://docs.podman.io/en/latest/markdown/podman-container.unit.5.html#environment-env-value-env-value>`_.
 
 Accessing the orchestrator file system
 ######################################
