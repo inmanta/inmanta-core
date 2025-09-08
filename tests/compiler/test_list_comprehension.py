@@ -617,6 +617,7 @@ def test_list_comprehension_unknown(snippetcompiler) -> None:
 
             ## unknown iterable makes result unknown
             l1 = [x for x in unknown]
+            l1_filtered = [x for x in unknown if not std::is_unknown(x)]
 
             ## unknown in iterable becomes unknown in result, value expression is not executed
             l2 = [x for x in [1, 2, unknown]]
@@ -728,6 +729,7 @@ def test_list_comprehension_unknown(snippetcompiler) -> None:
 
             assert = true
             assert = not std::is_unknown(l1)
+            assert = not std::is_unknown(l1_filtered)
             assert = not std::is_unknown(l2)
             assert = not std::is_unknown(l21)
             assert = not std::is_unknown(l3)
@@ -747,6 +749,9 @@ def test_list_comprehension_unknown(snippetcompiler) -> None:
 
             l1_unknowns = ["unknown"]
             l1_unknowns = tests::convert_unknowns(l1, "unknown")
+
+            l1_filtered_unknowns = []
+            l1_filtered_unknowns = tests::convert_unknowns(l1_filtered, "unknown")
 
             l2_unknowns = [1, 2, "unknown"]
             l2_unknowns = tests::convert_unknowns(l2, "unknown")
