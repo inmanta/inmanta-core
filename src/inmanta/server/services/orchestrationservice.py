@@ -225,7 +225,7 @@ class PartialUpdateMerger:
         )
 
     def merge_updated_and_shared_resources(
-        self, updated_and_shared_resources: abc.Collection[ResourceDTO]
+        self, updated_and_shared_resources: abc.Mapping[ResourceIdStr, ResourceDTO]
     ) -> dict[ResourceIdStr, ResourceDTO]:
         """
          Separates named resource sets from the shared resource set and expands the shared set with the shared resources in
@@ -235,14 +235,13 @@ class PartialUpdateMerger:
         :returns: The subset of resources in the new version of the configuration model that belong to the shared resource set
                   or a resource set that is updated by this partial compile.
         """
-        shared_resources = {r.resource_id: r for r in updated_and_shared_resources if r.resource_set is None}
-        updated_resources = {r.resource_id: r for r in updated_and_shared_resources if r.resource_set is not None}
+        shared_resources = {rid: r for rid, r in updated_and_shared_resources.items() if r.resource_set is None}
+        updated_resources = {rid: r for rid, r in updated_and_shared_resources.items() if r.resource_set is not None}
         shared_resources_merged = {r.resource_id: r for r in self._merge_shared_resources(shared_resources) or ()}
+        self._validate_constraints(updated_and_shared_resources)
         # Updated go last, so that in case of overlap, we get the updated one
         # Validation on move is done later
-        result = {**shared_resources_merged, **updated_resources}
-        self._validate_constraints(result)
-        return result
+        return {**shared_resources_merged, **updated_resources}
 
     def _validate_constraints(self, new_updated_and_shared_resources: abc.Mapping[ResourceIdStr, ResourceDTO]) -> None:
         """
@@ -270,11 +269,11 @@ class PartialUpdateMerger:
                     f"to {data.ResourceSet.get_printable_name_for_resource_set(res.resource_set)}."
                 )
 
-            resource_set_validator = ResourceSetValidator(new_updated_and_shared_resources.values())
-            try:
-                resource_set_validator.ensure_no_cross_resource_set_dependencies()
-            except CrossResourceSetDependencyError as e:
-                raise BadRequest(e.get_error_message())
+        resource_set_validator = ResourceSetValidator(new_updated_and_shared_resources.values())
+        try:
+            resource_set_validator.ensure_no_cross_resource_set_dependencies()
+        except CrossResourceSetDependencyError as e:
+            raise BadRequest(e.get_error_message())
 
     def _merge_shared_resources(self, shared_resources_new: dict[ResourceIdStr, ResourceDTO]) -> Optional[list[ResourceDTO]]:
         """
@@ -1148,9 +1147,8 @@ class OrchestrationService(protocol.ServerSlice):
                     deleted_resource_sets=set(removed_resource_sets),
                     connection=con,
                 )
-
                 # add shared resources
-                merged_resources = partial_update_merger.merge_updated_and_shared_resources(rid_to_resource.values())
+                merged_resources = partial_update_merger.merge_updated_and_shared_resources(rid_to_resource)
 
                 merged_unknowns = await partial_update_merger.merge_unknowns(
                     unknowns_in_partial_compile=self._create_unknown_parameter_daos_from_api_unknowns(env.id, version, unknowns)
