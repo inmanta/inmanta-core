@@ -1000,18 +1000,11 @@ class ResourceLogsView(DataView[ResourceLogOrder, ResourceLog]):
                 -- Get all resource action in the given environment for the given resource_id
                 WITH actions AS (
                     SELECT  ra.*
-                    FROM resource_set_configuration_model AS rscm
-                    INNER JOIN {Resource.table_name()} AS r
-                        ON rscm.environment=r.environment AND rscm.resource_set_id=r.resource_set_id
-                    INNER JOIN resourceaction_resource AS rr ON (
-                                                          r.environment=rr.environment
-                                                          AND r.resource_id=rr.resource_id
-                                                          AND rscm.model=rr.resource_version
-                                                      )
-                                                      INNER JOIN {ResourceAction.table_name()} AS ra ON (
-                                                          rr.resource_action_id=ra.action_id
-                                                      )
-                    WHERE r.environment=$1 AND r.resource_id=$2
+                    FROM resourceaction_resource AS rr
+                    INNER JOIN  {ResourceAction.table_name()} AS ra
+                        ON rr.environment=ra.environment
+                        AND rr.resource_action_id=ra.action_id
+                    WHERE rr.environment=$1 AND rr.resource_id=$2
                 )
             """,
             select_clause="SELECT action_id, action, timestamp, unnested_message",
