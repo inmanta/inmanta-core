@@ -47,7 +47,6 @@ from inmanta.data import (
     Parameter,
     ParameterOrder,
     QueryFilter,
-    Resource,
     ResourceAction,
     ResourceHistoryOrder,
     ResourceLogOrder,
