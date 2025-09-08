@@ -354,15 +354,12 @@ class ListComprehension(RawResumer, ExpressionStatement):
         # execute iterable so we have all values
         iterable: object = self.iterable.execute({k: v.get_value() for k, v in requires.items()}, resolver, queue)
 
-        # indicate to helper that we're done
-        if isinstance(iterable, Unknown):
-            collector_helper.set_unknown(resolver, queue)
-        elif not isinstance(iterable, list):
+        if not isinstance(iterable, (list, Unknown)):
             raise TypingException(
                 self, f"A list comprehension can only be applied to lists and relations, got {type(iterable).__name__}"
             )
-        else:
-            collector_helper.complete(iterable, resolver, queue)
+        # indicate to helper that we're done
+        collector_helper.complete(iterable, resolver, queue)
 
     def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         # at this point the resumer signalled the helper we were done and the helper waited for all value expressions
@@ -465,7 +462,7 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
     received gradually each they arrive as soon as they can be resolved).
 
     Expects to receive each result once, either gradually or at execution-time. Clients should indicate completion by calling
-    `complete()` or `set_unknown()`, after which no more values may be provided. This instance's `final_result` attribute
+    `complete()`, after which no more values may be provided. This instance's `final_result` attribute
     will contain the final result. It will be only be set after the client declares completion, but not necessarily immediately
     after (we may have to wait for value expressions' requires).
     """
@@ -550,45 +547,43 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
 
         return False
 
-    def set_unknown(self, resolver: Resolver, queue: QueueScheduler) -> None:
-        """
-        Set the final result to be an unknown. No elements should be gradually received in this case.
-        Mutually exclusive with `complete`.
-        """
-        if self._results:
-            if self._received_any_concrete:
-                raise InvalidCompilerState(
-                    self, "list comprehension helper got set_unknown after some (known) elements were received"
-                )
-            if len(self._results) > 1:
-                raise InvalidCompilerState(
-                    self,
-                    (
-                        "list comprehension iterable resulted in a single unknown"
-                        " after more than one unknown elements were received gradually"
-                    ),
-                )
-            if self.lhs is not None:
-                # we may have already propagated this unknown value gradually. We must not set the final result to a *different*
-                # unknown for consistency => simply await the unknown result
-                RawUnit(queue, resolver, dict(enumerate(self._results)), resumer=self)
-                return
-        self.final_result.set_value(Unknown(self.statement), self.statement.location)
-
-    def complete(self, all_values: abc.Sequence[object], resolver: Resolver, queue: QueueScheduler) -> None:
+    # TODO: bugfix entry
+    def complete(
+        self,
+        all_values: abc.Sequence[object] | Unknown,
+        resolver: Resolver,
+        queue: QueueScheduler,
+    ) -> None:
         """
         Indicate that all results have been received. No further calls to `receive_result` should be done after this.
-        Mutually exclusive with `set_unknown`.
         """
         if self._results:
+            # TODO: keep track of the unknown instead?
+            if isinstance(all_values, Unknown):
+                if self._received_any_concrete:
+                    raise InvalidCompilerState(
+                        self, "list comprehension helper got final value as Unknown after some (known) elements were received"
+                    )
+                if len(self._results) > 1:
+                    raise InvalidCompilerState(
+                        self,
+                        (
+                            "list comprehension iterable resulted in a single unknown"
+                            " after more than one unknown elements were received gradually"
+                        ),
+                    )
+                # In gradual mode, we will have already propagated this unknown value gradually.
+                # We must not set the final result to a *different* unknown for consistency => simply await the unknown result
+                # as for any other values
+            elif len(self._results) != len(all_values):
+                raise InvalidCompilerState(self, "list comprehension helper received some but not all values gradually")
             if self.lhs is None:
                 # We should only have received previous results in gradual mode, if any gradual results were received in
                 # non-gradual mode, this indicates a bug in the compiler, likely in this class
                 raise InvalidCompilerState(self, "list comprehension helper received gradual results in non-gradual mode")
-            if len(self._results) != len(all_values):
-                raise InvalidCompilerState(self, "list comprehension helper received some but not all values gradually")
         else:
-            for value in all_values:
+            # make sure we report unknowns the same as in gradual mode, where it will have been reported as a value
+            for value in [all_values] if isinstance(all_values, Unknown) else all_values:
                 self.receive_result(value, location=self.statement.location)
 
         RawUnit(queue, resolver, dict(enumerate(self._results)), resumer=self)

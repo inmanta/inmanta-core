@@ -1,5 +1,7 @@
 description: "Compiler: fixed bug where a list comprehension over an Unknown (``[x for x in <unknown>]``) would break the compiler under specific circumstances"
 change-type: patch
+sections:
+  bugfix: "{{description}}"
 destination-branches:
   - master
   - iso8

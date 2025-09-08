@@ -727,7 +727,7 @@ def test_list_comprehension_unknown(snippetcompiler) -> None:
             l14 = c5.values
 
             assert = true
-            assert = std::is_unknown(l1)
+            assert = not std::is_unknown(l1)
             assert = not std::is_unknown(l2)
             assert = not std::is_unknown(l21)
             assert = not std::is_unknown(l3)
@@ -744,6 +744,9 @@ def test_list_comprehension_unknown(snippetcompiler) -> None:
             assert = not std::is_unknown(l12)
             assert = not std::is_unknown(l13)
             assert = not std::is_unknown(l14)
+
+            l1_unknowns = ["unknown"]
+            l1_unknowns = tests::convert_unknowns(l1, "unknown")
 
             l2_unknowns = [1, 2, "unknown"]
             l2_unknowns = tests::convert_unknowns(l2, "unknown")
