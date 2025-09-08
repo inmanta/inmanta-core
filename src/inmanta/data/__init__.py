@@ -5281,26 +5281,6 @@ class Resource(BaseDocument):
     resource_set_id: uuid.UUID
 
     @classmethod
-    def __mangle_dict(cls, record: dict, version: int) -> None:
-        """
-        Transform the dict of attributes as it exists here/in the database to the backward compatible form
-        Operates in-place
-        """
-        parsed_id = resources.Id.parse_id(record["resource_id"])
-        parsed_id.set_version(version)
-        record["resource_version_id"] = parsed_id.resource_version_str()
-        record["id"] = record["resource_version_id"]
-        record["resource_type"] = parsed_id.entity_type
-        if "requires" in record["attributes"]:
-            record["attributes"]["requires"] = [
-                resources.Id.set_version_in_id(id, version) for id in record["attributes"]["requires"]
-            ]
-        # Due to a bug, the version field has always been present in the attributes dictionary.
-        # This bug has been fixed in the database. For backwards compatibility reason we here make sure that the
-        # version field is present in the attributes dictionary served out via the API.
-        record["attributes"]["version"] = version
-
-    @classmethod
     async def get_last_non_deploying_state_for_dependencies(
         cls, environment: uuid.UUID, resource_version_id: "resources.Id", connection: Optional[Connection] = None
     ) -> dict[ResourceVersionIdStr, ResourceState]:
