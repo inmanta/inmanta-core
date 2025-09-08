@@ -5479,7 +5479,7 @@ class Resource(BaseDocument):
             WHERE rscm.environment=$1 AND rscm.model=(SELECT MAX(cm.version)
                                               FROM {ConfigurationModel.table_name()} AS cm
                                               WHERE cm.environment=$1)
-            WHERE r.environment=$1"""
+            """
         if resource_type:
             query += " AND r.resource_type=$2"
             values.append(cls._get_value(resource_type))
