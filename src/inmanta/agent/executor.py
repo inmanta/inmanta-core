@@ -345,13 +345,19 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         self.inmanta_venv_status_file: pathlib.Path = pathlib.Path(self.env_path) / const.INMANTA_VENV_STATUS_FILENAME
         self.folder_name: str = pathlib.Path(self.env_path).name
         self.io_threadpool = io_threadpool
-        self.constraint_file: pathlib.Path | None = None
 
-    def _write_constraint_file(self, blueprint: EnvBlueprint) -> None:
+    def _write_constraint_file(self, blueprint: EnvBlueprint) -> str | None:
+        """
+        Write the constraint file defined in the blueprint to disk and return the path
+        to it, or None if no such constraint file is defined.
+        """
         if blueprint.constraints_file_hash is not None and blueprint.constraints:
-            self.constraint_file = pathlib.Path(self.env_path) / "requirements.txt"
-            with self.constraint_file.open("w") as f:
+            constraint_file_path = pathlib.Path(self.env_path) / "requirements.txt"
+            with constraint_file_path.open("w") as f:
                 f.write(blueprint.constraints)
+            return str(constraint_file_path)
+
+        return None
 
     async def create_and_install_environment(self, blueprint: EnvBlueprint) -> None:
         """
@@ -362,13 +368,13 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         """
         req: list[str] = list(blueprint.requirements)
         await asyncio.get_running_loop().run_in_executor(self.io_threadpool, self.init_env)
-        self._write_constraint_file(blueprint)
+        constraint_file: str | None = self._write_constraint_file(blueprint)
         if len(req):  # install_for_config expects at least 1 requirement or a path to install
             await self.async_install_for_config(
                 requirements=[packaging.requirements.Requirement(requirement_string=e) for e in req],
                 config=blueprint.pip_config,
                 upgrade=True,
-                constraint_files=[str(self.constraint_file)] if self.constraint_file else None,
+                constraint_files=[constraint_file] if constraint_file else None,
             )
 
         self.touch()

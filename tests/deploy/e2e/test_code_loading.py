@@ -358,32 +358,6 @@ raise Exception("Fail code loading")
     check_for_message(data=result.result["data"], must_be_present=expected_error_message)
 
 
-async def check_code_for_version(
-    version: int,
-    environment: str,
-    codemanager: CodeManager,
-    resource_type: str,
-    expected_source: bytes = b"#The code",
-    expected_constraints: str | None = None,
-):
-    """
-    Helper method to check that all agents get the same code
-    """
-    environment = uuid.UUID(environment)
-    resource_install_specs, invalid_resources = await codemanager.get_code(
-        environment=environment, version=version, resource_types=[resource_type]
-    )
-    for resource_install_spec in resource_install_specs:
-        assert len(resource_install_spec.blueprint.sources) == 1
-        if expected_constraints is not None:
-            assert resource_install_spec.blueprint.constraints == expected_constraints
-        else:
-            assert resource_install_spec.blueprint.constraints is None
-        break
-    else:
-        assert False, f"No source code registered for resource type {resource_type} in version {version}."
-
-
 async def test_project_constraints_in_agent_code_install(server, client, environment, clienthelper, agent):
     """
     Check that registered constraints get propagated into the agents' venv blueprints.

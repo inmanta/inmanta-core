@@ -157,7 +157,7 @@ class CodeManager:
 
     def register_code(self, type_name: str, instance: object) -> None:
         """Register the given type_object under the type_name and register the source associated with this type object.
-        This method assumes the register_project_constraints method were called first.
+        This method assumes the register_project_constraints method was called first.
 
         :param type_name: The inmanta type name for which the source of type_object will be registered.
             For example std::testing::NullResource
