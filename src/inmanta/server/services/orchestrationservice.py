@@ -544,10 +544,10 @@ class OrchestrationService(protocol.ServerSlice):
     def _create_dto_resources_from_api_resources(
         self,
         env_id: uuid.UUID,
-        version: int,
         resources: list[JsonType],
         resource_state: dict[ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]],
         resource_sets: dict[ResourceIdStr, Optional[str]],
+        check_version: int | None = None,
     ) -> dict[ResourceIdStr, ResourceDTO]:
         """
         This method converts the resources sent to the put_version or put_partial endpoint to DTO Resource objects.
@@ -555,6 +555,7 @@ class OrchestrationService(protocol.ServerSlice):
         An exception will be raised when one of the following constraints is not satisfied:
             * A resource present in the resource_sets parameter is not present in the resources dictionary.
             * The dependency graph of the provided resources is not closed.
+            * In a full compile, the version of a resource does not match the version we are creating
         """
         rid_to_resource = {}
         # The content of the requires attribute for all the resources
@@ -569,10 +570,10 @@ class OrchestrationService(protocol.ServerSlice):
                     f"Invalid resource: The version in the id field ({res_dict['id']}) doesn't match the version in the"
                     f" version field ({res_dict['version']})."
                 )
-            if version_part_of_resource_id != version:
+            if check_version is not None and version_part_of_resource_id != check_version:
                 raise BadRequest(
                     f"The resource version of resource {resource_version_id} does not match the version argument "
-                    f"(version: {version})"
+                    f"(version: {check_version})"
                 )
             res_set_name = resource_sets.get(resource_id, None)
 
@@ -1021,10 +1022,10 @@ class OrchestrationService(protocol.ServerSlice):
         unknowns_objs = self._create_unknown_parameter_daos_from_api_unknowns(env.id, version, unknowns)
         rid_to_resource: dict[ResourceIdStr, ResourceDTO] = self._create_dto_resources_from_api_resources(
             env_id=env.id,
-            version=version,
             resources=resources,
             resource_state=resource_state,
             resource_sets=resource_sets,
+            check_version=version,
         )
 
         async with data.Resource.get_connection() as con:
@@ -1140,7 +1141,6 @@ class OrchestrationService(protocol.ServerSlice):
 
                 rid_to_resource: dict[ResourceIdStr, ResourceDTO] = self._create_dto_resources_from_api_resources(
                     env_id=env.id,
-                    version=version,
                     resources=resources,
                     resource_state=resource_state,
                     resource_sets=resource_sets,
