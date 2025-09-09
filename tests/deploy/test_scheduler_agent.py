@@ -2400,7 +2400,16 @@ async def test_remove_agent_venvs(environment, agent: TestAgent, make_resource_m
         rid2: make_resource_minimal(rid=rid2, values={"value": "r2_value"}, requires=[rid1]),
     }
     await agent.scheduler._new_version(
-        [ModelVersion(version=1, resources=resources, requires=make_requires(resources), undefined=set())]
+        [
+            ModelVersion(
+                version=1,
+                resources=resources,
+                requires=make_requires(resources),
+                undefined=set(),
+                resource_sets={None: set(resources.keys())},
+                partial=False,
+            )
+        ]
     )
 
     # Wait until rid1 is deploying
