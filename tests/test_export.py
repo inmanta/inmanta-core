@@ -280,6 +280,8 @@ async def test_empty_server_export(snippetcompiler, server, client, environment)
         "index-url": None,
         "pre": None,
         "use-system-config": False,
+        "constraints-file-content": None,
+        "constraints-file-hash": None,
     }
 
 
