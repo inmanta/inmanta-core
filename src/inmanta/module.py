@@ -1973,7 +1973,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         ]
         return dependencies, constraints
 
-    def get_all_constraints(self) -> Sequence[str]:
+    def _get_all_constraints(self) -> Sequence[str]:
         """
 
         Compile a list of all package installation constraints defined at the project level. This method
@@ -1999,8 +1999,15 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
         return sorted(sanitized_constraints)
 
-    def set_constraint_file_content(self, content: str) -> None:
-        self.metadata.pip.constraints_file_content = content
+    def write_constraints_to_pip_config(self) -> None:
+        """
+        Helper method to retrieve constraints set at the project level and
+        populate the pip config constraints_file_content attribute.
+        """
+        constraints: Sequence[str] = self._get_all_constraints()
+        if constraints:
+            content: str = "\n".join(constraints)
+            self.metadata.pip.constraints_file_content = content
 
     def install_modules(self, *, bypass_module_cache: bool = False, update: bool = False) -> None:
         """

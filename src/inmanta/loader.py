@@ -85,10 +85,6 @@ class CodeManager:
         # Map of [inmanta_module_name, inmanta module]
         self.module_version_info: dict[str, "InmantaModule"] = {}
 
-        # Content of the file containing python package constraints
-        # set at the project level that have to be enforced when installing packages
-        # in the agents venv.
-        self._project_constraints_hash: str | None = None
 
     def build_agent_map(self, resources: dict["Id", "Resource"]) -> None:
         """
@@ -108,10 +104,8 @@ class CodeManager:
         packages into their venv.
         """
         _project = module.Project.get()
-        constraints: Sequence[str] = _project.get_all_constraints()
-        if constraints:
-            content: str = "\n".join(constraints)
-            _project.set_constraint_file_content(content)
+        _project.write_constraints_to_pip_config()
+
 
     def register_code(self, type_name: str, instance: object) -> None:
         """Register the given type_object under the type_name and register the source associated with this type object.

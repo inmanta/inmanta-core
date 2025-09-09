@@ -28,7 +28,7 @@ from inmanta.agent.executor import ModuleInstallSpec
 from inmanta.data.model import LEGACY_PIP_DEFAULT, ModuleSource, ModuleSourceMetadata, PipConfig
 from inmanta.util.async_lru import async_lru_cache
 from sqlalchemy import and_, select
-from sqlalchemy.orm import aliased
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -58,8 +58,6 @@ class CodeManager:
         """
         module_install_specs = []
 
-        source_file = aliased(models.File)
-
         modules_for_agent = (
             select(
                 models.AgentModules.inmanta_module_name,
@@ -68,7 +66,7 @@ class CodeManager:
                 models.ModuleFiles.python_module_name,
                 models.ModuleFiles.file_content_hash,
                 models.ModuleFiles.is_byte_code,
-                source_file.content.label("source_file_content"),
+                models.File.content,
                 models.ConfigurationModel.pip_config,
             )
             .join(
@@ -88,8 +86,8 @@ class CodeManager:
                 ),
             )
             .join(
-                source_file,
-                models.ModuleFiles.file_content_hash == source_file.content_hash,
+                models.File,
+                models.ModuleFiles.file_content_hash == models.File.content_hash,
             )
             .join(
                 models.ConfigurationModel,
