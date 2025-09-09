@@ -5888,7 +5888,11 @@ class Resource(BaseDocument):
         record = result[0]
         parsed_id = resources.Id.parse_id(record["latest_resource_id"])
         attributes = record["attributes"]
-
+        # Due to a bug, the version field has always been present in the attributes dictionary.
+        # This bug has been fixed in the database. For backwards compatibility reason we here make sure that the
+        # version field is present in the attributes dictionary served out via the API.
+        if "version" not in attributes:
+            attributes["version"] = record["latest_model"]
         requires = [resources.Id.parse_id(req).resource_str() for req in attributes["requires"]]
 
         # fetch the status of each of the requires. This is not calculated in the database because the lack of joinable
