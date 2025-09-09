@@ -27,7 +27,7 @@ from inmanta.agent import executor
 from inmanta.agent.executor import ModuleInstallSpec
 from inmanta.data.model import LEGACY_PIP_DEFAULT, ModuleSource, ModuleSourceMetadata, PipConfig
 from inmanta.util.async_lru import async_lru_cache
-from sqlalchemy import String, and_, cast, select
+from sqlalchemy import and_, select
 from sqlalchemy.orm import aliased
 
 LOGGER = logging.getLogger(__name__)
@@ -58,9 +58,7 @@ class CodeManager:
         """
         module_install_specs = []
 
-        constraint_file = aliased(models.File)
         source_file = aliased(models.File)
-        constraint_file_hash = cast(models.ConfigurationModel.pip_config.op("->>")("constraint-file-hash"), String)
 
         modules_for_agent = (
             select(
@@ -71,7 +69,6 @@ class CodeManager:
                 models.ModuleFiles.file_content_hash,
                 models.ModuleFiles.is_byte_code,
                 source_file.content.label("source_file_content"),
-                constraint_file.content.label("constraint_file_content"),
                 models.ConfigurationModel.pip_config,
             )
             .join(
@@ -101,11 +98,6 @@ class CodeManager:
                     models.AgentModules.environment == models.ConfigurationModel.environment,
                 ),
             )
-            .join(
-                constraint_file,
-                constraint_file.content_hash == constraint_file_hash,
-                isouter=True,
-            )
             .where(
                 models.AgentModules.environment == environment,
                 models.AgentModules.agent_name == agent_name,
@@ -127,15 +119,9 @@ class CodeManager:
                     assert row.inmanta_module_version == first_row.inmanta_module_version
                     assert row.pip_config == first_row.pip_config
                     assert set(row.requirements) == set(first_row.requirements)
-                    assert row.constraint_file_content == first_row.constraint_file_content
 
-                constraints = first_row.constraint_file_content.decode() if first_row.constraint_file_content else None
                 _pip_config = first_row.pip_config
-                pip_config = (
-                    LEGACY_PIP_DEFAULT
-                    if _pip_config is None
-                    else PipConfig(**_pip_config, constraints_file_content=constraints)
-                )
+                pip_config = LEGACY_PIP_DEFAULT if _pip_config is None else PipConfig(**_pip_config)
                 module_install_specs.append(
                     ModuleInstallSpec(
                         module_name=module_name,

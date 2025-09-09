@@ -1999,8 +1999,8 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
         return sorted(sanitized_constraints)
 
-    def set_constraint_file_hash(self, file_hash: str) -> None:
-        self.metadata.pip.constraints_file_hash = file_hash
+    def set_constraint_file_content(self, content: str) -> None:
+        self.metadata.pip.constraints_file_content = content
 
     def install_modules(self, *, bypass_module_cache: bool = False, update: bool = False) -> None:
         """

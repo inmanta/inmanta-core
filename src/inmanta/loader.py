@@ -33,7 +33,6 @@ from importlib.machinery import ModuleSpec, SourcelessFileLoader
 from itertools import chain
 from typing import TYPE_CHECKING, Optional
 
-import inmanta.export as export
 from inmanta import const, module
 from inmanta.data.model import InmantaModule, ModuleSource
 from inmanta.stable_api import stable_api
@@ -100,20 +99,19 @@ class CodeManager:
         for id in resources:
             self._types_to_agent[id.entity_type].add(id.agent_name)
 
-    def register_project_constraints(self, exporter: "export.Exporter") -> None:
+    def register_project_constraints(self) -> None:
         """
         Helper method to retrieve all package constraints defined at the project level and compile them
-        into a constraint file.
+        into a single string.
 
-        This file will be uploaded to the db and used by the agents when installing
+        This string is added to the project's pip config to be used by the agents when installing
         packages into their venv.
         """
         _project = module.Project.get()
         constraints: Sequence[str] = _project.get_all_constraints()
         if constraints:
             content: str = "\n".join(constraints)
-            _project_constraints_hash = exporter.upload_file(content)
-            _project.set_constraint_file_hash(_project_constraints_hash)
+            _project.set_constraint_file_content(content)
 
     def register_code(self, type_name: str, instance: object) -> None:
         """Register the given type_object under the type_name and register the source associated with this type object.

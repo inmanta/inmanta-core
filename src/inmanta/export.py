@@ -520,7 +520,7 @@ class Exporter:
 
         LOGGER.info("Sending resources and handler source to server")
 
-        code_manager.register_project_constraints(self)
+        code_manager.register_project_constraints()
 
         types = set()
 

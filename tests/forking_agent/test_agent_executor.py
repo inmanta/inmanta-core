@@ -135,9 +135,10 @@ assert inmanta_plugins.sub.a == 1""",
     env_blueprint2 = executor.EnvBlueprint(
         environment_id=env_id, pip_config=pip_config, requirements=requirements2, python_version=sys.version_info[:2]
     )
-    pip_config_2 = PipConfig(index_url=pip_index.url,
-        constraints_file_content = constraints,
-        constraints_file_hash = "dummy_hash",
+    pip_config_2 = PipConfig(
+        index_url=pip_index.url,
+        constraints_file_content=constraints,
+        constraints_file_hash="dummy_hash",
     )
 
     blueprint4 = executor.ExecutorBlueprint(

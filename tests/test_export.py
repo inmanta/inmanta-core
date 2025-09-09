@@ -748,8 +748,8 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
         "index-url": None,
         "pre": None,
         "use-system-config": False,
-        'constraints-file-content': None,
-        'constraints-file-hash': None,
+        "constraints-file-content": None,
+        "constraints-file-hash": None,
     }
     for version in response.result["versions"]:
         assert version["pip_config"] == expected_pip_config, f"failed for version: {version['version']}"
