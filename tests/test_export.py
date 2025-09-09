@@ -369,7 +369,8 @@ a = many_dependencies::Test(name="my_test_resource")
     module_install_specs = await codemanager.get_code(environment=uuid.UUID(environment), model_version=1, agent_name="agent")
 
     for module_install_spec in module_install_specs:
-        assert module_install_spec.blueprint.constraints is None
+        assert module_install_spec.blueprint.pip_config.constraints_file_hash is None
+        assert module_install_spec.blueprint.pip_config.constraints_file_content is None
 
     constraints = [
         "dependency-package<2.0.0",
@@ -397,7 +398,7 @@ a = many_dependencies::Test(name="my_test_resource")
 
     module_install_specs = await codemanager.get_code(environment=uuid.UUID(environment), model_version=2, agent_name="agent")
     for module_install_spec in module_install_specs:
-        assert module_install_spec.blueprint.constraints == "\n".join(constraints)
+        assert module_install_spec.blueprint.pip_config.constraints_file_content == "\n".join(constraints)
 
 
 async def test_old_compiler(server, client, environment):
@@ -747,6 +748,8 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
         "index-url": None,
         "pre": None,
         "use-system-config": False,
+        'constraints-file-content': None,
+        'constraints-file-hash': None,
     }
     for version in response.result["versions"]:
         assert version["pip_config"] == expected_pip_config, f"failed for version: {version['version']}"
