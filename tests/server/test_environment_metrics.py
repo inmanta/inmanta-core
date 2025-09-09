@@ -755,12 +755,28 @@ async def test_agent_count_metric(clienthelper, client, server):
     await model1.insert()
     model2 = data.ConfigurationModel(environment=env2.id, version=1, released=True, is_suitable_for_partial_compiles=False)
     await model2.insert()
+
+    resource_set1 = data.ResourceSet(environment=env1.id, id=uuid.uuid4())
+    await resource_set1.insert()
+    resource_set2 = data.ResourceSet(environment=env2.id, id=uuid.uuid4())
+    await resource_set2.insert()
+
     resource1 = data.Resource(
-        environment=env1.id, model=1, agent="agent1", resource_id="", resource_type="", resource_id_value=""
+        environment=env1.id,
+        agent="agent1",
+        resource_id="",
+        resource_type="",
+        resource_id_value="",
+        resource_set_id=resource_set1.id,
     )
     await resource1.insert()
     resource2 = data.Resource(
-        environment=env2.id, model=1, agent="agent2", resource_id="", resource_type="", resource_id_value=""
+        environment=env2.id,
+        agent="agent2",
+        resource_id="",
+        resource_type="",
+        resource_id_value="",
+        resource_set_id=resource_set2.id,
     )
     await resource2.insert()
 

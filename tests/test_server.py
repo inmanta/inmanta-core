@@ -42,7 +42,7 @@ from inmanta.server import config as opt
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 from inmanta.util import get_compiler_version
-from utils import log_contains, log_doesnt_contain, retry_limited
+from utils import insert_with_link_to_configuration_model, log_contains, log_doesnt_contain, retry_limited
 
 LOGGER = logging.getLogger(__name__)
 
@@ -816,9 +816,12 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
             is_suitable_for_partial_compiles=False,
         )
         await cm.insert()
+        resource_set = data.ResourceSet(environment=env.id, id=uuid.uuid4())
+        await insert_with_link_to_configuration_model(resource_set, versions=[i])
         res1 = data.Resource.new(
             environment=env.id,
             resource_version_id="std::testing::NullResource[agent1,name=motd],v=%s" % str(i),
+            resource_set=resource_set,
             attributes={"attr": [{"a": 1, "b": "c"}], "path": "/etc/motd"},
         )
         await res1.insert()
@@ -955,9 +958,12 @@ async def test_send_in_progress(server, client, environment, agent):
         attributes: dict[str, object],
         version: int,
     ) -> None:
+        resource_set = data.ResourceSet(environment=env_id, id=uuid.uuid4())
+        await insert_with_link_to_configuration_model(resource_set, versions=[version])
         r1 = data.Resource.new(
             environment=env_id,
             resource_version_id=resource_version_id,
+            resource_set=resource_set,
             attributes=attributes,
         )
         await r1.insert()
@@ -1030,9 +1036,12 @@ async def test_send_in_progress_action_id_conflict(server, client, environment, 
     model_version = 1
     rvid_r1_v1 = ResourceVersionIdStr(f"std::testing::NullResource[agent1,name=file1],v={model_version}")
 
+    resource_set = data.ResourceSet(environment=env_id, id=uuid.uuid4())
+    await insert_with_link_to_configuration_model(resource_set, versions=[model_version])
     await data.Resource.new(
         environment=env_id,
         resource_version_id=rvid_r1_v1,
+        resource_set=resource_set,
         attributes={"purge_on_delete": False, "requires": []},
     ).insert()
 
@@ -1233,10 +1242,13 @@ async def test_send_deploy_done_error_handling(server, client, environment, agen
 
     rvid_r1_v1 = ResourceVersionIdStr(f"std::testing::NullResource[agent1,name=file1],v={model_version}")
 
+    resource_set = data.ResourceSet(environment=env_id, id=uuid.uuid4())
+    await insert_with_link_to_configuration_model(resource_set, versions=[model_version])
     # Create resource
     await data.Resource.new(
         environment=env_id,
         resource_version_id=rvid_r1_v1,
+        resource_set=resource_set,
         attributes={"purge_on_delete": False, "requires": []},
     ).insert()
 
@@ -1340,8 +1352,13 @@ async def test_cleanup_old_agents(server, client, env1_halted, env2_halted):
     name = "file1"
     resource_id = f"std::testing::NullResource[agent4,name={name}]"
 
+    resource_set = data.ResourceSet(environment=env1.id, id=uuid.uuid4())
+    await insert_with_link_to_configuration_model(resource_set, versions=[version])
     await data.Resource.new(
-        environment=env1.id, resource_version_id=ResourceVersionIdStr(f"{resource_id},v={version}"), attributes={"name": name}
+        environment=env1.id,
+        resource_version_id=ResourceVersionIdStr(f"{resource_id},v={version}"),
+        resource_set=resource_set,
+        attributes={"name": name},
     ).insert()
 
     # should get purged
@@ -1430,12 +1447,6 @@ async def test_serialization_attributes_of_resource_to_api(client, server, envir
     assert len(result) == 1
     resource_dao = result[0]
     assert "version" not in resource_dao.attributes
-
-    # Ensure that the serialization of the resource DAO contains the version field in the attributes dictionary
-    resource_dto = resource_dao.to_dto()
-    assert resource_dto.attributes["version"] == version
-    resource_dct = resource_dao.to_dict()
-    assert resource_dct["attributes"]["version"] == version
 
     # Retrieve the resource via the API and ensure that the version field is present in the attributes dictionary
     result = await client.resource_history(environment, resource_id)
