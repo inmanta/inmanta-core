@@ -111,15 +111,15 @@ class CodeManager:
                 assert rows_list
 
                 first_row = rows_list[0]
+                _pip_config = first_row.pip_config
                 for row in rows_list:
 
                     # The following attributes should be consistent across all modules in this version
                     assert row.inmanta_module_version == first_row.inmanta_module_version
-                    assert row.pip_config == first_row.pip_config
+                    assert row.pip_config == _pip_config
                     assert set(row.requirements) == set(first_row.requirements)
                     assert row.project_constraints == first_row.project_constraints
 
-                _pip_config = first_row.pip_config
                 pip_config = LEGACY_PIP_DEFAULT if _pip_config is None else PipConfig(**_pip_config)
                 module_install_specs.append(
                     ModuleInstallSpec(

@@ -112,7 +112,7 @@ class EnvBlueprint:
     requirements: Sequence[str]
     _hash_cache: str | None = dataclasses.field(default=None, init=False, repr=False)
     python_version: tuple[int, int]
-    project_constraints: str | None
+    project_constraints: str | None = dataclasses.field(default=None, kw_only=True)
 
     def __post_init__(self) -> None:
         # remove duplicates and make uniform
@@ -164,9 +164,10 @@ class EnvBlueprint:
 
     def __str__(self) -> str:
         req = ",".join(str(req) for req in self.requirements)
+        constraints = ",".join(self.project_constraints.split("\n")) if self.project_constraints else ""
         return (
             f"EnvBlueprint(environment_id={self.environment_id}, requirements=[{str(req)}], "
-            f"constraints={self.project_constraints}, pip={self.pip_config}, python_version={self.python_version})"
+            f"constraints=[{constraints}], pip={self.pip_config}, python_version={self.python_version})"
         )
 
 
@@ -196,6 +197,8 @@ class ExecutorBlueprint(EnvBlueprint):
         assert len(env_ids) == 1
         sources = list({source for cd in code for source in cd.blueprint.sources})
         requirements = list({req for cd in code for req in cd.blueprint.requirements})
+
+        # Check that constraints set at the project level are consistent across all modules
         _constraints = list({cd.blueprint.project_constraints for cd in code})
         assert len(_constraints) == 1
         constraints = _constraints[0]

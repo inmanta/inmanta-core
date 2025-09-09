@@ -568,7 +568,7 @@ async def check_code_for_version(
             if module.module_name == module_name:
                 assert len(module.blueprint.sources) == 1
                 assert module.blueprint.sources[0].source == expected_source
-                assert module.blueprint.pip_config.constraints_file_content == expected_constraints
+                assert module.blueprint.project_constraints == expected_constraints
                 break
         else:
             assert False, f"Module {module_name} is not registered in version {version}."
@@ -924,7 +924,6 @@ async def test_project_constraints_in_agent_code_install(server, client, environ
     hv1: str = await upload_file(client, content)
 
     constraints = "dummy_constraint~=1.2.3\ndummy_constraint<5.5.5"
-    constraints_file_hash: str = await upload_file(client, constraints)
 
     module_source_metadata1 = ModuleSourceMetadata(
         name="inmanta_plugins.test",
@@ -952,7 +951,7 @@ async def test_project_constraints_in_agent_code_install(server, client, environ
         compiler_version=get_compiler_version(),
         module_version_info=module_version_info_v0,
         resource_sets={"test::ResType_A[agent_X,key=key1]": "set-a", "test::ResType_A[agent_Y,key=key1]": "set-b"},
-        pip_config=PipConfig(constraints_file_content=constraints),
+        project_constraints=constraints,
     )
 
     assert result.code == 200
@@ -993,7 +992,7 @@ async def test_project_constraints_in_agent_code_install(server, client, environ
         compiler_version=get_compiler_version(),
         module_version_info=module_version_info_v1,
         resource_sets={"test::ResType_A[agent_X,key=key1]": "set-a", "test::ResType_A[agent_Y,key=key1]": "set-b"},
-        pip_config=PipConfig(constraints_file_content=None),
+        project_constraints=None,
     )
 
     assert result.code == 200
@@ -1011,101 +1010,3 @@ async def test_project_constraints_in_agent_code_install(server, client, environ
     assert res.code == 200
 
     await wait_until_deployment_finishes(client, environment, version=version)
-
-    result = await client.put_partial(
-        tid=environment,
-        resources=get_resources(0),
-        resource_state={},
-        unknowns=[],
-        version_info={},
-        module_version_info=module_version_info_v0,
-        resource_sets={"test::ResType_A[agent_X,key=key1]": "set-a", "test::ResType_A[agent_Y,key=key1]": "set-b"},
-        pip_config=PipConfig(constraints_file_hash=constraints_file_hash),
-    )
-    assert result.code == 400
-    assert result.result["message"] == (
-        "Invalid request: Cannot perform partial export because the source code for module test in this partial version is "
-        "different from the currently registered source code. Consider running a full export instead. Alternatively, if you "
-        "are sure the new code is compatible and want to forcefully update, you can bypass this version check with the "
-        "`--allow-handler-code-update` CLI option."
-    )
-
-
-@pytest.mark.parametrize("auto_start_agent", [True])
-async def test_debug_project_constraints_in_agent_code_install(server, client, environment, clienthelper):
-    """
-    Check that registered constraints get propagated into the agents' venv blueprints.
-
-    The test_process_manager test in test_agent_executor.py checks that these constraints
-    are taken into account during agent code install.
-    """
-    codemanager = CodeManager()
-    version = await clienthelper.get_version()
-
-    def get_resources(version: int) -> list[dict]:
-        resources = [
-            {
-                "key": "key1",
-                "value": "value1",
-                "id": "test::ResType_A[agent_X,key=key1],v=%d" % version,
-                "send_event": False,
-                "purged": False,
-                "requires": [],
-            },
-            {
-                "key": "key1",
-                "value": "value1",
-                "id": "test::ResType_A[agent_Y,key=key1],v=%d" % version,
-                "send_event": False,
-                "purged": False,
-                "requires": [],
-            },
-        ]
-        return resources
-
-    content = "#The code"
-    hv1: str = await upload_file(client, content)
-
-    constraints = "dummy_constraint~=1.2.3\ndummy_constraint<5.5.5"
-    constraints_file_hash: str = await upload_file(client, constraints)
-
-    module_source_metadata1 = ModuleSourceMetadata(
-        name="inmanta_plugins.test",
-        hash_value=hv1,
-        is_byte_code=False,
-    )
-
-    module_version_info_v0 = {
-        "test": InmantaModuleDTO(
-            name="test",
-            version="0.0.0",
-            files_in_module=[module_source_metadata1],
-            requirements=[],
-            for_agents=["agent_X", "agent_Y"],
-        )
-    }
-
-    result = await client.put_version(
-        tid=environment,
-        version=version,
-        resources=get_resources(version),
-        resource_state={},
-        unknowns=[],
-        version_info={},
-        compiler_version=get_compiler_version(),
-        module_version_info=module_version_info_v0,
-        resource_sets={"test::ResType_A[agent_X,key=key1]": "set-a", "test::ResType_A[agent_Y,key=key1]": "set-b"},
-        pip_config=PipConfig(constraints_file_hash=constraints_file_hash),
-    )
-
-    assert result.code == 200
-
-    await check_code_for_version(
-        version=1,
-        environment=environment,
-        codemanager=codemanager,
-        agent_names=["agent_X", "agent_Y"],
-        module_name="test",
-        expected_source=b"#The code",
-        expected_constraints=constraints,
-    )
