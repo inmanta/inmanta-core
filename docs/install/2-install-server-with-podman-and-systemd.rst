@@ -194,7 +194,7 @@ Start the server with systemd
 #############################
 
 With the quadlet project, we can write simplified unit files for pod and containers and let podman generate the corresponding systemd services.
-To learn more about quadlet and how podman integrates nicely with systemd, please refer to `podman's documentation <https://docs.podman.io/en/latest/markdown/podman-quadlet.7.html>`_.
+To learn more about quadlet and how podman integrates nicely with systemd, please refer to `podman's documentation <https://docs.podman.io/en/latest/markdown/podman-systemd.unit.5.html>`_.
 
 Step 1: Install the required files
 ----------------------------------
