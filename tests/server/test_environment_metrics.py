@@ -763,7 +763,6 @@ async def test_agent_count_metric(clienthelper, client, server):
 
     resource1 = data.Resource(
         environment=env1.id,
-        model=1,
         agent="agent1",
         resource_id="",
         resource_type="",
@@ -773,7 +772,6 @@ async def test_agent_count_metric(clienthelper, client, server):
     await resource1.insert()
     resource2 = data.Resource(
         environment=env2.id,
-        model=1,
         agent="agent2",
         resource_id="",
         resource_type="",

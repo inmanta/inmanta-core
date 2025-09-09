@@ -490,18 +490,21 @@ class ResourceScheduler(TaskManager):
             if reset_deploy_progress:
                 await data.Scheduler._execute_query(
                     f"""
-                    WITH latest_released_version AS (
-                        SELECT MAX(version) AS version
-                        FROM public.configurationmodel
-                        WHERE released IS TRUE
-                          AND environment=$1
+                    WITH resources_in_latest_version AS (
+                        SELECT r.resource_id, r.environment
+                        FROM resource_set_configuration_model AS rscm
+                        INNER JOIN {data.Resource.table_name()} AS r
+                            ON rscm.environment=r.environment
+                            AND rscm.resource_set_id=r.resource_set_id
+                        WHERE rscm.environment=$1
+                            AND rscm.model=(SELECT MAX(cm.version)
+                                              FROM {data.ConfigurationModel.table_name()} AS cm
+                                              WHERE cm.environment=$1)
                     )
                     UPDATE {data.ResourcePersistentState.table_name()} AS rps
                     SET is_orphan=NOT EXISTS (
                         SELECT 1
-                        FROM resource r
-                        JOIN latest_released_version lrv
-                          ON r.model=lrv.version
+                        FROM resources_in_latest_version AS r
                         WHERE r.resource_id=rps.resource_id
                           AND r.environment=rps.environment
                     )

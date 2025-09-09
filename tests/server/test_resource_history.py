@@ -33,6 +33,7 @@ from inmanta.const import ResourceState
 from inmanta.server import config
 from inmanta.types import ResourceVersionIdStr
 from inmanta.util import parse_timestamp
+from utils import insert_with_link_to_configuration_model
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 
@@ -69,7 +70,7 @@ class ResourceFactory:
         key = f"{resource_type}[{agent},name={name}]"
         if (environment, version) not in self.resource_set_per_version:
             resource_set = data.ResourceSet(environment=environment, id=uuid.uuid4())
-            await resource_set.insert()
+            await insert_with_link_to_configuration_model(resource_set, versions=[version])
             self.resource_set_per_version[(environment, version)] = resource_set
 
         res = data.Resource.new(
