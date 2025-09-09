@@ -499,12 +499,12 @@ def put_version(
     resources: list,
     module_version_info: dict[str, InmantaModule],
     resource_state: dict[inmanta.types.ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]] = {},
-    unknowns: Sequence[Mapping[str, PrimitiveTypes]] = None,
-    version_info: dict = None,
-    compiler_version: str = None,
-    resource_sets: dict[inmanta.types.ResourceIdStr, str] = {},
-    pip_config: PipConfig = None,
+    unknowns: Sequence[Mapping[str, PrimitiveTypes]] | None = None,
+    version_info: dict | None = None,
+    compiler_version: str | None = None,
+    resource_sets: dict[inmanta.types.ResourceIdStr, str | None] = {},
     project_constraints: str | None = None,
+    pip_config: PipConfig | None = None,
 ):
     """
     Store a new version of the configuration model

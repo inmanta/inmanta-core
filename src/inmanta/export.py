@@ -642,7 +642,7 @@ class Exporter:
         project = inmanta.module.Project.get()
         pip_config = project.metadata.pip
         project_constraints = project.get_all_constraints()
-        result = do_put(pip_config=pip_config, project_constraints=project_constraints)
+        result = do_put(project_constraints=project_constraints, pip_config=pip_config)
         if (
             result.code == 400
             and isinstance(result.result, dict)
