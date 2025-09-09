@@ -950,8 +950,6 @@ class PipConfig(BaseModel):
     pre: Optional[bool] = None
     use_system_config: bool = False
 
-    constraints_file_content: str | None = None
-
     def has_source(self) -> bool:
         """Can this config get packages from anywhere?"""
         return bool(self.index_url) or self.use_system_config

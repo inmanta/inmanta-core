@@ -5637,13 +5637,13 @@ class ConfigurationModel(BaseDocument):
 
     version: int
     environment: uuid.UUID
-    date: Optional[datetime.datetime] = None
+    date: datetime.datetime | None = None
     partial_base: Optional[int] = None
 
-    pip_config: Optional[PipConfig] = None
+    pip_config: PipConfig | None = None
 
     released: bool = False
-    version_info: Optional[dict[str, object]] = None
+    version_info: dict[str, object] | None = None
     is_suitable_for_partial_compiles: bool
 
     total: int = 0
@@ -5651,6 +5651,8 @@ class ConfigurationModel(BaseDocument):
     # cached state for release
     undeployable: list[ResourceIdStr] = []
     skipped_for_undeployable: list[ResourceIdStr] = []
+
+    project_constraints: str | None = None
 
     def __init__(self, **kwargs: object) -> None:
         super().__init__(**kwargs)

@@ -519,8 +519,6 @@ class Exporter:
 
         LOGGER.info("Sending resources and handler source to server")
 
-        code_manager.register_project_constraints()
-
         types = set()
 
         # Load both resource definition and handlers
@@ -609,7 +607,7 @@ class Exporter:
                 else:
                     LOGGER.debug("  %s not in any resource set", rid)
 
-        def do_put(**kwargs: object) -> protocol.Result:
+        def do_put(project_constraints: str | None = None, **kwargs: object) -> protocol.Result:
             if partial_compile:
                 result = self.client.put_partial(
                     tid=tid,
@@ -635,6 +633,7 @@ class Exporter:
                     version_info=version_info,
                     compiler_version=get_compiler_version(),
                     module_version_info=code_manager.get_module_version_info(),
+                    project_constraints=project_constraints,
                     **kwargs,
                 )
             return result
@@ -642,7 +641,8 @@ class Exporter:
         # Backward compatibility with ISO6 servers
         project = inmanta.module.Project.get()
         pip_config = project.metadata.pip
-        result = do_put(pip_config=pip_config)
+        project_constraints = project.get_all_constraints()
+        result = do_put(pip_config=pip_config, project_constraints=project_constraints)
         if (
             result.code == 400
             and isinstance(result.result, dict)

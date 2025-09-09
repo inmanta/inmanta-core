@@ -537,6 +537,8 @@ class ConfigurationModel(Base):
     resourceaction: Mapped[List["ResourceAction"]] = relationship("ResourceAction", back_populates="configurationmodel")
     unknownparameter: Mapped[List["UnknownParameter"]] = relationship("UnknownParameter", back_populates="configurationmodel")
 
+    project_constraints: Mapped[Optional[str]] = mapped_column(String)
+
 
 class DiscoveredResource(Base):
     __tablename__ = "discoveredresource"

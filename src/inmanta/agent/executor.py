@@ -112,6 +112,7 @@ class EnvBlueprint:
     requirements: Sequence[str]
     _hash_cache: str | None = dataclasses.field(default=None, init=False, repr=False)
     python_version: tuple[int, int]
+    project_constraints: str | None
 
     def __post_init__(self) -> None:
         # remove duplicates and make uniform
@@ -130,6 +131,7 @@ class EnvBlueprint:
                 "pip_config": self.pip_config.model_dump(),
                 "requirements": self.requirements,
                 "python_version": self.python_version,
+                "project_constraints": self.project_constraints,
             }
 
             # Serialize the blueprint dictionary to a JSON string, ensuring consistent ordering
@@ -148,11 +150,13 @@ class EnvBlueprint:
             self.pip_config,
             set(self.requirements),
             self.python_version,
+            self.project_constraints,
         ) == (
             other.environment_id,
             other.pip_config,
             set(other.requirements),
             other.python_version,
+            other.project_constraints,
         )
 
     def __hash__(self) -> int:
@@ -162,7 +166,7 @@ class EnvBlueprint:
         req = ",".join(str(req) for req in self.requirements)
         return (
             f"EnvBlueprint(environment_id={self.environment_id}, requirements=[{str(req)}], "
-            f"pip={self.pip_config}, python_version={self.python_version})"
+            f"constraints={self.project_constraints}, pip={self.pip_config}, python_version={self.python_version})"
         )
 
 
@@ -192,6 +196,9 @@ class ExecutorBlueprint(EnvBlueprint):
         assert len(env_ids) == 1
         sources = list({source for cd in code for source in cd.blueprint.sources})
         requirements = list({req for cd in code for req in cd.blueprint.requirements})
+        _constraints = list({cd.blueprint.project_constraints for cd in code})
+        assert len(_constraints) == 1
+        constraints = _constraints[0]
 
         pip_configs = [cd.blueprint.pip_config for cd in code]
         python_versions = [cd.blueprint.python_version for cd in code]
@@ -213,6 +220,7 @@ class ExecutorBlueprint(EnvBlueprint):
             sources=sources,
             requirements=requirements,
             python_version=base_python_version,
+            project_constraints=constraints,
         )
 
     def blueprint_hash(self) -> str:
@@ -232,6 +240,7 @@ class ExecutorBlueprint(EnvBlueprint):
                     [source.metadata.hash_value, source.metadata.name, source.metadata.is_byte_code] for source in self.sources
                 ],
                 "python_version": self.python_version,
+                "project_constraints": self.project_constraints,
             }
 
             # Serialize the extended blueprint dictionary to a JSON string, ensuring consistent ordering
@@ -251,6 +260,7 @@ class ExecutorBlueprint(EnvBlueprint):
             pip_config=self.pip_config,
             requirements=self.requirements,
             python_version=self.python_version,
+            project_constraints=self.project_constraints,
         )
 
     def __eq__(self, other: object) -> bool:
@@ -330,10 +340,10 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         Write the constraint file defined in the blueprint to disk and return the path
         to it, or None if no such constraint file is defined.
         """
-        if blueprint.pip_config.constraints_file_content is not None:
+        if blueprint.project_constraints is not None:
             constraint_file_path = pathlib.Path(self.env_path) / "requirements.txt"
             with constraint_file_path.open("w") as f:
-                f.write(blueprint.pip_config.constraints_file_content)
+                f.write(blueprint.project_constraints)
             return str(constraint_file_path)
 
         return None

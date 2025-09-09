@@ -29,7 +29,6 @@ from inmanta.data.model import LEGACY_PIP_DEFAULT, ModuleSource, ModuleSourceMet
 from inmanta.util.async_lru import async_lru_cache
 from sqlalchemy import and_, select
 
-
 LOGGER = logging.getLogger(__name__)
 
 
@@ -66,8 +65,9 @@ class CodeManager:
                 models.ModuleFiles.python_module_name,
                 models.ModuleFiles.file_content_hash,
                 models.ModuleFiles.is_byte_code,
-                models.File.content,
+                models.File.content.label("source_file_content"),
                 models.ConfigurationModel.pip_config,
+                models.ConfigurationModel.project_constraints,
             )
             .join(
                 models.InmantaModule,
@@ -117,6 +117,7 @@ class CodeManager:
                     assert row.inmanta_module_version == first_row.inmanta_module_version
                     assert row.pip_config == first_row.pip_config
                     assert set(row.requirements) == set(first_row.requirements)
+                    assert row.project_constraints == first_row.project_constraints
 
                 _pip_config = first_row.pip_config
                 pip_config = LEGACY_PIP_DEFAULT if _pip_config is None else PipConfig(**_pip_config)
@@ -140,6 +141,7 @@ class CodeManager:
                             ],
                             python_version=sys.version_info[:2],
                             environment_id=environment,
+                            project_constraints=first_row.project_constraints if first_row.project_constraints else None,
                         ),
                     )
                 )

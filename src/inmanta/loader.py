@@ -85,7 +85,6 @@ class CodeManager:
         # Map of [inmanta_module_name, inmanta module]
         self.module_version_info: dict[str, "InmantaModule"] = {}
 
-
     def build_agent_map(self, resources: dict["Id", "Resource"]) -> None:
         """
         Construct a map of which agents are registered to deploy which resource type.
@@ -95,21 +94,9 @@ class CodeManager:
         for id in resources:
             self._types_to_agent[id.entity_type].add(id.agent_name)
 
-    def register_project_constraints(self) -> None:
-        """
-        Helper method to retrieve all package constraints defined at the project level and compile them
-        into a single string.
-
-        This string is added to the project's pip config to be used by the agents when installing
-        packages into their venv.
-        """
-        _project = module.Project.get()
-        _project.write_constraints_to_pip_config()
-
-
     def register_code(self, type_name: str, instance: object) -> None:
         """Register the given type_object under the type_name and register the source associated with this type object.
-        This method assumes the build_agent_map method and the register_project_constraints method were called first.
+        This method assumes the build_agent_map method was called first.
 
         :param type_name: The inmanta type name for which the source of type_object will be registered.
             For example std::testing::NullResource
