@@ -330,7 +330,7 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         Write the constraint file defined in the blueprint to disk and return the path
         to it, or None if no such constraint file is defined.
         """
-        if blueprint.pip_config.constraints_file_hash is not None and blueprint.pip_config.constraints_file_content:
+        if blueprint.pip_config.constraints_file_content is not None:
             constraint_file_path = pathlib.Path(self.env_path) / "requirements.txt"
             with constraint_file_path.open("w") as f:
                 f.write(blueprint.pip_config.constraints_file_content)

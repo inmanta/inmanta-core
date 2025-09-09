@@ -568,6 +568,7 @@ async def check_code_for_version(
             if module.module_name == module_name:
                 assert len(module.blueprint.sources) == 1
                 assert module.blueprint.sources[0].source == expected_source
+                assert module.blueprint.pip_config.constraints_file_content == expected_constraints
                 break
         else:
             assert False, f"Module {module_name} is not registered in version {version}."
@@ -951,7 +952,7 @@ async def test_project_constraints_in_agent_code_install(server, client, environ
         compiler_version=get_compiler_version(),
         module_version_info=module_version_info_v0,
         resource_sets={"test::ResType_A[agent_X,key=key1]": "set-a", "test::ResType_A[agent_Y,key=key1]": "set-b"},
-        pip_config=PipConfig(constraints_file_hash=constraints_file_hash),
+        pip_config=PipConfig(constraints_file_content=constraints),
     )
 
     assert result.code == 200
@@ -992,7 +993,7 @@ async def test_project_constraints_in_agent_code_install(server, client, environ
         compiler_version=get_compiler_version(),
         module_version_info=module_version_info_v1,
         resource_sets={"test::ResType_A[agent_X,key=key1]": "set-a", "test::ResType_A[agent_Y,key=key1]": "set-b"},
-        pip_config=PipConfig(constraints_file_hash=constraints_file_hash),
+        pip_config=PipConfig(constraints_file_content=None),
     )
 
     assert result.code == 200

@@ -947,7 +947,6 @@ class PipConfig(BaseModel):
     pre: Optional[bool] = None
     use_system_config: bool = False
 
-    constraints_file_hash: str | None = None
     constraints_file_content: str | None = None
 
     def has_source(self) -> bool:
