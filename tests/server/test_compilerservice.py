@@ -766,7 +766,7 @@ async def test_server_recompile(server, client, environment, monkeypatch):
     # Assert no protected environment settings
     result = await client.environment_settings_list(tid=environment)
     assert result.code == 200
-    for s in result.result["data"]["settings_v2"].values():
+    for s in result.result["data"]["definition"].values():
         assert not s["protected"]
         assert s["protected_by"] is None
 
@@ -821,7 +821,7 @@ async def test_server_recompile(server, client, environment, monkeypatch):
     # Assert protection
     result = await client.environment_settings_list(tid=environment)
     assert result.code == 200
-    for setting_name, s in result.result["data"]["settings_v2"].items():
+    for setting_name, s in result.result["data"]["definition"].items():
         if setting_name in {data.ENVIRONMENT_METRICS_RETENTION, data.NOTIFICATION_RETENTION}:
             assert s["protected"]
             assert model.ProtectedBy(s["protected_by"]) == model.ProtectedBy.project_yml

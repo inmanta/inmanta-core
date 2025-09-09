@@ -224,12 +224,14 @@ class TaskRunner:
         self._scheduler = scheduler
         self._task: typing.Optional[asyncio.Task[None]] = None
         self._notify_tasks: dict[uuid.UUID, asyncio.Task[None]] = {}
+        # Lock to prevent race conditions on the running state of this TaskRunner
+        self._notify_lock = asyncio.Lock()
 
     async def start(self) -> None:
-        self.status = AgentStatus.STARTED
         assert (
             self._task is None or self._task.done()
         ), f"Task Runner {self.endpoint} is trying to start twice, this should not happen"
+        self.status = AgentStatus.STARTED
         self._task = asyncio.create_task(self._run())
 
     async def stop(self) -> None:
@@ -254,20 +256,23 @@ class TaskRunner:
         :param task_id: Is not None if this task was started using the `notify_sync()` method. It's used to clean up the
                         reference to the associated asyncio.Task object in `self._notify_tasks`. This value is None otherwise.
         """
-        should_be_running = await self._scheduler.should_be_running() and await self._scheduler.should_runner_be_running(
-            endpoint=self.endpoint
-        )
+        try:
+            async with self._notify_lock:
+                should_be_running = (
+                    await self._scheduler.should_be_running()
+                    and await self._scheduler.should_runner_be_running(endpoint=self.endpoint)
+                )
 
-        match self.status:
-            case AgentStatus.STARTED if not should_be_running:
-                await self.stop()
-            case AgentStatus.STOPPED if should_be_running:
-                await self.start()
-            case AgentStatus.STOPPING if should_be_running:
-                self.status = AgentStatus.STARTED
-
-        if task_id:
-            del self._notify_tasks[task_id]
+                match self.status:
+                    case AgentStatus.STARTED if not should_be_running:
+                        await self.stop()
+                    case AgentStatus.STOPPED if should_be_running:
+                        await self.start()
+                    case AgentStatus.STOPPING if should_be_running:
+                        self.status = AgentStatus.STARTED
+        finally:
+            if task_id:
+                del self._notify_tasks[task_id]
 
     def notify_sync(self) -> None:
         """
@@ -289,7 +294,6 @@ class TaskRunner:
                 LOGGER.exception(
                     "Task %s for agent %s has failed and the exception was not properly handled", work_item.task, self.endpoint
                 )
-
             self._scheduler._work.agent_queues.task_done(self.endpoint, work_item.task)
 
         self.status = AgentStatus.STOPPED
@@ -356,6 +360,8 @@ class ResourceScheduler(TaskManager):
         self.state_update_manager = ToDbUpdateManager(client, environment)
 
         self._timer_manager = timers.TimerManager(self)
+
+        self._deployment_suspended: bool = False
 
     async def _reset(self) -> None:
         """
@@ -1051,6 +1057,8 @@ class ResourceScheduler(TaskManager):
         :param endpoint: The name of the agent
         """
         await data.Agent.insert_if_not_exist(environment=self.environment, endpoint=endpoint)
+        if self._deployment_suspended:
+            return False
         current_agent = await data.Agent.get(env=self.environment, endpoint=endpoint)
         return not current_agent.paused
 
@@ -1598,3 +1606,21 @@ class ResourceScheduler(TaskManager):
                 resource_states=resource_states_in_db,
                 discrepancies=discrepancy_map,
             )
+
+    async def suspend_deployments(self, reason: str) -> None:
+        """
+        Suspend all agent operations. All other scheduler functionality remains active.
+        """
+        LOGGER.info("Suspending all deployment operations: %s", reason)
+        self._deployment_suspended = True
+        await asyncio.gather(*[worker.stop() for worker in self._workers.values()])
+        self._work.add_poison_pill_to_agent_queues(reason=reason)
+        await asyncio.gather(*[worker.join() for worker in self._workers.values()])
+
+    async def resume_deployments(self) -> None:
+        """
+        Resume all agent operations.
+        """
+        LOGGER.info("Resuming all deployment operations.")
+        self._deployment_suspended = False
+        await self.refresh_all_agent_states_from_db()

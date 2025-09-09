@@ -399,13 +399,13 @@ class Resource(metaclass=ResourceMeta):
 
                 agent_value = getattr(agent_value, el)
 
-                if isinstance(agent_value, references.Reference):
-                    current_path: str = ".".join(path_elements[: i + 1])
-                    raise ResourceException(
-                        "Encountered reference in resource's agent attribute. Agent attribute values can not be references."
-                        f" Encountered at attribute {current_path!r} of resource instance {model_object}"
-                    )
-
+            except inmanta.ast.UnexpectedReference:
+                # Clean up exception
+                current_path: str = ".".join(path_elements[: i + 1])
+                raise ResourceException(
+                    "Encountered reference in resource's agent attribute. Agent attribute values can not be references."
+                    f" Encountered at attribute {current_path!r} of resource instance {model_object}"
+                )
             except (ResourceException, inmanta.ast.UnsetException, inmanta.ast.UnknownException):
                 raise
             except Exception:
@@ -413,9 +413,10 @@ class Resource(metaclass=ResourceMeta):
                     "Unable to get the name of agent %s belongs to. In path %s, '%s' does not exist"
                     % (model_object, agent_attribute, el)
                 )
-
-        attribute_value = cls.map_field(None, entity_name, attribute_name, model_object)
-        if isinstance(attribute_value, references.Reference):
+        try:
+            attribute_value = cls.map_field(None, entity_name, attribute_name, model_object)
+        except inmanta.ast.UnexpectedReference:
+            # Clean up exception
             raise ResourceException(
                 "Encountered reference in resource's id attribute. Id attribute values can not be references."
                 f" Encountered at attribute {attribute_name!r} of resource instance {model_object}"
@@ -451,8 +452,6 @@ class Resource(metaclass=ResourceMeta):
                 value = mthd(exporter, model_object)
             elif hasattr(cls, "map") and field_name in cls.map:
                 value = cls.map[field_name](exporter, model_object)
-            elif isinstance(model_object, proxy.DynamicProxy):
-                value = getattr(model_object._allow_references(), field_name)
             else:
                 value = getattr(model_object, field_name)
 
@@ -495,12 +494,13 @@ class Resource(metaclass=ResourceMeta):
         obj_id = resource_cls.object_to_id(model_object, entity_name, options["name"], options["agent"])
         obj = resource_cls(obj_id)
 
-        # map all fields
-        reference_collector = ReferenceCollector(obj)
-        fields: dict[str, object] = {
-            field: resource_cls.map_field(exporter, entity_name, field, model_object, reference_collector)
-            for field in resource_cls.fields
-        }
+        with proxy.exportcontext:
+            # map all fields
+            reference_collector = ReferenceCollector(obj)
+            fields: dict[str, object] = {
+                field: resource_cls.map_field(exporter, entity_name, field, model_object, reference_collector)
+                for field in resource_cls.fields
+            }
 
         fields[const.RESOURCE_ATTRIBUTE_REFERENCES] = list(reference_collector.references.values())
         fields[const.RESOURCE_ATTRIBUTE_MUTATORS] = reference_collector.mutators
@@ -677,6 +677,12 @@ class Resource(metaclass=ResourceMeta):
         res = Resource.deserialize(self.serialize())
         for k, v in kwargs.items():
             setattr(res, k, v)
+
+        # Resources are copied in the hanlder, the cache has to be retained!
+        res._resolved = self._resolved
+        # In every case, share caches with child
+        res._references = self._references
+        res._references_model = self._references_model
 
         return res
 

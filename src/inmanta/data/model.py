@@ -308,6 +308,15 @@ class ProtectedBy(str, Enum):
                 assert_never(unreachable)
 
 
+class EnvironmentSettingDefinitionAPI(EnvironmentSetting):
+    """
+    The definition of an environment setting as served out over the API.
+    """
+
+    protected: bool = False
+    protected_by: ProtectedBy | None = None
+
+
 class EnvironmentSettingDetails(BaseModel):
     """
     A class that stores the value and other metadata about an environment setting.
@@ -325,15 +334,9 @@ class EnvironmentSettingDetails(BaseModel):
 
 
 class EnvironmentSettingsReponse(BaseModel):
-    """
-    :param settings_v2: This attribute aims to replace the `settings` attribute. Next to the value
-                        of the setting this field contains additional information such as whether
-                        the setting is protected or not.
-    """
 
     settings: dict[str, EnvSettingType]
-    settings_v2: dict[str, EnvironmentSettingDetails]
-    definition: dict[str, EnvironmentSetting]
+    definition: dict[str, EnvironmentSettingDefinitionAPI]
 
 
 class ModelMetadata(BaseModel):

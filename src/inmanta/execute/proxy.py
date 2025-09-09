@@ -16,12 +16,14 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import contextvars
 import dataclasses
 import enum
 from collections.abc import Iterator, Mapping, Sequence
 from copy import copy
 from dataclasses import is_dataclass
-from typing import TYPE_CHECKING, Callable, Optional, Self, Union
+from types import TracebackType
+from typing import TYPE_CHECKING, Callable, ContextManager, Optional, Self, Union
 
 # Keep UnsetException, UnknownException and AttributeNotFound in place for backward compat with <iso8
 from inmanta import references
@@ -62,7 +64,28 @@ class ProxyMode(enum.Enum):
     EXPORT = enum.auto()
 
 
-@dataclasses.dataclass(kw_only=True, frozen=True, slots=True)
+global_proxy_mode: contextvars.ContextVar[ProxyMode] = contextvars.ContextVar("global_proxy_mode", default=ProxyMode.PLUGIN)
+"""
+This variable controls the behavior of all proxy objects
+
+It is global variable for performance reasons. Dynamic proxies are extremely performance sensitive because the are use a lot
+"""
+
+
+class ExportContext(ContextManager[None]):
+
+    def __enter__(self) -> None:
+        global_proxy_mode.set(ProxyMode.EXPORT)
+
+    def __exit__(
+        self, exc_type: type[BaseException] | None, exc_val: BaseException | None, traceback: TracebackType | None
+    ) -> None:
+        global_proxy_mode.set(ProxyMode.PLUGIN)
+
+
+exportcontext = ExportContext()
+
+
 class ProxyContext:
     """
     Context for creating proxy objects. Declares whether the object has already passed certain validation or whether certain
@@ -73,35 +96,51 @@ class ProxyContext:
     contain references that are not (can not be) declared. Since we require reference support to always be explicit, we have
     to reject reference values in such cases.
 
+    The global_proxy_mode determines the overall behavior:
+    1. when in export mode, references are always allowed
+    2. when in plugin mode, reference access is controlled by allow_reference_values and validated
+
+
     :param validated: True iff the object to proxy has been validated at the plugin boundary.
     :param allow_reference_values: Allow references for values accessed through this proxy. Either because they have been
         declared and validated, or because explicitly requested. Defaults to allow references iff the object has been
         validated. Kept as a separate field to allow overrides for a single proxy object while maintaining behavior for
-        nested proxies.
+        nested proxies. This value is not passed on to children.
     :param path: The path, within the plugin's argument namespace, where this object lives. Should be compatible with
         composition at the tail, e.g. `list_arg[0].attr`.
     """
 
-    path: str
-    mode: ProxyMode = ProxyMode.PLUGIN
-    validated: bool = True
-    allow_reference_values: Optional[bool] = None
+    __slots__ = ("path", "validated", "allow_reference_values")
 
-    def nested(self: Self, *, relative_path: str) -> Self:
+    def __init__(self, *, path: str, validated: bool = True, allow_reference_values: Optional[bool] = None) -> None:
+        self.path = path
+        self.validated = validated
+        self.allow_reference_values = allow_reference_values
+
+    def nested(self, *, relative_path: str) -> "ProxyContext":
         """
         Returns a context object for values nested one level deeper than the current context.
 
         :param relative_path: The path of new object, relative to the current context.
         """
-        return dataclasses.replace(
-            self,
+        return ProxyContext(
             path=self.path + relative_path,
+            validated=self.validated,
             # we're proxying elements one level deeper than the current context
             # => reset allow_reference_values to default behavior
             allow_reference_values=None,
         )
 
+    def allow_references(self) -> "ProxyContext":
+        return ProxyContext(
+            path=self.path,
+            validated=self.validated,
+            allow_reference_values=True,
+        )
+
     def should_allow_references(self) -> bool:
+        if global_proxy_mode.get() is ProxyMode.EXPORT:
+            return True
         return self.allow_reference_values if self.allow_reference_values is not None else self.validated
 
 
@@ -145,7 +184,7 @@ class DynamicProxy:
         """
         # don't just call constructor for backwards compatibility: some children outside of core might not have context arg
         new: Self = copy(self)
-        object.__setattr__(new, "__context", dataclasses.replace(self._get_context(), allow_reference_values=True))
+        object.__setattr__(new, "__context", self._get_context().allow_references())
         return new
 
     @classmethod
@@ -278,7 +317,15 @@ class DynamicProxy:
             value,
             # DSL instances are a black box as far as boundary validation is concerned
             # => from here on out, consider the object not validated, except during export
-            context=dataclasses.replace(context, validated=context.mode is ProxyMode.EXPORT),
+            context=(
+                ProxyContext(
+                    path=context.path,
+                    validated=False,
+                    allow_reference_values=None,
+                )
+                if context.validated
+                else context
+            ),
         )
 
     def _return_value(self, value: object, *, relative_path: str) -> object:

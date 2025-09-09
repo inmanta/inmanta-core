@@ -13,19 +13,23 @@ Contact: code@inmanta.com
 """
 
 import asyncio
+import base64
 import concurrent.futures
+import hashlib
 import json
 import os
 import subprocess
 import sys
 import uuid
+from datetime import datetime
 
 import pytest
 
+from inmanta import config, const, data
 from inmanta.agent import config as agent_config
 from inmanta.agent import executor
-from inmanta.data import PipConfig
-from utils import PipIndex
+from inmanta.data import PipConfig, model
+from utils import PipIndex, get_compiler_version, retry_limited, wait_until_deployment_finishes
 
 
 async def test_blueprint_hash_consistency(tmpdir):
@@ -189,6 +193,200 @@ async def test_environment_creation_locking(pip_index, tmpdir) -> None:
     await venv_manager_2.start()
     assert manager.pool.keys() == venv_manager_2.pool.keys()
     await venv_manager_2.request_shutdown()
+
+
+@pytest.mark.parametrize("auto_start_agent", [True])
+async def test_remove_executor_virtual_envs(
+    clienthelper,
+    server,
+    client,
+    environment,
+) -> None:
+    """
+    Verify the logic to remove all the Python environments used by the executors.
+    """
+    state_dir = config.Config.get("config", "state-dir")
+    venvs_dir = os.path.join(state_dir, "server", environment, "executors", "venvs")
+    # Increase the executor retention time so that it doesn't get cleaned up by the cleanup job.
+    agent_config.agent_executor_retention_time.set("3600")
+
+    # Disable all time-based deploy triggers
+    result = await client.set_setting(environment, data.AUTOSTART_AGENT_REPAIR_INTERVAL, "0")
+    assert result.code == 200
+    result = await client.set_setting(environment, data.AUTOSTART_AGENT_DEPLOY_INTERVAL, "0")
+    assert result.code == 200
+
+    version = await clienthelper.get_version()
+    resources = [
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": f"test::Resource[agent1,key=key1],v={version}",
+            "send_event": False,
+            "purge_on_delete": False,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "key": "key2",
+            "value": "value2",
+            "id": f"test::Resource[agent2,key=key2],v={version}",
+            "send_event": False,
+            "purge_on_delete": False,
+            "purged": False,
+            "requires": [],
+        },
+    ]
+    content = """
+import inmanta.agent.handler
+import inmanta.resources
+
+@inmanta.resources.resource("test::Resource", agent="agent", id_attribute="key")
+class Resource(inmanta.resources.PurgeableResource):
+    key: str
+    value: str
+
+    fields = ("key", "value")
+
+
+@inmanta.agent.handler.provider("test::Resource", name="test")
+class ResourceH(inmanta.agent.handler.CRUDHandler[Resource]):
+    def read_resource(
+        self, ctx: inmanta.agent.handler.HandlerContext, resource: Resource
+    ) -> None:
+        raise inmanta.agent.handler.ResourcePurged()
+
+    def create_resource(
+        self, ctx: inmanta.agent.handler.HandlerContext, resource: Resource
+    ) -> None:
+        ctx.set_created()
+
+    def update_resource(
+        self,
+        ctx: inmanta.agent.handler.HandlerContext,
+        changes: dict,
+        resource: Resource,
+    ) -> None:
+        pass
+
+    def delete_resource(
+        self, ctx: inmanta.agent.handler.HandlerContext, resource: Resource
+    ) -> None:
+        pass
+
+    """
+    sha1sum = hashlib.new("sha1")
+    sha1sum.update(content.encode())
+    hv1: str = sha1sum.hexdigest()
+    await client.upload_file(hv1, content=base64.b64encode(content.encode()).decode("ascii"))
+
+    module_source_metadata = model.ModuleSourceMetadata(
+        name="inmanta_plugins.test",
+        hash_value=hv1,
+        is_byte_code=False,
+    )
+
+    module_version_info = {
+        "test": model.InmantaModule(
+            name="test",
+            version="0.0.0",
+            files_in_module=[module_source_metadata],
+            requirements=[],
+            for_agents=["agent1", "agent2"],
+        )
+    }
+
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        resource_state={},
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+        module_version_info=module_version_info,
+    )
+    assert result.code == 200
+    result = await client.release_version(tid=environment, id=version)
+    assert result.code == 200
+    await wait_until_deployment_finishes(client, environment, version=version, timeout=10)
+    result = await client.resource_list(environment, deploy_summary=True)
+    assert result.code == 200
+    assert result.result["metadata"]["deploy_summary"]["by_state"]["deployed"] == 2
+
+    # Assert we have a Python environment
+    assert len(os.listdir(venvs_dir)) == 1
+
+    # Trigger removal of executor venvs
+    result = await client.all_agents_action(tid=environment, action=const.AllAgentAction.remove_all_agent_venvs.value)
+    assert result.code == 200
+
+    async def venv_removal_finished() -> bool:
+        result = await client.list_notifications(tid=environment)
+        assert result.code == 200
+        return any(n for n in result.result["data"] if n["title"] == "Agent venv removal finished")
+
+    await retry_limited(venv_removal_finished, timeout=10)
+
+    # Assert that the venv was removed
+    assert len(os.listdir(venvs_dir)) == 0
+
+    # Verify notifications
+    result = await client.list_notifications(tid=environment)
+    assert result.code == 200
+    start_removal_notification = [n for n in result.result["data"] if n["title"] == "Agent operations suspended"]
+    assert len(start_removal_notification) == 1
+    end_removal_notification = [n for n in result.result["data"] if n["title"] == "Agent venv removal finished"]
+    assert len(end_removal_notification) == 1
+    assert not any(n for n in result.result["data"] if n["title"] == "Agent venv removal failed")
+    assert datetime.fromisoformat(start_removal_notification[0]["created"]) < datetime.fromisoformat(
+        end_removal_notification[0]["created"]
+    )
+
+    # Trigger a new deployment
+    version = await clienthelper.get_version()
+    resources = [
+        {
+            "key": "key1",
+            "value": "new_value",
+            "id": f"test::Resource[agent1,key=key1],v={version}",
+            "send_event": False,
+            "purge_on_delete": False,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "key": "key2",
+            "value": "new_value",
+            "id": f"test::Resource[agent2,key=key2],v={version}",
+            "send_event": False,
+            "purge_on_delete": False,
+            "purged": False,
+            "requires": [],
+        },
+    ]
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        resource_state={},
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+        module_version_info=module_version_info,
+    )
+    assert result.code == 200
+    result = await client.release_version(tid=environment, id=version)
+    assert result.code == 200
+    await wait_until_deployment_finishes(client, environment, version=version, timeout=10)
+
+    # Verify that deployment was successful
+    result = await client.resource_list(environment, deploy_summary=True)
+    assert result.code == 200
+    assert result.result["metadata"]["deploy_summary"]["by_state"]["deployed"] == 2
+
+    # Assert we have a Python environment again
+    assert len(os.listdir(venvs_dir)) == 1
 
 
 async def test_recovery_virtual_environment_manager(tmpdir, pip_index, async_finalizer):

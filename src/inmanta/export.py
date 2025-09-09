@@ -35,7 +35,8 @@ from inmanta.ast import CompilerException, Namespace, UnknownException
 from inmanta.ast.entity import Entity
 from inmanta.config import Option, is_list, is_uuid_opt
 from inmanta.data import model
-from inmanta.execute.proxy import DynamicProxy, ProxyContext, ProxyMode
+from inmanta.execute import proxy
+from inmanta.execute.proxy import DynamicProxy, ProxyContext
 from inmanta.execute.runtime import Instance
 from inmanta.resources import Id, IgnoreResourceException, Resource, resource, to_id
 from inmanta.stable_api import stable_api
@@ -148,8 +149,7 @@ class Exporter:
         for t in types:
             if self.types is not None and t in self.types:
                 proxies[t] = [
-                    DynamicProxy.return_value(i, context=ProxyContext(path=f"<{i}>", mode=ProxyMode.EXPORT))
-                    for i in self.types[t].get_all_instances()
+                    DynamicProxy.return_value(i, context=ProxyContext(path=f"<{i}>")) for i in self.types[t].get_all_instances()
                 ]
             else:
                 proxies[t] = []
@@ -177,9 +177,7 @@ class Exporter:
                         res = Resource.create_from_model(
                             self,
                             resource_type,
-                            DynamicProxy.return_value(
-                                instance, context=ProxyContext(path=f"<{instance}>", mode=ProxyMode.EXPORT)
-                            ),
+                            DynamicProxy.return_value(instance, context=ProxyContext(path=f"<{instance}>")),
                         )
                         resource_mapping[instance] = res
                         self.add_resource(res)
@@ -264,11 +262,12 @@ class Exporter:
         if name not in Exporter.__export_functions:
             raise Exception("Export function %s does not exist." % name)
 
-        types, function = Exporter.__export_functions[name]
-        if len(types) > 0:
-            function(self, types=self._get_instance_proxies_of_types(types))
-        else:
-            function(self)
+        with proxy.exportcontext:
+            types, function = Exporter.__export_functions[name]
+            if len(types) > 0:
+                function(self, types=self._get_instance_proxies_of_types(types))
+            else:
+                function(self)
 
     def _call_dep_manager(self, types: ModelDict) -> None:
         """

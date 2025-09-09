@@ -74,7 +74,21 @@ def round_trip_resource(resource):
     serialized = resource.serialize()
     data = json.dumps(serialized, default=util.api_boundary_json_encoder)
     r = resources.Resource.deserialize(json.loads(data))
+
+    # Test cloning includes caches
+    clone = r.clone()
+    assert clone._references_model == r._references_model
+    assert clone._references == r._references
+    assert clone._resolved == r._resolved
     r.resolve_all_references(PythonLogger(logging.getLogger("test.refs")))
+    # old clone shares cache, but not resolved state, as it has not been mutated
+    assert clone._references_model == r._references_model
+    assert clone._references == r._references
+    assert clone._resolved != r._resolved
+    clone = r.clone()
+    assert clone._references_model == r._references_model
+    assert clone._references == r._references
+    assert clone._resolved == r._resolved
     return r
 
 
@@ -373,8 +387,20 @@ def test_decoding_legacy_resources(snippetcompiler, modules_v2_dir):
         """
 
     r = resources.Resource.deserialize(json.loads(old_resource))
+    # Test cloning includes caches
+    clone = r.clone()
+    assert clone._references_model == r._references_model
+    assert clone._references == r._references
+    assert clone._resolved == r._resolved
     r.resolve_all_references(PythonLogger(logging.getLogger("test.refs")))
-    return r
+    # old clone shares cache, but not resolved state, as it has not been mutated
+    assert clone._references_model == r._references_model
+    assert clone._references == r._references
+    assert clone._resolved != r._resolved
+    clone = r.clone()
+    assert clone._references_model == r._references_model
+    assert clone._references == r._references
+    assert clone._resolved == r._resolved
 
 
 def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:

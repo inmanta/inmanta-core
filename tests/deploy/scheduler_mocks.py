@@ -178,6 +178,13 @@ class DummyManager(executor.ExecutorManager[executor.Executor]):
             self.executors[agent_name] = DummyExecutor()
         return self.executors[agent_name]
 
+    def get_environment_manager(self) -> None:
+        return None
+
+    async def stop_all_executors(self) -> list[DummyExecutor]:
+        for ex in self.executors.values():
+            await ex.stop()
+
     async def stop_for_agent(self, agent_name: str) -> list[DummyExecutor]:
         pass
 
@@ -297,7 +304,6 @@ class TestScheduler(ResourceScheduler):
     def __init__(self, environment: uuid.UUID, executor_manager: executor.ExecutorManager[executor.Executor], client: Client):
         super().__init__(environment, executor_manager, client)
         # Bypass DB
-        self.executor_manager = self.executor_manager
         self.code_manager = DummyCodeManager()
         self.mock_versions = {}
         self.state_update_manager = DummyStateManager()

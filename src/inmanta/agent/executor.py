@@ -394,6 +394,12 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         This method must be called on a threadpool to not block the ioloop.
         """
         try:
+            # Remove the status file first. Like this we will rebuild the venv on use
+            # if the rmtree() call was interrupted because of a system failure.
+            os.remove(self.inmanta_venv_status_file)
+        except Exception:
+            pass
+        try:
             LOGGER.debug("Removing venv %s", self.env_path)
             shutil.rmtree(self.env_path)
         except Exception:
@@ -447,6 +453,34 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
 
     def get_lock_name_for(self, member_id: str) -> str:
         return member_id
+
+    async def remove_all_venvs(self) -> None:
+        """
+        Removes all the venvs from disk. It's the responsibility of the caller
+        to make sure the venvs are no longer used.
+        """
+        folders = [file for file in self.envs_dir.iterdir() if file.is_dir()]
+        for folder in folders:
+            if folder.name in self.pool:
+                # The ExecutorVirtualEnvironment is managed by this VirtualEnvironmentManager.
+                # Rely on the normal shutdown flow to clean up all datastructures correctly.
+                virtual_environment = self.pool[folder.name]
+                future: asyncio.Future[None] = asyncio.Future()
+
+                async def venv_cleanup_is_done(exec_virt_env: resourcepool.PoolMember[resourcepool.TPoolID]) -> None:
+                    future.set_result(None)
+
+                virtual_environment.termination_listeners.append(venv_cleanup_is_done)
+                await virtual_environment.request_shutdown()
+                await future
+            else:
+                # This should normally not happen, unless somebody added a directory manually
+                # to the venv directory while the server was running. Let's clean it up anyway.
+                fq_path = os.path.join(self.envs_dir, folder.name)
+                try:
+                    await asyncio.get_running_loop().run_in_executor(self.thread_pool, shutil.rmtree, fq_path)
+                except Exception:
+                    LOGGER.exception("An error occurred while removing the venv located %s", fq_path)
 
     async def init_environment_map(self) -> None:
         """
@@ -667,11 +701,26 @@ class ExecutorManager(abc.ABC, typing.Generic[E]):
         """
 
     @abc.abstractmethod
+    def get_environment_manager(self) -> VirtualEnvironmentManager | None:
+        """
+        Returns the VirtualEnvironmentManager used by this ExecutorManager or None if this
+        ExecutorManager doesn't have a VirtualEnvironmentManager.
+        """
+
+    @abc.abstractmethod
+    async def stop_all_executors(self) -> list[E]:
+        """
+        Stop all executors started by the ExecutorManager.
+        """
+        pass
+
+    @abc.abstractmethod
     async def stop_for_agent(self, agent_name: str) -> list[E]:
         """
         Indicate that all executors for this agent can be stopped.
 
-        This is considered to be a hint , the manager can choose to follow or not
+        Because multiple agents can run on the same executor, this method only stops the executor if no more
+        agents are running on it.
 
         If executors are stopped, they are returned
         """

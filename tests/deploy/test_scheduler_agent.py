@@ -18,6 +18,7 @@ Contact: code@inmanta.com
 This file is intended to contain test that use the agent/scheduler combination in isolation: no server, no executor
 """
 
+import asyncio
 import datetime
 import hashlib
 import itertools
@@ -33,7 +34,7 @@ import pytest
 
 import utils
 from deploy.scheduler_mocks import FAIL_DEPLOY, DummyExecutor, ManagedExecutor, TestAgent, TestScheduler
-from inmanta import const, util
+from inmanta import const, data, util
 from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
 from inmanta.agent.executor import ModuleInstallSpec, ResourceDetails
@@ -2452,6 +2453,71 @@ async def test_state_of_skipped_resources_for_dependencies(agent: TestAgent, mak
     )
 
 
+async def test_remove_agent_venvs(environment, agent: TestAgent, make_resource_minimal, monkeypatch):
+    """
+    Verify that a request to remove the agent venvs waits until all executing agent tasks are finished.
+    """
+    # Track whether the remove_executor_venvs method of the agent was called
+    # and block the call until the continue_remove_executor_venv_method future resolves.
+    _remove_executor_venvs_method_was_called = False
+    continue_remove_executor_venv_method = asyncio.get_running_loop().create_future()
+
+    async def _remove_executor_venvs_dummy() -> None:
+        nonlocal _remove_executor_venvs_method_was_called
+        _remove_executor_venvs_method_was_called = True
+        await continue_remove_executor_venv_method
+
+    monkeypatch.setattr(agent, "_remove_executor_venvs", _remove_executor_venvs_dummy)
+
+    # Mock the fact that we have no database and data.Notification().insert() would fail.
+    async def insert_dummy(connection):
+        pass
+
+    monkeypatch.setattr(data.Notification, "insert", insert_dummy)
+
+    # Push resources to the scheduler
+    rid1 = ResourceIdStr("test::Resource[agent1,name=1]")
+    rid2 = ResourceIdStr("test::Resource[agent1,name=2]")
+
+    executor1: ManagedExecutor = agent.executor_manager.register_managed_executor("agent1")
+
+    resources = {
+        rid1: make_resource_minimal(rid=rid1, values={"value": "r1_value"}, requires=[]),
+        rid2: make_resource_minimal(rid=rid2, values={"value": "r2_value"}, requires=[rid1]),
+    }
+    await agent.scheduler._new_version(
+        [ModelVersion(version=1, resources=resources, requires=make_requires(resources), undefined=set())]
+    )
+
+    # Wait until rid1 is deploying
+    await retry_limited_fast(lambda: rid1 in executor1.deploys, timeout=10)
+
+    # Request removal of all agent venvs.
+    # Assign task to a variable to prevent it from being garbage collected.
+    remove_executor_venvs_task = asyncio.create_task(agent.remove_executor_venvs())  # noqa: F841
+    await retry_limited_fast(lambda: agent.scheduler._deployment_suspended, timeout=10)
+
+    # Verify that we are waiting for the ongoing deployment to finish, before removing the venvs.
+    assert not _remove_executor_venvs_method_was_called
+
+    # Finish the deployment of rid1
+    executor1.deploys[rid1].set_result(const.HandlerResourceState.deployed)
+
+    ## Now the venv removal should start
+    await retry_limited_fast(lambda: _remove_executor_venvs_method_was_called, timeout=10)
+
+    ## As long as the removal is in progress, no new deployments should be started
+    assert not executor1.deploys
+
+    # Finish the venv_removal
+    continue_remove_executor_venv_method.set_result(None)
+
+    # Now the deployment of rid2 should start
+    await retry_limited_fast(lambda: rid2 in executor1.deploys, timeout=10)
+    # Finish the deployment of rid2
+    executor1.deploys[rid2].set_result(const.HandlerResourceState.deployed)
+
+
 class BrokenDummyManager(executor.ExecutorManager[executor.Executor]):
     """
     A broken dummy ExecutorManager that fails on get_executor to test failure paths
@@ -2461,6 +2527,12 @@ class BrokenDummyManager(executor.ExecutorManager[executor.Executor]):
         raise Exception()
 
     async def stop_for_agent(self, agent_name: str) -> list[DummyExecutor]:
+        pass
+
+    def get_environment_manager(self) -> None:
+        return None
+
+    async def stop_all_executors(self) -> list[DummyExecutor]:
         pass
 
     async def start(self) -> None:

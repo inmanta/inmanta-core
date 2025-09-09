@@ -273,7 +273,7 @@ std::testing::NullResource(name="test", agentname="non_existing_agent")
     assert result.code == 200
     assert result.result["data"]["settings"][NOTIFICATION_RETENTION] == 200
     result = await client.environment_settings_list(tid=environment)
-    for setting_name, s in result.result["data"]["settings_v2"].items():
+    for setting_name, s in result.result["data"]["definition"].items():
         if setting_name in {ENVIRONMENT_METRICS_RETENTION, NOTIFICATION_RETENTION}:
             assert s["protected"]
             assert model.ProtectedBy(s["protected_by"]) == model.ProtectedBy.project_yml
