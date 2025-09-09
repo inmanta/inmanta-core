@@ -235,10 +235,10 @@ class PartialUpdateMerger:
         :returns: The subset of resources in the new version of the configuration model that belong to the shared resource set
                   or a resource set that is updated by this partial compile.
         """
+        self._validate_constraints(updated_and_shared_resources)
         shared_resources = {rid: r for rid, r in updated_and_shared_resources.items() if r.resource_set is None}
         updated_resources = {rid: r for rid, r in updated_and_shared_resources.items() if r.resource_set is not None}
         shared_resources_merged = {r.resource_id: r for r in self._merge_shared_resources(shared_resources) or ()}
-        self._validate_constraints(updated_and_shared_resources)
         # Updated go last, so that in case of overlap, we get the updated one
         # Validation on move is done later
         return {**shared_resources_merged, **updated_resources}
@@ -307,7 +307,8 @@ class PartialUpdateMerger:
                 update = True
             else:
                 # Old shared resource not referenced by partial compile
-                res = self.shared_resources_old[rid_shared_resource]
+                res_old = self.shared_resources_old[rid_shared_resource]
+                res = res_old.model_copy(deep=True)
                 # Cleanup the requires relationship for shared resources that are not present in the partial compile
                 # and that were copied from the old version of the model.
                 res.attributes["requires"] = [
@@ -543,6 +544,7 @@ class OrchestrationService(protocol.ServerSlice):
     def _create_dto_resources_from_api_resources(
         self,
         env_id: uuid.UUID,
+        version: int,
         resources: list[JsonType],
         resource_state: dict[ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]],
         resource_sets: dict[ResourceIdStr, Optional[str]],
@@ -566,6 +568,11 @@ class OrchestrationService(protocol.ServerSlice):
                 raise BadRequest(
                     f"Invalid resource: The version in the id field ({res_dict['id']}) doesn't match the version in the"
                     f" version field ({res_dict['version']})."
+                )
+            if version_part_of_resource_id != version:
+                raise BadRequest(
+                    f"The resource version of resource {resource_version_id} does not match the version argument "
+                    f"(version: {version})"
                 )
             res_set_name = resource_sets.get(resource_id, None)
 
@@ -1014,6 +1021,7 @@ class OrchestrationService(protocol.ServerSlice):
         unknowns_objs = self._create_unknown_parameter_daos_from_api_unknowns(env.id, version, unknowns)
         rid_to_resource: dict[ResourceIdStr, ResourceDTO] = self._create_dto_resources_from_api_resources(
             env_id=env.id,
+            version=version,
             resources=resources,
             resource_state=resource_state,
             resource_sets=resource_sets,
@@ -1132,6 +1140,7 @@ class OrchestrationService(protocol.ServerSlice):
 
                 rid_to_resource: dict[ResourceIdStr, ResourceDTO] = self._create_dto_resources_from_api_resources(
                     env_id=env.id,
+                    version=version,
                     resources=resources,
                     resource_state=resource_state,
                     resource_sets=resource_sets,

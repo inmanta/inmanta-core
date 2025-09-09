@@ -373,8 +373,6 @@ src/inmanta/data/__init__.py:0: error: Returning Any from function declared to r
 src/inmanta/data/__init__.py:0: error: Signature of "_generate_next_value_" incompatible with supertype "enum.Enum"  [override]
 src/inmanta/data/__init__.py:0: error: Signature of "get_list" incompatible with supertype "BaseDocument"  [override]
 src/inmanta/data/__init__.py:0: error: Unsupported left operand type for + ("dict[str, object]")  [operator]
-src/inmanta/data/__init__.py:0: error: Unsupported right operand type for in ("object")  [operator]
-src/inmanta/data/__init__.py:0: error: Unsupported target for indexed assignment ("object")  [index]
 src/inmanta/data/__init__.py:0: error: Unused "type: ignore" comment  [unused-ignore]
 src/inmanta/data/__init__.py:0: error: Value expression in dictionary comprehension has incompatible type "object"; expected type "ReleasedResourceState"  [misc]
 src/inmanta/data/__init__.py:0: error: Value of type "Record | None" is not indexable  [index]
