@@ -105,7 +105,7 @@ class ResourceDetails:
 @dataclasses.dataclass
 class EnvBlueprint:
     """Represents a blueprint for creating virtual environments
-    with specific pip configurations and requirements."""
+    with specific pip configurations, requirements and constraints."""
 
     environment_id: uuid.UUID
     pip_config: PipConfig
