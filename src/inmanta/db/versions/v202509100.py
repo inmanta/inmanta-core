@@ -21,10 +21,8 @@ from asyncpg import Connection
 
 # TODO: test case. Parse with Python and assert ==
 async def update(connection: Connection) -> None:
-    """
-    Drop column 'provides' from resource table.
-    """
-    schema = """
+    # TODO: docstring
+    schema = r"""
     ALTER TABLE public.discoveredresource
         ADD COLUMN resource_type varchar,
         ADD COLUMN resource_id_value varchar,

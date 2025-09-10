@@ -879,7 +879,8 @@ class DiscoveredResource(DiscoveredResourceABC):
     """
     Discovered resource for API returns. Contains additional (redundant) metadata to improve user experience.
     """
-    resource_type: ResourceId
+
+    resource_type: ResourceType
     agent: str
     resource_id_value: str
 
@@ -898,7 +899,7 @@ class LinkedDiscoveredResource(DiscoveredResourceABC):
 
     discovery_resource_id: ResourceId
 
-    def to_dao(self, env: uuid.UUID) -> "data.DiscoveredResourceABC":
+    def to_dao(self, env: uuid.UUID) -> "data.DiscoveredResource":
         parsed_id: resources.Id = resources.Id.parse_id(self.discovered_resource_id)
         return data.DiscoveredResource(
             discovered_resource_id=self.discovered_resource_id,

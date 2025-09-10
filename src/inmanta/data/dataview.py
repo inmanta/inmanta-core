@@ -1320,7 +1320,7 @@ class AgentView(DataView[AgentOrder, model.Agent]):
 
 
 # TODO: test filtering and sorting
-class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredResourceABC]):
+class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredResource]):
     def __init__(
         self,
         environment: data.Environment,
@@ -1388,8 +1388,11 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
 
     def construct_dtos(self, records: Sequence[Record]) -> Sequence[dict[str, str]]:
         return [
-            model.DiscoveredResourceABC(
-                discovered_resource_id=res["discovered_resource_id"],
+            model.DiscoveredResource(
+                discovered_resource_id=rid.resource_str(),
+                resource_type=rid.entity_type,
+                agent=rid.agent_name,
+                resource_id_value=rid.attribute_value,
                 values=res["values"],
                 managed_resource_uri=(
                     f"/api/v2/resource/{urllib.parse.quote(str(res['discovered_resource_id']), safe='')}"
@@ -1398,7 +1401,10 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
                 ),
                 discovery_resource_id=res["discovery_resource_id"] if res["discovery_resource_id"] else None,
             ).model_dump()
-            for res in records
+            for rid, res in (
+                (Id.parse_id(res["discovered_resource_id"]), res)
+                for res in records
+            )
         ]
 
 

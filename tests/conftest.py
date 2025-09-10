@@ -1040,7 +1040,7 @@ async def agent(
 
 @pytest.fixture(scope="function")
 async def agent_factory_no_state_check(
-    agent_factory: Callable[[uuid.UUID], Awaitable[Agent]]
+    agent_factory: Callable[[uuid.UUID], Awaitable[Agent]],
 ) -> Callable[[uuid.UUID], Awaitable[Agent]]:
     global DISABLE_STATE_CHECK
     DISABLE_STATE_CHECK = True
@@ -1048,7 +1048,9 @@ async def agent_factory_no_state_check(
 
 
 @pytest.fixture(scope="function")
-async def agent_no_state_check(server, environment, agent_factory_no_state_check: Callable[[uuid.UUID], Awaitable[Agent]], monkeypatch):
+async def agent_no_state_check(
+    server, environment, agent_factory_no_state_check: Callable[[uuid.UUID], Awaitable[Agent]], monkeypatch
+):
     """Construct an agent that can execute using the resource container"""
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
