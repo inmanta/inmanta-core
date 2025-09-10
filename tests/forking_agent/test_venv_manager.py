@@ -282,7 +282,7 @@ class ResourceH(inmanta.agent.handler.CRUDHandler[Resource]):
     result = await client.upload_code_batched(
         tid=environment,
         id=version,
-        resources={"test::Resource": {content_hash: ("inmanta_plugins/test/__init__.py", "inmanta_plugins.test", [], None)}},
+        resources={"test::Resource": {content_hash: ("inmanta_plugins/test/__init__.py", "inmanta_plugins.test", [])}},
     )
     assert result.code == 200
     result = await client.put_version(
@@ -356,7 +356,7 @@ class ResourceH(inmanta.agent.handler.CRUDHandler[Resource]):
     result = await client.upload_code_batched(
         tid=environment,
         id=version,
-        resources={"test::Resource": {content_hash: ("inmanta_plugins/test/__init__.py", "inmanta_plugins.test", [], None)}},
+        resources={"test::Resource": {content_hash: ("inmanta_plugins/test/__init__.py", "inmanta_plugins.test", [])}},
     )
     assert result.code == 200
     result = await client.put_version(
