@@ -17,7 +17,6 @@ Contact: code@inmanta.com
 """
 
 import asyncio
-import base64
 import logging
 import sys
 import uuid
@@ -69,10 +68,10 @@ class CodeManager:
         if result.code == 200 and result.result is not None:
             sync_client = SyncClient(client=self._client, ioloop=asyncio.get_running_loop())
             requirements: set[str] = set()
-            constraints_file_hash: set[str | None] = set()
             sources: list["inmanta.loader.ModuleSource"] = []
             # Encapsulate source code details in ``ModuleSource`` objects
-            module_sources, project_constraints = result.result["data"]
+            module_sources = result.result["data"]["sources"]
+            project_constraints = result.result["data"]["project_constraints"]
             for source in module_sources:
                 sources.append(
                     inmanta.loader.ModuleSource(
@@ -83,24 +82,6 @@ class CodeManager:
                     )
                 )
                 requirements.update(source["requirements"])
-                constraints_file_hash.update({source["constraints_file_hash"]})
-
-            # The constraints_file_hash set should always contain
-            # exactly one element:
-            #  - {None} if no constraint is set at the project level
-            #  - {unique_hash} across all sources otherwise
-            _constraints_file_hash: str | None = None
-            constraints: str | None = None
-            if constraints_file_hash:
-                assert len(constraints_file_hash) == 1, f"{constraints_file_hash=}"
-                _constraints_file_hash = constraints_file_hash.pop()
-
-            if _constraints_file_hash is not None:
-                response: protocol.Result = await self._client.get_file(_constraints_file_hash)
-                if response.code != 200 or response.result is None:
-                    raise Exception(f"Failed to fetch constraints file with hash {constraints_file_hash}.")
-
-                constraints = base64.b64decode(response.result["content"]).decode()
 
             resource_install_spec = ResourceInstallSpec(
                 resource_type,
@@ -111,8 +92,7 @@ class CodeManager:
                     requirements=list(requirements),
                     sources=sources,
                     python_version=sys.version_info[:2],
-                    constraints_file_hash=_constraints_file_hash,
-                    constraints=constraints,
+                    project_constraints=project_constraints if project_constraints else None,
                 ),
             )
             return resource_install_spec

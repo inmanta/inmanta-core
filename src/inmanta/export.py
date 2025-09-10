@@ -35,7 +35,6 @@ from inmanta.ast import CompilerException, Namespace, UnknownException
 from inmanta.ast.entity import Entity
 from inmanta.config import Option, is_list, is_uuid_opt
 from inmanta.data import model
-from inmanta.data.model import PipConfig
 from inmanta.execute import proxy
 from inmanta.execute.proxy import DynamicProxy, ProxyContext
 from inmanta.execute.runtime import Instance
@@ -115,9 +114,7 @@ def upload_code(conn: protocol.SyncClient, tid: uuid.UUID, version: int, code_ma
     # ...other types would be included as well
     # }
     source_map = {
-        resource_name: {
-            source.hash: (source.path, source.module_name, source.requires) for source in sources
-        }
+        resource_name: {source.hash: (source.path, source.module_name, source.requires) for source in sources}
         for resource_name, sources in code_manager.get_types()
     }
 
@@ -488,7 +485,6 @@ class Exporter:
                 metadata,
                 partial_compile,
                 list(self._removed_resource_sets),
-                project.metadata.pip,
             )
             LOGGER.info("Committed resources with version %d", self._version)
 
@@ -596,7 +592,6 @@ class Exporter:
         metadata: dict[str, str],
         partial_compile: bool,
         resource_sets_to_remove: list[str],
-        pip_config: PipConfig,
     ) -> int:
         """
         Commit the entire list of resources to the configuration server.
@@ -652,7 +647,8 @@ class Exporter:
                 else:
                     LOGGER.debug("  %s not in any resource set", rid)
 
-        def do_put(**kwargs: object) -> protocol.Result:
+        # todo double check signature in iso9 PR
+        def do_put(project_constraints: str | None = None, **kwargs: object) -> protocol.Result:
             if partial_compile:
                 result = self.client.put_partial(
                     tid=tid,
@@ -675,6 +671,7 @@ class Exporter:
                     resource_state=self._resource_state,
                     version_info=version_info,
                     compiler_version=get_compiler_version(),
+                    project_constraints=project_constraints,
                     **kwargs,
                 )
             return result

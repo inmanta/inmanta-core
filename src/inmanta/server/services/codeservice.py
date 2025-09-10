@@ -21,6 +21,7 @@ from typing import cast
 
 from inmanta import data
 from inmanta.data import model
+from inmanta.data.model import GetSourceCodeResponse
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.exceptions import BadRequest, NotFound, ServerError
 from inmanta.server import SLICE_CODE, SLICE_DATABASE, SLICE_FILE, SLICE_TRANSPORT, protocol
@@ -99,13 +100,15 @@ class CodeService(protocol.ServerSlice):
         return 200
 
     @handle(methods_v2.get_source_code, env="tid")
-    async def get_source_code(self, env: data.Environment, version: int, resource_type: str) -> list[model.Source]:
+    async def get_source_code(self, env: data.Environment, version: int, resource_type: str) -> GetSourceCodeResponse:
+        LOGGER.debug("YELL")
         code = await data.Code.get_version(environment=env.id, version=version, resource=resource_type)
         if code is None:
             raise NotFound(f"The version of the code does not exist. {resource_type}, {version}")
 
         sources = []
 
+        LOGGER.debug(f"{code=}")
         # Get all module code pertaining to this env/version/resource
         if code.source_refs is not None:
             for code_hash, (file_name, module, requires) in code.source_refs.items():
@@ -114,5 +117,8 @@ class CodeService(protocol.ServerSlice):
                         hash=code_hash, is_byte_code=file_name.endswith(".pyc"), module_name=module, requirements=requires
                     )
                 )
+        cm = await data.ConfigurationModel.get_version(environment=env.id, version=version)
 
-        return sources
+        if cm is None:
+            raise NotFound(f"The version of the code does not exist. {resource_type}, {version}")
+        return GetSourceCodeResponse(sources=sources, project_constraints=cm.project_constraints)

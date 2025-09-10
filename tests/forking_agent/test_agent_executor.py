@@ -112,9 +112,14 @@ assert inmanta_plugins.sub.a == 1""",
         requirements=requirements1,
         sources=sources1,
         python_version=sys.version_info[:2],
+        project_constraints=None,
     )
     env_blueprint1 = executor.EnvBlueprint(
-        environment_id=env_id, pip_config=pip_config, requirements=requirements1, python_version=sys.version_info[:2]
+        environment_id=env_id,
+        pip_config=pip_config,
+        requirements=requirements1,
+        python_version=sys.version_info[:2],
+        project_constraints=None,
     )
     blueprint2 = executor.ExecutorBlueprint(
         environment_id=env_id,
@@ -122,6 +127,7 @@ assert inmanta_plugins.sub.a == 1""",
         requirements=requirements1,
         sources=sources2,
         python_version=sys.version_info[:2],
+        project_constraints=None,
     )
     blueprint3 = executor.ExecutorBlueprint(
         environment_id=env_id,
@@ -129,26 +135,29 @@ assert inmanta_plugins.sub.a == 1""",
         requirements=requirements2,
         sources=sources2,
         python_version=sys.version_info[:2],
+        project_constraints=None,
     )
     env_blueprint2 = executor.EnvBlueprint(
-        environment_id=env_id, pip_config=pip_config, requirements=requirements2, python_version=sys.version_info[:2]
+        environment_id=env_id,
+        pip_config=pip_config,
+        requirements=requirements2,
+        python_version=sys.version_info[:2],
+        project_constraints=None,
     )
     blueprint4 = executor.ExecutorBlueprint(
         environment_id=env_id,
         pip_config=pip_config,
         requirements=requirements2,
-        constraints=constraints,
-        constraints_file_hash="dummy_hash",
         sources=sources2,
         python_version=sys.version_info[:2],
+        project_constraints=constraints,
     )
     env_blueprint3 = executor.EnvBlueprint(
         environment_id=env_id,
         pip_config=pip_config,
         requirements=requirements2,
-        constraints=constraints,
-        constraints_file_hash="dummy_hash",
         python_version=sys.version_info[:2],
+        project_constraints=constraints,
     )
     executor_manager = mpmanager_light
     venv_manager = mpmanager_light.process_pool.environment_manager

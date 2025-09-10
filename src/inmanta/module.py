@@ -1973,7 +1973,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         ]
         return dependencies, constraints
 
-    def get_all_constraints(self) -> Sequence[str]:
+    def get_all_constraints(self) -> str:
         """
 
         Compile a list of all package installation constraints defined at the project level. This method
@@ -1997,7 +1997,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
                 req.extras = set()
             sanitized_constraints.append(str(req))
 
-        return sorted(sanitized_constraints)
+        return "\n".join(sorted(sanitized_constraints))
 
     def install_modules(self, *, bypass_module_cache: bool = False, update: bool = False) -> None:
         """

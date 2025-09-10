@@ -109,7 +109,7 @@ async def make_source_structure(
         sha1sum = hashlib.new("sha1")
         sha1sum.update(data)
         hv: str = sha1sum.hexdigest()
-        into[hv] = (file_name, module, dependencies, constraints_file_hash)
+        into[hv] = (file_name, module, dependencies)
         await client.upload_file(hv, content=base64.b64encode(data).decode("ascii"))
         return hv
 
@@ -411,6 +411,7 @@ async def test_project_constraints_in_agent_code_install(server, client, environ
         resources=get_resources(version),
         compiler_version=get_compiler_version(),
         resource_sets={"test::ResType_A[agent_X,key=key1]": "set-a", "test::ResType_A[agent_Y,key=key1]": "set-b"},
+        project_constraints=constraints,
     )
     assert result.code == 200
 
@@ -428,7 +429,7 @@ async def test_project_constraints_in_agent_code_install(server, client, environ
         resource_types=["test::ResType_A"],
     )
 
-    assert install_spec[0].blueprint.constraints == constraints
+    assert install_spec[0].blueprint.project_constraints == constraints
 
     version = await clienthelper.get_version()
     sources = {}
@@ -450,6 +451,7 @@ async def test_project_constraints_in_agent_code_install(server, client, environ
         resources=get_resources(version),
         compiler_version=get_compiler_version(),
         resource_sets={"test::ResType_A[agent_X,key=key1]": "set-a", "test::ResType_A[agent_Y,key=key1]": "set-b"},
+        project_constraints=None,
     )
     assert result.code == 200
 
@@ -462,4 +464,4 @@ async def test_project_constraints_in_agent_code_install(server, client, environ
         resource_types=["test::ResType_A"],
     )
 
-    assert install_spec[0].blueprint.constraints is None
+    assert install_spec[0].blueprint.project_constraints is None

@@ -374,7 +374,7 @@ a = many_dependencies::Test(name="my_test_resource")
 
     assert len(module_install_specs) > 0
     for module_install_spec in module_install_specs:
-        assert module_install_spec.blueprint.constraints is None
+        assert module_install_spec.blueprint.project_constraints is None
 
     constraints = [
         "dependency-package<2.0.0",
@@ -408,7 +408,7 @@ a = many_dependencies::Test(name="my_test_resource")
     assert len(module_install_specs) > 0
 
     for module_install_spec in module_install_specs:
-        assert module_install_spec.blueprint.constraints == "\n".join(constraints)
+        assert module_install_spec.blueprint.project_constraints == "\n".join(constraints)
 
 
 async def test_old_compiler(server, client, environment):

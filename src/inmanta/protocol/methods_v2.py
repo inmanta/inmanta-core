@@ -26,7 +26,7 @@ from typing import Literal, Optional, Union
 import inmanta.types
 from inmanta.const import AgentAction, AllAgentAction, ApiDocsFormat, Change, ClientType, ParameterSource, ResourceState
 from inmanta.data import model
-from inmanta.data.model import DataBaseReport, LinkedDiscoveredResource, PipConfig
+from inmanta.data.model import DataBaseReport, GetSourceCodeResponse, LinkedDiscoveredResource, PipConfig
 from inmanta.protocol import methods
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.decorators import typedmethod
@@ -1432,7 +1432,7 @@ def update_notification(
     client_types=[ClientType.agent],
     api_version=2,
 )
-def get_source_code(tid: uuid.UUID, version: int, resource_type: str) -> tuple[list[model.Source], str | None]:
+def get_source_code(tid: uuid.UUID, version: int, resource_type: str) -> GetSourceCodeResponse:
     """
     Get the code for the given version and the given resource. First element of the returned tuple
     is the list of model source required to deploy this resource_type. Second element is a string
