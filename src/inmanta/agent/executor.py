@@ -269,12 +269,20 @@ class ExecutorBlueprint(EnvBlueprint):
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, ExecutorBlueprint):
             return False
-        return (self.environment_id, self.pip_config, self.requirements, self.sources, self.python_version) == (
+        return (
+            self.environment_id,
+            self.pip_config,
+            self.requirements,
+            self.sources,
+            self.python_version,
+            self.project_constraints,
+        ) == (
             other.environment_id,
             other.pip_config,
             other.requirements,
             other.sources,
             other.python_version,
+            other.project_constraints,
         )
 
     def __hash__(self) -> int:
