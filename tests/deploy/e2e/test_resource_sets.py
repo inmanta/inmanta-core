@@ -257,7 +257,6 @@ async def test_put_partial_replace_resource_set(server, client, environment, cli
             files_in_module=[module_source_metadata],
             requirements=[],
             for_agents=["agent1"],
-            constraints_file_hash=None,
         )
     }
 

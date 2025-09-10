@@ -117,7 +117,6 @@ async def test_agent_installs_dependency_containing_extras(
             ],
             requirements=["pkg[optional-a]"],
             for_agents=["agent1"],
-            constraints_file_hash=None,
         )
     }
 
@@ -350,7 +349,6 @@ async def test_agent_code_loading_with_failure(
             files_in_module=[ModuleSourceMetadata(name="inmanta_plugins.test.dummy_file", hash_value=hash, is_byte_code=False)],
             requirements=[],
             for_agents=["agent1"],
-            constraints_file_hash=None,
         )
     }
 
@@ -498,7 +496,6 @@ async def test_logging_on_code_loading_error(server, client, environment, client
             files_in_module=[module_source_metadata],
             requirements=[],
             for_agents=["agent1"],
-            constraints_file_hash=None,
         )
     }
 
