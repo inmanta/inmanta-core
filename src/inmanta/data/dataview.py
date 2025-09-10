@@ -1401,10 +1401,7 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
                 ),
                 discovery_resource_id=res["discovery_resource_id"] if res["discovery_resource_id"] else None,
             ).model_dump()
-            for rid, res in (
-                (Id.parse_id(res["discovered_resource_id"]), res)
-                for res in records
-            )
+            for rid, res in ((Id.parse_id(res["discovered_resource_id"]), res) for res in records)
         ]
 
 
