@@ -5680,7 +5680,7 @@ class Resource(BaseDocument):
         #       - resource_set_id: resource set id in the new version iff it differs from the previous version
         #           -> NULL iff resource set with this name was deleted in this version
         #       - <projection_fields> -> NULL iff LEFT join didn't match any resources => empty resource set
-        query = f"""\
+        query: typing.LiteralString = f"""\
         WITH
         -- `since` model iff it exists and has been released
         reference_model AS (
