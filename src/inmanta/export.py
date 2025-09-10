@@ -114,10 +114,9 @@ def upload_code(conn: protocol.SyncClient, tid: uuid.UUID, version: int, code_ma
     #    },
     # ...other types would be included as well
     # }
-    constraints_file_hash: str | None = code_manager.get_project_constraints_file_hash()
     source_map = {
         resource_name: {
-            source.hash: (source.path, source.module_name, source.requires, constraints_file_hash) for source in sources
+            source.hash: (source.path, source.module_name, source.requires) for source in sources
         }
         for resource_name, sources in code_manager.get_types()
     }
@@ -681,7 +680,11 @@ class Exporter:
             return result
 
         # Backward compatibility with ISO6 servers
-        result = do_put(pip_config=pip_config)
+        project = inmanta.module.Project.get()
+        pip_config = project.metadata.pip
+        project_constraints = project.get_all_constraints()
+        result = do_put(project_constraints=project_constraints, pip_config=pip_config)
+
         if (
             result.code == 400
             and isinstance(result.result, dict)
