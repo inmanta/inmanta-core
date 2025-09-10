@@ -6944,8 +6944,8 @@ class DiscoveredResource(BaseDocument):
 
     __primary_key__ = ("environment", "discovered_resource_id")
 
-    def to_dto(self) -> m.DiscoveredResourceReturn:
-        return m.DiscoveredResourceReturn(
+    def to_dto(self) -> m.DiscoveredResource:
+        return m.DiscoveredResource(
             discovered_resource_id=self.discovered_resource_id,
             resource_type=self.resource_type,
             agent=self.agent,

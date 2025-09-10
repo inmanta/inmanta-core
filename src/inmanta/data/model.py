@@ -851,7 +851,7 @@ def _check_resource_id_str(v: str) -> ResourceIdStr:
 ResourceId: typing.TypeAlias = typing.Annotated[ResourceIdStr, pydantic.AfterValidator(_check_resource_id_str)]
 
 
-class DiscoveredResource(BaseModel):
+class DiscoveredResourceABC(BaseModel):
     """
     :param discovered_resource_id: The name of the resource
     :param values: The actual resource
@@ -875,15 +875,16 @@ class DiscoveredResource(BaseModel):
         return f"/api/v2/resource/{urllib.parse.quote(self.discovery_resource_id, safe='')}"
 
 
-# TODO name
-# TODO: mention only API output
-class DiscoveredResourceReturn(DiscoveredResource):
+class DiscoveredResource(DiscoveredResourceABC):
+    """
+    Discovered resource for API returns. Contains additional (redundant) metadata to improve user experience.
+    """
     resource_type: ResourceId
     agent: str
     resource_id_value: str
 
 
-class LinkedDiscoveredResource(DiscoveredResource):
+class LinkedDiscoveredResource(DiscoveredResourceABC):
     """
     DiscoveredResource linked to the discovery resource that discovered it.
 
@@ -891,13 +892,13 @@ class LinkedDiscoveredResource(DiscoveredResource):
            discovered resource.
     """
 
-    # This class is used as API input. Its behaviour can be directly incorporated into the DiscoveredResource parent class
+    # This class is used as API input. Its behaviour can be directly incorporated into the DiscoveredResourceABC parent class
     # when providing the id of the discovery resource is mandatory for all discovered resource. Ticket link:
     # https://github.com/inmanta/inmanta-core/issues/8004
 
     discovery_resource_id: ResourceId
 
-    def to_dao(self, env: uuid.UUID) -> "data.DiscoveredResource":
+    def to_dao(self, env: uuid.UUID) -> "data.DiscoveredResourceABC":
         parsed_id: resources.Id = resources.Id.parse_id(self.discovered_resource_id)
         return data.DiscoveredResource(
             discovered_resource_id=self.discovered_resource_id,
