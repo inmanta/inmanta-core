@@ -503,8 +503,8 @@ def put_version(
     version_info: dict | None = None,
     compiler_version: str | None = None,
     resource_sets: dict[inmanta.types.ResourceIdStr, str | None] = {},
-    project_constraints: str | None = None,
     pip_config: PipConfig | None = None,
+    project_constraints: str | None = None,
 ):
     """
     Store a new version of the configuration model
@@ -522,6 +522,8 @@ def put_version(
     :param resource_sets: Optional. a dictionary describing which resource belongs to which resource set
     :param pip_config: Optional. Pip config used by this version
     :param module_version_info: Map of (module name, module version) to InmantaModule
+    :param project_constraints: String of all the constraints set at the project level (if any) to be enforced during agent
+        code install
 
     """
 
