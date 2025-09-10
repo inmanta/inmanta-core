@@ -5680,7 +5680,7 @@ class Resource(BaseDocument):
         #       - resource_set_id: resource set id in the new version iff it differs from the previous version
         #           -> NULL iff resource set with this name was deleted in this version
         #       - <projection_fields> -> NULL iff LEFT join didn't match any resources => empty resource set
-        query: typing.LiteralString = f"""\
+        query = f"""\
         WITH
         -- `since` model iff it exists and has been released
         reference_model AS (
@@ -5720,9 +5720,9 @@ class Resource(BaseDocument):
                 FROM models AS cm
                 WINDOW pairs AS (ORDER BY cm.version ROWS 1 PRECEDING)
                 ORDER BY cm.version
-            )
+            ) AS unfiltered_model_pairs
             -- drop first row where there is no PRECEDING for the window function
-            WHERE old != new
+            WHERE unfiltered_model_pairs.old != unfiltered_model_pairs.new
         )
         SELECT
             reference_model.exists,
