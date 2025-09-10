@@ -151,14 +151,14 @@ class EnvBlueprint:
             self.environment_id,
             self.pip_config,
             set(self.requirements),
-            self.constraints_file_hash,
             self.python_version,
+            self.project_constraints,
         ) == (
             other.environment_id,
             other.pip_config,
             set(other.requirements),
-            other.constraints_file_hash,
             other.python_version,
+            self.project_constraints,
         )
 
     def __hash__(self) -> int:
@@ -166,11 +166,10 @@ class EnvBlueprint:
 
     def __str__(self) -> str:
         req = ",".join(str(req) for req in self.requirements)
-        constraints = self.constraints if self.constraints else ""
+        constraints = ",".join(self.project_constraints.split("\n")) if self.project_constraints else ""
         return (
             f"EnvBlueprint(environment_id={self.environment_id}, requirements=[{str(req)}], "
-            f"constraints=[{constraints}], constraint_file_hash={self.constraints_file_hash}, "
-            f"pip={self.pip_config}, python_version={self.python_version})"
+            f"constraints=[{constraints}], pip={self.pip_config}, python_version={self.python_version})"
         )
 
 
@@ -201,14 +200,10 @@ class ExecutorBlueprint(EnvBlueprint):
         sources = list({source for cd in code for source in cd.blueprint.sources})
         requirements = list({req for cd in code for req in cd.blueprint.requirements})
 
-        # The constraints_file_hash and constraints sets should always contain
-        # exactly one element:
-        #  - {None} and {None} if no constraint is set at the project level
-        #  - {unique_hash} and {unique_content} across all modules otherwise
-        constraints_file_hash = {cd.blueprint.constraints_file_hash for cd in code}
-        assert len(constraints_file_hash) == 1
-        constraints = {cd.blueprint.constraints for cd in code}
-        assert len(constraints) == 1
+        # Check that constraints set at the project level are consistent across all modules
+        _constraints = list({cd.blueprint.project_constraints for cd in code})
+        assert len(_constraints) == 1
+        constraints = _constraints[0]
 
         pip_configs = [cd.blueprint.pip_config for cd in code]
         python_versions = [cd.blueprint.python_version for cd in code]
@@ -229,9 +224,8 @@ class ExecutorBlueprint(EnvBlueprint):
             pip_config=base_pip,
             sources=sources,
             requirements=requirements,
-            constraints_file_hash=constraints_file_hash.pop(),
-            constraints=constraints.pop(),
             python_version=base_python_version,
+            project_constraints=constraints,
         )
 
     def blueprint_hash(self) -> str:
@@ -246,10 +240,10 @@ class ExecutorBlueprint(EnvBlueprint):
                 "environment_id": str(self.environment_id),
                 "pip_config": self.pip_config.model_dump(),
                 "requirements": self.requirements,
-                "constraint_file_hash": self.constraints_file_hash,
                 # Use the hash values and name to create a stable identity
                 "sources": [[source.hash_value, source.name, source.is_byte_code] for source in self.sources],
                 "python_version": self.python_version,
+                "project_constraints": self.project_constraints,
             }
 
             # Serialize the extended blueprint dictionary to a JSON string, ensuring consistent ordering
