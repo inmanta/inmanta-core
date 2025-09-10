@@ -533,6 +533,7 @@ class ConfigurationModel(Base):
     unknownparameter: Mapped[List["UnknownParameter"]] = relationship("UnknownParameter", back_populates="configurationmodel")
 
 
+# TODO
 class DiscoveredResource(Base):
     __tablename__ = "discoveredresource"
     __table_args__ = (

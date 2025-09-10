@@ -1319,6 +1319,7 @@ class AgentView(DataView[AgentOrder, model.Agent]):
         ]
 
 
+# TODO
 class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredResource]):
     def __init__(
         self,

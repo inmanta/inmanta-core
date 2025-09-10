@@ -875,6 +875,14 @@ class DiscoveredResource(BaseModel):
         return f"/api/v2/resource/{urllib.parse.quote(self.discovery_resource_id, safe='')}"
 
 
+# TODO name
+# TODO: mention only API output
+class DiscoveredResourceReturn(DiscoveredResource):
+    resource_type: ResourceId
+    agent: str
+    resource_id_value: str
+
+
 class LinkedDiscoveredResource(DiscoveredResource):
     """
     DiscoveredResource linked to the discovery resource that discovered it.
@@ -890,8 +898,12 @@ class LinkedDiscoveredResource(DiscoveredResource):
     discovery_resource_id: ResourceId
 
     def to_dao(self, env: uuid.UUID) -> "data.DiscoveredResource":
+        parsed_id: resources.Id = resources.Id.parse_id(self.discovered_resource_id)
         return data.DiscoveredResource(
             discovered_resource_id=self.discovered_resource_id,
+            resource_type=parsed_id.entity_type,
+            agent=parsed_id.agent_name,
+            resource_id_value=parsed_id.attribute_value,
             values=self.values,
             discovered_at=datetime.datetime.now(),
             environment=env,
