@@ -25,7 +25,7 @@ from typing import Optional
 
 import pytest
 
-from inmanta import config, const, module
+from inmanta import config, const, module, util
 from inmanta.agent.code_manager import CodeManager
 from inmanta.ast import CompilerException, ExternalException, RuntimeException
 from inmanta.const import ResourceState
@@ -377,7 +377,7 @@ import many_dependencies
 a = many_dependencies::Test(name="my_test_resource")
 """,
         autostd=True,
-        python_requires=[inmanta.util.parse_requirement(requirement=constraint) for constraint in constraints],
+        python_requires=[util.parse_requirement(requirement=constraint) for constraint in constraints],
         index_url=index.url,
         extra_index_url=["https://pypi.org/simple"],
     )
