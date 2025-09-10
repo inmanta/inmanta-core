@@ -6426,7 +6426,7 @@ class Code(BaseDocument):
     :param sources: The source code of plugins (phasing out)  form:
         {code_hash:(file_name, provider.__module__, source_code, [req])}
     :param requires: Python requires for the source code above
-    :param source_refs: file hashes refering to files in the file store
+    :param source_refs: file hashes referring to files in the file store
         {code_hash:(file_name, provider.__module__, [req], constraint_file_hash)}
     """
 
