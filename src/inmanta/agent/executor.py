@@ -112,10 +112,9 @@ class EnvBlueprint:
     environment_id: uuid.UUID
     pip_config: PipConfig
     requirements: Sequence[str]
-    constraints_file_hash: str | None = dataclasses.field(default=None, kw_only=True)
-    constraints: str | None = dataclasses.field(default=None, kw_only=True)
     _hash_cache: str | None = dataclasses.field(default=None, init=False, repr=False)
     python_version: tuple[int, int]
+    project_constraints: str | None = dataclasses.field(default=None, kw_only=True)
 
     def __post_init__(self) -> None:
         # remove duplicates and make uniform
@@ -124,7 +123,7 @@ class EnvBlueprint:
     def blueprint_hash(self) -> str:
         """
         Generate a stable hash for an EnvBlueprint instance by serializing its pip_config, requirements
-        and constraints in a sorted, consistent manner. This ensures that the hash value is
+        and project constraints in a sorted, consistent manner. This ensures that the hash value is
         independent of the order of requirements/constraints and consistent across interpreter sessions.
         Also cache the hash to only compute it once.
         """
@@ -133,8 +132,8 @@ class EnvBlueprint:
                 "environment_id": str(self.environment_id),
                 "pip_config": self.pip_config.model_dump(),
                 "requirements": self.requirements,
-                "constraints_file_hash": self.constraints_file_hash,
                 "python_version": self.python_version,
+                "project_constraints": self.project_constraints,
             }
 
             # Serialize the blueprint dictionary to a JSON string, ensuring consistent ordering

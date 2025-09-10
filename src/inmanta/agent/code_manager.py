@@ -72,7 +72,8 @@ class CodeManager:
             constraints_file_hash: set[str | None] = set()
             sources: list["inmanta.loader.ModuleSource"] = []
             # Encapsulate source code details in ``ModuleSource`` objects
-            for source in result.result["data"]:
+            module_sources, project_constraints = result.result["data"]
+            for source in module_sources:
                 sources.append(
                     inmanta.loader.ModuleSource(
                         name=source["module_name"],
