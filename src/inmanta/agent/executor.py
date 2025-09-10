@@ -262,20 +262,20 @@ class ExecutorBlueprint(EnvBlueprint):
             environment_id=self.environment_id,
             pip_config=self.pip_config,
             requirements=self.requirements,
-            constraints_file_hash=self.constraints_file_hash,
-            constraints=self.constraints,
             python_version=self.python_version,
+            project_constraints=self.project_constraints,
         )
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, ExecutorBlueprint):
             return False
-        return (self.environment_id, self.pip_config, self.requirements, self.sources, self.python_version) == (
+        return (self.environment_id, self.pip_config, self.requirements, self.sources, self.python_version, self.project_constraints) == (
             other.environment_id,
             other.pip_config,
             other.requirements,
             other.sources,
             other.python_version,
+            other.project_constraints,
         )
 
     def __hash__(self) -> int:
