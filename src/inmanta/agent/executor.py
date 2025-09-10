@@ -228,10 +228,10 @@ class ExecutorBlueprint(EnvBlueprint):
 
     def blueprint_hash(self) -> str:
         """
-        Generate a stable hash for an ExecutorBlueprint instance by serializing its pip_config (containing
-        constraints set at the project level, if any), sources and requirements in a sorted, consistent manner.
-        This ensures that the hash value is independent of the order of requirements and consistent across interpreter
-        sessions. Also cache the hash to only compute it once.
+        Generate a stable hash for an ExecutorBlueprint instance by serializing its pip_config, sources,
+        requirements and constraints in a sorted, consistent manner. This ensures that the hash value is
+        independent of the order of requirements and consistent across interpreter sessions.
+        Also cache the hash to only compute it once.
         """
         if self._hash_cache is None:
             blueprint_dict = {
