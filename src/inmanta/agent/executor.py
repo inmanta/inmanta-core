@@ -120,8 +120,8 @@ class EnvBlueprint:
 
     def blueprint_hash(self) -> str:
         """
-        Generate a stable hash for an EnvBlueprint instance by serializing its pip_config and requirements
-        in a sorted, consistent manner. This ensures that the hash value is
+        Generate a stable hash for an EnvBlueprint instance by serializing its pip_config, requirements
+        and project constraints in a sorted, consistent manner. This ensures that the hash value is
         independent of the order of requirements/constraints and consistent across interpreter sessions.
         Also cache the hash to only compute it once.
         """
