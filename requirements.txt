@@ -14,11 +14,11 @@ docstring-parser==0.17.0
 email-validator==2.3.0
 furo==2025.7.19
 graphviz==0.21
-inmanta-dev-dependencies==2.175.0
+inmanta-dev-dependencies==2.176.0
 inmanta-module-std
 inmanta-sphinx==2.3.0
 jinja2==3.1.6
-logfire==4.3.6
+logfire==4.4.0
 more-itertools==10.8.0
 myst-parser==4.0.1
 openapi_spec_validator==0.7.2
@@ -35,7 +35,7 @@ python-dateutil==2.9.0.post0
 pyyaml==6.0.2
 rpdb==0.2.0
 ruamel.yaml==0.18.15
-setproctitle==1.3.6
+setproctitle==1.3.7
 setuptools==80.9.0
 sphinx==8.2.3
 sphinx-argparse==0.5.2
