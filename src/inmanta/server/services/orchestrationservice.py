@@ -878,6 +878,7 @@ class OrchestrationService(protocol.ServerSlice):
                         updated_resource_sets=updated_resource_sets,
                         deleted_resource_sets=deleted_resource_sets_as_set,
                         connection=connection,
+                        project_constraints=project_constraints,
                     )
                 else:
                     cm = data.ConfigurationModel(
@@ -1143,6 +1144,7 @@ class OrchestrationService(protocol.ServerSlice):
 
                 base_model = current_versions[0]
                 base_version: int = base_model.version
+                base_constraints: str | None = base_model.project_constraints
                 if not base_model.is_suitable_for_partial_compiles:
                     resources_in_base_version = await data.Resource.get_resources_for_version(env.id, base_version)
                     resource_set_validator = ResourceSetValidator(set(resources_in_base_version))
@@ -1199,6 +1201,7 @@ class OrchestrationService(protocol.ServerSlice):
                     connection=con,
                     module_version_info=module_version_info or {},
                     allow_handler_code_update=allow_handler_code_update,
+                    project_constraints=base_constraints if base_constraints else None,
                 )
 
             returnvalue: ReturnValue[int] = ReturnValue[int](200, response=version)

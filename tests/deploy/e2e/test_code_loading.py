@@ -966,10 +966,27 @@ async def test_project_constraints_in_agent_code_install(server, client, environ
         expected_constraints=constraints,
     )
 
-    # do a deploy
-    result = await client.release_version(environment, version)
+    # Partial compiles should use the same constraints as the version they're based on.
+
+    result = await client.put_partial(
+        tid=environment,
+        resources=get_resources(0),
+        resource_state={},
+        unknowns=[],
+        version_info={},
+        module_version_info=module_version_info_v0,
+        resource_sets={"test::ResType_A[agent_X,key=key1]": "set-a", "test::ResType_A[agent_Y,key=key1]": "set-b"},
+    )
     assert result.code == 200
-    assert result.result["model"]["released"]
+    await check_code_for_version(
+        version=2,
+        environment=environment,
+        codemanager=codemanager,
+        agent_names=["agent_X", "agent_Y"],
+        module_name="test",
+        expected_source=b"#The code",
+        expected_constraints=constraints,
+    )
 
     module_version_info_v1 = {
         "test": InmantaModuleDTO(
@@ -998,7 +1015,7 @@ async def test_project_constraints_in_agent_code_install(server, client, environ
     assert result.code == 200
 
     await check_code_for_version(
-        version=2,
+        version=3,
         environment=environment,
         codemanager=codemanager,
         agent_names=["agent_X", "agent_Y"],
@@ -1010,3 +1027,23 @@ async def test_project_constraints_in_agent_code_install(server, client, environ
     assert res.code == 200
 
     await wait_until_deployment_finishes(client, environment, version=version)
+
+    result = await client.put_partial(
+        tid=environment,
+        resources=get_resources(0),
+        resource_state={},
+        unknowns=[],
+        version_info={},
+        module_version_info=module_version_info_v1,
+        resource_sets={"test::ResType_A[agent_X,key=key1]": "set-a", "test::ResType_A[agent_Y,key=key1]": "set-b"},
+    )
+    assert result.code == 200
+    await check_code_for_version(
+        version=4,
+        environment=environment,
+        codemanager=codemanager,
+        agent_names=["agent_X", "agent_Y"],
+        module_name="test",
+        expected_source=b"#The code",
+        expected_constraints=None,
+    )
