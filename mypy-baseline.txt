@@ -234,7 +234,6 @@ src/inmanta/data/__init__.py:0: error: "None" not callable  [misc]
 src/inmanta/data/__init__.py:0: error: "_validate_single" of "Field" does not return a value (it only ever returns None)  [func-returns-value]
 src/inmanta/data/__init__.py:0: error: "object" has no attribute "__iter__"; maybe "__dir__" or "__str__"? (not iterable)  [attr-defined]
 src/inmanta/data/__init__.py:0: error: "object" has no attribute "__iter__"; maybe "__dir__" or "__str__"? (not iterable)  [attr-defined]
-src/inmanta/data/__init__.py:0: error: "object" has no attribute "__iter__"; maybe "__dir__" or "__str__"? (not iterable)  [attr-defined]
 src/inmanta/data/__init__.py:0: error: "type[TBaseDocument]" has no attribute "get_list_without_details"  [attr-defined]
 src/inmanta/data/__init__.py:0: error: "type[object]" has no attribute "__supertype__"  [attr-defined]
 src/inmanta/data/__init__.py:0: error: Argument "agent" to "ReleasedResourceDetails" has incompatible type "object"; expected "str"  [arg-type]
@@ -298,7 +297,6 @@ src/inmanta/data/__init__.py:0: error: Argument "validator" to "Setting" has inc
 src/inmanta/data/__init__.py:0: error: Argument "version" to "CompileDetails" has incompatible type "object"; expected "int | None"  [arg-type]
 src/inmanta/data/__init__.py:0: error: Argument 1 of "insert_many" is incompatible with supertype "BaseDocument"; supertype defines the argument type as "Sequence[BaseDocument]"  [override]
 src/inmanta/data/__init__.py:0: error: Argument 1 to "__init__" of "BaseDocument" has incompatible type "**dict[str, object]"; expected "bool"  [arg-type]
-src/inmanta/data/__init__.py:0: error: Argument 1 to "__mangle_dict" of "Resource" has incompatible type "Record"; expected "dict[Any, Any]"  [arg-type]
 src/inmanta/data/__init__.py:0: error: Argument 1 to "_execute_query" of "BaseDocument" has incompatible type "dict[str, object]"; expected "str"  [arg-type]
 src/inmanta/data/__init__.py:0: error: Argument 1 to "_get_composed_filter" of "BaseDocument" has incompatible type "**dict[str, object]"; expected "int"  [arg-type]
 src/inmanta/data/__init__.py:0: error: Argument 1 to "_get_composed_filter" of "BaseDocument" has incompatible type "**dict[str, object]"; expected "int"  [arg-type]
@@ -339,6 +337,7 @@ src/inmanta/data/__init__.py:0: error: Incompatible types in "await" (actual typ
 src/inmanta/data/__init__.py:0: error: Incompatible types in assignment (expression has type "DocumentMeta", variable has type "type[BaseDocument]")  [assignment]
 src/inmanta/data/__init__.py:0: error: Incompatible types in assignment (expression has type "dict[str, object]", variable has type "Record")  [assignment]
 src/inmanta/data/__init__.py:0: error: Incompatible types in assignment (expression has type "object", variable has type "int")  [assignment]
+src/inmanta/data/__init__.py:0: error: Incompatible types in assignment (expression has type "object", variable has type "int")  [assignment]
 src/inmanta/data/__init__.py:0: error: Incompatible types in assignment (expression has type "object", variable has type "str")  [assignment]
 src/inmanta/data/__init__.py:0: error: Incompatible types in assignment (expression has type "str", variable has type "ResourceIdStr")  [assignment]
 src/inmanta/data/__init__.py:0: error: Incompatible types in assignment (expression has type "str", variable has type "ResourceIdStr")  [assignment]
@@ -351,7 +350,6 @@ src/inmanta/data/__init__.py:0: error: Item "None" of "RowLockMode | None" has n
 src/inmanta/data/__init__.py:0: error: Key expression in dictionary comprehension has incompatible type "object"; expected type "ResourceIdStr"  [misc]
 src/inmanta/data/__init__.py:0: error: Key expression in dictionary comprehension has incompatible type "object"; expected type "ResourceIdStr"  [misc]
 src/inmanta/data/__init__.py:0: error: Key expression in dictionary comprehension has incompatible type "object"; expected type "ResourceIdStr"  [misc]
-src/inmanta/data/__init__.py:0: error: Key expression in dictionary comprehension has incompatible type "str"; expected type "ResourceIdStr"  [misc]
 src/inmanta/data/__init__.py:0: error: List comprehension has incompatible type List[object]; expected List[str]  [misc]
 src/inmanta/data/__init__.py:0: error: List comprehension has incompatible type List[object]; expected List[str]  [misc]
 src/inmanta/data/__init__.py:0: error: List item 0 has incompatible type "object"; expected "str"  [list-item]
@@ -359,13 +357,13 @@ src/inmanta/data/__init__.py:0: error: List item 0 has incompatible type "object
 src/inmanta/data/__init__.py:0: error: Missing type parameters for generic type "Field"  [type-arg]
 src/inmanta/data/__init__.py:0: error: Missing type parameters for generic type "Field"  [type-arg]
 src/inmanta/data/__init__.py:0: error: Missing type parameters for generic type "Field"  [type-arg]
-src/inmanta/data/__init__.py:0: error: Missing type parameters for generic type "dict"  [type-arg]
 src/inmanta/data/__init__.py:0: error: Missing type parameters for generic type "dict"  [type-arg]
 src/inmanta/data/__init__.py:0: error: Missing type parameters for generic type "list"  [type-arg]
 src/inmanta/data/__init__.py:0: error: Need type annotation for "_updates" (hint: "_updates: dict[<type>, <type>] = ...")  [var-annotated]
 src/inmanta/data/__init__.py:0: error: No overload variant of "__add__" of "list" matches argument type "Sequence[tuple[str, ColumnType, PagingOrder]]"  [operator]
 src/inmanta/data/__init__.py:0: error: No overload variant of "int" matches argument type "object"  [call-overload]
 src/inmanta/data/__init__.py:0: error: No overload variant of "int" matches argument type "object"  [call-overload]
+src/inmanta/data/__init__.py:0: error: No overload variant of "list" matches argument type "object"  [call-overload]
 src/inmanta/data/__init__.py:0: error: No overload variant of "list" matches argument type "object"  [call-overload]
 src/inmanta/data/__init__.py:0: error: Overloaded function implementation does not accept all possible arguments of signature 1  [misc]
 src/inmanta/data/__init__.py:0: error: Returning Any from function declared to return "Connection"  [no-any-return]
@@ -377,7 +375,6 @@ src/inmanta/data/__init__.py:0: error: Returning Any from function declared to r
 src/inmanta/data/__init__.py:0: error: Signature of "_generate_next_value_" incompatible with supertype "enum.Enum"  [override]
 src/inmanta/data/__init__.py:0: error: Signature of "get_list" incompatible with supertype "BaseDocument"  [override]
 src/inmanta/data/__init__.py:0: error: Unsupported left operand type for + ("dict[str, object]")  [operator]
-src/inmanta/data/__init__.py:0: error: Unsupported left operand type for + ("object")  [operator]
 src/inmanta/data/__init__.py:0: error: Unsupported right operand type for in ("object")  [operator]
 src/inmanta/data/__init__.py:0: error: Unsupported target for indexed assignment ("object")  [index]
 src/inmanta/data/__init__.py:0: error: Unused "type: ignore" comment  [unused-ignore]
@@ -391,6 +388,7 @@ src/inmanta/data/__init__.py:0: note: Possible overload variants:
 src/inmanta/data/__init__.py:0: note: Possible overload variants:
 src/inmanta/data/__init__.py:0: note: Possible overload variants:
 src/inmanta/data/__init__.py:0: note: Possible overload variants:
+src/inmanta/data/__init__.py:0: note: Possible overload variants:
 src/inmanta/data/__init__.py:0: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#incompatible-overrides
 src/inmanta/data/__init__.py:0: note: Subclass:
 src/inmanta/data/__init__.py:0: note: Subclass:
@@ -399,6 +397,8 @@ src/inmanta/data/__init__.py:0: note: Superclass:
 src/inmanta/data/__init__.py:0: note: This violates the Liskov substitution principle
 src/inmanta/data/__init__.py:0: note: def [_S] __add__(self, list[_S], /) -> list[_S | tuple[str, ColumnType, PagingOrder]]
 src/inmanta/data/__init__.py:0: note: def [_T] __init__(self) -> list[_T]
+src/inmanta/data/__init__.py:0: note: def [_T] __init__(self) -> list[_T]
+src/inmanta/data/__init__.py:0: note: def [_T] __init__(self, Iterable[_T], /) -> list[_T]
 src/inmanta/data/__init__.py:0: note: def [_T] __init__(self, Iterable[_T], /) -> list[_T]
 src/inmanta/data/__init__.py:0: note: def __add__(self, list[tuple[str, ColumnType, PagingOrder]], /) -> list[tuple[str, ColumnType, PagingOrder]]
 src/inmanta/data/__init__.py:0: note: def __new__(cls, str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc = ..., /) -> int
@@ -1065,8 +1065,6 @@ src/inmanta/server/services/environment_metrics_service.py:0: error: Function is
 src/inmanta/server/services/environment_metrics_service.py:0: error: Function is missing a return type annotation  [no-untyped-def]
 src/inmanta/server/services/environment_metrics_service.py:0: error: Unsupported target for indexed assignment ("float | dict[str, float] | None")  [index]
 src/inmanta/server/services/metricservice.py:0: error: Incompatible types in assignment (expression has type "float", variable has type "int")  [assignment]
-src/inmanta/server/services/orchestrationservice.py:0: error: "object" has no attribute "__iter__"; maybe "__dir__" or "__str__"? (not iterable)  [attr-defined]
-src/inmanta/server/services/orchestrationservice.py:0: error: "object" has no attribute "__iter__"; maybe "__dir__" or "__str__"? (not iterable)  [attr-defined]
 src/inmanta/server/services/orchestrationservice.py:0: error: Argument 1 to "add_background_task" of "TaskHandler" has incompatible type "Coroutine[Any, Any, tuple[int, dict[str, Any] | None]]"; expected "Awaitable[Result[BaseModel | UUID | bool | int | float | <6 more items> | None] | None]"  [arg-type]
 src/inmanta/server/services/orchestrationservice.py:0: error: Argument 1 to "append" of "list" has incompatible type "Resource"; expected "dict[str, Any]"  [arg-type]
 src/inmanta/server/services/orchestrationservice.py:0: error: Incompatible return value type (got "ReturnValueWithMeta[Sequence[DesiredStateVersion]]", expected "ReturnValue[list[DesiredStateVersion]]")  [return-value]

@@ -902,22 +902,38 @@ async def resource_action_consistency_check():
 
     async def get_data(postgresql_client):
         post_ra_one = await postgresql_client.fetch(
-            """SELECT ra.action_id, r.environment, r.resource_id, r.model FROM public.resourceaction as ra
-                    INNER JOIN public.resource as r
-                    ON r.resource_id || ',v=' || r.model = ANY(ra.resource_version_ids)
+            """SELECT
+                ra.action_id,
+                r.environment,
+                r.resource_id,
+                rscm.model
+                FROM resource_set_configuration_model AS rscm
+                INNER JOIN resource AS r
+                    ON rscm.environment=r.environment
+                    AND rscm.resource_set_id=r.resource_set_id
+                INNER JOIN resourceaction as ra
+                    ON r.resource_id || ',v=' || rscm.model = ANY(ra.resource_version_ids)
                     AND r.environment = ra.environment
             """
         )
         post_ra_one_set = {(r[0], r[1], r[2], r[3]) for r in post_ra_one}
 
         post_ra_two = await postgresql_client.fetch(
-            """SELECT ra.action_id, r.environment, r.resource_id, r.model FROM public.resource as r
-                    INNER JOIN public.resourceaction_resource as jt
-                         ON r.environment = jt.environment
-                        AND r.resource_id = jt.resource_id
-                        AND r.model = jt.resource_version
-                    INNER JOIN public.resourceaction as ra
-                        ON ra.action_id = jt.resource_action_id
+            """SELECT
+                ra.action_id,
+                r.environment,
+                r.resource_id,
+                rscm.model
+            FROM resource_set_configuration_model AS rscm
+            INNER JOIN resource AS r
+                ON rscm.environment=r.environment
+                AND rscm.resource_set_id=r.resource_set_id
+            INNER JOIN public.resourceaction_resource as jt
+                 ON r.environment = jt.environment
+                AND r.resource_id = jt.resource_id
+                AND rscm.model = jt.resource_version
+            INNER JOIN public.resourceaction as ra
+                ON ra.action_id = jt.resource_action_id
             """
         )
         post_ra_two_set = {(r[0], r[1], r[2], r[3]) for r in post_ra_two}
@@ -1250,3 +1266,24 @@ def read_file(file_name: str) -> str:
     """
     with open(file_name, "r") as fh:
         return fh.read()
+
+
+async def insert_with_link_to_configuration_model(resource_set: data.ResourceSet, versions: list[int] | None = None) -> None:
+    """
+    Inserts the ResourceSet into the database and creates a link to the configuration models in the versions argument.
+    :param resource_set: The resource set to create
+    :param versions: The versions of the configuration model this ResourceSet belongs to
+    """
+    async with resource_set.get_connection() as con:
+        await resource_set.insert(con)
+        if versions is not None and len(versions) > 0:
+            query = """
+            INSERT INTO public.resource_set_configuration_model(
+                environment,
+                resource_set_id,
+                model
+            )
+            SELECT $1, $2, UNNEST($3::int[])
+            ON CONFLICT DO NOTHING;
+            """
+            await con.execute(query, resource_set.environment, resource_set.id, versions)

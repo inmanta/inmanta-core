@@ -47,7 +47,6 @@ from inmanta.data import (
     Parameter,
     ParameterOrder,
     QueryFilter,
-    Resource,
     ResourceAction,
     ResourceHistoryOrder,
     ResourceLogOrder,
@@ -540,37 +539,13 @@ class ResourceView(DataView[ResourceStatusOrder, model.LatestReleasedResource]):
         return {"deploy_summary": str(self.deploy_summary)}
 
     def get_base_query(self) -> SimpleQueryBuilder:
-        new_query_builder = SimpleQueryBuilder(
-            select_clause="SELECT *",
-            prelude=f"""
-               WITH latest_version AS (
+        prelude: str
+        if self.drop_orphans:
+            prelude = f"""
+            WITH latest_version AS (
                     SELECT MAX(public.configurationmodel.version) as version
                     FROM public.configurationmodel
-                    WHERE public.configurationmodel.released=TRUE AND environment=$1
-                ), versioned_resource_state AS (
-                    SELECT
-                        rps.*,
-                        CASE
-                            -- try the cheap, trivial option first because the lookup has a big performance impact
-                            WHEN EXISTS (
-                                SELECT 1
-                                FROM resource AS r
-                                WHERE r.environment = rps.environment AND r.resource_id = rps.resource_id AND r.model = (
-                                    SELECT version FROM latest_version
-                                )
-                            ) THEN (SELECT version FROM latest_version)
-                            -- only if the resource does not exist in the latest released version, search for the latest
-                            -- version it does exist in
-                            ELSE (
-                                SELECT MAX(r.model)
-                                FROM resource AS r
-                                JOIN configurationmodel AS m
-                                    ON r.environment = m.environment AND r.model = m.version AND m.released = TRUE
-                                WHERE r.environment = rps.environment AND r.resource_id = rps.resource_id
-                            )
-                        END AS version
-                    FROM resource_persistent_state AS rps
-                    WHERE rps.environment = $1
+                    WHERE public.configurationmodel.released AND environment=$1
                 ), result AS (
                     SELECT
                         rps.resource_id,
@@ -578,20 +553,72 @@ class ResourceView(DataView[ResourceStatusOrder, model.LatestReleasedResource]):
                         rps.resource_type,
                         rps.agent,
                         rps.resource_id_value,
-                        r.model,
+                        rscm.model,
                         rps.environment,
                         {const.SQL_RESOURCE_STATUS_SELECTOR} AS status
-                    FROM versioned_resource_state AS rps
-            -- LEFT join for trivial `COUNT(*)`. Not applicable when filtering orphans because left table contains orphans.
-                    {'' if self.drop_orphans else 'LEFT'} JOIN resource AS r
-                        ON r.environment = rps.environment
-                          AND r.resource_id = rps.resource_id
-           -- shortcut the version selection to the latest one iff we wish to exclude orphans
-           -- => no per-resource MAX required + wider index application
-                          AND r.model = {'(SELECT version FROM latest_version)' if self.drop_orphans else 'rps.version'}
-                    WHERE rps.environment = $1
+                    FROM resource_persistent_state AS rps
+                    INNER JOIN resource AS r
+                        ON r.environment=rps.environment
+                        AND r.resource_id=rps.resource_id
+                    INNER JOIN resource_set_configuration_model AS rscm
+                        ON r.environment=rscm.environment
+                        AND r.resource_set_id=rscm.resource_set_id
+                        AND rscm.model=(SELECT version FROM latest_version)
+                    WHERE rps.environment=$1 AND NOT rps.is_orphan
                 )
-            """,
+        """
+        else:
+            prelude = f"""
+                WITH latest_version AS (
+                    SELECT MAX(public.configurationmodel.version) as version
+                    FROM public.configurationmodel
+                    WHERE public.configurationmodel.released AND environment=$1
+                ), versioned_resource_state AS (
+                    SELECT
+                        rps.*,
+                        CASE
+                            -- try the cheap, trivial option first because the lookup has a big performance impact
+                            WHEN NOT rps.is_orphan
+                                THEN (SELECT version FROM latest_version)
+                            -- only if the resource does not exist in the latest released version, search for the latest
+                            -- version it does exist in
+                            ELSE (
+                                SELECT MAX(rscm.model)
+                                FROM resource AS r
+                                INNER JOIN resource_set_configuration_model AS rscm
+                                    ON r.environment=rscm.environment AND r.resource_set_id=rscm.resource_set_id
+                                INNER JOIN configurationmodel AS m
+                                    ON rscm.environment=m.environment AND rscm.model=m.version
+                                WHERE r.environment=rps.environment AND r.resource_id=rps.resource_id AND m.released
+                            )
+                        END AS version
+                    FROM resource_persistent_state AS rps
+                    WHERE rps.environment = $1
+                ),
+                result AS (
+                    SELECT
+                        rps.resource_id,
+                        r.attributes,
+                        rps.resource_type,
+                        rps.agent,
+                        rps.resource_id_value,
+                        rscm.model,
+                        rps.environment,
+                        {const.SQL_RESOURCE_STATUS_SELECTOR} AS status
+                    FROM resource AS r
+                    INNER JOIN resource_set_configuration_model AS rscm
+                        ON r.environment=rscm.environment
+                        AND r.resource_set_id=rscm.resource_set_id
+                    INNER JOIN versioned_resource_state AS rps
+                        ON r.environment=rps.environment
+                        AND r.resource_id=rps.resource_id
+                        AND rscm.model=rps.version
+                    WHERE r.environment=$1
+                )
+            """
+        new_query_builder = SimpleQueryBuilder(
+            select_clause="SELECT *",
+            prelude=prelude,
             from_clause="FROM result AS r",
             values=[self.environment.id],
         )
@@ -651,9 +678,12 @@ class ResourcesInVersionView(DataView[VersionedResourceOrder, model.VersionedRes
 
     def get_base_query(self) -> SimpleQueryBuilder:
         query_builder = SimpleQueryBuilder(
-            select_clause="SELECT resource_id, attributes, resource_type, agent, resource_id_value, environment",
-            from_clause=f" FROM {data.Resource.table_name()}",
-            filter_statements=["environment = $1", "model = $2"],
+            select_clause="SELECT r.resource_id, r.attributes, r.resource_type, r.agent, r.resource_id_value, r.environment",
+            from_clause=""" FROM resource AS r
+            INNER JOIN resource_set_configuration_model AS rscm
+                ON r.environment=rscm.environment
+                AND r.resource_set_id=rscm.resource_set_id""",
+            filter_statements=["r.environment=$1", "rscm.model=$2"],
             values=[self.environment.id, self.version],
         )
         return query_builder
@@ -789,7 +819,7 @@ class DesiredStateVersionView(DataView[DesiredStateVersionOrder, DesiredStateVer
                                            version_info -> 'export_metadata' ->> 'type' as type,
                                           (CASE WHEN cm.version = {scheduled_version} THEN 'active'
                                               WHEN cm.version > {scheduled_version} THEN 'candidate'
-                                              WHEN cm.version < {scheduled_version} AND cm.released=TRUE THEN 'retired'
+                                              WHEN cm.version < {scheduled_version} AND cm.released THEN 'retired'
                                               ELSE 'skipped_candidate'
                                           END) as status,
                                           cm.released as released""",
@@ -861,16 +891,19 @@ class ResourceHistoryView(DataView[ResourceHistoryOrder, ResourceHistory]):
                 WITH resourcewithsequenceids AS (
                   SELECT
                     attribute_hash,
-                    model,
+                    rscm.model,
                     attributes,
                     date,
                     ROW_NUMBER() OVER (ORDER BY date) - ROW_NUMBER() OVER (
                       PARTITION BY attribute_hash
                       ORDER BY date
                     ) AS seqid
-                  FROM resource JOIN configurationmodel cm
-                    ON resource.model = cm.version AND resource.environment = cm.environment
-                  WHERE resource.environment = $1 AND resource_id = $2 AND cm.released = TRUE
+                  FROM resource AS r
+                  INNER JOIN resource_set_configuration_model AS rscm
+                    ON r.resource_set_id=rscm.resource_set_id AND r.environment=rscm.environment
+                  INNER JOIN configurationmodel AS cm
+                    ON rscm.environment=cm.environment AND rscm.model=cm.version
+                  WHERE r.environment=$1 AND r.resource_id=$2 AND cm.released
                 )
             """,
             select_clause="SELECT attribute_hash, date, attributes, model",
@@ -966,15 +999,11 @@ class ResourceLogsView(DataView[ResourceLogOrder, ResourceLog]):
                 -- Get all resource action in the given environment for the given resource_id
                 WITH actions AS (
                     SELECT  ra.*
-                    FROM {Resource.table_name()} AS r INNER JOIN resourceaction_resource AS rr ON (
-                                                          r.environment=rr.environment
-                                                          AND r.resource_id=rr.resource_id
-                                                          AND r.model=rr.resource_version
-                                                      )
-                                                      INNER JOIN {ResourceAction.table_name()} AS ra ON (
-                                                          rr.resource_action_id=ra.action_id
-                                                      )
-                    WHERE r.environment=$1 AND r.resource_id=$2
+                    FROM resourceaction_resource AS rr
+                    INNER JOIN  {ResourceAction.table_name()} AS ra
+                        ON rr.environment=ra.environment
+                        AND rr.resource_action_id=ra.action_id
+                    WHERE rr.environment=$1 AND rr.resource_id=$2
                 )
             """,
             select_clause="SELECT action_id, action, timestamp, unnested_message",

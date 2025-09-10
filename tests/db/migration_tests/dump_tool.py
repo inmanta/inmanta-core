@@ -44,7 +44,7 @@ else:
 
 
 def check_result(result: inmanta.protocol.Result) -> bool:
-    assert result.code == 200
+    assert result.code == 200, result.result["message"]
 
 
 async def populate_facts_and_parameters(client, env_id: str):
@@ -193,6 +193,44 @@ async def test_dump_db(
 
     # Partial compile
     rid2 = "test::Resource[agent2,key=key2]"
+    rid3 = "test::Resource[agent3,key=key3]"
+    resources_partial = [
+        {
+            "key": "key2",
+            "version": 0,
+            "id": f"{rid2},v=0",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "key": "key2",
+            "version": 0,
+            "id": f"{rid3},v=0",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+    ]
+    resource_sets = {rid2: "set-a", rid3: "set-b"}
+    resource_states = {rid2: const.ResourceState.available}
+    check_result(
+        await client.put_partial(
+            tid=env_id_1,
+            resources=resources_partial,
+            resource_state=resource_states,
+            unknowns=[],
+            version_info=None,
+            resource_sets=resource_sets,
+            module_version_info={},
+        )
+    )
+    env_1_version += 1
+    await wait_for_version(client, env_id_1, env_1_version)
+
+    check_result(await client.release_version(env_id_1, env_1_version))
+
+    await wait_until_deployment_finishes(client, env_id_1, timeout=20)
     resources_partial = [
         {
             "key": "key2",
@@ -213,9 +251,16 @@ async def test_dump_db(
             unknowns=[],
             version_info=None,
             resource_sets=resource_sets,
+            removed_resource_sets=["set-b"],
             module_version_info={},
         )
     )
+    env_1_version += 1
+    await wait_for_version(client, env_id_1, env_1_version)
+
+    check_result(await client.release_version(env_id_1, env_1_version))
+
+    await wait_until_deployment_finishes(client, env_id_1, timeout=20)
 
     result = await client.create_environment(project_id=project_id, name="dev-3")
     assert result.code == 200

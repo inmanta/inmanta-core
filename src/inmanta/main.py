@@ -33,7 +33,7 @@ from inmanta import protocol, util
 from inmanta.config import Config, cmdline_rest_transport
 from inmanta.const import AgentAction, DesiredStateVersionStatus, ResourceAction
 from inmanta.resources import Id
-from inmanta.types import JsonType, ResourceVersionIdStr
+from inmanta.types import JsonType, ResourceIdStr, ResourceVersionIdStr
 
 
 class Client:
@@ -759,13 +759,12 @@ def version_report(client: Client, environment: str, version: str, show_detailed
         click.echo("=" * 72)
 
         for t in sorted(agents[agent].keys()):
-            resource_version_id = cast(ResourceVersionIdStr, agents[agent][t][0]["resource_version_id"])
-            parsed_resource_version_id = Id.parse_id(resource_version_id)
+            parsed_resource_version_id = Id.parse_id(agents[agent][t][0]["resource_id"])
             click.echo(click.style("Resource type:", bold=True) + f"{t} ({parsed_resource_version_id.attribute})")
             click.echo("-" * 72)
 
             for res in agents[agent][t]:
-                parsed_id = Id.parse_id(res["resource_version_id"])
+                parsed_id = Id.parse_id(cast(ResourceIdStr, res["resource_id"]))
                 click.echo((click.style(parsed_id.attribute_value, bold=True) + " (#actions=%d)") % len(res["actions"]))
                 # for dryrun show only the latest, for deploy all
                 if not result["model"]["released"]:
