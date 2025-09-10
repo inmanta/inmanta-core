@@ -36,7 +36,6 @@ from importlib.machinery import ModuleSpec, SourcelessFileLoader
 from itertools import chain
 from typing import TYPE_CHECKING, Optional
 
-import inmanta.export as export
 from inmanta import const, module
 from inmanta.stable_api import stable_api
 from inmanta.util import hash_file_streaming
@@ -135,29 +134,8 @@ class CodeManager:
         # Cache of module to source info
         self.__module_to_source_info: dict[str, list[SourceInfo]] = {}
 
-        # Content of the file containing python package constraints
-        # set at the project level that have to be enforced when installing packages
-        # in the agents venv.
-        self._project_constraints_hash: str | None = None
-
-    def register_project_constraints(self, exporter: "export.Exporter") -> None:
-        """
-        Helper method to retrieve all package constraints defined at the project level and compile them
-        into a constraint file.
-
-        This file will be uploaded to the db and used by the agents when installing
-        packages into their venv.
-        """
-        constraints: Sequence[str] = module.Project.get().get_all_constraints()
-        if constraints:
-            content: str = "\n".join(constraints)
-            self._project_constraints_hash = exporter.upload_file(content)
-        else:
-            self._project_constraints_hash = None
-
     def register_code(self, type_name: str, instance: object) -> None:
         """Register the given type_object under the type_name and register the source associated with this type object.
-        This method assumes the register_project_constraints method was called first.
 
         :param type_name: The inmanta type name for which the source of type_object will be registered.
             For example std::testing::NullResource
@@ -219,9 +197,6 @@ class CodeManager:
     def get_types(self) -> Iterable[tuple[str, list[SourceInfo]]]:
         """Get a list of all registered types"""
         return ((type_name, [self.__file_info[path] for path in files]) for type_name, files in self.__type_file.items())
-
-    def get_project_constraints_file_hash(self) -> str | None:
-        return self._project_constraints_hash
 
 
 @dataclass(frozen=True)

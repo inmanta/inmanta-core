@@ -158,7 +158,7 @@ class EnvBlueprint:
             other.pip_config,
             set(other.requirements),
             other.python_version,
-            self.project_constraints,
+            other.project_constraints,
         )
 
     def __hash__(self) -> int:

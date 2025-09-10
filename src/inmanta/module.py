@@ -1975,7 +1975,6 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
     def get_all_constraints(self) -> str:
         """
-
         Compile a list of all package installation constraints defined at the project level. This method
         inspects the requirements.txt file and the 'requires' section of the project.yml and compiles a list of
         requirements.

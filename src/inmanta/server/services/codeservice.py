@@ -101,14 +101,12 @@ class CodeService(protocol.ServerSlice):
 
     @handle(methods_v2.get_source_code, env="tid")
     async def get_source_code(self, env: data.Environment, version: int, resource_type: str) -> GetSourceCodeResponse:
-        LOGGER.debug("YELL")
         code = await data.Code.get_version(environment=env.id, version=version, resource=resource_type)
         if code is None:
             raise NotFound(f"The version of the code does not exist. {resource_type}, {version}")
 
         sources = []
 
-        LOGGER.debug(f"{code=}")
         # Get all module code pertaining to this env/version/resource
         if code.source_refs is not None:
             for code_hash, (file_name, module, requires) in code.source_refs.items():
@@ -120,5 +118,5 @@ class CodeService(protocol.ServerSlice):
         cm = await data.ConfigurationModel.get_version(environment=env.id, version=version)
 
         if cm is None:
-            raise NotFound(f"The version of the code does not exist. {resource_type}, {version}")
+            raise NotFound(f"Version {version} of the configuration model does not exist")
         return GetSourceCodeResponse(sources=sources, project_constraints=cm.project_constraints)

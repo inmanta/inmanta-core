@@ -98,18 +98,8 @@ def upload_code(conn: protocol.SyncClient, tid: uuid.UUID, version: int, code_ma
     #
     # source_map = {
     #    "mymodule::Mytype": {
-    #      'abc123': (
-    #         '/path/to/__init__.py',
-    #         'inmanta_plugins.mymodule.Mytype',
-    #         <requirements if any>,
-    #         <constraints_file_hash if any>
-    #      ),
-    #      'def456': (
-    #         '/path/to/utils.py',
-    #         'inmanta_plugins.mymodule.Mytype',
-    #         <requirements if any>,
-    #         <constraints_file_hash if any>
-    #      )
+    #      'abc123': ('/path/to/__init__.py', 'inmanta_plugins.mymodule.Mytype', <requirements if any>),
+    #      'def456': ('/path/to/utils.py', 'inmanta_plugins.mymodule.Mytype', <requirements if any>)
     #    },
     # ...other types would be included as well
     # }
@@ -554,8 +544,6 @@ class Exporter:
 
         LOGGER.info("Sending resources and handler source to server")
 
-        code_manager.register_project_constraints(self)
-
         types = set()
 
         # Load both resource definition and handlers
@@ -647,7 +635,6 @@ class Exporter:
                 else:
                     LOGGER.debug("  %s not in any resource set", rid)
 
-        # todo double check signature in iso9 PR
         def do_put(project_constraints: str | None = None, **kwargs: object) -> protocol.Result:
             if partial_compile:
                 result = self.client.put_partial(

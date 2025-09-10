@@ -78,19 +78,18 @@ async def agent(server, environment, deactive_venv):
 
 
 async def make_source_structure(
-    into: dict[str, tuple[str, str, list[str], str | None]],
+    into: dict[str, tuple[str, str, list[str]]],
     file: str,
     module: str,
     source: str,
     client: Client,
     byte_code: bool = False,
     dependencies: list[str] = [],
-    constraints_file_hash: str | None = None,
 ) -> str:
     """
     :param into: dict to populate:
         - key = hash value of the file
-        - value = tuple (file_name, module, dependencies, constraints_file_hash)
+        - value = tuple (file_name, module, dependencies)
     """
     with tempfile.TemporaryDirectory() as tmpdirname:
         if byte_code:
@@ -394,7 +393,6 @@ async def test_project_constraints_in_agent_code_install(server, client, environ
     content = "#The code"
 
     constraints = "dummy_constraint~=1.2.3\ndummy_constraint<5.5.5"
-    constraints_file_hash: str = await upload_file(client, constraints)
     await make_source_structure(
         sources,
         "inmanta_plugins/test/__init__.py",
@@ -402,7 +400,6 @@ async def test_project_constraints_in_agent_code_install(server, client, environ
         content,
         dependencies=[],
         client=client,
-        constraints_file_hash=constraints_file_hash,
     )
 
     result = await client.put_version(
@@ -442,7 +439,6 @@ async def test_project_constraints_in_agent_code_install(server, client, environ
         content,
         dependencies=[],
         client=client,
-        constraints_file_hash=None,
     )
 
     result = await client.put_version(
