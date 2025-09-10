@@ -861,7 +861,6 @@ class NotificationOrder(AbstractDatabaseOrderV2):
         return (ColumnNameStr("id"), UUIDColumn)
 
 
-# TODO
 class DiscoveredResourceOrder(SingleDatabaseOrder):
     """Represents the ordering by which discovered resources should be sorted"""
 
@@ -870,6 +869,9 @@ class DiscoveredResourceOrder(SingleDatabaseOrder):
         """Describes the names and types of the columns that are valid for this DatabaseOrder"""
         return {
             ColumnNameStr("discovered_resource_id"): StringColumn,
+            ColumnNameStr("agent"): StringColumn,
+            ColumnNameStr("resource_type"): StringColumn,
+            ColumnNameStr("resource_id_value"): StringColumn,
         }
 
 

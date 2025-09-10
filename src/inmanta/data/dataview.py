@@ -1319,7 +1319,7 @@ class AgentView(DataView[AgentOrder, model.Agent]):
         ]
 
 
-# TODO
+# TODO: test filtering and sorting
 class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredResource]):
     def __init__(
         self,
@@ -1347,6 +1347,9 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
         Return the specification of the allowed filters, see FilterValidator
         """
         return {
+            "resource_type": ContainsPartialFilter,
+            "agent": ContainsPartialFilter,
+            "resource_id_value": ContainsPartialFilter,
             "managed": BooleanEqualityFilter,
         }
 
