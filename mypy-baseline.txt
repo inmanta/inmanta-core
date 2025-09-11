@@ -257,7 +257,6 @@ src/inmanta/data/__init__.py:0: error: Argument "errstream" to "CompileRunReport
 src/inmanta/data/__init__.py:0: error: Argument "exporter_plugin" to "CompileDetails" has incompatible type "object"; expected "str | None"  [arg-type]
 src/inmanta/data/__init__.py:0: error: Argument "failed_compile_message" to "CompileDetails" has incompatible type "object"; expected "str | None"  [arg-type]
 src/inmanta/data/__init__.py:0: error: Argument "first_generated_time" to "ReleasedResourceDetails" has incompatible type "object"; expected "datetime"  [arg-type]
-src/inmanta/data/__init__.py:0: error: Argument "first_generated_version" to "ReleasedResourceDetails" has incompatible type "object"; expected "int"  [arg-type]
 src/inmanta/data/__init__.py:0: error: Argument "force_update" to "CompileDetails" has incompatible type "object"; expected "bool"  [arg-type]
 src/inmanta/data/__init__.py:0: error: Argument "id" to "CompileDetails" has incompatible type "object"; expected "UUID"  [arg-type]
 src/inmanta/data/__init__.py:0: error: Argument "id" to "CompileRunReport" has incompatible type "object"; expected "UUID"  [arg-type]
