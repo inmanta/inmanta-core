@@ -1023,8 +1023,6 @@ async def test_project_constraints_in_agent_code_install(server, client, environ
     res = await client.release_version(tid=environment, id=version)
     assert res.code == 200
 
-    await wait_until_deployment_finishes(client, environment, version=version)
-
     result = await client.put_partial(
         tid=environment,
         resources=get_resources(0),

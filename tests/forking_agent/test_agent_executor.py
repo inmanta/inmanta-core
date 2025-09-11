@@ -112,10 +112,11 @@ assert inmanta_plugins.sub.a == 1""",
         environment_id=env_id,
         pip_config=pip_config,
         requirements=requirements1,
-        sources=sources1,
         python_version=sys.version_info[:2],
         project_constraints=None,
+        sources=sources1,
     )
+
     env_blueprint1 = executor.EnvBlueprint(
         environment_id=env_id,
         pip_config=pip_config,
@@ -128,17 +129,17 @@ assert inmanta_plugins.sub.a == 1""",
         environment_id=env_id,
         pip_config=pip_config,
         requirements=requirements1,
-        sources=sources2,
         python_version=sys.version_info[:2],
         project_constraints=None,
+        sources=sources2,
     )
     blueprint3 = executor.ExecutorBlueprint(
         environment_id=env_id,
         pip_config=pip_config,
         requirements=requirements2,
-        sources=sources2,
         python_version=sys.version_info[:2],
         project_constraints=None,
+        sources=sources2,
     )
     env_blueprint2 = executor.EnvBlueprint(
         environment_id=env_id,
@@ -151,9 +152,9 @@ assert inmanta_plugins.sub.a == 1""",
         environment_id=env_id,
         pip_config=pip_config,
         requirements=requirements2,
-        sources=sources2,
         python_version=sys.version_info[:2],
         project_constraints=constraints,
+        sources=sources2,
     )
     env_blueprint3 = executor.EnvBlueprint(
         environment_id=env_id,
