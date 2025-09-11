@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump sphinx-click from 6.0.0 to 6.1.0
+destination-branches:
+- iso8
+sections: {}
