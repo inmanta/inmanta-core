@@ -61,6 +61,7 @@ def make_shared_set(resource_version=0, size=2, revision=0):
 
 def make_set(
     set_collector: dict[str, object],
+    reverse_set_collector: dict[str, set[str]],
     set_id: str,
     resource_version=0,
     revision=0,
@@ -88,8 +89,15 @@ def make_set(
         }
         for i in range(size)
     ]
+
+    ids = set()
+
     for i in range(size):
         set_collector[f"test::Resource[agent1,key={set_id}-{i}]"] = set_id
+        ids.add(f"test::Resource[agent1,key={set_id}-{i}]")
+
+    reverse_set_collector[set_id] = ids
+
     return resources
 
 
@@ -122,7 +130,7 @@ async def test_partial_compile_scenarios_end_to_end(
 
     # Add one resourceset to secondary
     version = await secondary_client_helper.get_version()
-    resources = make_set({}, "all", version, 0)
+    resources = make_set({}, {}, "all", version, 0)
     await secondary_client_helper.put_version_simple(resources, version)
 
     async def assert_secondary():
@@ -157,7 +165,14 @@ async def test_partial_compile_scenarios_end_to_end(
         assert executor.executors["agent1"].execute_count == expected_deploy_count
         executor.executors["agent1"].reset_counters()
 
-    async def put_partial(resources, set_collector, expected_deploy_count, total_size, remove=[]):
+    async def put_partial(
+        resources,
+        set_collector,
+        expected_deploy_count,
+        total_size,
+        resource_ids: set[str],
+        remove=[],
+    ):
         # Put a partial version and assert size and nr of resources deployed
         res = await client.put_partial(
             tid=environment,
@@ -173,19 +188,31 @@ async def test_partial_compile_scenarios_end_to_end(
         await clienthelper.wait_for_deployed(version)
         executor = executor_factory(uuid.UUID(environment))
         assert executor.executors["agent1"].execute_count == expected_deploy_count
+        for rd in executor.executors["agent1"].seen:
+            assert rd.model_version == version
+
         executor.executors["agent1"].reset_counters()
         # assert total size
-        result = await client.resource_list(environment, deploy_summary=True)
+        result = await client.resource_list(environment, deploy_summary=True, filter={"status": "!orphaned"})
         assert result.code == 200
         summary = result.result["metadata"]["deploy_summary"]
         assert summary["total"] == total_size
+
+        rids = {r.resource_id for r in result.value()}
+        assert resource_ids == rids
 
     # Put full (with shared set)
     version = await clienthelper.get_version()
     await clienthelper.set_auto_deploy(True)
 
     set_collector = {}
-    resources = make_shared_set(version) + make_set(set_collector, "set1", version) + make_set(set_collector, "set2", version)
+    all_sets = {}
+
+    resources = (
+        make_shared_set(version)
+        + make_set(set_collector, all_sets, "set1", version)
+        + make_set(set_collector, all_sets, "set2", version)
+    )
     # set1 : 5
     # set2 : 5
     # shared : 2
@@ -194,56 +221,91 @@ async def test_partial_compile_scenarios_end_to_end(
     # # Update 1 set and push shared
     set_collector = {}
     version = 0
-    resources = make_shared_set(version) + make_set(set_collector, "set1", version, size=6)
+    resources = make_shared_set(version) + make_set(set_collector, all_sets, "set1", version, size=6)
+    shared = {"test::Resource[agent1,key=shared1]", "test::Resource[agent1,key=shared2]"}
+
     # set1 : 6
     # set2 : 5
     # shared : 2
-    await put_partial(resources, set_collector, expected_deploy_count=1, total_size=13)
+    await put_partial(
+        resources,
+        set_collector,
+        expected_deploy_count=1,
+        total_size=13,
+        resource_ids=shared.union(all_sets["set1"]).union(all_sets["set2"]),
+    )
 
     # Update 1 set  and push part of shared
     set_collector = {}
     version = 0
-    resources = make_shared_set(version, 1) + make_set(set_collector, "set2", version, size=6)
+    resources = make_shared_set(version, 1) + make_set(set_collector, all_sets, "set2", version, size=6)
     # set1 : 6
     # set2 : 6
     # shared : 2
-    await put_partial(resources, set_collector, expected_deploy_count=1, total_size=14)
+    await put_partial(
+        resources,
+        set_collector,
+        expected_deploy_count=1,
+        total_size=14,
+        resource_ids=shared.union(all_sets["set1"]).union(all_sets["set2"]),
+    )
 
     # Update 1 set and add to shared
     set_collector = {}
     version = 0
-    resources = make_shared_set(version, 3) + make_set(set_collector, "set2", version, size=7)
+    shared.add("test::Resource[agent1,key=shared3]")
+    resources = make_shared_set(version, 3) + make_set(set_collector, all_sets, "set2", version, size=7)
     # Added one resource to shared, one to set2
     # set1 : 6
     # set2 : 7
     # shared : 3
-    await put_partial(resources, set_collector, expected_deploy_count=2, total_size=16)
+    await put_partial(
+        resources,
+        set_collector,
+        expected_deploy_count=2,
+        total_size=16,
+        resource_ids=shared.union(all_sets["set1"]).union(all_sets["set2"]),
+    )
 
     # Update 1 set
     set_collector = {}
     version = 0
-    resources = make_set(set_collector, "set2", version, size=3, revision=1)
+    resources = make_set(set_collector, all_sets, "set2", version, size=3, revision=1)
     # set1 : 6
     # set2 : 3
     # shared : 3
-    await put_partial(resources, set_collector, expected_deploy_count=3, total_size=12)
+    await put_partial(
+        resources,
+        set_collector,
+        expected_deploy_count=3,
+        total_size=12,
+        resource_ids=shared.union(all_sets["set1"]).union(all_sets["set2"]),
+    )
 
     # put full (remove 1 set, remove from shared )
     set_collector = {}
     version = await clienthelper.get_version()
-    resources = make_shared_set(version) + make_set(set_collector, "set1", version)
+    resources = make_shared_set(version) + make_set(set_collector, all_sets, "set1", version)
     await put_full(version, resources, set_collector, 0)
+    shared = {"test::Resource[agent1,key=shared1]", "test::Resource[agent1,key=shared2]"}
     # set1 : 5
     # shared : 2
 
     # Update 2 sets / remove 1
     set_collector = {}
     version = 0
-    resources = make_set(set_collector, "set2", version, revision=1) + make_set(set_collector, "set3")
+    resources = make_set(set_collector, all_sets, "set2", version, revision=1) + make_set(set_collector, all_sets, "set3")
     # set1 : 0
     # set2 : 5
     # set3 : 5
     # shared : 2
-    await put_partial(resources, set_collector, expected_deploy_count=10, total_size=12, remove=["set1"])
+    await put_partial(
+        resources,
+        set_collector,
+        expected_deploy_count=10,
+        total_size=12,
+        remove=["set1"],
+        resource_ids=shared.union(all_sets["set3"]).union(all_sets["set2"]),
+    )
 
     await assert_secondary()

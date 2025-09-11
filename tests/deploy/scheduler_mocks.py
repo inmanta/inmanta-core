@@ -59,11 +59,13 @@ class DummyExecutor(executor.Executor):
         self.dry_run_count = 0
         self.facts_count = 0
         self.mock_versions = {}
+        self.seen: list[ResourceDetails] = []
 
     def reset_counters(self) -> None:
         self.execute_count = 0
         self.dry_run_count = 0
         self.facts_count = 0
+        self.seen.clear()
 
     async def execute(
         self,
@@ -74,7 +76,7 @@ class DummyExecutor(executor.Executor):
         requires: Mapping[ResourceIdStr, const.HandlerResourceState],
     ) -> DeployReport:
         assert reason
-
+        self.seen.append(resource_details)
         self.execute_count += 1
         result = (
             const.HandlerResourceState.failed

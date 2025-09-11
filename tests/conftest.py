@@ -1010,7 +1010,6 @@ async def agent_factory(
             a.thread_pool,
             str(pathlib.Path(a._storage["executors"]) / "code"),
             str(pathlib.Path(a._storage["executors"]) / "venvs"),
-            False,
         )
         a.executor_manager = executor
         a.scheduler.executor_manager = executor
