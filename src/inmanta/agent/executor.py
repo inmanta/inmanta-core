@@ -400,7 +400,6 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
                 shutil.copy2(src=legacy_path, dst=pathlib.Path(self.inmanta_storage) / file_name)
                 os.remove(legacy_path)
 
-
         return self.inmanta_venv_status_file.exists()
 
     def touch(self) -> None:
@@ -458,7 +457,6 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         self.remove_venv()
         # This will also create the venv dir sitting above the .inmanta storage
         os.makedirs(self.inmanta_storage)
-
 
 
 class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, str, ExecutorVirtualEnvironment]):
