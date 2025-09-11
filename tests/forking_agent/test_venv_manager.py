@@ -441,7 +441,7 @@ async def test_recovery_virtual_environment_manager(tmpdir, pip_index, async_fin
 
     # Assert venv1 was removed
     venv_dirs = os.listdir(tmpdir)
-    assert venv_dirs == [venv2.folder_name]
+    assert venv_dirs == [venv2.id]
 
     await venv_manager.request_shutdown()
     await venv_manager.join()
