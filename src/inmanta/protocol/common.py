@@ -1225,7 +1225,7 @@ class Result(Generic[R]):
                 else exception()
             )
 
-        warnings: Optional[object] = self.result.get("metadata", {}).get("warnings", None)
+        warnings: Optional[object] = self.result.get("metadata", {}).get("warnings", None) if self.result is not None else None
         if warnings is not None:
             if not isinstance(warnings, list):
                 raise exceptions.BadRequest("Invalid warnings metadata attached to method response.")
@@ -1234,7 +1234,7 @@ class Result(Generic[R]):
                     raise exceptions.BadRequest("Invalid warnings metadata attached to method response.")
                 LOGGER.warning(warning)
 
-        if self.method_properties.return_type is None:
+        if self.method_properties.return_type is type(None):
             return None
 
         # typed methods always require an envelope key
