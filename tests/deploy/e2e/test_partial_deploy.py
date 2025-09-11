@@ -16,7 +16,6 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-# Every resource has change and send_event for maximal deploy activity
 import uuid
 from collections import defaultdict
 from typing import Callable
@@ -28,11 +27,11 @@ from inmanta.util import get_compiler_version
 from utils import ClientHelper
 
 
-def make_shared_set(resouce_version=0, size=2, revision=0):
+def make_shared_set(resource_version=0, size=2, revision=0):
     """
     Helper to build up the shared set resources
 
-    :param resouce_version: the version to use in the resource ids
+    :param resource_version: the version to use in the resource ids
     :param size: number of resources
     :param revision: changing this number changes the resource hash
     """
@@ -40,8 +39,8 @@ def make_shared_set(resouce_version=0, size=2, revision=0):
         {
             "key": "shared1",
             "value": f"{revision}",
-            "id": f"test::Resource[agent1,key=shared1],v={resouce_version}",
-            "version": resouce_version,
+            "id": f"test::Resource[agent1,key=shared1],v={resource_version}",
+            "version": resource_version,
             "send_event": True,
             "purged": False,
             "requires": [],
@@ -50,11 +49,11 @@ def make_shared_set(resouce_version=0, size=2, revision=0):
         {
             "key": f"shared{i}",
             "value": f"{i * revision}",
-            "id": f"test::Resource[agent1,key=shared{i}],v={resouce_version}",
-            "version": resouce_version,
+            "id": f"test::Resource[agent1,key=shared{i}],v={resource_version}",
+            "version": resource_version,
             "send_event": True,
             "purged": False,
-            "requires": [f"test::Resource[agent1,key=shared{i - 1}],v={resouce_version}"],
+            "requires": [f"test::Resource[agent1,key=shared{i - 1}],v={resource_version}"],
         }
         for i in range(2, size + 1)
     ]
@@ -63,7 +62,7 @@ def make_shared_set(resouce_version=0, size=2, revision=0):
 def make_set(
     set_collector: dict[str, object],
     set_id: str,
-    resouce_version=0,
+    resource_version=0,
     revision=0,
     size=5,
 ):
@@ -72,7 +71,7 @@ def make_set(
 
     :param set_collector: a dict where all resource will be registed as resourceid->setid
     :param set_id: the name of the resource set
-    :param resouce_version: the version to use in the resource ids
+    :param resource_version: the version to use in the resource ids
     :param size: number of resources
     :param revision: changing this number changes the resource hash
     """
@@ -81,11 +80,11 @@ def make_set(
         {
             "key": f"{set_id}-{i}",
             "value": f"{revision}",
-            "id": f"test::Resource[agent1,key={set_id}-{i}],v={resouce_version}",
-            "version": resouce_version,
+            "id": f"test::Resource[agent1,key={set_id}-{i}],v={resource_version}",
+            "version": resource_version,
             "send_event": True,
             "purged": False,
-            "requires": [f"test::Resource[agent1,key={set_id}-{i - 1}],v={resouce_version}"] if i != 0 else [],
+            "requires": [f"test::Resource[agent1,key={set_id}-{i - 1}],v={resource_version}"] if i != 0 else [],
         }
         for i in range(size)
     ]
@@ -114,7 +113,7 @@ async def test_partial_compile_scenarios_end_to_end(
     clienthelper: ClientHelper,
     client,
 ) -> None:
-    # set up a secondary env to detect resource leaking (perhaps overkill)
+    # set up a secondary env to detect resource leaking
     result = await client.create_environment(project_id=project_default, name="secondary")
     assert result.code == 200, result
     secondary_env_id = result.result["environment"]["id"]
@@ -190,7 +189,7 @@ async def test_partial_compile_scenarios_end_to_end(
     # set1 : 5
     # set2 : 5
     # shared : 2
-    await put_full(version, resources, set_collector, 12)
+    await put_full(version, resources, set_collector, expected_deploy_count=12)
 
     # # Update 1 set and push shared
     set_collector = {}
@@ -199,7 +198,7 @@ async def test_partial_compile_scenarios_end_to_end(
     # set1 : 6
     # set2 : 5
     # shared : 2
-    await put_partial(resources, set_collector, 1, 13)
+    await put_partial(resources, set_collector, expected_deploy_count=1, total_size=13)
 
     # Update 1 set  and push part of shared
     set_collector = {}
@@ -208,7 +207,7 @@ async def test_partial_compile_scenarios_end_to_end(
     # set1 : 6
     # set2 : 6
     # shared : 2
-    await put_partial(resources, set_collector, 1, 14)
+    await put_partial(resources, set_collector, expected_deploy_count=1, total_size=14)
 
     # Update 1 set and add to shared
     set_collector = {}
@@ -218,7 +217,7 @@ async def test_partial_compile_scenarios_end_to_end(
     # set1 : 6
     # set2 : 7
     # shared : 3
-    await put_partial(resources, set_collector, 2, 16)
+    await put_partial(resources, set_collector, expected_deploy_count=2, total_size=16)
 
     # Update 1 set
     set_collector = {}
@@ -227,21 +226,24 @@ async def test_partial_compile_scenarios_end_to_end(
     # set1 : 6
     # set2 : 3
     # shared : 3
-    await put_partial(resources, set_collector, 3, 12)
+    await put_partial(resources, set_collector, expected_deploy_count=3, total_size=12)
 
     # put full (remove 1 set, remove from shared )
     set_collector = {}
     version = await clienthelper.get_version()
     resources = make_shared_set(version) + make_set(set_collector, "set1", version)
     await put_full(version, resources, set_collector, 0)
+    # set1 : 5
+    # shared : 2
 
     # Update 2 sets / remove 1
     set_collector = {}
     version = 0
     resources = make_set(set_collector, "set2", version, revision=1) + make_set(set_collector, "set3")
-    # set1 : 6
-    # set2 : 3
-    # shared : 3
-    await put_partial(resources, set_collector, 10, 12, remove=["set1"])
+    # set1 : 0
+    # set2 : 5
+    # set3 : 5
+    # shared : 2
+    await put_partial(resources, set_collector, expected_deploy_count=10, total_size=12, remove=["set1"])
 
     await assert_secondary()
