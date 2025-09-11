@@ -1319,7 +1319,6 @@ class AgentView(DataView[AgentOrder, model.Agent]):
         ]
 
 
-# TODO: test filtering and sorting
 class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredResource]):
     def __init__(
         self,
