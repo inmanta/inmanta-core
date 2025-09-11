@@ -23,6 +23,8 @@ from collections import abc
 import asyncpg
 import pytest
 
+from inmanta import data
+
 file_name_regex = re.compile("test_v([0-9]{9})_to_v[0-9]{9}")
 part = file_name_regex.match(__name__)[1]
 
@@ -31,5 +33,24 @@ part = file_name_regex.match(__name__)[1]
 async def test_add_created_to_resource_persistent_state(
     postgresql_client: asyncpg.Connection, migrate_db_from: abc.Callable[[], abc.Awaitable[None]]
 ) -> None:
-
+    """
+    Check that the RPS column is added and that it is populated to the
+    configuration model version that the resource first appears in.
+    """
     await migrate_db_from()
+    environments = await data.Environment.get_list()
+    for env in environments:
+        configuration_models = await data.ConfigurationModel.get_list(
+            environment=env.id, order_by_column="version", order="ASC"
+        )
+        resource_to_first_cm = {}
+        for cm in configuration_models:
+            resources_in_version = await data.Resource.get_resources_for_version(env.id, cm.version)
+            for resource in resources_in_version:
+                if resource.resource_id not in resource_to_first_cm:
+                    resource_to_first_cm[resource.resource_id] = cm.date
+
+        rps_list = await data.ResourcePersistentState.get_list(environment=env.id)
+        for rps in rps_list:
+            assert rps.resource_id in resource_to_first_cm
+            assert resource_to_first_cm[rps.resource_id] == rps.created

@@ -55,7 +55,7 @@ from inmanta import const, resources, util
 from inmanta.const import NAME_RESOURCE_ACTION_LOGGER, AgentStatus, LogLevel, ResourceState
 from inmanta.data import model as m
 from inmanta.data import schema
-from inmanta.data.model import AuthMethod, BaseModel, PagingBoundaries, PipConfig
+from inmanta.data.model import AuthMethod, BaseModel, PagingBoundaries, PipConfig, ReleasedResourceState
 from inmanta.data.sqlalchemy import AgentModules, InmantaModule, ModuleFiles
 from inmanta.deploy import state
 from inmanta.protocol.exceptions import BadRequest, NotFound
@@ -5933,16 +5933,19 @@ class Resource(BaseDocument):
             status_result = await cls.select_query(status_query, [cls._get_value(env), cls._get_value(requires)], no_obj=True)
 
         return m.ReleasedResourceDetails(
-            resource_id=record["latest_resource_id"],
-            resource_type=record["resource_type"],
-            agent=record["agent"],
-            id_attribute=parsed_id.attribute,
-            id_attribute_value=record["resource_id_value"],
-            last_deploy=record["latest_deploy"],
-            first_generated_time=record["first_generated_time"],
-            attributes=attributes,
-            status=record["status"],
-            requires_status={record["resource_id"]: record["status"] for record in status_result},
+            resource_id=cast(ResourceIdStr, record["latest_resource_id"]),
+            resource_type=cast(ResourceType, record["resource_type"]),
+            agent=cast(str, record["agent"]),
+            id_attribute=cast(str, parsed_id.attribute),
+            id_attribute_value=cast(str, record["resource_id_value"]),
+            last_deploy=cast(datetime.datetime, record["latest_deploy"]),
+            first_generated_time=cast(datetime.datetime, record["first_generated_time"]),
+            attributes=cast(JsonType, attributes),
+            status=cast(ReleasedResourceState, record["status"]),
+            requires_status={
+                cast(ResourceIdStr, record["resource_id"]): cast(ReleasedResourceState, record["status"])
+                for record in status_result
+            },
         )
 
     @classmethod
