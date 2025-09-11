@@ -349,6 +349,8 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         #   - (Optionally) a requirements.txt file. It holds the python package constraints
         #     set at the project level enforced on the agent when installing code.
         self.inmanta_storage: pathlib.Path = pathlib.Path(self.env_path) / ".inmanta"
+
+
         self.inmanta_venv_status_file: pathlib.Path = self.inmanta_storage / const.INMANTA_VENV_STATUS_FILENAME
 
         self.io_threadpool = io_threadpool
@@ -375,6 +377,7 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         """
         req: list[str] = list(blueprint.requirements)
         await asyncio.get_running_loop().run_in_executor(self.io_threadpool, self.init_env)
+        os.makedirs(self.inmanta_storage)
         constraint_file: str | None = self._write_constraint_file(blueprint)
         if len(req):  # install_for_config expects at least 1 requirement or a path to install
             await self.async_install_for_config(
