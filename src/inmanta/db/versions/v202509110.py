@@ -19,9 +19,10 @@ Contact: code@inmanta.com
 from asyncpg import Connection
 
 
-# TODO: test case. Parse with Python and assert ==
 async def update(connection: Connection) -> None:
-    # TODO: docstring
+    """
+    Split resource id into its composite value columns on the discovered resources table.
+    """
     schema = r"""
     ALTER TABLE public.discoveredresource
         ADD COLUMN resource_type varchar,
