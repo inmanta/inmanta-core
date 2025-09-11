@@ -350,7 +350,6 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         #     set at the project level enforced on the agent when installing code.
         self.inmanta_storage: pathlib.Path = pathlib.Path(self.env_path) / ".inmanta"
 
-
         self.inmanta_venv_status_file: pathlib.Path = self.inmanta_storage / const.INMANTA_VENV_STATUS_FILENAME
 
         self.io_threadpool = io_threadpool
