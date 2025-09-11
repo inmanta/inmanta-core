@@ -18,7 +18,7 @@ Contact: code@inmanta.com
 
 import uuid
 from collections import defaultdict
-from typing import Callable
+from collections.abc import Callable
 
 import pytest
 
