@@ -109,6 +109,7 @@ async def test_dump_db(
     client,
     postgres_db,
     database_name,
+    # doesn't make sense to do a state check because we halt the environment
     agent_factory_no_state_check: Callable[[uuid.UUID], Awaitable[Agent]],
     resource_container,
     no_agent,
