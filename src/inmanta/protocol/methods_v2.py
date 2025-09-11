@@ -1434,8 +1434,9 @@ def update_notification(
 )
 def get_source_code(tid: uuid.UUID, version: int, resource_type: str) -> GetSourceCodeResponse:
     """
-    Get the code for the given version and the given resource and constraints set at the project
-    level that must be enforced on the agent during code install, if any.
+    Get the code for the given version and the given resource. The returned object
+    includes constraints set at the project level that must be enforced on the agent
+    during code install, if any.
 
     :param tid: The id of the environment
     :param version: The id of the model version
