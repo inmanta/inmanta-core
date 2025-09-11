@@ -464,7 +464,6 @@ async def test_resource_details(server, client, env_with_resources):
     multiple_requires = ids["multiple_requires"]
     result = await client.resource_details(env.id, multiple_requires)
     assert result.code == 200
-    assert result.result["data"]["first_generated_version"] == 2
     generated_time = parse_timestamp(result.result["data"]["first_generated_time"])
     assert generated_time == cm_times[1].astimezone(datetime.timezone.utc)
     deploy_time = parse_timestamp(result.result["data"]["last_deploy"])
@@ -479,7 +478,6 @@ async def test_resource_details(server, client, env_with_resources):
     no_requires = ids["no_requires"]
     result = await client.resource_details(env.id, no_requires)
     assert result.code == 200
-    assert result.result["data"]["first_generated_version"] == 2
     generated_time = parse_timestamp(result.result["data"]["first_generated_time"])
     assert generated_time == cm_times[1].astimezone(datetime.timezone.utc)
     deploy_time = parse_timestamp(result.result["data"]["last_deploy"])
@@ -491,7 +489,6 @@ async def test_resource_details(server, client, env_with_resources):
     single_requires = ids["single_requires"]
     result = await client.resource_details(env.id, single_requires)
     assert result.code == 200
-    assert result.result["data"]["first_generated_version"] == 4
     generated_time = parse_timestamp(result.result["data"]["first_generated_time"])
     assert generated_time == cm_times[3].astimezone(datetime.timezone.utc)
     deploy_time = parse_timestamp(result.result["data"]["last_deploy"])
@@ -509,14 +506,12 @@ async def test_resource_details(server, client, env_with_resources):
     never_deployed_resource = ids["never_deployed"]
     result = await client.resource_details(env.id, never_deployed_resource)
     assert result.code == 200
-    assert result.result["data"]["first_generated_version"] == 3
     assert result.result["data"]["status"] == "unavailable"
     await assert_matching_attributes(result.result["data"], resources[env.id][never_deployed_resource][1], expected_version=4)
 
     deployed_only_with_different_hash = ids["deployed_only_with_different_hash"]
     result = await client.resource_details(env.id, deployed_only_with_different_hash)
     assert result.code == 200
-    assert result.result["data"]["first_generated_version"] == 4
     assert result.result["data"]["status"] == "undefined"
     await assert_matching_attributes(
         result.result["data"], resources[env.id][deployed_only_with_different_hash][1], expected_version=4
@@ -525,7 +520,6 @@ async def test_resource_details(server, client, env_with_resources):
     deployed_only_in_earlier_version = ids["deployed_only_in_earlier_version"]
     result = await client.resource_details(env.id, deployed_only_in_earlier_version)
     assert result.code == 200
-    assert result.result["data"]["first_generated_version"] == 3
     assert result.result["data"]["status"] == "orphaned"
     await assert_matching_attributes(
         result.result["data"], resources[env.id][deployed_only_in_earlier_version][0], expected_version=3
@@ -537,7 +531,6 @@ async def test_resource_details(server, client, env_with_resources):
     orphaned = ids["orphaned_and_requires_orphaned"]
     result = await client.resource_details(env.id, orphaned)
     assert result.code == 200
-    assert result.result["data"]["first_generated_version"] == 3
     assert result.result["data"]["status"] == "orphaned"
     await assert_matching_attributes(result.result["data"], resources[env.id][orphaned][0], expected_version=3)
     assert result.result["data"]["requires_status"] == {

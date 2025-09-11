@@ -4706,6 +4706,8 @@ class ResourcePersistentState(BaseDocument):
     agent: str
     resource_id_value: str
 
+    # When this resource was first created
+    created: datetime.datetime
     # Field based on content from the resource actions
     last_deploy: Optional[datetime.datetime] = None
     # When a resource is updated in a new model version, it might take some time until this update reaches the scheduler.
@@ -4816,6 +4818,7 @@ class ResourcePersistentState(BaseDocument):
         Make sure that the resource_persistent_state table has a record for each resource present in the
         given model version. This method assumes that the given model_version is the latest released version.
         """
+        created_time = datetime.datetime.now()
         await cls._execute_query(
             f"""
             INSERT INTO {cls.table_name()} (
@@ -4829,7 +4832,8 @@ class ResourcePersistentState(BaseDocument):
                 is_orphan,
                 is_deploying,
                 last_deploy_result,
-                blocked
+                blocked,
+                created
             )
             SELECT
                 r.environment,
@@ -4847,7 +4851,8 @@ class ResourcePersistentState(BaseDocument):
                         r.is_undefined
                     THEN 'BLOCKED'
                     ELSE 'NOT_BLOCKED'
-                END
+                END,
+                $3
             FROM resource_set_configuration_model AS rscm
             INNER JOIN {Resource.table_name()} AS r
                 ON rscm.environment=r.environment
@@ -4857,6 +4862,7 @@ class ResourcePersistentState(BaseDocument):
             """,
             environment,
             model_version,
+            created_time,
             connection=connection,
         )
 
@@ -5877,47 +5883,25 @@ class Resource(BaseDocument):
 
         query = f"""
         SELECT DISTINCT ON (resource_id)
-            first.resource_id,
-            cm.date as first_generated_time,
-            rscm.model as first_model,
-            latest.model AS latest_model,
-            latest.resource_id as latest_resource_id,
-            latest.resource_type,
-            latest.agent,
-            latest.resource_id_value,
+            r.resource_id,
+            rscm.model AS latest_model,
+            r.resource_id as latest_resource_id,
+            r.resource_type,
+            r.agent,
+            r.resource_id_value,
+            rps.created as first_generated_time,
             rps.last_deploy as latest_deploy,
-            latest.attributes,
+            r.attributes,
             {const.SQL_RESOURCE_STATUS_SELECTOR} AS status
-        FROM resource first
-        INNER JOIN
-            /* 'latest' is the latest released version of the resource */
-            (SELECT distinct on (resource_id)
-                resource_id,
-                attribute_hash,
-                cm.version AS model,
-                attributes,
-                resource_type,
-                agent,
-                resource_id_value
-            FROM resource AS r
-            JOIN resource_set_configuration_model AS rscm
-                ON r.environment=rscm.environment AND r.resource_set_id=rscm.resource_set_id
-            JOIN configurationmodel AS cm
-                ON rscm.environment=cm.environment AND rscm.model=cm.version
-            WHERE r.environment=$1 AND r.resource_id=$2 AND cm.released
-            ORDER BY resource_id, model desc
-            ) as latest
-        /* The 'first' values correspond to the first time the attribute hash was the same as in
-            the 'latest' released version */
-            ON first.resource_id=latest.resource_id AND first.attribute_hash=latest.attribute_hash
+        FROM resource AS r
         INNER JOIN resource_set_configuration_model AS rscm
-            ON first.environment=rscm.environment AND first.resource_set_id=rscm.resource_set_id
+            ON r.environment=rscm.environment AND r.resource_set_id=rscm.resource_set_id
         INNER JOIN configurationmodel AS cm
             ON rscm.model=cm.version AND rscm.environment=cm.environment
         INNER JOIN resource_persistent_state AS rps
-            ON rps.resource_id=first.resource_id AND first.environment=rps.environment
-        WHERE first.environment=$1 AND first.resource_id=$2 AND cm.released
-        ORDER BY first.resource_id, rscm.model asc;
+            ON rps.resource_id=r.resource_id AND r.environment=rps.environment
+        WHERE r.environment=$1 AND r.resource_id=$2 AND cm.released
+        ORDER BY r.resource_id, rscm.model asc;
         """
         values = [cls._get_value(env), cls._get_value(resource_id)]
 
@@ -5939,17 +5923,10 @@ class Resource(BaseDocument):
         # fetch the status of each of the requires. This is not calculated in the database because the lack of joinable
         # fields requires to calculate the status for each resource record, before it is filtered
         status_query = f"""
-        SELECT DISTINCT ON (r.resource_id) r.resource_id,
+        SELECT rps.resource_id,
         {const.SQL_RESOURCE_STATUS_SELECTOR} AS status
-        FROM resource AS r
-        INNER JOIN resource_set_configuration_model AS rscm
-            ON r.environment=rscm.environment AND r.resource_set_id=rscm.resource_set_id
-        INNER JOIN configurationmodel AS cm
-            ON rscm.model=cm.version AND rscm.environment=cm.environment
-        INNER JOIN resource_persistent_state rps
-            ON r.resource_id=rps.resource_id AND r.environment=rps.environment
-        WHERE r.environment=$1 AND cm.released AND r.resource_id = ANY($2)
-        ORDER BY r.resource_id, cm.version DESC;
+        FROM resource_persistent_state AS rps
+        WHERE rps.environment=$1 AND rps.resource_id = ANY($2)
         """
 
         with pyformance.timer("sql.get_released_resource_details.get_status_of_each_requires").time():
@@ -5963,7 +5940,6 @@ class Resource(BaseDocument):
             id_attribute_value=record["resource_id_value"],
             last_deploy=record["latest_deploy"],
             first_generated_time=record["first_generated_time"],
-            first_generated_version=record["first_model"],
             attributes=attributes,
             status=record["status"],
             requires_status={record["resource_id"]: record["status"] for record in status_result},
