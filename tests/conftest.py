@@ -1006,7 +1006,8 @@ async def agent_factory(server, client, monkeypatch) -> AsyncIterator[Callable[[
                 await client.all_agents_action(tid=environment, action=const.AgentAction.pause.value).value()
                 # Set data.RESET_DEPLOY_PROGRESS_ON_START back to False in all of the environments of the created agents
                 # Because this teardown asserts that the state is correct on restart and this setting breaks that assertion
-                await client.set_setting(environment, data.RESET_DEPLOY_PROGRESS_ON_START, False).value()
+                result = await client.set_setting(environment, data.RESET_DEPLOY_PROGRESS_ON_START, False)
+                assert result.code == 200, result.result
             for agent in agents:
                 await agent.stop_working()
                 the_state = copy.deepcopy(dict(agent.scheduler._state.resource_state))

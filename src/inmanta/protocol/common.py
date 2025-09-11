@@ -1225,10 +1225,6 @@ class Result(Generic[R]):
                 else exception()
             )
 
-        # typed methods always require an envelope key
-        if self.result is None or self.method_properties.envelope_key not in self.result:
-            raise exceptions.BadRequest("No data was provided in the body. Make sure to only use typed methods.")
-
         warnings: Optional[object] = self.result.get("metadata", {}).get("warnings", None)
         if warnings is not None:
             if not isinstance(warnings, list):
@@ -1240,6 +1236,10 @@ class Result(Generic[R]):
 
         if self.method_properties.return_type is None:
             return None
+
+        # typed methods always require an envelope key
+        if self.result is None or self.method_properties.envelope_key not in self.result:
+            raise exceptions.BadRequest("No data was provided in the body. Make sure to only use typed methods.")
 
         try:
             ta = pydantic.TypeAdapter(self.method_properties.return_type)
