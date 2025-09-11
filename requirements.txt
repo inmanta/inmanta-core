@@ -22,7 +22,7 @@ logfire==4.6.0
 more-itertools==10.8.0
 myst-parser==4.0.1
 openapi_spec_validator==0.7.2
-opentelemetry-instrumentation-asyncpg==0.57b0
+opentelemetry-instrumentation-asyncpg==0.58b0
 packaging==25.0
 pip==25.2
 pip2pi==0.8.2
