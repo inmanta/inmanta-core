@@ -5901,7 +5901,7 @@ class Resource(BaseDocument):
         INNER JOIN resource_persistent_state AS rps
             ON rps.resource_id=r.resource_id AND r.environment=rps.environment
         WHERE r.environment=$1 AND r.resource_id=$2 AND cm.released
-        ORDER BY r.resource_id, rscm.model asc;
+        ORDER BY r.resource_id, rscm.model desc;
         """
         values = [cls._get_value(env), cls._get_value(resource_id)]
 

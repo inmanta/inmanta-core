@@ -160,7 +160,7 @@ async def env_with_resources(server, client):
         rps = await data.ResourcePersistentState.get_one(environment=environment, resource_id=res.resource_id)
         await rps.update(is_undefined=is_undefined, blocked=blocked, is_orphan=is_orphan)
 
-        return res
+        return res, rps.created
 
     # A resource with multiple resources in its requires list, and multiple versions where it was released,
     # and is also present in versions that were not released
@@ -443,7 +443,12 @@ async def env_with_resources(server, client):
     yield env, cm_times, ids, resources, deploy_times
 
 
-async def assert_matching_attributes(resource_api: dict[str, Any], resource_db: data.Resource, expected_version: int) -> None:
+async def assert_matching_attributes(
+    resource_api: dict[str, Any],
+    resource_db: tuple[data.Resource, datetime.datetime],
+    expected_version: int,
+    generated_time: datetime.datetime,
+) -> None:
     """
     This method throws an AssertionError when the attributes of the resource retrieved via the API
     doesn't match with the attributes present in the DAO.
@@ -452,8 +457,9 @@ async def assert_matching_attributes(resource_api: dict[str, Any], resource_db: 
     # Due to a bug, the version field has always been present in the attributes dictionary sent to the server.
     # This bug has been fixed in the database. For backwards compatibility reason the version field is present
     # in the attributes dictionary served out via the API.
-    attributes_db = {**resource_db.attributes, "version": expected_version}
+    attributes_db = {**resource_db[0].attributes, "version": expected_version}
     assert attributes_api == attributes_db
+    assert resource_db[1] == generated_time
 
 
 async def test_resource_details(server, client, env_with_resources):
@@ -465,10 +471,11 @@ async def test_resource_details(server, client, env_with_resources):
     result = await client.resource_details(env.id, multiple_requires)
     assert result.code == 200
     generated_time = parse_timestamp(result.result["data"]["first_generated_time"])
-    assert generated_time == cm_times[1].astimezone(datetime.timezone.utc)
     deploy_time = parse_timestamp(result.result["data"]["last_deploy"])
     assert deploy_time == deploy_times[env.id][multiple_requires][3]
-    await assert_matching_attributes(result.result["data"], resources[env.id][multiple_requires][3], expected_version=4)
+    await assert_matching_attributes(
+        result.result["data"], resources[env.id][multiple_requires][3], expected_version=4, generated_time=generated_time
+    )
     assert result.result["data"]["requires_status"] == {
         "std::testing::NullResource[internal,name=/tmp/dir1]": "deployed",
         "std::testing::NullResource[internal,name=/tmp/dir1/file2]": "deploying",
@@ -479,10 +486,11 @@ async def test_resource_details(server, client, env_with_resources):
     result = await client.resource_details(env.id, no_requires)
     assert result.code == 200
     generated_time = parse_timestamp(result.result["data"]["first_generated_time"])
-    assert generated_time == cm_times[1].astimezone(datetime.timezone.utc)
     deploy_time = parse_timestamp(result.result["data"]["last_deploy"])
     assert deploy_time == deploy_times[env.id][no_requires][3]
-    await assert_matching_attributes(result.result["data"], resources[env.id][no_requires][3], expected_version=4)
+    await assert_matching_attributes(
+        result.result["data"], resources[env.id][no_requires][3], expected_version=4, generated_time=generated_time
+    )
     assert result.result["data"]["requires_status"] == {}
     assert result.result["data"]["status"] == "deployed"
 
@@ -490,10 +498,11 @@ async def test_resource_details(server, client, env_with_resources):
     result = await client.resource_details(env.id, single_requires)
     assert result.code == 200
     generated_time = parse_timestamp(result.result["data"]["first_generated_time"])
-    assert generated_time == cm_times[3].astimezone(datetime.timezone.utc)
     deploy_time = parse_timestamp(result.result["data"]["last_deploy"])
     assert deploy_time == deploy_times[env.id][single_requires][2]
-    await assert_matching_attributes(result.result["data"], resources[env.id][single_requires][3], expected_version=4)
+    await assert_matching_attributes(
+        result.result["data"], resources[env.id][single_requires][3], expected_version=4, generated_time=generated_time
+    )
     assert result.result["data"]["requires_status"] == {"std::testing::NullResource[internal,name=/tmp/dir1]": "deployed"}
     assert result.result["data"]["status"] == "deploying"
 
@@ -506,23 +515,34 @@ async def test_resource_details(server, client, env_with_resources):
     never_deployed_resource = ids["never_deployed"]
     result = await client.resource_details(env.id, never_deployed_resource)
     assert result.code == 200
+    generated_time = parse_timestamp(result.result["data"]["first_generated_time"])
     assert result.result["data"]["status"] == "unavailable"
-    await assert_matching_attributes(result.result["data"], resources[env.id][never_deployed_resource][1], expected_version=4)
+    await assert_matching_attributes(
+        result.result["data"], resources[env.id][never_deployed_resource][1], expected_version=4, generated_time=generated_time
+    )
 
     deployed_only_with_different_hash = ids["deployed_only_with_different_hash"]
     result = await client.resource_details(env.id, deployed_only_with_different_hash)
     assert result.code == 200
+    generated_time = parse_timestamp(result.result["data"]["first_generated_time"])
     assert result.result["data"]["status"] == "undefined"
     await assert_matching_attributes(
-        result.result["data"], resources[env.id][deployed_only_with_different_hash][1], expected_version=4
+        result.result["data"],
+        resources[env.id][deployed_only_with_different_hash][1],
+        expected_version=4,
+        generated_time=generated_time,
     )
 
     deployed_only_in_earlier_version = ids["deployed_only_in_earlier_version"]
     result = await client.resource_details(env.id, deployed_only_in_earlier_version)
     assert result.code == 200
+    generated_time = parse_timestamp(result.result["data"]["first_generated_time"])
     assert result.result["data"]["status"] == "orphaned"
     await assert_matching_attributes(
-        result.result["data"], resources[env.id][deployed_only_in_earlier_version][0], expected_version=3
+        result.result["data"],
+        resources[env.id][deployed_only_in_earlier_version][0],
+        expected_version=3,
+        generated_time=generated_time,
     )
     assert result.result["data"]["requires_status"] == {
         "std::testing::NullResource[internal,name=/etc/requirement_in_later_version]": "deployed"
@@ -531,8 +551,11 @@ async def test_resource_details(server, client, env_with_resources):
     orphaned = ids["orphaned_and_requires_orphaned"]
     result = await client.resource_details(env.id, orphaned)
     assert result.code == 200
+    generated_time = parse_timestamp(result.result["data"]["first_generated_time"])
     assert result.result["data"]["status"] == "orphaned"
-    await assert_matching_attributes(result.result["data"], resources[env.id][orphaned][0], expected_version=3)
+    await assert_matching_attributes(
+        result.result["data"], resources[env.id][orphaned][0], expected_version=3, generated_time=generated_time
+    )
     assert result.result["data"]["requires_status"] == {
         "std::testing::NullResource[internal,name=/tmp/orphaned_req]": "orphaned"
     }
