@@ -503,7 +503,6 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
         to make sure the venvs are no longer used.
         """
         folders = [file for file in self.envs_dir.iterdir() if file.is_dir()]
-        LOGGER.warning(f"{folders=}")
         for folder in folders:
             if folder.name in self.pool:
                 # The ExecutorVirtualEnvironment is managed by this VirtualEnvironmentManager.
