@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump pynacl from 1.5.0 to 1.6.0
+destination-branches:
+- iso8
+sections: {}
