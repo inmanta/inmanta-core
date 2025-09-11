@@ -4818,7 +4818,6 @@ class ResourcePersistentState(BaseDocument):
         Make sure that the resource_persistent_state table has a record for each resource present in the
         given model version. This method assumes that the given model_version is the latest released version.
         """
-        created_time = datetime.datetime.now()
         await cls._execute_query(
             f"""
             INSERT INTO {cls.table_name()} (
@@ -4852,7 +4851,7 @@ class ResourcePersistentState(BaseDocument):
                     THEN 'BLOCKED'
                     ELSE 'NOT_BLOCKED'
                 END,
-                $3
+                now()
             FROM resource_set_configuration_model AS rscm
             INNER JOIN {Resource.table_name()} AS r
                 ON rscm.environment=r.environment
@@ -4862,7 +4861,6 @@ class ResourcePersistentState(BaseDocument):
             """,
             environment,
             model_version,
-            created_time,
             connection=connection,
         )
 
