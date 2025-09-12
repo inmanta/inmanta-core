@@ -73,7 +73,7 @@ class InmantaModule(Base):
         This is the first phase of code registration:
         For all provided modules, this method will write to the database:
             - the version being registered for this module. (This is a hash derived from
-                the content of the files in this module and from its requirements)
+                the content of the files in this module and its requirements)
             - which files belong to this module for this version.
 
         Any attempt to register a module or file again is silently ignored.
@@ -124,7 +124,12 @@ class InmantaModule(Base):
             await connection.executemany(
                 insert_modules_query,
                 [
-                    (inmanta_module_name, inmanta_module_data.version, environment, inmanta_module_data.requirements)
+                    (
+                        inmanta_module_name,
+                        inmanta_module_data.version,
+                        environment,
+                        inmanta_module_data.requirements,
+                    )
                     for inmanta_module_name, inmanta_module_data in modules.items()
                 ],
             )
@@ -531,6 +536,8 @@ class ConfigurationModel(Base):
     resource: Mapped[List["Resource"]] = relationship("Resource", back_populates="configurationmodel")
     resourceaction: Mapped[List["ResourceAction"]] = relationship("ResourceAction", back_populates="configurationmodel")
     unknownparameter: Mapped[List["UnknownParameter"]] = relationship("UnknownParameter", back_populates="configurationmodel")
+
+    project_constraints: Mapped[Optional[str]] = mapped_column(String)
 
 
 class DiscoveredResource(Base):

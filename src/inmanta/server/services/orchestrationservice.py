@@ -776,15 +776,16 @@ class OrchestrationService(protocol.ServerSlice):
         version: int,
         rid_to_resource: Mapping[ResourceIdStr, ResourceDTO],
         unknowns: abc.Sequence[data.UnknownParameter],
-        version_info: Optional[JsonType] = None,
-        resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
-        partial_base_version: Optional[int] = None,
-        removed_resource_sets: Optional[list[str]] = None,
-        pip_config: Optional[PipConfig] = None,
+        version_info: JsonType | None = None,
+        resource_sets: dict[ResourceIdStr, str | None] | None = None,
+        partial_base_version: int | None = None,
+        removed_resource_sets: list[str] | None = None,
+        pip_config: PipConfig | None = None,
         *,
         connection: asyncpg.connection.Connection,
         module_version_info: Mapping[InmantaModuleName, InmantaModuleDTO],
         allow_handler_code_update: bool = False,
+        project_constraints: str | None = None,
     ) -> None:
         """
         :param rid_to_resource: This parameter should contain all the resources when a full compile is done.
@@ -803,6 +804,8 @@ class OrchestrationService(protocol.ServerSlice):
         :param allow_handler_code_update: During partial compiles (i.e. partial_base_version is not None), a check is performed
             to make sure the source code of modules in this partial version is identical to the source code in the base
             version. Set this parameter to True to bypass this check.
+        :param project_constraints: A single string containing constraints on packages set at the project level that must
+            be taken into consideration during agent code installation.
 
         Pre-conditions:
             * The requires and provides relationships of the resources in rid_to_resource must be set correctly. For a
@@ -880,6 +883,7 @@ class OrchestrationService(protocol.ServerSlice):
                         updated_resource_sets=updated_resource_sets_no_shared,
                         deleted_resource_sets=deleted_resource_sets_as_set,
                         connection=connection,
+                        project_constraints=project_constraints,
                     )
                 else:
                     cm = data.ConfigurationModel(
@@ -894,6 +898,7 @@ class OrchestrationService(protocol.ServerSlice):
                         ),
                         pip_config=pip_config,
                         is_suitable_for_partial_compiles=not resource_set_validator.has_cross_resource_set_dependency(),
+                        project_constraints=project_constraints,
                     )
                     await cm.insert(connection=connection)
             except asyncpg.exceptions.UniqueViolationError:
@@ -1001,9 +1006,10 @@ class OrchestrationService(protocol.ServerSlice):
         unknowns: list[dict[str, PrimitiveTypes]],
         version_info: JsonType,
         module_version_info: Mapping[InmantaModuleName, InmantaModuleDTO],
-        compiler_version: Optional[str] = None,
-        resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
-        pip_config: Optional[PipConfig] = None,
+        compiler_version: str | None = None,
+        resource_sets: dict[ResourceIdStr, str | None] | None = None,
+        pip_config: PipConfig | None = None,
+        project_constraints: str | None = None,
     ) -> Apireturn:
         """
         :param unknowns: dict with the following structure
@@ -1044,6 +1050,7 @@ class OrchestrationService(protocol.ServerSlice):
                     pip_config=pip_config,
                     connection=con,
                     module_version_info=module_version_info or {},
+                    project_constraints=project_constraints,
                 )
             # This must be outside all transactions, as it relies on the result of _put_version
             # and it starts a background task, so it can't re-use this connection
@@ -1122,6 +1129,7 @@ class OrchestrationService(protocol.ServerSlice):
 
                 base_model = current_versions[0]
                 base_version: int = base_model.version
+                base_constraints: str | None = base_model.project_constraints
                 if not base_model.is_suitable_for_partial_compiles:
                     resources_in_base_version = await data.Resource.get_resources_for_version(env.id, base_version)
                     resource_set_validator = ResourceSetValidator([r.to_dto() for r in resources_in_base_version])
@@ -1176,6 +1184,7 @@ class OrchestrationService(protocol.ServerSlice):
                     connection=con,
                     module_version_info=module_version_info or {},
                     allow_handler_code_update=allow_handler_code_update,
+                    project_constraints=base_constraints if base_constraints else None,
                 )
 
             returnvalue: ReturnValue[int] = ReturnValue[int](200, response=version)

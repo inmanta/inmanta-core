@@ -6111,13 +6111,13 @@ class ConfigurationModel(BaseDocument):
 
     version: int
     environment: uuid.UUID
-    date: Optional[datetime.datetime] = None
+    date: datetime.datetime | None = None
     partial_base: Optional[int] = None
 
-    pip_config: Optional[PipConfig] = None
+    pip_config: PipConfig | None = None
 
     released: bool = False
-    version_info: Optional[dict[str, object]] = None
+    version_info: dict[str, object] | None = None
     is_suitable_for_partial_compiles: bool
 
     total: int = 0
@@ -6125,6 +6125,8 @@ class ConfigurationModel(BaseDocument):
     # cached state for release
     undeployable: list[ResourceIdStr] = []
     skipped_for_undeployable: list[ResourceIdStr] = []
+
+    project_constraints: str | None = None
 
     def __init__(self, **kwargs: object) -> None:
         super().__init__(**kwargs)
@@ -6139,14 +6141,15 @@ class ConfigurationModel(BaseDocument):
         env_id: uuid.UUID,
         version: int,
         total: int,
-        version_info: Optional[JsonType],
+        version_info: JsonType | None,
         undeployable: abc.Sequence[ResourceIdStr],
         skipped_for_undeployable: abc.Sequence[ResourceIdStr],
         partial_base: int,
-        pip_config: Optional[PipConfig],
+        pip_config: PipConfig | None,
         updated_resource_sets: abc.Set[str],
         deleted_resource_sets: abc.Set[str],
-        connection: Optional[Connection] = None,
+        connection: Connection | None = None,
+        project_constraints: str | None = None,
     ) -> "ConfigurationModel":
         """
         Create and insert a new configurationmodel that is the result of a partial compile. The new ConfigurationModel will
@@ -6211,7 +6214,8 @@ class ConfigurationModel(BaseDocument):
                 skipped_for_undeployable,
                 partial_base,
                 is_suitable_for_partial_compiles,
-                pip_config
+                pip_config,
+                project_constraints
             ) VALUES(
                 $1,
                 $2,
@@ -6249,7 +6253,8 @@ class ConfigurationModel(BaseDocument):
                 ),
                 $8,
                 True,
-                $10::jsonb
+                $10::jsonb,
+                $11
             )
             RETURNING
                 (SELECT base_version_found FROM base_version_exists LIMIT 1) AS base_version_found,
@@ -6279,6 +6284,7 @@ class ConfigurationModel(BaseDocument):
                     partial_base,
                     updated_resource_sets | deleted_resource_sets,
                     cls._get_value(pip_config),
+                    project_constraints,
                 )
             # Make mypy happy
             assert result is not None

@@ -440,7 +440,11 @@ async def test_put_partial_replace_resource_set(server, client, environment, cli
 
     module_version_info = {
         "test": InmantaModule(
-            name="test", version="0.0.0", files_in_module=[module_source_metadata], requirements=[], for_agents=["agent1"]
+            name="test",
+            version="0.0.0",
+            files_in_module=[module_source_metadata],
+            requirements=[],
+            for_agents=["agent1"],
         )
     }
 
