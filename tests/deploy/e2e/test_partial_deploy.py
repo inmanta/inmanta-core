@@ -60,7 +60,7 @@ def make_shared_set(resource_version=0, size=2, revision=0):
 
 
 def make_set(
-    set_collector: dict[str, object],
+    set_collector: dict[str, str],
     reverse_set_collector: dict[str, set[str]],
     set_id: str,
     resource_version=0,
@@ -68,9 +68,10 @@ def make_set(
     size=5,
 ):
     """
-    Helper to build up the a regular set of resources
+    Helper to build up a regular set of resources
 
-    :param set_collector: a dict where all resource will be registed as resourceid->setid
+    :param set_collector: a dict where all resource will be registered as resourceid->setid
+    :param reverse_set_collector: reverse lookup: setid -> set[resourceid]
     :param set_id: the name of the resource set
     :param resource_version: the version to use in the resource ids
     :param size: number of resources
