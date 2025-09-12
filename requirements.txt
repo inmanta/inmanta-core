@@ -18,7 +18,7 @@ inmanta-dev-dependencies==2.176.0
 inmanta-module-std
 inmanta-sphinx==2.3.0
 jinja2==3.1.6
-logfire==4.4.0
+logfire==4.6.0
 more-itertools==10.8.0
 myst-parser==4.0.1
 openapi_spec_validator==0.7.2
@@ -30,7 +30,7 @@ ply==3.11
 psutil==7.0.0
 pydantic==2.11.7
 PyJWT==2.10.1
-pynacl==1.5.0
+pynacl==1.6.0
 python-dateutil==2.9.0.post0
 pyyaml==6.0.2
 rpdb==0.2.0
@@ -40,7 +40,7 @@ setuptools==80.9.0
 sphinx==8.2.3
 sphinx-argparse==0.5.2
 sphinx-autodoc-annotation==1.0-1
-sphinx-click==6.0.0
+sphinx-click==6.1.0
 sphinxcontrib-contentui==0.2.5
 sphinxcontrib.datatemplates==0.11.0
 sphinxcontrib-redoc==1.6.0

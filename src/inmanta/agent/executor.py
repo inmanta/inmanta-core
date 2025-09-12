@@ -199,9 +199,9 @@ class ExecutorBlueprint(EnvBlueprint):
         requirements = list({req for cd in code for req in cd.blueprint.requirements})
 
         # Check that constraints set at the project level are consistent across all modules
-        _constraints = list({cd.blueprint.project_constraints for cd in code})
-        assert len(_constraints) == 1
-        constraints = _constraints[0]
+        all_constraints = {cd.blueprint.project_constraints for cd in code}
+        assert len(all_constraints) == 1
+        constraints = all_constraints.pop()
 
         pip_configs = [cd.blueprint.pip_config for cd in code]
         python_versions = [cd.blueprint.python_version for cd in code]
