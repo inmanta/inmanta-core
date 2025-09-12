@@ -518,6 +518,10 @@ class ClientHelper:
         result = await self.client.set_setting(self.environment, data.AUTO_DEPLOY, auto)
         assert result.code == 200
 
+    async def set_setting(self, setting: str, value: str | int) -> None:
+        result = await self.client.set_setting(self.environment, setting, value)
+        assert result.code == 200
+
 
 def get_resource(version: int, key: str = "key1", agent: str = "agent1", value: str = "value1") -> dict[str, Any]:
     return {
