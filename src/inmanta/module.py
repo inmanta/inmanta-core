@@ -1829,8 +1829,8 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
     ) -> None:
         """
         Initialize the project, this includes
-         * Loading the project.yaml (into self._metadata)
-         * Setting paths from project.yaml
+         * Loading the project.yml (into self._metadata)
+         * Setting paths from project.yml
          * Loading all modules in the module path (into self.modules)
         It does not include
          * verify if project.yml corresponds to the modules in self.modules
@@ -1972,6 +1972,31 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             for spec in self._metadata.requires
         ]
         return dependencies, constraints
+
+    def get_all_constraints(self) -> str:
+        """
+        Compile a list of all package installation constraints defined at the project level. This method
+        inspects the requirements.txt file and the 'requires' section of the project.yml and compiles a list of
+        requirements.
+
+        These requirements follow this schema: `<package_name><operator><version_constraint>`.
+        """
+        dependencies, constraints = self.get_all_dependencies_and_constraints()
+
+        sanitized_constraints = []
+
+        for req in itertools.chain(dependencies, constraints):
+            # Requirements specified by an url or without a version constraint are not valid
+            # to use inside a constraint file: ignore them.
+            if req.url or not req.specifier:
+                continue
+
+            # Extras are not valid inside a constraint file: drop them.
+            if req.extras:
+                req.extras = set()
+            sanitized_constraints.append(str(req))
+
+        return "\n".join(sorted(sanitized_constraints))
 
     def install_modules(self, *, bypass_module_cache: bool = False, update: bool = False) -> None:
         """

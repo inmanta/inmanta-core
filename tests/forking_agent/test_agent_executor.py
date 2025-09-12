@@ -23,11 +23,15 @@ import subprocess
 import sys
 import uuid
 
+import pytest
+
+import inmanta
 from inmanta import const
 from inmanta.agent import executor, forking_executor
 from inmanta.data.model import PipConfig
 from inmanta.loader import ModuleSource
 from inmanta.signals import dump_ioloop_running, dump_threads
+from packaging import version
 from utils import PipIndex, log_contains, log_doesnt_contain, retry_limited
 
 logger = logging.getLogger(__name__)
@@ -37,15 +41,36 @@ def code_for(bp: executor.ExecutorBlueprint) -> list[executor.ResourceInstallSpe
     return [executor.ResourceInstallSpec("test::Test", 5, bp)]
 
 
-async def test_process_manager(environment, pip_index, mpmanager_light: forking_executor.MPManager) -> None:
+@pytest.fixture
+def set_custom_executor_policy(server_config):
+    """
+    Fixture to temporarily set the policy for executor management.
+    """
+    old_cap_value = inmanta.agent.config.agent_executor_cap.get()
+
+    # Keep 4 executors per agent
+    inmanta.agent.config.agent_executor_cap.set("4")
+
+    yield
+
+    inmanta.agent.config.agent_executor_cap.set(str(old_cap_value))
+
+
+async def test_process_manager(
+    environment, pip_index, set_custom_executor_policy, mpmanager_light: forking_executor.MPManager
+) -> None:
     """
     This test verifies the creation and reuse of executors and their underlying environments. It checks whether
     new executors and environments are created as necessary and reused when the conditions are the same.
+
+    It also tests that constraints set in the EnvBlueprint are used during agent code install.
     """
+
     env_id = uuid.UUID(environment)
     # Define requirements and pip configuration
     requirements1 = ("pkg1",)
     requirements2 = ("pkg1", "pkg2")
+    constraints = "pkg1<2.0.0\npkg2"
     pip_config = PipConfig(index_url=pip_index.url)
 
     def make_module_source(name: str, content: str) -> ModuleSource:
@@ -85,30 +110,56 @@ assert inmanta_plugins.sub.a == 1""",
         environment_id=env_id,
         pip_config=pip_config,
         requirements=requirements1,
-        sources=sources1,
         python_version=sys.version_info[:2],
+        project_constraints=None,
+        sources=sources1,
     )
+
     env_blueprint1 = executor.EnvBlueprint(
-        environment_id=env_id, pip_config=pip_config, requirements=requirements1, python_version=sys.version_info[:2]
+        environment_id=env_id,
+        pip_config=pip_config,
+        requirements=requirements1,
+        python_version=sys.version_info[:2],
+        project_constraints=None,
     )
     blueprint2 = executor.ExecutorBlueprint(
         environment_id=env_id,
         pip_config=pip_config,
         requirements=requirements1,
-        sources=sources2,
         python_version=sys.version_info[:2],
+        project_constraints=None,
+        sources=sources2,
     )
     blueprint3 = executor.ExecutorBlueprint(
         environment_id=env_id,
         pip_config=pip_config,
         requirements=requirements2,
-        sources=sources2,
         python_version=sys.version_info[:2],
+        project_constraints=None,
+        sources=sources2,
     )
     env_blueprint2 = executor.EnvBlueprint(
-        environment_id=env_id, pip_config=pip_config, requirements=requirements2, python_version=sys.version_info[:2]
+        environment_id=env_id,
+        pip_config=pip_config,
+        requirements=requirements2,
+        python_version=sys.version_info[:2],
+        project_constraints=None,
     )
-
+    blueprint4 = executor.ExecutorBlueprint(
+        environment_id=env_id,
+        pip_config=pip_config,
+        requirements=requirements2,
+        python_version=sys.version_info[:2],
+        project_constraints=constraints,
+        sources=sources2,
+    )
+    env_blueprint3 = executor.EnvBlueprint(
+        environment_id=env_id,
+        pip_config=pip_config,
+        requirements=requirements2,
+        python_version=sys.version_info[:2],
+        project_constraints=constraints,
+    )
     executor_manager = mpmanager_light
     venv_manager = mpmanager_light.process_pool.environment_manager
 
@@ -128,6 +179,7 @@ assert inmanta_plugins.sub.a == 1""",
     # Verify that required packages are installed in the environment
     installed = executor_1.process.executor_virtual_env.get_installed_packages()
     assert all(element in installed for element in requirements1)
+    assert installed["pkg1"] == version.Version("2.0.0")
 
     # Reusing the same blueprint should reuse the executor without creating a new one
     executor_1_reuse = await executor_manager.get_executor("agent1", "local:", code_for(blueprint1))
@@ -168,6 +220,23 @@ assert inmanta_plugins.sub.a == 1""",
 
     installed = executor_3.process.executor_virtual_env.get_installed_packages()
     assert all(element in installed for element in requirements2)
+    assert installed["pkg1"] == version.Version("2.0.0")
+
+    # Changing the project constraints should necessitate a new environment
+    executor_4 = await executor_manager.get_executor("agent1", "local:", code_for(blueprint4))
+
+    assert len(executor_manager.pool) == 4
+    assert executor_4.id == executor.ExecutorId("agent1", "local:", blueprint4)
+    assert executor_4.id in executor_manager.pool
+    assert executor_manager.pool[executor_4.id] == executor_4
+
+    assert len(venv_manager.pool) == 3  # A new environment is created
+    assert env_blueprint3.blueprint_hash() in venv_manager.pool
+    assert venv_manager.pool[env_blueprint3.blueprint_hash()] == executor_4.process.executor_virtual_env
+
+    installed = executor_4.process.executor_virtual_env.get_installed_packages()
+    assert all(element in installed for element in requirements2)
+    assert installed["pkg1"] == version.Version("1.0.0")
 
 
 async def test_process_manager_restart(environment, tmpdir, mp_manager_factory, caplog) -> None:

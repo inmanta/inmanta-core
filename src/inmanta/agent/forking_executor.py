@@ -100,7 +100,6 @@ from inmanta.agent import executor, resourcepool
 from inmanta.agent.executor import DeployReport, FailedInmantaModules, GetFactReport, VirtualEnvironmentManager
 from inmanta.agent.resourcepool import PoolManager, PoolMember
 from inmanta.const import LOGGER_NAME_EXECUTOR
-from inmanta.loader import get_inmanta_module_name
 from inmanta.protocol.ipc_light import (
     FinalizingIPCClient,
     IPCMethod,
@@ -389,7 +388,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
         venv_path: str,
         storage_folder: str,
         session_gid: uuid.UUID,
-        sources: list[inmanta.loader.ModuleSource],
+        sources: list["inmanta.loader.ModuleSource"],
         venv_touch_interval: float = 60.0,
     ):
         """
@@ -434,7 +433,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
                 in_place.append(module_source)
             except Exception as e:
                 logger.info("Failed to load sources: %s", module_source, exc_info=True)
-                inmanta_module_name = get_inmanta_module_name(module_source.name)
+                inmanta_module_name = inmanta.loader.get_inmanta_module_name(module_source.name)
                 failed_modules[inmanta_module_name][module_source.name] = e
 
         # then try to import them
@@ -446,7 +445,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
                 )
             except Exception as e:
                 logger.info("Failed to import source: %s", module_source.name, exc_info=True)
-                inmanta_module_name = get_inmanta_module_name(module_source.name)
+                inmanta_module_name = inmanta.loader.get_inmanta_module_name(module_source.name)
                 failed_modules[inmanta_module_name][module_source.name] = ModuleImportException(e, module_source.name)
 
         return failed_modules

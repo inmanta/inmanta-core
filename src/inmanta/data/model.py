@@ -1041,3 +1041,8 @@ class DataBaseReport(BaseModel):
             free_connections=self.free_connections + other.free_connections,
             pool_exhaustion_time=self.pool_exhaustion_time + other.pool_exhaustion_time,
         )
+
+
+class GetSourceCodeResponse(BaseModel):
+    sources: list[Source]
+    project_constraints: str | None

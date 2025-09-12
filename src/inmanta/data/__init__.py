@@ -5819,6 +5819,8 @@ class ConfigurationModel(BaseDocument):
     undeployable: list[ResourceIdStr] = []
     skipped_for_undeployable: list[ResourceIdStr] = []
 
+    project_constraints: str | None = None
+
     def __init__(self, **kwargs: object) -> None:
         super().__init__(**kwargs)
 
@@ -5840,6 +5842,7 @@ class ConfigurationModel(BaseDocument):
         updated_resource_sets: abc.Set[str],
         deleted_resource_sets: abc.Set[str],
         connection: Optional[Connection] = None,
+        project_constraints: str | None = None,
     ) -> "ConfigurationModel":
         """
         Create and insert a new configurationmodel that is the result of a partial compile. The new ConfigurationModel will
@@ -5902,7 +5905,8 @@ class ConfigurationModel(BaseDocument):
                 skipped_for_undeployable,
                 partial_base,
                 is_suitable_for_partial_compiles,
-                pip_config
+                pip_config,
+                project_constraints
             ) VALUES(
                 $1,
                 $2,
@@ -5940,7 +5944,8 @@ class ConfigurationModel(BaseDocument):
                 ),
                 $8,
                 True,
-                $10::jsonb
+                $10::jsonb,
+                $11
             )
             RETURNING
                 (SELECT base_version_found FROM base_version_exists LIMIT 1) AS base_version_found,
@@ -5969,6 +5974,7 @@ class ConfigurationModel(BaseDocument):
                 partial_base,
                 updated_resource_sets | deleted_resource_sets,
                 cls._get_value(pip_config),
+                project_constraints,
             )
             # Make mypy happy
             assert result is not None
@@ -6426,7 +6432,7 @@ class Code(BaseDocument):
     :param sources: The source code of plugins (phasing out)  form:
         {code_hash:(file_name, provider.__module__, source_code, [req])}
     :param requires: Python requires for the source code above
-    :param source_refs: file hashes refering to files in the file store
+    :param source_refs: file hashes referring to files in the file store
         {code_hash:(file_name, provider.__module__, [req])}
     """
 

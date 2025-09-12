@@ -35,6 +35,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional, Sequence, cast
 from uuid import UUID
 
+import inmanta.loader
 import packaging.requirements
 from inmanta import const
 from inmanta.agent import config as cfg
@@ -44,7 +45,6 @@ from inmanta.const import Change
 from inmanta.data import LogLine
 from inmanta.data.model import AttributeStateChange, PipConfig
 from inmanta.env import PythonEnvironment
-from inmanta.loader import ModuleSource
 from inmanta.resources import Id
 from inmanta.types import JsonType, ResourceIdStr, ResourceType, ResourceVersionIdStr
 
@@ -106,13 +106,15 @@ class ResourceDetails:
 
 @dataclasses.dataclass
 class EnvBlueprint:
-    """Represents a blueprint for creating virtual environments with specific pip configurations and requirements."""
+    """Represents a blueprint for creating virtual environments
+    with specific pip configurations, requirements and constraints."""
 
     environment_id: uuid.UUID
     pip_config: PipConfig
     requirements: Sequence[str]
-    _hash_cache: Optional[str] = dataclasses.field(default=None, init=False, repr=False)
+    _hash_cache: str | None = dataclasses.field(default=None, init=False, repr=False)
     python_version: tuple[int, int]
+    project_constraints: str | None = dataclasses.field(default=None, kw_only=True)
 
     def __post_init__(self) -> None:
         # remove duplicates and make uniform
@@ -120,9 +122,9 @@ class EnvBlueprint:
 
     def blueprint_hash(self) -> str:
         """
-        Generate a stable hash for an EnvBlueprint instance by serializing its pip_config
-        and requirements in a sorted, consistent manner. This ensures that the hash value is
-        independent of the order of requirements and consistent across interpreter sessions.
+        Generate a stable hash for an EnvBlueprint instance by serializing its pip_config, requirements
+        and project constraints in a sorted, consistent manner. This ensures that the hash value is
+        independent of the order of requirements/constraints and consistent across interpreter sessions.
         Also cache the hash to only compute it once.
         """
         if self._hash_cache is None:
@@ -131,6 +133,7 @@ class EnvBlueprint:
                 "pip_config": self.pip_config.model_dump(),
                 "requirements": self.requirements,
                 "python_version": self.python_version,
+                "project_constraints": self.project_constraints,
             }
 
             # Serialize the blueprint dictionary to a JSON string, ensuring consistent ordering
@@ -144,11 +147,18 @@ class EnvBlueprint:
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, EnvBlueprint):
             return False
-        return (self.environment_id, self.pip_config, set(self.requirements), self.python_version) == (
+        return (
+            self.environment_id,
+            self.pip_config,
+            set(self.requirements),
+            self.python_version,
+            self.project_constraints,
+        ) == (
             other.environment_id,
             other.pip_config,
             set(other.requirements),
             other.python_version,
+            other.project_constraints,
         )
 
     def __hash__(self) -> int:
@@ -156,9 +166,10 @@ class EnvBlueprint:
 
     def __str__(self) -> str:
         req = ",".join(str(req) for req in self.requirements)
+        constraints = ",".join(self.project_constraints.split("\n")) if self.project_constraints else ""
         return (
-            f"EnvBlueprint(environment_id={self.environment_id}, requirements=[{str(req)}],"
-            f" pip={self.pip_config}, python_version={self.python_version})"
+            f"EnvBlueprint(environment_id={self.environment_id}, requirements=[{str(req)}], "
+            f"constraints=[{constraints}], pip={self.pip_config}, python_version={self.python_version})"
         )
 
 
@@ -166,7 +177,7 @@ class EnvBlueprint:
 class ExecutorBlueprint(EnvBlueprint):
     """Extends EnvBlueprint to include sources for the executor environment."""
 
-    sources: Sequence[ModuleSource]
+    sources: Sequence["inmanta.loader.ModuleSource"]
     _hash_cache: Optional[str] = dataclasses.field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -188,6 +199,12 @@ class ExecutorBlueprint(EnvBlueprint):
         assert len(env_ids) == 1
         sources = list({source for cd in code for source in cd.blueprint.sources})
         requirements = list({req for cd in code for req in cd.blueprint.requirements})
+
+        # Check that constraints set at the project level are consistent across all modules
+        all_constraints = {cd.blueprint.project_constraints for cd in code}
+        assert len(all_constraints) == 1
+        constraints = all_constraints.pop()
+
         pip_configs = [cd.blueprint.pip_config for cd in code]
         python_versions = [cd.blueprint.python_version for cd in code]
         if not pip_configs:
@@ -208,12 +225,13 @@ class ExecutorBlueprint(EnvBlueprint):
             sources=sources,
             requirements=requirements,
             python_version=base_python_version,
+            project_constraints=constraints,
         )
 
     def blueprint_hash(self) -> str:
         """
-        Generate a stable hash for an ExecutorBlueprint instance by serializing its pip_config, sources
-        and requirements in a sorted, consistent manner. This ensures that the hash value is
+        Generate a stable hash for an ExecutorBlueprint instance by serializing its pip_config, sources,
+        requirements and constraints in a sorted, consistent manner. This ensures that the hash value is
         independent of the order of requirements and consistent across interpreter sessions.
         Also cache the hash to only compute it once.
         """
@@ -225,6 +243,7 @@ class ExecutorBlueprint(EnvBlueprint):
                 # Use the hash values and name to create a stable identity
                 "sources": [[source.hash_value, source.name, source.is_byte_code] for source in self.sources],
                 "python_version": self.python_version,
+                "project_constraints": self.project_constraints,
             }
 
             # Serialize the extended blueprint dictionary to a JSON string, ensuring consistent ordering
@@ -244,17 +263,26 @@ class ExecutorBlueprint(EnvBlueprint):
             pip_config=self.pip_config,
             requirements=self.requirements,
             python_version=self.python_version,
+            project_constraints=self.project_constraints,
         )
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, ExecutorBlueprint):
             return False
-        return (self.environment_id, self.pip_config, self.requirements, self.sources, self.python_version) == (
+        return (
+            self.environment_id,
+            self.pip_config,
+            self.requirements,
+            self.sources,
+            self.python_version,
+            self.project_constraints,
+        ) == (
             other.environment_id,
             other.pip_config,
             other.requirements,
             other.sources,
             other.python_version,
+            other.project_constraints,
         )
 
     def __hash__(self) -> int:
@@ -318,6 +346,19 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         self.folder_name: str = pathlib.Path(self.env_path).name
         self.io_threadpool = io_threadpool
 
+    def _write_constraint_file(self, blueprint: EnvBlueprint) -> str | None:
+        """
+        Write the constraint file defined in the blueprint to disk and return the path
+        to it, or None if no such constraint file is defined.
+        """
+        if blueprint.project_constraints is not None:
+            constraint_file_path = pathlib.Path(self.env_path) / "requirements.txt"
+            with constraint_file_path.open("w") as f:
+                f.write(blueprint.project_constraints)
+            return str(constraint_file_path)
+
+        return None
+
     async def create_and_install_environment(self, blueprint: EnvBlueprint) -> None:
         """
         Creates and configures the virtual environment according to the provided blueprint.
@@ -327,10 +368,12 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         """
         req: list[str] = list(blueprint.requirements)
         await asyncio.get_running_loop().run_in_executor(self.io_threadpool, self.init_env)
+        constraint_file: str | None = self._write_constraint_file(blueprint)
         if len(req):  # install_for_config expects at least 1 requirement or a path to install
             await self.async_install_for_config(
                 requirements=[packaging.requirements.Requirement(requirement_string=e) for e in req],
                 config=blueprint.pip_config,
+                constraint_files=[constraint_file] if constraint_file else None,
             )
 
         self.touch()
