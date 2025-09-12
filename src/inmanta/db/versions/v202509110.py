@@ -39,5 +39,11 @@ async def update(connection: Connection) -> None:
             )
         ) AS rid(match)
     )
+    ;
+    ALTER TABLE public.discoveredresource
+        ALTER COLUMN resource_type SET NOT NULL,
+        ALTER COLUMN resource_id_value SET NOT NULL,
+        ALTER COLUMN agent SET NOT NULL
+    ;
     """
     await connection.execute(schema)
