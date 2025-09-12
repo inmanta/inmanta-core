@@ -299,7 +299,7 @@ class PartialUpdateMerger:
                         f"Resource ({rid_shared_resource}) without a resource set cannot be updated via a partial compile"
                     )
                 # If not, merge requires
-                update = self._merge_requires_of_shared_resource(old_shared_resource, new_shared_resource)
+                update |= self._merge_requires_of_shared_resource(old_shared_resource, new_shared_resource)
                 res = new_shared_resource
             elif rid_shared_resource in shared_resources_new:
                 # New shared resource in partial compile
