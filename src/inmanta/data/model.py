@@ -577,14 +577,12 @@ class ReleasedResourceDetails(ResourceDetails):
     """The details of a released resource
     :param last_deploy: The value of the last_deploy on the latest released version of the resource
     :param first_generated_time: The first time this resource was generated
-    :param first_generated_version: The first model version this resource was in
     :param status: The current status of the resource
     :param requires_status: The id and status of the resources this resource requires
     """
 
     last_deploy: Optional[datetime.datetime] = None
     first_generated_time: datetime.datetime
-    first_generated_version: int
     status: ReleasedResourceState
     requires_status: dict[ResourceIdStr, ReleasedResourceState]
 

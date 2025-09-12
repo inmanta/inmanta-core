@@ -1,0 +1,7 @@
+description: Add created column to ResourcePersistentState table.
+  Drop first_generated_version from ReleasedResourceDetails
+issue-nr: 9066
+change-type: minor
+destination-branches: [master]
+sections:
+  deprecation-note: "V2 endpoint resource_details no longer returns the first_generated_version"
