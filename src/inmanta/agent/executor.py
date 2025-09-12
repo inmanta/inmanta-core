@@ -398,8 +398,10 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         for file_name in ["requirements.txt", const.INMANTA_VENV_STATUS_FILENAME]:
             legacy_path: pathlib.Path = pathlib.Path(self.env_path) / file_name
             if legacy_path.exists():
-                # Use copy2 to preserve last access time metadata (for the status file).
-                shutil.copy2(src=legacy_path, dst=pathlib.Path(self.inmanta_storage) / file_name)
+                new_path: pathlib.Path = pathlib.Path(self.inmanta_storage) / file_name
+                if not new_path.exists():
+                    # Use copy2 to preserve last access time metadata (for the status file).
+                    shutil.copy2(src=legacy_path, dst=new_path)
                 os.remove(legacy_path)
 
         return self.inmanta_venv_status_file.exists()
