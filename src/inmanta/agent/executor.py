@@ -376,7 +376,7 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         """
         req: list[str] = list(blueprint.requirements)
         await asyncio.get_running_loop().run_in_executor(self.io_threadpool, self.init_env)
-        os.makedirs(self.inmanta_storage)
+        os.makedirs(self.inmanta_storage, exist_ok=True)
         constraint_file: str | None = self._write_constraint_file(blueprint)
         if len(req):  # install_for_config expects at least 1 requirement or a path to install
             await self.async_install_for_config(
