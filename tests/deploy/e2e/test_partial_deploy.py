@@ -155,7 +155,6 @@ async def test_partial_compile_scenarios_end_to_end(
             unknowns=[],
             version_info={},
             compiler_version=get_compiler_version(),
-            module_version_info={},
             resource_sets=set_collector,
         )
         assert res.code == 200, res.result
@@ -179,7 +178,6 @@ async def test_partial_compile_scenarios_end_to_end(
             resources=resources,
             unknowns=[],
             version_info={},
-            module_version_info={},
             resource_sets=set_collector,
             removed_resource_sets=remove,
         )
