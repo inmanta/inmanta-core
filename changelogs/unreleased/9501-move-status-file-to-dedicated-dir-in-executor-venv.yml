@@ -1,0 +1,4 @@
+description: Add a dedicated .inmanta directory to executors' venvs.
+issue-nr: 9501
+change-type: minor
+destination-branches: [master, iso8]
