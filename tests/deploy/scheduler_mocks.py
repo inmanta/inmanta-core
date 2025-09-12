@@ -23,7 +23,7 @@ import uuid
 from collections.abc import Set
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
-from typing import Any, Callable, Coroutine, Mapping, Never, Optional, Sequence, Set
+from typing import Any, Callable, Coroutine, Mapping, Never, Optional
 from uuid import UUID
 
 import asyncpg
