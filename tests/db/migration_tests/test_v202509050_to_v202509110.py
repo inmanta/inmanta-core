@@ -34,7 +34,9 @@ async def test_discovered_resources_split_id(
     postgresql_client: asyncpg.Connection, migrate_db_from: abc.Callable[[], abc.Awaitable[None]]
 ) -> None:
     await migrate_db_from()
-    for discovered in await data.DiscoveredResource.get_list():
+    discovered_resources = await data.DiscoveredResource.get_list()
+    assert len(discovered_resources) > 0
+    for discovered in discovered_resources:
         rid = resources.Id.parse_id(discovered.discovered_resource_id)
         assert discovered.resource_type == rid.entity_type
         assert discovered.agent == rid.agent_name
