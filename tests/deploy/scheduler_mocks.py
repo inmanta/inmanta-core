@@ -22,7 +22,7 @@ import typing
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
-from typing import Any, Callable, Coroutine, Mapping, Never, Optional, Sequence, Set
+from typing import Any, Callable, Coroutine, Mapping, Never, Optional, Set
 from uuid import UUID
 
 import asyncpg
@@ -32,6 +32,7 @@ from inmanta import const
 from inmanta.agent import Agent, executor
 from inmanta.agent.executor import DeployReport, DryrunReport, GetFactReport, ModuleInstallSpec, ResourceDetails
 from inmanta.const import Change
+from inmanta.data.model import AttributeStateChange
 from inmanta.deploy import state
 from inmanta.deploy.persistence import StateUpdateManager
 from inmanta.deploy.scheduler import ModelVersion, ResourceScheduler
@@ -58,11 +59,13 @@ class DummyExecutor(executor.Executor):
         self.dry_run_count = 0
         self.facts_count = 0
         self.mock_versions = {}
+        self.seen: list[ResourceDetails] = []
 
     def reset_counters(self) -> None:
         self.execute_count = 0
         self.dry_run_count = 0
         self.facts_count = 0
+        self.seen.clear()
 
     async def execute(
         self,
@@ -73,7 +76,7 @@ class DummyExecutor(executor.Executor):
         requires: Mapping[ResourceIdStr, const.HandlerResourceState],
     ) -> DeployReport:
         assert reason
-
+        self.seen.append(resource_details)
         self.execute_count += 1
         result = (
             const.HandlerResourceState.failed
@@ -89,8 +92,20 @@ class DummyExecutor(executor.Executor):
             change=Change.nochange,
         )
 
-    async def dry_run(self, resources: Sequence[ResourceDetails], dry_run_id: uuid.UUID) -> None:
+    async def dry_run(
+        self,
+        resource: ResourceDetails,
+        dry_run_id: uuid.UUID,
+    ) -> DryrunReport:
         self.dry_run_count += 1
+        return DryrunReport(
+            rvid=resource.rvid,
+            dryrun_id=dry_run_id,
+            changes={"handler": AttributeStateChange(current="TEST", desired=str(self.dry_run_count))},
+            started=datetime.datetime.now().astimezone(),
+            finished=datetime.datetime.now().astimezone(),
+            messages=[],
+        )
 
     async def get_facts(self, resource: ResourceDetails) -> None:
         self.facts_count += 1
@@ -160,7 +175,7 @@ class DummyManager(executor.ExecutorManager[executor.Executor]):
     """
 
     def __init__(self):
-        self.executors = {}
+        self.executors: dict[str, DummyExecutor] = {}
 
     def reset_executor_counters(self) -> None:
         for ex in self.executors.values():

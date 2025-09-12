@@ -22,6 +22,7 @@ import pathlib
 import stat
 import tempfile
 import warnings
+from concurrent.futures.thread import ThreadPoolExecutor
 from glob import glob
 from re import Pattern
 from threading import Condition
@@ -33,6 +34,7 @@ import inmanta.deploy.state
 import requests
 import toml
 from inmanta import logging as inmanta_logging
+from inmanta.agent.executor import Executor, ExecutorManager
 from inmanta.agent.handler import CRUDHandler, HandlerContext, ResourceHandler, SkipResource, TResource, provider
 from inmanta.agent.write_barier_executor import WriteBarierExecutorManager
 from inmanta.config import log_dir
@@ -954,7 +956,38 @@ DISABLE_STATE_CHECK = False
 
 
 @pytest.fixture(scope="function")
-async def agent_factory(server, client, monkeypatch) -> AsyncIterator[Callable[[uuid.UUID], Awaitable[Agent]]]:
+def executor_factory():
+
+    def default_executor(
+        environment: uuid.UUID,
+        client: inmanta.protocol.SessionClient,
+        eventloop: asyncio.AbstractEventLoop,
+        parent_logger: logging.Logger,
+        thread_pool: ThreadPoolExecutor,
+        code_dir: str,
+        env_dir: str,
+    ):
+        executor: ExecutorManager[Executor] = InProcessExecutorManager(
+            environment,
+            client,
+            eventloop,
+            parent_logger,
+            thread_pool,
+            code_dir,
+            env_dir,
+            False,
+        )
+
+        executor = WriteBarierExecutorManager(executor)
+        return executor
+
+    return default_executor
+
+
+@pytest.fixture(scope="function")
+async def agent_factory(
+    server, client, monkeypatch, executor_factory
+) -> AsyncIterator[Callable[[uuid.UUID], Awaitable[Agent]]]:
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     agents: list[Agent] = []
 
@@ -970,7 +1003,7 @@ async def agent_factory(server, client, monkeypatch) -> AsyncIterator[Callable[[
         # Restore state-dir
         config.Config.set("config", "state-dir", str(server_state_dir))
 
-        executor = InProcessExecutorManager(
+        executor = executor_factory(
             environment,
             a._client,
             asyncio.get_running_loop(),
@@ -978,11 +1011,7 @@ async def agent_factory(server, client, monkeypatch) -> AsyncIterator[Callable[[
             a.thread_pool,
             str(pathlib.Path(a._storage["executors"]) / "code"),
             str(pathlib.Path(a._storage["executors"]) / "venvs"),
-            False,
         )
-
-        executor = WriteBarierExecutorManager(executor)
-
         a.executor_manager = executor
         a.scheduler.executor_manager = executor
         a.scheduler.code_manager = utils.DummyCodeManager()
