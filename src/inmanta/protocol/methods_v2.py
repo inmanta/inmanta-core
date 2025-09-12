@@ -1613,7 +1613,7 @@ def discovered_resource_create_batch(tid: uuid.UUID, discovered_resources: Seque
     client_types=[ClientType.api],
     api_version=2,
 )
-def discovered_resources_get(tid: uuid.UUID, discovered_resource_id: ResourceIdStr) -> model.DiscoveredResource:
+def discovered_resources_get(tid: uuid.UUID, discovered_resource_id: ResourceIdStr) -> model.DiscoveredResourceABC:
     """
     Get a single discovered resource.
 
@@ -1636,7 +1636,7 @@ def discovered_resources_get_batch(
     end: Optional[str] = None,
     sort: str = "discovered_resource_id.asc",
     filter: Optional[Mapping[str, Sequence[str]]] = None,
-) -> list[model.DiscoveredResource]:
+) -> list[model.DiscoveredResourceABC]:
     """
     Get a list of discovered resources.
 
