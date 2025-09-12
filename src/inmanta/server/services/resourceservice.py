@@ -38,7 +38,7 @@ from inmanta.data.dataview import (
     ResourceView,
 )
 from inmanta.data.model import (
-    DiscoveredResource,
+    DiscoveredResourceABC,
     LatestReleasedResource,
     LinkedDiscoveredResource,
     ReleasedResourceDetails,
@@ -491,7 +491,7 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
     @handle(methods_v2.discovered_resources_get, env="tid")
     async def discovered_resources_get(
         self, env: data.Environment, discovered_resource_id: ResourceIdStr
-    ) -> DiscoveredResource:
+    ) -> DiscoveredResourceABC:
         if not self.feature_manager.enabled(resource_discovery):
             raise Forbidden(message="The resource discovery feature is not enabled.")
 
@@ -510,7 +510,7 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
         end: Optional[str] = None,
         sort: str = "discovered_resource_id.asc",
         filter: Optional[dict[str, list[str]]] = None,
-    ) -> ReturnValue[Sequence[DiscoveredResource]]:
+    ) -> ReturnValue[Sequence[DiscoveredResourceABC]]:
         if not self.feature_manager.enabled(resource_discovery):
             raise Forbidden(message="The resource discovery feature is not enabled.")
 

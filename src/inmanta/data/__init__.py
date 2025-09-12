@@ -869,6 +869,9 @@ class DiscoveredResourceOrder(SingleDatabaseOrder):
         """Describes the names and types of the columns that are valid for this DatabaseOrder"""
         return {
             ColumnNameStr("discovered_resource_id"): StringColumn,
+            ColumnNameStr("agent"): StringColumn,
+            ColumnNameStr("resource_type"): StringColumn,
+            ColumnNameStr("resource_id_value"): StringColumn,
         }
 
 
@@ -6913,7 +6916,12 @@ class DiscoveredResource(BaseDocument):
 
     environment: uuid.UUID
     discovered_at: datetime.datetime
+
     discovered_resource_id: ResourceIdStr
+    agent: str
+    resource_type: ResourceType
+    resource_id_value: str
+
     discovery_resource_id: Optional[ResourceIdStr]
     values: dict[str, object]
 
@@ -6922,6 +6930,9 @@ class DiscoveredResource(BaseDocument):
     def to_dto(self) -> m.DiscoveredResource:
         return m.DiscoveredResource(
             discovered_resource_id=self.discovered_resource_id,
+            resource_type=self.resource_type,
+            agent=self.agent,
+            resource_id_value=self.resource_id_value,
             values=self.values,
             discovery_resource_id=self.discovery_resource_id,
         )
