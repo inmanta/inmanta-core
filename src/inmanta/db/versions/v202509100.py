@@ -24,6 +24,15 @@ async def update(connection: Connection) -> None:
     Add 'created' column to ResourcePersistentState
     """
     schema = """
+    -- Remove dangling resource_sets (resources are deleted with cascade)
+    DELETE FROM resource_set AS rs
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM resource_set_configuration_model AS rscm
+        WHERE rscm.environment=rs.environment
+        AND rscm.resource_set_id=rs.id
+    );
+
     ALTER TABLE public.resource_persistent_state
         ADD COLUMN created TIMESTAMP WITH TIME ZONE;
 
