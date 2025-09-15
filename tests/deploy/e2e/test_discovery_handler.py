@@ -148,6 +148,9 @@ async def test_discovery_resource_handler_basic_test(
             "values": {"val": val},
             "managed_resource_uri": None,
             "discovery_resource_id": resource_id,
+            "resource_type": "test::MyUnmanagedResource",
+            "agent": "discovery_agent",
+            "resource_id_value": str(val),
             "discovery_resource_uri": f"/api/v2/resource/{parse.quote(resource_id)}",
         }
         for val in all_values

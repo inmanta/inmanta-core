@@ -551,6 +551,9 @@ class DiscoveredResource(Base):
 
     environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
     discovered_resource_id: Mapped[str] = mapped_column(String, primary_key=True)
+    agent: Mapped[str] = mapped_column(String)
+    resource_type: Mapped[str] = mapped_column(String)
+    resource_id_value: Mapped[str] = mapped_column(String)
     values: Mapped[dict[str, Any]] = mapped_column(JSONB)
     discovered_at: Mapped[datetime.datetime] = mapped_column(DateTime(True))
     discovery_resource_id: Mapped[Optional[str]] = mapped_column(String)

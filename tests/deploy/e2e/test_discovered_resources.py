@@ -162,6 +162,9 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
         discovered_resources.append(
             {
                 "discovered_resource_id": rid,
+                "resource_type": "test::Resource",
+                "agent": "agent1",
+                "resource_id_value": f"key{i}",
                 "values": {"value1": f"test{i}", "value2": f"test{i + 1}"},
                 "managed_resource_uri": (
                     f"/api/v2/resource/{parse.quote(rid, safe='')}" if i <= 4 else None
