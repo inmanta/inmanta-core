@@ -225,7 +225,7 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         # sub executors
         self.ctx = ExecutorContext(self, environment)
 
-        # venc keep alive
+        # venv keep alive
         # This interval and this task will be initialized when the InitCommand is received, see usage of `venv_cleanup_task`.
         # We set this to `None` as this field will be used to ensure that the InitCommand is only called once
         self.timer_venv_scheduler_interval: typing.Optional[float] = None
@@ -845,7 +845,7 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
         super().__init__()
         self.init_once()
 
-        # Can be overriden in tests
+        # Can be overridden in tests
         self.venv_checkup_interval: float = 60.0
 
         self.thread_pool = thread_pool
