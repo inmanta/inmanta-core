@@ -291,6 +291,10 @@ Protocol
     :members: code, result
     :undoc-members:
 
+.. autoclass:: inmanta.protocol.common.PageableClientCall
+    :members: all, all_sync
+
+
 
 Data
 ----
