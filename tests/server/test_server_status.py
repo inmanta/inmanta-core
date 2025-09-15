@@ -17,6 +17,8 @@ Contact: code@inmanta.com
 """
 
 import asyncio
+import re
+import sys
 import uuid
 
 import pytest
@@ -26,7 +28,7 @@ from inmanta.data.model import ReportedStatus
 from inmanta.server.services.compilerservice import CompilerService
 
 
-async def test_server_status(server, client, agent, environment):
+async def test_server_status(server, client, agent, environment, postgresql_client):
     result = await client.get_server_status()
 
     assert result.code == 200
@@ -52,6 +54,12 @@ async def test_server_status(server, client, agent, environment):
     assert "features" in status
     assert len(status["features"]) > 0
 
+    assert status["python_version"] == sys.version
+    postgresql_version = await postgresql_client.fetchval("SELECT version();")
+    # Assert that the output is `PostgreSQL X.Y[.Z] ...`
+    assert re.match(r"^(PostgreSQL \d+(?:\.\d+)+)", postgresql_version)
+    assert status["postgresql_version"] == postgresql_version
+
 
 async def test_server_status_database_unreachable(server, client):
     await data.disconnect_pool()
@@ -63,6 +71,7 @@ async def test_server_status_database_unreachable(server, client):
             database_slice = slice
     assert database_slice
     assert not database_slice["status"]["connected"]
+    assert result.result["data"]["postgresql_version"] is None
 
 
 async def test_server_status_timeout(server, client, monkeypatch):

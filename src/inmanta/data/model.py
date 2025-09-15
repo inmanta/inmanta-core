@@ -103,6 +103,8 @@ class StatusResponse(BaseModel):
     slices: list[SliceStatus]
     features: list[FeatureStatus]
     status: ReportedStatus
+    python_version: str
+    postgresql_version: str | None
 
 
 @stable_api
