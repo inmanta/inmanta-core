@@ -5284,7 +5284,7 @@ class ResourceSet(BaseDocument):
                 FROM resource_set_configuration_model AS rscm
                 WHERE environment=$1
                 AND rscm.resource_set_id=rs.id
-            )
+            ) AND environment=$1
             """,
             environment,
             connection=connection,
