@@ -359,6 +359,8 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         Backwards compatibility helper: move files that used to live in the
         top-level dir of the venv into the dedicated storage dir.
         """
+        os.makedirs(self.inmanta_storage, exist_ok=True)
+
         for file_name in ["requirements.txt", const.INMANTA_VENV_STATUS_FILENAME]:
             legacy_path: pathlib.Path = pathlib.Path(self.env_path) / file_name
             if legacy_path.exists():
@@ -403,13 +405,13 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
 
     def init_env(self) -> None:
         super().init_env()
-        os.makedirs(self.inmanta_storage, exist_ok=True)
         self._ensure_disk_layout_backwards_compatibility()
 
     def is_correctly_initialized(self) -> bool:
         """
         Was the venv correctly initialized: the inmanta status file exists
         """
+        self._ensure_disk_layout_backwards_compatibility()
         return self.inmanta_venv_status_file.exists()
 
     def touch(self) -> None:
