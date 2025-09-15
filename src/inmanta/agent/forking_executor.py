@@ -319,7 +319,7 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         """
         # makes mypy happy
         assert self.ctx.venv is not None
-        path = pathlib.Path(self.ctx.venv.env_path) / ".inmanta" /const.INMANTA_VENV_STATUS_FILENAME
+        path = pathlib.Path(self.ctx.venv.env_path) / ".inmanta" / const.INMANTA_VENV_STATUS_FILENAME
         path.touch()
         self.logger.log(
             const.LOG_LEVEL_TRACE, "Touching venv status %s, then sleeping %f", path, self.timer_venv_scheduler_interval

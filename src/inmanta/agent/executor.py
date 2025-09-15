@@ -349,10 +349,26 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         #   - (Optionally) a requirements.txt file. It holds the python package constraints
         #     set at the project level enforced on the agent when installing code.
         self.inmanta_storage: pathlib.Path = pathlib.Path(self.env_path) / ".inmanta"
-
+        os.makedirs(self.inmanta_storage, exist_ok=True)
         self.inmanta_venv_status_file: pathlib.Path = self.inmanta_storage / const.INMANTA_VENV_STATUS_FILENAME
 
         self.io_threadpool = io_threadpool
+
+        self._ensure_disk_layout_backwards_compatibility()
+
+    def _ensure_disk_layout_backwards_compatibility(self) -> None:
+        """
+        Backwards compatibility helper: move files that used to live in the
+        top-level dir of the venv into the dedicated storage dir.
+        """
+        for file_name in ["requirements.txt", const.INMANTA_VENV_STATUS_FILENAME]:
+            legacy_path: pathlib.Path = pathlib.Path(self.env_path) / file_name
+            if legacy_path.exists():
+                new_path: pathlib.Path = pathlib.Path(self.inmanta_storage) / file_name
+                if not new_path.exists():
+                    # Use copy2 to preserve last access time metadata (for the status file).
+                    shutil.copy2(src=legacy_path, dst=new_path)
+                os.remove(legacy_path)
 
     def _write_constraint_file(self, blueprint: EnvBlueprint) -> str | None:
         """
@@ -376,7 +392,7 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         """
         req: list[str] = list(blueprint.requirements)
         await asyncio.get_running_loop().run_in_executor(self.io_threadpool, self.init_env)
-        os.makedirs(self.inmanta_storage, exist_ok=True)
+
         constraint_file: str | None = self._write_constraint_file(blueprint)
         if len(req):  # install_for_config expects at least 1 requirement or a path to install
             await self.async_install_for_config(
@@ -391,19 +407,6 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         """
         Was the venv correctly initialized: the inmanta status file exists
         """
-
-        # Backwards compatibility mechanism: move files that used to live in the
-        # top-level dir of the venv into the dedicated storage dir.
-
-        for file_name in ["requirements.txt", const.INMANTA_VENV_STATUS_FILENAME]:
-            legacy_path: pathlib.Path = pathlib.Path(self.env_path) / file_name
-            if legacy_path.exists():
-                new_path: pathlib.Path = pathlib.Path(self.inmanta_storage) / file_name
-                if not new_path.exists():
-                    # Use copy2 to preserve last access time metadata (for the status file).
-                    shutil.copy2(src=legacy_path, dst=new_path)
-                os.remove(legacy_path)
-
         return self.inmanta_venv_status_file.exists()
 
     def touch(self) -> None:
