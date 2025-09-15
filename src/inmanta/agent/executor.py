@@ -349,12 +349,10 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         #   - (Optionally) a requirements.txt file. It holds the python package constraints
         #     set at the project level enforced on the agent when installing code.
         self.inmanta_storage: pathlib.Path = pathlib.Path(self.env_path) / ".inmanta"
-        os.makedirs(self.inmanta_storage, exist_ok=True)
+
         self.inmanta_venv_status_file: pathlib.Path = self.inmanta_storage / const.INMANTA_VENV_STATUS_FILENAME
 
         self.io_threadpool = io_threadpool
-
-        self._ensure_disk_layout_backwards_compatibility()
 
     def _ensure_disk_layout_backwards_compatibility(self) -> None:
         """
@@ -402,6 +400,11 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
             )
 
         self.touch()
+
+    def init_env(self) -> None:
+        super().init_env()
+        os.makedirs(self.inmanta_storage, exist_ok=True)
+        self._ensure_disk_layout_backwards_compatibility()
 
     def is_correctly_initialized(self) -> bool:
         """
