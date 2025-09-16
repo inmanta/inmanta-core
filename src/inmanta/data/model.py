@@ -103,7 +103,10 @@ class StatusResponse(BaseModel):
     slices: list[SliceStatus]
     features: list[FeatureStatus]
     status: ReportedStatus
+    # The python version used by the server
     python_version: str
+    # The postgresql version used by the database slice
+    # None if it is not initialized or an error occurred with the database slice
     postgresql_version: str | None
 
 

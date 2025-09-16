@@ -157,7 +157,7 @@ class Server(protocol.ServerSlice):
                 for feature in self.feature_manager.get_features()
             ],
             status=max(ReportedStatus(slice.reported_status) for slice in slices),
-            python_version=sys.version,
+            python_version=".".join(map(str, sys.version_info[:3])),
             postgresql_version=postgresql_version,
         )
 

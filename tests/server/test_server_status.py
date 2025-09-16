@@ -54,10 +54,13 @@ async def test_server_status(server, client, agent, environment, postgresql_clie
     assert "features" in status
     assert len(status["features"]) > 0
 
-    assert status["python_version"] == sys.version
-    postgresql_version = await postgresql_client.fetchval("SELECT version();")
-    # Assert that the output is `PostgreSQL X.Y[.Z] ...`
-    assert re.match(r"^(PostgreSQL \d+(?:\.\d+)+)", postgresql_version)
+    assert status["python_version"] == ".".join(map(str, sys.version_info[:3]))
+    regex_major_minor_patch = r"(\d+\.\d+(?:\.\d+)?)"
+    # Assert that the output is `X.Y[.Z]`
+    assert re.match(regex_major_minor_patch, status["python_version"])
+    postgresql_version = await postgresql_client.fetchval("SHOW server_version;")
+    # Assert that the output is `X.Y[.Z]`
+    assert re.match(regex_major_minor_patch, postgresql_version)
     assert status["postgresql_version"] == postgresql_version
 
 
