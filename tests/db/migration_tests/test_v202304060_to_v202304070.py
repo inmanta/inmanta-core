@@ -45,6 +45,9 @@ async def test_migration(
     values = {"value1": "test1", "value2": "test2"}
     await DiscoveredResource(
         discovered_resource_id="test::Resource[agent1,key=key]",
+        agent="agent1",
+        resource_type="test::Resource",
+        resource_id_value="key",
         values=values,
         environment=env.id,
         discovered_at=datetime.datetime.now(),
