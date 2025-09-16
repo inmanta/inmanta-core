@@ -76,5 +76,5 @@ breaking it in the first place if possible.
 For big database updates (e.g. large surface area / large structural changes...):
 
 * Download a dump of the mgmt orchestrator
-* Setup a local orchestrator and load the dump
-* Test the migration script on this orchestrator
+* Setup a dev orchestrator with the latest version of the database
+* Load the dump and check that migration is successful
