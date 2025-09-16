@@ -75,6 +75,6 @@ breaking it in the first place if possible.
 
 For big database updates (e.g. large surface area / large structural changes...):
 
-* Download a dump of the mgmt orchestrator
+* Get a dump of the mgmt orchestrator (/!\ The dump is very big, do not use the 'download support archive' button. Use pg_dump via cli or ask solutions team./!\)
 * Setup a dev orchestrator with the latest version of the database
-* Load the dump and check that migration is successful
+* Load the dump (e.g. https://internal.inmanta.com/development/core/tasks/investigate-customer-issue) and check that migration is successful
