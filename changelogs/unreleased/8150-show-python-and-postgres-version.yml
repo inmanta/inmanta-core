@@ -1,6 +1,6 @@
 ---
 description: Show Python and PostgreSQL version in serverstatus endpoint
-change-type: patch
+change-type: minor
 destination-branches: [master, iso8]
 sections:
   minor-improvement: "{{description}}"
