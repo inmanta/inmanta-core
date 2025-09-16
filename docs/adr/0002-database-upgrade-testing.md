@@ -66,3 +66,15 @@ In practice, this means that if you write a database update test:
 * Good, because we test against the actual older code
 * Bad, because it is very difficult to do
 * Bad, because it is very slow
+
+## Additional step for major changes
+
+The mgmt orchestrator is intended to work as a canari; it will likely break on the day following the merge
+of a bad migration script. In such a case, it can be reverted to a prior version. But, it is better to avoid
+breaking it in the first place if possible.
+
+For big database updates (e.g. large surface area / large structural changes...):
+
+* Download a dump of the mgmt orchestrator
+* Setup a local orchestrator and load the dump
+* Test the migration script on this orchestrator
