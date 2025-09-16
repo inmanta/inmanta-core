@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump the logfire group across 1 directory with 2 updates
+destination-branches:
+- iso8
+sections: {}
