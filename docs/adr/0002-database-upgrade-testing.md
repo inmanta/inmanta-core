@@ -69,7 +69,7 @@ In practice, this means that if you write a database update test:
 
 ## Additional step for major changes
 
-The mgmt orchestrator is intended to work as a canari; it will likely break on the day following the merge
+The mgmt orchestrator is intended to work as a canary; it will likely break on the day following the merge
 of a bad migration script. In such a case, it can be reverted to a prior version. But, it is better to avoid
 breaking it in the first place if possible.
 
