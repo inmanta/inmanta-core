@@ -404,7 +404,32 @@ end and last_id
         for item in await client.resource_list(tid=env.id, limit=20).value():
             ...
 
+.. _python_client_mypy_plugin:
 
+.. note::
+
+    Is it possible to inspect typing information about the :py:class:`inmanta.protocol.common.Client` and the
+    provided endpoints via the inmanta mypy plugin. For example, given the following python file:
+
+    .. code-block:: python
+
+        from inmanta.protocol.endpoints import Client
+
+
+        async def main() -> None:
+            c: Client
+            reveal_type(c)
+
+            reveal_type(c.environment_list)
+            reveal_type(await c.environment_list().value())
+            reveal_type(c.environment_list().all())
+
+
+    Calling the mypy plugin will reveal typing information:
+
+    .. code-block:: sh
+
+        mypy <path/to/file.py>
 
 
 filter
