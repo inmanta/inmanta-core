@@ -386,6 +386,11 @@ end and last_id
 
 .. note::
 
+    In order to make sure that everything is working correctly, run ``inmanta compile``. This will ensure that the modules are in place and the configuration is valid. If you face any errors at this stage, please contact us.
+
+
+.. note::
+
     The return value of these methods that support paging contains a ``links`` tag, with the urls of the ``next`` and
     ``prev`` pages. To iterate over all the results, the client can follow these links, or alternatively call the
     ``all()`` method on the result:
