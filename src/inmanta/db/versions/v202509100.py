@@ -33,6 +33,15 @@ async def update(connection: Connection) -> None:
         AND rscm.resource_set_id=rs.id
     );
 
+    -- Remove rps entries that no longer have a matching resource in the database
+    DELETE FROM public.resource_persistent_state AS rps
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM resource AS r
+        WHERE rps.environment=r.environment
+        AND rps.resource_id=r.resource_id
+    );
+
     ALTER TABLE public.resource_persistent_state
         ADD COLUMN created TIMESTAMP WITH TIME ZONE;
 
