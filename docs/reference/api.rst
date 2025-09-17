@@ -281,18 +281,19 @@ those types.
 
 .. note::
     The type classes themselves do not represent inmanta types, their instances do. For example, the
-    type representation for the inmanta type `number` is `Number()`, not `Number`.
+    type representation for the inmanta type ``number`` is ``Number()``, not ``Number``.
 
 
 Protocol
 --------
 
 .. autoclass:: inmanta.protocol.common.Result
-    :members: code, result
-    :undoc-members:
+    :members: code, result, value
 
-.. autoclass:: inmanta.protocol.common.PageableClientCall
+.. autoclass:: inmanta.protocol.common.PageableResult
     :members: all, all_sync
+    :show-inheritance:
+
 
 
 
@@ -386,43 +387,43 @@ end and last_id
 
 .. note::
 
-    In order to make sure that everything is working correctly, run ``inmanta compile``. This will ensure that the modules are in place and the configuration is valid. If you face any errors at this stage, please contact us.
-
-
-.. note::
-
     The return value of these methods that support paging contains a ``links`` tag, with the urls of the ``next`` and
     ``prev`` pages. To iterate over all the results, the client can follow these links, or alternatively call the
-    ``all()`` method on the result:
+    helper methods on the :py:class:`inmanta.protocol.common.PageableResult` object:
 
     .. code-block:: python
 
         # Iterate over all results by fetching pages of size 20
 
-        result = await client.resource_list(tid=env.id, limit=20)
+        async for item in client.resource_list(tid=env.id, limit=20).all():
+            ...
 
-        async for item in result.all():
+
+        # Iterate over results on a single page
+
+        for item in await client.resource_list(tid=env.id, limit=20).value():
             ...
 
 
 
-filter
-    The `filter` parameter is used for filtering the result set.
 
-    Filters should be specified with the syntax `?filter.<filter_key>=value`.
+filter
+    The ``filter`` parameter is used for filtering the result set.
+
+    Filters should be specified with the syntax ``?filter.<filter_key>=value``.
 
     It's also possible to provide multiple values for the same filter, in this case results are returned,
-    if they match any of these filter values: `?filter.<filter_key>=value&filter.<filter_key>=value2`
+    if they match any of these filter values: ``?filter.<filter_key>=value&filter.<filter_key>=value2``
 
     Multiple different filters narrow the results however (they are treated as an 'AND' operator).
-    For example `?filter.<filter_key>=value&filter.<filter_key2>=value2` returns results that match both filters.
+    For example ``?filter.<filter_key>=value&filter.<filter_key2>=value2`` returns results that match both filters.
 
     The documentation of each method describes the supported filters.
 
 sort
     The sort parameter describes how the result set should be sorted.
 
-    It should follow the pattern `?<attribute_to_sort_by>.<order>`, for example `?value.desc` (case insensitive).
+    It should follow the pattern ``?<attribute_to_sort_by>.<order>``, for example ``?value.desc`` (case insensitive).
 
     The documentation of each method describes the supported attributes to sort by.
 
