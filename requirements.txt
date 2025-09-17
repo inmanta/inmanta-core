@@ -8,7 +8,7 @@ click-plugins==1.1.1.2
 colorlog==6.9.0
 cookiecutter==2.6.0
 crontab==1.0.5
-cryptography==45.0.7
+cryptography==46.0.1
 docstring-parser==0.17.0
 # documentation
 email-validator==2.3.0
