@@ -357,6 +357,8 @@ async def test_dump_db(
     # Create a second version in environment dev3 that doesn't have resource key6, but has a new resource key7
     res = await client.reserve_version(env_id_3)
     assert res.code == 200
+    res_id_to_delete = "test::Resource[agent1,key=key9]"
+
     version = res.result["data"]
     res = await client.put_version(
         tid=env_id_3,
@@ -372,6 +374,15 @@ async def test_dump_db(
                 "purged": False,
                 "requires": [],
             },
+            {
+                "key": "key9",
+                "value": "val9",
+                "version": version,
+                "id": f"{res_id_to_delete},v={version}",
+                "send_event": True,
+                "purged": False,
+                "requires": [],
+            },
         ],
         resource_state={
             "test::Resource[agent1,key=key1]": const.ResourceState.available,
@@ -380,6 +391,7 @@ async def test_dump_db(
             "test::Resource[agent1,key=key4]": const.ResourceState.undefined,
             "test::Resource[agent1,key=key5]": const.ResourceState.available,
             "test::Resource[agent1,key=key7]": const.ResourceState.available,
+            res_id_to_delete: const.ResourceState.available,
         },
         compiler_version=util.get_compiler_version(),
         module_version_info={},
@@ -418,6 +430,7 @@ async def test_dump_db(
                 "purged": False,
                 "requires": [],
             },
+
         ],
         resource_state={
             "test::Resource[agent1,key=key1]": const.ResourceState.available,
@@ -432,6 +445,14 @@ async def test_dump_db(
         module_version_info={},
     )
     assert res.code == 200
+
+
+    # Delete a resource to have a dangling rps entry
+    res = await data.Resource.get_one(environment=env_id_3, resource_id=res_id_to_delete)
+    assert res
+    await res.delete()
+    rps = await data.ResourcePersistentState.get_one(environment=env_id_3, resource_id=res_id_to_delete)
+    assert rps
 
     # report some discovered resources
     await server.get_slice(SLICE_RESOURCE).discovered_resources_create_batch(
