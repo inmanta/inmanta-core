@@ -1,4 +1,4 @@
-description: Remove version information from resource requires
+description: Remove version information from resource attributes
 issue-nr: 9570
 change-type: minor
 destination-branches: [master]

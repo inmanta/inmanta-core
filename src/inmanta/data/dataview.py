@@ -21,7 +21,7 @@ import urllib.parse
 from abc import ABC
 from collections.abc import Sequence
 from datetime import datetime
-from typing import Generic, Mapping, Optional, TypeVar, Union, cast
+from typing import Any, Generic, Mapping, Optional, TypeVar, Union, cast
 from uuid import UUID
 
 from asyncpg import Record
@@ -85,7 +85,7 @@ from inmanta.server.validate_filter import (
     InvalidFilter,
     LogLevelFilter,
 )
-from inmanta.types import JsonType, ResourceIdStr, ResourceVersionIdStr, SimpleTypes
+from inmanta.types import ResourceIdStr, ResourceVersionIdStr, SimpleTypes
 from inmanta.util import datetime_iso_format
 
 T_ORDER = TypeVar("T_ORDER", bound=DatabaseOrderV2)
@@ -930,7 +930,7 @@ class ResourceHistoryView(DataView[ResourceHistoryOrder, ResourceHistory]):
             ResourceHistory(
                 resource_id=self.rid,
                 attribute_hash=record["attribute_hash"],
-                attributes=record["attributes"],
+                attributes=cast(dict[str, Any], record["attributes"]),
                 date=record["date"],
                 requires=[Id.parse_id(rid).resource_str() for rid in record["attributes"].get("requires", [])],
             )

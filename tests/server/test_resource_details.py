@@ -484,9 +484,7 @@ async def test_resource_details(server, client, env_with_resources):
     generated_time = parse_timestamp(result.result["data"]["first_generated_time"])
     deploy_time = parse_timestamp(result.result["data"]["last_deploy"])
     assert deploy_time == deploy_times[env.id][no_requires][3]
-    await assert_matching_attributes(
-        result.result["data"], resources[env.id][no_requires][3], generated_time=generated_time
-    )
+    await assert_matching_attributes(result.result["data"], resources[env.id][no_requires][3], generated_time=generated_time)
     assert result.result["data"]["requires_status"] == {}
     assert result.result["data"]["status"] == "deployed"
 
@@ -547,9 +545,7 @@ async def test_resource_details(server, client, env_with_resources):
     assert result.code == 200
     generated_time = parse_timestamp(result.result["data"]["first_generated_time"])
     assert result.result["data"]["status"] == "orphaned"
-    await assert_matching_attributes(
-        result.result["data"], resources[env.id][orphaned][0], generated_time=generated_time
-    )
+    await assert_matching_attributes(result.result["data"], resources[env.id][orphaned][0], generated_time=generated_time)
     assert result.result["data"]["requires_status"] == {
         "std::testing::NullResource[internal,name=/tmp/orphaned_req]": "orphaned"
     }

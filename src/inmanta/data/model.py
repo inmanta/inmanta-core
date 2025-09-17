@@ -27,10 +27,10 @@ import uuid
 from collections import abc
 from collections.abc import Sequence
 from enum import Enum, StrEnum
-from typing import ClassVar, Mapping, Optional, Self, Union, assert_never
+from typing import ClassVar, Mapping, Optional, Union, assert_never
 
 import pydantic.schema
-from pydantic import ConfigDict, Field, SerializationInfo, computed_field, field_serializer, field_validator, model_validator
+from pydantic import ConfigDict, Field, SerializationInfo, computed_field, field_serializer, field_validator
 
 import inmanta
 import inmanta.ast.export as ast_export
@@ -576,7 +576,6 @@ class VersionedResourceDetails(ResourceDetails):
 
     resource_version_id: ResourceVersionIdStr
     version: int
-
 
 
 class ReleasedResourceDetails(ResourceDetails):
