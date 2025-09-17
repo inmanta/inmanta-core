@@ -93,6 +93,18 @@ class FeatureStatus(BaseModel):
 class StatusResponse(BaseModel):
     """
     Response for the status method call
+
+    :param product: The name of the product.
+    :param edition: The edition of the product.
+    :param version: The version of the product.
+    :param license: The license used by the product.
+    :param extensions: The status of the extensions of the server
+    :param slices: The status of the slices of the server.
+    :param features: The status of the features offered by the slices of the server.
+    :param status: The overall status of the server
+    :param python_version: The python version used by the server.
+    :param postgresql_version: The postgresql version used by the database slice
+        None if it is not initialized or an error occurred with the database slice.
     """
 
     product: str
@@ -103,10 +115,7 @@ class StatusResponse(BaseModel):
     slices: list[SliceStatus]
     features: list[FeatureStatus]
     status: ReportedStatus
-    # The python version used by the server
     python_version: str
-    # The postgresql version used by the database slice
-    # None if it is not initialized or an error occurred with the database slice
     postgresql_version: str | None
 
 
