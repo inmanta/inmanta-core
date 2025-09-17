@@ -309,7 +309,7 @@ class ProtectedBy(str, Enum):
     """
 
     # The environment setting is managed using the environment_settings property of the project.yml file.
-    project_yml = "project_yml"
+    project_yml = "project.yml"
 
     def get_detailed_description(self) -> str:
         """
