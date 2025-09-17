@@ -371,6 +371,22 @@ Rest API
 
 The rest API is also available as a `swagger spec <openapi.html#http://>`_
 
+You can interact with these API endpoints using the :py:class:`inmanta.protocol.endpoints.Client` python client:
+
+.. code-block:: python
+
+    client = inmanta.protocol.endpoints.Client(name="client_name", timeout=120)
+
+    result = await client.environment_list(details=True)
+
+    assert result.code == 200
+
+    for key, value in result.result["data"].items():
+        ...
+
+
+
+
 The (v2) API endpoints that offer paging, sorting and filtering follow a convention.
 They share the following parameters:
 
@@ -404,6 +420,18 @@ end and last_id
         for item in await client.resource_list(tid=env.id, limit=20).value():
             ...
 
+
+    When calling an endpoint from a synchronous context, the :py:meth:`inmanta.protocol.common.PageableResult.all_sync`
+    method should be used instead of the all() method:
+
+    .. code-block:: python
+
+        # Iterate over all results by fetching pages of size 20
+        for item in client.resource_list(tid=env.id, limit=20).all_sync():
+            assert item == all_resources[idx]
+            idx += 1
+
+
 .. _python_client_mypy_plugin:
 
 .. note::
@@ -429,7 +457,7 @@ end and last_id
 
     .. code-block:: sh
 
-        mypy <path/to/file.py>
+        $ mypy <path/to/file.py>
 
 
 filter
