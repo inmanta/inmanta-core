@@ -1,4 +1,4 @@
 ---
-description: "The protected_by field of an environment setting now returns project.yml instead of project.yml"
+description: "The protected_by field of an environment setting now returns project.yml instead of project_yml"
 change-type: patch
 destination-branches: [master, iso8]
