@@ -37,36 +37,6 @@ async def test_add_created_to_resource_persistent_state(
     Check that the RPS column is added and that it is populated to the
     configuration model version that the resource first appears in.
     """
-    # Insert dangling rps entry
-    env = await data.Environment.get_one(connection=postgresql_client)
-    assert env
-    await postgresql_client.execute(
-        """
-        INSERT INTO public.resource_persistent_state (
-            environment,
-            resource_id,
-            resource_type,
-            agent,
-            resource_id_value,
-            is_undefined,
-            is_orphan,
-            last_deploy_result,
-            blocked
-        )
-        VALUES (
-            $1,
-            'my_resource',
-            'res_type',
-            'agent-1',
-            'res1',
-            false,
-            false,
-            'NEW',
-            'NOT_BLOCKED'
-        );
-        """,
-        env.id,
-    )
     await migrate_db_from()
     environments = await data.Environment.get_list()
     for env in environments:
