@@ -1,0 +1,6 @@
+description: Remove version information from resource requires
+issue-nr: 9570
+change-type: minor
+destination-branches: [master]
+sections:
+  deprecation-note: "{{description}}"
