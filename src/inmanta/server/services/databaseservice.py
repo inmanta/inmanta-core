@@ -246,6 +246,17 @@ class DatabaseService(protocol.ServerSlice):
         assert self._db_monitor is not None  # make mypy happy
         return (await self._db_monitor.get_status()).model_dump(mode="json")
 
+    async def get_postgresql_version(self) -> str | None:
+        """Get the Postgres version of the database connection.
+        Return None if the database is not connected"""
+        if self._db_monitor is None or self._pool is None:
+            return None
+        status = await self._db_monitor.get_status()
+        if not status.connected:
+            return None
+        async with self._pool.acquire() as connection:
+            return await connection.fetchval("SHOW server_version;")
+
 
 async def initialize_database_connection_pool(
     database_host: str,
