@@ -1355,6 +1355,9 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
                 SELECT
                     dr.environment,
                     dr.discovered_resource_id,
+                    dr.resource_type,
+                    dr.agent,
+                    dr.resource_id_value,
                     dr.values,
                     (rps_1.resource_id IS NOT NULL) AS managed,
                     rps_2.resource_id AS discovery_resource_id
