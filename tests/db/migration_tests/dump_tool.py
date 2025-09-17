@@ -430,7 +430,6 @@ async def test_dump_db(
                 "purged": False,
                 "requires": [],
             },
-
         ],
         resource_state={
             "test::Resource[agent1,key=key1]": const.ResourceState.available,
@@ -445,7 +444,6 @@ async def test_dump_db(
         module_version_info={},
     )
     assert res.code == 200
-
 
     # Delete a resource to have a dangling rps entry
     res = await data.Resource.get_one(environment=env_id_3, resource_id=res_id_to_delete)
