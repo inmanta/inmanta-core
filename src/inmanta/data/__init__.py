@@ -868,7 +868,7 @@ class DiscoveredResourceOrder(SingleDatabaseOrder):
     def get_valid_sort_columns(cls) -> dict[ColumnNameStr, ColumnType]:
         """Describes the names and types of the columns that are valid for this DatabaseOrder"""
         return {
-            ColumnNameStr("discovered_resource_id"): StringColumn,
+            ColumnNameStr("discovery_resource_id"): StringColumn,
             ColumnNameStr("agent"): StringColumn,
             ColumnNameStr("resource_type"): StringColumn,
             ColumnNameStr("resource_id_value"): StringColumn,
