@@ -1,0 +1,3 @@
+description: Update adr regarding database migrations
+change-type: patch
+destination-branches: [master, iso8, iso7]

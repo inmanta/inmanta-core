@@ -66,3 +66,20 @@ In practice, this means that if you write a database update test:
 * Good, because we test against the actual older code
 * Bad, because it is very difficult to do
 * Bad, because it is very slow
+
+## Additional step for major changes
+
+The mgmt orchestrator is intended to work as a canary; it will likely break on the day following the merge
+of a bad migration script. In such a case, it can be reverted to a prior version. But, it is better to avoid
+breaking it in the first place if possible.
+
+For big database updates (e.g. large surface area / large structural changes...):
+
+1. Get a dump of the mgmt orchestrator (/!\ The dump is very big, do not use the 'download support archive' button. Use pg_dump via cli or ask solutions team./!\)
+2. Setup a dev orchestrator with the latest version of the database
+3. Edit the dump to halt all environments at the end `UPDATE public.environment SET halted=true;` (This is automatically done if using the inmanta-support tool)
+4. Load the dump. The mgmt dump is too large for the inmanta-support tool (e.g. https://internal.inmanta.com/development/core/tasks/investigate-customer-issue)
+and it can get stuck or take ages to finish. A better solution would be to pipe the mgmt dump through psql to the dev orchestrator.
+Something like this: `psql -h <db_ip> -p <db_port> -U inmanta -d inmanta -f mgmt_dump.sql > output.log 2>&1`
+5. Apply the migration and assert that it works. This can be done by starting the orchestrator (as it should go through the migrations)
+or manually piping the migration using psql like in step 4.
