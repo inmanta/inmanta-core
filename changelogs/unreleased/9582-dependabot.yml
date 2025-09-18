@@ -1,5 +1,0 @@
-change-type: patch
-description: Bump cryptography from 45.0.7 to 46.0.1
-destination-branches:
-- master
-sections: {}
