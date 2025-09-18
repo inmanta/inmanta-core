@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump psutil from 7.0.0 to 7.1.0
+destination-branches:
+- master
+sections: {}
