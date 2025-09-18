@@ -21,6 +21,7 @@ import functools
 import json
 import logging
 import os
+import sys
 import uuid
 from datetime import UTC, datetime, timedelta, timezone
 from functools import partial
@@ -642,24 +643,58 @@ async def test_bootloader_db_wait(monkeypatch, tmpdir, caplog, db_wait_time: str
 
 
 @pytest.mark.parametrize("db_wait_time", ["2", "0"])
-async def test_bootloader_connect_running_db(server_config, postgres_db, caplog, db_wait_time: str):
+@pytest.mark.parametrize("minimal_pg_version", [0, sys.maxsize])
+async def test_bootloader_connect_running_db(
+    server_config, postgres_db, caplog, db_wait_time: str, minimal_pg_version: int, monkeypatch
+):
     """
     Tests that the bootloader can connect to a database and can start for both wait_up values
     """
     config.Config.set("database", "wait_time", db_wait_time)
+
+    def _get_minimal_postgres_version_patched() -> int:
+        return minimal_pg_version
+
+    config.Config.set("server", "min", db_wait_time)
     ibl: InmantaBootloader = InmantaBootloader(configure_logging=True)
+
+    monkeypatch.setattr(ibl, "_get_minimal_postgres_version", _get_minimal_postgres_version_patched)
     caplog.clear()
     caplog.set_level(logging.INFO)
     await ibl.start()
     await ibl.stop(timeout=20)
 
+    host = config.Config.get("database", "host")
+    unsupported_pg_version_warning = (
+        f"The PostgreSQL server version of the database at {host} is not supported by this "
+        "version of the Inmanta orchestrator. Please make sure to update to PostgreSQL "
+        f"{minimal_pg_version} as soon as possible."
+    )
+
     if db_wait_time != "0":
-        log_contains(caplog, "inmanta.server.bootloader", logging.INFO, "Successfully connected to the database.")
+        log_contains(
+            caplog,
+            "inmanta.server.bootloader",
+            logging.INFO,
+            "Successfully connected to the database (PostgreSQL server version ",
+        )
+        if minimal_pg_version == 0:
+            log_doesnt_contain(caplog, "inmanta.server.bootloader", logging.WARNING, unsupported_pg_version_warning)
+        else:
+            log_contains(caplog, "inmanta.server.bootloader", logging.WARNING, unsupported_pg_version_warning)
+
     else:
         # If db_wait_time is "0", the wait_for_db method is not called,
         # hence "Successfully connected to the database." log message will not appear.
-        log_doesnt_contain(caplog, "inmanta.server.bootloader", logging.INFO, "Successfully connected to the database.")
+        log_doesnt_contain(
+            caplog,
+            "inmanta.server.bootloader",
+            logging.INFO,
+            "Successfully connected to the database (PostgreSQL server version ",
+        )
     log_contains(caplog, "inmanta.server.server", logging.INFO, "Starting server endpoint")
+
+    monkeypatch.undo()
 
 
 async def test_get_resource_actions(postgresql_client, client, clienthelper, server, environment, null_agent):

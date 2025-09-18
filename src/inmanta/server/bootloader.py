@@ -18,7 +18,9 @@ Contact: code@inmanta.com
 
 import asyncio
 import importlib
+import json
 import logging
+import os.path
 import pkgutil
 from collections.abc import Generator
 from pkgutil import ModuleInfo
@@ -34,6 +36,7 @@ from inmanta.server import config
 from inmanta.server.extensions import ApplicationContext, FeatureManager, InvalidSliceNameException
 from inmanta.server.protocol import Server, ServerSlice
 from inmanta.stable_api import stable_api
+from packaging import version
 
 LOGGER = logging.getLogger(__name__)
 
@@ -100,9 +103,11 @@ class InmantaBootloader:
     async def start(self) -> None:
         self.start_loggers_for_extensions()
         db_wait_time: int = config.db_wait_time.get()
+
+        minimal_postgres_version = self._get_minimal_postgres_version()
         if db_wait_time != 0:
             # Wait for the database to be up before starting the server
-            await self.wait_for_db(db_wait_time)
+            await self.wait_for_db(db_wait_time=db_wait_time, minimal_postgres_version=minimal_postgres_version)
 
         ctx = self.load_slices()
         version = ctx.get_feature_manager().get_product_metadata().version
@@ -157,6 +162,21 @@ class InmantaBootloader:
                     name[len(EXTENSION_NAMESPACE) + 1 :]: name for finder, name, ispkg in iter_namespace(inmanta_ext)
                 }
         return dict(cls.AVAILABLE_EXTENSIONS)
+
+    def _get_minimal_postgres_version(self) -> int:
+        """
+        Helper method to retrieve and convert the (human readable) minimal required postgres version
+        from the compatibility file into a machine readable version as per
+        https://www.postgresql.org/docs/current/libpq-status.html#LIBPQ-PQSERVERVERSION.
+        """
+        compatibility_data = {}
+        compatibility_file: str = config.server_compatibility_file.get()
+        if os.path.exists(compatibility_file):
+            with open(compatibility_file) as fh:
+                compatibility_data = json.load(fh)
+
+        human_readable_version = version.Version(compatibility_data.get("system_requirements", {}).get("postgres_version", "0"))
+        return int(human_readable_version.major) * 10_000 + human_readable_version.minor
 
     # Extension loading Phase I: from start to setup functions collected
     def _discover_plugin_packages(self, return_all_available_packages: bool = False) -> list[str]:
@@ -275,10 +295,12 @@ class InmantaBootloader:
             self.ctx = ctx
         return ctx
 
-    async def wait_for_db(self, db_wait_time: int) -> None:
+    async def wait_for_db(self, db_wait_time: int, minimal_postgres_version: int = 0) -> None:
         """Wait for the database to be up by attempting to connect at intervals.
 
         :param db_wait_time: Maximum time to wait for the database to be up, in seconds.
+        :param minimal_postgres_version: Minimal supported postgres version as a machine readable int (e.g. v17.6 would
+            be passed as 17006)
         """
 
         start_time = asyncio.get_event_loop().time()
@@ -295,7 +317,18 @@ class InmantaBootloader:
             try:
                 # Attempt to create a database connection
                 conn = await asyncpg.connect(**db_settings, timeout=5)  # raises TimeoutError after 5 seconds
-                LOGGER.info("Successfully connected to the database.")
+                result = await conn.fetch("SHOW server_version_num")
+                pg_server_version_num = int(result[0]["server_version_num"])
+                LOGGER.info(f"Successfully connected to the database (PostgreSQL server version {pg_server_version_num}).")
+
+                if pg_server_version_num < minimal_postgres_version:
+
+                    LOGGER.warning(
+                        f"The PostgreSQL server version of the database at {config.db_host.get()} is not supported by this "
+                        "version of the Inmanta orchestrator. Please make sure to update to PostgreSQL "
+                        f"{minimal_postgres_version} as soon as possible."
+                    )
+
                 await conn.close(timeout=5)  # close the connection
                 return
             except asyncio.TimeoutError:
