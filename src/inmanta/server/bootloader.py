@@ -176,10 +176,11 @@ class InmantaBootloader:
             with open(compatibility_file) as fh:
                 compatibility_data = json.load(fh)
 
-        human_readable_version = version.Version(str(compatibility_data.get("system_requirements", {}).get("postgres_version", 0)))
+        human_readable_version = version.Version(
+            str(compatibility_data.get("system_requirements", {}).get("postgres_version", 0))
+        )
         machine_readable_version = int(human_readable_version.major) * 10_000 + human_readable_version.minor
         return human_readable_version, machine_readable_version
-
 
     # Extension loading Phase I: from start to setup functions collected
     def _discover_plugin_packages(self, return_all_available_packages: bool = False) -> list[str]:
@@ -336,7 +337,9 @@ class InmantaBootloader:
                         f"{str(human_readable_min_pg_version)} as soon as possible."
                     )
 
-                LOGGER.info(f"Successfully connected to the database (PostgreSQL server version {pg_server_version_human_readable}).")
+                LOGGER.info(
+                    f"Successfully connected to the database (PostgreSQL server version {pg_server_version_human_readable})."
+                )
 
                 await conn.close(timeout=5)  # close the connection
                 return
