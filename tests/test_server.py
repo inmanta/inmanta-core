@@ -43,6 +43,7 @@ from inmanta.server import config as opt
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 from inmanta.util import get_compiler_version
+from packaging import version
 from utils import insert_with_link_to_configuration_model, log_contains, log_doesnt_contain, retry_limited
 
 LOGGER = logging.getLogger(__name__)
@@ -652,8 +653,8 @@ async def test_bootloader_connect_running_db(
     """
     config.Config.set("database", "wait_time", db_wait_time)
 
-    def _get_minimal_postgres_version_patched() -> int:
-        return minimal_pg_version
+    def _get_minimal_postgres_version_patched() -> tuple[version.Version, int]:
+        return version.Version(str(minimal_pg_version)), minimal_pg_version
 
     config.Config.set("server", "min", db_wait_time)
     ibl: InmantaBootloader = InmantaBootloader(configure_logging=True)
@@ -664,11 +665,10 @@ async def test_bootloader_connect_running_db(
     await ibl.start()
     await ibl.stop(timeout=20)
 
-    host = config.Config.get("database", "host")
     unsupported_pg_version_warning = (
-        f"The PostgreSQL server version of the database at {host} is not supported by this "
+        " This version is not supported by this "
         "version of the Inmanta orchestrator. Please make sure to update to PostgreSQL "
-        f"{minimal_pg_version} as soon as possible."
+        f"{str(version.Version(str(minimal_pg_version)))} as soon as possible."
     )
 
     if db_wait_time != "0":

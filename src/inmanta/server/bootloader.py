@@ -168,6 +168,8 @@ class InmantaBootloader:
         from the compatibility file into a machine readable version as per
         https://www.postgresql.org/docs/current/libpq-status.html#LIBPQ-PQSERVERVERSION.
 
+        e.g. "v17.6" is transformed into "17006" in machine readable form.
+
         Returns a tuple of [human_readable_version, machine_readable_version]
         """
         compatibility_data = {}
@@ -303,8 +305,6 @@ class InmantaBootloader:
         """Wait for the database to be up by attempting to connect at intervals.
 
         :param db_wait_time: Maximum time to wait for the database to be up, in seconds.
-        :param minimal_postgres_version: Minimal supported postgres version as a machine readable int (e.g. v17.6 would
-            be passed as 17006)
         """
 
         start_time = asyncio.get_event_loop().time()
