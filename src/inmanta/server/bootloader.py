@@ -104,10 +104,9 @@ class InmantaBootloader:
         self.start_loggers_for_extensions()
         db_wait_time: int = config.db_wait_time.get()
 
-        minimal_postgres_version = self._get_minimal_postgres_version()
         if db_wait_time != 0:
             # Wait for the database to be up before starting the server
-            await self.wait_for_db(db_wait_time=db_wait_time, minimal_postgres_version=minimal_postgres_version)
+            await self.wait_for_db(db_wait_time=db_wait_time)
 
         ctx = self.load_slices()
         version = ctx.get_feature_manager().get_product_metadata().version
@@ -163,11 +162,13 @@ class InmantaBootloader:
                 }
         return dict(cls.AVAILABLE_EXTENSIONS)
 
-    def _get_minimal_postgres_version(self) -> int:
+    def _get_minimal_postgres_version(self) -> tuple[version.Version, int]:
         """
         Helper method to retrieve and convert the (human readable) minimal required postgres version
         from the compatibility file into a machine readable version as per
         https://www.postgresql.org/docs/current/libpq-status.html#LIBPQ-PQSERVERVERSION.
+
+        Returns a tuple of [human_readable_version, machine_readable_version]
         """
         compatibility_data = {}
         compatibility_file: str = config.server_compatibility_file.get()
@@ -175,8 +176,10 @@ class InmantaBootloader:
             with open(compatibility_file) as fh:
                 compatibility_data = json.load(fh)
 
-        human_readable_version = version.Version(compatibility_data.get("system_requirements", {}).get("postgres_version", "0"))
-        return int(human_readable_version.major) * 10_000 + human_readable_version.minor
+        human_readable_version = version.Version(str(compatibility_data.get("system_requirements", {}).get("postgres_version", 0)))
+        machine_readable_version = int(human_readable_version.major) * 10_000 + human_readable_version.minor
+        return human_readable_version, machine_readable_version
+
 
     # Extension loading Phase I: from start to setup functions collected
     def _discover_plugin_packages(self, return_all_available_packages: bool = False) -> list[str]:
@@ -295,7 +298,7 @@ class InmantaBootloader:
             self.ctx = ctx
         return ctx
 
-    async def wait_for_db(self, db_wait_time: int, minimal_postgres_version: int = 0) -> None:
+    async def wait_for_db(self, db_wait_time: int) -> None:
         """Wait for the database to be up by attempting to connect at intervals.
 
         :param db_wait_time: Maximum time to wait for the database to be up, in seconds.
@@ -313,21 +316,27 @@ class InmantaBootloader:
             "password": config.db_password.get(),
             "database": config.db_name.get(),
         }
+        human_readable_min_pg_version, machine_readable_min_pg_version = self._get_minimal_postgres_version()
+
         while True:
             try:
                 # Attempt to create a database connection
                 conn = await asyncpg.connect(**db_settings, timeout=5)  # raises TimeoutError after 5 seconds
                 result = await conn.fetch("SHOW server_version_num")
-                pg_server_version_num = int(result[0]["server_version_num"])
-                LOGGER.info(f"Successfully connected to the database (PostgreSQL server version {pg_server_version_num}).")
+                pg_server_version_machine_readable = int(result[0]["server_version_num"])
+                result = await conn.fetch("SHOW server_version")
+                pg_server_version_human_readable = result[0]["server_version"]
 
-                if pg_server_version_num < minimal_postgres_version:
+                if pg_server_version_machine_readable < machine_readable_min_pg_version:
 
                     LOGGER.warning(
-                        f"The PostgreSQL server version of the database at {config.db_host.get()} is not supported by this "
+                        f"The database at {config.db_host.get()} is using PostgreSQL version "
+                        f"{pg_server_version_human_readable}. This version is not supported by this "
                         "version of the Inmanta orchestrator. Please make sure to update to PostgreSQL "
-                        f"{minimal_postgres_version} as soon as possible."
+                        f"{str(human_readable_min_pg_version)} as soon as possible."
                     )
+
+                LOGGER.info(f"Successfully connected to the database (PostgreSQL server version {pg_server_version_human_readable}).")
 
                 await conn.close(timeout=5)  # close the connection
                 return
