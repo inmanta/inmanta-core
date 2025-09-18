@@ -1,0 +1,6 @@
+---
+description: "Check PostgreSQL version on server startup."
+issue-nr: 9543
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso8]
