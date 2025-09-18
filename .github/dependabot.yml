@@ -9,11 +9,6 @@ updates:
   allow:
     # Allow both direct and indirect updates for all packages
     - dependency-type: "all"
-  groups:
-    logfire:
-      patterns:
-        - "logfire"
-        - "opentelemetry*"
   ignore:
     # #6668
     - dependency-name: "pytest-inmanta-extensions"
@@ -24,29 +19,3 @@ updates:
       update-types: ["version-update:semver-major"]
     - dependency-name: "execnet"
       update-types: ["version-update:semver-major"]
-    - dependency-name: "cryptography"
-- target-branch: iso8
-  package-ecosystem: pip
-  directory: "/"
-  schedule:
-    interval: daily
-  open-pull-requests-limit: 10
-  allow:
-    # Allow both direct and indirect updates for all packages
-    - dependency-type: "all"
-  groups:
-    logfire:
-      patterns:
-        - "logfire"
-        - "opentelemetry*"
-  ignore:
-    # #6668
-    - dependency-name: "pytest-inmanta-extensions"
-      # pytest-inmanta-extensions version is tied to inmanta-core's version with an f-string
-      # dependabot crashes on trying to bump it
-      versions: [">=0.0.1"]
-    - dependency-name: "pydantic"
-      update-types: ["version-update:semver-major"]
-    - dependency-name: "execnet"
-      update-types: ["version-update:semver-major"]
-    - dependency-name: "cryptography"
