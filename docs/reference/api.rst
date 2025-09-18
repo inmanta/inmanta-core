@@ -281,15 +281,20 @@ those types.
 
 .. note::
     The type classes themselves do not represent inmanta types, their instances do. For example, the
-    type representation for the inmanta type `number` is `Number()`, not `Number`.
+    type representation for the inmanta type ``number`` is ``Number()``, not ``Number``.
 
 
 Protocol
 --------
 
 .. autoclass:: inmanta.protocol.common.Result
-    :members: code, result
-    :undoc-members:
+    :members: code, result, value
+
+.. autoclass:: inmanta.protocol.common.PageableResult
+    :members: all, all_sync
+    :show-inheritance:
+
+
 
 
 Data
@@ -366,6 +371,22 @@ Rest API
 
 The rest API is also available as a `swagger spec <openapi.html#http://>`_
 
+You can interact with these API endpoints using the :py:class:`inmanta.protocol.endpoints.Client` python client:
+
+.. code-block:: python
+
+    client = inmanta.protocol.endpoints.Client(name="client_name", timeout=120)
+
+    result = await client.environment_list(details=True)
+
+    assert result.code == 200
+
+    for key, value in result.result["data"].items():
+        ...
+
+
+
+
 The (v2) API endpoints that offer paging, sorting and filtering follow a convention.
 They share the following parameters:
 
@@ -384,36 +405,78 @@ end and last_id
 
     The return value of these methods that support paging contains a ``links`` tag, with the urls of the ``next`` and
     ``prev`` pages. To iterate over all the results, the client can follow these links, or alternatively call the
-    ``all()`` method on the result:
+    helper methods on the :py:class:`inmanta.protocol.common.PageableResult` object:
 
     .. code-block:: python
 
         # Iterate over all results by fetching pages of size 20
 
-        result = await client.resource_list(tid=env.id, limit=20)
-
-        async for item in result.all():
+        async for item in client.resource_list(tid=env.id, limit=20).all():
             ...
 
 
+        # Iterate over results on a single page
+
+        for item in await client.resource_list(tid=env.id, limit=20).value():
+            ...
+
+
+    When calling an endpoint from a synchronous context, the :py:meth:`inmanta.protocol.common.PageableResult.all_sync`
+    method should be used instead of the all() method:
+
+    .. code-block:: python
+
+        # Iterate over all results by fetching pages of size 20
+        for item in client.resource_list(tid=env.id, limit=20).all_sync():
+            assert item == all_resources[idx]
+            idx += 1
+
+
+.. _python_client_mypy_plugin:
+
+.. note::
+
+    Is it possible to inspect typing information about the :py:class:`inmanta.protocol.common.Client` and the
+    provided endpoints via the inmanta mypy plugin. For example, given the following python file:
+
+    .. code-block:: python
+
+        from inmanta.protocol.endpoints import Client
+
+
+        async def main() -> None:
+            c: Client
+            reveal_type(c)
+
+            reveal_type(c.environment_list)
+            reveal_type(await c.environment_list().value())
+            reveal_type(c.environment_list().all())
+
+
+    Calling the mypy plugin will reveal typing information:
+
+    .. code-block:: sh
+
+        $ mypy <path/to/file.py>
+
 
 filter
-    The `filter` parameter is used for filtering the result set.
+    The ``filter`` parameter is used for filtering the result set.
 
-    Filters should be specified with the syntax `?filter.<filter_key>=value`.
+    Filters should be specified with the syntax ``?filter.<filter_key>=value``.
 
     It's also possible to provide multiple values for the same filter, in this case results are returned,
-    if they match any of these filter values: `?filter.<filter_key>=value&filter.<filter_key>=value2`
+    if they match any of these filter values: ``?filter.<filter_key>=value&filter.<filter_key>=value2``
 
     Multiple different filters narrow the results however (they are treated as an 'AND' operator).
-    For example `?filter.<filter_key>=value&filter.<filter_key2>=value2` returns results that match both filters.
+    For example ``?filter.<filter_key>=value&filter.<filter_key2>=value2`` returns results that match both filters.
 
     The documentation of each method describes the supported filters.
 
 sort
     The sort parameter describes how the result set should be sorted.
 
-    It should follow the pattern `?<attribute_to_sort_by>.<order>`, for example `?value.desc` (case insensitive).
+    It should follow the pattern ``?<attribute_to_sort_by>.<order>``, for example ``?value.desc`` (case insensitive).
 
     The documentation of each method describes the supported attributes to sort by.
 
