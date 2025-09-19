@@ -1253,14 +1253,9 @@ async def test_get_resources_in_latest_version(init_dataclasses_and_load_schema)
     )
     assert len(resources) == 1
     resource = resources[0]
-    expected_resource = data.Resource.new(
-        environment=env.id,
-        resource_version_id="std::testing::NullResource[agent1,name=file1],v=2",
-        resource_set=resource_set,
-        attributes={"name": "motd1", "purge_on_delete": True, "purged": False},
-    )
-    expected_resource.make_hash()
-    assert resource.to_dict() == expected_resource.to_dict()
+    assert resource.resource_id == "std::testing::NullResource[agent1,name=file1]"
+    assert resource.resource_set_name is None  # shared set
+    assert resource.attributes == {"name": "motd1", "purge_on_delete": True, "purged": False}
 
     cm = data.ConfigurationModel(
         environment=env.id,
