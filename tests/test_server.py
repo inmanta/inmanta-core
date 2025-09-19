@@ -30,7 +30,6 @@ from typing import Awaitable
 import asyncpg
 import pytest
 from dateutil import parser
-from inmanta.server.protocol import ServerStartFailure
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 from inmanta import config, const, data, util
@@ -44,9 +43,9 @@ from inmanta.resources import Id
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_SERVER
 from inmanta.server import config as opt
 from inmanta.server.bootloader import InmantaBootloader, PostgreSQLVersion
+from inmanta.server.protocol import ServerStartFailure
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 from inmanta.util import get_compiler_version
-from packaging import version
 from utils import insert_with_link_to_configuration_model, log_contains, log_doesnt_contain, retry_limited
 
 LOGGER = logging.getLogger(__name__)
@@ -601,9 +600,10 @@ class MockConnection:
         return [{"server_version_num": "160010", "server_version": "16.10"}]
 
 
-
 @pytest.fixture
-async def read_postgresql_version_from_db(postgres_db, database_name: str, create_db_schema: bool = False) -> Awaitable[PostgreSQLVersion]:
+async def read_postgresql_version_from_db(
+    postgres_db, database_name: str, create_db_schema: bool = False
+) -> Awaitable[PostgreSQLVersion]:
     pool: asyncpg.Pool = await data.connect_pool(
         postgres_db.host, postgres_db.port, database_name, postgres_db.user, postgres_db.password, create_db_schema
     )
@@ -616,6 +616,7 @@ async def read_postgresql_version_from_db(postgres_db, database_name: str, creat
         await data.disconnect_pool()
 
     yield installed_postgresql_version
+
 
 @pytest.mark.parametrize("db_wait_time", ["20", "0"])
 async def test_bootloader_db_wait(monkeypatch, tmpdir, caplog, db_wait_time: str) -> None:
@@ -675,14 +676,8 @@ async def test_bootloader_db_wait(monkeypatch, tmpdir, caplog, db_wait_time: str
     await ibl.stop(timeout=20)
 
 
-@pytest.mark.parametrize("db_wait_time", [
-    "2",
-    "0"
-])
-@pytest.mark.parametrize("minimal_pg_version", [
-    0,
-    sys.maxsize
-])
+@pytest.mark.parametrize("db_wait_time", ["2", "0"])
+@pytest.mark.parametrize("minimal_pg_version", [0, sys.maxsize])
 async def test_bootloader_connect_running_db(
     tmp_path, server_config, postgres_db, caplog, db_wait_time: str, minimal_pg_version: int, read_postgresql_version_from_db
 ):
@@ -692,7 +687,7 @@ async def test_bootloader_connect_running_db(
     config.Config.set("database", "wait_time", db_wait_time)
 
     config.Config.set("server", "min", db_wait_time)
-    installed_postgresql_version=read_postgresql_version_from_db
+    installed_postgresql_version = read_postgresql_version_from_db
     required_version = set_required_postgresql_version(dir=tmp_path, version=minimal_pg_version)
     ibl: InmantaBootloader = InmantaBootloader(configure_logging=True)
 
@@ -739,13 +734,6 @@ async def test_bootloader_connect_running_db(
 
     finally:
         await ibl.stop(timeout=20)
-
-
-
-
-
-
-
 
 
 async def test_get_resource_actions(postgresql_client, client, clienthelper, server, environment, null_agent):
@@ -1767,11 +1755,10 @@ async def test_delete_active_version(client, clienthelper, server, environment, 
     assert result.code == 400
     assert result.result["message"] == "Invalid request: Cannot delete the active version"
 
+
 def set_required_postgresql_version(dir: str, version: str) -> PostgreSQLVersion:
     compatibility_file = os.path.join(dir, "compatibility.json")
-    json_data = {
-        "system_requirements": {
-            "postgres_version": version}}
+    json_data = {"system_requirements": {"postgres_version": version}}
     with open(compatibility_file, "w", encoding="utf-8") as fh:
         json.dump(json_data, fh)
 
@@ -1789,7 +1776,6 @@ async def test_postgresqlversion(tmp_path, minimal_pg_version, read_postgresql_v
     """
     required_version = set_required_postgresql_version(dir=tmp_path, version=minimal_pg_version)
     installed_version = read_postgresql_version_from_db
-
 
     if minimal_pg_version == 0:
         assert installed_version > required_version

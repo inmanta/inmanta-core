@@ -164,6 +164,7 @@ class InmantaBootloader:
         return dict(cls.AVAILABLE_EXTENSIONS)
 
         # Extension loading Phase I: from start to setup functions collected
+
     def _discover_plugin_packages(self, return_all_available_packages: bool = False) -> list[str]:
         """Discover all packages that are defined in the inmanta_ext namespace package. Filter available extensions based on
         enabled_extensions and disabled_extensions config in the server configuration.
