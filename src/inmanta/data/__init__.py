@@ -5454,8 +5454,8 @@ class Resource(BaseDocument):
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> list[m.Resource]:
         """
-        Returns the resources in the latest version of the configuration model of the given environment, that satisfy the
-        given constraints.
+        Returns the resources (in dto format) in the latest version of the configuration model of the given environment,
+        that satisfy the given constraints.
 
         :param environment: The resources should belong to this environment.
         :param resource_type: The environment should have this resource_type.
@@ -6029,7 +6029,8 @@ class Resource(BaseDocument):
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> abc.Mapping[ResourceIdStr, m.Resource]:
         """
-        Returns the resource in the given environment and version that belong to any of the given resource sets.
+        Returns the resources (in dto format) in the given environment and version
+        that belong to any of the given resource sets.
         This method also returns the resources in the share resource set iff the include_shared_resources boolean
         is set to True.
         """
