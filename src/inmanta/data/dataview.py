@@ -562,7 +562,7 @@ class ResourceView(DataView[ResourceStatusOrder, model.LatestReleasedResource]):
                         AND r.resource_id=rps.resource_id
                     INNER JOIN resource_set_configuration_model AS rscm
                         ON r.environment=rscm.environment
-                        AND r.resource_set_id=rscm.resource_set_id
+                        AND r.resource_set=rscm.resource_set
                         AND rscm.model=(SELECT version FROM latest_version)
                     WHERE rps.environment=$1 AND NOT rps.is_orphan
                 )
@@ -586,7 +586,7 @@ class ResourceView(DataView[ResourceStatusOrder, model.LatestReleasedResource]):
                                 SELECT MAX(rscm.model)
                                 FROM resource AS r
                                 INNER JOIN resource_set_configuration_model AS rscm
-                                    ON r.environment=rscm.environment AND r.resource_set_id=rscm.resource_set_id
+                                    ON r.environment=rscm.environment AND r.resource_set=rscm.resource_set
                                 INNER JOIN configurationmodel AS m
                                     ON rscm.environment=m.environment AND rscm.model=m.version
                                 WHERE r.environment=rps.environment AND r.resource_id=rps.resource_id AND m.released
@@ -608,7 +608,7 @@ class ResourceView(DataView[ResourceStatusOrder, model.LatestReleasedResource]):
                     FROM resource AS r
                     INNER JOIN resource_set_configuration_model AS rscm
                         ON r.environment=rscm.environment
-                        AND r.resource_set_id=rscm.resource_set_id
+                        AND r.resource_set=rscm.resource_set
                     INNER JOIN versioned_resource_state AS rps
                         ON r.environment=rps.environment
                         AND r.resource_id=rps.resource_id
@@ -682,7 +682,7 @@ class ResourcesInVersionView(DataView[VersionedResourceOrder, model.VersionedRes
             from_clause=""" FROM resource AS r
             INNER JOIN resource_set_configuration_model AS rscm
                 ON r.environment=rscm.environment
-                AND r.resource_set_id=rscm.resource_set_id""",
+                AND r.resource_set=rscm.resource_set""",
             filter_statements=["r.environment=$1", "rscm.model=$2"],
             values=[self.environment.id, self.version],
         )
@@ -900,7 +900,7 @@ class ResourceHistoryView(DataView[ResourceHistoryOrder, ResourceHistory]):
                     ) AS seqid
                   FROM resource AS r
                   INNER JOIN resource_set_configuration_model AS rscm
-                    ON r.resource_set_id=rscm.resource_set_id AND r.environment=rscm.environment
+                    ON r.resource_set=rscm.resource_set AND r.environment=rscm.environment
                   INNER JOIN configurationmodel AS cm
                     ON rscm.environment=cm.environment AND rscm.model=cm.version
                   WHERE r.environment=$1 AND r.resource_id=$2 AND cm.released
