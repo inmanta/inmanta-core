@@ -88,10 +88,9 @@ def server_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Se
         "--compatibility-file",
         type=str,
         dest="compatibility_file",
-        help="Path to the compatibility.json file. During startup, the server will perform version compatibility check "
+        help="Path to the compatibility.json file. During startup, the server will perform a version compatibility check "
         "for the PostgreSQL version being used. For more information about this file, please refer to "
-        "https://docs.inmanta.com/inmanta-service-orchestrator/latest/reference/compatibility.html.",
-        default="/usr/share/inmanta/compatibility/compatibility.json",
+        "the compatibility page in the Inmanta documentation.",
     )
 
 
@@ -106,7 +105,7 @@ def start_server(options: argparse.Namespace) -> None:
     if options.db_wait_time is not None:
         Config.set("database", "wait_time", str(options.db_wait_time))
 
-    if options.compatibility_file:
+    if options.compatibility_file is not None:
         Config.set("server", "compatibility_file", str(options.compatibility_file))
 
     tracing.configure_logfire("server")

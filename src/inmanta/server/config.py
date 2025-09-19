@@ -165,9 +165,9 @@ server_compatibility_file = Option(
     "server",
     "compatibility_file",
     "/usr/share/inmanta/compatibility/compatibility.json",
-    "Path to the compatibility.json file. During startup, the server will perform version compatibility check "
+    "Path to the compatibility.json file. During startup, the server will perform a version compatibility check "
     "for the PostgreSQL version being used. For more information about this file, please refer to "
-    "https://docs.inmanta.com/inmanta-service-orchestrator/latest/reference/compatibility.html.",
+    "the compatibility page in the Inmanta documentation.",
     is_str,
 )
 

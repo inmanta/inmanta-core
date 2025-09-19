@@ -23,6 +23,7 @@ import logging
 import os.path
 import pkgutil
 from collections.abc import Generator
+from functools import total_ordering
 from pkgutil import ModuleInfo
 from types import ModuleType
 from typing import Optional
@@ -34,7 +35,7 @@ from inmanta.const import EXTENSION_MODULE, EXTENSION_NAMESPACE
 from inmanta.logging import FullLoggingConfig, InmantaLoggerConfig
 from inmanta.server import config
 from inmanta.server.extensions import ApplicationContext, FeatureManager, InvalidSliceNameException
-from inmanta.server.protocol import Server, ServerSlice
+from inmanta.server.protocol import Server, ServerSlice, ServerStartFailure
 from inmanta.stable_api import stable_api
 from packaging import version
 
@@ -317,32 +318,31 @@ class InmantaBootloader:
             "password": config.db_password.get(),
             "database": config.db_name.get(),
         }
-        human_readable_min_pg_version, machine_readable_min_pg_version = self._get_minimal_postgres_version()
+
+        required_postgresql_version = PostgreSQLVersion.from_compatibility_file()
 
         while True:
             try:
                 # Attempt to create a database connection
                 conn = await asyncpg.connect(**db_settings, timeout=5)  # raises TimeoutError after 5 seconds
-                result = await conn.fetch("SHOW server_version_num")
-                pg_server_version_machine_readable = int(result[0]["server_version_num"])
-                result = await conn.fetch("SHOW server_version")
-                pg_server_version_human_readable = result[0]["server_version"]
+                installed_postgresql_version = await PostgreSQLVersion.from_database(conn)
 
-                if pg_server_version_machine_readable < machine_readable_min_pg_version:
-
-                    LOGGER.warning(
+                if installed_postgresql_version < required_postgresql_version:
+                    raise ServerStartFailure(
                         f"The database at {config.db_host.get()} is using PostgreSQL version "
-                        f"{pg_server_version_human_readable}. This version is not supported by this "
+                        f"{installed_postgresql_version}. This version is not supported by this "
                         "version of the Inmanta orchestrator. Please make sure to update to PostgreSQL "
-                        f"{str(human_readable_min_pg_version)} as soon as possible."
+                        f"{required_postgresql_version}."
                     )
 
                 LOGGER.info(
-                    f"Successfully connected to the database (PostgreSQL server version {pg_server_version_human_readable})."
+                    "Successfully connected to the database (PostgreSQL server version %s).", installed_postgresql_version
                 )
 
                 await conn.close(timeout=5)  # close the connection
                 return
+            except ServerStartFailure:
+                raise
             except asyncio.TimeoutError:
                 LOGGER.info("Waiting for database to be up: Connection attempt timed out.")
             except Exception:
@@ -353,3 +353,53 @@ class InmantaBootloader:
                 raise Exception("Database connection timeout after %d seconds." % db_wait_time)
             # Sleep for a second before retrying
             await asyncio.sleep(1)
+
+
+@total_ordering
+class PostgreSQLVersion:
+    def __init__(self, version: int):
+        """
+        :param version: This method expects the machine-readable version as defined in
+            https://www.postgresql.org/docs/current/libpq-status.html#LIBPQ-PQSERVERVERSION.
+            e.g. "v17.6" should be passed as 170006
+
+        """
+
+        self.version = version
+
+    @classmethod
+    async def from_database(cls, conn: asyncpg.Connection) -> "PostgreSQLVersion":
+        result = await conn.fetch("SHOW server_version_num")
+        pg_server_version_machine_readable = int(result[0]["server_version_num"])
+
+        return PostgreSQLVersion(version=pg_server_version_machine_readable)
+
+    @classmethod
+    def from_compatibility_file(cls) -> "PostgreSQLVersion":
+        """
+        Helper method to retrieve the minimal required postgres version configured under the
+        system_requirements->postgres_version section of the compatibility file.
+        """
+        compatibility_data = {}
+        compatibility_file: str = config.server_compatibility_file.get()
+        if os.path.exists(compatibility_file):
+            with open(compatibility_file) as fh:
+                compatibility_data = json.load(fh)
+
+        human_readable_version = version.Version(
+            str(compatibility_data.get("system_requirements", {}).get("postgres_version", 13))
+        )
+        machine_readable_version = int(human_readable_version.major) * 10_000 + human_readable_version.minor
+
+        return PostgreSQLVersion(version=machine_readable_version)
+
+    def __lt__(self, other: "PostgreSQLVersion") -> bool:
+        return self.version < other.version
+
+    def __str__(self) -> str:
+        """
+        Parse the machine readable version into a human readable version.
+        """
+        major = self.version // 10_000
+        minor = self.version - major * 10_000
+        return f"{major}.{minor}"
