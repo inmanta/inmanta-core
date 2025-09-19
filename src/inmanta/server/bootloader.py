@@ -163,29 +163,7 @@ class InmantaBootloader:
                 }
         return dict(cls.AVAILABLE_EXTENSIONS)
 
-    def _get_minimal_postgres_version(self) -> tuple[version.Version, int]:
-        """
-        Helper method to retrieve and convert the (human readable) minimal required postgres version
-        from the compatibility file into a machine readable version as per
-        https://www.postgresql.org/docs/current/libpq-status.html#LIBPQ-PQSERVERVERSION.
-
-        e.g. "v17.6" is transformed into "17006" in machine readable form.
-
-        Returns a tuple of [human_readable_version, machine_readable_version]
-        """
-        compatibility_data = {}
-        compatibility_file: str = config.server_compatibility_file.get()
-        if os.path.exists(compatibility_file):
-            with open(compatibility_file) as fh:
-                compatibility_data = json.load(fh)
-
-        human_readable_version = version.Version(
-            str(compatibility_data.get("system_requirements", {}).get("postgres_version", 0))
-        )
-        machine_readable_version = int(human_readable_version.major) * 10_000 + human_readable_version.minor
-        return human_readable_version, machine_readable_version
-
-    # Extension loading Phase I: from start to setup functions collected
+        # Extension loading Phase I: from start to setup functions collected
     def _discover_plugin_packages(self, return_all_available_packages: bool = False) -> list[str]:
         """Discover all packages that are defined in the inmanta_ext namespace package. Filter available extensions based on
         enabled_extensions and disabled_extensions config in the server configuration.
