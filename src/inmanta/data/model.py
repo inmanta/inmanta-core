@@ -309,7 +309,7 @@ class ProtectedBy(str, Enum):
     """
 
     # The environment setting is managed using the environment_settings property of the project.yml file.
-    project_yml = "project_yml"
+    project_yml = "project.yml"
 
     def get_detailed_description(self) -> str:
         """
@@ -320,6 +320,15 @@ class ProtectedBy(str, Enum):
                 return "Setting is managed by the project.yml file of the Inmanta project."
             case _ as unreachable:
                 assert_never(unreachable)
+
+    @classmethod
+    def _missing_(cls: type[Self], value: object) -> Optional[Self]:
+        """
+        This is a workaround for the issue where the protocol layer inconsistently handles enums.
+        Enums are serialized using their name, but deserialized using their value. This method makes
+        sure that we can deserialize enums using their name.
+        """
+        return next((p for p in cls if p.name == value), None) if isinstance(value, str) else None
 
 
 class EnvironmentSettingDefinitionAPI(EnvironmentSetting):
