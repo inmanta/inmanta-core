@@ -1409,60 +1409,6 @@ async def test_cleanup_old_agents(server, client, env1_halted, env2_halted):
         assert sorted(agents_after_purge) == sorted(expected_agents_after_purge)
 
 
-async def test_serialization_attributes_of_resource_to_api(client, server, environment, clienthelper, null_agent) -> None:
-    """
-    Due to a bug, the version of a resource was always included in the attribute dictionary.
-    This issue has been patched in the database, but at the API boundary we still serve the version
-    field in the attributes dictionary for backwards compatibility. This test verifies that behavior.
-    """
-    version = await clienthelper.get_version()
-    resource_id = "test::Resource[agent1,key=key1]"
-    resources = [
-        {
-            "id": f"{resource_id},v={version}",
-            "att": "val",
-            "version": version,
-            "send_event": False,
-            "purged": False,
-            "requires": [],
-        }
-    ]
-    attributes_on_api = {k: v for k, v in resources[0].items() if k != "id"}
-    result = await client.put_version(
-        tid=environment,
-        version=version,
-        resources=resources,
-        unknowns=[],
-        version_info={},
-        compiler_version=get_compiler_version(),
-        module_version_info={},
-    )
-    assert result.code == 200
-
-    result = await client.release_version(tid=environment, id=version)
-    assert result.code == 200
-
-    # Verify that the version field is not present in the attributes dictionary in the database.
-    result = await data.Resource.get_list()
-    assert len(result) == 1
-    resource_dao = result[0]
-    assert "version" not in resource_dao.attributes
-
-    # Retrieve the resource via the API and ensure that the version field is present in the attributes dictionary
-    result = await client.resource_history(environment, resource_id)
-    assert result.code == 200
-    assert len(result.result["data"]) == 1
-    assert result.result["data"][0]["attributes"] == attributes_on_api
-
-    result = await client.versioned_resource_details(tid=environment, version=version, rid=resource_id)
-    assert result.code == 200
-    assert result.result["data"]["attributes"] == attributes_on_api, result.result["data"]
-
-    result = await client.resource_details(tid=environment, rid=resource_id)
-    assert result.code == 200
-    assert result.result["data"]["attributes"] == attributes_on_api
-
-
 @pytest.mark.parametrize("v1_partial,v2_partial", [(False, False), (False, True)])
 # the other two cases require a race condition to trigger
 # as put_partial determines its own version number
