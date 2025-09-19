@@ -431,7 +431,7 @@ class Exporter:
             result = self.client.protected_environment_settings_set_batch(
                 tid=self._get_env_id(),
                 settings=project.metadata.environment_settings or {},
-                protected_by=model.ProtectedBy.project_yml.value,
+                protected_by=model.ProtectedBy.project_yml,
             )
             if result.code != 200:
                 raise Exception("Failed to update the environment settings, defined in the project.yml file, on the server.")

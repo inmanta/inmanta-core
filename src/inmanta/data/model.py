@@ -321,6 +321,15 @@ class ProtectedBy(str, Enum):
             case _ as unreachable:
                 assert_never(unreachable)
 
+    @classmethod
+    def _missing_(cls: type[Self], value: object) -> Optional[Self]:
+        """
+        This is a workaround for the issue where the protocol layer inconsistently handles enums.
+        Enums are serialized using their name, but deserialized using their value. This method makes
+        sure that we can deserialize enums using their value.
+        """
+        return next((p for p in cls if p.name == value), None) if isinstance(value, str) else None
+
 
 class EnvironmentSettingDefinitionAPI(EnvironmentSetting):
     """

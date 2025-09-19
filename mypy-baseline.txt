@@ -617,7 +617,6 @@ src/inmanta/execute/scheduler.py:0: error: Missing type parameters for generic t
 src/inmanta/execute/scheduler.py:0: error: Module "inmanta.ast" does not explicitly export attribute "NamedType"  [attr-defined]
 src/inmanta/execute/scheduler.py:0: error: Module "inmanta.ast" does not explicitly export attribute "Statement"  [attr-defined]
 src/inmanta/execute/scheduler.py:0: error: Module "inmanta.ast" has no attribute "BasicBlock"  [attr-defined]
-src/inmanta/export.py:0: error: Argument "protected_by" to "protected_environment_settings_set_batch" has incompatible type "str"; expected "ProtectedBy"  [arg-type]
 src/inmanta/export.py:0: error: Argument 1 to "parse_id" of "Id" has incompatible type "str"; expected "ResourceVersionIdStr | ResourceIdStr"  [arg-type]
 src/inmanta/export.py:0: error: Argument 1 to "set_version" of "Resource" has incompatible type "int | None"; expected "int"  [arg-type]
 src/inmanta/export.py:0: error: Argument 10 to "put_partial" has incompatible type "**dict[str, object]"; expected "PipConfig | None"  [arg-type]

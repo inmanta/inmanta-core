@@ -379,7 +379,7 @@ async def test_protect_environment_settings(environment, server, client):
     result = await client.protected_environment_settings_set_batch(
         tid=environment,
         settings={data.AUTO_DEPLOY: False, data.RESOURCE_ACTION_LOGS_RETENTION: 12},
-        protected_by=model.ProtectedBy.project_yml.value,
+        protected_by=model.ProtectedBy.project_yml,
     )
     assert result.code == 200
 
@@ -407,7 +407,7 @@ async def test_protect_environment_settings(environment, server, client):
     result = await client.protected_environment_settings_set_batch(
         tid=environment,
         settings={data.RESOURCE_ACTION_LOGS_RETENTION: 12, data.AVAILABLE_VERSIONS_TO_KEEP: 5},
-        protected_by=model.ProtectedBy.project_yml.value,
+        protected_by=model.ProtectedBy.project_yml,
     )
     assert result.code == 200
 
