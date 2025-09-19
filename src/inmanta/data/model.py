@@ -326,7 +326,7 @@ class ProtectedBy(str, Enum):
         """
         This is a workaround for the issue where the protocol layer inconsistently handles enums.
         Enums are serialized using their name, but deserialized using their value. This method makes
-        sure that we can deserialize enums using their value.
+        sure that we can deserialize enums using their name.
         """
         return next((p for p in cls if p.name == value), None) if isinstance(value, str) else None
 
