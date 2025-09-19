@@ -21,7 +21,7 @@ import urllib.parse
 from abc import ABC
 from collections.abc import Sequence
 from datetime import datetime
-from typing import Any, Generic, Mapping, Optional, TypeVar, Union, cast
+from typing import Generic, Mapping, Optional, TypeVar, Union, cast
 from uuid import UUID
 
 from asyncpg import Record
@@ -930,7 +930,7 @@ class ResourceHistoryView(DataView[ResourceHistoryOrder, ResourceHistory]):
             ResourceHistory(
                 resource_id=self.rid,
                 attribute_hash=record["attribute_hash"],
-                attributes=cast(dict[str, Any], record["attributes"]),
+                attributes=record["attributes"],
                 date=record["date"],
                 requires=[Id.parse_id(rid).resource_str() for rid in record["attributes"].get("requires", [])],
             )

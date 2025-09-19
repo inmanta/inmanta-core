@@ -406,6 +406,7 @@ src/inmanta/data/dataview.py:0: error: "object" has no attribute "get"  [attr-de
 src/inmanta/data/dataview.py:0: error: Argument "action" to "ResourceLog" has incompatible type "object"; expected "ResourceAction"  [arg-type]
 src/inmanta/data/dataview.py:0: error: Argument "action_id" to "ResourceLog" has incompatible type "object"; expected "UUID"  [arg-type]
 src/inmanta/data/dataview.py:0: error: Argument "attribute_hash" to "ResourceHistory" has incompatible type "object"; expected "str"  [arg-type]
+src/inmanta/data/dataview.py:0: error: Argument "attributes" to "ResourceHistory" has incompatible type "object"; expected "dict[str, Any]"  [arg-type]
 src/inmanta/data/dataview.py:0: error: Argument "cleared" to "Notification" has incompatible type "object"; expected "bool"  [arg-type]
 src/inmanta/data/dataview.py:0: error: Argument "compile_id" to "Notification" has incompatible type "object"; expected "UUID | None"  [arg-type]
 src/inmanta/data/dataview.py:0: error: Argument "completed" to "CompileReport" has incompatible type "object"; expected "datetime | None"  [arg-type]
