@@ -18,9 +18,12 @@ Contact: code@inmanta.com
 
 import asyncio
 import importlib
+import json
 import logging
+import os.path
 import pkgutil
 from collections.abc import Generator
+from functools import total_ordering
 from pkgutil import ModuleInfo
 from types import ModuleType
 from typing import Optional
@@ -32,8 +35,9 @@ from inmanta.const import EXTENSION_MODULE, EXTENSION_NAMESPACE
 from inmanta.logging import FullLoggingConfig, InmantaLoggerConfig
 from inmanta.server import config
 from inmanta.server.extensions import ApplicationContext, FeatureManager, InvalidSliceNameException
-from inmanta.server.protocol import Server, ServerSlice
+from inmanta.server.protocol import Server, ServerSlice, ServerStartFailure
 from inmanta.stable_api import stable_api
+from packaging import version
 
 LOGGER = logging.getLogger(__name__)
 
@@ -100,9 +104,10 @@ class InmantaBootloader:
     async def start(self) -> None:
         self.start_loggers_for_extensions()
         db_wait_time: int = config.db_wait_time.get()
+
         if db_wait_time != 0:
             # Wait for the database to be up before starting the server
-            await self.wait_for_db(db_wait_time)
+            await self.wait_for_db(db_wait_time=db_wait_time)
 
         ctx = self.load_slices()
         version = ctx.get_feature_manager().get_product_metadata().version
@@ -158,7 +163,8 @@ class InmantaBootloader:
                 }
         return dict(cls.AVAILABLE_EXTENSIONS)
 
-    # Extension loading Phase I: from start to setup functions collected
+        # Extension loading Phase I: from start to setup functions collected
+
     def _discover_plugin_packages(self, return_all_available_packages: bool = False) -> list[str]:
         """Discover all packages that are defined in the inmanta_ext namespace package. Filter available extensions based on
         enabled_extensions and disabled_extensions config in the server configuration.
@@ -291,13 +297,31 @@ class InmantaBootloader:
             "password": config.db_password.get(),
             "database": config.db_name.get(),
         }
+
+        required_postgresql_version = PostgreSQLVersion.from_compatibility_file()
+
         while True:
             try:
                 # Attempt to create a database connection
                 conn = await asyncpg.connect(**db_settings, timeout=5)  # raises TimeoutError after 5 seconds
-                LOGGER.info("Successfully connected to the database.")
+                installed_postgresql_version = await PostgreSQLVersion.from_database(conn)
+
+                if installed_postgresql_version < required_postgresql_version:
+                    raise ServerStartFailure(
+                        f"The database at {config.db_host.get()} is using PostgreSQL version "
+                        f"{installed_postgresql_version}. This version is not supported by this "
+                        "version of the Inmanta orchestrator. Please make sure to update to PostgreSQL "
+                        f"{required_postgresql_version}."
+                    )
+
+                LOGGER.info(
+                    "Successfully connected to the database (PostgreSQL server version %s).", installed_postgresql_version
+                )
+
                 await conn.close(timeout=5)  # close the connection
                 return
+            except ServerStartFailure:
+                raise
             except asyncio.TimeoutError:
                 LOGGER.info("Waiting for database to be up: Connection attempt timed out.")
             except Exception:
@@ -308,3 +332,53 @@ class InmantaBootloader:
                 raise Exception("Database connection timeout after %d seconds." % db_wait_time)
             # Sleep for a second before retrying
             await asyncio.sleep(1)
+
+
+@total_ordering
+class PostgreSQLVersion:
+    def __init__(self, version: int):
+        """
+        :param version: This method expects the machine-readable version as defined in
+            https://www.postgresql.org/docs/current/libpq-status.html#LIBPQ-PQSERVERVERSION.
+            e.g. "v17.6" should be passed as 170006
+
+        """
+
+        self.version = version
+
+    @classmethod
+    async def from_database(cls, conn: asyncpg.Connection) -> "PostgreSQLVersion":
+        result = await conn.fetch("SHOW server_version_num")
+        pg_server_version_machine_readable = int(result[0]["server_version_num"])
+
+        return PostgreSQLVersion(version=pg_server_version_machine_readable)
+
+    @classmethod
+    def from_compatibility_file(cls) -> "PostgreSQLVersion":
+        """
+        Helper method to retrieve the minimal required postgres version configured under the
+        system_requirements->postgres_version section of the compatibility file.
+        """
+        compatibility_data = {}
+        compatibility_file: str = config.server_compatibility_file.get()
+        if os.path.exists(compatibility_file):
+            with open(compatibility_file) as fh:
+                compatibility_data = json.load(fh)
+
+        human_readable_version = version.Version(
+            str(compatibility_data.get("system_requirements", {}).get("postgres_version", 13))
+        )
+        machine_readable_version = int(human_readable_version.major) * 10_000 + human_readable_version.minor
+
+        return PostgreSQLVersion(version=machine_readable_version)
+
+    def __lt__(self, other: "PostgreSQLVersion") -> bool:
+        return self.version < other.version
+
+    def __str__(self) -> str:
+        """
+        Parse the machine readable version into a human readable version.
+        """
+        major = self.version // 10_000
+        minor = self.version - major * 10_000
+        return f"{major}.{minor}"

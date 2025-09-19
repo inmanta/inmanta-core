@@ -21,10 +21,13 @@ import functools
 import json
 import logging
 import os
+import sys
 import uuid
 from datetime import UTC, datetime, timedelta, timezone
 from functools import partial
+from typing import Awaitable
 
+import asyncpg
 import pytest
 from dateutil import parser
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
@@ -39,7 +42,8 @@ from inmanta.protocol import Client
 from inmanta.resources import Id
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_SERVER
 from inmanta.server import config as opt
-from inmanta.server.bootloader import InmantaBootloader
+from inmanta.server.bootloader import InmantaBootloader, PostgreSQLVersion
+from inmanta.server.protocol import ServerStartFailure
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 from inmanta.util import get_compiler_version
 from utils import insert_with_link_to_configuration_model, log_contains, log_doesnt_contain, retry_limited
@@ -592,6 +596,27 @@ class MockConnection:
     async def close(self, timeout: int) -> None:
         return
 
+    async def fetch(self, query: str) -> list[dict[str, str]]:
+        return [{"server_version_num": "160010", "server_version": "16.10"}]
+
+
+@pytest.fixture
+async def read_postgresql_version_from_db(
+    postgres_db, database_name: str, create_db_schema: bool = False
+) -> Awaitable[PostgreSQLVersion]:
+    pool: asyncpg.Pool = await data.connect_pool(
+        postgres_db.host, postgres_db.port, database_name, postgres_db.user, postgres_db.password, create_db_schema
+    )
+    assert pool is not None
+    try:
+        async with pool.acquire() as connection:
+            assert connection is not None
+            installed_postgresql_version = await PostgreSQLVersion.from_database(connection)
+    finally:
+        await data.disconnect_pool()
+
+    yield installed_postgresql_version
+
 
 @pytest.mark.parametrize("db_wait_time", ["20", "0"])
 async def test_bootloader_db_wait(monkeypatch, tmpdir, caplog, db_wait_time: str) -> None:
@@ -630,11 +655,21 @@ async def test_bootloader_db_wait(monkeypatch, tmpdir, caplog, db_wait_time: str
 
     if db_wait_time != "0":
         log_contains(caplog, "inmanta.server.bootloader", logging.INFO, "Waiting for database to be up.")
-        log_contains(caplog, "inmanta.server.bootloader", logging.INFO, "Successfully connected to the database.")
+        log_contains(
+            caplog,
+            "inmanta.server.bootloader",
+            logging.INFO,
+            "Successfully connected to the database (PostgreSQL server version ",
+        )
     else:
         # If db_wait_time is "0", the wait_for_db method is not called,
         # hence "Successfully connected to the database." log message will not appear.
-        log_doesnt_contain(caplog, "inmanta.server.bootloader", logging.INFO, "Successfully connected to the database.")
+        log_doesnt_contain(
+            caplog,
+            "inmanta.server.bootloader",
+            logging.INFO,
+            "Successfully connected to the database (PostgreSQL server version ",
+        )
 
     log_contains(caplog, "inmanta.server.server", logging.INFO, "Starting server endpoint")
 
@@ -642,24 +677,63 @@ async def test_bootloader_db_wait(monkeypatch, tmpdir, caplog, db_wait_time: str
 
 
 @pytest.mark.parametrize("db_wait_time", ["2", "0"])
-async def test_bootloader_connect_running_db(server_config, postgres_db, caplog, db_wait_time: str):
+@pytest.mark.parametrize("minimal_pg_version", [0, sys.maxsize])
+async def test_bootloader_connect_running_db(
+    tmp_path, server_config, postgres_db, caplog, db_wait_time: str, minimal_pg_version: int, read_postgresql_version_from_db
+):
     """
     Tests that the bootloader can connect to a database and can start for both wait_up values
     """
     config.Config.set("database", "wait_time", db_wait_time)
+
+    config.Config.set("server", "min", db_wait_time)
+    installed_postgresql_version = read_postgresql_version_from_db
+    required_version = set_required_postgresql_version(dir=tmp_path, version=minimal_pg_version)
     ibl: InmantaBootloader = InmantaBootloader(configure_logging=True)
+
     caplog.clear()
     caplog.set_level(logging.INFO)
-    await ibl.start()
-    await ibl.stop(timeout=20)
 
-    if db_wait_time != "0":
-        log_contains(caplog, "inmanta.server.bootloader", logging.INFO, "Successfully connected to the database.")
-    else:
-        # If db_wait_time is "0", the wait_for_db method is not called,
-        # hence "Successfully connected to the database." log message will not appear.
-        log_doesnt_contain(caplog, "inmanta.server.bootloader", logging.INFO, "Successfully connected to the database.")
-    log_contains(caplog, "inmanta.server.server", logging.INFO, "Starting server endpoint")
+    try:
+        if db_wait_time == "0":
+            await ibl.start()
+            # If db_wait_time is "0", the wait_for_db method is not called,
+            # hence "Successfully connected to the database." log message will not appear.
+            log_doesnt_contain(
+                caplog,
+                "inmanta.server.bootloader",
+                logging.INFO,
+                "Successfully connected to the database (PostgreSQL server version ",
+            )
+        else:
+            if minimal_pg_version == sys.maxsize:
+                unsupported_pg_version_error = (
+                    f"The database at {postgres_db.host} is using PostgreSQL version "
+                    f"{installed_postgresql_version}. This version is not supported by this "
+                    "version of the Inmanta orchestrator. Please make sure to update to PostgreSQL "
+                    f"{required_version}."
+                )
+
+                with pytest.raises(ServerStartFailure) as exc_info:
+                    await ibl.start()
+                    assert unsupported_pg_version_error in str(exc_info.value)
+
+                return
+
+            else:
+                await ibl.start()
+
+                log_contains(
+                    caplog,
+                    "inmanta.server.bootloader",
+                    logging.INFO,
+                    f"Successfully connected to the database (PostgreSQL server version {installed_postgresql_version}).",
+                )
+
+        log_contains(caplog, "inmanta.server.server", logging.INFO, "Starting server endpoint")
+
+    finally:
+        await ibl.stop(timeout=20)
 
 
 async def test_get_resource_actions(postgresql_client, client, clienthelper, server, environment, null_agent):
@@ -1680,3 +1754,30 @@ async def test_delete_active_version(client, clienthelper, server, environment, 
     result = await client.delete_version(tid=environment, id=version)
     assert result.code == 400
     assert result.result["message"] == "Invalid request: Cannot delete the active version"
+
+
+def set_required_postgresql_version(dir: str, version: str) -> PostgreSQLVersion:
+    compatibility_file = os.path.join(dir, "compatibility.json")
+    json_data = {"system_requirements": {"postgres_version": version}}
+    with open(compatibility_file, "w", encoding="utf-8") as fh:
+        json.dump(json_data, fh)
+
+    config.Config.set("server", "compatibility_file", compatibility_file)
+
+    required_version = PostgreSQLVersion.from_compatibility_file()
+
+    return required_version
+
+
+@pytest.mark.parametrize("minimal_pg_version", [0, sys.maxsize])
+async def test_postgresqlversion(tmp_path, minimal_pg_version, read_postgresql_version_from_db):
+    """
+    Test the PostgreSQLVersion utility class
+    """
+    required_version = set_required_postgresql_version(dir=tmp_path, version=minimal_pg_version)
+    installed_version = read_postgresql_version_from_db
+
+    if minimal_pg_version == 0:
+        assert installed_version > required_version
+    else:
+        assert installed_version < required_version
