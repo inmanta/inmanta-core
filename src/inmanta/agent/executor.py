@@ -411,7 +411,6 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         """
         Was the venv correctly initialized: the inmanta status file exists
         """
-        self._ensure_disk_layout_backwards_compatibility()
         return self.inmanta_venv_status_file.exists()
 
     def touch(self) -> None:
