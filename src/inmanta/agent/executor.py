@@ -354,10 +354,14 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
 
         self.io_threadpool = io_threadpool
 
-    def _ensure_disk_layout_backwards_compatibility(self) -> None:
+    def ensure_disk_layout_backwards_compatibility(self) -> None:
         """
         Backwards compatibility helper: move files that used to live in the
         top-level dir of the venv into the dedicated storage dir.
+
+        This upgrades from the layout prior to september 2025
+
+        it should be called under the lock of the VirtualEnvironmentManager
         """
         created_storage = False
 
@@ -543,7 +547,7 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
             # No lock here, singe shot prior to start
             current_folder = self.envs_dir / folder
             virtual_environment = ExecutorVirtualEnvironment(env_path=str(current_folder), io_threadpool=self.thread_pool)
-            virtual_environment._ensure_disk_layout_backwards_compatibility()
+            virtual_environment.ensure_disk_layout_backwards_compatibility()
             if virtual_environment.is_correctly_initialized():
                 self.pool[folder.name] = virtual_environment
             else:
