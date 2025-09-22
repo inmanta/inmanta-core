@@ -1,11 +1,11 @@
 ---
 description: >
   Add a check for the installed PostgreSQL version on server startup. The server will not start if the PostgreSQL
-  version does not meet the minimal version requirements. Please make sure you update your database to use a compatible
-  PostgreSQL version by referring to the "Compatibility" page of the Inmanta documentation.
+  version does not meet the minimal version requirements. Please make sure you update your database if required.
+  The minimal PostgreSQL version can be found on the "Compatibility" page of the Inmanta documentation.
 issue-nr: 9543
 issue-repo: inmanta-core
-change-type: patch
+change-type: minor
 destination-branches: [master, iso8]
 sections:
   upgrade-note: "{{description}}"
