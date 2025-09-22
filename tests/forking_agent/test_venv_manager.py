@@ -17,7 +17,6 @@ import base64
 import concurrent.futures
 import json
 import os
-import pathlib
 import subprocess
 import sys
 import uuid
@@ -412,38 +411,17 @@ async def test_recovery_virtual_environment_manager(tmpdir, pip_index, async_fin
         requirements=(),
         python_version=sys.version_info[:2],
     )
-    blueprint3 = executor.EnvBlueprint(
-        environment_id=env_id,
-        pip_config=pip_config,
-        requirements=("pkg1", "pkg2"),
-        python_version=sys.version_info[:2],
-    )
-    venv1, venv2, venv3 = await asyncio.gather(
+    venv1, venv2 = await asyncio.gather(
         venv_manager.get_environment(blueprint1),
         venv_manager.get_environment(blueprint2),
-        venv_manager.get_environment(blueprint3),
     )
     await venv_manager.request_shutdown()
     await venv_manager.join()
 
-    assert len(os.listdir(tmpdir)) == 3
+    assert len(os.listdir(tmpdir)) == 2
 
     # Make venv1 corrupt
     os.remove(venv1.inmanta_venv_status_file)
-    # Pretend venv2 uses the legacy dir structure (with the status file at the root of the venv)
-    # and check that the new structure is restored (with the status file in the .inmanta subdir)
-
-    new_path = pathlib.Path(venv2.env_path) / ".inmanta" / const.INMANTA_VENV_STATUS_FILENAME
-    assert venv2.inmanta_venv_status_file == new_path
-
-    os.remove(venv2.inmanta_venv_status_file)
-
-    legacy_status_file_path = pathlib.Path(venv2.env_path) / const.INMANTA_VENV_STATUS_FILENAME
-    legacy_status_file_path.touch()
-
-    # Check that test set up is correct
-    assert not os.path.exists(new_path)
-    assert os.path.exists(legacy_status_file_path)
 
     venv_manager = executor.VirtualEnvironmentManager(
         envs_dir=tmpdir,
@@ -454,15 +432,9 @@ async def test_recovery_virtual_environment_manager(tmpdir, pip_index, async_fin
     await venv_manager.start()
     async_finalizer.add(venv_manager.request_shutdown)
 
-    # Assert venv1 was removed and venv2 was restructured
+    # Assert venv1 was removed
     venv_dirs = os.listdir(tmpdir)
-    assert set(venv_dirs) == {venv2.id, venv3.id}
-
-    assert venv2.inmanta_venv_status_file == new_path
-
-    # Check that structure was rebuild correctly
-    assert os.path.exists(new_path)
-    assert not os.path.exists(legacy_status_file_path)
+    assert venv_dirs == [venv2.folder_name]
 
     await venv_manager.request_shutdown()
     await venv_manager.join()
