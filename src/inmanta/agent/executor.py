@@ -467,8 +467,6 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         This method must be called on a threadpool to not block the ioloop.
         """
         self.remove_venv()
-        # This will also create the venv dir sitting above the .inmanta storage
-        os.makedirs(self.inmanta_storage)
 
 
 class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, str, ExecutorVirtualEnvironment]):
