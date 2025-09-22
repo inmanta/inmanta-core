@@ -163,7 +163,7 @@ class InmantaBootloader:
                 }
         return dict(cls.AVAILABLE_EXTENSIONS)
 
-        # Extension loading Phase I: from start to setup functions collected
+    # Extension loading Phase I: from start to setup functions collected
 
     def _discover_plugin_packages(self, return_all_available_packages: bool = False) -> list[str]:
         """Discover all packages that are defined in the inmanta_ext namespace package. Filter available extensions based on
@@ -300,6 +300,7 @@ class InmantaBootloader:
 
         required_postgresql_version = PostgreSQLVersion.from_compatibility_file()
 
+        conn: asyncpg.Connection | None = None
         while True:
             try:
                 # Attempt to create a database connection
@@ -318,7 +319,6 @@ class InmantaBootloader:
                     "Successfully connected to the database (PostgreSQL server version %s).", installed_postgresql_version
                 )
 
-                await conn.close(timeout=5)  # close the connection
                 return
             except ServerStartFailure:
                 raise
@@ -326,6 +326,10 @@ class InmantaBootloader:
                 LOGGER.info("Waiting for database to be up: Connection attempt timed out.")
             except Exception:
                 LOGGER.info("Waiting for database to be up.", exc_info=True)
+            finally:
+                if conn is not None:
+                    await conn.close(timeout=5)  # close the connection
+
             # Check if the maximum wait time has been exceeded
             if 0 < db_wait_time < asyncio.get_event_loop().time() - start_time:
                 LOGGER.error("Timed out waiting for the database to be up.")
@@ -341,13 +345,17 @@ class PostgreSQLVersion:
         :param version: This method expects the machine-readable version as defined in
             https://www.postgresql.org/docs/current/libpq-status.html#LIBPQ-PQSERVERVERSION.
             e.g. "v17.6" should be passed as 170006
-
         """
 
         self.version = version
 
     @classmethod
     async def from_database(cls, conn: asyncpg.Connection) -> "PostgreSQLVersion":
+        """
+        Helper method to retrieve the installed postgreSQL version. This method queries
+        the database by using the conn parameter. The caller is responsible for closing this
+        connection.
+        """
         result = await conn.fetch("SHOW server_version_num")
         pg_server_version_machine_readable = int(result[0]["server_version_num"])
 
@@ -356,7 +364,7 @@ class PostgreSQLVersion:
     @classmethod
     def from_compatibility_file(cls) -> "PostgreSQLVersion":
         """
-        Helper method to retrieve the minimal required postgres version configured under the
+        Helper method to retrieve the minimal required postgreSQL version configured under the
         system_requirements->postgres_version section of the compatibility file.
         """
         compatibility_data = {}

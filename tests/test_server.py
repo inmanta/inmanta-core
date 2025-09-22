@@ -1770,9 +1770,10 @@ def set_required_postgresql_version(dir: str, version: str) -> PostgreSQLVersion
 
 
 @pytest.mark.parametrize("minimal_pg_version", [0, sys.maxsize])
-async def test_postgresqlversion(tmp_path, minimal_pg_version, read_postgresql_version_from_db):
+async def test_postgresqlversion_comparison(tmp_path, minimal_pg_version, read_postgresql_version_from_db):
     """
-    Test the PostgreSQLVersion utility class
+    Unit test for the PostgreSQLVersion utility class. This test checks the 'from_database' and the
+    'from_compatibility_file' constructors as well as the class' comparison operator.
     """
     required_version = set_required_postgresql_version(dir=tmp_path, version=minimal_pg_version)
     installed_version = read_postgresql_version_from_db
@@ -1781,3 +1782,17 @@ async def test_postgresqlversion(tmp_path, minimal_pg_version, read_postgresql_v
         assert installed_version > required_version
     else:
         assert installed_version < required_version
+
+
+async def test_postgresqlversion(tmp_path):
+    """
+    Unit test for the PostgreSQLVersion utility class. This test checks the correct parsing and conversion of
+    the human-readable version (set in the compatibility file) into a machine-readable version by the 'from_compatibility_file'
+    constructor.
+    """
+    human_readable_input = ["13", "16.10", "17.6"]
+    expected_machine_readable_output = [130_000, 160_010, 170_006]
+
+    for _input, _output in zip(human_readable_input, expected_machine_readable_output):
+        version = set_required_postgresql_version(dir=tmp_path, version=_input)
+        assert version.version == _output
