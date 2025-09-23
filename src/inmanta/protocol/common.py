@@ -1204,7 +1204,7 @@ class Result(Generic[R]):
         If paged, returns only the values for the page represented by this result. To get all results, see
         :meth:`inmanta.protocol.common.PageableResult.all`.
 
-        Converts return codes to http exceptions where applicable.
+        Converts return codes to http exceptions where appliccable.
 
         :raises BaseHttpException: when return code is not 200
         """
