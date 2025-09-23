@@ -305,18 +305,21 @@ class InmantaBootloader:
             try:
                 # Attempt to create a database connection
                 conn = await asyncpg.connect(**db_settings, timeout=5)  # raises TimeoutError after 5 seconds
-                installed_postgresql_version = await PostgreSQLVersion.from_database(conn)
+                database_postgresql_version = await PostgreSQLVersion.from_database(conn)
 
-                if installed_postgresql_version < required_postgresql_version:
-                    raise ServerStartFailure(
-                        f"The database at {config.db_host.get()} is using PostgreSQL version "
-                        f"{installed_postgresql_version}. This version is not supported by this "
-                        "version of the Inmanta orchestrator. Please make sure to update to PostgreSQL "
-                        f"{required_postgresql_version}."
-                    )
+                if required_postgresql_version is None:
+                    LOGGER.debug("No compatibility file is set. Bypassing minimal required postgres version check.")
+                else:
+                    if database_postgresql_version < required_postgresql_version:
+                        raise ServerStartFailure(
+                            f"The database at {config.db_host.get()} is using PostgreSQL version "
+                            f"{database_postgresql_version}. This version is not supported by this "
+                            "version of the Inmanta orchestrator. Please make sure to update to PostgreSQL "
+                            f"{required_postgresql_version}."
+                        )
 
                 LOGGER.info(
-                    "Successfully connected to the database (PostgreSQL server version %s).", installed_postgresql_version
+                    "Successfully connected to the database (PostgreSQL server version %s).", database_postgresql_version
                 )
 
                 return
@@ -362,21 +365,29 @@ class PostgreSQLVersion:
         return PostgreSQLVersion(version=pg_server_version_machine_readable)
 
     @classmethod
-    def from_compatibility_file(cls) -> "PostgreSQLVersion":
+    def from_compatibility_file(cls) -> "PostgreSQLVersion | None":
         """
         Helper method to retrieve the minimal required postgreSQL version configured under the
-        system_requirements->postgres_version section of the compatibility file.
+        system_requirements->postgres_version section of the compatibility file. Returns None
+        if the file doesn't exist.
+
+        :raises: ServerStartFailure if the 'system_requirements->postgres_version' is not present
         """
         compatibility_data = {}
         compatibility_file: str = config.server_compatibility_file.get()
-        if os.path.exists(compatibility_file):
-            with open(compatibility_file) as fh:
-                compatibility_data = json.load(fh)
+        if not os.path.exists(compatibility_file):
+            return None
 
-        human_readable_version = version.Version(
-            str(compatibility_data.get("system_requirements", {}).get("postgres_version", 13))
-        )
-        machine_readable_version = int(human_readable_version.major) * 10_000 + human_readable_version.minor
+        with open(compatibility_file) as fh:
+            compatibility_data = json.load(fh)
+
+        required_version: int | None = compatibility_data.get("system_requirements", {}).get("postgres_version")
+        if required_version is None:
+            raise ServerStartFailure(
+                "Invalid compatibility file schema. Missing 'postgres_version' section in file: %s" % compatibility_file
+            )
+        human_readable_version = version.Version(str(required_version))
+        machine_readable_version = human_readable_version.major * 10_000 + human_readable_version.minor
 
         return PostgreSQLVersion(version=machine_readable_version)
 
@@ -385,7 +396,7 @@ class PostgreSQLVersion:
 
     def __str__(self) -> str:
         """
-        Parse the machine readable version into a human readable version.
+        Returns the human readable version of this PostgreSQLVersion.
         """
         major = self.version // 10_000
         minor = self.version - major * 10_000

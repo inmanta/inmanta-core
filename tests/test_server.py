@@ -27,7 +27,6 @@ from datetime import UTC, datetime, timedelta, timezone
 from functools import partial
 from typing import Awaitable
 
-import asyncpg
 import pytest
 from dateutil import parser
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
@@ -601,21 +600,8 @@ class MockConnection:
 
 
 @pytest.fixture
-async def read_postgresql_version_from_db(
-    postgres_db, database_name: str, create_db_schema: bool = False
-) -> Awaitable[PostgreSQLVersion]:
-    pool: asyncpg.Pool = await data.connect_pool(
-        postgres_db.host, postgres_db.port, database_name, postgres_db.user, postgres_db.password, create_db_schema
-    )
-    assert pool is not None
-    try:
-        async with pool.acquire() as connection:
-            assert connection is not None
-            installed_postgresql_version = await PostgreSQLVersion.from_database(connection)
-    finally:
-        await data.disconnect_pool()
-
-    yield installed_postgresql_version
+async def postgresql_version_from_db(postgresql_client) -> Awaitable[PostgreSQLVersion]:
+    yield await PostgreSQLVersion.from_database(postgresql_client)
 
 
 @pytest.mark.parametrize("db_wait_time", ["20", "0"])
@@ -679,16 +665,15 @@ async def test_bootloader_db_wait(monkeypatch, tmpdir, caplog, db_wait_time: str
 @pytest.mark.parametrize("db_wait_time", ["2", "0"])
 @pytest.mark.parametrize("minimal_pg_version", [0, sys.maxsize])
 async def test_bootloader_connect_running_db(
-    tmp_path, server_config, postgres_db, caplog, db_wait_time: str, minimal_pg_version: int, read_postgresql_version_from_db
+    tmp_path, server_config, postgres_db, caplog, db_wait_time: str, minimal_pg_version: int, postgresql_version_from_db
 ):
     """
     Tests that the bootloader can connect to a database and can start for both wait_up values
     """
     config.Config.set("database", "wait_time", db_wait_time)
 
-    config.Config.set("server", "min", db_wait_time)
-    installed_postgresql_version = read_postgresql_version_from_db
-    required_version = set_required_postgresql_version(dir=tmp_path, version=minimal_pg_version)
+    installed_postgresql_version = postgresql_version_from_db
+    required_version = write_compatibility_json_file(dir=tmp_path, minimal_pg_version=minimal_pg_version)
     ibl: InmantaBootloader = InmantaBootloader(configure_logging=True)
 
     caplog.clear()
@@ -729,6 +714,74 @@ async def test_bootloader_connect_running_db(
                     logging.INFO,
                     f"Successfully connected to the database (PostgreSQL server version {installed_postgresql_version}).",
                 )
+
+        log_contains(caplog, "inmanta.server.server", logging.INFO, "Starting server endpoint")
+
+    finally:
+        await ibl.stop(timeout=20)
+
+
+async def test_bootloader_start_invalid_compatibility_file(tmp_path, server_config, postgres_db, caplog):
+    """
+    Make sure a proper exception is raised when an invalid compatibility file is
+    being used during server startup.
+    """
+
+    # Write an invalid compatibility file (i.e. no 'system_requirements->postgres_version' section)
+    json_data = {}
+    compatibility_file = os.path.join(tmp_path, "compatibility.json")
+    with open(compatibility_file, "w", encoding="utf-8") as fh:
+        json.dump(json_data, fh)
+    config.Config.set("server", "compatibility_file", compatibility_file)
+
+    # Make sure we wait for the db to come up
+    config.Config.set("database", "wait_time", "2")
+
+    ibl: InmantaBootloader = InmantaBootloader(configure_logging=True)
+
+    caplog.set_level(logging.INFO)
+
+    try:
+        invalid_compatibility_file_error = (
+            "Invalid compatibility file schema. Missing 'postgres_version' section in file: %s" % compatibility_file
+        )
+
+        with pytest.raises(ServerStartFailure) as exc_info:
+            await ibl.start()
+            assert invalid_compatibility_file_error in str(exc_info.value)
+
+    finally:
+        await ibl.stop(timeout=20)
+
+
+async def test_bootloader_start_no_compatibility_file(tmp_path, server_config, postgres_db, caplog, postgresql_version_from_db):
+    """
+    Make sure the minimal postgres version compatibility check is disabled
+    when no compatibility file is set.
+    """
+
+    # Make sure we wait for the db to come up
+    config.Config.set("database", "wait_time", "2")
+
+    ibl: InmantaBootloader = InmantaBootloader(configure_logging=True)
+
+    caplog.set_level(logging.DEBUG)
+
+    try:
+        await ibl.start()
+        log_contains(
+            caplog,
+            "inmanta.server.bootloader",
+            logging.DEBUG,
+            "No compatibility file is set. Bypassing minimal required postgres version check.",
+        )
+
+        log_contains(
+            caplog,
+            "inmanta.server.bootloader",
+            logging.INFO,
+            "Successfully connected to the database (PostgreSQL server version",
+        )
 
         log_contains(caplog, "inmanta.server.server", logging.INFO, "Starting server endpoint")
 
@@ -1756,9 +1809,9 @@ async def test_delete_active_version(client, clienthelper, server, environment, 
     assert result.result["message"] == "Invalid request: Cannot delete the active version"
 
 
-def set_required_postgresql_version(dir: str, version: str) -> PostgreSQLVersion:
+def write_compatibility_json_file(dir: str, minimal_pg_version: int) -> PostgreSQLVersion:
     compatibility_file = os.path.join(dir, "compatibility.json")
-    json_data = {"system_requirements": {"postgres_version": version}}
+    json_data = {"system_requirements": {"postgres_version": minimal_pg_version}}
     with open(compatibility_file, "w", encoding="utf-8") as fh:
         json.dump(json_data, fh)
 
@@ -1770,13 +1823,13 @@ def set_required_postgresql_version(dir: str, version: str) -> PostgreSQLVersion
 
 
 @pytest.mark.parametrize("minimal_pg_version", [0, sys.maxsize])
-async def test_postgresqlversion_comparison(tmp_path, minimal_pg_version, read_postgresql_version_from_db):
+async def test_postgresqlversion_comparison(tmp_path, minimal_pg_version, postgresql_version_from_db):
     """
     Unit test for the PostgreSQLVersion utility class. This test checks the 'from_database' and the
     'from_compatibility_file' constructors as well as the class' comparison operator.
     """
-    required_version = set_required_postgresql_version(dir=tmp_path, version=minimal_pg_version)
-    installed_version = read_postgresql_version_from_db
+    required_version = write_compatibility_json_file(dir=tmp_path, minimal_pg_version=minimal_pg_version)
+    installed_version = postgresql_version_from_db
 
     if minimal_pg_version == 0:
         assert installed_version > required_version
@@ -1794,5 +1847,5 @@ async def test_postgresqlversion(tmp_path):
     expected_machine_readable_output = [130_000, 160_010, 170_006]
 
     for _input, _output in zip(human_readable_input, expected_machine_readable_output):
-        version = set_required_postgresql_version(dir=tmp_path, version=_input)
+        version = write_compatibility_json_file(dir=tmp_path, minimal_pg_version=_input)
         assert version.version == _output
