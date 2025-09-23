@@ -672,7 +672,6 @@ async def test_bootloader_connect_running_db(
     """
     config.Config.set("database", "wait_time", db_wait_time)
 
-    installed_postgresql_version = postgresql_version_from_db
     required_version = write_compatibility_json_file(dir=tmp_path, minimal_pg_version=minimal_pg_version)
     ibl: InmantaBootloader = InmantaBootloader(configure_logging=True)
 
@@ -694,7 +693,7 @@ async def test_bootloader_connect_running_db(
             if minimal_pg_version == sys.maxsize:
                 unsupported_pg_version_error = (
                     f"The database at {postgres_db.host} is using PostgreSQL version "
-                    f"{installed_postgresql_version}. This version is not supported by this "
+                    f"{postgresql_version_from_db}. This version is not supported by this "
                     "version of the Inmanta orchestrator. Please make sure to update to PostgreSQL "
                     f"{required_version}."
                 )
@@ -712,7 +711,7 @@ async def test_bootloader_connect_running_db(
                     caplog,
                     "inmanta.server.bootloader",
                     logging.INFO,
-                    f"Successfully connected to the database (PostgreSQL server version {installed_postgresql_version}).",
+                    f"Successfully connected to the database (PostgreSQL server version {postgresql_version_from_db}).",
                 )
 
         log_contains(caplog, "inmanta.server.server", logging.INFO, "Starting server endpoint")
