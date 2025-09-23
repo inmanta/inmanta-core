@@ -6,6 +6,6 @@ description: >
 issue-nr: 9543
 issue-repo: inmanta-core
 change-type: major
-destination-branches: [master, iso8]
+destination-branches: [master]
 sections:
   upgrade-note: "{{description}}"
