@@ -5,7 +5,7 @@ description: >
   The minimal PostgreSQL version can be found on the "Compatibility" page of the Inmanta documentation.
 issue-nr: 9543
 issue-repo: inmanta-core
-change-type: minor
+change-type: major
 destination-branches: [master, iso8]
 sections:
   upgrade-note: "{{description}}"
