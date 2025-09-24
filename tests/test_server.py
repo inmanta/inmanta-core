@@ -586,80 +586,9 @@ async def test_server_logs_address(server_config, caplog, async_finalizer):
         log_contains(caplog, "protocol.rest", logging.INFO, f"Server listening on {address}:")
 
 
-class MockConnection:
-    """
-    Mock connection class to simulate an asyncpg connection.
-    This class includes a close method to mimic closing a database connection.
-    """
-
-    async def close(self, timeout: int) -> None:
-        return
-
-    async def fetch(self, query: str) -> list[dict[str, str]]:
-        return [{"server_version_num": "160010", "server_version": "16.10"}]
-
-
 @pytest.fixture
 async def postgresql_version_from_db(postgresql_client) -> Awaitable[PostgreSQLVersion]:
     yield await PostgreSQLVersion.from_database(postgresql_client)
-
-
-@pytest.mark.parametrize("db_wait_time", ["20", "0"])
-async def test_bootloader_db_wait(monkeypatch, tmpdir, caplog, db_wait_time: str) -> None:
-    """
-    Tests the Inmanta server bootloader's behavior with respect to waiting for the database to be ready before proceeding
-    with the startup, based on the 'db_wait_time' configuration.
-    """
-    state_dir: str = tmpdir.mkdir("state_dir").strpath
-    config.Config.set("database", "wait_time", db_wait_time)
-    config.Config.set("config", "state-dir", state_dir)
-
-    state = {"first_connect": True}
-
-    async def mock_asyncpg_connect(*args, **kwargs) -> MockConnection:
-        """
-        Mock function to replace asyncpg.connect.
-        Will raise an Exception on the first invocation.
-        """
-        if state["first_connect"]:
-            state["first_connect"] = False
-            raise Exception("Connection failure")
-        else:
-            return MockConnection()
-
-    async def mock_start(self) -> None:
-        """Mocks the call to self.restserver.start()."""
-        return
-
-    monkeypatch.setattr("inmanta.server.protocol.Server.start", mock_start)
-    monkeypatch.setattr("asyncpg.connect", mock_asyncpg_connect)
-    ibl: InmantaBootloader = InmantaBootloader(configure_logging=True)
-    caplog.set_level(logging.INFO)
-    caplog.clear()
-    start_task: asyncio.Task = asyncio.create_task(ibl.start())
-    await start_task
-
-    if db_wait_time != "0":
-        log_contains(caplog, "inmanta.server.bootloader", logging.INFO, "Waiting for database to be up.")
-        log_contains(
-            caplog,
-            "inmanta.server.bootloader",
-            logging.INFO,
-            "Successfully connected to the database (PostgreSQL server version ",
-        )
-    else:
-        # If db_wait_time is "0", the wait_for_db method is not called,
-        # hence "Successfully connected to the database." log message will not appear.
-        log_doesnt_contain(
-            caplog,
-            "inmanta.server.bootloader",
-            logging.INFO,
-            "Successfully connected to the database (PostgreSQL server version ",
-        )
-
-    log_contains(caplog, "inmanta.server.server", logging.INFO, "Starting server endpoint")
-
-    await ibl.stop(timeout=20)
 
 
 @pytest.mark.parametrize("db_wait_time", ["2", "0"])
