@@ -676,7 +676,8 @@ async def test_bootloader_start_invalid_compatibility_file(tmp_path, server_conf
 
     try:
         invalid_compatibility_file_error = (
-            "Invalid compatibility file schema. Missing 'postgres_version' section in file: %s" % compatibility_file
+            "Invalid compatibility file schema. Missing 'system_requirements.postgres_version' section in file: %s"
+            % compatibility_file
         )
 
         with pytest.raises(ServerStartFailure) as exc_info:

@@ -393,7 +393,7 @@ class PostgreSQLVersion:
     @classmethod
     async def from_database(cls, conn: asyncpg.Connection) -> "PostgreSQLVersion":
         """
-        Helper method to retrieve the installed postgreSQL version. This method queries
+        Helper method to retrieve the postgreSQL version used in the database. This method queries
         the database by using the conn parameter. The caller is responsible for closing this
         connection.
         """
@@ -407,10 +407,11 @@ class PostgreSQLVersion:
         """
         Helper method to retrieve the minimal required postgreSQL version configured under the
         system_requirements->postgres_version section of the compatibility file. Returns None
-        if the server.compatibility_file option is set to None
+        if the server.compatibility_file option is set to None or to empty string.
 
-        :raises ServerStartFailure: If the compatibility file doesn't exist or if the
-            'system_requirements->postgres_version' section is not present.
+        :raises ServerStartFailure: If the compatibility file doesn't exist.
+        :raises ServerStartFailure: If the 'system_requirements->postgres_version' section is not present
+            in the compatibility file.
         """
         compatibility_data = {}
         compatibility_file: str | None = config.server_compatibility_file.get()
@@ -427,7 +428,8 @@ class PostgreSQLVersion:
         required_version: int | None = compatibility_data.get("system_requirements", {}).get("postgres_version")
         if required_version is None:
             raise ServerStartFailure(
-                "Invalid compatibility file schema. Missing 'postgres_version' section in file: %s" % compatibility_file
+                "Invalid compatibility file schema. Missing 'system_requirements.postgres_version' section in file: %s"
+                % compatibility_file
             )
         human_readable_version = version.Version(str(required_version))
         machine_readable_version = human_readable_version.major * 10_000 + human_readable_version.minor
