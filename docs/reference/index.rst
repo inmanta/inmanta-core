@@ -18,6 +18,7 @@ Inmanta, please check out the :doc:`../quickstart` guide.
     json
     expertfeatures
     modules
+    python_client
     openapi
     compatibility
     apilinks
