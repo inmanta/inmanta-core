@@ -105,25 +105,25 @@ Make sure you add the inmanta plugin to your mypy configuration, e.g. using the 
 
 For example, given the following python file:
 
-    .. code-block:: python
+.. code-block:: python
 
-        from inmanta.protocol.endpoints import Client
+    from inmanta.protocol.endpoints import Client
 
 
-        async def main() -> None:
-            c: Client
-            reveal_type(c)
+    async def main() -> None:
+        c: Client
+        reveal_type(c)
 
-            reveal_type(c.environment_list)
-            reveal_type(await c.environment_list().value())
-            reveal_type(c.environment_list().all())
+        reveal_type(c.environment_list)
+        reveal_type(await c.environment_list().value())
+        reveal_type(c.environment_list().all())
 
 
 Use mypy to reveal typing information:
 
-    .. code-block:: sh
+.. code-block:: sh
 
-        $ mypy <path/to/file.py>
+    $ mypy <path/to/file.py>
 
 
 Endpoints
