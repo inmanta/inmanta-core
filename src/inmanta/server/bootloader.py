@@ -118,7 +118,8 @@ class InmantaBootloader:
     async def check_database_before_server_start(self) -> None:
         """
         Perform database connectivity and version compatibility check. These checks can be disabled by
-        respectively setting the database.wait_time option to 0 and the server.compatibility_file option to None.
+        respectively setting the database.wait_time option to 0 and the server.compatibility_file option
+        to None or to an empty string.
 
         These checks are performed before starting any slice e.g. to bail before any database migration is attempted
         in case an incompatible PostgreSQL version is detected.
@@ -133,7 +134,6 @@ class InmantaBootloader:
         The check is bypassed if the database.wait_time option is set to 0.
 
         :raises Exception: If the connectivity cannot be established within the configured database.wait_time.
-
         """
         db_wait_time: int = config.db_wait_time.get()
 
@@ -146,7 +146,7 @@ class InmantaBootloader:
         This method looks for the required PostgreSQL version defined in the compatibility file (Whose path is configured by
         the server.compatibility_file option) and checks that the PostgreSQL version of the database meets this requirement.
 
-        The check is bypassed if the server_compatibility_file option is set to None.
+        The check is bypassed if the server_compatibility_file option is set to None or to an empty string.
 
         :raises ServerStartFailure: If the compatibility file schema is missing the `system_requirements->postgres_version`
             section.

@@ -670,9 +670,6 @@ async def test_bootloader_start_invalid_compatibility_file(tmp_path, server_conf
         json.dump(json_data, fh)
     config.Config.set("server", "compatibility_file", compatibility_file)
 
-    # Make sure we wait for the db to come up
-    config.Config.set("database", "wait_time", "2")
-
     ibl: InmantaBootloader = InmantaBootloader(configure_logging=True)
 
     caplog.set_level(logging.INFO)
@@ -695,9 +692,6 @@ async def test_bootloader_start_no_compatibility_file(tmp_path, server_config, p
     Make sure the minimal postgres version compatibility check is disabled
     when no compatibility file is set.
     """
-
-    # Make sure we wait for the db to come up
-    config.Config.set("database", "wait_time", "2")
 
     ibl: InmantaBootloader = InmantaBootloader(configure_logging=True)
 
