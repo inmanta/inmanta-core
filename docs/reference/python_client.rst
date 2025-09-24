@@ -90,12 +90,20 @@ sort
 Type inspection
 ===============
 
-.. note::
 
-    # TODO add info on how to setup this mypy plugin
-    # TODO see if the endpoint name can easily be added to the swagger doc
-    Is it possible to inspect typing information about the :py:class:`inmanta.protocol.common.Client` and the
-    provided endpoints via the inmanta mypy plugin. For example, given the following python file:
+Is it possible to inspect typing information about the :py:class:`inmanta.protocol.common.Result` (or :py:class:`inmanta.protocol.common.PageableResult`)
+returned by an endpoint by using the inmanta mypy plugin.
+
+Make sure you add the inmanta plugin to your mypy configuration, e.g. using the ``pyproject.toml`` file:
+
+
+.. code-block:: toml
+
+    [tool.mypy]
+    plugins = 'inmanta.mypy'
+
+
+For example, given the following python file:
 
     .. code-block:: python
 
@@ -111,7 +119,7 @@ Type inspection
             reveal_type(c.environment_list().all())
 
 
-    Calling the mypy plugin will reveal typing information:
+Use mypy to reveal typing information:
 
     .. code-block:: sh
 
