@@ -607,41 +607,49 @@ async def test_bootloader_connect_running_db(
     caplog.clear()
     caplog.set_level(logging.INFO)
 
-    try:
+    def _check_database_connectivity_logs():
         if db_wait_time == "0":
-            await ibl.start()
             # If db_wait_time is "0", the wait_for_db method is not called,
             # hence "Successfully connected to the database." log message will not appear.
             log_doesnt_contain(
                 caplog,
                 "inmanta.server.bootloader",
                 logging.INFO,
-                "Successfully connected to the database (PostgreSQL server version ",
+                "Successfully connected to the database.",
             )
         else:
-            if minimal_pg_version == sys.maxsize:
-                unsupported_pg_version_error = (
-                    f"The database at {postgres_db.host} is using PostgreSQL version "
-                    f"{postgresql_version_from_db}. This version is not supported by this "
-                    "version of the Inmanta orchestrator. Please make sure to update to PostgreSQL "
-                    f"{required_version}."
-                )
+            log_contains(
+                caplog,
+                "inmanta.server.bootloader",
+                logging.INFO,
+                "Successfully connected to the database.",
+            )
 
-                with pytest.raises(ServerStartFailure) as exc_info:
-                    await ibl.start()
-                    assert unsupported_pg_version_error in str(exc_info.value)
+    try:
+        if minimal_pg_version == sys.maxsize:
+            unsupported_pg_version_error = (
+                f"The database at {postgres_db.host} is using PostgreSQL version "
+                f"{postgresql_version_from_db}. This version is not supported by this "
+                "version of the Inmanta orchestrator. Please make sure to update to PostgreSQL "
+                f"{required_version}."
+            )
 
-                return
-
-            else:
+            with pytest.raises(ServerStartFailure) as exc_info:
                 await ibl.start()
+                _check_database_connectivity_logs()
+                assert unsupported_pg_version_error in str(exc_info.value)
 
-                log_contains(
-                    caplog,
-                    "inmanta.server.bootloader",
-                    logging.INFO,
-                    f"Successfully connected to the database (PostgreSQL server version {postgresql_version_from_db}).",
-                )
+            return
+
+        else:
+            await ibl.start()
+            _check_database_connectivity_logs()
+            log_contains(
+                caplog,
+                "inmanta.server.bootloader",
+                logging.INFO,
+                f"Successfully connected to the database (PostgreSQL server version {postgresql_version_from_db}).",
+            )
 
         log_contains(caplog, "inmanta.server.server", logging.INFO, "Starting server endpoint")
 

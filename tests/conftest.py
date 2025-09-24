@@ -806,6 +806,7 @@ async def server_config(
         config.Config.set("server", "bind-port", port)
         config.Config.set("server", "bind-address", "127.0.0.1")
         config.Config.set("server", "agent-process-purge-interval", "0")
+        config.Config.set("server", "compatibility_file", "")
         config.Config.set("config", "executable", os.path.abspath(inmanta.app.__file__))
         config.Config.set("server", "agent-timeout", "2")
         config.Config.set("agent", "agent-repair-interval", "0")

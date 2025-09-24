@@ -103,11 +103,8 @@ class InmantaBootloader:
 
     async def start(self) -> None:
         self.start_loggers_for_extensions()
-        db_wait_time: int = config.db_wait_time.get()
 
-        if db_wait_time != 0:
-            # Wait for the database to be up before starting the server
-            await self.wait_for_db(db_wait_time=db_wait_time)
+        await self.check_database_before_server_start()
 
         ctx = self.load_slices()
         version = ctx.get_feature_manager().get_product_metadata().version
@@ -117,6 +114,65 @@ class InmantaBootloader:
             ctx.get_feature_manager().add_slice(mypart)
         await self.restserver.start()
         self.started = True
+
+    async def check_database_before_server_start(self) -> None:
+        """
+        Perform database connectivity and version compatibility check. These checks can be disabled by
+        respectively setting the database.wait_time option to 0 and the server.compatibility_file option to None.
+
+        These checks are performed before starting any slice e.g. to bail before any database migration is attempted
+        in case an incompatible PostgreSQL version is detected.
+        """
+        await self._database_connectivity_check()
+        await self._database_version_compatibility_check()
+
+    async def _database_connectivity_check(self) -> None:
+        """
+        This method attempts to connect to the database.
+
+        The check is bypassed if the database.wait_time option is set to 0.
+
+        :raises Exception: If the connectivity cannot be established within the configured database.wait_time.
+
+        """
+        db_wait_time: int = config.db_wait_time.get()
+
+        if db_wait_time != 0:
+            # Wait for the database to be up before starting the server
+            await self.wait_for_db(db_wait_time=db_wait_time)
+
+    async def _database_version_compatibility_check(self) -> None:
+        """
+        This method looks for the required PostgreSQL version defined in the compatibility file (Whose path is configured by
+        the server.compatibility_file option) and checks that the PostgreSQL version of the database meets this requirement.
+
+        The check is bypassed if the server_compatibility_file option is set to None.
+
+        :raises ServerStartFailure: If the compatibility file schema is missing the `system_requirements->postgres_version`
+            section.
+        :raises ServerStartFailure: If the database version is lower than the required version defined in
+            the compatibility file.
+        """
+        required_postgresql_version = PostgreSQLVersion.from_compatibility_file()
+        conn: asyncpg.Connection | None = None
+        try:
+            conn = await self.get_db_connection()
+            database_postgresql_version = await PostgreSQLVersion.from_database(conn)
+
+            if required_postgresql_version is None:
+                LOGGER.debug("No compatibility file is set. Bypassing minimal required postgres version check.")
+            else:
+                if database_postgresql_version < required_postgresql_version:
+                    raise ServerStartFailure(
+                        f"The database at {config.db_host.get()} is using PostgreSQL version "
+                        f"{database_postgresql_version}. This version is not supported by this "
+                        "version of the Inmanta orchestrator. Please make sure to update to PostgreSQL "
+                        f"{required_postgresql_version}."
+                    )
+            LOGGER.info("Successfully connected to the database (PostgreSQL server version %s).", database_postgresql_version)
+        finally:
+            if conn is not None:
+                await conn.close(timeout=5)  # close the connection
 
     def start_loggers_for_extensions(self, on_config: InmantaLoggerConfig | None = None) -> FullLoggingConfig:
         ctx = self.load_slices()
@@ -281,13 +337,7 @@ class InmantaBootloader:
             self.ctx = ctx
         return ctx
 
-    async def wait_for_db(self, db_wait_time: int) -> None:
-        """Wait for the database to be up by attempting to connect at intervals.
-
-        :param db_wait_time: Maximum time to wait for the database to be up, in seconds.
-        """
-
-        start_time = asyncio.get_event_loop().time()
+    async def get_db_connection(self) -> asyncpg.Connection:
 
         # Retrieve database connection settings from the configuration
         db_settings = {
@@ -298,41 +348,29 @@ class InmantaBootloader:
             "database": config.db_name.get(),
         }
 
-        required_postgresql_version = PostgreSQLVersion.from_compatibility_file()
+        # Attempt to create a database connection
 
-        conn: asyncpg.Connection | None = None
+        return await asyncpg.connect(**db_settings, timeout=5)  # raises TimeoutError after 5 seconds
+
+    async def wait_for_db(self, db_wait_time: int) -> None:
+        """Wait for the database to be up by attempting to connect at intervals.
+
+        :param db_wait_time: Maximum time to wait for the database to be up, in seconds.
+        """
+
+        start_time = asyncio.get_event_loop().time()
+
         while True:
             try:
                 # Attempt to create a database connection
-                conn = await asyncpg.connect(**db_settings, timeout=5)  # raises TimeoutError after 5 seconds
-                database_postgresql_version = await PostgreSQLVersion.from_database(conn)
-
-                if required_postgresql_version is None:
-                    LOGGER.debug("No compatibility file is set. Bypassing minimal required postgres version check.")
-                else:
-                    if database_postgresql_version < required_postgresql_version:
-                        raise ServerStartFailure(
-                            f"The database at {config.db_host.get()} is using PostgreSQL version "
-                            f"{database_postgresql_version}. This version is not supported by this "
-                            "version of the Inmanta orchestrator. Please make sure to update to PostgreSQL "
-                            f"{required_postgresql_version}."
-                        )
-
-                LOGGER.info(
-                    "Successfully connected to the database (PostgreSQL server version %s).", database_postgresql_version
-                )
-
+                conn = await self.get_db_connection()
+                LOGGER.info("Successfully connected to the database.")
+                await conn.close(timeout=5)  # close the connection
                 return
-            except ServerStartFailure:
-                raise
             except asyncio.TimeoutError:
                 LOGGER.info("Waiting for database to be up: Connection attempt timed out.")
             except Exception:
                 LOGGER.info("Waiting for database to be up.", exc_info=True)
-            finally:
-                if conn is not None:
-                    await conn.close(timeout=5)  # close the connection
-
             # Check if the maximum wait time has been exceeded
             if 0 < db_wait_time < asyncio.get_event_loop().time() - start_time:
                 LOGGER.error("Timed out waiting for the database to be up.")
@@ -369,14 +407,19 @@ class PostgreSQLVersion:
         """
         Helper method to retrieve the minimal required postgreSQL version configured under the
         system_requirements->postgres_version section of the compatibility file. Returns None
-        if the file doesn't exist.
+        if the server.compatibility_file option is set to None
 
-        :raises: ServerStartFailure if the 'system_requirements->postgres_version' is not present
+        :raises ServerStartFailure: If the compatibility file doesn't exist or if the
+            'system_requirements->postgres_version' section is not present.
         """
         compatibility_data = {}
-        compatibility_file: str = config.server_compatibility_file.get()
-        if not os.path.exists(compatibility_file):
+        compatibility_file: str | None = config.server_compatibility_file.get()
+        if not compatibility_file:
+            # Bypass the check if compatibility_file is None or ""
             return None
+
+        if not os.path.exists(compatibility_file):
+            raise ServerStartFailure("The configured compatibility file doesn't exist: %s" % compatibility_file)
 
         with open(compatibility_file) as fh:
             compatibility_data = json.load(fh)
@@ -393,6 +436,11 @@ class PostgreSQLVersion:
 
     def __lt__(self, other: "PostgreSQLVersion") -> bool:
         return self.version < other.version
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, PostgreSQLVersion):
+            return self.version == other.version
+        return False
 
     def __str__(self) -> str:
         """
