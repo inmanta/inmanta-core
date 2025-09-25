@@ -53,7 +53,6 @@ def get_command(
     server_extensions=[],
     version=False,
     command: str = "server",
-    compatibility_file=None,
 ):
     """Build an argument string for subprocess to run the orchestrator inmanta.app entrypoint"""
     root_dir = tmp_dir.mkdir("root").strpath
@@ -99,8 +98,6 @@ def get_command(
     if version:
         args += ["--version"]
     args += ["-c", config_file, command]
-    if compatibility_file is not None:
-        args += ["--compatibility-file", compatibility_file]
     return (args, log_dir)
 
 
@@ -371,7 +368,6 @@ def test_startup_failure(tmpdir, postgres_db, database_name):
         dbuser=postgres_db.user,
         dbpass=postgres_db.password,
         server_extensions=["badplugin"],
-        compatibility_file="",
     )
     pp = ":".join(sys.path)
     # Add a bad module

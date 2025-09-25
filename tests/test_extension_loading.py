@@ -262,7 +262,6 @@ async def test_custom_feature_manager(
         config.Config.set("cmdline_rest_transport", "port", port)
         config.Config.set("server", "bind-port", port)
         config.Config.set("server", "bind-address", "127.0.0.1")
-        config.Config.set("server", "compatibility_file", "")
         config.server_enabled_extensions.set("testfm")
 
         ibl = InmantaBootloader(configure_logging=True)
