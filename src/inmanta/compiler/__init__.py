@@ -25,7 +25,8 @@ from typing import TYPE_CHECKING, Optional
 
 import inmanta.ast.type as inmanta_type
 import inmanta.execute.dataflow as dataflow
-from inmanta import const, module
+from inmanta import const, module, references, resources
+from inmanta.agent import handler
 from inmanta.ast import (
     AnchorTarget,
     AttributeException,
@@ -138,6 +139,20 @@ def get_types_and_scopes() -> tuple[dict[str, inmanta_type.Type], Namespace]:
     sched = scheduler.Scheduler(compiler_config.track_dataflow())
     sched.define_types(compiler, statements, blocks)
     return sched.get_types(), compiler.get_ns()
+
+
+@stable_api
+def reset() -> None:
+    """
+    Reset the state of the scheduler. Used by pytest-inmanta, because it
+    performs consecutive compiles within the same process.
+    """
+    LOGGER.debug("Resetting compiler state")
+    resources.resource.reset()
+    handler.Commander.reset()
+    references.reference.reset()
+    references.mutator.reset()
+    PluginMeta.clear()
 
 
 class Compiler:
