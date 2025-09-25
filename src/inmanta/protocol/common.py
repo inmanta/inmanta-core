@@ -1134,7 +1134,7 @@ class Result(Generic[R]):
         Returns the value wrapped in this result, parsed as the method's return type. Only works for typed methods.
         If paged, returns only the values for the page represented by this result. To get all results, see `all()`.
 
-        Converts return codes to http exceptions where applicable.
+        Converts return codes to http exceptions where appliccable.
 
         :raises BaseHttpException: when return code is not 200
         """
