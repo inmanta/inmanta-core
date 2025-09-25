@@ -21,8 +21,7 @@ from collections import defaultdict
 
 import more_itertools
 
-from inmanta import compiler
-from inmanta import module, plugins, references, resources
+from inmanta import compiler, module, plugins, references, resources
 from inmanta.agent import handler
 from inmanta.ast import Range
 from inmanta.compiler import Compiler
