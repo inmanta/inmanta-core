@@ -153,6 +153,7 @@ def reset() -> None:
     references.reference.reset()
     references.mutator.reset()
     PluginMeta.clear()
+    module.Project.get().invalidate_state()
 
 
 class Compiler:

@@ -22,6 +22,8 @@ from collections import defaultdict
 import more_itertools
 
 from inmanta import compiler
+from inmanta import module, plugins, references, resources
+from inmanta.agent import handler
 from inmanta.ast import Range
 from inmanta.compiler import Compiler
 from inmanta.execute import scheduler
@@ -382,3 +384,42 @@ def test_constructor_renamed_namespace(snippetcompiler):
     range_target = Range(target_path, 1, 8, 1, 12)
 
     assert (range_source, range_target) in anchormap
+
+
+def test_compiler_reset_method(snippetcompiler):
+    """
+    Verify that the reset() method of the compiler works correctly.
+    """
+    snippetcompiler.setup_for_snippet(
+        """
+        import successhandlermodule
+
+        ref = successhandlermodule::create_my_ref("base_str")
+
+        successhandlermodule::SuccessResourceWithReference(
+            name="test_success_r_1",
+            agent="agent_1",
+            my_attr=ref
+        )
+        """
+    )
+    compiler_obj = Compiler()
+    (statements, blocks) = compiler_obj.compile()
+
+    # Verify we have compiler state
+    assert list(resources.resource.get_entity_resources())
+    assert handler.Commander.get_handlers()
+    assert [k for k, _ in references.reference.get_references() if not k.startswith("core::")]
+    assert [k for k, _ in references.mutator.get_mutators() if not k.startswith("core::")]
+    assert plugins.PluginMeta.get_functions()
+    assert module.Project.get().modules
+
+    compiler.reset()
+
+    # Verify that compiler state was cleaned up
+    assert not list(resources.resource.get_entity_resources())
+    assert not handler.Commander.get_handlers()
+    assert not [k for k, _ in references.reference.get_references() if not k.startswith("core::")]
+    assert not [k for k, _ in references.mutator.get_mutators() if not k.startswith("core::")]
+    assert not plugins.PluginMeta.get_functions()
+    assert not module.Project.get().modules
