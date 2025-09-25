@@ -148,8 +148,8 @@ class InmantaBootloader:
 
         The check is bypassed if the server_compatibility_file option is set to None or to an empty string.
 
-        :raises ServerStartFailure: If the compatibility file schema is missing the `system_requirements->postgres_version`
-            section.
+        :raises ServerStartFailure: If the compatibility file doesn't exist or its schema is missing the
+            `system_requirements->postgres_version` section.
         :raises ServerStartFailure: If the database version is lower than the required version defined in
             the compatibility file.
         """
