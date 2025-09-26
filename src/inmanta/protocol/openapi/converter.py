@@ -474,6 +474,8 @@ class OperationHandler:
             responses=responses,
             operationId=url_method.method_name,
             parameters=(parameters if len(parameters) else None),
+            # SOLUTION 1: easy/ugly
+            # summary=f"{url_method.short_method_description} [{url_method.method_name}]",
             summary=url_method.short_method_description,
             description=url_method.long_method_description,
             tags=tags,
