@@ -38,12 +38,12 @@ async def test_add_resource_set_table_and_drop_model(
     # Check if resource_set table is populated correctly
     res_sets_raw = await data.ResourceSet.get_list()
     assert len(res_sets_raw) != 0
-    res_sets = {(r.environment, r.id, r.name) for r in res_sets_raw}
+    res_sets = {(r.environment, r.id) for r in res_sets_raw}
     assert len(res_sets_raw) == len(res_sets)
     resources = await data.Resource.get_list()
-    resource_set_info = {(r.environment, r.resource_set_id, r.resource_set) for r in resources}
+    resource_set_info = {(r.environment, r.resource_set) for r in resources}
     assert res_sets == resource_set_info
-    resource_set_names = {r.resource_set for r in resources}
+    resource_set_names = {r.name for r in res_sets_raw}
     assert None in resource_set_names
     assert "set-a" in resource_set_names
 
@@ -52,7 +52,7 @@ async def test_add_resource_set_table_and_drop_model(
         SELECT rs.name, rscm.*
         FROM public.resource_set_configuration_model AS rscm
         JOIN public.resource_set AS rs
-            ON rs.environment=rscm.environment AND rs.id=rscm.resource_set_id
+            ON rs.environment=rscm.environment AND rs.id=rscm.resource_set
         ORDER BY rs.name
         """
     )

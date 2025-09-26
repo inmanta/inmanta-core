@@ -48,7 +48,7 @@ async def assert_resource_set_assignment(environment, assignment: dict[str, Opti
     """
     resources = await Resource.get_resources_in_latest_version(environment=environment)
     assert len(resources) == len(assignment)
-    actual_assignment = {r.attributes["key"]: r.resource_set for r in resources}
+    actual_assignment = {r.attributes["key"]: r.resource_set_name for r in resources}
     assert actual_assignment == assignment
 
 

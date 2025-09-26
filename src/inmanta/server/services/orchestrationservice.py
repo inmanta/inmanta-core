@@ -87,14 +87,14 @@ class CrossResourceSetDependencyError(Exception):
 class ResourceSetValidator:
     def __init__(self, resources: abc.Collection[ResourceDTO]) -> None:
         self.resources = resources
-        self.rid_to_resource_set = {res.resource_id: res.resource_set for res in self.resources}
+        self.rid_to_resource_set = {res.resource_id: res.resource_set_name for res in self.resources}
 
     def _is_cross_resource_set_dependency(self, res: ResourceDTO, rid_dependency: ResourceIdStr) -> bool:
         """
         Return True iff the dependency between resource res and the resource with id rid_dependency is a cross-resource set
         dependency.
         """
-        if res.resource_set is None:
+        if res.resource_set_name is None:
             # Resource is in shared resource set.
             return False
         if rid_dependency not in self.rid_to_resource_set:
@@ -105,7 +105,7 @@ class ResourceSetValidator:
         if resource_set_dep is None:
             # Dependency towards shared resource set.
             return False
-        return res.resource_set != resource_set_dep
+        return res.resource_set_name != resource_set_dep
 
     def ensure_no_cross_resource_set_dependencies(self) -> None:
         """
@@ -168,10 +168,10 @@ class PartialUpdateMerger:
         self.modified_resource_sets = updated_resource_sets | deleted_resource_sets
         self.updated_and_shared_resources_old = updated_and_shared_resources_old
         self.non_shared_resources_in_partial_update_old: abc.Mapping[ResourceIdStr, ResourceDTO] = {
-            rid: r for rid, r in self.updated_and_shared_resources_old.items() if r.resource_set is not None
+            rid: r for rid, r in self.updated_and_shared_resources_old.items() if r.resource_set_name is not None
         }
         self.shared_resources_old: abc.Mapping[ResourceIdStr, ResourceDTO] = {
-            rid: r for rid, r in self.updated_and_shared_resources_old.items() if r.resource_set is None
+            rid: r for rid, r in self.updated_and_shared_resources_old.items() if r.resource_set_name is None
         }
         self.rids_deleted_resource_sets = rids_deleted_resource_sets
 
@@ -190,7 +190,7 @@ class PartialUpdateMerger:
         A replacement constructor method for this class. This method is used to work around the limitation that no async
         calls can be done in a constructor. See docstring real constructor for meaning of arguments.
         """
-        updated_and_shared_resources_old: abc.Mapping[ResourceIdStr, data.Resource] = (
+        updated_and_shared_resources_old: abc.Mapping[ResourceIdStr, ResourceDTO] = (
             await data.Resource.get_resources_in_resource_sets(
                 environment=env_id,
                 version=base_version,
@@ -199,9 +199,7 @@ class PartialUpdateMerger:
                 connection=connection,
             )
         )
-        updated_and_shared_resources_old_dto: abc.Mapping[ResourceIdStr, ResourceDTO] = {
-            k: v.to_dto() for k, v in updated_and_shared_resources_old.items()
-        }
+
         rids_deleted_resource_sets: abc.Set[ResourceIdStr] = {
             rid
             for rid in (
@@ -220,7 +218,7 @@ class PartialUpdateMerger:
             rids_in_partial_compile,
             updated_resource_sets,
             deleted_resource_sets,
-            updated_and_shared_resources_old_dto,
+            updated_and_shared_resources_old,
             rids_deleted_resource_sets,
         )
 
@@ -236,8 +234,8 @@ class PartialUpdateMerger:
                   or a resource set that is updated by this partial compile.
         """
         self._validate_constraints(updated_and_shared_resources)
-        shared_resources = {rid: r for rid, r in updated_and_shared_resources.items() if r.resource_set is None}
-        updated_resources = {rid: r for rid, r in updated_and_shared_resources.items() if r.resource_set is not None}
+        shared_resources = {rid: r for rid, r in updated_and_shared_resources.items() if r.resource_set_name is None}
+        updated_resources = {rid: r for rid, r in updated_and_shared_resources.items() if r.resource_set_name is not None}
         shared_resources_merged = {r.resource_id: r for r in self._merge_shared_resources(shared_resources) or ()}
         # Updated go last, so that in case of overlap, we get the updated one
         # Validation on move is done later
@@ -256,8 +254,8 @@ class PartialUpdateMerger:
             matching_resource_old_model = self.updated_and_shared_resources_old[res.resource_id]
 
             if (
-                res.resource_set != matching_resource_old_model.resource_set
-                and matching_resource_old_model.resource_set not in self.modified_resource_sets
+                res.resource_set_name != matching_resource_old_model.resource_set_name
+                and matching_resource_old_model.resource_set_name not in self.modified_resource_sets
             ):
                 # We can't move resource
                 # Unless between resource sets we are updating
@@ -265,8 +263,8 @@ class PartialUpdateMerger:
                 raise BadRequest(
                     "A partial compile only migrate resources between resource set that are pushed together:"
                     f" trying to move {res.resource_id} from resource set "
-                    f"{data.ResourceSet.get_printable_name_for_resource_set(matching_resource_old_model.resource_set)} "
-                    f"to {data.ResourceSet.get_printable_name_for_resource_set(res.resource_set)}."
+                    f"{data.ResourceSet.get_printable_name_for_resource_set(matching_resource_old_model.resource_set_name)} "
+                    f"to {data.ResourceSet.get_printable_name_for_resource_set(res.resource_set_name)}."
                 )
 
         resource_set_validator = ResourceSetValidator(new_updated_and_shared_resources.values())
@@ -612,7 +610,7 @@ class OrchestrationService(protocol.ServerSlice):
                 resource_id_value=resource_version_id.attribute_value,
                 attributes=attributes,
                 is_undefined=is_undefined,
-                resource_set=res_set_name,
+                resource_set_name=res_set_name,
             )
 
         rids = set(rid_to_resource.keys())
@@ -845,7 +843,7 @@ class OrchestrationService(protocol.ServerSlice):
 
         for r in rid_to_resource.values():
             # Populate resource_sets with the shared set
-            if r.resource_set is None:
+            if r.resource_set_name is None:
                 resource_sets[r.resource_id] = None
 
         for rid_name in resource_sets.keys():
@@ -1131,8 +1129,9 @@ class OrchestrationService(protocol.ServerSlice):
                 base_version: int = base_model.version
                 base_constraints: str | None = base_model.project_constraints
                 if not base_model.is_suitable_for_partial_compiles:
-                    resources_in_base_version = await data.Resource.get_resources_for_version(env.id, base_version)
-                    resource_set_validator = ResourceSetValidator([r.to_dto() for r in resources_in_base_version])
+                    resource_set_validator = ResourceSetValidator(
+                        await data.Resource.get_resources_for_version_as_dto(env.id, base_version)
+                    )
                     try:
                         resource_set_validator.ensure_no_cross_resource_set_dependencies()
                     except CrossResourceSetDependencyError as e:
