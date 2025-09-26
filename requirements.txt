@@ -12,7 +12,7 @@ cryptography==46.0.1
 docstring-parser==0.17.0
 # documentation
 email-validator==2.3.0
-furo==2025.7.19
+furo==2025.9.25
 graphviz==0.21
 inmanta-dev-dependencies==2.179.0
 inmanta-module-std
