@@ -27,10 +27,10 @@ import uuid
 from collections import abc
 from collections.abc import Sequence
 from enum import Enum, StrEnum
-from typing import ClassVar, Mapping, Optional, Self, Union, assert_never
+from typing import ClassVar, Mapping, Optional, Union, assert_never
 
 import pydantic.schema
-from pydantic import ConfigDict, Field, SerializationInfo, computed_field, field_serializer, field_validator, model_validator
+from pydantic import ConfigDict, Field, SerializationInfo, computed_field, field_serializer, field_validator
 
 import inmanta
 import inmanta.ast.export as ast_export
@@ -576,15 +576,6 @@ class VersionedResourceDetails(ResourceDetails):
 
     resource_version_id: ResourceVersionIdStr
     version: int
-
-    @model_validator(mode="after")
-    def ensure_version_field_set_in_attributes(self) -> Self:
-        # Due to a bug, the version field has always been present in the attributes dictionary.
-        # This bug has been fixed in the database. For backwards compatibility reason we here make sure that the
-        # version field is present in the attributes dictionary served out via the API.
-        if "version" not in self.attributes:
-            self.attributes["version"] = self.version
-        return self
 
 
 class ReleasedResourceDetails(ResourceDetails):
