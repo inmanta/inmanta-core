@@ -342,9 +342,40 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
     def __init__(self, env_path: str, io_threadpool: ThreadPoolExecutor):
         PythonEnvironment.__init__(self, env_path=env_path)
         resourcepool.PoolMember.__init__(self, my_id=os.path.basename(env_path))
-        self.inmanta_venv_status_file: pathlib.Path = pathlib.Path(self.env_path) / const.INMANTA_VENV_STATUS_FILENAME
-        self.folder_name: str = pathlib.Path(self.env_path).name
+
+        # The .inmanta dir contains
+        #   - a status file for bookkeeping. Its presence indicates the successful creation
+        #     of the ExecutorVirtualEnvironment and its age determines if this env can be cleaned up.
+        #   - (Optionally) a requirements.txt file. It holds the python package constraints
+        #     set at the project level enforced on the agent when installing code.
+        self.inmanta_storage: pathlib.Path = pathlib.Path(self.env_path) / ".inmanta"
+
+        self.inmanta_venv_status_file: pathlib.Path = self.inmanta_storage / const.INMANTA_VENV_STATUS_FILENAME
+
         self.io_threadpool = io_threadpool
+
+    def ensure_disk_layout_backwards_compatibility(self) -> None:
+        """
+        Backwards compatibility helper: move files that used to live in the
+        top-level dir of the venv into the dedicated storage dir.
+
+        This upgrades from the layout prior to september 2025
+
+        it should be called under the lock of the VirtualEnvironmentManager
+        """
+        created_storage = False
+
+        for file_name in ["requirements.txt", const.INMANTA_VENV_STATUS_FILENAME]:
+            legacy_path: pathlib.Path = pathlib.Path(self.env_path) / file_name
+            if legacy_path.exists():
+                new_path: pathlib.Path = pathlib.Path(self.inmanta_storage) / file_name
+                if not new_path.exists():
+                    if not created_storage:
+                        os.makedirs(self.inmanta_storage, exist_ok=True)
+                        created_storage = True
+                    # Use copy2 to preserve last access time metadata (for the status file).
+                    shutil.copy2(src=legacy_path, dst=new_path)
+                os.remove(legacy_path)
 
     def _write_constraint_file(self, blueprint: EnvBlueprint) -> str | None:
         """
@@ -352,7 +383,7 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         to it, or None if no such constraint file is defined.
         """
         if blueprint.project_constraints is not None:
-            constraint_file_path = pathlib.Path(self.env_path) / "requirements.txt"
+            constraint_file_path = self.inmanta_storage / "requirements.txt"
             with constraint_file_path.open("w") as f:
                 f.write(blueprint.project_constraints)
             return str(constraint_file_path)
@@ -368,6 +399,9 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         """
         req: list[str] = list(blueprint.requirements)
         await asyncio.get_running_loop().run_in_executor(self.io_threadpool, self.init_env)
+        # Ensure our storage folder exists
+        os.makedirs(self.inmanta_storage, exist_ok=True)
+
         constraint_file: str | None = self._write_constraint_file(blueprint)
         if len(req):  # install_for_config expects at least 1 requirement or a path to install
             await self.async_install_for_config(
@@ -422,6 +456,7 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
             pass
         try:
             LOGGER.debug("Removing venv %s", self.env_path)
+            # Will also delete .inmanta storage dir
             shutil.rmtree(self.env_path)
         except Exception:
             LOGGER.exception(
@@ -436,7 +471,6 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         This method must be called on a threadpool to not block the ioloop.
         """
         self.remove_venv()
-        os.makedirs(self.env_path)
 
 
 class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, str, ExecutorVirtualEnvironment]):
@@ -513,6 +547,7 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
             # No lock here, singe shot prior to start
             current_folder = self.envs_dir / folder
             virtual_environment = ExecutorVirtualEnvironment(env_path=str(current_folder), io_threadpool=self.thread_pool)
+            virtual_environment.ensure_disk_layout_backwards_compatibility()
             if virtual_environment.is_correctly_initialized():
                 self.pool[folder.name] = virtual_environment
             else:
@@ -550,7 +585,7 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
                 env_dir,
                 internal_id,
             )
-            is_new = False  # Returning the path and False for existing directory
+            is_new = False
 
         process_environment = ExecutorVirtualEnvironment(env_dir, self.thread_pool)
 
