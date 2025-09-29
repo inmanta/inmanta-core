@@ -160,6 +160,16 @@ server_ssl_cert = Option(
     "server", "ssl_cert_file", None, "SSL certificate file for the server key. Leave blank to disable SSL", is_str_opt
 )
 
+server_compatibility_file = Option(
+    "server",
+    "compatibility_file",
+    None,
+    "Path to the compatibility.json file. During startup, the server will perform a version compatibility check "
+    "for the PostgreSQL version being used. For more information about this file, please refer to "
+    "the compatibility page in the Inmanta documentation. Leave blank to disable the version compatibility check.",
+    is_str_opt,
+)
+
 
 def ssl_enabled():
     """Is ssl enabled on the server, given the current server config"""
