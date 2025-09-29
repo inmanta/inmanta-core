@@ -1,0 +1,12 @@
+---
+description: >
+  Add a check for the PostgreSQL version of the database on server startup. The server will not start if the PostgreSQL
+  version of the database is not compatible with this version of the orchestrator. Please make sure you update your
+  database if required. The compatible PostgreSQL version can be found in the "Compatibility" page of the Inmanta
+  documentation.
+issue-nr: 9543
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [master]
+sections:
+  upgrade-note: "{{description}}"
