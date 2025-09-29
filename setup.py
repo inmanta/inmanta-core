@@ -6,11 +6,11 @@ requires = [
     "build~=1.0",
     "click-plugins~=1.0",
     # click has been known to publish non-backwards compatible minors in the past (removed deprecated code in 8.1.0)
-    "click>=8.0,<8.3",
+    "click>=8.0,<8.4",
     "colorlog~=6.4",
     "cookiecutter>=1,<3",
     "crontab>=0.23,<2.0",
-    "cryptography>=36,<46",
+    "cryptography>=36,<47",
     # docstring-parser has been known to publish non-backwards compatible minors in the past
     "docstring-parser>=0.10,<0.18",
     "email-validator>=1,<3",

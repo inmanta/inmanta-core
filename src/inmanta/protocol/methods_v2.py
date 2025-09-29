@@ -1741,7 +1741,7 @@ def discovered_resource_create_batch(tid: uuid.UUID, discovered_resources: Seque
     client_types=[ClientType.api],
     api_version=2,
 )
-def discovered_resources_get(tid: uuid.UUID, discovered_resource_id: ResourceIdStr) -> model.DiscoveredResourceABC:
+def discovered_resources_get(tid: uuid.UUID, discovered_resource_id: ResourceIdStr) -> model.DiscoveredResource:
     """
     Get a single discovered resource.
 
@@ -1765,7 +1765,7 @@ def discovered_resources_get_batch(
     end: Optional[str] = None,
     sort: str = "discovered_resource_id.asc",
     filter: Optional[Mapping[str, Sequence[str]]] = None,
-) -> list[model.DiscoveredResourceABC]:
+) -> list[model.DiscoveredResource]:
     """
     Get a list of discovered resources.
 
@@ -1781,7 +1781,8 @@ def discovered_resources_get_batch(
     :param end: The upper limit for the order by column (exclusive).
                 Only one of 'start' and 'end' should be specified at the same time.
     :param sort: Return the results sorted according to the parameter value.
-            The following sorting attributes are supported: 'discovered_resource_id'.
+            The following sorting attributes are supported: 'discovered_resource_id', 'resource_type', 'agent',
+            'resource_id_value'.
             The following orders are supported: 'asc', 'desc'
     :param filter: Filter the list of returned resources.
         Default behavior: return all discovered resources.
@@ -1791,6 +1792,9 @@ def discovered_resources_get_batch(
               resources that are present in any released configuration model of environment tid.
             - filter.managed=false: only return discovered resources that the orchestrator is unaware of i.e. resources
               that are not part of any released configuration model of environment tid.
+            - filter.resource_type: filter by resource type.
+            - filter.agent: filter by agent.
+            - filter.resource_id_value: filter by resource id value.
 
     :return: A list of all matching released resources
     :raise NotFound: This exception is raised when the referenced environment is not found

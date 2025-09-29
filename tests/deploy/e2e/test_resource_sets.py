@@ -175,11 +175,11 @@ async def test_put_partial_copies_unchanged_resource_sets(server, client, enviro
 
 
 async def test_resource_sets_via_put_version(server, client, environment, clienthelper):
-    version = await clienthelper.get_version()
+    version_1 = await clienthelper.get_version()
 
     result = await client.put_version(
         tid=environment,
-        version=version,
+        version=version_1,
         resources=[],
         resource_state={},
         unknowns=[],
@@ -239,6 +239,31 @@ async def test_resource_sets_via_put_version(server, client, environment, client
     }
     result = await client.put_version(
         tid=environment,
+        version=version_1,
+        resources=make_resources(version_1),
+        resource_state={},
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+        resource_sets=resource_sets,
+        module_version_info={},
+    )
+    assert result.code == 200
+
+    # Create project
+    result = await client.list_projects()
+    assert result.code == 200
+    project_id = result.result["projects"][0]["id"]
+
+    # Create environment
+    result = await client.create_environment(project_id=project_id, name="env_2")
+    env_2 = result.result["environment"]["id"]
+    # Create another version on a different environment
+    res = await client.reserve_version(env_2)
+    assert res.code == 200
+    version = res.result["data"]
+    result_2 = await client.put_version(
+        tid=env_2,
         version=version,
         resources=make_resources(version),
         resource_state={},
@@ -248,7 +273,7 @@ async def test_resource_sets_via_put_version(server, client, environment, client
         resource_sets=resource_sets,
         module_version_info={},
     )
-    assert result.code == 200
+    assert result_2.code == 200
 
     resource_list = await data.Resource.get_resources_in_latest_version(uuid.UUID(environment))
     resource_sets_from_db = {resource.resource_id: resource.resource_set for resource in resource_list}
@@ -261,11 +286,11 @@ async def test_resource_sets_via_put_version(server, client, environment, client
     assert set([rs.name for rs in res_sets]) == set(resource_sets_from_db.values())
 
     # Check to see if new resource sets are added and the old ones are present in this version
-    version = await clienthelper.get_version()
+    version_2 = await clienthelper.get_version()
     result = await client.put_version(
         tid=environment,
-        version=version,
-        resources=make_resources(version),
+        version=version_2,
+        resources=make_resources(version_2),
         resource_state={},
         unknowns=[],
         version_info={},
@@ -275,32 +300,47 @@ async def test_resource_sets_via_put_version(server, client, environment, client
     )
     assert result.code == 200
 
-    res_sets = await data.ResourceSet.get_resource_sets_in_version(environment=env_id, version=version)
+    res_sets = await data.ResourceSet.get_resource_sets_in_version(environment=env_id, version=version_2)
     assert len(res_sets) == 4
     assert set([rs.name for rs in res_sets]) == {None, "set-a", "set-b", "set-c"}
 
     # Test clear_resource_sets_in_version
     async with data.ResourceSet.get_connection() as con:
         total_resource_sets = await data.ResourceSet.get_list(connection=con)
+        # env1(4 version2 + 3 version1) + env2(3 version1)
+        assert len(total_resource_sets) == 10
+        resource_sets_env1 = await data.ResourceSet.get_list(environment=env_id, connection=con)
         # 4 version2 + 3 version1
-        assert len(total_resource_sets) == 7
+        assert len(resource_sets_env1) == 7
         total_resources = await data.Resource.get_list(connection=con)
-        # 4 version2 + 4 version1
-        assert len(total_resources) == 8
+        # env1(4 version2 + 4 version1) + env2(4 version1)
+        assert len(total_resources) == 12
         # Clear version only
-        await data.ResourceSet.clear_resource_sets_in_version(environment=env_id, version=version, connection=con)
-        res_sets = await data.ResourceSet.get_resource_sets_in_version(environment=env_id, version=version, connection=con)
+        await data.ResourceSet.clear_resource_sets_in_version(environment=env_id, version=version_2, connection=con)
+        res_sets = await data.ResourceSet.get_resource_sets_in_version(environment=env_id, version=version_2, connection=con)
         assert len(res_sets) == 0
 
         # Assert it did not change other versions
-        version -= 1
-        res_sets = await data.ResourceSet.get_resource_sets_in_version(environment=env_id, version=version)
+        res_sets = await data.ResourceSet.get_resource_sets_in_version(environment=env_id, version=version_1)
         assert len(res_sets) == 3
         total_resource_sets = await data.ResourceSet.get_list(connection=con)
-        # 3 version1
-        assert len(total_resource_sets) == 3
+        # env1(3 version1) + env2(3 version1)
+        assert len(total_resource_sets) == 6
         total_resources = await data.Resource.get_list(connection=con)
-        # 4 version1
+        # 4 version2 + 4 version1
+        assert len(total_resources) == 8
+
+        # Clear remaining version of environment
+        await data.ResourceSet.clear_resource_sets_in_version(environment=env_id, version=version_1, connection=con)
+        res_sets = await data.ResourceSet.get_resource_sets_in_version(environment=env_id, version=version_1, connection=con)
+        assert len(res_sets) == 0
+
+        # Check that it did not delete resource sets of other environments
+        resource_sets_env2 = await data.ResourceSet.get_list(environment=env_2, connection=con)
+        # 3 version1
+        assert len(resource_sets_env2) == 3
+        total_resources = await data.Resource.get_list(connection=con)
+        # env2(4 version1)
         assert len(total_resources) == 4
 
     # also assert pip config can be None on put_version
