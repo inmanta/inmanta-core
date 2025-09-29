@@ -470,13 +470,13 @@ def test():
     )
 
     executor_1_venv_status_file = (
-        pathlib.Path(executor_1.process.executor_virtual_env.env_path) / const.INMANTA_VENV_STATUS_FILENAME
+        pathlib.Path(executor_1.process.executor_virtual_env.env_path) / ".inmanta" / const.INMANTA_VENV_STATUS_FILENAME
     )
     executor_2_venv_status_file = (
-        pathlib.Path(executor_2.process.executor_virtual_env.env_path) / const.INMANTA_VENV_STATUS_FILENAME
+        pathlib.Path(executor_2.process.executor_virtual_env.env_path) / ".inmanta" / const.INMANTA_VENV_STATUS_FILENAME
     )
     executor_3_venv_status_file = (
-        pathlib.Path(executor_3.process.executor_virtual_env.env_path) / const.INMANTA_VENV_STATUS_FILENAME
+        pathlib.Path(executor_3.process.executor_virtual_env.env_path) / ".inmanta" / const.INMANTA_VENV_STATUS_FILENAME
     )
 
     logger.warning("Touching %s now", executor_2_venv_status_file)
