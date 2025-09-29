@@ -394,7 +394,7 @@ async def test_protect_environment_settings(environment, server, client):
     assert result.result["data"]["settings"][data.AUTO_DEPLOY] is False
     definition = result.result["data"]["definition"][data.AUTO_DEPLOY]
     assert definition["protected"] is True
-    assert model.ProtectedBy(definition["protected_by"]) is model.ProtectedBy.project_yml
+    assert definition["protected_by"] == model.ProtectedBy.project_yml.value
 
     # Update set of protected settings
     result = await client.protected_environment_settings_set_batch(
