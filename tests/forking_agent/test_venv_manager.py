@@ -466,3 +466,32 @@ async def test_recovery_virtual_environment_manager(tmpdir, pip_index, async_fin
 
     await venv_manager.request_shutdown()
     await venv_manager.join()
+
+
+async def test_virtual_environment_expire(tmpdir, pip_index, async_finalizer):
+    """
+    Verify that the VirtualEnvironmentManager removes venvs that were not correctly initialized.
+    """
+    venv_manager = executor.VirtualEnvironmentManager(
+        envs_dir=tmpdir,
+        thread_pool=concurrent.futures.ThreadPoolExecutor(
+            max_workers=1,
+        ),
+    )
+    venv_manager.retention_time = 1  # force one second retention
+
+    await venv_manager.start()
+    async_finalizer.add(venv_manager.request_shutdown)
+    env_id = uuid.uuid4()
+    pip_config = PipConfig(index_url=pip_index.url)
+    blueprint1 = executor.EnvBlueprint(
+        environment_id=env_id,
+        pip_config=pip_config,
+        requirements=("pkg1",),
+        python_version=sys.version_info[:2],
+    )
+
+    venv1 = await venv_manager.get_environment(blueprint1)
+    await asyncio.sleep(1.1)
+    venv1.is_correctly_initialized()
+    venv1 = await venv_manager.get_environment(blueprint1)

@@ -354,18 +354,25 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
 
         self.io_threadpool = io_threadpool
 
-    def _ensure_disk_layout_backwards_compatibility(self) -> None:
+    def ensure_disk_layout_backwards_compatibility(self) -> None:
         """
         Backwards compatibility helper: move files that used to live in the
         top-level dir of the venv into the dedicated storage dir.
+
+        This upgrades from the layout prior to september 2025
+
+        it should be called under the lock of the VirtualEnvironmentManager
         """
-        os.makedirs(self.inmanta_storage, exist_ok=True)
+        created_storage = False
 
         for file_name in ["requirements.txt", const.INMANTA_VENV_STATUS_FILENAME]:
             legacy_path: pathlib.Path = pathlib.Path(self.env_path) / file_name
             if legacy_path.exists():
                 new_path: pathlib.Path = pathlib.Path(self.inmanta_storage) / file_name
                 if not new_path.exists():
+                    if not created_storage:
+                        os.makedirs(self.inmanta_storage, exist_ok=True)
+                        created_storage = True
                     # Use copy2 to preserve last access time metadata (for the status file).
                     shutil.copy2(src=legacy_path, dst=new_path)
                 os.remove(legacy_path)
@@ -392,6 +399,8 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         """
         req: list[str] = list(blueprint.requirements)
         await asyncio.get_running_loop().run_in_executor(self.io_threadpool, self.init_env)
+        # Ensure our storage folder exists
+        os.makedirs(self.inmanta_storage, exist_ok=True)
 
         constraint_file: str | None = self._write_constraint_file(blueprint)
         if len(req):  # install_for_config expects at least 1 requirement or a path to install
@@ -403,15 +412,10 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
 
         self.touch()
 
-    def init_env(self) -> None:
-        super().init_env()
-        self._ensure_disk_layout_backwards_compatibility()
-
     def is_correctly_initialized(self) -> bool:
         """
         Was the venv correctly initialized: the inmanta status file exists
         """
-        self._ensure_disk_layout_backwards_compatibility()
         return self.inmanta_venv_status_file.exists()
 
     def touch(self) -> None:
@@ -467,8 +471,6 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         This method must be called on a threadpool to not block the ioloop.
         """
         self.remove_venv()
-        # This will also create the venv dir sitting above the .inmanta storage
-        os.makedirs(self.inmanta_storage)
 
 
 class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, str, ExecutorVirtualEnvironment]):
@@ -545,6 +547,7 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
             # No lock here, singe shot prior to start
             current_folder = self.envs_dir / folder
             virtual_environment = ExecutorVirtualEnvironment(env_path=str(current_folder), io_threadpool=self.thread_pool)
+            virtual_environment.ensure_disk_layout_backwards_compatibility()
             if virtual_environment.is_correctly_initialized():
                 self.pool[folder.name] = virtual_environment
             else:
