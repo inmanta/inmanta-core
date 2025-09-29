@@ -5282,9 +5282,9 @@ class ResourceSet(BaseDocument):
             WHERE NOT EXISTS (
                 SELECT 1
                 FROM resource_set_configuration_model AS rscm
-                WHERE environment=$1
+                WHERE rscm.environment=rs.environment
                 AND rscm.resource_set_id=rs.id
-            )
+            ) AND rs.environment=$1
             """,
             environment,
             connection=connection,

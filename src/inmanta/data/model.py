@@ -93,6 +93,18 @@ class FeatureStatus(BaseModel):
 class StatusResponse(BaseModel):
     """
     Response for the status method call
+
+    :param product: The name of the product.
+    :param edition: The edition of the product.
+    :param version: The version of the product.
+    :param license: The license used by the product.
+    :param extensions: The status of the extensions of the server
+    :param slices: The status of the slices of the server.
+    :param features: The status of the features offered by the slices of the server.
+    :param status: The overall status of the server
+    :param python_version: The python version used by the server.
+    :param postgresql_version: The postgresql version used by the database slice
+        None if it is not initialized or an error occurred with the database slice.
     """
 
     product: str
@@ -103,6 +115,8 @@ class StatusResponse(BaseModel):
     slices: list[SliceStatus]
     features: list[FeatureStatus]
     status: ReportedStatus
+    python_version: str
+    postgresql_version: str | None
 
 
 @stable_api
@@ -295,7 +309,7 @@ class ProtectedBy(str, Enum):
     """
 
     # The environment setting is managed using the environment_settings property of the project.yml file.
-    project_yml = "project_yml"
+    project_yml = "project.yml"
 
     def get_detailed_description(self) -> str:
         """
@@ -306,6 +320,15 @@ class ProtectedBy(str, Enum):
                 return "Setting is managed by the project.yml file of the Inmanta project."
             case _ as unreachable:
                 assert_never(unreachable)
+
+    @classmethod
+    def _missing_(cls: type[Self], value: object) -> Optional[Self]:
+        """
+        This is a workaround for the issue where the protocol layer inconsistently handles enums.
+        Enums are serialized using their name, but deserialized using their value. This method makes
+        sure that we can deserialize enums using their name.
+        """
+        return next((p for p in cls if p.name == value), None) if isinstance(value, str) else None
 
 
 class EnvironmentSettingDefinitionAPI(EnvironmentSetting):
