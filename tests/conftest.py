@@ -16,38 +16,107 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import asyncio
+import concurrent
 import copy
+import csv
+import datetime
+import json
+import logging
 import logging.config
+import os
 import pathlib
+import queue
+import random
+import re
+import shutil
+import site
+import socket
 import stat
+import string
+import subprocess
+import sys
 import tempfile
+import time
+import traceback
+import uuid
+import venv
 import warnings
+import weakref
+from collections import abc, defaultdict, namedtuple
+from collections.abc import AsyncIterator, Awaitable, Iterator
 from concurrent.futures.thread import ThreadPoolExecutor
+from configparser import ConfigParser
 from glob import glob
 from re import Pattern
 from threading import Condition
+from typing import Any, Callable, Dict, Generic, Optional, Union
 
+import asyncpg
+import psutil
+import py
+import pytest
+from asyncpg.exceptions import DuplicateDatabaseError
+from click import testing
+from tornado import netutil
 from tornado.httpclient import AsyncHTTPClient
 
 import _pytest.logging
+import inmanta
+import inmanta.agent
+import inmanta.app
+import inmanta.compiler as compiler
+import inmanta.compiler.config
 import inmanta.deploy.state
+import inmanta.main
+import inmanta.server.agentmanager as agentmanager
+import inmanta.user_setup
+import inmanta.util
 import requests
 import toml
+from inmanta import config, const, data, env, loader
 from inmanta import logging as inmanta_logging
-from inmanta.agent.executor import Executor, ExecutorManager
+from inmanta import protocol, resources
+from inmanta.agent import handler
+from inmanta.agent.agent_new import Agent
+from inmanta.agent.executor import DeployReport, Executor, ExecutorManager
 from inmanta.agent.handler import CRUDHandler, HandlerContext, ResourceHandler, SkipResource, TResource, provider
+from inmanta.agent.in_process_executor import InProcessExecutorManager
 from inmanta.agent.write_barier_executor import WriteBarierExecutorManager
+from inmanta.ast import CompilerException
 from inmanta.config import log_dir
+from inmanta.const import ResourceState
 from inmanta.data.model import AuthMethod, EnvSettingType
+from inmanta.data.schema import SCHEMA_VERSION_TABLE
+from inmanta.db import util as db_util
 from inmanta.db.util import PGRestore
+from inmanta.deploy import scheduler
+from inmanta.env import ActiveEnv, CommandRunner, LocalPackagePath, VirtualEnv, process_env, store_venv, swap_process_env
+from inmanta.export import ResourceDict, cfg_env, unknown_parameters
 from inmanta.logging import InmantaLoggerConfig
+from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
+from inmanta.moduletool import DefaultIsolatedEnvCached, ModuleTool, V2ModuleBuilder
+from inmanta.parser.plyInmantaParser import cache_manager
+from inmanta.protocol import VersionMatch
 from inmanta.protocol.auth import auth
 from inmanta.references import mutator, reference
-from inmanta.resources import PurgeableResource, Resource, resource
+from inmanta.resources import Id, PurgeableResource, Resource, resource
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_COMPILER
+from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.config import AuthorizationProviderName
+from inmanta.server.protocol import Server, SliceStartupException
+from inmanta.server.services import orchestrationservice
+from inmanta.server.services.compilerservice import CompilerService, CompileRun
 from inmanta.tornado import LoopResolverWithUnixSocketSuppport
+from inmanta.types import JsonType, ResourceIdStr, ResourceVersionIdStr
 from inmanta.util import ScheduledTask, Scheduler, TaskMethod, TaskSchedule
+from inmanta.vendor import pyformance
+from inmanta.vendor.pyformance import MetricsRegistry
+from inmanta.warnings import WarningsManager
+from libpip2pi.commands import dir2pi
 from packaging.requirements import Requirement
+from packaging.version import Version
+from pytest_postgresql import factories
 
 """
 About the use of @parametrize_any and @slowtest:
@@ -103,73 +172,6 @@ About the fixtures that control the behavior related to the scheduler:
                     => Usage: Add the `@pytest.mark.parametrize("no_agent", [True])` annotation on the test case.
 """
 
-import asyncio
-import concurrent
-import csv
-import datetime
-import json
-import logging
-import os
-import queue
-import random
-import re
-import shutil
-import site
-import socket
-import string
-import subprocess
-import sys
-import time
-import traceback
-import uuid
-import venv
-import weakref
-from collections import abc, defaultdict, namedtuple
-from collections.abc import AsyncIterator, Awaitable, Iterator
-from configparser import ConfigParser
-from typing import Any, Callable, Dict, Generic, Optional, Union
-
-import asyncpg
-import psutil
-import py
-import pytest
-from asyncpg.exceptions import DuplicateDatabaseError
-from click import testing
-from tornado import netutil
-
-import inmanta
-import inmanta.agent
-import inmanta.app
-import inmanta.compiler as compiler
-import inmanta.compiler.config
-import inmanta.main
-import inmanta.server.agentmanager as agentmanager
-import inmanta.user_setup
-from inmanta import config, const, data, env, loader, protocol, resources
-from inmanta.agent import handler
-from inmanta.agent.agent_new import Agent
-from inmanta.agent.in_process_executor import InProcessExecutorManager
-from inmanta.ast import CompilerException
-from inmanta.data.schema import SCHEMA_VERSION_TABLE
-from inmanta.db import util as db_util
-from inmanta.env import ActiveEnv, CommandRunner, LocalPackagePath, VirtualEnv, process_env, store_venv, swap_process_env
-from inmanta.export import ResourceDict, cfg_env, unknown_parameters
-from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
-from inmanta.moduletool import DefaultIsolatedEnvCached, ModuleTool, V2ModuleBuilder
-from inmanta.parser.plyInmantaParser import cache_manager
-from inmanta.protocol import VersionMatch
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_COMPILER
-from inmanta.server.bootloader import InmantaBootloader
-from inmanta.server.protocol import Server, SliceStartupException
-from inmanta.server.services import orchestrationservice
-from inmanta.server.services.compilerservice import CompilerService, CompileRun
-from inmanta.types import JsonType, ResourceIdStr
-from inmanta.vendor import pyformance
-from inmanta.vendor.pyformance import MetricsRegistry
-from inmanta.warnings import WarningsManager
-from libpip2pi.commands import dir2pi
-from packaging.version import Version
-from pytest_postgresql import factories
 
 # Import test modules differently when conftest is put into the inmanta_tests packages
 PYTEST_PLUGIN_MODE: bool = __file__ and os.path.dirname(__file__).split("/")[-1] == "inmanta_tests"
@@ -2896,3 +2898,143 @@ def resource_container(clean_reset):
         wait_for_condition_with_waiters=wait_for_condition_with_waiters,
     )
     Provider.reset()
+
+
+@pytest.fixture
+async def very_big_env(
+    server, client, environment, clienthelper, null_agent, monkeypatch, instances: int, resources_per_version: int
+) -> tuple[int, int]:
+    env_obj = await data.Environment.get_by_id(environment)
+    await env_obj.set(data.AUTO_DEPLOY, True)
+
+    if resources_per_version < 5:
+        raise Exception("resources_per_version cannot be less than 5")
+    deploy_counter = 0
+    # The mix:
+    # 2*<instances> versions -> increments , all hashes change after <instances> steps
+    # each version with <resources_per_version> resources
+    # one undefined
+    # one skip for undef
+    # one failed
+    # one skipped
+    # orphans: in second half, produce 10 orphans each -> 10*<instances> orphans
+
+    dummy_scheduler = scheduler.ResourceScheduler(uuid.UUID(environment), executor_manager=None, client=client)
+
+    async def mock_run(self) -> None:
+        """Mocks the call to TaskRunner._run."""
+        return
+
+    # We want dummy_scheduler._running=True so that read_version runs correctly
+    # But we don't want the TaskRunner to actually run anything that is scheduled (we will do that manually)
+    monkeypatch.setattr("inmanta.deploy.scheduler.TaskRunner._run", mock_run)
+    await dummy_scheduler._initialize()
+
+    async def make_resource_set(tenant_index: int, iteration: int) -> list[dict[str, object]]:
+        is_full = tenant_index == 0 and iteration == 0
+        if is_full:
+            version = await clienthelper.get_version()
+        else:
+            version = 0
+
+        def resource_id(ri: int) -> str:
+            if iteration > 0 and ri > resources_per_version / 2:
+                ri += 10
+            return f"test::XResource{int(ri / (resources_per_version / 5))}[agent{tenant_index},sub={ri}]"
+
+        attributes = [
+            {
+                "id": f"{resource_id(ri)},v={version}",
+                "send_event": False,
+                "purged": False,
+                "requires": [] if ri % 2 == 0 else [resource_id(ri - 1)],
+                "my_attribute": iteration,
+            }
+            for ri in range(resources_per_version)
+        ]
+        resource_state = {resource_id(0): ResourceState.undefined}
+        resource_sets = {resource_id(ri): f"set{tenant_index}" for ri in range(resources_per_version)}
+        if is_full:
+            result = await client.put_version(
+                environment,
+                version,
+                attributes,
+                module_version_info={},
+                resource_state=resource_state,
+                unknowns=[],
+                version_info={},
+                compiler_version=inmanta.util.get_compiler_version(),
+                resource_sets=resource_sets,
+            )
+            assert result.code == 200
+        else:
+            result = await client.put_partial(
+                environment,
+                module_version_info={},
+                resource_state=resource_state,
+                unknowns=[],
+                version_info={},
+                resources=attributes,
+                resource_sets=resource_sets,
+            )
+            assert result.code == 200
+            version = result.result["data"]
+        await utils.wait_until_version_is_released(client, environment, version)
+
+        # Updates the scheduler state
+        await dummy_scheduler.read_version()
+
+        # Get all resources
+        result = await client.get_version(tid=environment, id=version)
+        assert result.code == 200
+        all_resources: list[dict[str, object]] = result.result["resources"]
+
+        resources_in_dirty_set: list[dict[str, object]] = [
+            r
+            for r in all_resources
+            if r["resource_id"] in dummy_scheduler._state.dirty and r["agent"] == f"agent{tenant_index}"
+        ]
+
+        async def deploy(resource: dict[str, object]) -> None:
+            nonlocal deploy_counter
+            deploy_counter = deploy_counter + 1
+            rid = ResourceIdStr(resource["resource_id"])
+            action_id = uuid.uuid4()
+            deploy_intent = await dummy_scheduler.deploy_start(action_id, rid)
+            if "sub=4]" in rid:
+                # never finish deploying r4
+                return
+            if deploy_intent is not None:
+                await dummy_scheduler.deploy_done(
+                    deploy_intent,
+                    DeployReport(
+                        rvid=ResourceVersionIdStr(f"{rid},v={version}"),
+                        action_id=action_id,
+                        resource_state=(
+                            const.HandlerResourceState.failed
+                            if "sub=2]" in rid
+                            else const.HandlerResourceState.skipped if "sub=3]" in rid else const.HandlerResourceState.deployed
+                        ),
+                        messages=[],
+                        changes={},
+                        change=None,
+                    ),
+                )
+
+        await asyncio.gather(*(deploy(resource) for resource in resources_in_dirty_set))
+        return resources_in_dirty_set
+
+    first_iteration_resources = {}
+    for iteration in [0, 1]:
+        for tenant in range(instances):
+            resources = await make_resource_set(tenant, iteration)
+            logger.warning("deploys: %d, tenant: %d, iteration: %d", deploy_counter, tenant, iteration)
+            # Since we are using null_agent we need to manually mark orphans
+            if iteration == 0:
+                first_iteration_resources[tenant] = {Id.parse_id(res["resource_id"]).resource_str() for res in resources}
+            elif iteration == 1:
+                new_rids = {Id.parse_id(res["resource_id"]).resource_str() for res in resources}
+                orphans = first_iteration_resources[tenant] - new_rids
+                await dummy_scheduler.state_update_manager.mark_as_orphan(environment=environment, resource_ids=orphans)
+
+    return instances, resources_per_version
