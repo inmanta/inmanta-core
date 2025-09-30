@@ -1971,9 +1971,11 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         ]
         constraints: Sequence[inmanta.util.CanonicalRequirement] = [
             *chain(
-                [InmantaModuleRequirement(inmanta.util.parse_requirement(requirement=spec)).get_python_package_requirement()
-                for spec in self._metadata.requires],
-                self.get_product_constraints()
+                [
+                    InmantaModuleRequirement(inmanta.util.parse_requirement(requirement=spec)).get_python_package_requirement()
+                    for spec in self._metadata.requires
+                ],
+                self.get_product_constraints(),
             )
         ]
         return dependencies, constraints
