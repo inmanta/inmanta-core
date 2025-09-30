@@ -262,8 +262,10 @@ class AgentModules(Base):
     inmanta_module_version: Mapped[str] = mapped_column(String, nullable=False)
     environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
 
-    agent: Mapped["Agent"] = relationship("Agent", back_populates="agent_modules")
-    configurationmodel: Mapped["Configurationmodel"] = relationship("Configurationmodel", back_populates="agent_modules")
+    agent: Mapped["Agent"] = relationship("Agent", back_populates="agent_modules", viewonly=True)
+    configurationmodel: Mapped["Configurationmodel"] = relationship(
+        "Configurationmodel", back_populates="agent_modules", viewonly=True
+    )
     inmanta_module: Mapped["InmantaModule"] = relationship("InmantaModule", back_populates="agent_modules")
 
     @classmethod
@@ -591,8 +593,12 @@ class Configurationmodel(Base):
     )
     dryrun: Mapped[list["Dryrun"]] = relationship("Dryrun", back_populates="configurationmodel")
     resourceaction: Mapped[list["Resourceaction"]] = relationship("Resourceaction", back_populates="configurationmodel")
-    unknownparameter: Mapped[list["Unknownparameter"]] = relationship("Unknownparameter", back_populates="configurationmodel")
-    agent_modules: Mapped[list["AgentModules"]] = relationship("AgentModules", back_populates="configurationmodel")
+    unknownparameter: Mapped[list["Unknownparameter"]] = relationship(
+        "Unknownparameter", back_populates="configurationmodel", viewonly=True
+    )
+    agent_modules: Mapped[list["AgentModules"]] = relationship(
+        "AgentModules", back_populates="configurationmodel", viewonly=True
+    )
 
 
 class Discoveredresource(Base):
@@ -939,6 +945,7 @@ class Resource(Base):
             Resource.resource_id == foreign(ResourcePersistentState.resource_id),
             Resource.environment == foreign(ResourcePersistentState.environment),
         ),
+        viewonly=True,
     )
 
 
@@ -1038,8 +1045,10 @@ class Unknownparameter(Base):
     metadata_: Mapped[Optional[dict]] = mapped_column("metadata", JSONB)
     resolved: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text("false"))
 
-    configurationmodel: Mapped["Configurationmodel"] = relationship("Configurationmodel", back_populates="unknownparameter")
-    environment_: Mapped["Environment"] = relationship("Environment", back_populates="unknownparameter")
+    configurationmodel: Mapped["Configurationmodel"] = relationship(
+        "Configurationmodel", back_populates="unknownparameter", viewonly=True
+    )
+    environment_: Mapped["Environment"] = relationship("Environment", back_populates="unknownparameter", viewonly=True)
 
 
 class Agent(Base):
@@ -1060,7 +1069,7 @@ class Agent(Base):
 
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="agent")
     agentinstance: Mapped[Optional["Agentinstance"]] = relationship("Agentinstance", back_populates="agent")
-    agent_modules: Mapped[list["AgentModules"]] = relationship("AgentModules", back_populates="agent")
+    agent_modules: Mapped[list["AgentModules"]] = relationship("AgentModules", back_populates="agent", viewonly=True)
 
 
 class ResourceactionResource(Base):
