@@ -46,6 +46,8 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import DeclarativeBase, Mapped, foreign, mapped_column, relationship
 
+# This file is mostly generated code (generated with sqlacodegen),
+# but it suffered some modifications, keep that in mind if you were to regenerate it
 # Currently, these models don't offer any additional validation, besides typing, so it's best to avoid inserting/modifying
 # DB entries directly using these models.
 
