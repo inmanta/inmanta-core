@@ -488,7 +488,7 @@ def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Se
     parser.add_argument(
         "--soft-delete",
         dest="soft_delete",
-        help="This flag prevents the deletion of resource sets (marked for deletion via the ``--delete-resource-set`` cli"
+        help="This flag prevents the deletion of resource sets (marked for deletion via the ``--delete-resource-set`` cli "
         "option or the INMANTA_REMOVED_SET_ID env variable) that contain resources that are currently being exported.",
         action="store_true",
         default=False,
