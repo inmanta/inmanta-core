@@ -583,6 +583,7 @@ class Configurationmodel(Base):
     total: Mapped[Optional[int]] = mapped_column(Integer, server_default=text("0"))
     partial_base: Mapped[Optional[int]] = mapped_column(Integer)
     pip_config: Mapped[Optional[dict]] = mapped_column(JSONB)
+    project_constraints: Mapped[Optional[str]] = mapped_column(String)
 
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="configurationmodel")
     resource_set: Mapped[list["ResourceSet"]] = relationship(
