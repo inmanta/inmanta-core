@@ -1,0 +1,8 @@
+description: >
+  Modules constraints defined at the product level in the compatibility.json file are now
+  enforced during project and agent install.
+issue-nr: 9600
+change-type: minor
+destination-branches: [master, iso8]
+sections:
+  minor-improvement: "{{description}}"
