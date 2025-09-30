@@ -121,6 +121,9 @@ There are 4 important building blocks that we have to take into account:
         ```
         This class determines what fields we allow our users to sort the results.
 
+    Some tips:
+        - Use stmt.compile(compile_kwargs={"literal_binds": True}) to get the underlying SQL code of a statement.
+
     Known limitations:
         - No paging/filtering/sorting on nested relationships:
             https://github.com/strawberry-graphql/strawberry-sqlalchemy/issues/236
