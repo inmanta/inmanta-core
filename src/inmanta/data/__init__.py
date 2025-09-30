@@ -5103,7 +5103,7 @@ class ResourceSet(BaseDocument):
         updated_resource_sets: set[str | None] = set()
         resource_data: dict[str, list[object]] = defaultdict(list)
         for r in updated_resources:
-            updated_resource_sets.add(r.resource_set_name)
+            updated_resource_sets.add(r.resource_set)
             resource_data["resource_id"].append(str(r.resource_id))
             resource_data["resource_type"].append(r.resource_type)
             resource_data["resource_id_value"].append(r.resource_id_value)
@@ -5111,7 +5111,7 @@ class ResourceSet(BaseDocument):
             resource_data["attributes"].append(r.attributes)
             resource_data["attribute_hash"].append(util.make_attribute_hash(r.resource_id, r.attributes))
             resource_data["is_undefined"].append(r.is_undefined)
-            resource_data["resource_set"].append(r.resource_set_name)
+            resource_data["resource_set"].append(r.resource_set)
         resource_data_db: dict[str, object] = {k: cls._get_value(v) for k, v in resource_data.items()}
 
         # common arguments to all queries
@@ -5445,7 +5445,7 @@ class Resource(BaseDocument):
             await connection.execute(update_rps_query, *values)
 
     @classmethod
-    async def get_resources_in_latest_version(
+    async def get_resources_in_latest_version_as_dto(
         cls,
         environment: uuid.UUID,
         resource_type: Optional[ResourceType] = None,

@@ -1246,7 +1246,7 @@ async def test_get_resources_in_latest_version(init_dataclasses_and_load_schema)
             )
             await res.insert()
 
-    resources = await data.Resource.get_resources_in_latest_version(
+    resources = await data.Resource.get_resources_in_latest_version_as_dto(
         env.id,
         "std::testing::NullResource",
         {"name": "motd1", "purge_on_delete": True},
@@ -1254,7 +1254,7 @@ async def test_get_resources_in_latest_version(init_dataclasses_and_load_schema)
     assert len(resources) == 1
     resource = resources[0]
     assert resource.resource_id == "std::testing::NullResource[agent1,name=file1]"
-    assert resource.resource_set_name is None  # shared set
+    assert resource.resource_set is None  # shared set
     assert resource.attributes == {"name": "motd1", "purge_on_delete": True, "purged": False}
 
     cm = data.ConfigurationModel(
@@ -1267,7 +1267,7 @@ async def test_get_resources_in_latest_version(init_dataclasses_and_load_schema)
         is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
-    resources = await data.Resource.get_resources_in_latest_version(
+    resources = await data.Resource.get_resources_in_latest_version_as_dto(
         env.id, "std::testing::NullResource", {"name": "motd1", "purge_on_delete": True}
     )
     assert len(resources) == 0

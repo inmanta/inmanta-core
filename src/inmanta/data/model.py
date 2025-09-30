@@ -388,7 +388,7 @@ class Resource(BaseModel):
     agent: str
     attributes: JsonType
     is_undefined: bool
-    resource_set_name: str | None = None
+    resource_set: str | None = None
 
     @classmethod
     def from_postgres_record(cls, record: asyncpg.Record) -> "Resource":
@@ -406,7 +406,7 @@ class Resource(BaseModel):
             agent=cast(str, record["agent"]),
             attributes=cast(JsonType, record["attributes"]),
             is_undefined=cast(bool, record["is_undefined"]),
-            resource_set_name=cast(str | None, record["resource_set_name"]),
+            resource_set=cast(str | None, record["resource_set_name"]),
         )
 
 
