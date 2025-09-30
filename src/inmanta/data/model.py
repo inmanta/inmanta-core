@@ -31,7 +31,7 @@ from typing import ClassVar, Mapping, Optional, Self, Union, assert_never, cast
 
 import asyncpg
 import pydantic.schema
-from pydantic import ConfigDict, Field, SerializationInfo, computed_field, field_serializer, field_validator, model_validator
+from pydantic import ConfigDict, Field, SerializationInfo, computed_field, field_serializer, field_validator
 
 import inmanta
 import inmanta.ast.export as ast_export
@@ -310,7 +310,7 @@ class ProtectedBy(str, Enum):
     """
 
     # The environment setting is managed using the environment_settings property of the project.yml file.
-    project_yml = "project_yml"
+    project_yml = "project.yml"
 
     def get_detailed_description(self) -> str:
         """
@@ -321,6 +321,15 @@ class ProtectedBy(str, Enum):
                 return "Setting is managed by the project.yml file of the Inmanta project."
             case _ as unreachable:
                 assert_never(unreachable)
+
+    @classmethod
+    def _missing_(cls: type[Self], value: object) -> Optional[Self]:
+        """
+        This is a workaround for the issue where the protocol layer inconsistently handles enums.
+        Enums are serialized using their name, but deserialized using their value. This method makes
+        sure that we can deserialize enums using their name.
+        """
+        return next((p for p in cls if p.name == value), None) if isinstance(value, str) else None
 
 
 class EnvironmentSettingDefinitionAPI(EnvironmentSetting):
@@ -596,15 +605,6 @@ class VersionedResourceDetails(ResourceDetails):
 
     resource_version_id: ResourceVersionIdStr
     version: int
-
-    @model_validator(mode="after")
-    def ensure_version_field_set_in_attributes(self) -> Self:
-        # Due to a bug, the version field has always been present in the attributes dictionary.
-        # This bug has been fixed in the database. For backwards compatibility reason we here make sure that the
-        # version field is present in the attributes dictionary served out via the API.
-        if "version" not in self.attributes:
-            self.attributes["version"] = self.version
-        return self
 
 
 class ReleasedResourceDetails(ResourceDetails):

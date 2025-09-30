@@ -85,7 +85,7 @@ from inmanta.server.validate_filter import (
     InvalidFilter,
     LogLevelFilter,
 )
-from inmanta.types import JsonType, ResourceIdStr, ResourceVersionIdStr, SimpleTypes
+from inmanta.types import ResourceIdStr, ResourceVersionIdStr, SimpleTypes
 from inmanta.util import datetime_iso_format
 
 T_ORDER = TypeVar("T_ORDER", bound=DatabaseOrderV2)
@@ -926,20 +926,11 @@ class ResourceHistoryView(DataView[ResourceHistoryOrder, ResourceHistory]):
         return query_builder
 
     def construct_dtos(self, records: Sequence[Record]) -> Sequence[ResourceHistory]:
-        def get_attributes(record: Record) -> JsonType:
-            attributes = record["attributes"]
-            if "version" not in attributes:
-                # Due to a bug, the version field has always been present in the attributes dictionary.
-                # This bug has been fixed in the database. For backwards compatibility reason we here make sure that the
-                # version field is present in the attributes dictionary served out via the API.
-                attributes["version"] = record["model"]
-            return attributes
-
         return [
             ResourceHistory(
                 resource_id=self.rid,
                 attribute_hash=record["attribute_hash"],
-                attributes=get_attributes(record),
+                attributes=record["attributes"],
                 date=record["date"],
                 requires=[Id.parse_id(rid).resource_str() for rid in record["attributes"].get("requires", [])],
             )
