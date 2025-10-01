@@ -191,7 +191,7 @@ class PartialUpdateMerger:
         calls can be done in a constructor. See docstring real constructor for meaning of arguments.
         """
         updated_and_shared_resources_old: abc.Mapping[ResourceIdStr, ResourceDTO] = (
-            await data.Resource.get_resources_in_resource_sets(
+            await data.Resource.get_resources_in_resource_sets_as_dto(
                 environment=env_id,
                 version=base_version,
                 resource_sets=updated_resource_sets,
@@ -203,7 +203,7 @@ class PartialUpdateMerger:
         rids_deleted_resource_sets: abc.Set[ResourceIdStr] = {
             rid
             for rid in (
-                await data.Resource.get_resources_in_resource_sets(
+                await data.Resource.get_resources_in_resource_sets_as_dto(
                     environment=env_id,
                     version=base_version,
                     resource_sets=deleted_resource_sets,

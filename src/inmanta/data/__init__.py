@@ -6014,7 +6014,7 @@ class Resource(BaseDocument):
         return m.ResourceDeploySummary.create_from_db_result(results)
 
     @classmethod
-    async def get_resources_in_resource_sets(
+    async def get_resources_in_resource_sets_as_dto(
         cls,
         environment: uuid.UUID,
         version: int,
