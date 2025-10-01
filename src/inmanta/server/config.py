@@ -166,8 +166,10 @@ server_compatibility_file = Option(
     "compatibility_file",
     None,
     "Path to the compatibility.json file. During startup, the server will perform a version compatibility check "
-    "for the PostgreSQL version being used. For more information about this file, please refer to "
-    "the compatibility page in the Inmanta documentation. Leave blank to disable the version compatibility check.",
+    "for the PostgreSQL version being used. The constraints defined in the `python_package_constraints` field will be "
+    "enforced both during project install and during agent install. For more information about this file, please refer to "
+    "the compatibility page in the Inmanta documentation. Leave blank to disable the version compatibility check and the"
+    "enforcement of the constraints.",
     is_str_opt,
 )
 

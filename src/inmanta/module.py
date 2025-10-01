@@ -1991,7 +1991,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         with open(compatibility_file) as fh:
             compatibility_data = json.load(fh)
 
-        module_constraints: Mapping[str, str] = compatibility_data.get("module_compatibility_ranges", {})
+        module_constraints: Mapping[str, str] = compatibility_data.get("python_package_constraints", {})
         return [inmanta.util.parse_requirement(f"{k}{v}") for k, v in module_constraints.items()]
 
     def get_all_constraints(self) -> str:

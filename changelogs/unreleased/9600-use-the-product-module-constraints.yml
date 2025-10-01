@@ -1,6 +1,7 @@
 description: >
-  Modules constraints defined at the product level in the compatibility.json file are now
-  enforced during project and agent install.
+  Python package constraints defined at the product level in the compatibility.json file are now
+  enforced by default during project and agent install. This behavior can be disabled by setting
+  the `server.compatibility_file` option to None.
 issue-nr: 9600
 change-type: minor
 destination-branches: [master, iso8]
