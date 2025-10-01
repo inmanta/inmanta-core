@@ -24,9 +24,6 @@ This section describes how to upgrade an orchestrator in-place.
     - Before upgrading the orchestrator to a new major version, make sure the old orchestrator is at the latest version available within its major.
     - Upgrades should be done one major version at a time. Upgrading from major
       version :code:`X` to major version :code:`X+2`, should be done by upgrading from :code:`X` to :code:`X+1` and then from :code:`X+1` to :code:`X+2`.
-    - Make sure the PostgreSQL version of the database meets the requirements of the new major version of the orchestrator
-      and make sure to update it if required. The required version can be found in the compatibility page of the Inmanta documentation
-      for the new major version of the orchestrator.
 
 
 1. Halt all environments (by pressing the ``STOP`` button in the web-console for each environment).

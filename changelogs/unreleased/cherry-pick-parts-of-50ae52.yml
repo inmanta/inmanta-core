@@ -1,0 +1,6 @@
+---
+description: >
+  Cherry pick parts of 50ae52bbcf7152f732f1ffe66f496b611419740d to add the logic to read the compatibility.json file.
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [iso8]
