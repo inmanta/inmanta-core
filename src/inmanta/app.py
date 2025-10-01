@@ -89,7 +89,8 @@ def server_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Se
         type=str,
         dest="compatibility_file",
         help="Path to the compatibility.json file. During startup, the server will perform a version compatibility check "
-        "for the PostgreSQL version being used. For more information about this file, please refer to "
+        "for the PostgreSQL version being used. The constraints defined in the `python_package_constraints` field will be "
+        "enforced both during project install and during agent install. For more information about this file, please refer to "
         "the compatibility page in the Inmanta documentation.",
     )
 
