@@ -16,6 +16,7 @@ import dataclasses
 import re
 import typing
 import uuid
+from abc import ABC, abstractmethod
 from enum import StrEnum
 from typing import Sequence, cast
 
@@ -93,7 +94,7 @@ There are 4 important building blocks that we have to take into account:
         i.e. a filter to get values based on a list of enum values
         ```
             @strawberry.input
-            class EnumFilter(CustomFilter, typing.Generic[T]):
+            class EnumFilter[T: StrEnum](CustomFilter):
                 # Expects to receive a StrEnum.
                 # Provides equal and not equal filters. Multiple enum values can be provided to include/exclude
                 eq: list[T] | None = strawberry.UNSET
@@ -164,10 +165,18 @@ class GraphQLContext:
     compiler_service: CompilerService
 
 
-class CustomFilter:
+class CustomFilter(ABC):
+    """
+    Base class for custom filters.
+    Subclasses are expected to implement apply_filter with the concrete logic of the filter
+    """
 
+    @abstractmethod
     def apply_filter(self, stmt: Select[typing.Any], model: type[models.Base], key: str) -> Select[typing.Any]:
-        return stmt
+        """
+        Applies the logic of this custom filter to the given statement.
+        """
+        pass
 
 
 @strawberry.input
