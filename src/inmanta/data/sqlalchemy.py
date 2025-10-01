@@ -14,7 +14,7 @@ Contact: code@inmanta.com
 
 import datetime
 import uuid
-from typing import Optional
+from typing import Any, Optional
 
 import asyncpg
 
@@ -74,9 +74,9 @@ class InmantaModule(Base):
         ARRAY(String()), nullable=False, server_default=text("ARRAY[]::character varying[]")
     )
 
-    environment_: Mapped["Environment"] = relationship("Environment", back_populates="inmanta_module")
-    module_files: Mapped[list["ModuleFiles"]] = relationship("ModuleFiles", back_populates="inmanta_module")
-    agent_modules: Mapped[list["AgentModules"]] = relationship("AgentModules", back_populates="inmanta_module")
+    environment_: Mapped["Environment"] = relationship("Environment", back_populates="inmanta_module", viewonly=True)
+    module_files: Mapped[list["ModuleFiles"]] = relationship("ModuleFiles", back_populates="inmanta_module", viewonly=True)
+    agent_modules: Mapped[list["AgentModules"]] = relationship("AgentModules", back_populates="inmanta_module", viewonly=True)
 
     @classmethod
     async def register_modules(
@@ -460,7 +460,7 @@ class Environment(Base):
     halted: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     repo_url: Mapped[Optional[str]] = mapped_column(String, server_default=text("''::character varying"))
     repo_branch: Mapped[Optional[str]] = mapped_column(String, server_default=text("''::character varying"))
-    settings: Mapped[Optional[dict]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
+    settings: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
     last_version: Mapped[Optional[int]] = mapped_column(Integer, server_default=text("0"))
     description: Mapped[Optional[str]] = mapped_column(String(255), server_default=text("''::character varying"))
     icon: Mapped[Optional[str]] = mapped_column(String(65535), server_default=text("''::character varying"))
@@ -529,14 +529,16 @@ class Compile(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
     environment: Mapped[uuid.UUID] = mapped_column(UUID, nullable=False)
-    requested_environment_variables: Mapped[dict] = mapped_column(JSONB, nullable=False)
-    mergeable_environment_variables: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    requested_environment_variables: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    mergeable_environment_variables: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
     soft_delete: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
-    links: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    links: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
     started: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     completed: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     requested: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
-    metadata_: Mapped[Optional[dict]] = mapped_column("metadata", JSONB)
+    metadata_: Mapped[Optional[dict[str, Any]]] = mapped_column("metadata", JSONB)
     do_export: Mapped[Optional[bool]] = mapped_column(Boolean)
     force_update: Mapped[Optional[bool]] = mapped_column(Boolean)
     success: Mapped[Optional[bool]] = mapped_column(Boolean)
@@ -544,7 +546,7 @@ class Compile(Base):
     remote_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID)
     handled: Mapped[Optional[bool]] = mapped_column(Boolean)
     substitute_compile_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID)
-    compile_data: Mapped[Optional[dict]] = mapped_column(JSONB)
+    compile_data: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB)
     partial: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text("false"))
     removed_resource_sets: Mapped[Optional[list[str]]] = mapped_column(
         ARRAY(String()), server_default=text("ARRAY[]::character varying[]")
@@ -552,7 +554,7 @@ class Compile(Base):
     notify_failed_compile: Mapped[Optional[bool]] = mapped_column(Boolean)
     failed_compile_message: Mapped[Optional[str]] = mapped_column(String)
     exporter_plugin: Mapped[Optional[str]] = mapped_column(String)
-    used_environment_variables: Mapped[Optional[dict]] = mapped_column(JSONB)
+    used_environment_variables: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB)
 
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="compile")
     substitute_compile: Mapped[Optional["Compile"]] = relationship(
@@ -583,10 +585,10 @@ class Configurationmodel(Base):
     is_suitable_for_partial_compiles: Mapped[bool] = mapped_column(Boolean, nullable=False)
     date: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     released: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text("false"))
-    version_info: Mapped[Optional[dict]] = mapped_column(JSONB)
+    version_info: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB)
     total: Mapped[Optional[int]] = mapped_column(Integer, server_default=text("0"))
     partial_base: Mapped[Optional[int]] = mapped_column(Integer)
-    pip_config: Mapped[Optional[dict]] = mapped_column(JSONB)
+    pip_config: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB)
     project_constraints: Mapped[Optional[str]] = mapped_column(String)
 
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="configurationmodel")
@@ -614,7 +616,7 @@ class Discoveredresource(Base):
 
     environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
     discovered_resource_id: Mapped[str] = mapped_column(String, primary_key=True)
-    values: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    values: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     discovered_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False)
     discovery_resource_id: Mapped[Optional[str]] = mapped_column(String)
 
@@ -704,7 +706,7 @@ class Parameter(Base):
     expires: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
     resource_id: Mapped[Optional[str]] = mapped_column(String, server_default=text("''::character varying"))
     updated: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
-    metadata_: Mapped[Optional[dict]] = mapped_column("metadata", JSONB)
+    metadata_: Mapped[Optional[dict[str, Any]]] = mapped_column("metadata", JSONB)
 
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="parameter")
 
@@ -882,7 +884,7 @@ class Dryrun(Base):
     date: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     total: Mapped[Optional[int]] = mapped_column(Integer, server_default=text("0"))
     todo: Mapped[Optional[int]] = mapped_column(Integer, server_default=text("0"))
-    resources: Mapped[Optional[dict]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
+    resources: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
 
     configurationmodel: Mapped["Configurationmodel"] = relationship("Configurationmodel", back_populates="dryrun")
 
@@ -934,7 +936,7 @@ class Resource(Base):
     resource_type: Mapped[str] = mapped_column(String, nullable=False)
     resource_id_value: Mapped[str] = mapped_column(String, nullable=False)
     resource_set_id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
-    attributes: Mapped[Optional[dict]] = mapped_column(JSONB)
+    attributes: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB)
     attribute_hash: Mapped[Optional[str]] = mapped_column(String)
     resource_set: Mapped[Optional[str]] = mapped_column(String)
     is_undefined: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text("false"))
@@ -997,7 +999,7 @@ class Resourceaction(Base):
     version: Mapped[int] = mapped_column(Integer, nullable=False)
     resource_version_ids: Mapped[list[str]] = mapped_column(ARRAY(String()), nullable=False)
     finished: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
-    messages: Mapped[Optional[list[dict]]] = mapped_column(ARRAY(JSONB()))
+    messages: Mapped[Optional[list[dict[str, Any]]]] = mapped_column(ARRAY(JSONB()))
     status: Mapped[Optional[str]] = mapped_column(
         Enum(
             "unavailable",
@@ -1014,7 +1016,7 @@ class Resourceaction(Base):
         ),
         server_default=text("'available'::resourcestate"),
     )
-    changes: Mapped[Optional[dict]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
+    changes: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
     change: Mapped[Optional[str]] = mapped_column(Enum("nochange", "created", "purged", "updated", name="change"))
 
     configurationmodel: Mapped["Configurationmodel"] = relationship("Configurationmodel", back_populates="resourceaction")
@@ -1044,7 +1046,7 @@ class Unknownparameter(Base):
     source: Mapped[str] = mapped_column(String, nullable=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False)
     resource_id: Mapped[Optional[str]] = mapped_column(String, server_default=text("''::character varying"))
-    metadata_: Mapped[Optional[dict]] = mapped_column("metadata", JSONB)
+    metadata_: Mapped[Optional[dict[str, Any]]] = mapped_column("metadata", JSONB)
     resolved: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text("false"))
 
     configurationmodel: Mapped["Configurationmodel"] = relationship(

@@ -782,13 +782,22 @@ async def test_deploy_summary(server, client, env_with_resources):
     assert result.result["metadata"]["deploy_summary"] == empty_summary
 
 
-@pytest.mark.parametrize("instances", [2])  # set the size
-@pytest.mark.parametrize("resources_per_version", [100])
 @pytest.mark.parametrize("trace", [False])  # make it analyze the queries
-async def test_resources_paging_performance(client, environment, very_big_env: tuple[int, int], trace: bool, async_finalizer):
+async def test_resources_paging_performance(client, environment, mixed_resource_generator, trace: bool, async_finalizer):
     """Scaling test, not part of the normal testsuite"""
     # Basic sanity
-    instances, resources_per_version = very_big_env
+    instances = 2
+    resources_per_version = 100
+    # From the `mixed_resource_generator` docstring, and for 2 instances with 100 resources per version we expect:
+    # 220 total resources
+    #   20 orphaned
+    #   2 undefined
+    #   2 skipped_for_undefined
+    #   2 failed
+    #   2 skipped
+    #   2 deploying
+    #   190 deployed
+    await mixed_resource_generator(environment, instances, resources_per_version)
     result = await client.resource_list(environment, limit=5, deploy_summary=True)
     assert result.code == 200
     assert result.result["metadata"]["deploy_summary"] == {

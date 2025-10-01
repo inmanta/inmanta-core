@@ -517,13 +517,13 @@ async def test_notifications(server, client, setup_database):
         previous_time = created
 
 
-@pytest.mark.parametrize("instances", [2])
-@pytest.mark.parametrize("resources_per_version", [10])
-async def test_query_resources(server, client, very_big_env):
-    instances, resources_per_version = very_big_env
+async def test_query_resources(server, client, environment, mixed_resource_generator):
+    instances = 2
+    resources_per_version = 10
     versions = 2
     total_versions = versions * instances
     total_resources = total_versions * resources_per_version
+    await mixed_resource_generator(environment, instances, resources_per_version)
     filters = [
         # (1 undefined, 1 skipped for undefined) * 2 versions * <instances>
         {"query": "{blocked: {eq: BLOCKED}}", "result": 2 * total_versions},

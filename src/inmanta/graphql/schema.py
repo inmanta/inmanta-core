@@ -164,10 +164,6 @@ class GraphQLContext:
     compiler_service: CompilerService
 
 
-# Used for the generic enum filter
-T = typing.TypeVar("T", bound=StrEnum)
-
-
 class CustomFilter:
 
     def apply_filter(self, stmt: Select[typing.Any], model: type[models.Base], key: str) -> Select[typing.Any]:
@@ -175,7 +171,7 @@ class CustomFilter:
 
 
 @strawberry.input
-class EnumFilter(CustomFilter, typing.Generic[T]):
+class EnumFilter[T: StrEnum](CustomFilter):
     """
     Expects to receive a StrEnum.
     Provides equal and not equal filters. Multiple enum values can be provided to include/exclude
