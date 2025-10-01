@@ -1963,8 +1963,12 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
     ) -> tuple[Sequence[inmanta.util.CanonicalRequirement], Sequence[inmanta.util.CanonicalRequirement]]:
         """
         Returns a tuple that contains all the dependencies and constraints that should be used when
-        installing this project. The first element in the tuple contains the dependencies. The second
-        element contains the constraints.
+        installing this project. The first element in the tuple contains the dependencies (defined in
+        the requirements.txt file). The second element contains the 'pure' constraints (defined in the
+        _metadata.requires of the project.yml and the python_package_constraints of the compatibility.json).
+
+        Use the get_all_constraints method to retrieve all constraints (i.e. 'pure' constraints and constraints
+        inferred from dependencies)
         """
         dependencies: Sequence[inmanta.util.CanonicalRequirement] = [
             inmanta.util.parse_requirement(req) for req in self.get_all_python_requirements_as_list()
