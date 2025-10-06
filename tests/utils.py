@@ -914,7 +914,7 @@ async def resource_action_consistency_check():
                 FROM resource_set_configuration_model AS rscm
                 INNER JOIN resource AS r
                     ON rscm.environment=r.environment
-                    AND rscm.resource_set_id=r.resource_set_id
+                    AND rscm.resource_set=r.resource_set
                 INNER JOIN resourceaction as ra
                     ON r.resource_id || ',v=' || rscm.model = ANY(ra.resource_version_ids)
                     AND r.environment = ra.environment
@@ -931,7 +931,7 @@ async def resource_action_consistency_check():
             FROM resource_set_configuration_model AS rscm
             INNER JOIN resource AS r
                 ON rscm.environment=r.environment
-                AND rscm.resource_set_id=r.resource_set_id
+                AND rscm.resource_set=r.resource_set
             INNER JOIN public.resourceaction_resource as jt
                  ON r.environment = jt.environment
                 AND r.resource_id = jt.resource_id
@@ -1284,7 +1284,7 @@ async def insert_with_link_to_configuration_model(resource_set: data.ResourceSet
             query = """
             INSERT INTO public.resource_set_configuration_model(
                 environment,
-                resource_set_id,
+                resource_set,
                 model
             )
             SELECT $1, $2, UNNEST($3::int[])

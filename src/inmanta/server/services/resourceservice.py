@@ -235,10 +235,10 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
         attributes: dict[PrimitiveTypes, PrimitiveTypes] = {},
         connection: Optional[Connection] = None,
     ) -> list[Resource]:
-        result = await data.Resource.get_resources_in_latest_version(
+        result = await data.Resource.get_resources_in_latest_version_as_dto(
             environment.id, resource_type, attributes, connection=connection
         )
-        return [r.to_dto() for r in result]
+        return result
 
     @handle(methods_v2.get_resource_actions, env="tid")
     async def get_resource_actions(

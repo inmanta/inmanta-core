@@ -190,8 +190,8 @@ class PartialUpdateMerger:
         A replacement constructor method for this class. This method is used to work around the limitation that no async
         calls can be done in a constructor. See docstring real constructor for meaning of arguments.
         """
-        updated_and_shared_resources_old: abc.Mapping[ResourceIdStr, data.Resource] = (
-            await data.Resource.get_resources_in_resource_sets(
+        updated_and_shared_resources_old: abc.Mapping[ResourceIdStr, ResourceDTO] = (
+            await data.Resource.get_resources_in_resource_sets_as_dto(
                 environment=env_id,
                 version=base_version,
                 resource_sets=updated_resource_sets,
@@ -199,13 +199,11 @@ class PartialUpdateMerger:
                 connection=connection,
             )
         )
-        updated_and_shared_resources_old_dto: abc.Mapping[ResourceIdStr, ResourceDTO] = {
-            k: v.to_dto() for k, v in updated_and_shared_resources_old.items()
-        }
+
         rids_deleted_resource_sets: abc.Set[ResourceIdStr] = {
             rid
             for rid in (
-                await data.Resource.get_resources_in_resource_sets(
+                await data.Resource.get_resources_in_resource_sets_as_dto(
                     environment=env_id,
                     version=base_version,
                     resource_sets=deleted_resource_sets,
@@ -220,7 +218,7 @@ class PartialUpdateMerger:
             rids_in_partial_compile,
             updated_resource_sets,
             deleted_resource_sets,
-            updated_and_shared_resources_old_dto,
+            updated_and_shared_resources_old,
             rids_deleted_resource_sets,
         )
 
@@ -1131,8 +1129,9 @@ class OrchestrationService(protocol.ServerSlice):
                 base_version: int = base_model.version
                 base_constraints: str | None = base_model.project_constraints
                 if not base_model.is_suitable_for_partial_compiles:
-                    resources_in_base_version = await data.Resource.get_resources_for_version(env.id, base_version)
-                    resource_set_validator = ResourceSetValidator([r.to_dto() for r in resources_in_base_version])
+                    resource_set_validator = ResourceSetValidator(
+                        await data.Resource.get_resources_for_version_as_dto(env.id, base_version)
+                    )
                     try:
                         resource_set_validator.ensure_no_cross_resource_set_dependencies()
                     except CrossResourceSetDependencyError as e:
