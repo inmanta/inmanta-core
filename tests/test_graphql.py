@@ -21,6 +21,7 @@ import pytest
 import inmanta.data.sqlalchemy as models
 from inmanta import const, data
 from inmanta.deploy import state
+from inmanta.graphql.schema import to_snake_case
 from inmanta.server import SLICE_COMPILER
 from inmanta.server.services.compilerservice import CompilerService
 from inmanta.util import retry_limited
@@ -166,6 +167,22 @@ async def setup_database(project_default, server, client):
             msg_timings_idx += 2
         await resource_action.save()
         await data.ResourcePersistentState.populate_for_version(environment=id_env_1, model_version=i)
+
+
+@pytest.mark.parametrize(
+    "input, output",
+    [
+        ("isDeploying", "is_deploying"),
+        ("lastDeployResult", "last_deploy_result"),
+        ("resourceIdValue", "resource_id_value"),
+        ("blocked", "blocked"),
+    ],
+)
+async def test_to_snake_case(input, output):
+    """
+    Check that the to_snake_case function works as expected for our intended use.
+    """
+    assert to_snake_case(input) == output
 
 
 async def test_graphql_schema(server, client):

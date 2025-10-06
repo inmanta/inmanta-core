@@ -153,7 +153,7 @@ def to_snake_case(name: str) -> str:
     Strawberry converts the query, filter and order fields to camelCase.
     With this we accommodate the user to also filter and order in camelCase.
     """
-    return re.sub("(.)([A-Z][a-z]+)", r"\1_\2", name).lower()
+    return re.sub("([A-Z])", r"_\1", name).lower()
 
 
 @dataclasses.dataclass
