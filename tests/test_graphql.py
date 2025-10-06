@@ -532,6 +532,21 @@ async def test_notifications(server, client, setup_database):
 
 
 async def test_query_resources(server, client, environment, mixed_resource_generator):
+    def is_subset_dict(expected: dict, actual: dict) -> bool:
+        """
+        Checks if a dict is a subset of another dict.
+        Allows for nested dicts.
+        """
+        for key, val in expected.items():
+            if key not in actual:
+                return False
+            if isinstance(val, dict) and isinstance(actual[key], dict):
+                if not is_subset_dict(val, actual[key]):
+                    return False
+            elif actual[key] != val:
+                return False
+        return True
+
     instances = 2
     resources_per_version = 10
     iterations = 2
@@ -540,32 +555,65 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
     await mixed_resource_generator(environment, instances, resources_per_version)
     filters = [
         # (1 undefined, 1 skipped for undefined) * 2 versions * <instances>
-        {"query": "{blocked: {eq: BLOCKED}}", "result": 2 * total_versions},
+        {
+            "query": "{blocked: {eq: BLOCKED}}",
+            "result": 2 * total_versions,
+            "assertion": {"state": {"blocked": state.Blocked.BLOCKED.name}},
+        },
         {"query": "{blocked: {eq: BLOCKED, neq: BLOCKED}}", "result": 0},
-        {"query": '{agent: {eq: ["agent1"]}}', "result": resources_per_version * instances},
+        {"query": '{agent: {eq: ["agent1"]}}', "result": resources_per_version * instances, "assertion": {"agent": "agent1"}},
         {"query": '{agent: {contains: ["%agent%"]}}', "result": total_resources},
         {"query": '{agent: {notContains: ["%agent%"]}}', "result": 0},
-        {"query": '{agent: {notContains: ["%1"]}}', "result": resources_per_version * instances},
+        {
+            "query": '{agent: {notContains: ["%1"]}}',
+            "result": resources_per_version * instances,
+            "assertion": {"agent": "agent0"},
+        },
         {"query": '{agent: {contains: ["agent_"]}}', "result": total_resources},
         {"query": '{agent: {contains: ["1", "2"]}}', "result": 0},
         {"query": '{resourceType: {notContains: ["%XResource%"]}}', "result": 0},
         {"query": '{resourceType: {notContains: ["%xresource%"]}}', "result": 0},
         {"query": '{resourceIdValue: {notContains: ["1"]}}', "result": (resources_per_version - 1) * total_versions},
-        {"query": '{resourceIdValue: {eq: ["0"]}}', "result": total_versions},
+        {"query": '{resourceIdValue: {eq: ["0"]}}', "result": total_versions, "assertion": {"resourceIdValue": "0"}},
         {"query": "{purged: true}", "result": 0},
         {"query": "{purged: false}", "result": total_resources},
         # skipped for undefined
-        {"query": "{complianceState: {eq: HAS_UPDATE} blocked: {eq: BLOCKED}}", "result": total_versions},
+        {
+            "query": "{complianceState: {eq: HAS_UPDATE} blocked: {eq: BLOCKED}}",
+            "result": total_versions,
+            "assertion": {
+                "state": {"blocked": state.Blocked.BLOCKED.name, "complianceState": state.Compliance.HAS_UPDATE.name}
+            },
+        },
         # 1 undefined, 1 skipped for undefined, 1 still deploying
-        {"query": "{lastDeployResult: {eq: NEW}}", "result": 3 * total_versions},
-        {"query": "{isDeploying: true}", "result": total_versions},
-        {"query": "{isDeploying: false}", "result": (resources_per_version - 1) * total_versions},
+        {
+            "query": "{lastDeployResult: {eq: NEW}}",
+            "result": 3 * total_versions,
+            "assertion": {"state": {"lastDeployResult": state.DeployResult.NEW.name}},
+        },
+        {"query": "{isDeploying: true}", "result": total_versions, "assertion": {"state": {"isDeploying": True}}},
+        {
+            "query": "{isDeploying: false}",
+            "result": (resources_per_version - 1) * total_versions,
+            "assertion": {"state": {"isDeploying": False}},
+        },
         # 1 undefined, 1 skipped for undefined
-        {"query": "{lastDeployResult: {eq: NEW} isDeploying: false}", "result": 2 * total_versions},
+        {
+            "query": "{lastDeployResult: {eq: NEW} isDeploying: false}",
+            "result": 2 * total_versions,
+            "assertion": {"state": {"lastDeployResult": state.DeployResult.NEW.name, "isDeploying": False}},
+        },
         #  1 skipped for undefined
         {
             "query": "{lastDeployResult: {eq: NEW} isDeploying: false complianceState: {neq: UNDEFINED}}",
             "result": total_versions,
+            "assertion": {
+                "state": {
+                    "lastDeployResult": state.DeployResult.NEW.name,
+                    "isDeploying": False,
+                    "complianceState": state.Compliance.HAS_UPDATE.name,
+                }
+            },
         },
     ]
     for f in filters:
@@ -603,6 +651,10 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
         assert result.code == 200
         assert result.result["data"]["errors"] is None
         assert len(result.result["data"]["data"]["resources"]["edges"]) == f["result"], f["query"]
+        assertion = f.get("assertion", None)
+        if assertion:
+            for res in result.result["data"]["data"]["resources"]["edges"]:
+                assert is_subset_dict(assertion, res["node"])
 
     query = """
     {
