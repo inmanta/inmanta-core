@@ -25,6 +25,7 @@ from inmanta.deploy import state
 from sqlalchemy import (
     ARRAY,
     Boolean,
+    Case,
     Column,
     DateTime,
     Double,
@@ -448,7 +449,7 @@ class Schemamanager(Base):
 
 class Environment(Base):
     __tablename__ = "environment"
-    __table_args__ = (
+    __table_args__: tuple[Any, ...] = (
         ForeignKeyConstraint(["project"], ["project.id"], ondelete="CASCADE", name="environment_project_fkey"),
         PrimaryKeyConstraint("id", name="environment_pkey"),
         Index("environment_name_project_index", "project", "name", unique=True),
@@ -778,9 +779,9 @@ class ResourcePersistentState(Base):
         else:
             return state.Compliance.NON_COMPLIANT
 
-    @compliance_state.expression
+    @compliance_state.inplace.expression
     @classmethod
-    def compliance_state(cls):
+    def _compliance_state_expression(cls) -> Case[Any]:
         return case(
             (cls.is_orphan, None),
             (cls.is_undefined, state.Compliance.UNDEFINED.name),
@@ -915,17 +916,17 @@ class Resource(Base):
     __tablename__ = "resource"
     __table_args__ = (
         ForeignKeyConstraint(
-            ["resource_set_id", "environment"],
+            ["resource_set", "environment"],
             ["resource_set.id", "resource_set.environment"],
             ondelete="CASCADE",
-            name="resource_resource_set_id_environment_fkey",
+            name="resource_resource_set_environment_fkey",
         ),
-        PrimaryKeyConstraint("environment", "resource_set_id", "resource_id", name="resource_pkey"),
+        PrimaryKeyConstraint("environment", "resource_set", "resource_id", name="resource_pkey"),
         Index("resource_attributes_index", "attributes"),
         Index("resource_env_attr_hash_index", "environment", "attribute_hash"),
         Index("resource_environment_agent_idx", "environment", "agent"),
         Index("resource_environment_resource_id_value_index", "environment", "resource_id_value"),
-        Index("resource_environment_resource_set_id_index", "environment", "resource_set_id"),
+        Index("resource_environment_resource_set_index", "environment", "resource_set"),
         Index("resource_environment_resource_type_index", "environment", "resource_type"),
         Index("resource_resource_id_index", "resource_id"),
     )
@@ -935,10 +936,9 @@ class Resource(Base):
     agent: Mapped[str] = mapped_column(String, nullable=False)
     resource_type: Mapped[str] = mapped_column(String, nullable=False)
     resource_id_value: Mapped[str] = mapped_column(String, nullable=False)
-    resource_set_id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
+    resource_set: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
     attributes: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB)
     attribute_hash: Mapped[Optional[str]] = mapped_column(String)
-    resource_set: Mapped[Optional[str]] = mapped_column(String)
     is_undefined: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text("false"))
 
     resource_set_: Mapped["ResourceSet"] = relationship("ResourceSet", back_populates="resource")
@@ -958,7 +958,7 @@ t_resource_set_configuration_model = Table(
     Base.metadata,
     Column("environment", UUID, primary_key=True),
     Column("model", Integer, primary_key=True),
-    Column("resource_set_id", UUID, primary_key=True),
+    Column("resource_set", UUID, primary_key=True),
     ForeignKeyConstraint(
         ["environment", "model"],
         ["configurationmodel.environment", "configurationmodel.version"],
@@ -966,12 +966,12 @@ t_resource_set_configuration_model = Table(
         name="resource_set_configuration_model_environment_model_fkey",
     ),
     ForeignKeyConstraint(
-        ["environment", "resource_set_id"],
+        ["environment", "resource_set"],
         ["resource_set.environment", "resource_set.id"],
-        name="resource_set_configuration_mod_environment_resource_set_id_fkey",
+        name="resource_set_configuration_mod_environment_resource_set_fkey",
     ),
-    PrimaryKeyConstraint("environment", "model", "resource_set_id", name="resource_set_configuration_model_pkey"),
-    Index("resource_set_configuration_model_environment_resource_set_id_in", "environment", "resource_set_id"),
+    PrimaryKeyConstraint("environment", "model", "resource_set", name="resource_set_configuration_model_pkey"),
+    Index("resource_set_configuration_model_environment_resource_set_in", "environment", "resource_set"),
 )
 
 

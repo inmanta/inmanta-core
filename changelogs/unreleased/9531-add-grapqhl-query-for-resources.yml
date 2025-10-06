@@ -1,7 +1,7 @@
 ---
 description: >
-  Add a query for resources to the GraphQL endpoint
-  Add the capability to sort by multiple fields at the same time
+  Add a query for resources to the GraphQL endpoint.
+  Add the capability to sort by multiple fields at the same time.
 issue-nr: 9531
 issue-repo: inmanta-core
 change-type: minor

@@ -80,35 +80,32 @@ async def setup_database(project_default, server, client):
         await session.commit()
         await session.flush()
 
-    cm_times = []
-    for i in range(1, 10):
-        cm_times.append(datetime.datetime.strptime(f"2021-07-07T10:1{i}:00.0", "%Y-%m-%dT%H:%M:%S.%f"))
-    cm_time_idx = 0
     resource_set_per_version: dict[int, data.ResourceSet] = {}
+    cm_times = {}
     for i in range(1, 10):
+        cm_times[i] = datetime.datetime.strptime(f"2021-07-07T10:1{i}:00.0", "%Y-%m-%dT%H:%M:%S.%f")
         cm = data.ConfigurationModel(
             environment=id_env_1,
             version=i,
-            date=cm_times[cm_time_idx],
+            date=cm_times[i],
             total=1,
             released=i != 1 and i != 9,
             version_info={},
             is_suitable_for_partial_compiles=False,
         )
-        cm_time_idx += 1
         await cm.insert()
 
         resource_set = data.ResourceSet(environment=id_env_1, id=uuid.uuid4())
         await insert_with_link_to_configuration_model(resource_set, versions=[i])
         resource_set_per_version[i] = resource_set
 
-    msg_timings = []
-    for i in range(1, 30):
-        msg_timings.append(
-            datetime.datetime.strptime("2021-07-07T10:10:00.0", "%Y-%m-%dT%H:%M:%S.%f")
-            .replace(minute=i)
-            .astimezone(datetime.timezone.utc)
-        )
+    msg_timings = {
+        i: datetime.datetime.strptime("2021-07-07T10:10:00.0", "%Y-%m-%dT%H:%M:%S.%f")
+        .replace(minute=i)
+        .astimezone(datetime.timezone.utc)
+        for i in range(0, 14)
+    }
+
     msg_timings_idx = 0
     for i in range(1, 10):
         action_id = uuid.uuid4()
@@ -137,7 +134,7 @@ async def setup_database(project_default, server, client):
             ],
             action_id=action_id,
             action=const.ResourceAction.deploy if i % 2 else const.ResourceAction.pull,
-            started=cm_times[i - 1],
+            started=cm_times[i],
         )
         await resource_action.insert()
         if i % 2:
@@ -520,8 +517,8 @@ async def test_notifications(server, client, setup_database):
 async def test_query_resources(server, client, environment, mixed_resource_generator):
     instances = 2
     resources_per_version = 10
-    versions = 2
-    total_versions = versions * instances
+    iterations = 2
+    total_versions = iterations * instances
     total_resources = total_versions * resources_per_version
     await mixed_resource_generator(environment, instances, resources_per_version)
     filters = [
