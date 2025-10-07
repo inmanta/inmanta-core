@@ -765,19 +765,13 @@ class ResourcePersistentState(Base):
 
     @hybrid_property
     def compliance_state(self) -> state.Compliance | None:
-        # Copied from ResourcePersistentState.get_compliance_status
-        if self.is_orphan:
-            return None
-        elif self.is_undefined:
-            return state.Compliance.UNDEFINED
-        elif (
-            self.last_deployed_attribute_hash is None or self.current_intent_attribute_hash != self.last_deployed_attribute_hash
-        ):
-            return state.Compliance.HAS_UPDATE
-        elif self.last_deploy_result is state.DeployResult.DEPLOYED:
-            return state.Compliance.COMPLIANT
-        else:
-            return state.Compliance.NON_COMPLIANT
+        return state.get_compliance_status(
+            self.is_orphan,
+            self.is_undefined,
+            self.last_deployed_attribute_hash,
+            self.current_intent_attribute_hash,
+            state.DeployResult(self.last_deploy_result.lower()),
+        )
 
     @compliance_state.inplace.expression
     @classmethod

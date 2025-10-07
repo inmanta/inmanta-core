@@ -153,7 +153,7 @@ def to_snake_case(name: str) -> str:
     Strawberry converts the query, filter and order fields to camelCase.
     With this we accommodate the user to also filter and order in camelCase.
     """
-    if re.match(r"[A-Z]"):
+    if re.match(r"[A-Z]", name):
         raise Exception("name cannot start with capital letter.")
     return re.sub("([A-Z])", r"_\1", name).lower()
 

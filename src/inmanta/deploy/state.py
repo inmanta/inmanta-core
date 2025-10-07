@@ -119,6 +119,25 @@ class DeployResult(StrEnum):
                 raise Exception(f"Unexpected handler_resource_state {resource_state.name}")
 
 
+def get_compliance_status(
+    is_orphan: bool,
+    is_undefined: bool,
+    last_deployed_attribute_hash: str | None,
+    current_intent_attribute_hash: str | None,
+    last_deploy_result: DeployResult,
+) -> Compliance | None:
+    if is_orphan:
+        return None
+    elif is_undefined:
+        return Compliance.UNDEFINED
+    elif last_deployed_attribute_hash is None or current_intent_attribute_hash != last_deployed_attribute_hash:
+        return Compliance.HAS_UPDATE
+    elif last_deploy_result is DeployResult.DEPLOYED:
+        return Compliance.COMPLIANT
+    else:
+        return Compliance.NON_COMPLIANT
+
+
 class AgentStatus(StrEnum):
     """
     The status of the agent responsible of a given resource.
