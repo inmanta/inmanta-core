@@ -431,14 +431,14 @@ def test_reset_compiler_state(snippetcompiler):
     assert plugins.PluginMeta.get_functions() == registered_plugins
     assert module.Project.get().modules == registered_modules
 
-    #ProjectLoader.register_dynamic_module("successhandlermodule")
-    #ProjectLoader.load(snippetcompiler.project)
-    #compiler_obj.compile()
+    ProjectLoader.register_dynamic_module("successhandlermodule")
+    ProjectLoader.load(snippetcompiler.project)
+    compiler_obj.compile()
 
-    #assert not list(resources.resource.get_entity_resources())
-    #assert not handler.Commander.get_handlers()
-    #assert not [k for k, _ in references.reference.get_references() if not k.startswith("core::")]
-    #assert not [k for k, _ in references.mutator.get_mutators() if not k.startswith("core::")]
-    #assert not plugins.PluginMeta.get_functions()
-    #assert module.Project.get().modules == registered_modules
+    assert not list(resources.resource.get_entity_resources())
+    assert not handler.Commander.get_handlers()
+    assert not [k for k, _ in references.reference.get_references() if not k.startswith("core::")]
+    assert not [k for k, _ in references.mutator.get_mutators() if not k.startswith("core::")]
+    assert not plugins.PluginMeta.get_functions()
+    assert module.Project.get().modules == registered_modules
 
