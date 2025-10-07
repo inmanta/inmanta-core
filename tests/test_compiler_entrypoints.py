@@ -24,7 +24,7 @@ import more_itertools
 from inmanta import compiler, module, plugins, references, resources
 from inmanta.agent import handler
 from inmanta.ast import Range
-from inmanta.compiler import Compiler
+from inmanta.compiler import Compiler, ProjectLoader
 from inmanta.execute import scheduler
 
 
@@ -385,9 +385,9 @@ def test_constructor_renamed_namespace(snippetcompiler):
     assert (range_source, range_target) in anchormap
 
 
-def test_compiler_reset_method(snippetcompiler):
+def test_reset_compiler_state(snippetcompiler):
     """
-    Verify that the reset() method of the compiler works correctly.
+    Verify the support in the ProjectLoader class to reset the compiler state.
     """
     snippetcompiler.setup_for_snippet(
         """
@@ -403,7 +403,7 @@ def test_compiler_reset_method(snippetcompiler):
         """
     )
     compiler_obj = Compiler()
-    (statements, blocks) = compiler_obj.compile()
+    compiler_obj.compile()
 
     # Verify we have compiler state
     assert list(resources.resource.get_entity_resources())
@@ -413,12 +413,14 @@ def test_compiler_reset_method(snippetcompiler):
     assert plugins.PluginMeta.get_functions()
     assert module.Project.get().modules
 
-    compiler.reset()
+    ProjectLoader.load(snippetcompiler.project)
+    compiler_obj.compile()
 
     # Verify that compiler state was cleaned up
-    assert not list(resources.resource.get_entity_resources())
-    assert not handler.Commander.get_handlers()
-    assert not [k for k, _ in references.reference.get_references() if not k.startswith("core::")]
-    assert not [k for k, _ in references.mutator.get_mutators() if not k.startswith("core::")]
-    assert not plugins.PluginMeta.get_functions()
-    assert not module.Project.get().modules
+    assert list(resources.resource.get_entity_resources())
+    assert handler.Commander.get_handlers()
+    assert [k for k, _ in references.reference.get_references() if not k.startswith("core::")]
+    assert [k for k, _ in references.mutator.get_mutators() if not k.startswith("core::")]
+    assert plugins.PluginMeta.get_functions()
+    assert module.Project.get().modules
+

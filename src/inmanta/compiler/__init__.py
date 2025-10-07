@@ -188,7 +188,7 @@ class ProjectLoader:
         cls._dynamic_modules = set()
 
     @classmethod
-    def load(cls, project: module.Project) -> None:
+    def load(cls, project: "module.Project") -> None:
         """
         Sets and loads the given project.
         """
@@ -225,7 +225,7 @@ class ProjectLoader:
         references.mutator.reset()
 
     @classmethod
-    def _restore_compiler_state(cls, project: module.Project) -> None:
+    def _restore_compiler_state(cls, project: "module.Project") -> None:
         """
         Re-register all compiler state objects.
         """
