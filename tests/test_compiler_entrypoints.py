@@ -421,16 +421,15 @@ def test_reset_compiler_state(snippetcompiler):
     registered_modules = dict(module.Project.get().modules)
     assert registered_modules
 
-    # TODO:
-    #ProjectLoader.load(snippetcompiler.project)
-    #compiler_obj.compile()
+    ProjectLoader.load(snippetcompiler.project)
+    compiler_obj.compile()
 
-    #assert list(resources.resource.get_entity_resources()) == registered_resources
-    #assert handler.Commander.get_handlers() == registered_providers
-    #assert [k for k, _ in references.reference.get_references() if not k.startswith("core::")] == registered_references
-    #assert [k for k, _ in references.mutator.get_mutators() if not k.startswith("core::")] == registered_mutators
-    #assert plugins.PluginMeta.get_functions() == registered_plugins
-    #assert module.Project.get().modules == registered_modules
+    assert list(resources.resource.get_entity_resources()) == registered_resources
+    assert handler.Commander.get_handlers() == registered_providers
+    assert [k for k, _ in references.reference.get_references() if not k.startswith("core::")] == registered_references
+    assert [k for k, _ in references.mutator.get_mutators() if not k.startswith("core::")] == registered_mutators
+    assert plugins.PluginMeta.get_functions() == registered_plugins
+    assert module.Project.get().modules == registered_modules
 
     #ProjectLoader.register_dynamic_module("successhandlermodule")
     #ProjectLoader.load(snippetcompiler.project)
