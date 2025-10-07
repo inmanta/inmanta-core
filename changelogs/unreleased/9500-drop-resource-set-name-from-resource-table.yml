@@ -1,0 +1,4 @@
+description: Changed resource_set column in the resource table to contain the id of the resource_set.
+issue-nr: 9500
+change-type: minor
+destination-branches: [master]
