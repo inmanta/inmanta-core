@@ -229,34 +229,38 @@ class ProjectLoader:
         """
         Re-register all compiler state objects.
         """
-        loaded_mod_ns_pattern: Pattern[str] = re.compile(
-            "(" + "|".join(re.escape(mod) for mod in project.modules.keys()) + ")::"
-        )
-        # Restore plugins
-        currently_registered_plugins = set(PluginMeta.get_functions().keys())
-        for fq_plugin_name, plugin in cls._registered_plugins.items():
-            if fq_plugin_name not in currently_registered_plugins and loaded_mod_ns_pattern.match(fq_plugin_name):
-                PluginMeta.add_function(plugin)
-        # Restore resources
-        currently_registered_resources = set(resources.resource.get_entity_resources())
-        for fq_resource_name, (resource_cls, options) in cls._registered_resources.items():
-            if fq_resource_name not in currently_registered_resources and loaded_mod_ns_pattern.match(fq_resource_name):
-                resources.resource.add_resource(fq_resource_name, resource_cls, options)
-        # Restore providers
-        currently_registered_providers = {fq_prov_name for fq_prov_name, _ in handler.Commander.get_providers()}
-        for fq_provider_name, provider_cls in cls._registered_providers.items():
-            if fq_provider_name not in currently_registered_providers and loaded_mod_ns_pattern.match(fq_provider_name):
-                handler.Commander.add_provider(fq_provider_name, provider_cls)
-        # Restore references
-        currently_registered_references = {ref_name for ref_name, _ in references.reference.get_references()}
-        for reference_name, reference_cls in cls._registered_references.items():
-            if reference_name not in currently_registered_references and loaded_mod_ns_pattern.match(reference_name):
-                references.reference.add_reference(reference_name, reference_cls)
-        # Restore mutators
-        currently_registered_mutators = {mut_name for mut_name, _ in references.mutator.get_mutators()}
-        for mutator_name, mutator_cls in cls._registered_mutators.items():
-            if mutator_name not in currently_registered_mutators and loaded_mod_ns_pattern.match(mutator_name):
-                references.mutator.add_mutator(mutator_name, mutator_cls)
+        for saved_registered, currently_registered_names, register_fnc in [
+            (
+                cls._registered_plugins,
+                set(PluginMeta.get_functions().keys()),
+                lambda name, cls_obj, rest: PluginMeta.add_function(cls_obj),
+            ),
+            (
+                cls._registered_resources,
+                set(resources.resource.get_entity_resources()),
+                (lambda name, cls_obj, rest: resources.resource.add_resource(name, cls_obj, rest))
+            ),
+            (
+                cls._registered_providers,
+                {fq_prov_name for fq_prov_name, _ in handler.Commander.get_providers()},
+                (lambda name, cls_obj, rest: handler.Commander.add_provider(name, cls_obj))
+            ),
+            (
+                cls._registered_references,
+                {ref_name for ref_name, _ in references.reference.get_references()},
+                (lambda name, cls_obj, rest: references.reference.add_reference(name, cls_obj))
+            ),
+            (
+                cls._registered_mutators,
+                {mut_name for mut_name, _ in references.mutator.get_mutators()},
+                (lambda name, cls_obj, rest: references.mutator.add_mutator(name, cls_obj))
+            )
+        ]:
+            for name, cls_or_tuple in saved_registered.items():
+                cls_obj = cls_or_tuple if not isinstance(cls_or_tuple, tuple) else cls_or_tuple[0]
+                module_name = cls_obj.__module__.removeprefix("inmanta_plugins.").split(".", maxsplit=1)[0]
+                if name not in currently_registered_names and module_name in project.modules:
+                    register_fnc(name, cls_obj, cls_or_tuple[1] if isinstance(cls_or_tuple, tuple) else None)
 
     @classmethod
     def register_dynamic_module(cls, module_name: str) -> None:
