@@ -17,11 +17,12 @@ Contact: code@inmanta.com
 """
 
 import logging
+import re
 import sys
 from collections import abc
 from collections.abc import Sequence
 from itertools import chain
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, ClassVar, Optional, Pattern, Type
 
 import inmanta.ast.type as inmanta_type
 import inmanta.execute.dataflow as dataflow
@@ -142,18 +143,166 @@ def get_types_and_scopes() -> tuple[dict[str, inmanta_type.Type], Namespace]:
 
 
 @stable_api
-def reset() -> None:
+class ProjectLoader:
     """
-    Reset the state of the scheduler. Used by pytest-inmanta, because it
-    performs consecutive compiles within the same process.
+    Singleton providing methods for managing project loading and associated side effects. Since these operations have global
+    side effects, managing them calls for a centralized manager rather than managing them on the Project instance level.
+    This class is used by pytest-inmanta, because it executes multiple compiles within the same process.
+
+    This class manages the setting and loading of a project, as well as the following side effects:
+        - Python modules: under normal operation, an inmanta module's Python modules are loaded when the project is loaded.
+            However, to support top-level Python imports in test cases, pytest-inmanta instructs the project to not clean
+            up loaded Python modules when setting a new project as this would force a reload, changing object identities.
+            One exception is when working with dynamic modules whose content might change between project loads (for example
+            the unittest module and any module created with Project.create_module). Therefore any dynamic modules are always
+            forcefully cleaned up, forcing a reload when next imported.
+        - Python module state: since Python module objects are kept alive (see above), any state kept on those objects is
+            carried over across compiles. To start each compile from a fresh state, any stateful modules must define one or
+            more cleanup functions. This class is responsible for calling these functions when appropriate.
+        - Objects registered using decorators: plugins, resources, providers, references and mutators are registered using
+            their corresponding decorator. Under normal operation, loading a project registers all these objects as a side
+            effect of loading each module's Python modules. However, pytest-inmanta does not reload said Python modules
+            (see above). To make sure these objects are registered for loaded modules (and thus accessible from the model),
+            each loaded project starts with a clean (empty) set. Loading the project registers any plugins for newly loaded
+            modules while this class is responsible for completing the set with appropriate previously registered plugins.
     """
-    LOGGER.debug("Resetting compiler state")
-    resources.resource.reset()
-    handler.Commander.reset()
-    references.reference.reset()
-    references.mutator.reset()
-    PluginMeta.clear()
-    module.Project.get().invalidate_state()
+
+    _registered_plugins: ClassVar[dict[str, Type[Plugin]]] = {}
+    _registered_resources: ClassVar[dict[str, tuple[type["resources.Resource"], dict[str, str]]]] = {}
+    _registered_providers: ClassVar[dict[str, type[handler.ResourceHandler[Any]]]] = {}
+    _registered_references: ClassVar[dict[str, type[references.Reference[references.RefValue]]]] = {}
+    _registered_mutators: ClassVar[dict[str, type[references.Mutator]]] = {}
+    _dynamic_modules: ClassVar[set[str]] = set()
+
+    @classmethod
+    def reset(cls) -> None:
+        """
+        Fully resets the ProjectLoader. For normal pytest-inmanta use this is not required (or even desired). It is used for
+        resetting the singleton state in between distinct module tests for pytest-inmanta's own test suite.
+        """
+        cls._registered_plugins = {}
+        cls._registered_resources = {}
+        cls._registered_providers = {}
+        cls._registered_references = {}
+        cls._registered_mutators = {}
+        cls._dynamic_modules = set()
+
+    @classmethod
+    def load(cls, project: module.Project) -> None:
+        """
+        Sets and loads the given project.
+        """
+        # unload dynamic modules before fetching currently registered objects: they should not be included
+        cls._unload_dynamic_modules()
+        # add currently registered objects to tracked them before loading the project
+        cls._save_compiler_state()
+        # reset modules' state
+        cls._reset_module_state()
+
+        module.Project.set(project, clean=False)
+
+        cls._reset_compiler_state()
+
+        project.load()
+
+        # complete the set of registered plugins from the previously registered ones
+        cls._restore_compiler_state(project)
+
+    @classmethod
+    def _save_compiler_state(cls) -> None:
+        cls._registered_plugins.update(PluginMeta.get_functions())
+        cls._registered_resources.update(dict(resources.resource._resources))
+        cls._registered_providers.update(dict(handler.Commander.get_handlers()))
+        cls._registered_references.update(dict(references.reference.get_references()))
+        cls._registered_mutators.update(dict(references.mutator.get_mutators()))
+
+    @classmethod
+    def _reset_compiler_state(cls) -> None:
+        PluginMeta.clear()
+        resources.resource.reset()
+        handler.Commander.reset()
+        references.reference.reset()
+        references.mutator.reset()
+
+    @classmethod
+    def _restore_compiler_state(cls, project: module.Project) -> None:
+        """
+        Re-register all compiler state objects.
+        """
+        loaded_mod_ns_pattern: Pattern[str] = re.compile(
+            "(" + "|".join(re.escape(mod) for mod in project.modules.keys()) + ")::"
+        )
+        # Restore plugins
+        currently_registered_plugins = set(PluginMeta.get_functions().keys())
+        for fq_plugin_name, plugin in cls._registered_plugins.items():
+            if fq_plugin_name not in currently_registered_plugins and loaded_mod_ns_pattern.match(fq_plugin_name):
+                PluginMeta.add_function(plugin)
+        # Restore resources
+        currently_registered_resources = set(resources.resource.get_entity_resources())
+        for fq_resource_name, (resource_cls, options) in cls._registered_resources.items():
+            if fq_resource_name not in currently_registered_resources and loaded_mod_ns_pattern.match(fq_resource_name):
+                resources.resource.add_resource(fq_resource_name, resource_cls, options)
+        # Restore providers
+        currently_registered_providers = {fq_prov_name for fq_prov_name, _ in handler.Commander.get_providers()}
+        for fq_provider_name, provider_cls in cls._registered_providers.items():
+            if fq_provider_name not in currently_registered_providers and loaded_mod_ns_pattern.match(fq_provider_name):
+                handler.Commander.add_provider(fq_provider_name, provider_cls)
+        # Restore references
+        currently_registered_references = {ref_name for ref_name, _ in references.reference.get_references()}
+        for reference_name, reference_cls in cls._registered_references.items():
+            if reference_name not in currently_registered_references and loaded_mod_ns_pattern.match(reference_name):
+                references.reference.add_reference(reference_name, reference_cls)
+        # Restore mutators
+        currently_registered_mutators = {mut_name for mut_name, _ in references.mutator.get_mutators()}
+        for mutator_name, mutator_cls in cls._registered_mutators.items():
+            if mutator_name not in currently_registered_mutators and loaded_mod_ns_pattern.match(mutator_name):
+                references.mutator.add_mutator(mutator_name, mutator_cls)
+
+    @classmethod
+    def register_dynamic_module(cls, module_name: str) -> None:
+        """
+        Register a module as dynamic by name. Dynamic modules are forcefully reloaded on each project load.
+        """
+        cls._dynamic_modules.add(module_name)
+
+    @classmethod
+    def _unload_dynamic_modules(cls) -> None:
+        """
+        Unload all registered dynamic modules to force a reload on the next compile. Should be called at least once between
+        project loads because it assumes that either a dynamic module is loaded by the currently active project or it was
+        not loaded at all.
+        """
+        if not hasattr(module.Module, "unload"):
+            # older versions of core (<6) don't support (and don't require) explicit module unloading
+            return
+        project: module.Project
+        try:
+            project = module.Project.get()
+        except module.ProjectNotFoundException:
+            # no project has been loaded yet, no need to unload any modules
+            return
+        for mod in cls._dynamic_modules:
+            if mod in project.modules:
+                project.modules[mod].unload()
+
+    @classmethod
+    def clear_dynamic_modules(cls) -> None:
+        """
+        Clear the set of registered dynamic modules, unloading them first.
+        """
+        cls._unload_dynamic_modules()
+        cls._dynamic_modules = set()
+
+    @classmethod
+    def _reset_module_state(cls) -> None:
+        """
+        Resets any state kept on Python module objects associated with Inmanta modules by calling predefined cleanup functions.
+        """
+        for mod_name, mod in sys.modules.items():
+            if mod_name.startswith("inmanta_plugins."):
+                for func_name, func in mod.__dict__.items():
+                    if func_name.startswith("inmanta_reset_state") and callable(func):
+                        func()
 
 
 class Compiler:
