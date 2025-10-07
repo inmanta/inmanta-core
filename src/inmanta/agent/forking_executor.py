@@ -225,7 +225,7 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         # sub executors
         self.ctx = ExecutorContext(self, environment)
 
-        # venc keep alive
+        # venv keep alive
         # This interval and this task will be initialized when the InitCommand is received, see usage of `venv_cleanup_task`.
         # We set this to `None` as this field will be used to ensure that the InitCommand is only called once
         self.timer_venv_scheduler_interval: typing.Optional[float] = None
@@ -319,7 +319,7 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         """
         # makes mypy happy
         assert self.ctx.venv is not None
-        path = pathlib.Path(self.ctx.venv.env_path) / const.INMANTA_VENV_STATUS_FILENAME
+        path = pathlib.Path(self.ctx.venv.env_path) / ".inmanta" / const.INMANTA_VENV_STATUS_FILENAME
         path.touch()
         self.logger.log(
             const.LOG_LEVEL_TRACE, "Touching venv status %s, then sleeping %f", path, self.timer_venv_scheduler_interval
@@ -845,7 +845,7 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
         super().__init__()
         self.init_once()
 
-        # Can be overriden in tests
+        # Can be overridden in tests
         self.venv_checkup_interval: float = 60.0
 
         self.thread_pool = thread_pool
@@ -1084,10 +1084,10 @@ class MPManager(
 
     async def create_member(self, executor_id: executor.ExecutorId) -> MPExecutor:
         try:
-            process = await self.process_pool.get(executor_id.blueprint)
+            process: MPProcess = await self.process_pool.get(executor_id.blueprint)
             # FIXME: we have a race here: the process can become empty between these two calls
             # Current thinking is that this race is unlikely
-            result = await process.get(executor_id)
+            result: MPExecutor = await process.get(executor_id)
 
             executors = self.agent_map.get(executor_id.agent_name)
             assert executors is not None  # make mypy happy
