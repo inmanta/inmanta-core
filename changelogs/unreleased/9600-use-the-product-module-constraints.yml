@@ -4,6 +4,6 @@ description: >
   the `server.compatibility_file` option to None.
 issue-nr: 9600
 change-type: minor
-destination-branches: [master, iso8]
+destination-branches: [iso8]
 sections:
   minor-improvement: "{{description}}"
