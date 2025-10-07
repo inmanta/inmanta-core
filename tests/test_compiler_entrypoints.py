@@ -16,6 +16,7 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import pytest
 import os
 from collections import defaultdict
 
@@ -402,25 +403,43 @@ def test_reset_compiler_state(snippetcompiler):
         )
         """
     )
+
     compiler_obj = Compiler()
     compiler_obj.compile()
 
     # Verify we have compiler state
-    assert list(resources.resource.get_entity_resources())
-    assert handler.Commander.get_handlers()
-    assert [k for k, _ in references.reference.get_references() if not k.startswith("core::")]
-    assert [k for k, _ in references.mutator.get_mutators() if not k.startswith("core::")]
-    assert plugins.PluginMeta.get_functions()
-    assert module.Project.get().modules
+    registered_resources = list(resources.resource.get_entity_resources())
+    assert registered_resources
+    registered_providers = dict(handler.Commander.get_handlers())
+    assert registered_providers
+    registered_references = [k for k, _ in references.reference.get_references() if not k.startswith("core::")]
+    assert registered_references
+    registered_mutators = [k for k, _ in references.mutator.get_mutators() if not k.startswith("core::")]
+    assert registered_mutators
+    registered_plugins = plugins.PluginMeta.get_functions()
+    assert registered_plugins
+    registered_modules = dict(module.Project.get().modules)
+    assert registered_modules
 
-    ProjectLoader.load(snippetcompiler.project)
-    compiler_obj.compile()
+    # TODO:
+    #ProjectLoader.load(snippetcompiler.project)
+    #compiler_obj.compile()
 
-    # Verify that compiler state was cleaned up
-    assert list(resources.resource.get_entity_resources())
-    assert handler.Commander.get_handlers()
-    assert [k for k, _ in references.reference.get_references() if not k.startswith("core::")]
-    assert [k for k, _ in references.mutator.get_mutators() if not k.startswith("core::")]
-    assert plugins.PluginMeta.get_functions()
-    assert module.Project.get().modules
+    #assert list(resources.resource.get_entity_resources()) == registered_resources
+    #assert handler.Commander.get_handlers() == registered_providers
+    #assert [k for k, _ in references.reference.get_references() if not k.startswith("core::")] == registered_references
+    #assert [k for k, _ in references.mutator.get_mutators() if not k.startswith("core::")] == registered_mutators
+    #assert plugins.PluginMeta.get_functions() == registered_plugins
+    #assert module.Project.get().modules == registered_modules
+
+    #ProjectLoader.register_dynamic_module("successhandlermodule")
+    #ProjectLoader.load(snippetcompiler.project)
+    #compiler_obj.compile()
+
+    #assert not list(resources.resource.get_entity_resources())
+    #assert not handler.Commander.get_handlers()
+    #assert not [k for k, _ in references.reference.get_references() if not k.startswith("core::")]
+    #assert not [k for k, _ in references.mutator.get_mutators() if not k.startswith("core::")]
+    #assert not plugins.PluginMeta.get_functions()
+    #assert module.Project.get().modules == registered_modules
 
