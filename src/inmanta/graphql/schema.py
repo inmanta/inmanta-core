@@ -31,7 +31,7 @@ from strawberry.schema.config import StrawberryConfig
 from strawberry.types import Info
 from strawberry.types.info import ContextType
 from strawberry_sqlalchemy_mapper import StrawberrySQLAlchemyLoader, StrawberrySQLAlchemyMapper
-
+from sqlakeyset.asyncio import select_page
 """
 The strawberry models in this file are generated from the sqlalchemy models in inmanta.data.sqlalchemy.models.
 We use a `StrawberrySQLAlchemyMapper` to map a sqlalchemy model to a strawberry model via the `type` decorator.
@@ -362,6 +362,15 @@ class EnvironmentOrder(StrawberryOrder):
     def key_to_model(self) -> dict[str, type[models.Base]]:
         return {"id": self.model, "name": self.model}
 
+@strawberry.type
+class EnvironmentEdge(relay.Edge[Environment]):
+    @classmethod
+    def resolve_edge(cls, node: Environment, *, cursor: str = None, **kwargs) -> typing.Self:
+        return cls(cursor=cursor, node=node, **kwargs)
+
+@strawberry.type
+class EnvironmentConnection(relay.Connection[Environment]):
+    pass
 
 @mapper.type(models.Notification)
 class Notification:
@@ -542,15 +551,37 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
 
     @strawberry.type
     class Query:
-        @relay.connection(relay.ListConnection[Environment])  # type: ignore[misc, type-var]
+        @strawberry.field # type: ignore[misc, type-var]
         async def environments(
             self,
+            info: CustomInfo,
+            first: typing.Optional[int] = strawberry.UNSET,
+            after: typing.Optional[str] = strawberry.UNSET,
+            before: typing.Optional[str] = strawberry.UNSET,
             filter: typing.Optional[EnvironmentFilter] = strawberry.UNSET,
             order_by: typing.Optional[Sequence[EnvironmentOrder]] = strawberry.UNSET,
-        ) -> typing.Iterable[models.Environment]:
+        ) -> EnvironmentConnection:
             async with get_session() as session:
+                first = 20 if first is None or first is strawberry.UNSET else first
                 stmt = select(models.Environment)
                 stmt = add_filter_and_sort(stmt, filter, order_by)
+
+                kwargs = {}
+                if after is not None or after is not strawberry.UNSET:
+                    kwargs["after"] = after
+                page = await select_page(session, stmt, per_page=first, **kwargs)
+                edges = [
+                    EnvironmentEdge.resolve_edge(cursor=str(res[0])[1:], node=res[1]) for res in page.paging.bookmark_items()
+                ]
+                return EnvironmentConnection(
+                    edges=edges,
+                    page_info=strawberry.relay.PageInfo(
+                        has_next_page=page.paging.has_next,
+                        has_previous_page=page.paging.has_previous,
+                        start_cursor=page.paging.bookmark_next[1:],
+                        end_cursor=page.paging.bookmark_previous[1:],
+                    )
+                )
                 _environments = await session.scalars(stmt)
                 return _environments.all()
 

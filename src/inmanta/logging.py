@@ -446,7 +446,7 @@ class LoggingConfigBuilder:
                 },
                 # Prevent SQLAlchemy from producing too many/superfluous log messages
                 "sqlalchemy.engine": {
-                    "level": "WARNING",
+                    "level": "DEBUG",
                     "propagate": True,
                 },
                 "inmanta.data.NullerPool": {
