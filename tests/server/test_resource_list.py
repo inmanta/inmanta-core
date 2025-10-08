@@ -31,11 +31,15 @@ import pytest
 from dateutil.tz import UTC
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
+import inmanta.util
 import util.performance
 import utils
-from inmanta import data, util
+from inmanta import const, data, util
+from inmanta.agent.executor import DeployReport
 from inmanta.const import ResourceState
 from inmanta.data.model import LatestReleasedResource
+from inmanta.deploy import scheduler
+from inmanta.resources import Id
 from inmanta.server import config
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 
@@ -782,37 +786,163 @@ async def test_deploy_summary(server, client, env_with_resources):
     assert result.result["metadata"]["deploy_summary"] == empty_summary
 
 
+@pytest.fixture
+async def very_big_env(server, client, environment, clienthelper, null_agent, monkeypatch, instances: int) -> int:
+    env_obj = await data.Environment.get_by_id(environment)
+    await env_obj.set(data.AUTO_DEPLOY, True)
+
+    deploy_counter = 0
+    # The mix:
+    # 2*<instances> versions -> increments , all hashes change after <instances> steps
+    # each version with 100 resources
+    # one undefined
+    # one skip for undef
+    # one failed
+    # one skipped
+    # orphans: in second half, produce 10 orphans each -> 10*<instances> orphans
+    # every 10th version is not released -> not sure what this means and if it still applies
+
+    dummy_scheduler = scheduler.ResourceScheduler(uuid.UUID(environment), executor_manager=None, client=client)
+
+    async def mock_run(self) -> None:
+        """Mocks the call to TaskRunner._run."""
+        return
+
+    # We want dummy_scheduler._running=True so that read_version runs correctly
+    # But we don't want the TaskRunner to actually run anything that is scheduled (we will do that manually)
+    monkeypatch.setattr("inmanta.deploy.scheduler.TaskRunner._run", mock_run)
+    await dummy_scheduler._initialize()
+
+    async def make_resource_set(tenant_index: int, iteration: int) -> list[dict[str, object]]:
+        is_full = tenant_index == 0 and iteration == 0
+        if is_full:
+            version = await clienthelper.get_version()
+        else:
+            version = 0
+
+        def resource_id(ri: int) -> str:
+            if iteration > 0 and ri > 40:
+                ri += 10
+            return f"test::XResource{int(ri / 20)}[agent{tenant_index},sub={ri}]"
+
+        attributes = [
+            {
+                "id": f"{resource_id(ri)},v={version}",
+                "send_event": False,
+                "purged": False,
+                "requires": [] if ri % 2 == 0 else [resource_id(ri - 1)],
+                "my_attribute": iteration,
+            }
+            for ri in range(100)
+        ]
+        resource_state = {resource_id(0): ResourceState.undefined}
+        resource_sets = {resource_id(ri): f"set{tenant_index}" for ri in range(100)}
+        if is_full:
+            result = await client.put_version(
+                environment,
+                version,
+                attributes,
+                module_version_info={},
+                resource_state=resource_state,
+                unknowns=[],
+                version_info={},
+                compiler_version=inmanta.util.get_compiler_version(),
+                resource_sets=resource_sets,
+            )
+            assert result.code == 200
+        else:
+            result = await client.put_partial(
+                environment,
+                module_version_info={},
+                resource_state=resource_state,
+                unknowns=[],
+                version_info={},
+                resources=attributes,
+                resource_sets=resource_sets,
+            )
+            assert result.code == 200
+            version = result.result["data"]
+        await utils.wait_until_version_is_released(client, environment, version)
+
+        # Updates the scheduler state
+        await dummy_scheduler.read_version()
+
+        # Get all resources
+        result = await client.get_version(tid=environment, id=version)
+        assert result.code == 200
+        all_resources: list[dict[str, object]] = result.result["resources"]
+
+        resources_in_dirty_set: list[dict[str, object]] = [
+            r
+            for r in all_resources
+            if r["resource_id"] in dummy_scheduler._state.dirty and r["agent"] == f"agent{tenant_index}"
+        ]
+
+        async def deploy(resource: dict[str, object]) -> None:
+            nonlocal deploy_counter
+            deploy_counter = deploy_counter + 1
+            rid = ResourceIdStr(resource["resource_id"])
+            action_id = uuid.uuid4()
+            deploy_intent = await dummy_scheduler.deploy_start(action_id, rid)
+            if "sub=4]" in rid:
+                # never finish deploying r4
+                return
+            if deploy_intent is not None:
+                await dummy_scheduler.deploy_done(
+                    deploy_intent,
+                    DeployReport(
+                        rvid=ResourceVersionIdStr(f"{rid},v={version}"),
+                        action_id=action_id,
+                        resource_state=(
+                            const.HandlerResourceState.failed
+                            if "sub=2]" in rid
+                            else const.HandlerResourceState.skipped if "sub=3]" in rid else const.HandlerResourceState.deployed
+                        ),
+                        messages=[],
+                        changes={},
+                        change=None,
+                    ),
+                )
+
+        await asyncio.gather(*(deploy(resource) for resource in resources_in_dirty_set))
+        return resources_in_dirty_set
+
+    first_iteration_resources = {}
+    for iteration in [0, 1]:
+        for tenant in range(instances):
+            resources = await make_resource_set(tenant, iteration)
+            LOGGER.warning("deploys: %d, tenant: %d, iteration: %d", deploy_counter, tenant, iteration)
+            # Since we are using null_agent we need to manually mark orphans
+            if iteration == 0:
+                first_iteration_resources[tenant] = {Id.parse_id(res["resource_id"]).resource_str() for res in resources}
+            elif iteration == 1:
+                new_rids = {Id.parse_id(res["resource_id"]).resource_str() for res in resources}
+                orphans = first_iteration_resources[tenant] - new_rids
+                await dummy_scheduler.state_update_manager.mark_as_orphan(environment=environment, resource_ids=orphans)
+
+    return instances
+
+
+@pytest.mark.parametrize("instances", [2])  # set the size
 @pytest.mark.parametrize("trace", [False])  # make it analyze the queries
-async def test_resources_paging_performance(client, environment, mixed_resource_generator, trace: bool, async_finalizer):
+async def test_resources_paging_performance(client, environment, very_big_env: int, trace: bool, async_finalizer):
     """Scaling test, not part of the normal testsuite"""
     # Basic sanity
-    instances = 2
-    resources_per_version = 100
-    # From the `mixed_resource_generator` docstring, and for 2 instances with 100 resources per version we expect:
-    # 220 total resources
-    #   20 orphaned
-    #   2 undefined
-    #   2 skipped_for_undefined
-    #   2 failed
-    #   2 skipped
-    #   2 deploying
-    #   190 deployed
-    await mixed_resource_generator(environment, instances, resources_per_version)
     result = await client.resource_list(environment, limit=5, deploy_summary=True)
     assert result.code == 200
     assert result.result["metadata"]["deploy_summary"] == {
         "by_state": {
             "available": 0,
             "cancelled": 0,
-            "deployed": (resources_per_version - 5) * instances,
-            "deploying": instances,
-            "failed": instances,
-            "skipped": instances,
-            "skipped_for_undefined": instances,
+            "deployed": (95 * very_big_env),
+            "deploying": very_big_env,
+            "failed": very_big_env,
+            "skipped": very_big_env,
+            "skipped_for_undefined": very_big_env,
             "unavailable": 0,
-            "undefined": instances,
+            "undefined": very_big_env,
         },
-        "total": instances * resources_per_version,
+        "total": very_big_env * 100,
     }
 
     port = config.server_bind_port.get()
@@ -821,14 +951,14 @@ async def test_resources_paging_performance(client, environment, mixed_resource_
 
     # Test link for self page
     filters = [
-        ({}, instances * (resources_per_version + 10)),
-        ({"status": "!orphaned"}, instances * resources_per_version),
-        ({"status": "deploying"}, instances),
-        ({"status": "deployed"}, (resources_per_version - 5) * instances),
+        ({}, very_big_env * 110),
+        ({"status": "!orphaned"}, very_big_env * 100),
+        ({"status": "deploying"}, very_big_env),
+        ({"status": "deployed"}, 95 * very_big_env),
         ({"status": "available"}, 0),
-        ({"agent": "agent0"}, resources_per_version + 10),
+        ({"agent": "agent0"}, 110),
         ({"agent": "someotheragent"}, 0),
-        ({"resource_id_value": "39"}, instances),
+        ({"resource_id_value": "39"}, very_big_env),
     ]
 
     orders = [

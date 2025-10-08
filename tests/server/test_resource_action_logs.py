@@ -35,33 +35,36 @@ resource_id_a = r"std::testing::NullResource[agent1,name=/tmp#/%%/\_file1.txt]"
 
 @pytest.fixture
 async def env_with_logs(client, server, environment: str):
+    cm_times = []
+    for i in range(1, 10):
+        cm_times.append(datetime.datetime.strptime(f"2021-07-07T10:1{i}:00.0", "%Y-%m-%dT%H:%M:%S.%f"))
+    cm_time_idx = 0
     env_id = uuid.UUID(environment)
     resource_set_per_version: dict[int, data.ResourceSet] = {}
-    cm_times = {}
     for i in range(1, 10):
-        cm_times[i] = datetime.datetime.strptime(f"2021-07-07T10:1{i}:00.0", "%Y-%m-%dT%H:%M:%S.%f")
         cm = data.ConfigurationModel(
             environment=env_id,
             version=i,
-            date=cm_times[i],
+            date=cm_times[cm_time_idx],
             total=1,
             released=i != 1 and i != 9,
             version_info={},
             is_suitable_for_partial_compiles=False,
         )
+        cm_time_idx += 1
         await cm.insert()
 
         resource_set = data.ResourceSet(environment=env_id, id=uuid.uuid4())
         await insert_with_link_to_configuration_model(resource_set, versions=[i])
         resource_set_per_version[i] = resource_set
 
-    msg_timings = {
-        i: datetime.datetime.strptime("2021-07-07T10:10:00.0", "%Y-%m-%dT%H:%M:%S.%f")
-        .replace(minute=i)
-        .astimezone(datetime.timezone.utc)
-        for i in range(0, 14)
-    }
-
+    msg_timings = []
+    for i in range(1, 30):
+        msg_timings.append(
+            datetime.datetime.strptime("2021-07-07T10:10:00.0", "%Y-%m-%dT%H:%M:%S.%f")
+            .replace(minute=i)
+            .astimezone(datetime.timezone.utc)
+        )
     msg_timings_idx = 0
     for i in range(1, 10):
         action_id = uuid.uuid4()
@@ -90,7 +93,7 @@ async def env_with_logs(client, server, environment: str):
             ],
             action_id=action_id,
             action=const.ResourceAction.deploy if i % 2 else const.ResourceAction.pull,
-            started=cm_times[i],
+            started=cm_times[i - 1],
         )
         await resource_action.insert()
         if i % 2:

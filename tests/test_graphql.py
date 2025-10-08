@@ -13,19 +13,16 @@ Contact: code@inmanta.com
 """
 
 import datetime
-import logging
 import uuid
 
 import pytest
 
 import inmanta.data.sqlalchemy as models
 from inmanta import const, data
-from inmanta.deploy import state
-from inmanta.graphql.schema import to_snake_case
 from inmanta.server import SLICE_COMPILER
 from inmanta.server.services.compilerservice import CompilerService
 from inmanta.util import retry_limited
-from utils import insert_with_link_to_configuration_model, run_compile_and_wait_until_compile_is_done
+from utils import run_compile_and_wait_until_compile_is_done
 
 
 @pytest.fixture
@@ -80,109 +77,6 @@ async def setup_database(project_default, server, client):
         session.add_all([*add_notifications(id_env_1), *add_notifications(id_env_2)])
         await session.commit()
         await session.flush()
-
-    resource_set_per_version: dict[int, data.ResourceSet] = {}
-    cm_times = {}
-    for i in range(1, 10):
-        cm_times[i] = datetime.datetime.strptime(f"2021-07-07T10:1{i}:00.0", "%Y-%m-%dT%H:%M:%S.%f")
-        cm = data.ConfigurationModel(
-            environment=id_env_1,
-            version=i,
-            date=cm_times[i],
-            total=1,
-            released=i != 1 and i != 9,
-            version_info={},
-            is_suitable_for_partial_compiles=False,
-        )
-        await cm.insert()
-
-        resource_set = data.ResourceSet(environment=id_env_1, id=uuid.uuid4())
-        await insert_with_link_to_configuration_model(resource_set, versions=[i])
-        resource_set_per_version[i] = resource_set
-
-    msg_timings = {
-        i: datetime.datetime.strptime("2021-07-07T10:10:00.0", "%Y-%m-%dT%H:%M:%S.%f")
-        .replace(minute=i)
-        .astimezone(datetime.timezone.utc)
-        for i in range(0, 14)
-    }
-
-    msg_timings_idx = 0
-    for i in range(1, 10):
-        action_id = uuid.uuid4()
-        res1 = data.Resource.new(
-            environment=id_env_1,
-            resource_version_id=f"std::testing::NullResource[agent1,name=dir1],v={i}",
-            resource_set=resource_set_per_version[i],
-            attributes={"name": "file2", "purged": True},
-        )
-        await res1.insert()
-
-        res2 = data.Resource.new(
-            environment=id_env_1,
-            resource_version_id=f"std::testing::NullResource[agent1,name=dir2],v={i}",
-            resource_set=resource_set_per_version[i],
-            attributes={"name": "dir2", "purged": False},
-        )
-        await res2.insert()
-
-        resource_action = data.ResourceAction(
-            environment=id_env_1,
-            version=i,
-            resource_version_ids=[
-                f"std::testing::NullResource[agent1,name=dir1],v={i}",
-                f"std::testing::NullResource[agent1,name=dir2],v={i}",
-            ],
-            action_id=action_id,
-            action=const.ResourceAction.deploy if i % 2 else const.ResourceAction.pull,
-            started=cm_times[i],
-        )
-        await resource_action.insert()
-        if i % 2:
-            resource_action.add_logs(
-                [
-                    data.LogLine.log(
-                        logging.INFO,
-                        "Successfully stored version %(version)d",
-                        version=i,
-                        timestamp=msg_timings[msg_timings_idx],
-                    ),
-                ]
-            )
-            msg_timings_idx += 1
-        else:
-            resource_action.add_logs(
-                [
-                    data.LogLine.log(
-                        logging.INFO,
-                        "Resource version pulled by client for agent %(agent)s",
-                        agent="admin",
-                        timestamp=msg_timings[msg_timings_idx],
-                    ),
-                    data.LogLine.log(
-                        logging.DEBUG, "Setting deployed due to known good status", timestamp=msg_timings[msg_timings_idx + 1]
-                    ),
-                ]
-            )
-            msg_timings_idx += 2
-        await resource_action.save()
-        await data.ResourcePersistentState.populate_for_version(environment=id_env_1, model_version=i)
-
-
-@pytest.mark.parametrize(
-    "input, output",
-    [
-        ("isDeploying", "is_deploying"),
-        ("lastDeployResult", "last_deploy_result"),
-        ("resourceIdValue", "resource_id_value"),
-        ("blocked", "blocked"),
-    ],
-)
-async def test_to_snake_case(input, output):
-    """
-    Check that the to_snake_case function works as expected for our intended use.
-    """
-    assert to_snake_case(input) == output
 
 
 async def test_graphql_schema(server, client):
@@ -249,10 +143,10 @@ async def test_query_environments_with_sorting(server, client, setup_database):
 }
 """
     test_cases = [
-        ('orderBy:[{key: "name", order:"asc"}]', ["test-env-a", "test-env-b", "test-env-c"]),
-        ('orderBy:[{key: "name", order:"desc"}]', ["test-env-c", "test-env-b", "test-env-a"]),
-        ('orderBy:[{key: "id", order:"asc"}]', ["test-env-b", "test-env-c", "test-env-a"]),
-        ('orderBy:[{key: "id", order:"desc"}]', ["test-env-a", "test-env-c", "test-env-b"]),
+        ('orderBy:{name: "asc"}', ["test-env-a", "test-env-b", "test-env-c"]),
+        ('orderBy:{name: "desc"}', ["test-env-c", "test-env-b", "test-env-a"]),
+        ('orderBy:{id: "asc"}', ["test-env-b", "test-env-c", "test-env-a"]),
+        ('orderBy:{id: "desc"}', ["test-env-a", "test-env-c", "test-env-b"]),
     ]
 
     for test_case in test_cases:
@@ -445,9 +339,9 @@ async def test_notifications(server, client, setup_database):
               cleared: false
               environment: "11111111-1234-5678-1234-000000000001"
             },
-            orderBy: [
-                {key: "created" order: "desc"}
-            ])
+            orderBy: {
+                created: "desc"
+            })
     """
     )
     assert result.code == 200
@@ -472,9 +366,9 @@ async def test_notifications(server, client, setup_database):
               cleared: false
               environment: "11111111-1234-5678-1234-000000000001"
             },
-            orderBy: [
-                {key: "created" order: "desc"}
-            ],
+            orderBy: {
+                created: "desc"
+            },
             first: 3)
     """
     )
@@ -504,9 +398,9 @@ async def test_notifications(server, client, setup_database):
               cleared: false
               environment: "11111111-1234-5678-1234-000000000001"
             },
-            orderBy: [
-                {key: "created" order: "desc"}
-            ],
+            orderBy: {
+                created: "desc"
+            },
             first: 3, after: "%s")
     """
         % pageInfo["endCursor"]
@@ -529,215 +423,3 @@ async def test_notifications(server, client, setup_database):
         created = datetime.datetime.fromisoformat(edge["node"]["created"])
         assert created < previous_time
         previous_time = created
-
-
-async def test_query_resources(server, client, environment, mixed_resource_generator):
-    def is_subset_dict(expected: dict, actual: dict) -> bool:
-        """
-        Checks if a dict is a subset of another dict.
-        Allows for nested dicts.
-        """
-        for key, val in expected.items():
-            if key not in actual:
-                return False
-            if isinstance(val, dict) and isinstance(actual[key], dict):
-                if not is_subset_dict(val, actual[key]):
-                    return False
-            elif actual[key] != val:
-                return False
-        return True
-
-    instances = 2
-    resources_per_version = 10
-    iterations = 2
-    total_versions = iterations * instances
-    total_resources = total_versions * resources_per_version
-    await mixed_resource_generator(environment, instances, resources_per_version)
-    filters = [
-        # (1 undefined, 1 skipped for undefined) * 2 versions * <instances>
-        {
-            "query": "{blocked: {eq: BLOCKED}}",
-            "result": 2 * total_versions,
-            "assertion": {"state": {"blocked": state.Blocked.BLOCKED.name}},
-        },
-        {"query": "{blocked: {eq: BLOCKED, neq: BLOCKED}}", "result": 0},
-        {"query": '{agent: {eq: ["agent1"]}}', "result": resources_per_version * instances, "assertion": {"agent": "agent1"}},
-        {"query": '{agent: {contains: ["%agent%"]}}', "result": total_resources},
-        {"query": '{agent: {notContains: ["%agent%"]}}', "result": 0},
-        {
-            "query": '{agent: {notContains: ["%1"]}}',
-            "result": resources_per_version * instances,
-            "assertion": {"agent": "agent0"},
-        },
-        {"query": '{agent: {contains: ["agent_"]}}', "result": total_resources},
-        {"query": '{agent: {contains: ["1", "2"]}}', "result": 0},
-        {"query": '{resourceType: {notContains: ["%XResource%"]}}', "result": 0},
-        {"query": '{resourceType: {notContains: ["%xresource%"]}}', "result": 0},
-        {"query": '{resourceIdValue: {notContains: ["1"]}}', "result": (resources_per_version - 1) * total_versions},
-        {"query": '{resourceIdValue: {eq: ["0"]}}', "result": total_versions, "assertion": {"resourceIdValue": "0"}},
-        {"query": "{purged: true}", "result": 0},
-        {"query": "{purged: false}", "result": total_resources},
-        # skipped for undefined
-        {
-            "query": "{complianceState: {eq: HAS_UPDATE} blocked: {eq: BLOCKED}}",
-            "result": total_versions,
-            "assertion": {
-                "state": {"blocked": state.Blocked.BLOCKED.name, "complianceState": state.Compliance.HAS_UPDATE.name}
-            },
-        },
-        # 1 undefined, 1 skipped for undefined, 1 still deploying
-        {
-            "query": "{lastDeployResult: {eq: NEW}}",
-            "result": 3 * total_versions,
-            "assertion": {"state": {"lastDeployResult": state.DeployResult.NEW.name}},
-        },
-        {"query": "{isDeploying: true}", "result": total_versions, "assertion": {"state": {"isDeploying": True}}},
-        {
-            "query": "{isDeploying: false}",
-            "result": (resources_per_version - 1) * total_versions,
-            "assertion": {"state": {"isDeploying": False}},
-        },
-        # 1 undefined, 1 skipped for undefined
-        {
-            "query": "{lastDeployResult: {eq: NEW} isDeploying: false}",
-            "result": 2 * total_versions,
-            "assertion": {"state": {"lastDeployResult": state.DeployResult.NEW.name, "isDeploying": False}},
-        },
-        #  1 skipped for undefined
-        {
-            "query": "{lastDeployResult: {eq: NEW} isDeploying: false complianceState: {neq: UNDEFINED}}",
-            "result": total_versions,
-            "assertion": {
-                "state": {
-                    "lastDeployResult": state.DeployResult.NEW.name,
-                    "isDeploying": False,
-                    "complianceState": state.Compliance.HAS_UPDATE.name,
-                }
-            },
-        },
-    ]
-    for f in filters:
-        query = (
-            """
-        {
-            resources (filter: %s) {
-                edges {
-                    node {
-                      resourceId
-                      agent
-                      resourceIdValue
-                      resourceType
-                      attributes
-                      purged
-                      state{
-                        isOrphan
-                        isUndefined
-                        blocked
-                        isDeploying
-                        lastDeployResult
-                        lastDeploy
-                        complianceState
-                        currentIntentAttributeHash
-                      }
-                      requiresLength
-                    }
-                }
-            }
-        }
-        """
-            % f["query"]
-        )
-        result = await client.graphql(query=query)
-        assert result.code == 200
-        assert result.result["data"]["errors"] is None
-        assert len(result.result["data"]["data"]["resources"]["edges"]) == f["result"], f["query"]
-        assertion = f.get("assertion", None)
-        if assertion:
-            for res in result.result["data"]["data"]["resources"]["edges"]:
-                assert is_subset_dict(assertion, res["node"])
-
-    query = """
-    {
-        resources (filter: {lastDeployResult: {eq: NEW}}
-            orderBy: [{key: "complianceState" order: "asc"}]) {
-            edges {
-                node {
-                  state{
-                    complianceState
-                  }
-                }
-            }
-        }
-    }
-    """
-    result = await client.graphql(query=query)
-    assert result.code == 200
-    assert result.result["data"]["errors"] is None
-    result_resources = result.result["data"]["data"]["resources"]["edges"]
-    assert len(result_resources) == 3 * total_versions
-    for i in range(0, len(result_resources)):
-        assert (
-            result_resources[i]["node"]["state"]["complianceState"] == state.Compliance.HAS_UPDATE.name
-            if i < 2 * total_versions
-            else state.Compliance.UNDEFINED.name
-        )
-
-    query = """
-    {
-        resources (filter: {lastDeployResult: {eq: NEW}}
-            orderBy: [{key: "complianceState" order: "desc"}, {key: "isDeploying" order: "asc"}]) {
-            edges {
-                node {
-                  state{
-                    complianceState
-                    isDeploying
-                  }
-                }
-            }
-        }
-    }
-    """
-    result = await client.graphql(query=query)
-    assert result.code == 200
-    assert result.result["data"]["errors"] is None
-    result_resources = result.result["data"]["data"]["resources"]["edges"]
-    assert len(result_resources) == 3 * total_versions
-    for i in range(0, len(result_resources)):
-        # [{UNDEFINED, False}, {HAS_UPDATE, False}, {HAS_UPDATE, True}]
-        assert (
-            result_resources[i]["node"]["state"]["complianceState"] == state.Compliance.UNDEFINED.name
-            if i < total_versions
-            else state.Compliance.HAS_UPDATE.name
-        )
-        assert result_resources[i]["node"]["state"]["isDeploying"] == (False if i < 2 * total_versions else True)
-
-    query = """
-       {
-           resources (filter: {lastDeployResult: {eq: NEW}}
-                    orderBy: [{key: "complianceState" order: "desc"}, {key: "isDeploying" order: "desc"}]) {
-               edges {
-                   node {
-                     state{
-                       complianceState
-                       isDeploying
-                     }
-                   }
-               }
-           }
-       }
-       """
-    result = await client.graphql(query=query)
-    assert result.code == 200
-    assert result.result["data"]["errors"] is None
-    result_resources = result.result["data"]["data"]["resources"]["edges"]
-    assert len(result_resources) == 3 * total_versions
-    for i in range(0, len(result_resources)):
-        # [{UNDEFINED, False}, {HAS_UPDATE, True}, {HAS_UPDATE, False}]
-        assert (
-            result_resources[i]["node"]["state"]["complianceState"] == state.Compliance.UNDEFINED.name
-            if i < total_versions
-            else state.Compliance.HAS_UPDATE.name
-        )
-        assert result_resources[i]["node"]["state"]["isDeploying"] == (
-            False if i < total_versions or i >= 2 * total_versions else True
-        )

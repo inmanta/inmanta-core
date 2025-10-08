@@ -13,19 +13,15 @@ Contact: code@inmanta.com
 """
 
 import dataclasses
-import re
 import typing
 import uuid
-from abc import ABC, abstractmethod
-from enum import StrEnum
-from typing import Sequence, cast
+from typing import cast
 
 import inmanta.data.sqlalchemy as models
 import strawberry
 from inmanta.data import get_session, get_session_factory
-from inmanta.deploy import state
 from inmanta.server.services.compilerservice import CompilerService
-from sqlalchemy import Boolean, Select, UnaryExpression, and_, asc, desc, select
+from sqlalchemy import Select, asc, desc, select
 from strawberry import relay
 from strawberry.schema.config import StrawberryConfig
 from strawberry.types import Info
@@ -61,7 +57,7 @@ There are 4 important building blocks that we have to take into account:
             async def environments(
                 self,
                 filter: typing.Optional[EnvironmentFilter] = strawberry.UNSET,
-                order_by: typing.Optional[Sequence[ResourceOrder]] = strawberry.UNSET,
+                order_by: typing.Optional[EnvironmentOrder] = strawberry.UNSET,
             ) -> typing.Iterable[models.Environment]:
                 async with get_session() as session:
                     stmt = select(models.Environment)
@@ -88,42 +84,15 @@ There are 4 important building blocks that we have to take into account:
             class EnvironmentFilter(StrawberryFilter):
                 id: typing.Optional[str] = strawberry.UNSET
         ```
-        This class determines what fields we allow our users to filter on and what type we expect to receive.
-
-        We can also define custom filters to handle more complex behaviour than simple equality.
-        i.e. a filter to get values based on a list of enum values
-        ```
-            @strawberry.input
-            class EnumFilter[T: StrEnum](CustomFilter):
-                # Expects to receive a StrEnum.
-                # Provides equal and not equal filters. Multiple enum values can be provided to include/exclude
-                eq: list[T] | None = strawberry.UNSET
-                neq: list[T] | None = strawberry.UNSET
-
-                def apply_filter(self, stmt: Select[typing.Any], model: type[models.Base], key: str) -> Select[typing.Any]:
-                    # Enums are stored as a string of their name in the database and not of their value
-                    if self.eq is not None and self.eq is not strawberry.UNSET:
-                        stmt = stmt.where(getattr(model, key).in_([x.name for x in self.eq]))
-                    if self.neq is not None and self.neq is not strawberry.UNSET:
-                        stmt = stmt.where(~getattr(model, key).in_([x.name for x in self.neq]))
-                    return stmt
-        ```
+        This class determines what fields we allow our users to filter on.
     4) The `StrawberryOrder` child class for our strawberry model i.e.
         ```
-            @strawberry.input
+            @strawberry.input(one_of=True)
             class EnvironmentOrder(StrawberryOrder):
-                @property
-                def model(self) -> type[models.Base]:
-                    return models.Environment
-
-                @property
-                def key_to_model(self) -> dict[str, type[models.Base]]:
-                    return {"id": self.model, "name": self.model}
+                id: typing.Optional[str] = strawberry.UNSET
+                name: typing.Optional[str] = strawberry.UNSET
         ```
         This class determines what fields we allow our users to sort the results.
-
-    Some tips:
-        - Use stmt.compile(compile_kwargs={"literal_binds": True}) to get the underlying SQL code of a statement.
 
     Known limitations:
         - No paging/filtering/sorting on nested relationships:
@@ -147,17 +116,6 @@ There are 4 important building blocks that we have to take into account:
 mapper: StrawberrySQLAlchemyMapper[typing.Any] = StrawberrySQLAlchemyMapper()
 
 
-def to_snake_case(name: str) -> str:
-    """
-    Convert a string from camelCase to snake_case.
-    Strawberry converts the query, filter and order fields to camelCase.
-    With this we accommodate the user to also filter and order in camelCase.
-    """
-    if re.match(r"[A-Z]", name):
-        raise Exception("name cannot start with capital letter.")
-    return re.sub("([A-Z])", r"_\1", name).lower()
-
-
 @dataclasses.dataclass
 class GraphQLContext:
     """
@@ -165,66 +123,6 @@ class GraphQLContext:
     """
 
     compiler_service: CompilerService
-
-
-class CustomFilter(ABC):
-    """
-    Base class for custom filters.
-    Subclasses are expected to implement apply_filter with the concrete logic of the filter
-    """
-
-    @abstractmethod
-    def apply_filter(self, stmt: Select[typing.Any], model: type[models.Base], key: str) -> Select[typing.Any]:
-        """
-        Applies the logic of this custom filter to the given statement.
-        """
-        pass
-
-
-@strawberry.input
-class EnumFilter[T: StrEnum](CustomFilter):
-    """
-    Expects to receive a StrEnum.
-    Provides equal and not equal filters. Multiple enum values can be provided to include/exclude
-    """
-
-    eq: list[T] | None = strawberry.UNSET
-    neq: list[T] | None = strawberry.UNSET
-
-    def apply_filter(self, stmt: Select[typing.Any], model: type[models.Base], key: str) -> Select[typing.Any]:
-        # Enums are stored as a string of their name in the database and not of their value
-        if self.eq is not None and self.eq is not strawberry.UNSET:
-            stmt = stmt.where(getattr(model, key).in_([x.name for x in self.eq]))
-        if self.neq is not None and self.neq is not strawberry.UNSET:
-            stmt = stmt.where(~getattr(model, key).in_([x.name for x in self.neq]))
-        return stmt
-
-
-@strawberry.input
-class StrFilter(CustomFilter):
-    """
-    Provides equal/not equal/contains/not contains filters.
-    Multiple values can be provided to each filter and multiple filters can be active at the same time.
-    contains/not contains support wild card matching with `_` or `%`
-    """
-
-    eq: list[str] | None = strawberry.UNSET
-    neq: list[str] | None = strawberry.UNSET
-    contains: list[str] | None = strawberry.UNSET
-    not_contains: list[str] | None = strawberry.UNSET
-
-    def apply_filter(self, stmt: Select[typing.Any], model: type[models.Base], key: str) -> Select[typing.Any]:
-        if self.eq is not None and self.eq is not strawberry.UNSET:
-            stmt = stmt.where(getattr(model, key).in_(self.eq))
-        if self.neq is not None and self.neq is not strawberry.UNSET:
-            stmt = stmt.where(~getattr(model, key).in_(self.neq))
-        if self.contains is not None and self.contains is not strawberry.UNSET:
-            for c in self.contains:
-                stmt = stmt.where(getattr(model, key).ilike(c))
-        if self.not_contains is not None and self.not_contains is not strawberry.UNSET:
-            for c in self.not_contains:
-                stmt = stmt.where(~getattr(model, key).ilike(c))
-        return stmt
 
 
 class StrawberryFilter:
@@ -238,67 +136,20 @@ class StrawberryFilter:
         """
         Returns the filter in dict form.
         This is fed to the SQLAlchemy query to apply as filter.
-        This is only used for simple filters i.e. exact match on the same table
         """
-        return {key: value for key, value in self.__dict__.items()}
-
-    def apply_filters(self, stmt: Select[typing.Any]) -> Select[typing.Any]:
-        """
-        Applies the filters to the given query.
-        """
-        return stmt.filter_by(**self.get_filter_dict())
-
-    @property
-    def get_models_to_join(self) -> set[type[models.Base]]:
-        """
-        When filtering or sorting on values in a different table, it is necessary to manually do the join.
-        This function returns the tables to join if necessary.
-        """
-        return set()
+        return {key: value for key, value in self.__dict__.items() if value is not strawberry.UNSET}
 
 
-@strawberry.input
 class StrawberryOrder:
     """
     This class determines what fields we allow our users to sort the results on.
+    Only one field is allowed to be sorted on at any time (for simplicity's sake).
+    We use `asc` or `desc` to determine if we are sorting in ascending or descending order.
     The sorting is applied with the `add_filter_and_sort` function.
     The `@strawberry.input` decorator is necessary for this class to be allowed as a parameter of a query
-
-    :param key: The key to sort on.
-    :param order: `asc` or `desc` to determine if we are sorting in ascending or descending order.
     """
 
-    key: str
-    order: str = "asc"
-
-    @property
-    def model(self) -> type[models.Base]:
-        """
-        The base model of the query. To be overridden by subclasses.
-        """
-        return models.Base
-
-    @property
-    def key_to_model(self) -> dict[str, type[models.Base]]:
-        """
-        The allowed keys and respective model to sort on.
-        """
-        return {}
-
-    def get_order_by(self) -> UnaryExpression[typing.Any]:
-        """
-        Returns an Expression to use while sorting.
-        """
-        snake_case_key = to_snake_case(self.key)
-        if snake_case_key not in self.key_to_model.keys():
-            raise Exception(
-                f"Invalid sort key provided expected one of {self.key_to_model.keys()} instead got {snake_case_key}."
-            )
-        if self.order == "asc":
-            return asc(getattr(self.key_to_model[snake_case_key], snake_case_key))
-        elif self.order == "desc":
-            return desc(getattr(self.key_to_model[snake_case_key], snake_case_key))
-        raise Exception(f"Invalid sort order provided expected asc or desc, got {self.order}.")
+    pass
 
 
 def get_expert_mode(root: "Environment") -> bool:
@@ -338,10 +189,6 @@ class Environment:
         "resource_persistent_state",
         "unknownparameter",
         "agent",
-        "inmanta_module",
-        "resource_set",
-        "resource_set_configuration_model",
-        "role_assignment",
     ]
     is_expert_mode: bool = strawberry.field(resolver=get_expert_mode)
     is_compiling: bool = strawberry.field(resolver=get_is_compiling)
@@ -352,20 +199,15 @@ class EnvironmentFilter(StrawberryFilter):
     id: typing.Optional[str] = strawberry.UNSET
 
 
-@strawberry.input
+@strawberry.input(one_of=True)
 class EnvironmentOrder(StrawberryOrder):
-    @property
-    def model(self) -> type[models.Base]:
-        return models.Environment
-
-    @property
-    def key_to_model(self) -> dict[str, type[models.Base]]:
-        return {"id": self.model, "name": self.model}
+    id: typing.Optional[str] = strawberry.UNSET
+    name: typing.Optional[str] = strawberry.UNSET
 
 
 @mapper.type(models.Notification)
 class Notification:
-    __exclude__ = ["environment_", "compile"]
+    __exclude__ = ["environment_"]
 
 
 @strawberry.input
@@ -374,155 +216,28 @@ class NotificationFilter(StrawberryFilter):
     environment: typing.Optional[uuid.UUID] = strawberry.UNSET
 
 
+@strawberry.input(one_of=True)
 class NotificationOrder(StrawberryOrder):
-    @property
-    def model(self) -> type[models.Base]:
-        return models.Notification
-
-    @property
-    def key_to_model(self) -> dict[str, type[models.Base]]:
-        return {"created": self.model}
-
-
-def get_requires_length(root: "Resource") -> int:
-    """
-    Checks the length of the requires of the resource
-    """
-    assert hasattr(root, "attributes")  # Make mypy happy
-    return len(root.attributes.get("requires", []))
-
-
-def get_purged(root: "Resource") -> bool:
-    """
-    Checks the length of the requires of the resource
-    """
-    assert hasattr(root, "attributes")  # Make mypy happy
-    return bool(root.attributes.get("purged"))
-
-
-@mapper.type(models.Resource)
-class Resource:
-    __exclude__ = ["resource_set_"]
-    requires_length: int = strawberry.field(resolver=get_requires_length)
-    purged: bool = strawberry.field(resolver=get_purged)
-
-
-@strawberry.input
-class ResourceFilter(StrawberryFilter):
-    resource_type: StrFilter | None = strawberry.UNSET
-    resource_id_value: StrFilter | None = strawberry.UNSET
-    agent: StrFilter | None = strawberry.UNSET
-    purged: bool | None = strawberry.UNSET
-    blocked: EnumFilter[state.Blocked] | None = strawberry.UNSET
-    compliance_state: EnumFilter[state.Compliance] | None = strawberry.UNSET
-    last_deploy_result: EnumFilter[state.DeployResult] | None = strawberry.UNSET
-    is_deploying: bool | None = strawberry.UNSET
-
-    @property
-    def model(self) -> type[models.Base]:
-        return models.Resource
-
-    @property
-    def rps_model(self) -> type[models.Base]:
-        return models.ResourcePersistentState
-
-    @property
-    def get_models_to_join(self) -> set[type[models.Base]]:
-        rps_join = ["blocked", "compliance_state", "last_deploy_result", "is_deploying"]
-        for attr in rps_join:
-            if getattr(self, attr) is not strawberry.UNSET:
-                return {self.rps_model}
-        return set()
-
-    def apply_filters(self, stmt: Select[typing.Any]) -> Select[typing.Any]:
-        # Every filter we apply to the resource is custom, so we don't use `get_filter_dict`
-        key_to_model = {
-            "resource_type": self.model,
-            "resource_id_value": self.model,
-            "agent": self.model,
-            "blocked": self.rps_model,
-            "compliance_state": self.rps_model,
-            "last_deploy_result": self.rps_model,
-        }
-        for key, model in key_to_model.items():
-            attr = getattr(self, key)
-            if attr is not None and attr is not strawberry.UNSET:
-                stmt = attr.apply_filter(stmt, model, key)
-        if self.purged is not None and self.purged is not strawberry.UNSET:
-            stmt = stmt.filter(models.Resource.attributes["purged"].astext.cast(Boolean).is_(self.purged))
-        if self.is_deploying is not None and self.is_deploying is not strawberry.UNSET:
-            stmt = stmt.filter(models.ResourcePersistentState.is_deploying == self.is_deploying)
-        return stmt
-
-
-class ResourceOrder(StrawberryOrder):
-
-    @property
-    def model(self) -> type[models.Base]:
-        return models.Resource
-
-    @property
-    def rps_model(self) -> type[models.Base]:
-        return models.ResourcePersistentState
-
-    @property
-    def key_to_model(self) -> dict[str, type[models.Base]]:
-        return {
-            "agent": self.model,
-            "resource_type": self.model,
-            "resource_id_value": self.model,
-            "blocked": self.rps_model,
-            "compliance_state": self.rps_model,
-            "last_deploy_result": self.rps_model,
-            "is_deploying": self.rps_model,
-        }
-
-
-@mapper.type(models.ResourcePersistentState)
-class ResourcePersistentState:
-    __tablename__ = "resource_persistent_state"
-    __exclude__ = ["resource_set_"]
+    created: typing.Optional[str] = strawberry.UNSET
 
 
 def add_filter_and_sort(
     stmt: Select[typing.Any],
     filter: typing.Optional[StrawberryFilter] = strawberry.UNSET,
-    order_by: typing.Optional[Sequence[StrawberryOrder]] = strawberry.UNSET,
+    order_by: typing.Optional[StrawberryOrder] = strawberry.UNSET,
 ) -> Select[typing.Any]:
-    """
-    Adds filter and sorting to the given statement.
-    """
-    if filter is not None and filter is not strawberry.UNSET:
-        stmt = filter.apply_filters(stmt)
-    if order_by is not None and order_by is not strawberry.UNSET:
-        stmt = stmt.order_by(*[order.get_order_by() for order in order_by])
-    return stmt
-
-
-def do_required_resource_joins(
-    stmt: Select[typing.Any],
-    filter: typing.Optional[StrawberryFilter] = strawberry.UNSET,
-    order_by: typing.Optional[Sequence[StrawberryOrder]] = strawberry.UNSET,
-) -> Select[typing.Any]:
-    """
-    Checks the given filter and order_by to see if we need to join any external tables.
-    Only working for the Resource table
-    """
-    models_to_join: set[type[models.Base]] = set()
-    if order_by and order_by is not strawberry.UNSET:
-        models_to_join = models_to_join | {
-            o.key_to_model[to_snake_case(o.key)] for o in order_by if o.key_to_model[to_snake_case(o.key)] != o.model
-        }
     if filter and filter is not strawberry.UNSET:
-        models_to_join = models_to_join | filter.get_models_to_join
-    if models.ResourcePersistentState in models_to_join:
-        stmt = stmt.join(
-            models.ResourcePersistentState,
-            and_(
-                models.Resource.resource_id == models.ResourcePersistentState.resource_id,
-                models.Resource.environment == models.ResourcePersistentState.environment,
-            ),
-        )
+        stmt = stmt.filter_by(**filter.get_filter_dict())
+    if order_by and order_by is not strawberry.UNSET:
+        for key in order_by.__dict__.keys():
+            order = getattr(order_by, key)
+            if order is not strawberry.UNSET:
+                if order == "asc":
+                    stmt = stmt.order_by(asc(key))
+                elif order == "desc":
+                    stmt = stmt.order_by(desc(key))
+                else:
+                    raise Exception(f"Invalid order {order} for field {key}. Only 'asc' or 'desc' is allowed.")
     return stmt
 
 
@@ -546,7 +261,7 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
         async def environments(
             self,
             filter: typing.Optional[EnvironmentFilter] = strawberry.UNSET,
-            order_by: typing.Optional[Sequence[EnvironmentOrder]] = strawberry.UNSET,
+            order_by: typing.Optional[EnvironmentOrder] = strawberry.UNSET,
         ) -> typing.Iterable[models.Environment]:
             async with get_session() as session:
                 stmt = select(models.Environment)
@@ -558,26 +273,12 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
         async def notifications(
             self,
             filter: typing.Optional[NotificationFilter] = strawberry.UNSET,
-            order_by: typing.Optional[Sequence[NotificationOrder]] = strawberry.UNSET,
+            order_by: typing.Optional[NotificationOrder] = strawberry.UNSET,
         ) -> typing.Iterable[models.Notification]:
             async with get_session() as session:
                 stmt = select(models.Notification)
                 stmt = add_filter_and_sort(stmt, filter, order_by)
                 _notifications = await session.scalars(stmt)
                 return _notifications.all()
-
-        @relay.connection(relay.ListConnection[Resource])  # type: ignore[misc, type-var]
-        async def resources(
-            self,
-            filter: typing.Optional[ResourceFilter] = strawberry.UNSET,
-            order_by: typing.Optional[Sequence[ResourceOrder]] = strawberry.UNSET,
-        ) -> typing.Iterable[models.Resource]:
-            async with get_session() as session:
-                stmt = select(models.Resource)
-                stmt = add_filter_and_sort(stmt, filter, order_by)
-                stmt = do_required_resource_joins(stmt, filter, order_by)
-                _resources = await session.scalars(stmt)
-                result = _resources.all()
-                return result
 
     return strawberry.Schema(query=Query, config=StrawberryConfig(info_class=CustomInfo))
