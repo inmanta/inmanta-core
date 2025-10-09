@@ -238,23 +238,23 @@ class ProjectLoader:
             (
                 cls._registered_resources,
                 set(resources.resource.get_entity_resources()),
-                (lambda name, cls_obj, rest: resources.resource.add_resource(name, cls_obj, rest))
+                (lambda name, cls_obj, rest: resources.resource.add_resource(name, cls_obj, rest)),
             ),
             (
                 cls._registered_providers,
                 {fq_prov_name for fq_prov_name, _ in handler.Commander.get_providers()},
-                (lambda name, cls_obj, rest: handler.Commander.add_provider(name, cls_obj))
+                (lambda name, cls_obj, rest: handler.Commander.add_provider(name, cls_obj)),
             ),
             (
                 cls._registered_references,
                 {ref_name for ref_name, _ in references.reference.get_references()},
-                (lambda name, cls_obj, rest: references.reference.add_reference(name, cls_obj))
+                (lambda name, cls_obj, rest: references.reference.add_reference(name, cls_obj)),
             ),
             (
                 cls._registered_mutators,
                 {mut_name for mut_name, _ in references.mutator.get_mutators()},
-                (lambda name, cls_obj, rest: references.mutator.add_mutator(name, cls_obj))
-            )
+                (lambda name, cls_obj, rest: references.mutator.add_mutator(name, cls_obj)),
+            ),
         ]:
             for name, cls_or_tuple in saved_registered.items():
                 cls_obj = cls_or_tuple if not isinstance(cls_or_tuple, tuple) else cls_or_tuple[0]
