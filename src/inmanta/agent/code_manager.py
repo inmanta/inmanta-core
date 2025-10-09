@@ -66,8 +66,8 @@ class CodeManager:
                 models.ModuleFiles.file_content_hash,
                 models.ModuleFiles.is_byte_code,
                 models.File.content.label("source_file_content"),
-                models.ConfigurationModel.pip_config,
-                models.ConfigurationModel.project_constraints,
+                models.Configurationmodel.pip_config,
+                models.Configurationmodel.project_constraints,
             )
             .join(
                 models.InmantaModule,
@@ -90,10 +90,10 @@ class CodeManager:
                 models.ModuleFiles.file_content_hash == models.File.content_hash,
             )
             .join(
-                models.ConfigurationModel,
+                models.Configurationmodel,
                 and_(
-                    models.AgentModules.cm_version == models.ConfigurationModel.version,
-                    models.AgentModules.environment == models.ConfigurationModel.environment,
+                    models.AgentModules.cm_version == models.Configurationmodel.version,
+                    models.AgentModules.environment == models.Configurationmodel.environment,
                 ),
             )
             .where(

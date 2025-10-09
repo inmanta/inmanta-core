@@ -46,7 +46,7 @@ async def assert_resource_set_assignment(environment, assignment: dict[str, Opti
     :param assignment: Map the value of name attribute of resource Res to the resource set that resource is expected to
                        belong to.
     """
-    resources = await Resource.get_resources_in_latest_version(environment=environment)
+    resources = await Resource.get_resources_in_latest_version_as_dto(environment=environment)
     assert len(resources) == len(assignment)
     actual_assignment = {r.attributes["key"]: r.resource_set for r in resources}
     assert actual_assignment == assignment

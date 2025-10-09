@@ -111,7 +111,7 @@ async def test_discovery_resource_handler_basic_test(
     )
     assert result.code == 200
 
-    resource_list = await data.Resource.get_resources_in_latest_version(uuid.UUID(environment))
+    resource_list = await data.Resource.get_resources_in_latest_version_as_dto(uuid.UUID(environment))
     assert resource_list, resource_list
 
     # Ensure that a dry-run doesn't do anything for a DiscoveryHandler

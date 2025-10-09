@@ -19,6 +19,7 @@ Contact: code@inmanta.com
 import configparser
 import importlib
 import itertools
+import json
 import logging
 import operator
 import os
@@ -64,6 +65,7 @@ from inmanta.ast.statements.define import DefineImport
 from inmanta.file_parser import PreservativeYamlParser, RequirementsTxtParser
 from inmanta.parser import plyInmantaParser
 from inmanta.parser.plyInmantaParser import cache_manager
+from inmanta.server import config
 from inmanta.stable_api import stable_api
 from inmanta.util import get_compiler_version
 from inmanta.warnings import InmantaWarning
@@ -1961,17 +1963,40 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
     ) -> tuple[Sequence[inmanta.util.CanonicalRequirement], Sequence[inmanta.util.CanonicalRequirement]]:
         """
         Returns a tuple that contains all the dependencies and constraints that should be used when
-        installing this project. The first element in the tuple contains the dependencies. The second
-        element contains the constraints.
+        installing this project. The first element in the tuple contains the dependencies (defined in
+        the requirements.txt file). The second element contains the 'pure' constraints (defined in the
+        _metadata.requires of the project.yml and the python_package_constraints of the compatibility.json).
+
+        Use the get_all_constraints method to retrieve all constraints (i.e. 'pure' constraints and constraints
+        inferred from dependencies)
         """
         dependencies: Sequence[inmanta.util.CanonicalRequirement] = [
             inmanta.util.parse_requirement(req) for req in self.get_all_python_requirements_as_list()
         ]
         constraints: Sequence[inmanta.util.CanonicalRequirement] = [
-            InmantaModuleRequirement(inmanta.util.parse_requirement(requirement=spec)).get_python_package_requirement()
-            for spec in self._metadata.requires
+            *chain(
+                [
+                    InmantaModuleRequirement(inmanta.util.parse_requirement(requirement=spec)).get_python_package_requirement()
+                    for spec in self._metadata.requires
+                ],
+                self.get_product_constraints(),
+            )
         ]
         return dependencies, constraints
+
+    def get_product_constraints(self) -> list[inmanta.util.CanonicalRequirement]:
+        compatibility_file: str | None = config.server_compatibility_file.get()
+        if not compatibility_file:
+            # Don't fetch product constraints when compatibility_file is None or ""
+            return []
+        if not os.path.exists(compatibility_file):
+            raise Exception("The configured compatibility file doesn't exist: %s" % compatibility_file)
+
+        with open(compatibility_file) as fh:
+            compatibility_data = json.load(fh)
+
+        module_constraints: Mapping[str, str] = compatibility_data.get("python_package_constraints", {})
+        return [inmanta.util.parse_requirement(f"{k}{v}") for k, v in module_constraints.items()]
 
     def get_all_constraints(self) -> str:
         """

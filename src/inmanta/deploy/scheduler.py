@@ -501,7 +501,7 @@ class ResourceScheduler(TaskManager):
                         FROM resource_set_configuration_model AS rscm
                         INNER JOIN {data.Resource.table_name()} AS r
                             ON rscm.environment=r.environment
-                            AND rscm.resource_set_id=r.resource_set_id
+                            AND rscm.resource_set=r.resource_set
                         WHERE rscm.environment=$1
                             AND rscm.model=(SELECT MAX(cm.version)
                                               FROM {data.ConfigurationModel.table_name()} AS cm
