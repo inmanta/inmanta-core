@@ -17,12 +17,11 @@ Contact: code@inmanta.com
 """
 
 import logging
-import re
 import sys
 from collections import abc
 from collections.abc import Sequence
 from itertools import chain
-from typing import TYPE_CHECKING, Any, ClassVar, Optional, Pattern, Type
+from typing import TYPE_CHECKING, Any, ClassVar, Optional, Type
 
 import inmanta.ast.type as inmanta_type
 import inmanta.execute.dataflow as dataflow

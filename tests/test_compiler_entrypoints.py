@@ -20,7 +20,6 @@ import os
 from collections import defaultdict
 
 import more_itertools
-import pytest
 
 from inmanta import compiler, module, plugins, references, resources
 from inmanta.agent import handler
