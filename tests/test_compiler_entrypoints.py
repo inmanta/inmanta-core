@@ -491,6 +491,7 @@ def test_project_loader(snippetcompiler):
             """
         )
 
+    # Clear the ast cache
     snippetcompiler.project.invalidate_state()
     ProjectLoader.load(snippetcompiler.project)
     compiler_obj.compile()
