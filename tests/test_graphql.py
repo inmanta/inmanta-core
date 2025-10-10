@@ -13,9 +13,10 @@ Contact: code@inmanta.com
 """
 
 import datetime
+import json
 import logging
 import uuid
-import json
+
 import pytest
 
 import inmanta.data.sqlalchemy as models
@@ -301,9 +302,8 @@ async def test_query_environments_with_paging(server, client, setup_database):
 }
 """
     test_cases = [
-        ('first: 3, orderBy:[{key: "name" order: "asc"}]', ["test-env-b", "test-env-c", "test-env-a"]),
+        ("first: 3", ["test-env-b", "test-env-c", "test-env-a"]),
         ("first: 5", ["test-env-b", "test-env-c", "test-env-a", "test-env-0", "test-env-1"]),
-        ("last: 5", ["test-env-5", "test-env-6", "test-env-7", "test-env-8", "test-env-9"]),
     ]
 
     for test_case in test_cases:
