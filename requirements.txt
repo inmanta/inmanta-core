@@ -47,7 +47,7 @@ sphinxcontrib-redoc==1.6.0
 sphinxcontrib-serializinghtml==2.0.0
 sphinx-design==0.6.1
 Sphinx-Substitution-Extensions==2025.6.6
-SQLAlchemy==2.0.43
+SQLAlchemy==2.0.44
 strawberry-sqlalchemy-mapper==0.7.0
 texttable==1.7.0
 time-machine==2.19.0
