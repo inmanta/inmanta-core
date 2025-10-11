@@ -41,7 +41,7 @@ myst_enable_extensions = ["colon_fence"]
 def setup(app):
     # cut off license headers
     from sphinx.ext.autodoc import cut_lines
-    app.connect('autodoc-process-docstring', cut_lines(15, what=['module']))
+    app.connect('autodoc-process-docstring', cut_lines(17, what=['module']))
 def check_dot_command():
     if shutil.which("dot") is None:
         raise Exception("The 'dot' command is not available. Please install Graphviz (https://graphviz.org) "

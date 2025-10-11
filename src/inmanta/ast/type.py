@@ -60,7 +60,7 @@ class Type(Locatable):
         Validate the given value to check if it satisfies the constraints associated with this type. Returns true iff
         validation succeeds, otherwise raises a :py:class:`inmanta.ast.RuntimeException`.
 
-        In advanced cases where this class has a custom `to_python()`, translation-specific validation should be deferred
+        In advanced cases where this class has a custom ``to_python()``, translation-specific validation should be deferred
         to that stage. Translation-specific means that the value is definitely of this DSL type, but it can not be converted to
         the Python domain.
         """
@@ -118,7 +118,7 @@ class Type(Locatable):
     def get_base_type(self) -> "Type":
         """
         Returns the base type for this type, i.e. the plain type without modifiers such as expressed by
-        `[]` and `?` in the :term:`DSL` and 'Reference' in the plugin domain.
+        ``[]`` and ``?`` in the :term:`DSL` and ``Reference`` in the plugin domain.
         """
         return self
 
@@ -435,7 +435,7 @@ class Null(Type):
 @stable_api
 class NullableType(Type):
     """
-    Represents a nullable type in the Inmanta :term:`DSL`. For example `NullableType(Number())` represents `number?`.
+    Represents a nullable type in the Inmanta :term:`DSL`. For example ``NullableType(Number())`` represents ``number?``.
     """
 
     def __init__(self, element_type: Type) -> None:
