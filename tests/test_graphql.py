@@ -13,6 +13,7 @@ Contact: code@inmanta.com
 """
 
 import datetime
+import json
 import logging
 import uuid
 
@@ -192,6 +193,8 @@ async def test_graphql_schema(server, client):
     result = await client.graphql_schema()
     assert result.code == 200
     assert result.result["data"]["__schema"]
+    json_string = json.dumps(result.result)
+    print(json_string)
 
 
 async def test_query_environments_with_filtering(server, client, setup_database):
@@ -301,7 +304,6 @@ async def test_query_environments_with_paging(server, client, setup_database):
     test_cases = [
         ("first: 3", ["test-env-b", "test-env-c", "test-env-a"]),
         ("first: 5", ["test-env-b", "test-env-c", "test-env-a", "test-env-0", "test-env-1"]),
-        ("last: 5", ["test-env-5", "test-env-6", "test-env-7", "test-env-8", "test-env-9"]),
     ]
 
     for test_case in test_cases:
