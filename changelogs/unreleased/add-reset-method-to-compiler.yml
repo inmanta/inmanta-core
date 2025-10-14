@@ -1,0 +1,4 @@
+---
+description: Added support for pytest-inmanta to reset the compiler state.
+change-type: minor
+destination-branches: [master, iso8]
