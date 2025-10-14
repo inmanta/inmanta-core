@@ -278,7 +278,12 @@ class StrawberryOrder:
 
     @classmethod
     def default_order(cls) -> dict[str, UnaryExpression[typing.Any]]:
-        return {}
+        """
+        The default order of this strawberry class.
+        Required for each subclass of StrawberryOrder.
+        Necessary for paging with sqlakeyset.
+        """
+        raise NotImplementedError()
 
     @property
     def model(self) -> type[models.Base]:
