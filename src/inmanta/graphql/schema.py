@@ -601,7 +601,7 @@ async def get_connection(
                 raise Exception("`first` is not allowed in conjunction with `last` or `before`")
             per_page = first
         elif last is not None and last is not strawberry.UNSET:
-            if (after is not None and after is not strawberry.UNSET) or (before is not None and before is not strawberry.UNSET):
+            if (after is not None and after is not strawberry.UNSET) or (before is None or before is strawberry.UNSET):
                 raise Exception("`last` is only allowed in conjunction with `before`")
             per_page = last
         else:

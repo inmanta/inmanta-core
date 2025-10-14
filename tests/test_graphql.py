@@ -13,7 +13,6 @@ Contact: code@inmanta.com
 """
 
 import datetime
-import json
 import logging
 import uuid
 
@@ -272,7 +271,7 @@ async def test_query_environments_with_paging(server, client, setup_database):
     result = await client.project_create(name="test-proj-2", project_id=id_project_2)
     assert result.code == 200
     # Create environments in project
-    for i in range(10):
+    for i in range(6):
         result = await client.environment_create(
             project_id=id_project_2,
             name=f"test-env-{i}",
@@ -280,6 +279,7 @@ async def test_query_environments_with_paging(server, client, setup_database):
         )
         assert result.code == 200
 
+    # env-ids -> [b, c, a, 0, 1, 2, 3, 4, 5]
     query = """
 {
     environments(%s){
@@ -302,7 +302,6 @@ async def test_query_environments_with_paging(server, client, setup_database):
     test_cases = [
         ("first: 3", ["test-env-b", "test-env-c", "test-env-a"]),
         ("first: 5", ["test-env-b", "test-env-c", "test-env-a", "test-env-0", "test-env-1"]),
-        ("last: 5", ["test-env-5", "test-env-6", "test-env-7", "test-env-8", "test-env-9"]),
     ]
 
     for test_case in test_cases:
@@ -312,6 +311,7 @@ async def test_query_environments_with_paging(server, client, setup_database):
         assert [node["node"]["name"] for node in results] == test_case[1]
 
     # Get the first 5 elements
+    # [b, c, a, 0, 1]
     result = await client.graphql(query=query % "first: 5")
     assert result.code == 200
     environments = result.result["data"]["data"]["environments"]
@@ -338,8 +338,75 @@ async def test_query_environments_with_paging(server, client, setup_database):
     new_last_cursor = results[4]["cursor"]
     assert environments["pageInfo"]["startCursor"] == first_cursor
     assert environments["pageInfo"]["endCursor"] == new_last_cursor
+    assert environments["pageInfo"]["hasNextPage"] is False
+    assert environments["pageInfo"]["hasPreviousPage"] is True
+    expected_ids = [1, 2, 3, 4, 5]
+    for i in range(len(results)):
+        assert results[i]["node"]["name"] == f"test-env-{expected_ids[i]}"
+
+    # Get the last 5 elements before last_cursor
+    previous_second_to_last_cursor = results[3]["cursor"]
+    previous_first_cursor = first_cursor
+    result = await client.graphql(query=query % f'last: 5, before:"{new_last_cursor}"')
+    assert result.code == 200
+    environments = result.result["data"]["data"]["environments"]
+    results = environments["edges"]
+    assert len(results) == 5
+    assert results[1]["cursor"] == previous_first_cursor
+    assert results[4]["cursor"] == previous_second_to_last_cursor
+    assert environments["pageInfo"]["endCursor"] == previous_second_to_last_cursor
     assert environments["pageInfo"]["hasNextPage"] is True
     assert environments["pageInfo"]["hasPreviousPage"] is True
+    expected_ids = [0, 1, 2, 3, 4]
+    for i in range(len(results)):
+        assert results[i]["node"]["name"] == f"test-env-{expected_ids[i]}"
+
+    # Error cases
+
+    # last by itself
+    result = await client.graphql(query=query % "last: 5")
+    assert result.code == 200
+    data = result.result["data"]
+    assert data
+    assert data["data"] is None
+    assert len(data["errors"]) == 1
+    assert data["errors"][0] == "`last` is only allowed in conjunction with `before`"
+
+    # first + last
+    result = await client.graphql(query=query % "first: 5, last: 5")
+    assert result.code == 200
+    data = result.result["data"]
+    assert data
+    assert data["data"] is None
+    assert len(data["errors"]) == 1
+    assert data["errors"][0] == "`first` is not allowed in conjunction with `last` or `before`"
+
+    # first + before
+    result = await client.graphql(query=query % f'first: 5, before: "{new_last_cursor}"')
+    assert result.code == 200
+    data = result.result["data"]
+    assert data
+    assert data["data"] is None
+    assert len(data["errors"]) == 1
+    assert data["errors"][0] == "`first` is not allowed in conjunction with `last` or `before`"
+
+    # last + after
+    result = await client.graphql(query=query % f'last: 5, after: "{first_cursor}"')
+    assert result.code == 200
+    data = result.result["data"]
+    assert data
+    assert data["data"] is None
+    assert len(data["errors"]) == 1
+    assert data["errors"][0] == "`last` is only allowed in conjunction with `before`"
+
+    # before + after
+    result = await client.graphql(query=query % f'before: "{new_last_cursor}", after: "{first_cursor}"')
+    assert result.code == 200
+    data = result.result["data"]
+    assert data
+    assert data["data"] is None
+    assert len(data["errors"]) == 1
+    assert data["errors"][0] == "`after` is not allowed in conjunction with `before`"
 
 
 async def test_is_environment_compiling(server, client, clienthelper, environment, mocked_compiler_service_block):
