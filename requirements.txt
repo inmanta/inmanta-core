@@ -18,7 +18,7 @@ inmanta-dev-dependencies==2.181.0
 inmanta-module-std
 inmanta-sphinx==2.3.0
 jinja2==3.1.6
-logfire==4.13.1
+logfire==4.13.2
 more-itertools==10.8.0
 myst-parser==4.0.1
 openapi_spec_validator==0.7.2
