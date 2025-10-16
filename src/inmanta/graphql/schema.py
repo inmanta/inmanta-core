@@ -720,8 +720,9 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
             else:
                 include_orphans = True
 
+            # Only fetch resources in their latest version
+            # Logic based on src/inmanta/data/dataview.py::ResourceView
             stmt = select(models.Resource).where(models.Resource.environment == filter.environment)
-
             # CTE that fetches the latest version
             latest_version_cte = (
                 select(func.max(models.Configurationmodel.version).label("version"))
