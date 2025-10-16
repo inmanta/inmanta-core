@@ -153,7 +153,6 @@ There are 4 important building blocks that we have to take into account:
 
 mapper: StrawberrySQLAlchemyMapper[typing.Any] = StrawberrySQLAlchemyMapper()
 DEFAULT_PER_PAGE: int = 50
-EDGE_CURSOR_PREFIX: str = "arrayconnection:"
 
 
 def to_snake_case(name: str) -> str:
@@ -579,16 +578,20 @@ def encode_cursor(cursor: str) -> str:
     :param cursor: The cursor received from sqlakeyset without direction information ('<'/'>').
     :return: The base64 encoded cursor in str form.
     """
-    return base64.b64encode(f"{EDGE_CURSOR_PREFIX}{cursor}".encode()).decode()
+    return base64.b64encode(f"{relay.types.PREFIX}:{cursor}".encode()).decode()
 
 
 def decode_cursor(cursor: str) -> str:
     """
-    :param cursor: The cursor received as an argument from the user.
-        Expected in the format that Edge.resolve_edge returns (prefixed with `EDGE_CURSOR_PREFIX`).
+    :param cursor: The cursor received as an argument from the user in base64.
+        Expected in the format that Edge.resolve_edge returns (prefixed with `relay.types.PREFIX:`).
     :return: The decoded cursor in str form.
     """
-    return base64.b64decode(cursor).decode().split(EDGE_CURSOR_PREFIX)[1]
+    decoded_cursor = base64.b64decode(cursor.encode()).decode()
+    prefix = f"{relay.types.PREFIX}:"
+    if prefix not in decoded_cursor:
+        raise Exception(f"Invalid cursor provided: {cursor}")
+    return decoded_cursor.split(prefix)[1]
 
 
 async def get_connection(
