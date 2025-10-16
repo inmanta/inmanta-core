@@ -12,6 +12,7 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import base64
 import dataclasses
 import re
 import typing
@@ -25,6 +26,8 @@ import strawberry
 from inmanta.data import get_session, get_session_factory
 from inmanta.deploy import state
 from inmanta.server.services.compilerservice import CompilerService
+from sqlakeyset import Marker, unserialize_bookmark
+from sqlakeyset.asyncio import select_page
 from sqlalchemy import Boolean, Select, UnaryExpression, and_, asc, desc, select
 from strawberry import relay
 from strawberry.schema.config import StrawberryConfig
@@ -145,6 +148,7 @@ There are 4 important building blocks that we have to take into account:
 """
 
 mapper: StrawberrySQLAlchemyMapper[typing.Any] = StrawberrySQLAlchemyMapper()
+DEFAULT_PER_PAGE: int = 50
 
 
 def to_snake_case(name: str) -> str:
@@ -271,6 +275,15 @@ class StrawberryOrder:
     key: str
     order: str = "asc"
 
+    @classmethod
+    def default_order(cls) -> dict[str, UnaryExpression[typing.Any]]:
+        """
+        The default order of this strawberry class.
+        Required for each subclass of StrawberryOrder.
+        Necessary for paging with sqlakeyset.
+        """
+        raise NotImplementedError()
+
     @property
     def model(self) -> type[models.Base]:
         """
@@ -354,6 +367,11 @@ class EnvironmentFilter(StrawberryFilter):
 
 @strawberry.input
 class EnvironmentOrder(StrawberryOrder):
+
+    @classmethod
+    def default_order(cls) -> dict[str, UnaryExpression[typing.Any]]:
+        return {"id": asc(models.Environment.id)}
+
     @property
     def model(self) -> type[models.Base]:
         return models.Environment
@@ -375,6 +393,10 @@ class NotificationFilter(StrawberryFilter):
 
 
 class NotificationOrder(StrawberryOrder):
+    @classmethod
+    def default_order(cls) -> dict[str, UnaryExpression[typing.Any]]:
+        return {"environment": asc(models.Notification.environment), "id": asc(models.Notification.id)}
+
     @property
     def model(self) -> type[models.Base]:
         return models.Notification
@@ -457,6 +479,14 @@ class ResourceFilter(StrawberryFilter):
 
 class ResourceOrder(StrawberryOrder):
 
+    @classmethod
+    def default_order(cls) -> dict[str, UnaryExpression[typing.Any]]:
+        return {
+            "environment": asc(models.Resource.environment),
+            "resource_set": asc(models.Resource.resource_set),
+            "resource_id": asc(models.Resource.resource_id),
+        }
+
     @property
     def model(self) -> type[models.Base]:
         return models.Resource
@@ -486,6 +516,7 @@ class ResourcePersistentState:
 
 def add_filter_and_sort(
     stmt: Select[typing.Any],
+    default_sorting: dict[str, UnaryExpression[typing.Any]],
     filter: typing.Optional[StrawberryFilter] = strawberry.UNSET,
     order_by: typing.Optional[Sequence[StrawberryOrder]] = strawberry.UNSET,
 ) -> Select[typing.Any]:
@@ -494,8 +525,16 @@ def add_filter_and_sort(
     """
     if filter is not None and filter is not strawberry.UNSET:
         stmt = filter.apply_filters(stmt)
+    order_expressions: dict[str, UnaryExpression[typing.Any]] = {}
     if order_by is not None and order_by is not strawberry.UNSET:
-        stmt = stmt.order_by(*[order.get_order_by() for order in order_by])
+        for order in order_by:
+            if order.key in order_expressions:
+                raise Exception(f"Sorting key appears multiple times in orderBy: {order.key}")
+            order_expressions[order.key] = order.get_order_by()
+    for default_key, order_expression in default_sorting.items():
+        if default_key not in order_expressions:
+            order_expressions[default_key] = order_expression
+    stmt = stmt.order_by(*order_expressions.values())
     return stmt
 
 
@@ -509,11 +548,11 @@ def do_required_resource_joins(
     Only working for the Resource table
     """
     models_to_join: set[type[models.Base]] = set()
-    if order_by and order_by is not strawberry.UNSET:
+    if order_by is not None and order_by is not strawberry.UNSET:
         models_to_join = models_to_join | {
             o.key_to_model[to_snake_case(o.key)] for o in order_by if o.key_to_model[to_snake_case(o.key)] != o.model
         }
-    if filter and filter is not strawberry.UNSET:
+    if filter is not None and filter is not strawberry.UNSET:
         models_to_join = models_to_join | filter.get_models_to_join
     if models.ResourcePersistentState in models_to_join:
         stmt = stmt.join(
@@ -524,6 +563,90 @@ def do_required_resource_joins(
             ),
         )
     return stmt
+
+
+def encode_cursor(cursor: str) -> str:
+    """
+    :param cursor: The cursor received from sqlakeyset without direction information ('<'/'>').
+    :return: The base64 encoded cursor in str form.
+    """
+    return base64.b64encode(f"{relay.types.PREFIX}:{cursor}".encode()).decode()
+
+
+def decode_cursor(cursor: str) -> str:
+    """
+    :param cursor: The cursor received as an argument from the user in base64.
+        Expected in the format that Edge.resolve_edge returns (prefixed with `relay.types.PREFIX:`).
+    :return: The decoded cursor in str form.
+    """
+    decoded_cursor = base64.b64decode(cursor.encode()).decode()
+    prefix = f"{relay.types.PREFIX}:"
+    if prefix not in decoded_cursor:
+        raise Exception(f"Invalid cursor provided: {cursor}")
+    return decoded_cursor.split(prefix)[1]
+
+
+async def get_connection(
+    stmt: Select[typing.Any],
+    model: str,
+    info: Info,
+    first: typing.Optional[int] = strawberry.UNSET,
+    after: typing.Optional[str] = strawberry.UNSET,
+    last: typing.Optional[int] = strawberry.UNSET,
+    before: typing.Optional[str] = strawberry.UNSET,
+) -> relay.ListConnection[typing.Any]:
+    """
+    Build the connection object. Here we do all the pagination and fetching of results (edges) to return to the user.
+    We do not call `ListConnection.resolve_connection` because:
+     1) We already got the PageInfo arguments from sqlakeyset
+     2) It calls `Edge.resolve_edge` with a cursor that is not useful to us
+    """
+    async with get_session() as session:
+        per_page: int
+        # Get results per page and sanitation of input arguments
+        if first is not None and first is not strawberry.UNSET:
+            if (last is not None and last is not strawberry.UNSET) or (before is not None and before is not strawberry.UNSET):
+                raise Exception("`first` is not allowed in conjunction with `last` or `before`")
+            per_page = first
+        elif last is not None and last is not strawberry.UNSET:
+            if (after is not None and after is not strawberry.UNSET) or (before is None or before is strawberry.UNSET):
+                raise Exception("`last` is only allowed in conjunction with `before`")
+            per_page = last
+        else:
+            per_page = DEFAULT_PER_PAGE
+
+        # Get cursor and direction of results to fetch (forwards/backwards)
+        page: Marker | None = None
+        if after is not None and after is not strawberry.UNSET:
+            if before is not None and before is not strawberry.UNSET:
+                raise Exception("`after` is not allowed in conjunction with `before`")
+            page = unserialize_bookmark(f">{decode_cursor(after)}")
+        elif before is not None and before is not strawberry.UNSET:
+            page = unserialize_bookmark(f"<{decode_cursor(before)}")
+
+        # Fetch the page using sqlakeyset
+        result = await select_page(session, stmt, per_page=per_page, page=page)
+        edges = []
+        # We use the private methods for the mapper because their respective public attributes like `mapper.connection_types`
+        # Are only filled when the private methods are called first. The private methods use the public attributes as cache so
+        # it is fine to call them repeatedly
+        connection = cast(relay.ListConnection, mapper._connection_type_for(model))
+        for cursor, value in result.paging.bookmark_items():
+            formatted_cursor = str(cursor)[1:]
+            sqla_obj = next(iter(value._mapping.values()))
+            edge = cast(relay.Edge, mapper._edge_type_for(model))
+            node = connection.resolve_node(sqla_obj, info=info)
+            edges.append(edge.resolve_edge(cursor=formatted_cursor, node=node))
+
+        return connection(
+            edges=edges,
+            page_info=strawberry.relay.PageInfo(
+                has_next_page=result.paging.has_next,
+                has_previous_page=result.paging.has_previous,
+                start_cursor=encode_cursor(result.paging.bookmark_previous[1:]),
+                end_cursor=encode_cursor(result.paging.bookmark_next[1:]),
+            ),
+        )
 
 
 def get_schema(context: GraphQLContext) -> strawberry.Schema:
@@ -542,42 +665,54 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
 
     @strawberry.type
     class Query:
-        @relay.connection(relay.ListConnection[Environment])  # type: ignore[misc, type-var]
+        @strawberry.field
         async def environments(
             self,
+            info: CustomInfo,
+            first: typing.Optional[int] = strawberry.UNSET,
+            after: typing.Optional[str] = strawberry.UNSET,
+            last: typing.Optional[int] = strawberry.UNSET,
+            before: typing.Optional[str] = strawberry.UNSET,
             filter: typing.Optional[EnvironmentFilter] = strawberry.UNSET,
             order_by: typing.Optional[Sequence[EnvironmentOrder]] = strawberry.UNSET,
-        ) -> typing.Iterable[models.Environment]:
-            async with get_session() as session:
-                stmt = select(models.Environment)
-                stmt = add_filter_and_sort(stmt, filter, order_by)
-                _environments = await session.scalars(stmt)
-                return _environments.all()
+        ) -> relay.ListConnection[Environment]:
+            stmt = select(models.Environment)
+            stmt = add_filter_and_sort(stmt, EnvironmentOrder.default_order(), filter, order_by)
+            return await get_connection(
+                stmt, info=info, model="Environment", first=first, after=after, last=last, before=before
+            )
 
-        @relay.connection(relay.ListConnection[Notification])  # type: ignore[misc, type-var]
+        @strawberry.field
         async def notifications(
             self,
+            info: CustomInfo,
+            first: typing.Optional[int] = strawberry.UNSET,
+            after: typing.Optional[str] = strawberry.UNSET,
+            last: typing.Optional[int] = strawberry.UNSET,
+            before: typing.Optional[str] = strawberry.UNSET,
             filter: typing.Optional[NotificationFilter] = strawberry.UNSET,
             order_by: typing.Optional[Sequence[NotificationOrder]] = strawberry.UNSET,
-        ) -> typing.Iterable[models.Notification]:
-            async with get_session() as session:
-                stmt = select(models.Notification)
-                stmt = add_filter_and_sort(stmt, filter, order_by)
-                _notifications = await session.scalars(stmt)
-                return _notifications.all()
+        ) -> relay.ListConnection[Notification]:
+            stmt = select(models.Notification)
+            stmt = add_filter_and_sort(stmt, NotificationOrder.default_order(), filter, order_by)
+            return await get_connection(
+                stmt, info=info, model="Notification", first=first, after=after, last=last, before=before
+            )
 
-        @relay.connection(relay.ListConnection[Resource])  # type: ignore[misc, type-var]
+        @strawberry.field
         async def resources(
             self,
+            info: CustomInfo,
+            first: typing.Optional[int] = strawberry.UNSET,
+            after: typing.Optional[str] = strawberry.UNSET,
+            last: typing.Optional[int] = strawberry.UNSET,
+            before: typing.Optional[str] = strawberry.UNSET,
             filter: typing.Optional[ResourceFilter] = strawberry.UNSET,
             order_by: typing.Optional[Sequence[ResourceOrder]] = strawberry.UNSET,
-        ) -> typing.Iterable[models.Resource]:
-            async with get_session() as session:
-                stmt = select(models.Resource)
-                stmt = add_filter_and_sort(stmt, filter, order_by)
-                stmt = do_required_resource_joins(stmt, filter, order_by)
-                _resources = await session.scalars(stmt)
-                result = _resources.all()
-                return result
+        ) -> relay.ListConnection[Resource]:
+            stmt = select(models.Resource)
+            stmt = add_filter_and_sort(stmt, ResourceOrder.default_order(), filter, order_by)
+            stmt = do_required_resource_joins(stmt, filter, order_by)
+            return await get_connection(stmt, info=info, model="Resource", first=first, after=after, last=last, before=before)
 
     return strawberry.Schema(query=Query, config=StrawberryConfig(info_class=CustomInfo))
