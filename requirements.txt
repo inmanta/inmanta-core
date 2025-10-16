@@ -5,7 +5,7 @@ build==1.3.0
 bumpversion==0.6.0
 click==8.3.0
 click-plugins==1.1.1.2
-colorlog==6.9.0
+colorlog==6.10.1
 cookiecutter==2.6.0
 crontab==1.0.5
 cryptography==46.0.3
