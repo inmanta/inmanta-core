@@ -726,12 +726,10 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
             # Only fetch resources in their latest version
             # Logic based on src/inmanta/data/dataview.py::ResourceView
             stmt = select(models.Resource).where(models.Resource.environment == filter.environment)
-            # CTE that fetches the latest version
-            latest_version_cte = (
-                select(func.max(models.Configurationmodel.version).label("version"))
-                .where(
-                    models.Configurationmodel.released.is_(True), models.Configurationmodel.environment == filter.environment
-                )
+            # CTE that fetches the latest scheduled version
+            latest_scheduled_version_cte = (
+                select(models.Scheduler.last_processed_model_version.label("version"))
+                .where(models.Scheduler.environment == filter.environment)
                 .cte()
             )
 
@@ -747,7 +745,7 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
                             # Simple case where we are dealing with non-orphans
                             (
                                 ~models.ResourcePersistentState.is_orphan,
-                                select(latest_version_cte.c.version).scalar_subquery(),
+                                select(latest_scheduled_version_cte.c.version).scalar_subquery(),
                             ),
                             else_=select(func.max(models.t_resource_set_configuration_model.c.model))
                             .join(
@@ -799,7 +797,7 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
                         models.t_resource_set_configuration_model.c.environment == models.Resource.environment,
                         models.t_resource_set_configuration_model.c.resource_set == models.Resource.resource_set,
                         models.t_resource_set_configuration_model.c.model
-                        == select(latest_version_cte.c.version).scalar_subquery(),
+                        == select(latest_scheduled_version_cte.c.version).scalar_subquery(),
                     ),
                 )
             stmt = add_filter_and_sort(stmt, ResourceOrder.default_order(), filter, order_by)
