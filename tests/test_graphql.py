@@ -326,7 +326,7 @@ async def test_query_environments_with_paging(server, client, setup_database):
     assert environments["pageInfo"]["hasPreviousPage"] is False
 
     # Get 5 environments starting from the second to last cursor of the previous result
-    second_to_last_cursor = results[3]["cursor"]
+    second_to_last_cursor = results[-2]["cursor"]
     result = await client.graphql(query=query % f'first: 5, after:"{second_to_last_cursor}"')
     assert result.code == 200
     environments = result.result["data"]["data"]["environments"]
@@ -345,7 +345,7 @@ async def test_query_environments_with_paging(server, client, setup_database):
         assert results[i]["node"]["name"] == f"test-env-{expected_ids[i]}"
 
     # Get the last 5 elements before last_cursor
-    previous_second_to_last_cursor = results[3]["cursor"]
+    previous_second_to_last_cursor = results[-2]["cursor"]
     previous_first_cursor = first_cursor
     result = await client.graphql(query=query % f'last: 5, before:"{new_last_cursor}"')
     assert result.code == 200
