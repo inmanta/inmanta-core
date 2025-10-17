@@ -50,6 +50,8 @@ async def add_env(env: uuid.UUID, metadata: dict) -> uuid.UUID:
 async def ignore_env(obj: Any, metadata: dict) -> Any:
     """
     This mapper only adds an env all for authz
+
+    :meta private:
     """
     metadata[const.INMANTA_URN + "env"] = "all"
     return obj
