@@ -28,7 +28,7 @@ from inmanta.deploy import state
 from inmanta.server.services.compilerservice import CompilerService
 from sqlakeyset import Marker, unserialize_bookmark
 from sqlakeyset.asyncio import select_page
-from sqlalchemy import Boolean, Select, UnaryExpression, and_, asc, case, desc, func, select
+from sqlalchemy import Boolean, Select, UnaryExpression, and_, asc, case, desc, func, not_, select
 from strawberry import relay
 from strawberry.schema.config import StrawberryConfig
 from strawberry.types import Info
@@ -112,7 +112,7 @@ There are 4 important building blocks that we have to take into account:
                     if self.eq is not None and self.eq is not strawberry.UNSET:
                         stmt = stmt.where(getattr(model, key).in_([x.name for x in self.eq]))
                     if self.neq is not None and self.neq is not strawberry.UNSET:
-                        stmt = stmt.where(~getattr(model, key).in_([x.name for x in self.neq]))
+                        stmt = stmt.where(not_(getattr(model, key).in_([x.name for x in self.neq])))
                     return stmt
         ```
     4) The `StrawberryOrder` child class for our strawberry model i.e.
@@ -204,7 +204,7 @@ class EnumFilter[T: StrEnum](CustomFilter):
         if self.eq is not None and self.eq is not strawberry.UNSET:
             stmt = stmt.where(getattr(model, key).in_([x.name for x in self.eq]))
         if self.neq is not None and self.neq is not strawberry.UNSET:
-            stmt = stmt.where(~getattr(model, key).in_([x.name for x in self.neq]))
+            stmt = stmt.where(not_(getattr(model, key).in_([x.name for x in self.neq])))
         return stmt
 
 
@@ -225,13 +225,13 @@ class StrFilter(CustomFilter):
         if self.eq is not None and self.eq is not strawberry.UNSET:
             stmt = stmt.where(getattr(model, key).in_(self.eq))
         if self.neq is not None and self.neq is not strawberry.UNSET:
-            stmt = stmt.where(~getattr(model, key).in_(self.neq))
+            stmt = stmt.where(_not(getattr(model, key).in_(self.neq)))
         if self.contains is not None and self.contains is not strawberry.UNSET:
             for c in self.contains:
                 stmt = stmt.where(getattr(model, key).ilike(c))
         if self.not_contains is not None and self.not_contains is not strawberry.UNSET:
             for c in self.not_contains:
-                stmt = stmt.where(~getattr(model, key).ilike(c))
+                stmt = stmt.where(not_(getattr(model, key).ilike(c)))
         return stmt
 
 
@@ -744,7 +744,7 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
                         case(
                             # Simple case where we are dealing with non-orphans
                             (
-                                ~models.ResourcePersistentState.is_orphan,
+                                not_(models.ResourcePersistentState.is_orphan),
                                 select(latest_scheduled_version_cte.c.version).scalar_subquery(),
                             ),
                             else_=select(func.max(models.t_resource_set_configuration_model.c.model))
