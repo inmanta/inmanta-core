@@ -28,7 +28,7 @@ from inmanta.deploy import state
 from inmanta.server.services.compilerservice import CompilerService
 from sqlakeyset import Marker, unserialize_bookmark
 from sqlakeyset.asyncio import select_page
-from sqlalchemy import Boolean, Select, UnaryExpression, and_, asc, desc, select
+from sqlalchemy import Boolean, Select, UnaryExpression, and_, asc, case, desc, func, not_, select
 from strawberry import relay
 from strawberry.schema.config import StrawberryConfig
 from strawberry.types import Info
@@ -60,23 +60,27 @@ There are 4 important building blocks that we have to take into account:
 
     2) The attributes of the `Query` class i.e.
         ```
-            @relay.connection(relay.ListConnection[Environment])  # type: ignore[misc, type-var]
+            @strawberry.field
             async def environments(
                 self,
+                info: CustomInfo,
+                first: typing.Optional[int] = strawberry.UNSET,
+                after: typing.Optional[str] = strawberry.UNSET,
+                last: typing.Optional[int] = strawberry.UNSET,
+                before: typing.Optional[str] = strawberry.UNSET,
                 filter: typing.Optional[EnvironmentFilter] = strawberry.UNSET,
-                order_by: typing.Optional[Sequence[ResourceOrder]] = strawberry.UNSET,
-            ) -> typing.Iterable[models.Environment]:
-                async with get_session() as session:
-                    stmt = select(models.Environment)
-                    stmt = add_filter_and_sort(stmt, filter, order_by)
-                    _environments = await session.scalars(stmt)
-                    return _environments.all()
+                order_by: typing.Optional[Sequence[EnvironmentOrder]] = strawberry.UNSET,
+            ) -> relay.ListConnection[Environment]:
+                stmt = select(models.Environment)
+                stmt = add_filter_and_sort(stmt, EnvironmentOrder.default_order(), filter, order_by)
+                return await get_connection(
+                    stmt, info=info, model="Environment", first=first, after=after, last=last, before=before
+                )
         ```
-        It is decorated with `@relay.connection(relay.ListConnection[<strawberry_model>])` to provide relay pagination.
-        This decorator will generate a `<strawberry_model>Connection` class.
-        The `first`/`last`/`before`/`after` query arguments are inserted by this decorator.
+
+        The `first`/`last`/`before`/`after` query arguments are used for pagination.
         It is possible to add custom parameters to the query that we want to use on resolution, like `filter` and `order_by`.
-        We return an iterable of our SQLAlchemy model that will then be paginated (if requested by the user)
+        We call `get_connection` to manually fetch the correct results and page information and return it to the user.
 
         If you don't exclude a certain relation from the model i.e. `project`
         you would then have to create a strawberry model for it.
@@ -108,7 +112,7 @@ There are 4 important building blocks that we have to take into account:
                     if self.eq is not None and self.eq is not strawberry.UNSET:
                         stmt = stmt.where(getattr(model, key).in_([x.name for x in self.eq]))
                     if self.neq is not None and self.neq is not strawberry.UNSET:
-                        stmt = stmt.where(~getattr(model, key).in_([x.name for x in self.neq]))
+                        stmt = stmt.where(not_(getattr(model, key).in_([x.name for x in self.neq])))
                     return stmt
         ```
     4) The `StrawberryOrder` child class for our strawberry model i.e.
@@ -200,7 +204,7 @@ class EnumFilter[T: StrEnum](CustomFilter):
         if self.eq is not None and self.eq is not strawberry.UNSET:
             stmt = stmt.where(getattr(model, key).in_([x.name for x in self.eq]))
         if self.neq is not None and self.neq is not strawberry.UNSET:
-            stmt = stmt.where(~getattr(model, key).in_([x.name for x in self.neq]))
+            stmt = stmt.where(not_(getattr(model, key).in_([x.name for x in self.neq])))
         return stmt
 
 
@@ -221,13 +225,13 @@ class StrFilter(CustomFilter):
         if self.eq is not None and self.eq is not strawberry.UNSET:
             stmt = stmt.where(getattr(model, key).in_(self.eq))
         if self.neq is not None and self.neq is not strawberry.UNSET:
-            stmt = stmt.where(~getattr(model, key).in_(self.neq))
+            stmt = stmt.where(not_(getattr(model, key).in_(self.neq)))
         if self.contains is not None and self.contains is not strawberry.UNSET:
             for c in self.contains:
                 stmt = stmt.where(getattr(model, key).ilike(c))
         if self.not_contains is not None and self.not_contains is not strawberry.UNSET:
             for c in self.not_contains:
-                stmt = stmt.where(~getattr(model, key).ilike(c))
+                stmt = stmt.where(not_(getattr(model, key).ilike(c)))
         return stmt
 
 
@@ -388,8 +392,8 @@ class Notification:
 
 @strawberry.input
 class NotificationFilter(StrawberryFilter):
+    environment: uuid.UUID
     cleared: typing.Optional[bool] = strawberry.UNSET
-    environment: typing.Optional[uuid.UUID] = strawberry.UNSET
 
 
 class NotificationOrder(StrawberryOrder):
@@ -431,6 +435,7 @@ class Resource:
 
 @strawberry.input
 class ResourceFilter(StrawberryFilter):
+    environment: uuid.UUID
     resource_type: StrFilter | None = strawberry.UNSET
     resource_id_value: StrFilter | None = strawberry.UNSET
     agent: StrFilter | None = strawberry.UNSET
@@ -439,6 +444,7 @@ class ResourceFilter(StrawberryFilter):
     compliance_state: EnumFilter[state.Compliance] | None = strawberry.UNSET
     last_deploy_result: EnumFilter[state.DeployResult] | None = strawberry.UNSET
     is_deploying: bool | None = strawberry.UNSET
+    is_orphan: bool | None = strawberry.UNSET
 
     @property
     def model(self) -> type[models.Base]:
@@ -450,7 +456,7 @@ class ResourceFilter(StrawberryFilter):
 
     @property
     def get_models_to_join(self) -> set[type[models.Base]]:
-        rps_join = ["blocked", "compliance_state", "last_deploy_result", "is_deploying"]
+        rps_join = ["blocked", "compliance_state", "last_deploy_result", "is_deploying", "is_orphan"]
         for attr in rps_join:
             if getattr(self, attr) is not strawberry.UNSET:
                 return {self.rps_model}
@@ -474,6 +480,8 @@ class ResourceFilter(StrawberryFilter):
             stmt = stmt.filter(models.Resource.attributes["purged"].astext.cast(Boolean).is_(self.purged))
         if self.is_deploying is not None and self.is_deploying is not strawberry.UNSET:
             stmt = stmt.filter(models.ResourcePersistentState.is_deploying == self.is_deploying)
+        if self.is_orphan is not None and self.is_orphan is not strawberry.UNSET:
+            stmt = stmt.filter(models.ResourcePersistentState.is_orphan == self.is_orphan)
         return stmt
 
 
@@ -686,11 +694,11 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
         async def notifications(
             self,
             info: CustomInfo,
+            filter: NotificationFilter,
             first: typing.Optional[int] = strawberry.UNSET,
             after: typing.Optional[str] = strawberry.UNSET,
             last: typing.Optional[int] = strawberry.UNSET,
             before: typing.Optional[str] = strawberry.UNSET,
-            filter: typing.Optional[NotificationFilter] = strawberry.UNSET,
             order_by: typing.Optional[Sequence[NotificationOrder]] = strawberry.UNSET,
         ) -> relay.ListConnection[Notification]:
             stmt = select(models.Notification)
@@ -703,14 +711,95 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
         async def resources(
             self,
             info: CustomInfo,
+            filter: ResourceFilter,
             first: typing.Optional[int] = strawberry.UNSET,
             after: typing.Optional[str] = strawberry.UNSET,
             last: typing.Optional[int] = strawberry.UNSET,
             before: typing.Optional[str] = strawberry.UNSET,
-            filter: typing.Optional[ResourceFilter] = strawberry.UNSET,
             order_by: typing.Optional[Sequence[ResourceOrder]] = strawberry.UNSET,
         ) -> relay.ListConnection[Resource]:
-            stmt = select(models.Resource)
+            if filter.is_orphan is False:
+                include_orphans = False
+            else:
+                include_orphans = True
+
+            # Only fetch resources in their latest version
+            # Logic based on src/inmanta/data/dataview.py::ResourceView
+            stmt = select(models.Resource).where(models.Resource.environment == filter.environment)
+            # CTE that fetches the latest scheduled version
+            latest_scheduled_version_cte = (
+                select(models.Scheduler.last_processed_model_version.label("version"))
+                .where(models.Scheduler.environment == filter.environment)
+                .cte()
+            )
+
+            if include_orphans:
+                # CTE that checks if a resource is orphaned or not and returns the appropriate version
+                # - If it is not orphaned, return the resource in the latest released version
+                # - If it is orphaned, return the resource in the latest version that it was present in.
+                included_orphans_cte = (
+                    select(
+                        models.ResourcePersistentState.environment,
+                        models.ResourcePersistentState.resource_id,
+                        case(
+                            # Simple case where we are dealing with non-orphans
+                            (
+                                not_(models.ResourcePersistentState.is_orphan),
+                                select(latest_scheduled_version_cte.c.version).scalar_subquery(),
+                            ),
+                            else_=select(func.max(models.t_resource_set_configuration_model.c.model))
+                            .join(
+                                models.Resource,
+                                and_(
+                                    models.Resource.environment == models.t_resource_set_configuration_model.c.environment,
+                                    models.Resource.resource_set == models.t_resource_set_configuration_model.c.resource_set,
+                                ),
+                            )
+                            .join(
+                                models.Configurationmodel,
+                                and_(
+                                    models.t_resource_set_configuration_model.c.environment
+                                    == models.Configurationmodel.environment,
+                                    models.t_resource_set_configuration_model.c.model == models.Configurationmodel.version,
+                                ),
+                            )
+                            .where(
+                                models.Resource.environment == models.ResourcePersistentState.environment,
+                                models.Resource.resource_id == models.ResourcePersistentState.resource_id,
+                                models.Configurationmodel.released.is_(True),
+                            )
+                            .scalar_subquery(),
+                        ).label("version"),
+                    )
+                    .where(
+                        models.ResourcePersistentState.environment == filter.environment,
+                    )
+                    .cte()
+                )
+                stmt = stmt.join(
+                    models.t_resource_set_configuration_model,
+                    and_(
+                        models.t_resource_set_configuration_model.c.environment == models.Resource.environment,
+                        models.t_resource_set_configuration_model.c.resource_set == models.Resource.resource_set,
+                    ),
+                ).join(
+                    included_orphans_cte,
+                    and_(
+                        models.Resource.environment == included_orphans_cte.c.environment,
+                        models.Resource.resource_id == included_orphans_cte.c.resource_id,
+                        models.t_resource_set_configuration_model.c.model == included_orphans_cte.c.version,
+                    ),
+                )
+            else:
+                stmt = stmt.join(
+                    models.t_resource_set_configuration_model,
+                    and_(
+                        models.t_resource_set_configuration_model.c.environment == models.Resource.environment,
+                        models.t_resource_set_configuration_model.c.resource_set == models.Resource.resource_set,
+                        models.t_resource_set_configuration_model.c.model
+                        == select(latest_scheduled_version_cte.c.version).scalar_subquery(),
+                    ),
+                )
             stmt = add_filter_and_sort(stmt, ResourceOrder.default_order(), filter, order_by)
             stmt = do_required_resource_joins(stmt, filter, order_by)
             return await get_connection(stmt, info=info, model="Resource", first=first, after=after, last=last, before=before)

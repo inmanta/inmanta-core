@@ -2916,7 +2916,7 @@ async def mixed_resource_generator(
         <instances> skipped for undefined
         <instances> failed
         <instances> skipped
-        10*<instances> orphans
+        min(<resources_per_version> / 2, 10) *<instances> orphans
         <resources_per_version> - 5 deployed
     """
 
@@ -2947,7 +2947,7 @@ async def mixed_resource_generator(
                 version = 0
 
             def resource_id(ri: int) -> str:
-                if iteration > 0 and ri > resources_per_version / 2:
+                if iteration > 0 and ri >= resources_per_version / 2:
                     ri += 10
                 return f"test::XResource{int(ri / (resources_per_version / 5))}[agent{agent_index},sub={ri}]"
 
