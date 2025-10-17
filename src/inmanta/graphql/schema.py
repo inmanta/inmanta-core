@@ -225,7 +225,7 @@ class StrFilter(CustomFilter):
         if self.eq is not None and self.eq is not strawberry.UNSET:
             stmt = stmt.where(getattr(model, key).in_(self.eq))
         if self.neq is not None and self.neq is not strawberry.UNSET:
-            stmt = stmt.where(_not(getattr(model, key).in_(self.neq)))
+            stmt = stmt.where(not_(getattr(model, key).in_(self.neq)))
         if self.contains is not None and self.contains is not strawberry.UNSET:
             for c in self.contains:
                 stmt = stmt.where(getattr(model, key).ilike(c))
