@@ -311,6 +311,7 @@ class Resource(metaclass=ResourceMeta):
         const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS,
         const.RESOURCE_ATTRIBUTE_REFERENCES,
         const.RESOURCE_ATTRIBUTE_MUTATORS,
+        const.RESOURCE_ATTRIBUTE_REPORT,
     )
     send_event: bool  # Deprecated field
     model: "proxy.DynamicProxy"
@@ -340,6 +341,13 @@ class Resource(metaclass=ResourceMeta):
         except Exception:
             # default to True for backward compatibility (all resources used to receive events)
             return True
+
+    @staticmethod
+    def get_report(_exporter: "export.Exporter", obj: "Resource") -> bool:
+        try:
+            return obj.report
+        except Exception:
+            return False
 
     @classmethod
     def convert_requires(
@@ -531,6 +539,8 @@ class Resource(metaclass=ResourceMeta):
         extra: dict[str, object] = {}
         if const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS not in obj_map:
             extra[const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS] = True
+        if const.RESOURCE_ATTRIBUTE_REPORT not in obj_map:
+            extra[const.RESOURCE_ATTRIBUTE_REPORT] = False
 
         if (
             const.RESOURCE_ATTRIBUTE_MUTATORS not in obj_map

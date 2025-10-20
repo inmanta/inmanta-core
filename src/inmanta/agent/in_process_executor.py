@@ -269,7 +269,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
             if set_fact_response.code != 200:
                 ctx.error("Failed to send facts to the server %s", set_fact_response.result)
 
-        return DeployReport.from_ctx(resource_details.rvid, ctx)
+        return DeployReport.from_ctx(resource_details.rvid, ctx, typing.cast(bool, resource.get("report")))
 
     async def dry_run(
         self,

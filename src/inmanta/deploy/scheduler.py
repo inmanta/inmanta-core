@@ -1344,7 +1344,10 @@ class ResourceScheduler(TaskManager):
                 return state.copy()
 
             # We are not stale
-            state.compliance = Compliance.COMPLIANT if deploy_result is DeployResult.DEPLOYED else Compliance.NON_COMPLIANT
+            if result.report:
+                state.compliance = Compliance.COMPLIANT if len(result.changes) == 0 else Compliance.NON_COMPLIANT
+            else:
+                state.compliance = Compliance.COMPLIANT if deploy_result is DeployResult.DEPLOYED else Compliance.NON_COMPLIANT
 
             # first update state, then send out events
             self._deploying_latest.remove(resource)

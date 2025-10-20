@@ -945,6 +945,92 @@ class ResourceHandler(HandlerAPI[TResource]):
 TPurgeableResource = TypeVar("TPurgeableResource", bound=resources.PurgeableResource)
 
 
+class ReadOnlyHandler(ResourceHandler[TPurgeableResource]):
+    """
+    This handler base class only reads and reports the changes in desired state
+    """
+
+    def read_resource(self, ctx: HandlerContext, resource: TPurgeableResource) -> None:
+        """
+        This method reads the current state of the resource. It provides a copy of the resource that should be deployed,
+        the method implementation should modify the attributes of this resource to the current state.
+
+        :param ctx: Context can be used to pass value discovered in the read method to the CUD methods. For example, the
+                   id used in API calls
+        :param resource: A clone of the desired resource state. The read method need to set values on this object.
+        :raise SkipResource: Raise this exception when the handler should skip this resource
+        :raise SkipResourceForDependencies: Raise this exception when the handler should skip this resource and retry only
+            when its dependencies succeed.
+        """
+
+    def calculate_diff(
+        self, ctx: HandlerContext, current: TPurgeableResource, desired: TPurgeableResource
+    ) -> dict[str, dict[str, typing.Any]]:
+        """
+        Calculate the diff between the current and desired resource state.
+
+        :param ctx: Context can be used to get values discovered in the read method. For example, the id used in API
+                    calls. This context should also be used to let the handler know what changes were made to the
+                    resource.
+        :param current: The current state of the resource
+        :param desired: The desired state of the resource
+        :return: A dict with key the name of the field and value another dict with "current" and "desired" as keys for
+                 fields that require changes.
+        """
+        return self._diff(current, desired)
+
+    @tracing.instrument("ReadOnlyHandler.execute", extract_args=True)
+    def execute(self, ctx: HandlerContext, resource: TPurgeableResource, dry_run: bool = False) -> None:
+        try:
+            self.pre(ctx, resource)
+
+            # current is clone
+            desired = resource
+            current: TPurgeableResource = desired.clone()
+            changes: dict[str, dict[str, typing.Any]] = {}
+            ctx.debug("Calling read_resource")
+            with tracing.span("read_resource"):
+                self.read_resource(ctx, current)
+
+            with tracing.span("calculate_diff"):
+                changes = self.calculate_diff(ctx, current, desired)
+
+            for field, values in changes.items():
+                ctx.add_change(field, desired=values["desired"], current=values["current"])
+
+            ctx.set_resource_state(const.HandlerResourceState.deployed)
+
+        except SkipResourceForDependencies as e:
+            ctx.set_resource_state(const.HandlerResourceState.skipped_for_dependency)
+            ctx.warning(
+                msg="Resource %(resource_id)s was skipped: %(reason)s",
+                resource_id=resource.id,
+                reason=e.args,
+            )
+        except SkipResource as e:
+            ctx.set_resource_state(const.HandlerResourceState.skipped)
+            ctx.warning(
+                msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id.resource_str(), reason=e.args
+            )
+        except Exception as e:
+            ctx.set_resource_state(const.HandlerResourceState.failed)
+            ctx.exception(
+                "An error occurred during deployment of %(resource_id)s (exception: %(exception)s)",
+                resource_id=resource.id.resource_str(),
+                exception=f"{e.__class__.__name__}('{e}')",
+                traceback=traceback.format_exc(),
+            )
+        finally:
+            try:
+                self.post(ctx, resource)
+            except Exception as e:
+                ctx.exception(
+                    "An error occurred after deployment of %(resource_id)s (exception: %(exception)s)",
+                    resource_id=resource.id.resource_str(),
+                    exception=f"{e.__class__.__name__}('{e}')",
+                )
+
+
 @stable_api
 class CRUDHandler(ResourceHandler[TPurgeableResource]):
     """
