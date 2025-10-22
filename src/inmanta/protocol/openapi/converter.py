@@ -80,7 +80,7 @@ class OpenApiConverter:
             Server(
                 url=f"{protocol}://{server_address}:{bind_port}/",
             ),
-            Server(url="/"),  # Generic server, working even if the swagger if behind a reverse proxy
+            Server(url="/"),  # Generic server, working even if the swagger is behind a reverse proxy
         ]
 
     def _get_inmanta_version(self) -> Optional[str]:
