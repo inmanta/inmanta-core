@@ -1519,7 +1519,7 @@ async def test_resource_status(resource_container, server, client, clienthelper,
             ResourceIdStr("test::Resource[agent1,key=key3]"): ReleasedResourceState.deployed,
             ResourceIdStr("test::Resource[agent1,key=key4]"): ReleasedResourceState.deployed,
             ResourceIdStr("test::Resource[agent1,key=key5]"): ReleasedResourceState.deployed,
-            # veriry that the new resource was registered an orphan
+            # verify that the new resource was registered as orphan
             ResourceIdStr("test::Resource[agent1,key=key6]"): ReleasedResourceState.orphaned,
         }
     )
