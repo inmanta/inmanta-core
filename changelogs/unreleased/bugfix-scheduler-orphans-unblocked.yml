@@ -1,7 +1,0 @@
-description: "Fix scheduler crash for unblocked orphans"
-change-type: patch
-sections:
-  bugfix: "Fixed bug where the resource scheduler might crash when a `skipped_for_undefined` resource is deleted in the same model version where its dependency becomes defined"
-destination-branches:
-  - master
-  - iso8
