@@ -1,0 +1,7 @@
+description: "Fix scheduler bug: mark orphans for new-then-deleted resources"
+change-type: patch
+sections:
+  bugfix: Fixed bug where resources might not be marked as orphans if they are deleted very quickly after their first appearance. This bug only affected the resource list endpoint, it did not cause those resources to remain managed.
+destination-branches:
+  - master
+  - iso8
