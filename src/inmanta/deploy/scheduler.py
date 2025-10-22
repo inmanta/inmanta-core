@@ -29,7 +29,7 @@ from abc import abstractmethod
 from collections.abc import Mapping, Sequence, Set
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional, Self
+from typing import ClassVar, Optional, Self
 
 import asyncpg
 
@@ -82,7 +82,7 @@ class DeployIntent(ResourceVersionIntent):
     deploy_start: datetime.datetime
 
 
-class ResourceIntentChange(Enum):
+class ResourceIntentChangeType(Enum):
     """
     A state change for a single resource's intent. Represents in which way, if any, a resource changed in a new model version
     versus the currently managed one.
@@ -106,6 +106,28 @@ class ResourceIntentChange(Enum):
     """
     The resource was deleted.
     """
+
+
+class _ResourceIntentChange(abc.ABC):
+    change: ClassVar[ResourceIntentChangeType]
+
+
+class New(_ResourceIntentChange):
+    change = ResourceIntentChangeType.NEW
+
+
+class Updated(_ResourceIntentChange):
+    change = ResourceIntentChangeType.UPDATED
+
+
+@dataclass(frozen=True, kw_only=True)
+class Deleted(_ResourceIntentChange):
+    change: ClassVar[ResourceIntentChangeType] = ResourceIntentChangeType.DELETED
+
+    deleted_version: int
+
+
+type ResourceIntentChange = New | Updated | Deleted
 
 
 class ResourceRecord(typing.TypedDict):
@@ -847,7 +869,8 @@ class ResourceScheduler(TaskManager):
                     del resource_requires[resource]
                 undefined.discard(resource)
                 if resource in self._state.intent:
-                    intent_changes[resource] = ResourceIntentChange.DELETED
+                    # TODO
+                    intent_changes[resource] = Deleted(deleted_version=0)
                 else:
                     with contextlib.suppress(KeyError):
                         del intent_changes[resource]
@@ -877,12 +900,15 @@ class ResourceScheduler(TaskManager):
                     resource not in self._state.intent.keys()
                     # deleted in a previously processed version and reappeared now
                     # => consider as a new resource rather than an update
-                    or intent_changes.get(resource) in (ResourceIntentChange.DELETED, ResourceIntentChange.NEW)
+                    or (
+                        resource in intent_changes
+                        and intent_changes[resource].change in (ResourceIntentChangeType.DELETED, ResourceIntentChangeType.NEW)
+                    )
                 ):
-                    intent_changes[resource] = ResourceIntentChange.NEW
+                    intent_changes[resource] = New()
                 # resources we already manage
                 elif resource_intent.attribute_hash != self._state.intent[resource].attribute_hash:
-                    intent_changes[resource] = ResourceIntentChange.UPDATED
+                    intent_changes[resource] = Updated()
                 # no change of intent for this resource, unless defined status changed
 
                 # determine new defined status
@@ -897,7 +923,7 @@ class ResourceScheduler(TaskManager):
                     self._state.resource_state[resource].compliance is Compliance.UNDEFINED
                 ):
                     # resource's defined status changed
-                    intent_changes[resource] = ResourceIntentChange.UPDATED
+                    intent_changes[resource] = Updated()
 
         return (
             ModelVersion(
@@ -987,12 +1013,12 @@ class ResourceScheduler(TaskManager):
             i += 1
 
             match change:
-                case ResourceIntentChange.DELETED:
+                case Deleted():
                     deleted.add(resource)
                     continue
-                case ResourceIntentChange.NEW:
+                case New():
                     new.add(resource)
-                case ResourceIntentChange.UPDATED:
+                case Updated():
                     updated.add(resource)
                 case _ as _never:
                     typing.assert_never(_never)
@@ -1056,7 +1082,7 @@ class ResourceScheduler(TaskManager):
                 # update resource state and dirty set
                 self._state.update_resource(
                     model.resources[resource],
-                    force_new=intent_changes[resource] is ResourceIntentChange.NEW,
+                    force_new=intent_changes[resource].change is ResourceIntentChangeType.NEW,
                     undefined=resource in model.undefined,
                     last_deployed=last_deploy_time.get(resource, None),
                 )
