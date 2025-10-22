@@ -404,7 +404,7 @@ class TimerManager:
 
     def remove_timers(self, resources: Collection[ResourceIdStr]) -> None:
         """
-        Cancel and remove timers for resources that have been completely dropped from the model.
+        Cancel and remove timers (if they exist) for resources that have been completely dropped from the model.
         """
         self.stop_timers(resources)
         for resource in resources:

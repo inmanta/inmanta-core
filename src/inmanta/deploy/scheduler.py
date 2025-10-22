@@ -807,7 +807,8 @@ class ResourceScheduler(TaskManager):
         Returns a tuple of
         - the resulting model version after processing all versions.
         - a mapping of resources to their change of intent, after processing all versions in sequence. Only contains resources
-            with a change of intent.
+            with a change of intent. May include resources with DELETED change of intent even if they aren't part of the current
+            state.
 
         :param new_versions: The new versions to process, in ascending order.
         :param up_to_date_resources: A set of resources that are considered up to date and in a known good state, regardless
@@ -867,13 +868,12 @@ class ResourceScheduler(TaskManager):
                 with contextlib.suppress(KeyError):
                     del intent[resource]
                     del resource_requires[resource]
+                if (
+                    resource not in intent_changes
+                    or intent_changes[resource].change is not ResourceIntentChangeType.DELETED
+                ):
+                    intent_changes[resource] = Deleted(deleted_version=model.version)
                 undefined.discard(resource)
-                if resource in self._state.intent:
-                    # TODO
-                    intent_changes[resource] = Deleted(deleted_version=0)
-                else:
-                    with contextlib.suppress(KeyError):
-                        del intent_changes[resource]
 
             i: int = 0
             for resource, resource_intent in model.resources.items():
@@ -997,7 +997,7 @@ class ResourceScheduler(TaskManager):
             i += 1
 
         # convert intent changes to sets for bulk processing
-        deleted: set[ResourceIdStr] = set()
+        deleted: dict[ResourceIdStr, Deleted] = {}
         new: set[ResourceIdStr] = set()
         updated: set[ResourceIdStr] = set()
         # resources that were previously undefined but not anymore, including those considered new if they match this property
@@ -1014,7 +1014,7 @@ class ResourceScheduler(TaskManager):
 
             match change:
                 case Deleted():
-                    deleted.add(resource)
+                    deleted[resource] = change
                     continue
                 case New():
                     new.add(resource)
@@ -1047,7 +1047,7 @@ class ResourceScheduler(TaskManager):
         force_new: Set[ResourceIdStr] = self._state.intent.keys() & new
 
         # assert invariants of the constructed sets
-        assert len(intent_changes) == len(deleted | new | updated) == len(deleted) + len(new) + len(updated)
+        assert len(intent_changes) == len(deleted.keys() | new | updated) == len(deleted) + len(new) + len(updated)
         assert len(became_defined | became_undefined) == (len(became_defined) + len(became_undefined))
 
         # pass control to IO loop once more before we acquire the lock
@@ -1113,7 +1113,7 @@ class ResourceScheduler(TaskManager):
                     self._state.resource_state[resource].blocked = Blocked.NOT_BLOCKED
 
             # Update set of in-progress deploys that became unmanaged
-            self._deploying_unmanaged.update(self._deploying_latest & (new | deleted))
+            self._deploying_unmanaged.update(self._deploying_latest & (new | deleted.keys()))
             # Update set of in-progress non-stale deploys by trimming resources with new state
             self._deploying_latest.difference_update(intent_changes.keys(), transitive_blocked)
 
@@ -1122,7 +1122,7 @@ class ResourceScheduler(TaskManager):
             #    - blocked: must not be deployed
             #    - deleted from the model
             self._timer_manager.stop_timers(self._state.dirty | became_undefined | transitive_blocked)
-            self._timer_manager.remove_timers(deleted)
+            self._timer_manager.remove_timers(deleted.keys())
             # Install timers for initial up-to-date resources. They are up-to-date now,
             # but we want to make sure we periodically repair them.
             self._timer_manager.update_timers(
@@ -1139,8 +1139,9 @@ class ResourceScheduler(TaskManager):
                 dropped_requires=dropped_requires,
             )
             for resource in deleted:
-                self._state.drop(resource)  # Removes from the dirty set
-            for resource in deleted | became_undefined | transitive_blocked:
+                if resource in self._state.resource_state:
+                    self._state.drop(resource)  # Removes from the dirty set
+            for resource in deleted.keys() | became_undefined | transitive_blocked:
                 self._work.delete_resource(resource)
 
             # Updating the blocked state should be done under the scheduler lock, because this state is written
@@ -1165,7 +1166,7 @@ class ResourceScheduler(TaskManager):
                 connection=con,
             )
             # Mark orphaned resources
-            await self.state_update_manager.mark_as_orphan(self.environment, deleted, connection=con)
+            await self.state_update_manager.mark_as_orphan(self.environment, deleted.keys(), connection=con)
             await self.state_update_manager.set_last_processed_model_version(
                 self.environment, self._state.version, connection=con
             )
