@@ -868,10 +868,7 @@ class ResourceScheduler(TaskManager):
                 with contextlib.suppress(KeyError):
                     del intent[resource]
                     del resource_requires[resource]
-                if (
-                    resource not in intent_changes
-                    or intent_changes[resource].change is not ResourceIntentChangeType.DELETED
-                ):
+                if resource not in intent_changes or intent_changes[resource].change is not ResourceIntentChangeType.DELETED:
                     intent_changes[resource] = Deleted(deleted_version=model.version)
                 undefined.discard(resource)
 
