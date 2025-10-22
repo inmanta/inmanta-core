@@ -1160,7 +1160,7 @@ class ResourceScheduler(TaskManager):
                 self.environment,
                 intent={
                     rid: (self._state.resource_state[rid], self._state.intent[rid])
-                    for rid in new | updated | resources_with_updated_blocked_state
+                    for rid in (new | updated | resources_with_updated_blocked_state) - deleted.keys()
                 },
                 update_blocked_state=True,
                 connection=con,
