@@ -599,6 +599,8 @@ class ScheduledWork:
         when we know it can't progress e.g. it is undefined and thus known to be blocked
         on another resource.
         Does not affect dry-run tasks because they do not act on the latest desired state.
+
+        Does nothing if no work is found for this resource.
         """
         # delete from waiting collection if deploy task is waiting to be queued
         if resource in self._waiting:
