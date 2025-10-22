@@ -967,7 +967,6 @@ src/inmanta/protocol/openapi/converter.py:0: error: "object" has no attribute "_
 src/inmanta/protocol/openapi/converter.py:0: error: "object" has no attribute "__iter__"; maybe "__dir__" or "__str__"? (not iterable)  [attr-defined]
 src/inmanta/protocol/openapi/converter.py:0: error: "object" has no attribute "keys"  [attr-defined]
 src/inmanta/protocol/openapi/converter.py:0: error: Argument "parameters" to "Operation" has incompatible type "list[Parameter] | None"; expected "list[Parameter | Reference] | None"  [arg-type]
-src/inmanta/protocol/openapi/converter.py:0: error: Argument "url" to "Server" has incompatible type "str"; expected "AnyUrl"  [arg-type]
 src/inmanta/protocol/openapi/converter.py:0: error: Argument 1 to "Schema" has incompatible type "**dict[str, object]"; expected "Schema | None"  [arg-type]
 src/inmanta/protocol/openapi/converter.py:0: error: Argument 1 to "Schema" has incompatible type "**dict[str, object]"; expected "Schema | None"  [arg-type]
 src/inmanta/protocol/openapi/converter.py:0: error: Argument 1 to "Schema" has incompatible type "**dict[str, object]"; expected "Schema | bool | None"  [arg-type]
