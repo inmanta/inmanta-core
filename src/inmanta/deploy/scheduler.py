@@ -124,7 +124,7 @@ class Updated(_ResourceIntentChange):
 class Deleted(_ResourceIntentChange):
     change: ClassVar[ResourceIntentChangeType] = ResourceIntentChangeType.DELETED
 
-    deleted_version: int
+    last_seen_version: int
 
 
 type ResourceIntentChange = New | Updated | Deleted
@@ -835,6 +835,7 @@ class ResourceScheduler(TaskManager):
         # all undefined resources in the new model versions. Newer version information overrides older ones.
         undefined: set[ResourceIdStr] = set()
 
+        previous_version: int = self._state.version
         for model in new_versions:
             version = model.version
 
@@ -869,7 +870,7 @@ class ResourceScheduler(TaskManager):
                     del intent[resource]
                     del resource_requires[resource]
                 if resource not in intent_changes or intent_changes[resource].change is not ResourceIntentChangeType.DELETED:
-                    intent_changes[resource] = Deleted(deleted_version=model.version)
+                    intent_changes[resource] = Deleted(last_seen_version=previous_version)
                 undefined.discard(resource)
 
             i: int = 0
@@ -921,6 +922,8 @@ class ResourceScheduler(TaskManager):
                 ):
                     # resource's defined status changed
                     intent_changes[resource] = Updated()
+
+            previous_version = version
 
         return (
             ModelVersion(
