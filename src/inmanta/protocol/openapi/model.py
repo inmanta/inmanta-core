@@ -45,7 +45,7 @@ class Info(BaseModel):
 
 
 class Server(BaseModel):
-    url: AnyUrl
+    url: str
     description: Optional[str] = None
 
 
