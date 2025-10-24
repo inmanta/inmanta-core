@@ -631,6 +631,7 @@ class DeployReport:
     messages: list[LogLine]
     changes: dict[str, AttributeStateChange]
     change: Optional[Change]
+    report: Optional[bool] = False
 
     def __post_init__(self) -> None:
         if self.status in {*const.TRANSIENT_STATES, *const.UNDEPLOYABLE_STATES, const.ResourceState.dry}:
@@ -648,7 +649,7 @@ class DeployReport:
         return const.ResourceState(self.resource_state)
 
     @classmethod
-    def from_ctx(cls, rvid: ResourceVersionIdStr, ctx: HandlerContext) -> "DeployReport":
+    def from_ctx(cls, rvid: ResourceVersionIdStr, ctx: HandlerContext, report: bool = False) -> "DeployReport":
         if ctx.status is None:
             ctx.warning("Deploy status field is None, failing!")
             ctx.set_resource_state(const.HandlerResourceState.failed)
@@ -661,6 +662,7 @@ class DeployReport:
             messages=ctx.logs,
             changes=ctx.changes,
             change=ctx.change,
+            report=report,
         )
 
     @classmethod

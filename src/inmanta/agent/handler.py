@@ -1039,7 +1039,11 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
             for field, values in changes.items():
                 ctx.add_change(field, desired=values["desired"], current=values["current"])
 
-            if not dry_run:
+            if dry_run:
+                ctx.set_resource_state(const.HandlerResourceState.dry)
+            elif resource.get("report", default=False):
+                ctx.set_resource_state(const.HandlerResourceState.deployed)
+            else:
                 if "purged" in changes:
                     if not changes["purged"]["desired"]:
                         ctx.debug("Calling create_resource")
@@ -1056,8 +1060,6 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
                         self.update_resource(ctx, dict(changes), desired)
 
                 ctx.set_resource_state(const.HandlerResourceState.deployed)
-            else:
-                ctx.set_resource_state(const.HandlerResourceState.dry)
 
         except SkipResourceForDependencies as e:
             ctx.set_resource_state(const.HandlerResourceState.skipped_for_dependency)
