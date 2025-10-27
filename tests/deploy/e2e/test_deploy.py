@@ -1468,6 +1468,7 @@ async def test_resource_status(resource_container, server, client, clienthelper,
         wait_for_deploy=False,
     )
     await agent.scheduler.start()
+    await wait_until_deployment_finishes(client, env_id, version=version)
     await assert_states(
         {
             ResourceIdStr("test::Resource[agent1,key=key1]"): ReleasedResourceState.deployed,
