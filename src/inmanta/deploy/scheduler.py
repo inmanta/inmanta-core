@@ -1143,7 +1143,9 @@ class ResourceScheduler(TaskManager):
             )
             # Mark orphaned resources
             if first_version:
-                await self.state_update_manager.mark_all_orphans(self.environment, current_version=model.version, connection=con)
+                await self.state_update_manager.mark_all_orphans(
+                    self.environment, current_version=model.version, connection=con
+                )
             else:
                 await self.state_update_manager.mark_as_orphan(self.environment, deleted.keys(), connection=con)
             await self.state_update_manager.set_last_processed_model_version(
