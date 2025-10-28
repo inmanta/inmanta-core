@@ -302,6 +302,11 @@ class DummyStateManager(StateUpdateManager):
     ) -> None:
         pass
 
+    async def mark_all_orphans(
+        self, environment: UUID, *, current_version: int, connection: Optional[Connection] = None
+    ) -> None:
+        pass
+
     async def mark_as_orphan(
         self,
         environment: UUID,
