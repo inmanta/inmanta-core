@@ -435,6 +435,9 @@ RESOURCE_ATTRIBUTE_RECEIVE_EVENTS: typing.Final[str] = "receive_events"
 RESOURCE_ATTRIBUTE_REFERENCES: typing.Final[str] = "references"
 RESOURCE_ATTRIBUTE_MUTATORS: typing.Final[str] = "mutators"
 
+# resource attribute to distinguish read-only resources
+RESOURCE_ATTRIBUTE_REPORT: typing.Final[str] = "report"
+
 # Per component log variables
 LOG_CONTEXT_VAR_ENVIRONMENT = "environment"
 
