@@ -24,8 +24,8 @@ from collections.abc import Mapping
 
 import pytest
 
-import utils
 import inmanta.server
+import utils
 from inmanta import config, const, data
 from inmanta.agent.agent_new import Agent
 from inmanta.deploy.state import Blocked, Compliance, DeployResult, ResourceState
@@ -388,6 +388,7 @@ async def test_scheduler_initialize_multiple_versions(
                 "purged": False,
                 "send_event": False,
             }
+
         return [res(1), res(2)] if r2 else [res(1)]
 
     version = await clienthelper.get_version()
