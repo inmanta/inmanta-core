@@ -382,7 +382,7 @@ async def test_scheduler_initialize_multiple_versions(
         def res(n: int) -> None:
             return {
                 "key": f"key{n}",
-                "value": "val{i}",
+                "value": f"val{n}",
                 "id": f"test::Resource[agent1,key=key{n}],v={version}",
                 "requires": [],
                 "purged": False,
