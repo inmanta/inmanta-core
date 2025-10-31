@@ -1,0 +1,4 @@
+---
+description: "Add documentation for the Client mypy plugin and the paging helper methods"
+change-type: patch
+destination-branches: [master, iso8]
