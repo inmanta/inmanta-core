@@ -899,6 +899,9 @@ class ResourceScheduler(TaskManager):
             return
         if connection is not None and connection.is_in_transaction():
             raise ValueError("_new_version() expects its connection to not be in a transaction context")
+
+        first_version: bool = self._state.version == 0
+
         up_to_date_resources = set() if up_to_date_resources is None else up_to_date_resources
         last_deploy_time = {} if last_deploy_time is None else last_deploy_time
 
@@ -1087,7 +1090,14 @@ class ResourceScheduler(TaskManager):
                 connection=con,
             )
             # Mark orphaned resources
-            await self.state_update_manager.mark_as_orphan(self.environment, deleted.keys(), connection=con)
+            if first_version:
+                # We're starting fresh. Make sure to mark all orphans, because we may be skipping some unprocessed versions.
+                await self.state_update_manager.mark_all_orphans(
+                    self.environment, current_version=model.version, connection=con
+                )
+            else:
+                # We're processing versions relative to an already processed version => deleted contains all orphans.
+                await self.state_update_manager.mark_as_orphan(self.environment, deleted.keys(), connection=con)
             await self.state_update_manager.set_last_processed_model_version(
                 self.environment, self._state.version, connection=con
             )

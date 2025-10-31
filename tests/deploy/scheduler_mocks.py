@@ -311,6 +311,19 @@ class DummyStateManager(StateUpdateManager):
     ) -> None:
         pass
 
+    async def mark_all_orphans(
+        self, environment: UUID, *, current_version: int, connection: Optional[Connection] = None
+    ) -> None:
+        pass
+
+    async def mark_as_orphan(
+        self,
+        environment: UUID,
+        resource_ids: Set[ResourceIdStr],
+        connection: Optional[Connection] = None,
+    ) -> None:
+        pass
+
     @asynccontextmanager
     async def get_connection(self, connection: Optional[Connection] = None) -> AbstractAsyncContextManager[Connection]:
         yield DummyDatabaseConnection()

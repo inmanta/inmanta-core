@@ -1,0 +1,7 @@
+description: "Fix scheduler bug: mark all orphans for a scheduler with reset state"
+change-type: patch
+# bugfix-scheduler-orphans.yml is close enough
+sections: {}
+destination-branches:
+  - master
+  - iso8
