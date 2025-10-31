@@ -379,16 +379,16 @@ async def test_scheduler_initialize_multiple_versions(
     agent: Agent | None = None
 
     def resources(version: int, *, r2: bool = True) -> list[dict[str, object]]:
-        def res(rid: str) -> None:
+        def res(n: int) -> None:
             return {
-                "key": "key1",
-                "value": "val1",
-                "id": f"{rid},v={version}",
+                "key": f"key{n}",
+                "value": "val{i}",
+                "id": f"test::Resource[agent1,key=key{n}],v={version}",
                 "requires": [],
                 "purged": False,
                 "send_event": False,
             }
-        return [res(rid1), res(rid2)] if r2 else [res(rid1)]
+        return [res(1), res(2)] if r2 else [res(1)]
 
     version = await clienthelper.get_version()
     res = await client.put_version(

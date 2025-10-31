@@ -1,0 +1,5 @@
+description: Added test case for orphan marking on scheduler initialization
+change-type: patch
+destination-branches:
+  - master
+  - iso8
