@@ -21,9 +21,10 @@ from collections import defaultdict
 
 import more_itertools
 
-from inmanta import compiler
+from inmanta import compiler, module, plugins, references, resources
+from inmanta.agent import handler
 from inmanta.ast import Range
-from inmanta.compiler import Compiler
+from inmanta.compiler import Compiler, ProjectLoader
 from inmanta.execute import scheduler
 
 
@@ -382,3 +383,122 @@ def test_constructor_renamed_namespace(snippetcompiler):
     range_target = Range(target_path, 1, 8, 1, 12)
 
     assert (range_source, range_target) in anchormap
+
+
+def test_project_loader_dynamic_modules(snippetcompiler):
+    """
+    Verify that the ProjectLoader class handles dynamic modules correctly.
+    """
+    snippetcompiler.setup_for_snippet(
+        """
+        import successhandlermodule
+
+        ref = successhandlermodule::create_my_ref("base_str")
+
+        successhandlermodule::SuccessResourceWithReference(
+            name="test_success_r_1",
+            agent="agent_1",
+            my_attr=ref
+        )
+        """
+    )
+
+    compiler_obj = Compiler()
+    compiler_obj.compile()
+
+    # Verify we have compiler state
+    registered_resources = {k: id(v) for k, v in resources.resource.get_resources()}
+    assert registered_resources
+    registered_providers = {k: id(v) for k, v in handler.Commander.get_handlers().items()}
+    assert registered_providers
+    registered_references = {k: id(v) for k, v in references.reference.get_references() if not k.startswith("core::")}
+    assert registered_references
+    registered_mutators = {k: id(v) for k, v in references.mutator.get_mutators() if not k.startswith("core::")}
+    assert registered_mutators
+    registered_plugins = {k: id(v) for k, v in plugins.PluginMeta.get_functions().items()}
+    assert registered_plugins
+    registered_modules = {k: id(v) for k, v in module.Project.get().modules.items()}
+    assert registered_modules
+
+    ProjectLoader.load(snippetcompiler.project)
+    compiler_obj.compile()
+
+    # Verify that the identity of the compiler state objects didn't change
+    assert {k: id(v) for k, v in resources.resource.get_resources()} == registered_resources
+    assert {k: id(v) for k, v in handler.Commander.get_handlers().items()} == registered_providers
+    assert {k: id(v) for k, v in references.reference.get_references() if not k.startswith("core::")} == registered_references
+    assert {k: id(v) for k, v in references.mutator.get_mutators() if not k.startswith("core::")} == registered_mutators
+    assert {k: id(v) for k, v in plugins.PluginMeta.get_functions().items()} == registered_plugins
+    assert {k: id(v) for k, v in module.Project.get().modules.items()} == registered_modules
+
+    ProjectLoader.register_dynamic_module("successhandlermodule")
+    ProjectLoader.load(snippetcompiler.project)
+    compiler_obj.compile()
+
+    # Verify that the identity of the compiler state objects did change
+    assert {k: id(v) for k, v in resources.resource.get_resources()} != registered_resources
+    assert {k: id(v) for k, v in handler.Commander.get_handlers().items()} != registered_providers
+    assert {k: id(v) for k, v in references.reference.get_references() if not k.startswith("core::")} != registered_references
+    assert {k: id(v) for k, v in references.mutator.get_mutators() if not k.startswith("core::")} != registered_mutators
+    assert {k: id(v) for k, v in plugins.PluginMeta.get_functions().items()} != registered_plugins
+    assert {k: id(v) for k, v in module.Project.get().modules.items()} != registered_modules
+
+
+def test_project_loader(snippetcompiler):
+    """ """
+    snippetcompiler.setup_for_snippet(
+        """
+        import successhandlermodule
+
+        ref = successhandlermodule::create_my_ref("base_str")
+
+        successhandlermodule::SuccessResourceWithReference(
+            name="test_success_r_1",
+            agent="agent_1",
+            my_attr=ref
+        )
+        """
+    )
+
+    compiler_obj = Compiler()
+    compiler_obj.compile()
+
+    # Verify we have compiler state
+    registered_resources = {k: id(v) for k, v in resources.resource.get_resources()}
+    assert any(k.startswith("successhandlermodule::") for k in registered_resources.keys())
+    registered_providers = {k: id(v) for k, v in handler.Commander.get_handlers().items()}
+    assert any(k.startswith("successhandlermodule::") for k in registered_providers.keys())
+    registered_references = {k: id(v) for k, v in references.reference.get_references() if not k.startswith("core::")}
+    assert any(k.startswith("successhandlermodule::") for k in registered_references.keys())
+    registered_mutators = {k: id(v) for k, v in references.mutator.get_mutators() if not k.startswith("core::")}
+    assert "foo::Mutator" in registered_mutators.keys()
+    registered_plugins = {k: id(v) for k, v in plugins.PluginMeta.get_functions().items()}
+    assert any(k.startswith("successhandlermodule::") for k in registered_plugins.keys())
+    assert not any(k.startswith("tests::") for k in registered_plugins.keys())
+    registered_modules = {k: id(v) for k, v in module.Project.get().modules.items()}
+    assert "successhandlermodule" in registered_modules
+    assert "tests" not in registered_modules
+
+    # Update the model as such that it no longer uses the successhandlermodule module,
+    # but it does use the tests module now.
+    with open(snippetcompiler.main, "w", encoding="utf-8") as fh:
+        fh.write(
+            """
+            import tests
+
+            tests::length("test")
+            """
+        )
+
+    # Clear the ast cache
+    snippetcompiler.project.invalidate_state()
+    ProjectLoader.load(snippetcompiler.project)
+    compiler_obj.compile()
+    assert not any(resources.resource.get_resources())
+    assert not handler.Commander.get_handlers()
+    assert not {k: id(v) for k, v in references.reference.get_references() if not k.startswith("core::")}
+    assert not {k: id(v) for k, v in references.mutator.get_mutators() if not k.startswith("core::")}
+    registered_plugins = {k: id(v) for k, v in plugins.PluginMeta.get_functions().items()}
+    assert any(k.startswith("tests::") for k in registered_plugins.keys())
+    assert "successhandlermodule" not in module.Project.get().modules
+    assert "tests" in module.Project.get().modules
