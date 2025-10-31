@@ -515,33 +515,6 @@ class ResourceScheduler(TaskManager):
             reset_deploy_progress: bool = typing.cast(
                 bool, await environment.get(data.RESET_DEPLOY_PROGRESS_ON_START, connection=con)
             )
-            if reset_deploy_progress:
-                await data.Scheduler._execute_query(
-                    f"""
-                    WITH resources_in_latest_version AS (
-                        SELECT r.resource_id, r.environment
-                        FROM resource_set_configuration_model AS rscm
-                        INNER JOIN {data.Resource.table_name()} AS r
-                            ON rscm.environment=r.environment
-                            AND rscm.resource_set=r.resource_set
-                        WHERE rscm.environment=$1
-                            AND rscm.model=(SELECT MAX(cm.version)
-                                              FROM {data.ConfigurationModel.table_name()} AS cm
-                                              WHERE cm.environment=$1)
-                    )
-                    UPDATE {data.ResourcePersistentState.table_name()} AS rps
-                    SET is_orphan=NOT EXISTS (
-                        SELECT 1
-                        FROM resources_in_latest_version AS r
-                        WHERE r.resource_id=rps.resource_id
-                          AND r.environment=rps.environment
-                    )
-                    WHERE rps.environment=$1;
-
-                    """,
-                    self.environment,
-                    connection=con,
-                )
 
             # Check if we can restore the scheduler state from a previous run
             restored_state: Optional[ModelState] = (
@@ -969,6 +942,9 @@ class ResourceScheduler(TaskManager):
             return
         if connection is not None and connection.is_in_transaction():
             raise ValueError("_new_version() expects its connection to not be in a transaction context")
+
+        first_version: bool = self._state.version == 0
+
         up_to_date_resources = set() if up_to_date_resources is None else up_to_date_resources
         last_deploy_time = {} if last_deploy_time is None else last_deploy_time
 
@@ -1166,7 +1142,14 @@ class ResourceScheduler(TaskManager):
                 connection=con,
             )
             # Mark orphaned resources
-            await self.state_update_manager.mark_as_orphan(self.environment, deleted.keys(), connection=con)
+            if first_version:
+                # We're starting fresh. Make sure to mark all orphans, because we may be skipping some unprocessed versions.
+                await self.state_update_manager.mark_all_orphans(
+                    self.environment, current_version=model.version, connection=con
+                )
+            else:
+                # We're processing versions relative to an already processed version => deleted contains all orphans.
+                await self.state_update_manager.mark_as_orphan(self.environment, deleted.keys(), connection=con)
             await self.state_update_manager.set_last_processed_model_version(
                 self.environment, self._state.version, connection=con
             )
