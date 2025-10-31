@@ -389,12 +389,9 @@ class ToDbUpdateManager(StateUpdateManager):
                 AND NOT EXISTS(
                     SELECT 1
                     FROM {data.Resource.table_name()} AS r
-                    INNER JOIN resource_set_configuration_model AS rscm
-                        ON rscm.environment = r.environment
-                        AND rscm.resource_set = r.resource_set
                     INNER JOIN {data.ConfigurationModel.table_name()} AS cm
-                        ON cm.environment = rscm.environment
-                        AND cm.version = rscm.model
+                        ON cm.environment = r.environment
+                        AND cm.version = r.model
                     WHERE
                         r.environment=rps.environment
                         AND r.resource_id=rps.resource_id
