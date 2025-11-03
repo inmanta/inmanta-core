@@ -282,9 +282,6 @@ class ProjectLoader:
         project loads because it assumes that either a dynamic module is loaded by the currently active project or it was
         not loaded at all.
         """
-        if not hasattr(module.Module, "unload"):
-            # older versions of core (<6) don't support (and don't require) explicit module unloading
-            return
         project: module.Project
         try:
             project = module.Project.get()
