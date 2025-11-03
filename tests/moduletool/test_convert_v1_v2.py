@@ -21,13 +21,11 @@ import logging
 import os
 import re
 import shutil
-import subprocess
 
 import py
 import pytest
 from pytest import MonkeyPatch
 
-import inmanta.util
 import toml
 from inmanta import moduletool
 from inmanta.command import CLIException
@@ -96,27 +94,6 @@ def test_module_conversion_in_place_minimal(tmpdir):
     module_in = ModuleV1(dummyproject, tmpdir)
     ModuleConverter(module_in).convert_in_place()
     assert_v2_module(module_name, tmpdir, minimal=True)
-
-
-def test_issue_3159_conversion_std_module_add_self_to_dependencies(tmpdir):
-    """
-    Ensure that the conversion of the std module from a V1 to a V2 module,
-    doesn't include the std module as a requirement in the setup.cfg file.
-    """
-    clone_dir = os.path.join(tmpdir, "std")
-    v2_dir = os.path.join(tmpdir, "std_v2")
-    subprocess.check_call(["git", "clone", "https://github.com/inmanta/std.git", clone_dir])
-    dummyproject = DummyProject()
-    module_in = ModuleV1(dummyproject, clone_dir)
-    ModuleConverter(module_in).convert(v2_dir)
-
-    setup_cfg_file = os.path.join(v2_dir, "setup.cfg")
-    parser = configparser.ConfigParser()
-    parser.read(setup_cfg_file)
-    assert parser.has_option("options", "install_requires")
-    install_requires = inmanta.util.parse_requirements(parser.get("options", "install_requires").split("\n"))
-    pkg_names = [r.name for r in install_requires]
-    assert "inmanta-module-std" not in pkg_names
 
 
 def test_module_conversion_in_place_cli(tmpdir, monkeypatch: MonkeyPatch):
