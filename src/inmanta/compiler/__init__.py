@@ -195,10 +195,9 @@ class ProjectLoader:
         # reset modules' state
         cls._reset_module_state()
 
-        module.Project.set(project, clean=False)
-
         cls._reset_compiler_state()
 
+        module.Project.set(project, clean=False)
         project.load()
 
         # complete the set of registered plugins from the previously registered ones
