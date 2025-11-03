@@ -144,7 +144,7 @@ def get_types_and_scopes() -> tuple[dict[str, inmanta_type.Type], Namespace]:
 @stable_api
 class ProjectLoader:
     """
-    Singleton providing methods for managing project loading and associated side effects. Since these operations have global
+    Singleton providing methods for managing project loading and associated side effects when (sequentially) loading more than one project within the same process. Since these operations have global
     side effects, managing them calls for a centralized manager rather than managing them on the Project instance level.
     This class is used by pytest-inmanta, because it executes multiple compiles within the same process.
 
