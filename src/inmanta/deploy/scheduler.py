@@ -534,9 +534,8 @@ class ResourceScheduler(TaskManager):
             initialized_version: int = self._state.version
             # Set running flag because we're ready to start accepting tasks.
             # Set before scheduling first tasks because many methods (e.g. read_version) skip silently when not running
-            LOGGER.debug("Scheduler initialization: resuming deploy operations")
+            LOGGER.debug("Scheduler initialization: resuming deploy operations and reading latest model version")
             self._running = True
-            LOGGER.debug("Scheduler initialization: reading latest version")
             await self.read_version(connection=con)
             # All resources get a timer
             async with self._scheduler_lock:
