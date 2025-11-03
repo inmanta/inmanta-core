@@ -224,28 +224,33 @@ class ProjectLoader:
         """
         Re-register all compiler state objects.
         """
-        for saved_registered, currently_registered_names, register_fnc in [
+        for state_type_name, saved_registered, currently_registered_names, register_fnc in [
             (
+                "plugin",
                 cls._registered_plugins,
                 set(PluginMeta.get_functions().keys()),
                 lambda name, cls_obj, rest: PluginMeta.add_function(cls_obj),
             ),
             (
+                "resource",
                 cls._registered_resources,
                 set(resources.resource.get_entity_resources()),
                 (lambda name, cls_obj, rest: resources.resource.add_resource(name, cls_obj, rest)),
             ),
             (
+                "provider",
                 cls._registered_providers,
                 {fq_prov_name for fq_prov_name, _ in handler.Commander.get_providers()},
                 (lambda name, cls_obj, rest: handler.Commander.add_provider(name, cls_obj)),
             ),
             (
+                "reference",
                 cls._registered_references,
                 {ref_name for ref_name, _ in references.reference.get_references()},
                 (lambda name, cls_obj, rest: references.reference.add_reference(name, cls_obj)),
             ),
             (
+                "mutator",
                 cls._registered_mutators,
                 {mut_name for mut_name, _ in references.mutator.get_mutators()},
                 (lambda name, cls_obj, rest: references.mutator.add_mutator(name, cls_obj)),
@@ -253,7 +258,13 @@ class ProjectLoader:
         ]:
             for name, cls_or_tuple in saved_registered.items():
                 cls_obj = cls_or_tuple if not isinstance(cls_or_tuple, tuple) else cls_or_tuple[0]
-                module_name = cls_obj.__module__.removeprefix("inmanta_plugins.").split(".", maxsplit=1)[0]
+                fq_module_name = cls_obj.__module__
+                if fq_module_name.startswith("inmanta."):
+                    # Element is not part of a module, it belongs to inmanta-core. No need to register.
+                    continue
+                if not fq_module_name.startswith("inmanta_plugins."):
+                    raise Exception(f"{state_type_name} is not part of the inmanta_plugins package: {fq_module_name}")
+                module_name = fq_module_name.removeprefix("inmanta_plugins.").split(".", maxsplit=1)[0]
                 if name not in currently_registered_names and module_name in project.modules:
                     register_fnc(name, cls_obj, cls_or_tuple[1] if isinstance(cls_or_tuple, tuple) else None)
 
