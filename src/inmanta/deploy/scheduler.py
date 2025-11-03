@@ -419,6 +419,7 @@ class ResourceScheduler(TaskManager):
     async def start(self) -> None:
         if self._running:
             return
+        LOGGER.debug("Starting resource scheduler for environment %s", str(self.environment))
         await self._reset()
         await self.reset_resource_state()
 
@@ -502,6 +503,7 @@ class ResourceScheduler(TaskManager):
                 await ModelState.create_from_db(self.environment, connection=con) if should_restore_state else None
             )
             if restored_state is not None:
+                LOGGER.debug("Scheduler initialization: restoring internal state")
                 # Restore scheduler state like it was before the scheduler went down
                 self._state = restored_state
                 self._work = work.ScheduledWork(
@@ -512,14 +514,17 @@ class ResourceScheduler(TaskManager):
                 restored_version: int = self._state.version
                 # Set running flag because we're ready to start accepting tasks.
                 # Set before scheduling first tasks because many methods (e.g. read_version) skip silently when not running
+                LOGGER.debug("Scheduler initialization: resuming deploy operations and reading latest model version")
                 self._running = True
                 # All resources get a timer
                 await self.read_version(connection=con)
                 async with self._scheduler_lock:
+                    LOGGER.debug("Scheduler initialization: setting up initial deploy timers")
                     self._timer_manager.update_timers(self._state.intent.keys() - self._state.dirty)
 
                 if self._state.version == restored_version:
                     # no new version was present. Simply trigger a deploy for everything that's not in a known good state
+                    LOGGER.debug("Scheduler initialization: triggering deploy")
                     await self.deploy(
                         reason="the resource scheduler was started",
                         priority=TaskPriority.INTERVAL_DEPLOY,
@@ -541,8 +546,10 @@ class ResourceScheduler(TaskManager):
 
                 # Set running flag because we're ready to start accepting tasks.
                 # Set before scheduling first tasks because many methods (e.g. read_version) skip silently when not running
+                LOGGER.debug("Scheduler initialization: resuming deploy operations and reading latest model version")
                 self._running = True
                 await self._recover_scheduler_state_using_increments_calculation(connection=con)
+            LOGGER.debug("Scheduler initialization: finished initialization, scheduler is fully up and running")
 
     async def _recover_scheduler_state_using_increments_calculation(self, *, connection: asyncpg.connection.Connection) -> None:
         """
@@ -556,6 +563,7 @@ class ResourceScheduler(TaskManager):
         except KeyError:
             # No model version has been released yet.
             return
+        LOGGER.debug("Read latest model version %d", model.version)
         # Rely on the incremental calculation to determine which resources should be deployed and which not.
         up_to_date_resources: Set[ResourceIdStr]
         up_to_date_resources, last_deploy_time = await ConfigurationModel.get_last_deployed_and_neg_increment(
@@ -582,11 +590,16 @@ class ResourceScheduler(TaskManager):
         :param agent: If given, deploy resources only for this agent. Otherwise deploy for all agents.
         """
         if not self._running:
+            LOGGER.debug("Ignoring deploy request for halted resource scheduler")
             return
         async with self._scheduler_lock:
             to_deploy: Set[ResourceIdStr] = (
                 self._state.dirty if agent is None else self._state.dirty & self._state.resources_by_agent.get(agent, set())
             )
+            if agent is not None:
+                LOGGER.debug("Triggering deploy for %d resources on agent %s because %s", len(to_deploy), agent, reason)
+            else:
+                LOGGER.debug("Triggering deploy for %d resources because %s", len(to_deploy), reason)
             self._timer_manager.stop_timers(to_deploy)
             self._work.deploy_with_context(to_deploy, reason=reason, priority=priority, deploying=self._deploying_latest)
 
@@ -613,6 +626,7 @@ class ResourceScheduler(TaskManager):
             return True
 
         if not self._running:
+            LOGGER.debug("Ignoring repair request for halted resource scheduler")
             return
         async with self._scheduler_lock:
             in_scope: Set[ResourceIdStr] = (
@@ -620,16 +634,22 @@ class ResourceScheduler(TaskManager):
             )
 
             to_deploy: Set[ResourceIdStr] = {resource for resource in in_scope if should_deploy_resource(resource)}
+            if agent is not None:
+                LOGGER.debug("Triggering deploy for %d resources on agent %s because %s", len(to_deploy), agent, reason)
+            else:
+                LOGGER.debug("Triggering deploy for %d resources because %s", len(to_deploy), reason)
             self._state.dirty.update(to_deploy)
             self._timer_manager.stop_timers(to_deploy)
             self._work.deploy_with_context(to_deploy, reason=reason, priority=priority, deploying=self._deploying_latest)
 
     async def dryrun(self, dry_run_id: uuid.UUID, version: int) -> None:
         if not self._running:
+            LOGGER.debug("Ignoring dry-run request for halted resource scheduler")
             return
 
         paused_agents = await self.all_paused_agents()
 
+        LOGGER.debug("Triggering dry-run %s for version %d", str(dry_run_id), version)
         model: ModelVersion = await self._get_single_model_version_from_db(version=version)
         for resource, resource_intent in model.resources.items():
             if resource in model.undefined:
@@ -732,6 +752,7 @@ class ResourceScheduler(TaskManager):
         :param connection: Connection to use for db operations. Should not be in a transaction context.
         """
         if not self._running:
+            LOGGER.debug("Ignoring request to read latest version for halted resource scheduler")
             return
         async with self._intent_lock, self.state_update_manager.get_connection(connection) as con:
             # Note: we're not very sensitive to races on the latest released version here. The server will always notify us
@@ -755,6 +776,11 @@ class ResourceScheduler(TaskManager):
                 )
                 for version, resources in resources_by_version
             ]
+            LOGGER.debug(
+                "Read %d model versions newer than the currently managed version %d",
+                len(resources_by_version),
+                self._state.version,
+            )
 
             await self._new_version(
                 new_versions,
@@ -785,6 +811,8 @@ class ResourceScheduler(TaskManager):
 
         if not new_versions:
             raise ValueError("Expected at least one new model version")
+
+        LOGGER.debug("Consolidating changes from %d new versions", len(new_versions))
 
         version: int
         intent: dict[ResourceIdStr, ResourceIntent] = {}
@@ -909,6 +937,17 @@ class ResourceScheduler(TaskManager):
         model: ModelVersion
         intent_changes: Mapping[ResourceIdStr, ResourceIntentChange]
         model, intent_changes = await self._get_intent_changes(new_versions, up_to_date_resources=up_to_date_resources)
+
+        LOGGER.debug(
+            (
+                "Processing intent changes for %d resources between currently managed model version %d"
+                " and new model version %d, because %s"
+            ),
+            len(intent_changes),
+            self._state.version,
+            model.version,
+            reason,
+        )
 
         # Track potential changes in requires per resource
         added_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}  # includes new resources if they have at least one req
@@ -1074,6 +1113,10 @@ class ResourceScheduler(TaskManager):
                 became_undefined | transitive_blocked | transitive_unblocked
             )
 
+        LOGGER.debug(
+            "Successfully updated resource scheduler to manage model version %d. Writing intent changes to the database.",
+            model.version,
+        )
         async with self.state_update_manager.get_connection(connection=connection) as con, con.transaction():
             # Update intent for resources with new desired state
             # Safe to update outside of the lock: scheduler persisted intent is allowed to lag behind its in-memory intent
@@ -1101,6 +1144,7 @@ class ResourceScheduler(TaskManager):
             await self.state_update_manager.set_last_processed_model_version(
                 self.environment, self._state.version, connection=con
             )
+        LOGGER.debug("Finished writing changes for model version %d to the database", model.version)
 
     def _create_agent(self, agent: str) -> None:
         """Start processing for the given agent"""
