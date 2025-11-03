@@ -271,7 +271,7 @@ async def test_query_environments_with_paging(server, client, setup_database):
     result = await client.project_create(name="test-proj-2", project_id=id_project_2)
     assert result.code == 200
     # Create environments in project
-    for i in range(10):
+    for i in range(6):
         result = await client.environment_create(
             project_id=id_project_2,
             name=f"test-env-{i}",
@@ -279,6 +279,7 @@ async def test_query_environments_with_paging(server, client, setup_database):
         )
         assert result.code == 200
 
+    # env-ids -> [b, c, a, 0, 1, 2, 3, 4, 5]
     query = """
 {
     environments(%s){
@@ -301,7 +302,6 @@ async def test_query_environments_with_paging(server, client, setup_database):
     test_cases = [
         ("first: 3", ["test-env-b", "test-env-c", "test-env-a"]),
         ("first: 5", ["test-env-b", "test-env-c", "test-env-a", "test-env-0", "test-env-1"]),
-        ("last: 5", ["test-env-5", "test-env-6", "test-env-7", "test-env-8", "test-env-9"]),
     ]
 
     for test_case in test_cases:
@@ -311,6 +311,7 @@ async def test_query_environments_with_paging(server, client, setup_database):
         assert [node["node"]["name"] for node in results] == test_case[1]
 
     # Get the first 5 elements
+    # [b, c, a, 0, 1]
     result = await client.graphql(query=query % "first: 5")
     assert result.code == 200
     environments = result.result["data"]["data"]["environments"]
@@ -325,7 +326,7 @@ async def test_query_environments_with_paging(server, client, setup_database):
     assert environments["pageInfo"]["hasPreviousPage"] is False
 
     # Get 5 environments starting from the second to last cursor of the previous result
-    second_to_last_cursor = results[3]["cursor"]
+    second_to_last_cursor = results[-2]["cursor"]
     result = await client.graphql(query=query % f'first: 5, after:"{second_to_last_cursor}"')
     assert result.code == 200
     environments = result.result["data"]["data"]["environments"]
@@ -337,8 +338,75 @@ async def test_query_environments_with_paging(server, client, setup_database):
     new_last_cursor = results[4]["cursor"]
     assert environments["pageInfo"]["startCursor"] == first_cursor
     assert environments["pageInfo"]["endCursor"] == new_last_cursor
+    assert environments["pageInfo"]["hasNextPage"] is False
+    assert environments["pageInfo"]["hasPreviousPage"] is True
+    expected_ids = [1, 2, 3, 4, 5]
+    for i in range(len(results)):
+        assert results[i]["node"]["name"] == f"test-env-{expected_ids[i]}"
+
+    # Get the last 5 elements before last_cursor
+    previous_second_to_last_cursor = results[3]["cursor"]
+    previous_first_cursor = first_cursor
+    result = await client.graphql(query=query % f'last: 5, before:"{new_last_cursor}"')
+    assert result.code == 200
+    environments = result.result["data"]["data"]["environments"]
+    results = environments["edges"]
+    assert len(results) == 5
+    assert results[1]["cursor"] == previous_first_cursor
+    assert results[4]["cursor"] == previous_second_to_last_cursor
+    assert environments["pageInfo"]["endCursor"] == previous_second_to_last_cursor
     assert environments["pageInfo"]["hasNextPage"] is True
     assert environments["pageInfo"]["hasPreviousPage"] is True
+    expected_ids = [0, 1, 2, 3, 4]
+    for i in range(len(results)):
+        assert results[i]["node"]["name"] == f"test-env-{expected_ids[i]}"
+
+    # Error cases
+
+    # last by itself
+    result = await client.graphql(query=query % "last: 5")
+    assert result.code == 200
+    data = result.result["data"]
+    assert data
+    assert data["data"] is None
+    assert len(data["errors"]) == 1
+    assert data["errors"][0] == "`last` is only allowed in conjunction with `before`"
+
+    # first + last
+    result = await client.graphql(query=query % "first: 5, last: 5")
+    assert result.code == 200
+    data = result.result["data"]
+    assert data
+    assert data["data"] is None
+    assert len(data["errors"]) == 1
+    assert data["errors"][0] == "`first` is not allowed in conjunction with `last` or `before`"
+
+    # first + before
+    result = await client.graphql(query=query % f'first: 5, before: "{new_last_cursor}"')
+    assert result.code == 200
+    data = result.result["data"]
+    assert data
+    assert data["data"] is None
+    assert len(data["errors"]) == 1
+    assert data["errors"][0] == "`first` is not allowed in conjunction with `last` or `before`"
+
+    # last + after
+    result = await client.graphql(query=query % f'last: 5, after: "{first_cursor}"')
+    assert result.code == 200
+    data = result.result["data"]
+    assert data
+    assert data["data"] is None
+    assert len(data["errors"]) == 1
+    assert data["errors"][0] == "`last` is only allowed in conjunction with `before`"
+
+    # before + after
+    result = await client.graphql(query=query % f'before: "{new_last_cursor}", after: "{first_cursor}"')
+    assert result.code == 200
+    data = result.result["data"]
+    assert data
+    assert data["data"] is None
+    assert len(data["errors"]) == 1
+    assert data["errors"][0] == "`after` is not allowed in conjunction with `before`"
 
 
 async def test_is_environment_compiling(server, client, clienthelper, environment, mocked_compiler_service_block):
@@ -430,13 +498,14 @@ async def test_notifications(server, client, setup_database):
           }
         }
     """
-    # Get full list of notifications
+    # Try to get the full list of notifications without filter
     result = await client.graphql(query=query % "")
     assert result.code == 200
-    edges = result.result["data"]["data"]["notifications"]["edges"]
-    # Environments 1 and 2 have 2 cleared and 6 uncleared notifications
-    assert len(edges) == 16
-
+    assert len(result.result["data"]["errors"]) == 1
+    assert (
+        result.result["data"]["errors"][0]
+        == "Field 'notifications' argument 'filter' of type 'NotificationFilter!' is required, but it was not provided."
+    )
     # Get list of notifications filtered by cleared
     result = await client.graphql(
         query=query
@@ -549,64 +618,80 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
 
     instances = 2
     resources_per_version = 10
-    iterations = 2
-    total_versions = iterations * instances
-    total_resources = total_versions * resources_per_version
+    orphans = resources_per_version / 2
+    total_resources_in_latest_version = resources_per_version * instances
+    total_resources = total_resources_in_latest_version + (orphans * instances)
     await mixed_resource_generator(environment, instances, resources_per_version)
     filters = [
-        # (1 undefined, 1 skipped for undefined) * 2 versions * <instances>
+        # (1 undefined, 1 skipped for undefined) * <instances>
         {
-            "query": "{blocked: {eq: BLOCKED}}",
-            "result": 2 * total_versions,
+            "query": "blocked: {eq: BLOCKED}",
+            "result": 2 * instances,
             "assertion": {"state": {"blocked": state.Blocked.BLOCKED.name}},
         },
-        {"query": "{blocked: {eq: BLOCKED, neq: BLOCKED}}", "result": 0},
-        {"query": '{agent: {eq: ["agent1"]}}', "result": resources_per_version * instances, "assertion": {"agent": "agent1"}},
-        {"query": '{agent: {contains: ["%agent%"]}}', "result": total_resources},
-        {"query": '{agent: {notContains: ["%agent%"]}}', "result": 0},
+        {"query": "blocked: {eq: BLOCKED, neq: BLOCKED}", "result": 0},
+        {"query": 'agent: {eq: ["agent1"]}', "result": resources_per_version + orphans, "assertion": {"agent": "agent1"}},
         {
-            "query": '{agent: {notContains: ["%1"]}}',
-            "result": resources_per_version * instances,
+            "query": 'agent: {eq: ["agent1"]} isOrphan: false',
+            "result": resources_per_version,
+            "assertion": {"agent": "agent1", "state": {"isOrphan": False}},
+        },
+        {
+            "query": 'agent: {eq: ["agent1"]} isOrphan: true',
+            "result": orphans,
+            "assertion": {"agent": "agent1", "state": {"isOrphan": True}},
+        },
+        {"query": 'agent: {contains: ["%agent%"]}', "result": total_resources},
+        {"query": 'agent: {notContains: ["%agent%"]}', "result": 0},
+        {
+            "query": 'agent: {notContains: ["%1"]}',
+            "result": resources_per_version + orphans,
             "assertion": {"agent": "agent0"},
         },
-        {"query": '{agent: {contains: ["agent_"]}}', "result": total_resources},
-        {"query": '{agent: {contains: ["1", "2"]}}', "result": 0},
-        {"query": '{resourceType: {notContains: ["%XResource%"]}}', "result": 0},
-        {"query": '{resourceType: {notContains: ["%xresource%"]}}', "result": 0},
-        {"query": '{resourceIdValue: {notContains: ["1"]}}', "result": (resources_per_version - 1) * total_versions},
-        {"query": '{resourceIdValue: {eq: ["0"]}}', "result": total_versions, "assertion": {"resourceIdValue": "0"}},
-        {"query": "{purged: true}", "result": 0},
-        {"query": "{purged: false}", "result": total_resources},
+        {
+            "query": 'agent: {notContains: ["%1"]} isOrphan: false',
+            "result": resources_per_version,
+            "assertion": {"agent": "agent0", "state": {"isOrphan": False}},
+        },
+        {"query": 'agent: {contains: ["agent_"]}', "result": total_resources},
+        {"query": 'agent: {contains: ["1", "2"]}', "result": 0},
+        {"query": 'resourceType: {notContains: ["%XResource%"]}', "result": 0},
+        {"query": 'resourceType: {notContains: ["%xresource%"]}', "result": 0},
+        {"query": 'resourceIdValue: {notContains: ["1"]}', "result": (resources_per_version - 1 + orphans) * instances},
+        {"query": 'resourceIdValue: {notContains: ["1"]} isOrphan: false', "result": (resources_per_version - 1) * instances},
+        {"query": 'resourceIdValue: {eq: ["0"]}', "result": instances, "assertion": {"resourceIdValue": "0"}},
+        {"query": "purged: true", "result": 0},
+        {"query": "purged: false", "result": total_resources},
         # skipped for undefined
         {
-            "query": "{complianceState: {eq: HAS_UPDATE} blocked: {eq: BLOCKED}}",
-            "result": total_versions,
+            "query": "complianceState: {eq: HAS_UPDATE} blocked: {eq: BLOCKED}",
+            "result": instances,
             "assertion": {
                 "state": {"blocked": state.Blocked.BLOCKED.name, "complianceState": state.Compliance.HAS_UPDATE.name}
             },
         },
         # 1 undefined, 1 skipped for undefined, 1 still deploying
         {
-            "query": "{lastDeployResult: {eq: NEW}}",
-            "result": 3 * total_versions,
+            "query": "lastDeployResult: {eq: NEW}",
+            "result": 3 * instances,
             "assertion": {"state": {"lastDeployResult": state.DeployResult.NEW.name}},
         },
-        {"query": "{isDeploying: true}", "result": total_versions, "assertion": {"state": {"isDeploying": True}}},
+        {"query": "isDeploying: true", "result": instances, "assertion": {"state": {"isDeploying": True}}},
         {
-            "query": "{isDeploying: false}",
-            "result": (resources_per_version - 1) * total_versions,
+            "query": "isDeploying: false",
+            "result": total_resources - instances,
             "assertion": {"state": {"isDeploying": False}},
         },
         # 1 undefined, 1 skipped for undefined
         {
-            "query": "{lastDeployResult: {eq: NEW} isDeploying: false}",
-            "result": 2 * total_versions,
+            "query": "lastDeployResult: {eq: NEW} isDeploying: false",
+            "result": 2 * instances,
             "assertion": {"state": {"lastDeployResult": state.DeployResult.NEW.name, "isDeploying": False}},
         },
         #  1 skipped for undefined
         {
-            "query": "{lastDeployResult: {eq: NEW} isDeploying: false complianceState: {neq: UNDEFINED}}",
-            "result": total_versions,
+            "query": "lastDeployResult: {eq: NEW} isDeploying: false complianceState: {neq: UNDEFINED}",
+            "result": instances,
             "assertion": {
                 "state": {
                     "lastDeployResult": state.DeployResult.NEW.name,
@@ -617,10 +702,9 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
         },
     ]
     for f in filters:
-        query = (
-            """
+        query = """
         {
-            resources (filter: %s) {
+            resources (filter: {environment: "%s" %s}) {
                 edges {
                     node {
                       resourceId
@@ -644,8 +728,9 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
                 }
             }
         }
-        """
-            % f["query"]
+        """ % (
+            environment,
+            f["query"],
         )
         result = await client.graphql(query=query)
         assert result.code == 200
@@ -656,9 +741,10 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
             for res in result.result["data"]["data"]["resources"]["edges"]:
                 assert is_subset_dict(assertion, res["node"])
 
-    query = """
+    query = (
+        """
     {
-        resources (filter: {lastDeployResult: {eq: NEW}}
+        resources ( filter: {environment: "%s" lastDeployResult: {eq: NEW}}
             orderBy: [{key: "complianceState" order: "asc"}]) {
             edges {
                 node {
@@ -670,21 +756,24 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
         }
     }
     """
+        % environment
+    )
     result = await client.graphql(query=query)
     assert result.code == 200
     assert result.result["data"]["errors"] is None
     result_resources = result.result["data"]["data"]["resources"]["edges"]
-    assert len(result_resources) == 3 * total_versions
+    assert len(result_resources) == 3 * instances
     for i in range(0, len(result_resources)):
         assert (
             result_resources[i]["node"]["state"]["complianceState"] == state.Compliance.HAS_UPDATE.name
-            if i < 2 * total_versions
+            if i < 2 * instances
             else state.Compliance.UNDEFINED.name
         )
 
-    query = """
+    query = (
+        """
     {
-        resources (filter: {lastDeployResult: {eq: NEW}}
+        resources (filter: {environment: "%s" lastDeployResult: {eq: NEW}}
             orderBy: [{key: "complianceState" order: "desc"}, {key: "isDeploying" order: "asc"}]) {
             edges {
                 node {
@@ -697,23 +786,26 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
         }
     }
     """
+        % environment
+    )
     result = await client.graphql(query=query)
     assert result.code == 200
     assert result.result["data"]["errors"] is None
     result_resources = result.result["data"]["data"]["resources"]["edges"]
-    assert len(result_resources) == 3 * total_versions
+    assert len(result_resources) == 3 * instances
     for i in range(0, len(result_resources)):
         # [{UNDEFINED, False}, {HAS_UPDATE, False}, {HAS_UPDATE, True}]
         assert (
             result_resources[i]["node"]["state"]["complianceState"] == state.Compliance.UNDEFINED.name
-            if i < total_versions
+            if i < instances
             else state.Compliance.HAS_UPDATE.name
         )
-        assert result_resources[i]["node"]["state"]["isDeploying"] == (False if i < 2 * total_versions else True)
+        assert result_resources[i]["node"]["state"]["isDeploying"] == (False if i < 2 * instances else True)
 
-    query = """
+    query = (
+        """
        {
-           resources (filter: {lastDeployResult: {eq: NEW}}
+           resources (filter: {environment: "%s" lastDeployResult: {eq: NEW}}
                     orderBy: [{key: "complianceState" order: "desc"}, {key: "isDeploying" order: "desc"}]) {
                edges {
                    node {
@@ -726,18 +818,18 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
            }
        }
        """
+        % environment
+    )
     result = await client.graphql(query=query)
     assert result.code == 200
     assert result.result["data"]["errors"] is None
     result_resources = result.result["data"]["data"]["resources"]["edges"]
-    assert len(result_resources) == 3 * total_versions
+    assert len(result_resources) == 3 * instances
     for i in range(0, len(result_resources)):
         # [{UNDEFINED, False}, {HAS_UPDATE, True}, {HAS_UPDATE, False}]
         assert (
             result_resources[i]["node"]["state"]["complianceState"] == state.Compliance.UNDEFINED.name
-            if i < total_versions
+            if i < instances
             else state.Compliance.HAS_UPDATE.name
         )
-        assert result_resources[i]["node"]["state"]["isDeploying"] == (
-            False if i < total_versions or i >= 2 * total_versions else True
-        )
+        assert result_resources[i]["node"]["state"]["isDeploying"] == (False if i < instances or i >= 2 * instances else True)

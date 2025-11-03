@@ -20,8 +20,9 @@ import abc
 import datetime
 import logging
 import uuid
+from collections.abc import Set
 from contextlib import AbstractAsyncContextManager
-from typing import Any, Optional, Set
+from typing import Any, Optional
 from uuid import UUID
 
 from asyncpg import Connection, UniqueViolationError
@@ -94,6 +95,17 @@ class StateUpdateManager(abc.ABC):
         update_blocked_state: bool,
         connection: Optional[Connection] = None,
     ) -> None:
+        pass
+
+    @abc.abstractmethod
+    async def mark_all_orphans(
+        self, environment: UUID, *, current_version: int, connection: Optional[Connection] = None
+    ) -> None:
+        """
+        Mark all resources that do not appear in the current version or a later one as orphans.
+
+        More expensive than mark_as_orphan. Should only be used when it is not clear which resources should be orphaned.
+        """
         pass
 
     @abc.abstractmethod
@@ -339,6 +351,37 @@ class ToDbUpdateManager(StateUpdateManager):
     ) -> None:
         await data.ResourcePersistentState.update_resource_intent(
             environment, intent, update_blocked_state, connection=connection
+        )
+
+    async def mark_all_orphans(
+        self, environment: UUID, *, current_version: int, connection: Optional[Connection] = None
+    ) -> None:
+        await data.Scheduler._execute_query(
+            f"""
+            UPDATE {data.ResourcePersistentState.table_name()} AS rps
+            SET is_orphan=true
+            WHERE
+                rps.environment=$1
+                AND NOT rps.is_orphan
+                AND NOT EXISTS(
+                    SELECT 1
+                    FROM {data.Resource.table_name()} AS r
+                    INNER JOIN resource_set_configuration_model AS rscm
+                        ON rscm.environment = r.environment
+                        AND rscm.resource_set = r.resource_set
+                    INNER JOIN {data.ConfigurationModel.table_name()} AS cm
+                        ON cm.environment = rscm.environment
+                        AND cm.version = rscm.model
+                    WHERE
+                        r.environment=rps.environment
+                        AND r.resource_id=rps.resource_id
+                        AND cm.version >= $2
+                        AND cm.released
+                )
+            """,
+            environment,
+            current_version,
+            connection=connection,
         )
 
     async def mark_as_orphan(

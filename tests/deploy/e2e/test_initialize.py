@@ -1,5 +1,5 @@
 """
-Copyright 2019 Inmanta
+Copyright 2024 Inmanta
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@ from collections.abc import Mapping
 
 import pytest
 
+import inmanta.server
 import utils
 from inmanta import config, const, data
 from inmanta.agent.agent_new import Agent
@@ -343,3 +344,105 @@ async def test_scheduler_initialization(
             last_deployed=last_deployed_after[6],
         ),
     }
+
+
+@pytest.mark.parametrize("no_agent", (True,))
+@pytest.mark.parametrize("reset_state", (True, False))
+async def test_scheduler_initialize_multiple_versions(
+    agent_factory,
+    resource_container,
+    clienthelper,
+    server,
+    client,
+    environment,
+    reset_state: bool,
+) -> None:
+    """
+    Verify processing of multiple versions when the scheduler initializes from an empty state (first start for an
+    environment or reset_state). Concretely, verify that resources from the first version that are orphaned by the
+    second, are in fact marked as orphans.
+
+    :param reset_state: If True, achieve empty state through state reset. Otherwise achieve it via an empty environment.
+    """
+    if reset_state:
+        await client.set_setting(environment, data.RESET_DEPLOY_PROGRESS_ON_START, True)
+
+    async def start_agent() -> Agent:
+        agentmanager = server.get_slice(inmanta.server.SLICE_AGENT_MANAGER)
+
+        agent: Agent = await agent_factory(uuid.UUID(environment))
+        await utils.retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+        return agent
+
+    rid1: str = "test::Resource[agent1,key=key1]"
+    rid2: str = "test::Resource[agent1,key=key2]"
+    agent: Agent | None = None
+
+    def resources(version: int, *, r2: bool = True) -> list[dict[str, object]]:
+        def res(n: int) -> None:
+            return {
+                "key": f"key{n}",
+                "value": f"val{n}",
+                "id": f"test::Resource[agent1,key=key{n}],v={version}",
+                "requires": [],
+                "purged": False,
+                "send_event": False,
+            }
+
+        return [res(1), res(2)] if r2 else [res(1)]
+
+    version = await clienthelper.get_version()
+    res = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources(version),
+        resource_state={},
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+        module_version_info={},
+    )
+    assert res.code == 200, res.result
+    result = await client.release_version(environment, version)
+    assert result.code == 200
+
+    if reset_state:
+        # set up initial state: make sure there is something to reset
+        # start the agent, deploy the first version, then halt the agent again
+        agent = await start_agent()
+        await clienthelper.wait_for_deployed()
+
+        for rid in (rid1, rid2):
+            assert (await client.resource_details(tid=environment, rid=rid).value()).status == const.ResourceState.deployed
+        await agent.scheduler.stop()
+
+    # release second version, dropping r2
+    version = await clienthelper.get_version()
+    res = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources(version, r2=False),
+        resource_state={},
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+        module_version_info={},
+    )
+    assert res.code == 200, res.result
+    result = await client.release_version(environment, version)
+    assert result.code == 200
+
+    for rid in (rid1, rid2):
+        status = (await client.resource_details(tid=environment, rid=rid).value()).status
+        assert status == const.ResourceState.deployed if reset_state else const.ResourceState.available
+
+    # start / resume agent
+    if agent is None:
+        agent = await start_agent()
+    else:
+        await agent.scheduler.start()
+
+    await clienthelper.wait_for_deployed()
+
+    assert (await client.resource_details(tid=environment, rid=rid1).value()).status == const.ResourceState.deployed
+    assert (await client.resource_details(tid=environment, rid=rid2).value()).status == "orphaned"

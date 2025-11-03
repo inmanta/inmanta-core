@@ -192,7 +192,7 @@ class ModuleFiles(Base):
             name="module_files_environment_inmanta_module_name_inmanta_modul_fkey",
         ),
         ForeignKeyConstraint(
-            ["file_content_hash"], ["file.content_hash"], ondelete="CASCADE", name="module_files_file_content_hash_fkey"
+            ["file_content_hash"], ["file.content_hash"], ondelete="RESTRICT", name="module_files_file_content_hash_fkey"
         ),
         PrimaryKeyConstraint(
             "environment", "inmanta_module_name", "inmanta_module_version", "python_module_name", name="module_files_pkey"
@@ -246,7 +246,7 @@ class AgentModules(Base):
         ForeignKeyConstraint(
             ["environment", "inmanta_module_name", "inmanta_module_version"],
             ["inmanta_module.environment", "inmanta_module.name", "inmanta_module.version"],
-            ondelete="CASCADE",
+            ondelete="RESTRICT",
             name="agent_modules_environment_inmanta_module_name_inmanta_modu_fkey",
         ),
         PrimaryKeyConstraint("environment", "cm_version", "agent_name", "inmanta_module_name", name="agent_modules_pkey"),
