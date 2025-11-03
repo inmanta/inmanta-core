@@ -1,0 +1,6 @@
+description: Added sections to the environment settings
+issue-nr: 7447
+change-type: minor
+destination-branches: [master]
+sections:
+  minor-improvement: "{{description}}"

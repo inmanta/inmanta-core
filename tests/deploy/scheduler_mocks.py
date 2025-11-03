@@ -22,7 +22,7 @@ import typing
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
-from typing import Any, Callable, Coroutine, Mapping, Never, Optional, Sequence, Set
+from typing import Any, Callable, Coroutine, Mapping, Never, Optional, Set
 from uuid import UUID
 
 import asyncpg
@@ -32,6 +32,7 @@ from inmanta import const
 from inmanta.agent import Agent, executor
 from inmanta.agent.executor import DeployReport, DryrunReport, GetFactReport, ModuleInstallSpec, ResourceDetails
 from inmanta.const import Change
+from inmanta.data.model import AttributeStateChange
 from inmanta.deploy import state
 from inmanta.deploy.persistence import StateUpdateManager
 from inmanta.deploy.scheduler import ModelVersion, ResourceScheduler
@@ -58,11 +59,13 @@ class DummyExecutor(executor.Executor):
         self.dry_run_count = 0
         self.facts_count = 0
         self.mock_versions = {}
+        self.seen: list[ResourceDetails] = []
 
     def reset_counters(self) -> None:
         self.execute_count = 0
         self.dry_run_count = 0
         self.facts_count = 0
+        self.seen.clear()
 
     async def execute(
         self,
@@ -73,9 +76,7 @@ class DummyExecutor(executor.Executor):
         requires: Mapping[ResourceIdStr, const.HandlerResourceState],
     ) -> DeployReport:
         assert reason
-        # Actual reason or test reason
-        # The actual reasons are of the form `action because of reason`
-        assert ("because" in reason) or ("Test" in reason)
+        self.seen.append(resource_details)
         self.execute_count += 1
         result = (
             const.HandlerResourceState.failed
@@ -91,8 +92,20 @@ class DummyExecutor(executor.Executor):
             change=Change.nochange,
         )
 
-    async def dry_run(self, resources: Sequence[ResourceDetails], dry_run_id: uuid.UUID) -> None:
+    async def dry_run(
+        self,
+        resource: ResourceDetails,
+        dry_run_id: uuid.UUID,
+    ) -> DryrunReport:
         self.dry_run_count += 1
+        return DryrunReport(
+            rvid=resource.rvid,
+            dryrun_id=dry_run_id,
+            changes={"handler": AttributeStateChange(current="TEST", desired=str(self.dry_run_count))},
+            started=datetime.datetime.now().astimezone(),
+            finished=datetime.datetime.now().astimezone(),
+            messages=[],
+        )
 
     async def get_facts(self, resource: ResourceDetails) -> None:
         self.facts_count += 1
@@ -162,7 +175,7 @@ class DummyManager(executor.ExecutorManager[executor.Executor]):
     """
 
     def __init__(self):
-        self.executors = {}
+        self.executors: dict[str, DummyExecutor] = {}
 
     def reset_executor_counters(self) -> None:
         for ex in self.executors.values():
@@ -179,6 +192,13 @@ class DummyManager(executor.ExecutorManager[executor.Executor]):
         if agent_name not in self.executors:
             self.executors[agent_name] = DummyExecutor()
         return self.executors[agent_name]
+
+    def get_environment_manager(self) -> None:
+        return None
+
+    async def stop_all_executors(self) -> list[DummyExecutor]:
+        for ex in self.executors.values():
+            await ex.stop()
 
     async def stop_for_agent(self, agent_name: str) -> list[DummyExecutor]:
         pass
@@ -282,6 +302,11 @@ class DummyStateManager(StateUpdateManager):
     ) -> None:
         pass
 
+    async def mark_all_orphans(
+        self, environment: UUID, *, current_version: int, connection: Optional[Connection] = None
+    ) -> None:
+        pass
+
     async def mark_as_orphan(
         self,
         environment: UUID,
@@ -299,7 +324,6 @@ class TestScheduler(ResourceScheduler):
     def __init__(self, environment: uuid.UUID, executor_manager: executor.ExecutorManager[executor.Executor], client: Client):
         super().__init__(environment, executor_manager, client)
         # Bypass DB
-        self.executor_manager = self.executor_manager
         self.code_manager = DummyCodeManager()
         self.mock_versions = {}
         self.state_update_manager = DummyStateManager()
@@ -345,8 +369,10 @@ class TestScheduler(ResourceScheduler):
         return ModelVersion(
             version=version,
             resources=self.mock_versions[version],
+            resource_sets={None: set(self.mock_versions[version].keys())},
             requires={},
             undefined=set(),
+            partial=False,
         )
 
 
@@ -371,9 +397,6 @@ class TestAgent(Agent):
         super().__init__(environment)
         self.executor_manager = DummyManager()
         self.scheduler = TestScheduler(self.scheduler.environment, self.executor_manager, self.scheduler.client)
-
-    async def load_environment_settings(self) -> None:
-        pass
 
 
 class DummyDatabaseConnection:

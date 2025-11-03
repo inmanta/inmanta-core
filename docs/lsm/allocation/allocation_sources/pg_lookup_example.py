@@ -9,14 +9,15 @@ Inmanta LSM
 import os
 from typing import Any, Optional
 
-import inmanta_plugins.lsm.allocation as lsm
 import psycopg2
+from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+
+import inmanta_plugins.lsm.allocation as lsm
 from inmanta_plugins.lsm.allocation import (
     AllocationContext,
     ExternalAttributeAllocator,
     T,
 )
-from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
 
 class PGRouterResolver(ExternalAttributeAllocator[T]):

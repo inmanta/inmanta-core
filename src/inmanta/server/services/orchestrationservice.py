@@ -30,21 +30,15 @@ import pydantic
 
 import inmanta.exceptions
 import inmanta.util
-from inmanta import const, data, tracing
+from inmanta import const, data
 from inmanta.const import ResourceState
 from inmanta.data import APILIMIT, AVAILABLE_VERSIONS_TO_KEEP, InvalidSort, ResourcePersistentState, RowLockMode
 from inmanta.data.dataview import DesiredStateVersionView
 from inmanta.data.model import AgentName, DesiredStateVersion
 from inmanta.data.model import InmantaModule as InmantaModuleDTO
-from inmanta.data.model import (
-    InmantaModuleName,
-    InmantaModuleVersion,
-    PipConfig,
-    PromoteTriggerMethod,
-    ResourceDiff,
-    ResourceMinimal,
-    SchedulerStatusReport,
-)
+from inmanta.data.model import InmantaModuleName, InmantaModuleVersion, PipConfig, PromoteTriggerMethod
+from inmanta.data.model import Resource as ResourceDTO
+from inmanta.data.model import ResourceDiff, ResourceMinimal, SchedulerStatusReport
 from inmanta.data.sqlalchemy import AgentModules, InmantaModule
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
@@ -73,12 +67,6 @@ PERFORM_CLEANUP: bool = True
 # Kill switch for cleanup, for use when working with historical data
 
 
-def get_printable_name_for_resource_set(native: str | None) -> str:
-    if native is None:
-        return "<SHARED>"
-    return native
-
-
 class CrossResourceSetDependencyError(Exception):
     def __init__(self, resource_id1: ResourceIdStr, resource_id2: ResourceIdStr) -> None:
         """
@@ -97,11 +85,11 @@ class CrossResourceSetDependencyError(Exception):
 
 
 class ResourceSetValidator:
-    def __init__(self, resources: abc.Set[data.Resource]) -> None:
+    def __init__(self, resources: abc.Collection[ResourceDTO]) -> None:
         self.resources = resources
         self.rid_to_resource_set = {res.resource_id: res.resource_set for res in self.resources}
 
-    def _is_cross_resource_set_dependency(self, res: data.Resource, rid_dependency: ResourceIdStr) -> bool:
+    def _is_cross_resource_set_dependency(self, res: ResourceDTO, rid_dependency: ResourceIdStr) -> bool:
         """
         Return True iff the dependency between resource res and the resource with id rid_dependency is a cross-resource set
         dependency.
@@ -126,10 +114,7 @@ class ResourceSetValidator:
         set.
         """
         for res in self.resources:
-            # It's sufficient to only check the requires relationship. The provides
-            # relationship is always a subset of the reverse relationship (provides relationship).
-            # The provides relationship only contains the cross-agent dependencies.
-            for req in res.get_requires():
+            for req in res.attributes.get("requires", []):
                 if self._is_cross_resource_set_dependency(res, req):
                     raise CrossResourceSetDependencyError(res.resource_id, req)
 
@@ -159,7 +144,7 @@ class PartialUpdateMerger:
         rids_in_partial_compile: abc.Set[ResourceIdStr],
         updated_resource_sets: abc.Set[str],
         deleted_resource_sets: abc.Set[str],
-        updated_and_shared_resources_old: abc.Mapping[ResourceIdStr, data.Resource],
+        updated_and_shared_resources_old: abc.Mapping[ResourceIdStr, ResourceDTO],
         rids_deleted_resource_sets: abc.Set[ResourceIdStr],
     ) -> None:
         """
@@ -182,10 +167,10 @@ class PartialUpdateMerger:
         self.deleted_resource_sets = deleted_resource_sets
         self.modified_resource_sets = updated_resource_sets | deleted_resource_sets
         self.updated_and_shared_resources_old = updated_and_shared_resources_old
-        self.non_shared_resources_in_partial_update_old: abc.Mapping[ResourceIdStr, data.Resource] = {
+        self.non_shared_resources_in_partial_update_old: abc.Mapping[ResourceIdStr, ResourceDTO] = {
             rid: r for rid, r in self.updated_and_shared_resources_old.items() if r.resource_set is not None
         }
-        self.shared_resources_old: abc.Mapping[ResourceIdStr, data.Resource] = {
+        self.shared_resources_old: abc.Mapping[ResourceIdStr, ResourceDTO] = {
             rid: r for rid, r in self.updated_and_shared_resources_old.items() if r.resource_set is None
         }
         self.rids_deleted_resource_sets = rids_deleted_resource_sets
@@ -205,8 +190,8 @@ class PartialUpdateMerger:
         A replacement constructor method for this class. This method is used to work around the limitation that no async
         calls can be done in a constructor. See docstring real constructor for meaning of arguments.
         """
-        updated_and_shared_resources_old: abc.Mapping[ResourceIdStr, data.Resource] = (
-            await data.Resource.get_resources_in_resource_sets(
+        updated_and_shared_resources_old: abc.Mapping[ResourceIdStr, ResourceDTO] = (
+            await data.Resource.get_resources_in_resource_sets_as_dto(
                 environment=env_id,
                 version=base_version,
                 resource_sets=updated_resource_sets,
@@ -214,10 +199,11 @@ class PartialUpdateMerger:
                 connection=connection,
             )
         )
+
         rids_deleted_resource_sets: abc.Set[ResourceIdStr] = {
             rid
             for rid in (
-                await data.Resource.get_resources_in_resource_sets(
+                await data.Resource.get_resources_in_resource_sets_as_dto(
                     environment=env_id,
                     version=base_version,
                     resource_sets=deleted_resource_sets,
@@ -237,8 +223,8 @@ class PartialUpdateMerger:
         )
 
     def merge_updated_and_shared_resources(
-        self, updated_and_shared_resources: abc.Sequence[data.Resource]
-    ) -> dict[ResourceIdStr, data.Resource]:
+        self, updated_and_shared_resources: abc.Mapping[ResourceIdStr, ResourceDTO]
+    ) -> dict[ResourceIdStr, ResourceDTO]:
         """
          Separates named resource sets from the shared resource set and expands the shared set with the shared resources in
          the previous model version.
@@ -247,16 +233,15 @@ class PartialUpdateMerger:
         :returns: The subset of resources in the new version of the configuration model that belong to the shared resource set
                   or a resource set that is updated by this partial compile.
         """
-        shared_resources = {r.resource_id: r for r in updated_and_shared_resources if r.resource_set is None}
-        updated_resources = {r.resource_id: r for r in updated_and_shared_resources if r.resource_set is not None}
-        shared_resources_merged = {r.resource_id: r for r in self._merge_shared_resources(shared_resources)}
+        self._validate_constraints(updated_and_shared_resources)
+        shared_resources = {rid: r for rid, r in updated_and_shared_resources.items() if r.resource_set is None}
+        updated_resources = {rid: r for rid, r in updated_and_shared_resources.items() if r.resource_set is not None}
+        shared_resources_merged = {r.resource_id: r for r in self._merge_shared_resources(shared_resources) or ()}
         # Updated go last, so that in case of overlap, we get the updated one
         # Validation on move is done later
-        result = {**shared_resources_merged, **updated_resources}
-        self._validate_constraints(result)
-        return result
+        return {**shared_resources_merged, **updated_resources}
 
-    def _validate_constraints(self, new_updated_and_shared_resources: abc.Mapping[ResourceIdStr, data.Resource]) -> None:
+    def _validate_constraints(self, new_updated_and_shared_resources: abc.Mapping[ResourceIdStr, ResourceDTO]) -> None:
         """
         Validate whether the new updated and shared resources that results from the merging the old version of the model
         with resources of the partial compile, are compliant with the constraints of a partial compile.
@@ -278,45 +263,58 @@ class PartialUpdateMerger:
                 raise BadRequest(
                     "A partial compile only migrate resources between resource set that are pushed together:"
                     f" trying to move {res.resource_id} from resource set "
-                    f"{get_printable_name_for_resource_set(matching_resource_old_model.resource_set)} "
-                    f"to {get_printable_name_for_resource_set(res.resource_set)}."
+                    f"{data.ResourceSet.get_printable_name_for_resource_set(matching_resource_old_model.resource_set)} "
+                    f"to {data.ResourceSet.get_printable_name_for_resource_set(res.resource_set)}."
                 )
 
-            if res.resource_set is None and res.attribute_hash != matching_resource_old_model.attribute_hash:
-                raise BadRequest(f"Resource ({res.resource_id}) without a resource set cannot be updated via a partial compile")
+        resource_set_validator = ResourceSetValidator(new_updated_and_shared_resources.values())
+        try:
+            resource_set_validator.ensure_no_cross_resource_set_dependencies()
+        except CrossResourceSetDependencyError as e:
+            raise BadRequest(e.get_error_message())
 
-            resource_set_validator = ResourceSetValidator(set(new_updated_and_shared_resources.values()))
-            try:
-                resource_set_validator.ensure_no_cross_resource_set_dependencies()
-            except CrossResourceSetDependencyError as e:
-                raise BadRequest(e.get_error_message())
-
-    def _merge_shared_resources(self, shared_resources_new: dict[ResourceIdStr, data.Resource]) -> abc.Sequence[data.Resource]:
+    def _merge_shared_resources(self, shared_resources_new: dict[ResourceIdStr, ResourceDTO]) -> Optional[list[ResourceDTO]]:
         """
         Merge the set of shared resources present in the old version of the model together with the set of shared resources
         present in the partial compile.
 
         :param shared_resources_new: The set of shared resources present in the partial compile.
-        :returns: The set of shared resources that should be present in the new version of the model.
+        :returns: The set of shared resources that should be written to the new version of the model. Returns None if
+            nothing changed versus the previous version
         """
         all_rids_shared_resources = set(self.shared_resources_old.keys()) | set(shared_resources_new.keys())
         result = []
+        update: bool = False
         for rid_shared_resource in all_rids_shared_resources:
             if rid_shared_resource in shared_resources_new and rid_shared_resource in self.shared_resources_old:
-                # Merge requires/provides shared resource
                 old_shared_resource = self.shared_resources_old[rid_shared_resource]
                 new_shared_resource = shared_resources_new[rid_shared_resource]
-                res = self._merge_requires_and_provides_of_shared_resource(old_shared_resource, new_shared_resource)
+                # Check if shared resource is updated
+                if inmanta.util.make_attribute_hash(
+                    rid_shared_resource, old_shared_resource.attributes
+                ) != inmanta.util.make_attribute_hash(rid_shared_resource, new_shared_resource.attributes):
+                    raise BadRequest(
+                        f"Resource ({rid_shared_resource}) without a resource set cannot be updated via a partial compile"
+                    )
+                # If not, merge requires
+                update |= self._merge_requires_of_shared_resource(old_shared_resource, new_shared_resource)
+                res = new_shared_resource
             elif rid_shared_resource in shared_resources_new:
                 # New shared resource in partial compile
                 res = shared_resources_new[rid_shared_resource]
+                update = True
             else:
                 # Old shared resource not referenced by partial compile
                 res_old = self.shared_resources_old[rid_shared_resource]
-                res = res_old.copy_for_partial_compile(new_version=self.version)
-                res = self._clean_requires_provides_old_shared_resource(res)
+                res = res_old.model_copy(deep=True)
+                # Cleanup the requires relationship for shared resources that are not present in the partial compile
+                # and that were copied from the old version of the model.
+                res.attributes["requires"] = [
+                    rid for rid in res.attributes["requires"] if self._should_keep_dependency_old_shared_resources(rid)
+                ]
+                update = True
             result.append(res)
-        return result
+        return result if update else None
 
     def _should_keep_dependency_old_shared_resources(self, rid_dependency: ResourceIdStr) -> bool:
         """
@@ -332,41 +330,27 @@ class PartialUpdateMerger:
             return False
         return True
 
-    def _clean_requires_provides_old_shared_resource(self, resource: data.Resource) -> data.Resource:
+    def _merge_requires_of_shared_resource(self, old: ResourceDTO, new: ResourceDTO) -> bool:
         """
-        Cleanup the requires/provides relationship for shared resources that are not present in the partial compile
-        and that were copied from the old version of the model.
-        """
-        resource.attributes["requires"] = [
-            rid for rid in resource.attributes["requires"] if self._should_keep_dependency_old_shared_resources(rid)
-        ]
-        resource.provides = [rid for rid in resource.provides if self._should_keep_dependency_old_shared_resources(rid)]
-        return resource
-
-    def _merge_requires_and_provides_of_shared_resource(self, old: data.Resource, new: data.Resource) -> data.Resource:
-        """
-        Update the requires and provides relationship of `new` to make it consistent with the new version of the model.
+        Update the requires relationship of `new` in-place to make it consistent with the new version of the model.
+        Returns True iff the new merged requires differs from the old one.
 
         :param old: The shared resource present in the old version of the model.
         :param new: The shared resource part of the incremental compile.
         """
-        new.provides = list(self._merge_dependencies_shared_resource(old.provides, new.provides))
-        new.attributes["requires"] = self._merge_dependencies_shared_resource(old.get_requires(), new.get_requires())
-        return new
-
-    def _merge_dependencies_shared_resource(
-        self, old_deps: abc.Sequence[ResourceIdStr], new_deps: abc.Sequence[ResourceIdStr]
-    ) -> abc.Sequence[ResourceIdStr]:
-        """
-        Merge the dependencies for a certain shared resource together to make it consistent with the new version of the model.
-
-        :param old_deps: The set of dependencies present in the old version of the shared resource.
-        :param new_deps: The set of dependencies present in the shared resource that is part of the partial compile.
-        """
-        old_deps_cleaned: abc.Set[ResourceIdStr] = {
-            dep for dep in old_deps if self._should_keep_dependency_old_shared_resources(dep)
+        old_requires = old.attributes.get("requires", [])
+        new_requires = new.attributes.get("requires", [])
+        old_requires_cleaned: abc.Set[ResourceIdStr] = {
+            req for req in old_requires if self._should_keep_dependency_old_shared_resources(req)
         }
-        return list(old_deps_cleaned | set(new_deps))
+        merged_requires = list(old_requires_cleaned | set(new_requires))
+        new.attributes["requires"] = merged_requires
+        return (
+            # a requires was dropped
+            len(old_requires_cleaned) != len(old_requires)
+            # a requires was added by the new version
+            or len(merged_requires) != len(old_requires)
+        )
 
     async def merge_unknowns(
         self, unknowns_in_partial_compile: abc.Sequence[data.UnknownParameter]
@@ -507,7 +491,9 @@ class OrchestrationService(protocol.ServerSlice):
             if bool(include_logs):
                 actions: list[data.ResourceAction] = []
                 res_dict["actions"] = actions
-                resource_action_lookup[res_dict["resource_version_id"]] = actions
+                rvid = Id.parse_id(res_dict["resource_id"])
+                rvid.set_version(version_id)
+                resource_action_lookup[rvid.resource_version_str()] = actions
 
         if include_logs:
             # get all logs, unsorted
@@ -553,79 +539,79 @@ class OrchestrationService(protocol.ServerSlice):
         out = version_object.pip_config
         return out
 
-    def _create_dao_resources_from_api_resources(
+    def _create_dto_resources_from_api_resources(
         self,
         env_id: uuid.UUID,
         resources: list[JsonType],
         resource_state: dict[ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]],
         resource_sets: dict[ResourceIdStr, Optional[str]],
-        set_version: Optional[int] = None,
-    ) -> dict[ResourceIdStr, data.Resource]:
+        check_version: int | None = None,
+    ) -> dict[ResourceIdStr, ResourceDTO]:
         """
-        This method converts the resources sent to the put_version or put_partial endpoint to dao Resource objects.
-        The resulting resource objects will have their provides set up correctly for cross agent dependencies
-        and the version field of these resources will be set to set_version if provided.
+        This method converts the resources sent to the put_version or put_partial endpoint to DTO Resource objects.
 
-        An exception will be raised when the one of the following constraints is not satisfied:
+        An exception will be raised when one of the following constraints is not satisfied:
             * A resource present in the resource_sets parameter is not present in the resources dictionary.
             * The dependency graph of the provided resources is not closed.
+            * In a full compile, the version of a resource does not match the version we are creating
         """
         rid_to_resource = {}
         # The content of the requires attribute for all the resources
         all_requires: set[ResourceIdStr] = set()
-        # list of all resources which have a cross agent dependency, as a tuple, (dependant,requires)
-        cross_agent_dep: list[tuple[data.Resource, Id]] = []
         for res_dict in resources:
             # Verify that the version field and the version in the resource version id field match
-            version_part_of_resource_id = Id.parse_id(res_dict["id"]).version
+            resource_version_id = Id.parse_id(res_dict["id"])
+            version_part_of_resource_id = resource_version_id.version
+            resource_id = resource_version_id.resource_str()
             if "version" in res_dict and res_dict["version"] != version_part_of_resource_id:
                 raise BadRequest(
                     f"Invalid resource: The version in the id field ({res_dict['id']}) doesn't match the version in the"
                     f" version field ({res_dict['version']})."
                 )
-            res_obj = data.Resource.new(env_id, res_dict["id"])
-            # Populate status field
-            if res_obj.resource_id in resource_state:
-                res_obj.status = const.ResourceState[resource_state[res_obj.resource_id]]
-                res_obj.is_undefined = const.ResourceState[resource_state[res_obj.resource_id]] == const.ResourceState.undefined
-            # Populate resource_set field
-            if res_obj.resource_id in resource_sets:
-                res_obj.resource_set = resource_sets[res_obj.resource_id]
+            if check_version is not None and version_part_of_resource_id != check_version:
+                raise BadRequest(
+                    f"The resource version of resource {resource_version_id} does not match the version argument "
+                    f"(version: {check_version})"
+                )
+            res_set_name = resource_sets.get(resource_id, None)
+
+            # Populate is_undefined field
+            is_undefined = (
+                True
+                if resource_id in resource_state
+                and const.ResourceState[resource_state[resource_id]] is const.ResourceState.undefined
+                else False
+            )
 
             # Populate attributes field of resources
             attributes = {}
             for field, value in res_dict.items():
                 if field not in {"id", "version"}:
                     attributes[field] = value
-            res_obj.attributes = attributes
-            res_obj.make_hash()
-
-            # Update the version fields
-            if set_version is not None:
-                res_obj.model = set_version
 
             # find cross agent dependencies
-            agent = res_obj.agent
+            agent = resource_version_id.agent_name
             if "requires" not in attributes:
-                LOGGER.warning("Received resource without requires attribute (%s)", res_obj.resource_id)
+                LOGGER.warning("Received resource without requires attribute (%s)", resource_id)
             else:
                 # Collect all requires as resource_ids instead of resource version ids
                 cleaned_requires = []
                 for req in attributes["requires"]:
                     rid = Id.parse_id(req)
                     all_requires.add(rid.resource_str())
-                    if rid.get_agent_name() != agent:
-                        # it is a CAD
-                        cross_agent_dep.append((res_obj, rid))
                     cleaned_requires.append(rid.resource_str())
                 attributes["requires"] = cleaned_requires
 
-            rid_to_resource[res_obj.resource_id] = res_obj
-
-        # hook up all CADs
-        for f, t in cross_agent_dep:
-            res_obj = rid_to_resource[t.resource_str()]
-            res_obj.provides.append(f.resource_id)
+            rid_to_resource[resource_id] = ResourceDTO(
+                environment=env_id,
+                resource_id=resource_id,
+                resource_type=resource_version_id.entity_type,
+                agent=agent,
+                resource_id_value=resource_version_id.attribute_value,
+                attributes=attributes,
+                is_undefined=is_undefined,
+                resource_set=res_set_name,
+            )
 
         rids = set(rid_to_resource.keys())
 
@@ -645,7 +631,7 @@ class OrchestrationService(protocol.ServerSlice):
         return rid_to_resource
 
     def _get_skipped_for_undeployable(
-        self, resources: abc.Sequence[data.Resource], undeployable_ids: abc.Sequence[ResourceIdStr]
+        self, resources: abc.Sequence[ResourceDTO], undeployable_ids: abc.Sequence[ResourceIdStr]
     ) -> abc.Sequence[ResourceIdStr]:
         """
         Return the resources that are skipped_for_undeployable given the full set of resources and
@@ -786,17 +772,18 @@ class OrchestrationService(protocol.ServerSlice):
         self,
         env: data.Environment,
         version: int,
-        rid_to_resource: dict[ResourceIdStr, data.Resource],
+        rid_to_resource: Mapping[ResourceIdStr, ResourceDTO],
         unknowns: abc.Sequence[data.UnknownParameter],
-        version_info: Optional[JsonType] = None,
-        resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
-        partial_base_version: Optional[int] = None,
-        removed_resource_sets: Optional[list[str]] = None,
-        pip_config: Optional[PipConfig] = None,
+        version_info: JsonType | None = None,
+        resource_sets: dict[ResourceIdStr, str | None] | None = None,
+        partial_base_version: int | None = None,
+        removed_resource_sets: list[str] | None = None,
+        pip_config: PipConfig | None = None,
         *,
         connection: asyncpg.connection.Connection,
         module_version_info: Mapping[InmantaModuleName, InmantaModuleDTO],
         allow_handler_code_update: bool = False,
+        project_constraints: str | None = None,
     ) -> None:
         """
         :param rid_to_resource: This parameter should contain all the resources when a full compile is done.
@@ -815,6 +802,8 @@ class OrchestrationService(protocol.ServerSlice):
         :param allow_handler_code_update: During partial compiles (i.e. partial_base_version is not None), a check is performed
             to make sure the source code of modules in this partial version is identical to the source code in the base
             version. Set this parameter to True to bypass this check.
+        :param project_constraints: A single string containing constraints on packages set at the project level that must
+            be taken into consideration during agent code installation.
 
         Pre-conditions:
             * The requires and provides relationships of the resources in rid_to_resource must be set correctly. For a
@@ -853,11 +842,9 @@ class OrchestrationService(protocol.ServerSlice):
             raise BadRequest(f"The version number used ({version}) is not positive")
 
         for r in rid_to_resource.values():
-            if r.model != version:
-                raise BadRequest(
-                    f"The resource version of resource {r.resource_version_id} does not match the version argument "
-                    f"(version: {version})"
-                )
+            # Populate resource_sets with the shared set
+            if r.resource_set is None:
+                resource_sets[r.resource_id] = None
 
         for rid_name in resource_sets.keys():
             try:
@@ -867,11 +854,11 @@ class OrchestrationService(protocol.ServerSlice):
 
         started = datetime.datetime.now().astimezone()
 
-        resource_set_validator = ResourceSetValidator(set(rid_to_resource.values()))
+        resource_set_validator = ResourceSetValidator(rid_to_resource.values())
         undeployable_ids: abc.Sequence[ResourceIdStr] = [
             res.resource_id for res in rid_to_resource.values() if res.is_undefined
         ]
-        updated_resource_sets: abc.Set[str] = {sr for sr in resource_sets.values() if sr is not None}
+        updated_resource_sets_no_shared: abc.Set[str] = {sr for sr in resource_sets.values() if sr is not None}
         deleted_resource_sets_as_set: abc.Set[str] = set(removed_resource_sets)
         async with connection.transaction():
             try:
@@ -891,9 +878,10 @@ class OrchestrationService(protocol.ServerSlice):
                         ),
                         partial_base=partial_base_version,
                         pip_config=pip_config,
-                        updated_resource_sets=updated_resource_sets,
+                        updated_resource_sets=updated_resource_sets_no_shared,
                         deleted_resource_sets=deleted_resource_sets_as_set,
                         connection=connection,
+                        project_constraints=project_constraints,
                     )
                 else:
                     cm = data.ConfigurationModel(
@@ -908,45 +896,25 @@ class OrchestrationService(protocol.ServerSlice):
                         ),
                         pip_config=pip_config,
                         is_suitable_for_partial_compiles=not resource_set_validator.has_cross_resource_set_dependency(),
+                        project_constraints=project_constraints,
                     )
                     await cm.insert(connection=connection)
             except asyncpg.exceptions.UniqueViolationError:
                 raise ServerError("The given version is already defined. Versions should be unique.")
 
-            with tracing.span("put_version.partial"):
-                all_ids: set[Id] = {Id.parse_id(rid, version) for rid in rid_to_resource.keys()}
-                if is_partial_update:
-                    # Make mypy happy
-                    assert partial_base_version is not None
-                    # This dict maps a resource id to its resource set for unchanged resource sets.
-                    rids_unchanged_resource_sets: dict[ResourceIdStr, str] = (
-                        await data.Resource.copy_resources_from_unchanged_resource_set(
-                            environment=env.id,
-                            source_version=partial_base_version,
-                            destination_version=version,
-                            updated_resource_sets=updated_resource_sets,
-                            deleted_resource_sets=deleted_resource_sets_as_set,
-                            connection=connection,
-                        )
-                    )
-                    resources_that_moved_resource_sets = rids_unchanged_resource_sets.keys() & rid_to_resource.keys()
-                    if resources_that_moved_resource_sets:
-                        msg = (
-                            "The following Resource(s) cannot be migrated to a different resource set using a partial compile, "
-                            "a full compile is necessary for this process:\n"
-                        )
-                        msg += "\n".join(
-                            f"    {rid} moved from {get_printable_name_for_resource_set(rids_unchanged_resource_sets[rid])} "
-                            f"to {get_printable_name_for_resource_set(resource_sets.get(rid))}"
-                            for rid in resources_that_moved_resource_sets
-                        )
-
-                        raise BadRequest(msg)
-                    all_ids |= {Id.parse_id(rid, version) for rid in rids_unchanged_resource_sets.keys()}
-
-                await data.Resource.insert_many(list(rid_to_resource.values()), connection=connection)
-                await cm.recalculate_total(connection=connection)
-
+            all_ids: set[Id] = {Id.parse_id(rid, version) for rid in rid_to_resource.keys()}
+            try:
+                await data.ResourceSet.insert_sets_and_resources(
+                    environment=env.id,
+                    updated_resources=list(rid_to_resource.values()),
+                    target_version=version,
+                    base_version=partial_base_version,
+                    deleted_resource_sets=deleted_resource_sets_as_set,
+                    connection=connection,
+                )
+            except data.InvalidResourceSetMigration as e:
+                raise BadRequest(e.message)
+            await cm.recalculate_total(connection=connection)
             await data.UnknownParameter.insert_many(unknowns, connection=connection)
 
             all_agents: set[str] = {res.agent for res in rid_to_resource.values()}
@@ -1036,9 +1004,10 @@ class OrchestrationService(protocol.ServerSlice):
         unknowns: list[dict[str, PrimitiveTypes]],
         version_info: JsonType,
         module_version_info: Mapping[InmantaModuleName, InmantaModuleDTO],
-        compiler_version: Optional[str] = None,
-        resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
-        pip_config: Optional[PipConfig] = None,
+        compiler_version: str | None = None,
+        resource_sets: dict[ResourceIdStr, str | None] | None = None,
+        pip_config: PipConfig | None = None,
+        project_constraints: str | None = None,
     ) -> Apireturn:
         """
         :param unknowns: dict with the following structure
@@ -1055,11 +1024,12 @@ class OrchestrationService(protocol.ServerSlice):
             raise BadRequest("Older compiler versions are no longer supported, please update your compiler")
 
         unknowns_objs = self._create_unknown_parameter_daos_from_api_unknowns(env.id, version, unknowns)
-        rid_to_resource: dict[ResourceIdStr, data.Resource] = self._create_dao_resources_from_api_resources(
+        rid_to_resource: dict[ResourceIdStr, ResourceDTO] = self._create_dto_resources_from_api_resources(
             env_id=env.id,
             resources=resources,
             resource_state=resource_state,
             resource_sets=resource_sets,
+            check_version=version,
         )
 
         async with data.Resource.get_connection() as con:
@@ -1078,6 +1048,7 @@ class OrchestrationService(protocol.ServerSlice):
                     pip_config=pip_config,
                     connection=con,
                     module_version_info=module_version_info or {},
+                    project_constraints=project_constraints,
                 )
             # This must be outside all transactions, as it relies on the result of _put_version
             # and it starts a background task, so it can't re-use this connection
@@ -1156,9 +1127,11 @@ class OrchestrationService(protocol.ServerSlice):
 
                 base_model = current_versions[0]
                 base_version: int = base_model.version
+                base_constraints: str | None = base_model.project_constraints
                 if not base_model.is_suitable_for_partial_compiles:
-                    resources_in_base_version = await data.Resource.get_resources_for_version(env.id, base_version)
-                    resource_set_validator = ResourceSetValidator(set(resources_in_base_version))
+                    resource_set_validator = ResourceSetValidator(
+                        await data.Resource.get_resources_for_version_as_dto(env.id, base_version)
+                    )
                     try:
                         resource_set_validator.ensure_no_cross_resource_set_dependencies()
                     except CrossResourceSetDependencyError as e:
@@ -1173,12 +1146,11 @@ class OrchestrationService(protocol.ServerSlice):
                             base_version,
                         )
 
-                rid_to_resource: dict[ResourceIdStr, data.Resource] = self._create_dao_resources_from_api_resources(
+                rid_to_resource: dict[ResourceIdStr, ResourceDTO] = self._create_dto_resources_from_api_resources(
                     env_id=env.id,
                     resources=resources,
                     resource_state=resource_state,
                     resource_sets=resource_sets,
-                    set_version=version,
                 )
 
                 updated_resource_sets: abc.Set[str] = {sr_name for sr_name in resource_sets.values() if sr_name is not None}
@@ -1191,9 +1163,8 @@ class OrchestrationService(protocol.ServerSlice):
                     deleted_resource_sets=set(removed_resource_sets),
                     connection=con,
                 )
-
                 # add shared resources
-                merged_resources = partial_update_merger.merge_updated_and_shared_resources(list(rid_to_resource.values()))
+                merged_resources = partial_update_merger.merge_updated_and_shared_resources(rid_to_resource)
 
                 merged_unknowns = await partial_update_merger.merge_unknowns(
                     unknowns_in_partial_compile=self._create_unknown_parameter_daos_from_api_unknowns(env.id, version, unknowns)
@@ -1212,6 +1183,7 @@ class OrchestrationService(protocol.ServerSlice):
                     connection=con,
                     module_version_info=module_version_info or {},
                     allow_handler_code_update=allow_handler_code_update,
+                    project_constraints=base_constraints if base_constraints else None,
                 )
 
             returnvalue: ReturnValue[int] = ReturnValue[int](200, response=version)
@@ -1385,8 +1357,8 @@ class OrchestrationService(protocol.ServerSlice):
     ) -> list[ResourceDiff]:
         await self._validate_version_parameters(env.id, from_version, to_version)
 
-        from_version_resources = await data.Resource.get_list(environment=env.id, model=from_version)
-        to_version_resources = await data.Resource.get_list(environment=env.id, model=to_version)
+        from_version_resources = await data.Resource.get_resources_for_version(environment=env.id, version=from_version)
+        to_version_resources = await data.Resource.get_resources_for_version(environment=env.id, version=to_version)
 
         from_state = diff.Version(self.convert_resources(from_version_resources))
         to_state = diff.Version(self.convert_resources(to_version_resources))

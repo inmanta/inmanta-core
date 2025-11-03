@@ -16,11 +16,12 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import datetime
 import logging
 import os
 import uuid
 from concurrent.futures.thread import ThreadPoolExecutor
-from typing import Any, Optional
+from typing import Optional
 
 import inmanta.server.config as opt
 from inmanta import config, const, data, protocol
@@ -31,8 +32,9 @@ from inmanta.const import AGENT_SCHEDULER_ID
 from inmanta.data.model import DataBaseReport, SchedulerStatusReport
 from inmanta.deploy import scheduler
 from inmanta.protocol import SessionEndpoint, methods, methods_v2
+from inmanta.resources import Id
 from inmanta.server.services.databaseservice import DatabaseMonitor
-from inmanta.types import Apireturn
+from inmanta.types import Apireturn, ResourceIdStr
 from inmanta.util import ensure_directory_exist, join_threadpools
 
 LOGGER = logging.getLogger("inmanta.scheduler")
@@ -114,7 +116,6 @@ class Agent(SessionEndpoint):
         if self.working:
             return
         self.working = True
-        await self.load_environment_settings()
         await self.executor_manager.start()
         await self.scheduler.start()
         LOGGER.info("Scheduler started for environment %s", self.environment)
@@ -129,6 +130,58 @@ class Agent(SessionEndpoint):
         await self.executor_manager.join([], timeout=timeout)
         await self.scheduler.join()
         LOGGER.info("Scheduler stopped for environment %s", self.environment)
+
+    @protocol.handle(methods_v2.remove_executor_venvs)
+    async def remove_executor_venvs(self) -> None:
+        """
+        Remove all the venvs used by the executors of this agent.
+        """
+        try:
+            await data.Notification(
+                environment=self._env_id,
+                created=datetime.datetime.now().astimezone(),
+                title="Agent operations suspended",
+                message="Agent operations are temporarily suspended because the user requested to remove the agent venvs.",
+                severity=const.NotificationSeverity.info,
+            ).insert()
+            # Stop all deployments and stop all executors
+            await self.scheduler.suspend_deployments(reason="removing all agent venvs")
+            await self.executor_manager.stop_all_executors()
+            # Remove venvs
+            await self._remove_executor_venvs()
+        except Exception as e:
+            await data.Notification(
+                environment=self._env_id,
+                created=datetime.datetime.now().astimezone(),
+                title="Agent venv removal failed",
+                message=f"Failed to remove agent venvs: {e}",
+                severity=const.NotificationSeverity.error,
+            ).insert()
+        else:
+            await data.Notification(
+                environment=self._env_id,
+                created=datetime.datetime.now().astimezone(),
+                title="Agent venv removal finished",
+                message="The agent venvs were successfully removed. Resuming agent operations.",
+                severity=const.NotificationSeverity.info,
+            ).insert()
+        finally:
+            # Resume deployments again
+            await self.scheduler.resume_deployments()
+
+    async def _remove_executor_venvs(self) -> None:
+        """
+        This method was created to be able to monkeypatch it in testing.
+        """
+        environment_manager: executor.VirtualEnvironmentManager | None = self.executor_manager.get_environment_manager()
+        if not environment_manager:
+            raise Exception(
+                "Calling the remove_executor_venvs endpoint while running against an ExecutorManager that doesn't have"
+                " a VirtualEnvironmentManager. This can happen while running the test suite using"
+                " the agent fixture. In that case all executors run in the same process as the server."
+                " So there are no venvs to cleanup."
+            )
+        await environment_manager.remove_all_venvs()
 
     @protocol.handle(methods.set_state)
     async def set_state(self, agent: Optional[str], enabled: bool) -> Apireturn:
@@ -156,21 +209,6 @@ class Agent(SessionEndpoint):
             else:
                 await self.scheduler.refresh_agent_state_from_db(name=agent)
                 return 200, f"Agent `{agent}` has been notified!"
-
-    async def load_environment_settings(self) -> None:
-        """
-        Load environment settings into local settings
-        """
-        async with data.Environment.get_connection() as connection:
-            assert self.environment is not None
-            environment = await data.Environment.get_by_id(self.environment, connection=connection)
-            assert environment is not None
-            agent_deploy_interval = await environment.get(data.AUTOSTART_AGENT_DEPLOY_INTERVAL, connection=connection)
-            assert agent_deploy_interval is not None and isinstance(agent_deploy_interval, str)  # make mypy happy
-            agent_repair_interval = await environment.get(data.AUTOSTART_AGENT_REPAIR_INTERVAL, connection=connection)
-            assert agent_repair_interval is not None and isinstance(agent_repair_interval, str)  # make mypy happy
-            cfg.agent_repair_interval.set(agent_repair_interval)
-            cfg.agent_deploy_interval.set(agent_deploy_interval)
 
     async def on_reconnect(self) -> None:
         result = await self._client.get_state(tid=self._env_id, sid=self.sessionid, agent=AGENT_SCHEDULER_ID)
@@ -205,10 +243,10 @@ class Agent(SessionEndpoint):
 
         if incremental_deploy:
             LOGGER.info("%s got a trigger to run deploy in environment %s", agent_id, env)
-            await self.scheduler.deploy(reason="Deploy was triggered because user has requested a deploy", agent=agent)
+            await self.scheduler.deploy(reason="user requested a deploy", agent=agent)
         else:
             LOGGER.info("%s got a trigger to run repair in environment %s", agent_id, env)
-            await self.scheduler.repair(reason="Deploy was triggered because user has requested a repair", agent=agent)
+            await self.scheduler.repair(reason="user requested a repair", agent=agent)
         return 200
 
     @protocol.handle(methods.trigger_read_version, env="tid", agent="id")
@@ -235,12 +273,12 @@ class Agent(SessionEndpoint):
         return 200
 
     @protocol.handle(methods.get_parameter, env="tid")
-    async def get_facts(self, env: uuid.UUID, agent: str, resource: dict[str, Any]) -> Apireturn:
-        # FIXME: this api is very inefficient: it sends the entire resource, we only need the id now
+    async def get_facts(self, env: uuid.UUID, agent: str, resource_id: ResourceIdStr) -> Apireturn:
         assert env == self.environment
         assert agent == AGENT_SCHEDULER_ID
-        LOGGER.info("Agent %s got a trigger to run get_facts for resource %s in environment %s", agent, resource.get("id"), env)
-        await self.scheduler.get_facts(resource)
+        LOGGER.info("Agent %s got a trigger to run get_facts for resource %s in environment %s", agent, resource_id, env)
+        id = Id.parse_id(resource_id)
+        await self.scheduler.get_facts(id)
         return 200
 
     @protocol.handle(methods.get_status)
@@ -256,7 +294,6 @@ class Agent(SessionEndpoint):
     @protocol.handle(methods_v2.notify_timer_update, env="tid")
     async def notify_timer_update(self, env: data.Environment) -> None:
         assert env == self.environment
-        await self.load_environment_settings()
         await self.scheduler.load_timer_settings()
 
     @protocol.handle(methods_v2.get_db_status)

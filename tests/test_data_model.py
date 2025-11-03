@@ -19,7 +19,6 @@ Contact: code@inmanta.com
 import datetime
 import json
 import typing
-from enum import Enum
 
 import pydantic
 import pytest
@@ -27,24 +26,6 @@ import pytest
 from inmanta import const, types
 from inmanta.data.model import BaseModel, LogLine
 from inmanta.protocol.common import json_encode
-
-
-def test_model_inheritance():
-    """Test if config classes inheritance"""
-
-    class Choices(str, Enum):
-        yes = "yes"
-        no = "no"
-
-    class Project(BaseModel):
-        name: str
-        opts: Choices
-
-    project = Project(name="test", opts="no")
-    ser = project.dict()
-
-    assert ser["opts"] == "no"
-    assert not isinstance(ser["opts"], Enum)
 
 
 def test_union_bool_json():

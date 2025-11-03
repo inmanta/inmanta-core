@@ -1,0 +1,5 @@
+description: >
+  Part 2/2: remove agent deploy/repair interval options
+issue-nr: 8621
+change-type: patch
+destination-branches: [master]

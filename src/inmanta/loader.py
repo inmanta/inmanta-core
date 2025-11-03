@@ -135,6 +135,7 @@ class CodeManager:
 
         files_metadata = [module_source.metadata for module_source in module_sources]
         requirements = self.get_inmanta_module_requirements(inmanta_module_name)
+
         module_version = self.get_module_version(requirements, files_metadata)
 
         self.module_version_info[inmanta_module_name] = InmantaModule(
@@ -172,10 +173,12 @@ class CodeManager:
         """Get the list of python requirements associated with this inmanta module"""
         project: module.Project = module.Project.get()
         mod: module.Module = project.modules[module_name]
+
         if project.metadata.agent_install_dependency_modules:
             _requires = mod.get_all_python_requirements_as_list()
         else:
             _requires = mod.get_strict_python_requirements_as_list()
+
         return set(_requires)
 
     @staticmethod

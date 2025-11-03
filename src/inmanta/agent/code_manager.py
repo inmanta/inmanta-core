@@ -55,8 +55,8 @@ class CodeManager:
 
         :return: list of ModuleInstallSpec for this agent and this model version.
         """
-
         module_install_specs = []
+
         modules_for_agent = (
             select(
                 models.AgentModules.inmanta_module_name,
@@ -65,8 +65,9 @@ class CodeManager:
                 models.ModuleFiles.python_module_name,
                 models.ModuleFiles.file_content_hash,
                 models.ModuleFiles.is_byte_code,
-                models.File.content,
-                models.ConfigurationModel.pip_config,
+                models.File.content.label("source_file_content"),
+                models.Configurationmodel.pip_config,
+                models.Configurationmodel.project_constraints,
             )
             .join(
                 models.InmantaModule,
@@ -89,10 +90,10 @@ class CodeManager:
                 models.ModuleFiles.file_content_hash == models.File.content_hash,
             )
             .join(
-                models.ConfigurationModel,
+                models.Configurationmodel,
                 and_(
-                    models.AgentModules.cm_version == models.ConfigurationModel.version,
-                    models.AgentModules.environment == models.ConfigurationModel.environment,
+                    models.AgentModules.cm_version == models.Configurationmodel.version,
+                    models.AgentModules.environment == models.Configurationmodel.environment,
                 ),
             )
             .where(
@@ -108,18 +109,25 @@ class CodeManager:
             for module_name, rows in itertools.groupby(result.all(), key=lambda r: r.inmanta_module_name):
                 rows_list = list(rows)
                 assert rows_list
-                assert len({row.inmanta_module_version for row in rows_list}) == 1
 
-                _pip_config = rows_list[0].pip_config
-                assert all(row.pip_config == _pip_config for row in rows_list)
+                first_row = rows_list[0]
+                _pip_config = first_row.pip_config
+                for row in rows_list:
+
+                    # The following attributes should be consistent across all modules in this version
+                    assert row.inmanta_module_version == first_row.inmanta_module_version
+                    assert row.pip_config == _pip_config
+                    assert set(row.requirements) == set(first_row.requirements)
+                    assert row.project_constraints == first_row.project_constraints
+
                 pip_config = LEGACY_PIP_DEFAULT if _pip_config is None else PipConfig(**_pip_config)
                 module_install_specs.append(
                     ModuleInstallSpec(
                         module_name=module_name,
-                        module_version=rows_list[0].inmanta_module_version,
+                        module_version=first_row.inmanta_module_version,
                         blueprint=executor.ExecutorBlueprint(
                             pip_config=pip_config,
-                            requirements=rows_list[0].requirements,
+                            requirements=first_row.requirements,
                             sources=[
                                 ModuleSource(
                                     metadata=ModuleSourceMetadata(
@@ -127,12 +135,13 @@ class CodeManager:
                                         hash_value=row.file_content_hash,
                                         is_byte_code=row.is_byte_code,
                                     ),
-                                    source=row.content,
+                                    source=row.source_file_content,
                                 )
                                 for row in rows_list
                             ],
                             python_version=sys.version_info[:2],
                             environment_id=environment,
+                            project_constraints=first_row.project_constraints if first_row.project_constraints else None,
                         ),
                     )
                 )

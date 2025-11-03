@@ -29,22 +29,23 @@ from uuid import UUID
 import pytest
 
 import inmanta.protocol
+import inmanta.types
 from inmanta import const, data, util
 from inmanta.agent.agent_new import Agent
-from inmanta.data import CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES
+from inmanta.data import CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES, model
 from inmanta.data.schema import DBSchema
 from inmanta.protocol import methods
-from inmanta.server import SLICE_COMPILER, SLICE_SERVER
+from inmanta.server import SLICE_COMPILER, SLICE_RESOURCE, SLICE_SERVER
 from inmanta.server.services.compilerservice import CompilerService
 
 if __file__ and os.path.dirname(__file__).split("/")[-2] == "inmanta_tests":
-    from inmanta_tests.utils import wait_for_version, wait_until_deployment_finishes  # noqa: F401
+    from inmanta_tests.utils import retry_limited, wait_for_version, wait_until_deployment_finishes  # noqa: F401
 else:
-    from utils import wait_for_version, wait_until_deployment_finishes
+    from utils import retry_limited, wait_for_version, wait_until_deployment_finishes
 
 
 def check_result(result: inmanta.protocol.Result) -> bool:
-    assert result.code == 200
+    assert result.code == 200, result.result["message"]
 
 
 async def populate_facts_and_parameters(client, env_id: str):
@@ -108,7 +109,8 @@ async def test_dump_db(
     client,
     postgres_db,
     database_name,
-    agent_factory: Callable[[uuid.UUID], Awaitable[Agent]],
+    # doesn't make sense to do a state check because we halt the environment
+    agent_factory_no_state_check: Callable[[uuid.UUID], Awaitable[Agent]],
     resource_container,
     no_agent,
 ) -> None:
@@ -126,7 +128,7 @@ async def test_dump_db(
     assert result.code == 200
     env_id_1 = result.result["environment"]["id"]
     env1 = await data.Environment.get_by_id(uuid.UUID(env_id_1))
-    await agent_factory(env_id_1)
+    await agent_factory_no_state_check(env_id_1)
 
     env_1_version = 1
 
@@ -193,6 +195,44 @@ async def test_dump_db(
 
     # Partial compile
     rid2 = "test::Resource[agent2,key=key2]"
+    rid3 = "test::Resource[agent3,key=key3]"
+    resources_partial = [
+        {
+            "key": "key2",
+            "version": 0,
+            "id": f"{rid2},v=0",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "key": "key2",
+            "version": 0,
+            "id": f"{rid3},v=0",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+    ]
+    resource_sets = {rid2: "set-a", rid3: "set-b"}
+    resource_states = {rid2: const.ResourceState.available}
+    check_result(
+        await client.put_partial(
+            tid=env_id_1,
+            resources=resources_partial,
+            resource_state=resource_states,
+            unknowns=[],
+            version_info=None,
+            resource_sets=resource_sets,
+            module_version_info={},
+        )
+    )
+    env_1_version += 1
+    await wait_for_version(client, env_id_1, env_1_version)
+
+    check_result(await client.release_version(env_id_1, env_1_version))
+
+    await wait_until_deployment_finishes(client, env_id_1, timeout=20)
     resources_partial = [
         {
             "key": "key2",
@@ -213,14 +253,21 @@ async def test_dump_db(
             unknowns=[],
             version_info=None,
             resource_sets=resource_sets,
+            removed_resource_sets=["set-b"],
             module_version_info={},
         )
     )
+    env_1_version += 1
+    await wait_for_version(client, env_id_1, env_1_version)
+
+    check_result(await client.release_version(env_id_1, env_1_version))
+
+    await wait_until_deployment_finishes(client, env_id_1, timeout=20)
 
     result = await client.create_environment(project_id=project_id, name="dev-3")
     assert result.code == 200
     env_id_3 = result.result["environment"]["id"]
-    await agent_factory(env_id_3)
+    await agent_factory_no_state_check(env_id_3)
 
     check_result(await client.set_setting(env_id_3, "autostart_agent_deploy_interval", "0"))
     check_result(await client.set_setting(env_id_3, "autostart_agent_repair_interval", "600"))
@@ -310,6 +357,8 @@ async def test_dump_db(
     # Create a second version in environment dev3 that doesn't have resource key6, but has a new resource key7
     res = await client.reserve_version(env_id_3)
     assert res.code == 200
+    res_id_to_delete = "test::Resource[agent1,key=key9]"
+
     version = res.result["data"]
     res = await client.put_version(
         tid=env_id_3,
@@ -325,6 +374,15 @@ async def test_dump_db(
                 "purged": False,
                 "requires": [],
             },
+            {
+                "key": "key9",
+                "value": "val9",
+                "version": version,
+                "id": f"{res_id_to_delete},v={version}",
+                "send_event": True,
+                "purged": False,
+                "requires": [],
+            },
         ],
         resource_state={
             "test::Resource[agent1,key=key1]": const.ResourceState.available,
@@ -333,6 +391,7 @@ async def test_dump_db(
             "test::Resource[agent1,key=key4]": const.ResourceState.undefined,
             "test::Resource[agent1,key=key5]": const.ResourceState.available,
             "test::Resource[agent1,key=key7]": const.ResourceState.available,
+            res_id_to_delete: const.ResourceState.available,
         },
         compiler_version=util.get_compiler_version(),
         module_version_info={},
@@ -385,6 +444,53 @@ async def test_dump_db(
         module_version_info={},
     )
     assert res.code == 200
+
+    # Delete a resource to have a dangling rps entry
+    res = await data.Resource.get_one(environment=env_id_3, resource_id=res_id_to_delete)
+    assert res
+    await res.delete()
+    rps = await data.ResourcePersistentState.get_one(environment=env_id_3, resource_id=res_id_to_delete)
+    assert rps
+
+    # report some discovered resources
+    await server.get_slice(SLICE_RESOURCE).discovered_resources_create_batch(
+        env=env1,
+        discovered_resources=[
+            model.LinkedDiscoveredResource(
+                discovered_resource_id=inmanta.types.ResourceIdStr(rid),
+                values={},
+                discovery_resource_id="discovery::Discovery[discovery,name=discoverer]",
+            )
+            for rid in [
+                "discovery::Discovered[myagent,name=discovered]",
+                "discovery::deep::submod::Dis-co-ve-red[my-agent,name=NameWithSpecial!,[::#&^@chars]",
+            ]
+        ],
+    )
+
+    # Create an environment that contains a compile report with a notification
+    # associated with it about the fact that the compile failed.
+    result = await client.create_environment(project_id=project_id, name="dev-4")
+    assert result.code == 200
+    env_id_4 = result.result["environment"]["id"]
+    project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["server"], str(env_id_4), "compiler")
+    # Make dir read-only so that the compile service fails on it
+    os.makedirs(project_dir, exist_ok=True)
+    os.chmod(project_dir, 0o444)
+
+    async def has_compile_finished(env_id: uuid.UUID) -> bool:
+        result = await client.is_compiling(env_id)
+        return result.code == 204
+
+    check_result(await client.notify_change(id=env_id_4))
+    await retry_limited(has_compile_finished, timeout=10, env_id=env_id_4)
+    check_result(await client.notify_change(id=env_id_4))
+    await retry_limited(has_compile_finished, timeout=10, env_id=env_id_4)
+
+    compiles = await data.Compile.get_list(environment=env_id_4)
+    assert len(compiles) == 2
+    # Delete one compile so that we have a notification for a compile that no longer exists.
+    await compiles[0].delete()
 
     proc = await asyncio.create_subprocess_exec(
         "pg_dump", "-h", "127.0.0.1", "-p", str(postgres_db.port), "-f", outfile, "-O", "-U", postgres_db.user, database_name

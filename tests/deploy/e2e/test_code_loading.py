@@ -18,7 +18,6 @@ Contact: code@inmanta.com
 
 import asyncio
 import base64
-import hashlib
 import logging
 import pathlib
 import uuid
@@ -28,7 +27,7 @@ from logging import DEBUG
 import py
 import pytest
 
-from inmanta import data
+from inmanta import data, protocol
 from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
 from inmanta.agent.code_manager import CodeManager, CouldNotResolveCode
@@ -77,12 +76,22 @@ async def agent(server, environment, deactive_venv):
     await a.stop()
 
 
+async def upload_file(client: protocol.Client, content: str) -> str:
+    content = content.encode()
+
+    _hash = hash_file(content)
+    body = base64.b64encode(content).decode("ascii")
+
+    res = await client.upload_file(id=_hash, content=body)
+    assert res.code == 200
+    return _hash
+
+
 @pytest.mark.slowtest
 async def test_agent_installs_dependency_containing_extras(
     server_pre_start,
     server,
     client,
-    monkeypatch,
     index_with_pkgs_containing_optional_deps: str,
     clienthelper,
     environment,
@@ -91,9 +100,9 @@ async def test_agent_installs_dependency_containing_extras(
     """
     Test whether the agent code loading works correctly when a python dependency is provided that contains extras.
     """
-    content = "file content".encode()
-    hash = hash_file(content)
-    body = base64.b64encode(content).decode("ascii")
+
+    source_content = "file_content"
+    _hash = await upload_file(client, source_content)
 
     module_version_info = {
         "test": InmantaModuleDTO(
@@ -103,16 +112,13 @@ async def test_agent_installs_dependency_containing_extras(
                 ModuleSourceMetadata(
                     name="inmanta_plugins.test",
                     is_byte_code=False,
-                    hash_value=hash,
+                    hash_value=_hash,
                 )
             ],
             requirements=["pkg[optional-a]"],
             for_agents=["agent1"],
         )
     }
-
-    res = await client.upload_file(id=hash, content=body)
-    assert res.code == 200
 
     version = await clienthelper.get_version()
     resources = [
@@ -144,7 +150,7 @@ async def test_agent_installs_dependency_containing_extras(
         agent_name="agent1",
     )
 
-    assert install_spec[0].blueprint.sources[0].source == b"file content"
+    assert install_spec[0].blueprint.sources[0].source == source_content.encode()
     await agent.executor_manager.get_executor("agent1", "localhost", install_spec)
 
     installed_packages = process_env.get_installed_packages()
@@ -167,7 +173,6 @@ async def test_agent_installs_dependency_containing_extras(
 
 async def test_get_code(
     server,
-    agent,
     client,
 ) -> None:
     """
@@ -476,10 +481,7 @@ async def test_logging_on_code_loading_error(server, client, environment, client
         },
     ]
     content = "syntax error"
-    sha1sum = hashlib.new("sha1")
-    sha1sum.update(content.encode())
-    hv1: str = sha1sum.hexdigest()
-    await client.upload_file(hv1, content=base64.b64encode(content.encode()).decode("ascii"))
+    hv1 = await upload_file(client, content)
 
     module_source_metadata = ModuleSourceMetadata(
         name="inmanta_plugins.test",
@@ -544,8 +546,33 @@ async def test_logging_on_code_loading_error(server, client, environment, client
     check_for_message(data=result.result["data"], must_be_present=expected_error_message)
 
 
+async def check_code_for_version(
+    version: int,
+    environment: str,
+    codemanager: CodeManager,
+    agent_names: Sequence[str],
+    module_name: str,
+    expected_source: bytes = b"#The code",
+    expected_constraints: str | None = None,
+):
+    """
+    Helper method to check that all agents get the same code
+    """
+    environment = uuid.UUID(environment)
+    for agent_name in agent_names:
+        module_install_specs = await codemanager.get_code(environment=environment, model_version=version, agent_name=agent_name)
+        for module in module_install_specs:
+            if module.module_name == module_name:
+                assert len(module.blueprint.sources) == 1
+                assert module.blueprint.sources[0].source == expected_source
+                assert module.blueprint.project_constraints == expected_constraints
+                break
+        else:
+            assert False, f"Module {module_name} is not registered in version {version}."
+
+
 @pytest.mark.parametrize("auto_start_agent", [True])
-async def test_code_loading_after_partial(server, agent, client, environment, clienthelper):
+async def test_code_loading_after_partial(server, client, environment, clienthelper):
     """
     Test the following scenario:
 
@@ -565,25 +592,6 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
 
     """
     codemanager = CodeManager()
-
-    async def check_code_for_version(
-        version: int, environment: str, agent_names: Sequence[str], module_name: str, expected_source: bytes = b"#The code"
-    ):
-        """
-        Helper method to check that all agents get the same code
-        """
-        environment = uuid.UUID(environment)
-        for agent_name in agent_names:
-            module_install_specs = await codemanager.get_code(
-                environment=environment, model_version=version, agent_name=agent_name
-            )
-            for module in module_install_specs:
-                if module.module_name == module_name:
-                    assert len(module.blueprint.sources) == 1
-                    assert module.blueprint.sources[0].source == expected_source
-                    break
-            else:
-                assert False, f"Module {module_name} is not registered in version {version}."
 
     version = await clienthelper.get_version()
     resources = [
@@ -605,10 +613,7 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
         },
     ]
     content = "#The code"
-    sha1sum = hashlib.new("sha1")
-    sha1sum.update(content.encode())
-    hv1: str = sha1sum.hexdigest()
-    await client.upload_file(hv1, content=base64.b64encode(content.encode()).decode("ascii"))
+    hv1: str = await upload_file(client, content)
 
     module_source_metadata1 = ModuleSourceMetadata(
         name="inmanta_plugins.test",
@@ -623,6 +628,7 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
             files_in_module=[module_source_metadata1],
             requirements=[],
             for_agents=["agent_X", "agent_Y"],
+            constraints_file_hash=None,
         )
     }
 
@@ -641,7 +647,12 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
     assert result.code == 200
 
     await check_code_for_version(
-        version=1, environment=environment, agent_names=["agent_X", "agent_Y"], module_name="test", expected_source=b"#The code"
+        version=1,
+        environment=environment,
+        codemanager=codemanager,
+        agent_names=["agent_X", "agent_Y"],
+        module_name="test",
+        expected_source=b"#The code",
     )
 
     resources = [
@@ -668,16 +679,18 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
     )
     assert result.code == 200
     await check_code_for_version(
-        version=2, environment=environment, agent_names=["agent_X", "agent_Y"], module_name="test", expected_source=b"#The code"
+        version=2,
+        environment=environment,
+        codemanager=codemanager,
+        agent_names=["agent_X", "agent_Y"],
+        module_name="test",
+        expected_source=b"#The code",
     )
 
     # 3) Partial export using different module version from the base version should raise an exception:
 
     altered_content = "#The OTHER code"
-    sha1sum = hashlib.new("sha1")
-    sha1sum.update(altered_content.encode())
-    hv2: str = sha1sum.hexdigest()
-    await client.upload_file(hv2, content=base64.b64encode(altered_content.encode()).decode("ascii"))
+    hv2: str = await upload_file(client, altered_content)
 
     module_source_metadata2 = ModuleSourceMetadata(
         name="inmanta_plugins.test",
@@ -692,6 +705,7 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
             files_in_module=[module_source_metadata2],
             requirements=[],
             for_agents=["agent_X"],
+            constraints_file_hash=None,
         )
     }
 
@@ -714,7 +728,12 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
     )
 
     await check_code_for_version(
-        version=2, environment=environment, agent_names=["agent_X", "agent_Y"], module_name="test", expected_source=b"#The code"
+        version=2,
+        environment=environment,
+        codemanager=codemanager,
+        agent_names=["agent_X", "agent_Y"],
+        module_name="test",
+        expected_source=b"#The code",
     )
 
     # 4) Make sure we can provide new agents with already registered code:
@@ -725,6 +744,7 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
             files_in_module=[module_source_metadata1],
             requirements=[],
             for_agents=["agent_Z"],
+            constraints_file_hash=None,
         )
     }
     resources = [
@@ -755,6 +775,7 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
     await check_code_for_version(
         version=3,
         environment=environment,
+        codemanager=codemanager,
         agent_names=["agent_X", "agent_Y", "agent_Z"],
         module_name="test",
         expected_source=b"#The code",
@@ -763,10 +784,7 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
     # 5) Make sure we can provide agents with new modules:
 
     content = "#Yet some other code"
-    sha1sum = hashlib.new("sha1")
-    sha1sum.update(content.encode())
-    hv3: str = sha1sum.hexdigest()
-    await client.upload_file(hv3, content=base64.b64encode(content.encode()).decode("ascii"))
+    hv3: str = await upload_file(client, content)
 
     module_source_metadata3 = ModuleSourceMetadata(
         name="inmanta_plugins.new_module",
@@ -781,6 +799,7 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
             files_in_module=[module_source_metadata3],
             requirements=[],
             for_agents=["agent_Z", "agent_A"],
+            constraints_file_hash=None,
         )
     }
     resources = [
@@ -819,6 +838,7 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
     await check_code_for_version(
         version=4,
         environment=environment,
+        codemanager=codemanager,
         agent_names=["agent_X", "agent_Y", "agent_Z"],
         module_name="test",
         expected_source=b"#The code",
@@ -826,6 +846,7 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
     await check_code_for_version(
         version=4,
         environment=environment,
+        codemanager=codemanager,
         agent_names=["agent_Z", "agent_A"],
         module_name="new_module",
         expected_source=b"#Yet some other code",
@@ -847,6 +868,7 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
     await check_code_for_version(
         version=5,
         environment=environment,
+        codemanager=codemanager,
         agent_names=["agent_X", "agent_Y", "agent_Z"],
         module_name="test",
         expected_source=b"#The OTHER code",
@@ -855,7 +877,168 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
     await check_code_for_version(
         version=5,
         environment=environment,
+        codemanager=codemanager,
         agent_names=["agent_Z", "agent_A"],
         module_name="new_module",
         expected_source=b"#Yet some other code",
+    )
+
+
+@pytest.mark.parametrize("auto_start_agent", [True])
+async def test_project_constraints_in_agent_code_install(server, client, environment, clienthelper):
+    """
+    Check that registered constraints get propagated into the agents' venv blueprints.
+
+    The test_process_manager test in test_agent_executor.py checks that these constraints
+    are taken into account during agent code install.
+    """
+    codemanager = CodeManager()
+
+    version = await clienthelper.get_version()
+
+    def get_resources(version: int) -> list[dict]:
+        resources = [
+            {
+                "key": "key1",
+                "value": "value1",
+                "id": "test::ResType_A[agent_X,key=key1],v=%d" % version,
+                "send_event": False,
+                "purged": False,
+                "requires": [],
+            },
+            {
+                "key": "key1",
+                "value": "value1",
+                "id": "test::ResType_A[agent_Y,key=key1],v=%d" % version,
+                "send_event": False,
+                "purged": False,
+                "requires": [],
+            },
+        ]
+        return resources
+
+    content = "#The code"
+    hv1: str = await upload_file(client, content)
+
+    constraints = "dummy_constraint~=1.2.3\ndummy_constraint<5.5.5"
+
+    module_source_metadata1 = ModuleSourceMetadata(
+        name="inmanta_plugins.test",
+        hash_value=hv1,
+        is_byte_code=False,
+    )
+
+    module_version_info_v0 = {
+        "test": InmantaModuleDTO(
+            name="test",
+            version="0.0.0",
+            files_in_module=[module_source_metadata1],
+            requirements=[],
+            for_agents=["agent_X", "agent_Y"],
+        )
+    }
+
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=get_resources(version),
+        resource_state={},
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+        module_version_info=module_version_info_v0,
+        resource_sets={"test::ResType_A[agent_X,key=key1]": "set-a", "test::ResType_A[agent_Y,key=key1]": "set-b"},
+        project_constraints=constraints,
+    )
+
+    assert result.code == 200
+
+    await check_code_for_version(
+        version=1,
+        environment=environment,
+        codemanager=codemanager,
+        agent_names=["agent_X", "agent_Y"],
+        module_name="test",
+        expected_source=b"#The code",
+        expected_constraints=constraints,
+    )
+
+    # Partial compiles should use the same constraints as the version they're based on.
+
+    result = await client.put_partial(
+        tid=environment,
+        resources=get_resources(0),
+        resource_state={},
+        unknowns=[],
+        version_info={},
+        module_version_info=module_version_info_v0,
+        resource_sets={"test::ResType_A[agent_X,key=key1]": "set-a", "test::ResType_A[agent_Y,key=key1]": "set-b"},
+    )
+    assert result.code == 200
+    await check_code_for_version(
+        version=2,
+        environment=environment,
+        codemanager=codemanager,
+        agent_names=["agent_X", "agent_Y"],
+        module_name="test",
+        expected_source=b"#The code",
+        expected_constraints=constraints,
+    )
+
+    module_version_info_v1 = {
+        "test": InmantaModuleDTO(
+            name="test",
+            version="1.0.0",
+            files_in_module=[module_source_metadata1],
+            requirements=[],
+            for_agents=["agent_X", "agent_Y"],
+        )
+    }
+
+    version = await clienthelper.get_version()
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=get_resources(version),
+        resource_state={},
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+        module_version_info=module_version_info_v1,
+        resource_sets={"test::ResType_A[agent_X,key=key1]": "set-a", "test::ResType_A[agent_Y,key=key1]": "set-b"},
+        project_constraints=None,
+    )
+
+    assert result.code == 200
+
+    await check_code_for_version(
+        version=3,
+        environment=environment,
+        codemanager=codemanager,
+        agent_names=["agent_X", "agent_Y"],
+        module_name="test",
+        expected_source=b"#The code",
+        expected_constraints=None,
+    )
+    res = await client.release_version(tid=environment, id=version)
+    assert res.code == 200
+
+    result = await client.put_partial(
+        tid=environment,
+        resources=get_resources(0),
+        resource_state={},
+        unknowns=[],
+        version_info={},
+        module_version_info=module_version_info_v1,
+        resource_sets={"test::ResType_A[agent_X,key=key1]": "set-a", "test::ResType_A[agent_Y,key=key1]": "set-b"},
+    )
+    assert result.code == 200
+    await check_code_for_version(
+        version=4,
+        environment=environment,
+        codemanager=codemanager,
+        agent_names=["agent_X", "agent_Y"],
+        module_name="test",
+        expected_source=b"#The code",
+        expected_constraints=None,
     )

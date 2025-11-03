@@ -231,6 +231,17 @@ async def test_agents_paging(server, client, env_with_agents: None, environment:
     }
     assert result.result["metadata"] == {"total": 2, "before": 2, "after": 0, "page_size": 1}
 
+    all_agents = await client.get_agents(environment).value()
+    assert len(all_agents) == 9
+
+    result = await client.get_agents(environment)
+
+    idx = 0
+    async for item in result.all():
+        assert item == all_agents[idx]
+        idx += 1
+    assert idx == len(all_agents)
+
 
 async def test_sorting_validation(client, environment: str, env_with_agents: None) -> None:
     sort_status_map = {

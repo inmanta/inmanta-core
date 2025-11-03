@@ -1,0 +1,3 @@
+description: Drop status field from Resource
+change-type: major
+destination-branches: [master]

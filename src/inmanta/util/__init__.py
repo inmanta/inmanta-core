@@ -39,7 +39,7 @@ import warnings
 from abc import ABC, abstractmethod
 from asyncio import CancelledError, Lock, Task, ensure_future, gather
 from collections import abc, defaultdict
-from collections.abc import Coroutine, Iterable, Iterator
+from collections.abc import Awaitable, Coroutine, Iterable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from logging import Logger
@@ -56,7 +56,7 @@ import packaging.requirements
 import packaging.utils
 import pydantic_core
 from crontab import CronTab
-from inmanta import COMPILER_VERSION, const
+from inmanta import COMPILER_VERSION, const, types
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ReturnTypes
 from packaging.utils import NormalizedName
@@ -640,7 +640,7 @@ class TaskHandler(Generic[T]):
     def is_running(self) -> bool:
         return not self._stopped
 
-    def add_background_task(self, future: Coroutine[object, None, T], cancel_on_stop: bool = True) -> Task[T]:
+    def add_background_task(self, future: Awaitable[T], cancel_on_stop: bool = True) -> Task[T]:
         """Add a background task to the event loop. When stop is called, the task is cancelled.
 
         :param future: The future or coroutine to run as background task.
@@ -839,12 +839,41 @@ def ensure_event_loop() -> asyncio.AbstractEventLoop:
     """
     try:
         # nothing needs to be done if this thread already has an event loop
+        # known issue: asyncio offers no way to get the active event loop if it's not running. So we may be too eager
+        #   in creating a new one.
         return asyncio.get_running_loop()
     except RuntimeError:
         # asyncio.set_event_loop sets the event loop for this thread only
         new_loop = asyncio.new_event_loop()
         asyncio.set_event_loop(new_loop)
         return new_loop
+
+
+def wait_sync[T](
+    awaitable: Awaitable[T] | asyncio.Future[T],
+    *,
+    timeout: int = 120,
+    ioloop: Optional[asyncio.AbstractEventLoop] = None,
+) -> T:
+    """
+    Blocks on an async awaitable from a syncronous context. Must not be called from an async context.
+
+    Must not be called from handlers, see Handler.run_sync for that.
+
+    :param ioloop: await on an existing io loop, on another thread. Otherwise an io loop is started on the current thread.
+    """
+    with_timeout: types.AsyncioCoroutine[T] = asyncio.wait_for(awaitable, timeout)
+    if ioloop is not None:
+        # run it on the given loop
+        return asyncio.run_coroutine_threadsafe(with_timeout, ioloop).result()
+    # no running loop given: create a loop for this thread if it doesn't exist already and run it
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        # no loop running for this thread. Use asyncio.run
+        return asyncio.run(with_timeout)
+    else:
+        raise Exception("wait_sync can not be called from an async context")
 
 
 class ExhaustedPoolWatcher:
@@ -998,7 +1027,7 @@ def make_attribute_hash(resource_id: "ResourceId", attributes: Mapping[str, obje
     from inmanta.protocol.common import custom_json_encoder
 
     character = json.dumps(
-        {k: v for k, v in attributes.items() if k not in ["requires", "provides", "version"]},
+        {k: v for k, v in attributes.items() if k not in ["id", "requires", "provides", "version"]},
         default=custom_json_encoder,
         sort_keys=True,  # sort the keys for stable hashes when using dicts, see #5306
     )
@@ -1006,3 +1035,28 @@ def make_attribute_hash(resource_id: "ResourceId", attributes: Mapping[str, obje
     m.update(resource_id.encode("utf-8"))
     m.update(character.encode("utf-8"))
     return m.hexdigest()
+
+
+def get_pkg_name_and_version(path_distribution_pkg: str) -> tuple[str, str]:
+    """
+    Returns a tuple that holds the name and version number of the given
+    distribution package. This method is compatible with both wheels and sdist packages.
+
+    Sdist file format: `{name}-{version}.tar.gz`
+    Wheel file format: `{distribution}-{version}(-{build tag})?-{python tag}-{abi tag}-{platform tag}.whl`
+    """
+    filename = os.path.basename(path_distribution_pkg)
+    if filename.endswith(".tar.gz"):
+        filename = filename.removesuffix(".tar.gz")
+    pkg_name, version = filename.split("-")[0:2]
+    normalized_pkg_name = parse_requirement(pkg_name.removeprefix("inmanta-module-")).name
+    return normalized_pkg_name, version
+
+
+def get_module_name(path_distribution_pkg: str) -> str:
+    """
+    Returns the name of the Inmanta module that belongs to the given python package.
+    """
+    filename = os.path.basename(path_distribution_pkg)
+    pkg_name: str = filename.split("-", maxsplit=1)[0]
+    return pkg_name.removeprefix("inmanta_module_")

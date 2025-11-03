@@ -1,0 +1,6 @@
+description: It is no longer mandatory to backslash escape dots in the identifier when accessing a dict_path list element.
+issue-nr: 8878
+change-type: minor
+destination-branches: [master, iso8]
+sections:
+  minor-improvement: "{{description}}"

@@ -26,17 +26,17 @@ import logging
 import typing
 import uuid
 from abc import abstractmethod
-from collections.abc import Collection, Mapping, Sequence, Set
+from collections.abc import Mapping, Sequence, Set
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional, Self
+from typing import ClassVar, Optional, Self
 
 import asyncpg
 
-from inmanta import const, data
+from inmanta import const, data, types
 from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
-from inmanta.data import ConfigurationModel, Environment
+from inmanta.data import Environment
 from inmanta.data.model import Discrepancy, SchedulerStatusReport
 from inmanta.deploy import timers, work
 from inmanta.deploy.persistence import ToDbUpdateManager
@@ -46,6 +46,7 @@ from inmanta.deploy.work import TaskPriority
 from inmanta.protocol import Client
 from inmanta.resources import Id
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
+from inmanta.vendor import pyformance
 
 LOGGER = logging.getLogger(__name__)
 NB_ITERATIONS_PASS_IO_LOOP: int = 100
@@ -81,7 +82,7 @@ class DeployIntent(ResourceVersionIntent):
     deploy_start: datetime.datetime
 
 
-class ResourceIntentChange(Enum):
+class ResourceIntentChangeType(Enum):
     """
     A state change for a single resource's intent. Represents in which way, if any, a resource changed in a new model version
     versus the currently managed one.
@@ -107,6 +108,28 @@ class ResourceIntentChange(Enum):
     """
 
 
+class _ResourceIntentChange(abc.ABC):
+    change: ClassVar[ResourceIntentChangeType]
+
+
+class New(_ResourceIntentChange):
+    change = ResourceIntentChangeType.NEW
+
+
+class Updated(_ResourceIntentChange):
+    change = ResourceIntentChangeType.UPDATED
+
+
+@dataclass(frozen=True, kw_only=True)
+class Deleted(_ResourceIntentChange):
+    change: ClassVar[ResourceIntentChangeType] = ResourceIntentChangeType.DELETED
+
+    last_seen_version: int
+
+
+type ResourceIntentChange = New | Updated | Deleted
+
+
 class ResourceRecord(typing.TypedDict):
     """
     A dict representing a resource database record with all fields relevant for the scheduler.
@@ -124,32 +147,60 @@ class ResourceRecord(typing.TypedDict):
 class ModelVersion:
     """
     A version of the model to be managed by the scheduler.
+
+    If partial is True, contains only those resources that changed since the previous version. Deleted resource sets are
+    modelled as empty sets.
+
+    :param version: The version of the model
+    :param resources: Intent of all resources in this model. Scoped to the resources from `resource_sets` for a partial model.
+    :param resource_sets: All resource sets (in the model, or the diff with the previous version for a partial model), with the
+        resources that belong to them.
+    :param requires: The requires relation of all resources. Resources without requires may be absent.
+    :param undefined: Set of all resources that are undefined.
+    :param partial: Whether this is a full or partial model version. Partial model versions only contain the resource sets that
+        were changed (including new or deleted) since the previous version. For each of those resource sets, they contain all
+        its resources.
     """
 
     version: int
     resources: Mapping[ResourceIdStr, ResourceIntent]
+    resource_sets: Mapping[Optional[str], Set[ResourceIdStr]]
     requires: Mapping[ResourceIdStr, Set[ResourceIdStr]]
     undefined: Set[ResourceIdStr]
+    partial: bool
 
     @classmethod
-    def from_db_records(cls: type[Self], version: int, resources: Collection[ResourceRecord]) -> Self:
-        return cls(
-            version=version,
-            resources={
-                ResourceIdStr(resource["resource_id"]): ResourceIntent(
-                    resource_id=ResourceIdStr(resource["resource_id"]),
+    def from_db_records(
+        cls: type[Self],
+        version: int,
+        resource_sets: Mapping[Optional[str], Sequence[ResourceRecord]],
+        *,
+        partial: bool,
+    ) -> Self:
+        resources: dict[ResourceIdStr, ResourceIntent] = {}
+        sets: dict[Optional[str], set[ResourceIdStr]] = {}
+        requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
+        undefined: set[ResourceIdStr] = set()
+        for resource_set, set_resources in resource_sets.items():
+            sets[resource_set] = set()
+            for resource in set_resources:
+                resource_id = ResourceIdStr(resource["resource_id"])
+                sets[resource_set].add(resource_id)
+                resources[resource_id] = ResourceIntent(
+                    resource_id=resource_id,
                     attribute_hash=resource["attribute_hash"],
                     attributes=resource["attributes"],
                 )
-                for resource in resources
-            },
-            requires={
-                ResourceIdStr(resource["resource_id"]): {
-                    Id.parse_id(req).resource_str() for req in resource["attributes"].get("requires", [])
-                }
-                for resource in resources
-            },
-            undefined={ResourceIdStr(resource["resource_id"]) for resource in resources if resource["is_undefined"]},
+                requires[resource_id] = {Id.parse_id(req).resource_str() for req in resource["attributes"].get("requires", [])}
+                if resource["is_undefined"]:
+                    undefined.add(resource_id)
+        return cls(
+            version=version,
+            resources=resources,
+            resource_sets=sets,
+            requires=requires,
+            undefined=undefined,
+            partial=partial,
         )
 
 
@@ -224,12 +275,14 @@ class TaskRunner:
         self._scheduler = scheduler
         self._task: typing.Optional[asyncio.Task[None]] = None
         self._notify_tasks: dict[uuid.UUID, asyncio.Task[None]] = {}
+        # Lock to prevent race conditions on the running state of this TaskRunner
+        self._notify_lock = asyncio.Lock()
 
     async def start(self) -> None:
-        self.status = AgentStatus.STARTED
         assert (
             self._task is None or self._task.done()
         ), f"Task Runner {self.endpoint} is trying to start twice, this should not happen"
+        self.status = AgentStatus.STARTED
         self._task = asyncio.create_task(self._run())
 
     async def stop(self) -> None:
@@ -254,20 +307,23 @@ class TaskRunner:
         :param task_id: Is not None if this task was started using the `notify_sync()` method. It's used to clean up the
                         reference to the associated asyncio.Task object in `self._notify_tasks`. This value is None otherwise.
         """
-        should_be_running = await self._scheduler.should_be_running() and await self._scheduler.should_runner_be_running(
-            endpoint=self.endpoint
-        )
+        try:
+            async with self._notify_lock:
+                should_be_running = (
+                    await self._scheduler.should_be_running()
+                    and await self._scheduler.should_runner_be_running(endpoint=self.endpoint)
+                )
 
-        match self.status:
-            case AgentStatus.STARTED if not should_be_running:
-                await self.stop()
-            case AgentStatus.STOPPED if should_be_running:
-                await self.start()
-            case AgentStatus.STOPPING if should_be_running:
-                self.status = AgentStatus.STARTED
-
-        if task_id:
-            del self._notify_tasks[task_id]
+                match self.status:
+                    case AgentStatus.STARTED if not should_be_running:
+                        await self.stop()
+                    case AgentStatus.STOPPED if should_be_running:
+                        await self.start()
+                    case AgentStatus.STOPPING if should_be_running:
+                        self.status = AgentStatus.STARTED
+        finally:
+            if task_id:
+                del self._notify_tasks[task_id]
 
     def notify_sync(self) -> None:
         """
@@ -289,7 +345,6 @@ class TaskRunner:
                 LOGGER.exception(
                     "Task %s for agent %s has failed and the exception was not properly handled", work_item.task, self.endpoint
                 )
-
             self._scheduler._work.agent_queues.task_done(self.endpoint, work_item.task)
 
         self.status = AgentStatus.STOPPED
@@ -357,6 +412,8 @@ class ResourceScheduler(TaskManager):
 
         self._timer_manager = timers.TimerManager(self)
 
+        self._deployment_suspended: bool = False
+
     async def _reset(self) -> None:
         """
         Clear out all state and start empty
@@ -381,6 +438,7 @@ class ResourceScheduler(TaskManager):
     async def start(self) -> None:
         if self._running:
             return
+        LOGGER.debug("Starting resource scheduler for environment %s", str(self.environment))
         await self._reset()
         await self.reset_resource_state()
 
@@ -458,30 +516,6 @@ class ResourceScheduler(TaskManager):
             reset_deploy_progress: bool = typing.cast(
                 bool, await environment.get(data.RESET_DEPLOY_PROGRESS_ON_START, connection=con)
             )
-            if reset_deploy_progress:
-                await data.Scheduler._execute_query(
-                    f"""
-                    WITH latest_released_version AS (
-                        SELECT MAX(version) AS version
-                        FROM public.configurationmodel
-                        WHERE released IS TRUE
-                          AND environment=$1
-                    )
-                    UPDATE {data.ResourcePersistentState.table_name()} AS rps
-                    SET is_orphan=NOT EXISTS (
-                        SELECT 1
-                        FROM resource r
-                        JOIN latest_released_version lrv
-                          ON r.model=lrv.version
-                        WHERE r.resource_id=rps.resource_id
-                          AND r.environment=rps.environment
-                    )
-                    WHERE rps.environment=$1;
-
-                    """,
-                    self.environment,
-                    connection=con,
-                )
 
             # Check if we can restore the scheduler state from a previous run
             restored_state: Optional[ModelState] = (
@@ -489,6 +523,7 @@ class ResourceScheduler(TaskManager):
             )
 
             if restored_state is not None:
+                LOGGER.debug("Scheduler initialization: restoring internal state")
                 # Restore scheduler state like it was before the scheduler went down
                 self._state = restored_state
                 self._work = work.ScheduledWork(
@@ -499,18 +534,22 @@ class ResourceScheduler(TaskManager):
             initialized_version: int = self._state.version
             # Set running flag because we're ready to start accepting tasks.
             # Set before scheduling first tasks because many methods (e.g. read_version) skip silently when not running
+            LOGGER.debug("Scheduler initialization: resuming deploy operations and reading latest model version")
             self._running = True
-            # All resources get a timer
             await self.read_version(connection=con)
+            # All resources get a timer
             async with self._scheduler_lock:
+                LOGGER.debug("Scheduler initialization: setting up initial deploy timers")
                 self._timer_manager.update_timers(self._state.intent.keys() - self._state.dirty)
 
             if self._state.version == initialized_version:
                 # no new version was present. Simply trigger a deploy for everything that's not in a known good state
+                LOGGER.debug("Scheduler initialization: triggering deploy")
                 await self.deploy(
-                    reason="Deploy was triggered because the resource scheduler was started",
+                    reason="the resource scheduler was started",
                     priority=TaskPriority.INTERVAL_DEPLOY,
                 )
+            LOGGER.debug("Scheduler initialization: finished initialization, scheduler is fully up and running")
 
     async def deploy(
         self,
@@ -525,11 +564,16 @@ class ResourceScheduler(TaskManager):
         :param agent: If given, deploy resources only for this agent. Otherwise deploy for all agents.
         """
         if not self._running:
+            LOGGER.debug("Ignoring deploy request for halted resource scheduler")
             return
         async with self._scheduler_lock:
             to_deploy: Set[ResourceIdStr] = (
                 self._state.dirty if agent is None else self._state.dirty & self._state.resources_by_agent.get(agent, set())
             )
+            if agent is not None:
+                LOGGER.debug("Triggering deploy for %d resources on agent %s because %s", len(to_deploy), agent, reason)
+            else:
+                LOGGER.debug("Triggering deploy for %d resources because %s", len(to_deploy), reason)
             self._timer_manager.stop_timers(to_deploy)
             self._work.deploy_with_context(to_deploy, reason=reason, priority=priority, deploying=self._deploying_latest)
 
@@ -556,6 +600,7 @@ class ResourceScheduler(TaskManager):
             return True
 
         if not self._running:
+            LOGGER.debug("Ignoring repair request for halted resource scheduler")
             return
         async with self._scheduler_lock:
             in_scope: Set[ResourceIdStr] = (
@@ -563,16 +608,22 @@ class ResourceScheduler(TaskManager):
             )
 
             to_deploy: Set[ResourceIdStr] = {resource for resource in in_scope if should_deploy_resource(resource)}
+            if agent is not None:
+                LOGGER.debug("Triggering deploy for %d resources on agent %s because %s", len(to_deploy), agent, reason)
+            else:
+                LOGGER.debug("Triggering deploy for %d resources because %s", len(to_deploy), reason)
             self._state.dirty.update(to_deploy)
             self._timer_manager.stop_timers(to_deploy)
             self._work.deploy_with_context(to_deploy, reason=reason, priority=priority, deploying=self._deploying_latest)
 
     async def dryrun(self, dry_run_id: uuid.UUID, version: int) -> None:
         if not self._running:
+            LOGGER.debug("Ignoring dry-run request for halted resource scheduler")
             return
 
         paused_agents = await self.all_paused_agents()
 
+        LOGGER.debug("Triggering dry-run %s for version %d", str(dry_run_id), version)
         model: ModelVersion = await self._get_single_model_version_from_db(version=version)
         for resource, resource_intent in model.resources.items():
             if resource in model.undefined:
@@ -596,10 +647,10 @@ class ResourceScheduler(TaskManager):
                 priority=TaskPriority.DRYRUN,
             )
 
-    async def get_facts(self, resource: dict[str, object]) -> None:
+    async def get_facts(self, resource_id: Id) -> None:
         if not self._running:
             return
-        rid = Id.parse_id(resource["id"]).resource_str()
+        rid = resource_id.resource_str()
         self._work.agent_queues.queue_put_nowait(
             RefreshFact(resource=rid),
             priority=TaskPriority.FACT_REFRESH,
@@ -641,24 +692,75 @@ class ResourceScheduler(TaskManager):
         Raises KeyError if no specific version has been provided and no released versions exist.
         """
         async with self.state_update_manager.get_connection(connection) as con:
-            if version is None:
-                # Fetch the latest released model version
-                cm_version = await ConfigurationModel.get_latest_version(self.environment, connection=con)
-                if cm_version is None:
-                    raise KeyError()
-                version = cm_version.version
-
-            resources_from_db = await data.Resource.get_resources_for_version_raw(
-                environment=self.environment,
-                version=version,
-                projection=ResourceRecord.__required_keys__,
-                connection=con,
+            model: Optional[tuple[int, types.ResourceSets[dict[str, object]]]] = (
+                await data.Resource.get_resources_for_version_raw(
+                    self.environment,
+                    version=version,
+                    projection=ResourceRecord.__required_keys__,
+                    connection=con,
+                )
             )
+            if model is None:
+                raise KeyError()
 
+            # Can not be typed properly due to limitations of TypedDict, but we know we requested ResourceRecord's keys
+            resource_sets = typing.cast(types.ResourceSets[ResourceRecord], model[1])
             return ModelVersion.from_db_records(
-                version,
-                resources_from_db,  # type: ignore
+                version=model[0],
+                resource_sets=resource_sets,
+                partial=False,
             )
+
+    async def _get_partial_model_versions_from_db(self, *, connection: asyncpg.connection.Connection) -> list[ModelVersion]:
+        """
+        Returns a list of partial model versions from the database, relative to the currently active version. If no version
+        is active yet, returns a single full version (the latest released one) instead.
+
+        Must be called under intent lock.
+        """
+        if self._state.version > 0:
+            resources_by_version: Sequence[tuple[int, types.ResourceSets[dict[str, object]]]]
+            try:
+                # read new versions as partial updates
+                resources_by_version = await data.Resource.get_partial_resources_since_version_raw(
+                    self.environment,
+                    since=self._state.version,
+                    projection=ResourceRecord.__required_keys__,
+                    connection=connection,
+                )
+            except data.PartialBaseMissing:
+                # should not happen, but be defensive: fall back to reading full version
+                LOGGER.warning(
+                    "The currently active version (%s) no longer exists in the database. Resource scheduler will fall back"
+                    " to reading the latest version from the database in full. This should really never happen, please"
+                    " report this bug.",
+                    self._state.version,
+                )
+            else:
+                LOGGER.debug(
+                    "Read %d model versions newer than the currently managed version %d",
+                    len(resources_by_version),
+                    self._state.version,
+                )
+                return [
+                    ModelVersion.from_db_records(
+                        version,
+                        # Can not be typed properly due to limitations of TypedDict,
+                        # but we know we requested ResourceRecord's keys
+                        typing.cast(types.ResourceSets[ResourceRecord], resources),
+                        partial=True,
+                    )
+                    for version, resources in resources_by_version
+                ]
+
+        # no existing state => read a full version
+        try:
+            latest_version: ModelVersion = await self._get_single_model_version_from_db(version=None, connection=connection)
+            LOGGER.debug("Read latest model version %d", latest_version.version)
+        except KeyError:
+            return []
+        else:
+            return [latest_version]
 
     async def read_version(
         self,
@@ -675,34 +777,21 @@ class ResourceScheduler(TaskManager):
         :param connection: Connection to use for db operations. Should not be in a transaction context.
         """
         if not self._running:
+            LOGGER.debug("Ignoring request to read latest version for halted resource scheduler")
             return
-        async with self._intent_lock, self.state_update_manager.get_connection(connection) as con:
-            # Note: we're not very sensitive to races on the latest released version here. The server will always notify us
-            # *after* a new version is released. So we'll always be in one of two scenearios:
-            # - the latest released version was released before we started processing this notification
-            # - a new version was released after we started processing this communication or is being released now, in which
-            #   case a new notification will be / have been sent and blocked on the intent locked until we're done here.
-            # So if we end up with a race, we can be confident that we'll always process the associated notification soon.
-            resources_by_version: Sequence[tuple[int, Sequence[Mapping[str, object]]]] = (
-                await data.Resource.get_resources_since_version_raw(
-                    self.environment,
-                    since=self._state.version if self._state.version > 0 else None,
+        with pyformance.timer("internal.scheduler.read_version").time():
+            async with self._intent_lock, self.state_update_manager.get_connection(connection) as con:
+                # Note: we're not very sensitive to races on the latest released version here. The server will always notify us
+                # *after* a new version is released. So we'll always be in one of two scenearios:
+                # - the latest released version was released before we started processing this notification
+                # - a new version was released after we started processing this communication or is being released now, in which
+                #   case a new notification will be / have been sent and blocked on the intent locked until we're done here.
+                # So if we end up with a race, we can be confident that we'll always process the associated notification soon.
+                await self._new_version(
+                    await self._get_partial_model_versions_from_db(connection=con),
+                    reason="a new version was released",
                     connection=con,
                 )
-            )
-            new_versions: Sequence[ModelVersion] = [
-                ModelVersion.from_db_records(
-                    version,
-                    resources,  # type: ignore
-                )
-                for version, resources in resources_by_version
-            ]
-
-            await self._new_version(
-                new_versions,
-                reason="Deploy was triggered because a new version has been released",
-                connection=con,
-            )
 
     async def _get_intent_changes(
         self,
@@ -716,7 +805,8 @@ class ResourceScheduler(TaskManager):
         Returns a tuple of
         - the resulting model version after processing all versions.
         - a mapping of resources to their change of intent, after processing all versions in sequence. Only contains resources
-            with a change of intent.
+            with a change of intent. May include resources with DELETED change of intent even if they aren't part of the current
+            state.
 
         :param new_versions: The new versions to process, in ascending order.
         :param up_to_date_resources: A set of resources that are considered up to date and in a known good state, regardless
@@ -727,27 +817,61 @@ class ResourceScheduler(TaskManager):
         if not new_versions:
             raise ValueError("Expected at least one new model version")
 
+        LOGGER.debug("Consolidating changes from %d new versions", len(new_versions))
+
+        # Sequentially apply versions in new_versions and build up a view on the model state.
+        #
+        # partial == True iff this view is a partial view on the intent, i.e. relative to the current state's intent,
+        # in the sense that it only contains the diff. False if it represents all intent.
+        # Concretely, will be False once (if) we process a non-partial version from new_versions.
+        partial: bool = True
+        # Each variable below keeps track of what has been modified so far.
         version: int
         intent: dict[ResourceIdStr, ResourceIntent] = {}
+        resource_sets: dict[Optional[str], Set[ResourceIdStr]] = {}  # deleted sets are represented by an empty set
         resource_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
         # keep track of all new resource intent and all changes of intent relative to the currently managed version
         intent_changes: dict[ResourceIdStr, ResourceIntentChange] = {}
         # all undefined resources in the new model versions. Newer version information overrides older ones.
         undefined: set[ResourceIdStr] = set()
 
+        previous_version: int = self._state.version
         for model in new_versions:
             version = model.version
-            # resources that don't exist anymore in this version
-            for resource in (self._state.intent.keys() | intent.keys()) - model.resources.keys():
+
+            # Update resource sets and check for deleted resources.
+
+            # known resources that are in scope for this model version update, i.e. resources in exported sets
+            known_resources: Set[ResourceIdStr]
+            if model.partial:
+                known_resources = set().union(
+                    *(
+                        # get resources in set from tracked resource set, falling back to state's resource set if appropriate
+                        resource_sets.get(
+                            resource_set, self._state.resource_sets.get(resource_set, set()) if partial else set()
+                        )
+                        for resource_set in model.resource_sets.keys()
+                    )
+                )
+                # Update resource sets mapping. Do not drop empty / deleted resource sets yet, because that would remove
+                # them from the partial view. We need to keep track of them so that the final resulting model version
+                # has them as empty sets in its diff. Only then can they be cleaned up from the scheduler's model state.
+                resource_sets.update(model.resource_sets)
+            else:
+                # unless we read a full version in a previous iteration, `intent` represents partial intent,
+                # i.e. an overlay on top of the state's intent
+                known_resources = intent.keys() | (self._state.intent.keys() if partial else set())
+                # from now on we track all resource sets
+                partial = False
+                resource_sets = dict(model.resource_sets)
+
+            for resource in known_resources - model.resources.keys():
                 with contextlib.suppress(KeyError):
                     del intent[resource]
                     del resource_requires[resource]
+                if resource not in intent_changes or intent_changes[resource].change is not ResourceIntentChangeType.DELETED:
+                    intent_changes[resource] = Deleted(last_seen_version=previous_version)
                 undefined.discard(resource)
-                if resource in self._state.intent:
-                    intent_changes[resource] = ResourceIntentChange.DELETED
-                else:
-                    with contextlib.suppress(KeyError):
-                        del intent_changes[resource]
 
             i: int = 0
             for resource, resource_intent in model.resources.items():
@@ -774,12 +898,15 @@ class ResourceScheduler(TaskManager):
                     resource not in self._state.intent.keys()
                     # deleted in a previously processed version and reappeared now
                     # => consider as a new resource rather than an update
-                    or intent_changes.get(resource) in (ResourceIntentChange.DELETED, ResourceIntentChange.NEW)
+                    or (
+                        resource in intent_changes
+                        and intent_changes[resource].change in (ResourceIntentChangeType.DELETED, ResourceIntentChangeType.NEW)
+                    )
                 ):
-                    intent_changes[resource] = ResourceIntentChange.NEW
+                    intent_changes[resource] = New()
                 # resources we already manage
                 elif resource_intent.attribute_hash != self._state.intent[resource].attribute_hash:
-                    intent_changes[resource] = ResourceIntentChange.UPDATED
+                    intent_changes[resource] = Updated()
                 # no change of intent for this resource, unless defined status changed
 
                 # determine new defined status
@@ -794,14 +921,18 @@ class ResourceScheduler(TaskManager):
                     self._state.resource_state[resource].compliance is Compliance.UNDEFINED
                 ):
                     # resource's defined status changed
-                    intent_changes[resource] = ResourceIntentChange.UPDATED
+                    intent_changes[resource] = Updated()
+
+            previous_version = version
 
         return (
             ModelVersion(
                 version=version,
                 resources=intent,
+                resource_sets=resource_sets,
                 requires=resource_requires,
                 undefined=undefined,
+                partial=partial,
             ),
             intent_changes,
         )
@@ -812,7 +943,7 @@ class ResourceScheduler(TaskManager):
         *,
         up_to_date_resources: Optional[Set[ResourceIdStr]] = None,
         last_deploy_time: Mapping[ResourceIdStr, datetime.datetime] | None = None,
-        reason: str = "Deploy was triggered because a new version has been released",
+        reason: str = "a new version was released",
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> None:
         """
@@ -823,7 +954,8 @@ class ResourceScheduler(TaskManager):
 
         :param up_to_date_resources: Set of resources that are to be considered in an assumed good state due to a previously
             successful deploy for the same intent. Should not include any blocked resources. Mostly intended for the very first
-            version when the scheduler is started with a fresh state.
+            version when the scheduler is started with a fresh state. Must be present in the latest version in the
+            new versions list.
         :param last_deploy_time: last known deploy time of all resources. only intended for the very first
             version when the scheduler is started with a fresh state.
             It must contain ALL resources as it is used to start the timers
@@ -837,6 +969,9 @@ class ResourceScheduler(TaskManager):
             return
         if connection is not None and connection.is_in_transaction():
             raise ValueError("_new_version() expects its connection to not be in a transaction context")
+
+        first_version: bool = self._state.version == 0
+
         up_to_date_resources = set() if up_to_date_resources is None else up_to_date_resources
         last_deploy_time = {} if last_deploy_time is None else last_deploy_time
 
@@ -844,6 +979,17 @@ class ResourceScheduler(TaskManager):
         model: ModelVersion
         intent_changes: Mapping[ResourceIdStr, ResourceIntentChange]
         model, intent_changes = await self._get_intent_changes(new_versions, up_to_date_resources=up_to_date_resources)
+
+        LOGGER.debug(
+            (
+                "Processing intent changes for %d resources between currently managed model version %d"
+                " and new model version %d, because %s"
+            ),
+            len(intent_changes),
+            self._state.version,
+            model.version,
+            reason,
+        )
 
         # Track potential changes in requires per resource
         added_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}  # includes new resources if they have at least one req
@@ -865,7 +1011,7 @@ class ResourceScheduler(TaskManager):
             i += 1
 
         # convert intent changes to sets for bulk processing
-        deleted: set[ResourceIdStr] = set()
+        deleted: dict[ResourceIdStr, Deleted] = {}
         new: set[ResourceIdStr] = set()
         updated: set[ResourceIdStr] = set()
         # resources that were previously undefined but not anymore, including those considered new if they match this property
@@ -881,12 +1027,12 @@ class ResourceScheduler(TaskManager):
             i += 1
 
             match change:
-                case ResourceIntentChange.DELETED:
-                    deleted.add(resource)
+                case Deleted():
+                    deleted[resource] = change
                     continue
-                case ResourceIntentChange.NEW:
+                case New():
                     new.add(resource)
-                case ResourceIntentChange.UPDATED:
+                case Updated():
                     updated.add(resource)
                 case _ as _never:
                     typing.assert_never(_never)
@@ -915,7 +1061,7 @@ class ResourceScheduler(TaskManager):
         force_new: Set[ResourceIdStr] = self._state.intent.keys() & new
 
         # assert invariants of the constructed sets
-        assert len(intent_changes) == len(deleted | new | updated) == len(deleted) + len(new) + len(updated)
+        assert len(intent_changes) == len(deleted.keys() | new | updated) == len(deleted) + len(new) + len(updated)
         assert len(became_defined | became_undefined) == (len(became_defined) + len(became_undefined))
 
         # pass control to IO loop once more before we acquire the lock
@@ -929,8 +1075,17 @@ class ResourceScheduler(TaskManager):
         #   and has to be even apart from motivations 2-3, it may interleave with
         # 2. clarity: it clearly signifies that this is the atomic and performance-sensitive part
         async with self._scheduler_lock:
-            # update model version
+            # update model version and resource set mapping
             self._state.version = model.version
+            if model.partial:
+                for resource_set, resources in model.resource_sets.items():
+                    if resources:
+                        self._state.resource_sets[resource_set] = set(resources)
+                    else:
+                        with contextlib.suppress(KeyError):
+                            del self._state.resource_sets[resource_set]
+            else:
+                self._state.resource_sets = {name: set(s) for name, s in model.resource_sets.items()}
             # update resource intent
             for resource in up_to_date_resources:
                 # Registers resource and removes from the dirty set
@@ -941,7 +1096,7 @@ class ResourceScheduler(TaskManager):
                 # update resource state and dirty set
                 self._state.update_resource(
                     model.resources[resource],
-                    force_new=intent_changes[resource] is ResourceIntentChange.NEW,
+                    force_new=intent_changes[resource].change is ResourceIntentChangeType.NEW,
                     undefined=resource in model.undefined,
                     last_deployed=last_deploy_time.get(resource, None),
                 )
@@ -972,7 +1127,7 @@ class ResourceScheduler(TaskManager):
                     self._state.resource_state[resource].blocked = Blocked.NOT_BLOCKED
 
             # Update set of in-progress deploys that became unmanaged
-            self._deploying_unmanaged.update(self._deploying_latest & (new | deleted))
+            self._deploying_unmanaged.update(self._deploying_latest & (new | deleted.keys()))
             # Update set of in-progress non-stale deploys by trimming resources with new state
             self._deploying_latest.difference_update(intent_changes.keys(), transitive_blocked)
 
@@ -981,7 +1136,7 @@ class ResourceScheduler(TaskManager):
             #    - blocked: must not be deployed
             #    - deleted from the model
             self._timer_manager.stop_timers(self._state.dirty | became_undefined | transitive_blocked)
-            self._timer_manager.remove_timers(deleted)
+            self._timer_manager.remove_timers(deleted.keys())
             # Install timers for initial up-to-date resources. They are up-to-date now,
             # but we want to make sure we periodically repair them.
             self._timer_manager.update_timers(
@@ -998,8 +1153,9 @@ class ResourceScheduler(TaskManager):
                 dropped_requires=dropped_requires,
             )
             for resource in deleted:
-                self._state.drop(resource)  # Removes from the dirty set
-            for resource in deleted | became_undefined | transitive_blocked:
+                if resource in self._state.resource_state:
+                    self._state.drop(resource)  # Removes from the dirty set
+            for resource in deleted.keys() | became_undefined | transitive_blocked:
                 self._work.delete_resource(resource)
 
             # Updating the blocked state should be done under the scheduler lock, because this state is written
@@ -1008,6 +1164,10 @@ class ResourceScheduler(TaskManager):
                 became_undefined | transitive_blocked | transitive_unblocked
             )
 
+        LOGGER.debug(
+            "Successfully updated resource scheduler to manage model version %d. Writing intent changes to the database.",
+            model.version,
+        )
         async with self.state_update_manager.get_connection(connection=connection) as con, con.transaction():
             # Update intent for resources with new desired state
             # Safe to update outside of the lock: scheduler persisted intent is allowed to lag behind its in-memory intent
@@ -1018,16 +1178,24 @@ class ResourceScheduler(TaskManager):
                 self.environment,
                 intent={
                     rid: (self._state.resource_state[rid], self._state.intent[rid])
-                    for rid in new | updated | resources_with_updated_blocked_state
+                    for rid in (new | updated | resources_with_updated_blocked_state) - deleted.keys()
                 },
                 update_blocked_state=True,
                 connection=con,
             )
             # Mark orphaned resources
-            await self.state_update_manager.mark_as_orphan(self.environment, deleted, connection=con)
+            if first_version:
+                # We're starting fresh. Make sure to mark all orphans, because we may be skipping some unprocessed versions.
+                await self.state_update_manager.mark_all_orphans(
+                    self.environment, current_version=model.version, connection=con
+                )
+            else:
+                # We're processing versions relative to an already processed version => deleted contains all orphans.
+                await self.state_update_manager.mark_as_orphan(self.environment, deleted.keys(), connection=con)
             await self.state_update_manager.set_last_processed_model_version(
                 self.environment, self._state.version, connection=con
             )
+        LOGGER.debug("Finished writing changes for model version %d to the database", model.version)
 
     def _create_agent(self, agent: str) -> None:
         """Start processing for the given agent"""
@@ -1051,6 +1219,8 @@ class ResourceScheduler(TaskManager):
         :param endpoint: The name of the agent
         """
         await data.Agent.insert_if_not_exist(environment=self.environment, endpoint=endpoint)
+        if self._deployment_suspended:
+            return False
         current_agent = await data.Agent.get(env=self.environment, endpoint=endpoint)
         return not current_agent.paused
 
@@ -1089,10 +1259,12 @@ class ResourceScheduler(TaskManager):
 
     def _get_resource_intent(self, resource: ResourceIdStr) -> Optional[ResourceIntent]:
         """
-        Get intent of a given resource.
+        Get intent of a given resource. Returns None for stale or blocked resources.
         Always expected to be called under lock
         """
         try:
+            if self._state.resource_state[resource].blocked is Blocked.BLOCKED:
+                return None
             return self._state.intent[resource]
         except KeyError:
             # Stale resource
@@ -1116,7 +1288,7 @@ class ResourceScheduler(TaskManager):
         async with self._scheduler_lock:
             # fetch resource intent under lock
             resource_intent = self._get_resource_intent(resource)
-            if resource_intent is None or self._state.resource_state[resource].blocked is Blocked.BLOCKED:
+            if resource_intent is None:
                 # We are trying to deploy a stale resource.
                 return None
             dependencies = await self._get_last_non_deploying_state_for_dependencies(resource=resource)
@@ -1337,9 +1509,9 @@ class ResourceScheduler(TaskManager):
             self._work.deploy_with_context(
                 all_listeners,
                 reason=(
-                    f"Deploying because a recovery event was received from {resource_id}"
+                    f"a recovery event was received from {resource_id}"
                     if recovered_from_failure
-                    else f"Deploying because an event was received from {resource_id}"
+                    else f"an event was received from {resource_id}"
                 ),
                 priority=priority,
                 deploying=self._deploying_latest,
@@ -1596,3 +1768,21 @@ class ResourceScheduler(TaskManager):
                 resource_states=resource_states_in_db,
                 discrepancies=discrepancy_map,
             )
+
+    async def suspend_deployments(self, reason: str) -> None:
+        """
+        Suspend all agent operations. All other scheduler functionality remains active.
+        """
+        LOGGER.info("Suspending all deployment operations: %s", reason)
+        self._deployment_suspended = True
+        await asyncio.gather(*[worker.stop() for worker in self._workers.values()])
+        self._work.add_poison_pill_to_agent_queues(reason=reason)
+        await asyncio.gather(*[worker.join() for worker in self._workers.values()])
+
+    async def resume_deployments(self) -> None:
+        """
+        Resume all agent operations.
+        """
+        LOGGER.info("Resuming all deployment operations.")
+        self._deployment_suspended = False
+        await self.refresh_all_agent_states_from_db()

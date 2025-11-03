@@ -1,0 +1,6 @@
+---
+description: "Increase the log level of the SQLAlchemy logs."
+issue-nr: 9509
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master]

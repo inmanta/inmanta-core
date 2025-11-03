@@ -39,6 +39,7 @@ from utils import (
     log_contains,
     resource_action_consistency_check,
     retry_limited,
+    retry_limited_assertion,
     wait_full_success,
     wait_until_deployment_finishes,
 )
@@ -624,14 +625,10 @@ async def test_deploy_with_undefined(server, client, resource_container, agent, 
     resources = await data.Resource.get_list(environment=environment)
     assert len(resources) == 4
     # Assert that we get 2 undefined resources
-    undefined_state = [res for res in resources if res.status == const.ResourceState.undefined]
-    other_state = [res for res in resources if res.status != const.ResourceState.undefined]
+    undefined_state = [res for res in resources if res.is_undefined]
+    other_state = [res for res in resources if not res.is_undefined]
     assert len(undefined_state) == 2
     assert len(other_state) == 2
-    # Assert that the undefined resources have is_undefined set to true
-    # And resources in any other state have it set to false
-    for resource in resources:
-        assert resource.is_undefined == (resource in undefined_state)
 
     # do a deploy
     result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
@@ -1223,7 +1220,11 @@ async def test_resource_status(resource_container, server, client, clienthelper,
         ]
 
     async def deploy_resources(
-        version: int, resources: list[dict[str, object]], resource_state: dict[ResourceIdStr, const.ResourceState]
+        version: int,
+        resources: list[dict[str, object]],
+        resource_state: dict[ResourceIdStr, const.ResourceState],
+        *,
+        wait_for_deploy: bool = True,
     ) -> None:
         result = await client.put_version(
             tid=env_id,
@@ -1244,7 +1245,8 @@ async def test_resource_status(resource_container, server, client, clienthelper,
         result = await client.get_version(env_id, version)
         assert result.code == 200
 
-        await wait_until_deployment_finishes(client, env_id, version=version)
+        if wait_for_deploy:
+            await wait_until_deployment_finishes(client, env_id, version=version)
 
     async def assert_states(expected_states: dict[ResourceIdStr, ReleasedResourceState]) -> None:
         # Verify behavior of resource_details() endpoint.
@@ -1384,14 +1386,17 @@ async def test_resource_status(resource_container, server, client, clienthelper,
             ResourceIdStr("test::Resource[agent1,key=key5]"): const.ResourceState.available,
         },
     )
-    await assert_states(
-        {
+    # deploy resources tends to escape from its wait, retry here.
+    await retry_limited_assertion(
+        assert_states,
+        1,
+        expected_states={
             ResourceIdStr("test::Resource[agent1,key=key1]"): ReleasedResourceState.deployed,
             ResourceIdStr("test::Resource[agent1,key=key2]"): ReleasedResourceState.deployed,
             ResourceIdStr("test::Resource[agent1,key=key3]"): ReleasedResourceState.deployed,
             ResourceIdStr("test::Resource[agent1,key=key4]"): ReleasedResourceState.undefined,
             ResourceIdStr("test::Resource[agent1,key=key5]"): ReleasedResourceState.skipped_for_undefined,
-        }
+        },
     )
     result = await data.ResourcePersistentState.get_list(environment=environment)
     result_per_resource_id = {r.resource_id: r for r in result}
@@ -1419,6 +1424,105 @@ async def test_resource_status(resource_container, server, client, clienthelper,
         last_deploy_result=DeployResult.DEPLOYED,
         blocked=Blocked.BLOCKED,
         expected_compliance=Compliance.COMPLIANT,
+    )
+
+    # Drop resource 5
+    version = await clienthelper.get_version()
+    await deploy_resources(
+        version=version,
+        resources=get_resources(version)[:-1],
+        resource_state={
+            ResourceIdStr("test::Resource[agent1,key=key1]"): const.ResourceState.available,
+            ResourceIdStr("test::Resource[agent1,key=key2]"): const.ResourceState.available,
+            ResourceIdStr("test::Resource[agent1,key=key3]"): const.ResourceState.available,
+            ResourceIdStr("test::Resource[agent1,key=key4]"): const.ResourceState.available,
+        },
+    )
+    await assert_states(
+        {
+            ResourceIdStr("test::Resource[agent1,key=key1]"): ReleasedResourceState.deployed,
+            ResourceIdStr("test::Resource[agent1,key=key2]"): ReleasedResourceState.deployed,
+            ResourceIdStr("test::Resource[agent1,key=key3]"): ReleasedResourceState.deployed,
+            ResourceIdStr("test::Resource[agent1,key=key4]"): ReleasedResourceState.deployed,
+            ResourceIdStr("test::Resource[agent1,key=key5]"): ReleasedResourceState.orphaned,
+        }
+    )
+
+    # Add resource 5 again
+    version = await clienthelper.get_version()
+    await deploy_resources(
+        version=version,
+        resources=get_resources(version),
+        resource_state={
+            ResourceIdStr("test::Resource[agent1,key=key1]"): const.ResourceState.available,
+            ResourceIdStr("test::Resource[agent1,key=key2]"): const.ResourceState.available,
+            ResourceIdStr("test::Resource[agent1,key=key3]"): const.ResourceState.available,
+            ResourceIdStr("test::Resource[agent1,key=key4]"): const.ResourceState.available,
+            ResourceIdStr("test::Resource[agent1,key=key5]"): const.ResourceState.available,
+        },
+    )
+    await assert_states(
+        {
+            ResourceIdStr("test::Resource[agent1,key=key1]"): ReleasedResourceState.deployed,
+            ResourceIdStr("test::Resource[agent1,key=key2]"): ReleasedResourceState.deployed,
+            ResourceIdStr("test::Resource[agent1,key=key3]"): ReleasedResourceState.deployed,
+            ResourceIdStr("test::Resource[agent1,key=key4]"): ReleasedResourceState.deployed,
+            ResourceIdStr("test::Resource[agent1,key=key5]"): ReleasedResourceState.deployed,
+        }
+    )
+
+    # Add a never-before-seen resource, but delete it before the scheduler got the chance to start managing it
+    version = await clienthelper.get_version()
+    await agent.scheduler.stop()
+    await deploy_resources(
+        version=version,
+        resources=[
+            *get_resources(version),
+            {
+                "key": "key6",
+                "value": "value",
+                "id": f"test::Resource[agent1,key=key6],v={version}",
+                "requires": [],
+                "purged": False,
+                "send_event": False,
+                "receive_events": False,
+            },
+        ],
+        resource_state={
+            ResourceIdStr("test::Resource[agent1,key=key1]"): const.ResourceState.available,
+            ResourceIdStr("test::Resource[agent1,key=key2]"): const.ResourceState.available,
+            ResourceIdStr("test::Resource[agent1,key=key3]"): const.ResourceState.available,
+            ResourceIdStr("test::Resource[agent1,key=key4]"): const.ResourceState.available,
+            ResourceIdStr("test::Resource[agent1,key=key5]"): const.ResourceState.available,
+            ResourceIdStr("test::Resource[agent1,key=key6]"): const.ResourceState.available,
+        },
+        wait_for_deploy=False,
+    )
+    version = await clienthelper.get_version()
+    await deploy_resources(
+        version=version,
+        resources=get_resources(version),
+        resource_state={
+            ResourceIdStr("test::Resource[agent1,key=key1]"): const.ResourceState.available,
+            ResourceIdStr("test::Resource[agent1,key=key2]"): const.ResourceState.available,
+            ResourceIdStr("test::Resource[agent1,key=key3]"): const.ResourceState.available,
+            ResourceIdStr("test::Resource[agent1,key=key4]"): const.ResourceState.available,
+            ResourceIdStr("test::Resource[agent1,key=key5]"): const.ResourceState.available,
+        },
+        wait_for_deploy=False,
+    )
+    await agent.scheduler.start()
+    await wait_until_deployment_finishes(client, env_id, version=version)
+    await assert_states(
+        {
+            ResourceIdStr("test::Resource[agent1,key=key1]"): ReleasedResourceState.deployed,
+            ResourceIdStr("test::Resource[agent1,key=key2]"): ReleasedResourceState.deployed,
+            ResourceIdStr("test::Resource[agent1,key=key3]"): ReleasedResourceState.deployed,
+            ResourceIdStr("test::Resource[agent1,key=key4]"): ReleasedResourceState.deployed,
+            ResourceIdStr("test::Resource[agent1,key=key5]"): ReleasedResourceState.deployed,
+            # verify that the new resource was registered as orphan
+            ResourceIdStr("test::Resource[agent1,key=key6]"): ReleasedResourceState.orphaned,
+        }
     )
 
 

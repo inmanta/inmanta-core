@@ -1,0 +1,4 @@
+---
+description: "Fix bug where isExpertMode field of graphql endpoint always returns False."
+change-type: patch
+destination-branches: [master]

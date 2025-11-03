@@ -29,7 +29,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from functools import reduce
-from typing import Any, Optional, Union, cast
+from typing import Any, Optional, Union, assert_never, cast
 from uuid import UUID
 
 import asyncpg.connection
@@ -43,12 +43,12 @@ from inmanta import logging as inmanta_logging
 from inmanta import tracing
 from inmanta.agent import config as agent_cfg
 from inmanta.config import Config, config_map_to_str, scheduler_log_config
-from inmanta.const import AGENT_SCHEDULER_ID, UNDEPLOYABLE_NAMES, AgentAction, AgentStatus
+from inmanta.const import AGENT_SCHEDULER_ID, AgentAction, AgentStatus, AllAgentAction
 from inmanta.data import APILIMIT, Environment, InvalidSort, model
 from inmanta.data.model import DataBaseReport
 from inmanta.protocol import encode_token, handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
-from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound, ShutdownInProgress
+from inmanta.protocol.exceptions import BadRequest, Conflict, Forbidden, NotFound, ShutdownInProgress
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
     SLICE_AUTOSTARTED_AGENT_MANAGER,
@@ -290,21 +290,34 @@ class AgentManager(ServerSlice, SessionListener):
         await self._unpause_agent(env, endpoint=const.AGENT_SCHEDULER_ID, connection=connection)
 
     @handle(methods_v2.all_agents_action, env="tid")
-    async def all_agents_action(self, env: data.Environment, action: AgentAction) -> None:
-        if env.halted and action in {AgentAction.pause, AgentAction.unpause}:
+    async def all_agents_action(self, env: data.Environment, action: AllAgentAction) -> None:
+        if env.halted and action in {AllAgentAction.pause, AllAgentAction.unpause}:
             raise Forbidden("Can not pause or unpause agents when the environment has been halted.")
-        if not env.halted and action in {AgentAction.keep_paused_on_resume, AgentAction.unpause_on_resume}:
+        if not env.halted and action in {AllAgentAction.keep_paused_on_resume, AllAgentAction.unpause_on_resume}:
             raise Forbidden("Cannot set on_resume state of agents when the environment is not halted.")
-        if action is AgentAction.pause:
-            await self._pause_agent(env=env)
-        elif action is AgentAction.unpause:
-            await self._unpause_agent(env=env)
-        elif action is AgentAction.keep_paused_on_resume:
-            await self._set_unpause_on_resume(env, should_be_unpaused_on_resume=False)
-        elif action is AgentAction.unpause_on_resume:
-            await self._set_unpause_on_resume(env, should_be_unpaused_on_resume=True)
+        match action:
+            case AllAgentAction.pause:
+                await self._pause_agent(env=env)
+            case AllAgentAction.unpause:
+                await self._unpause_agent(env=env)
+            case AllAgentAction.keep_paused_on_resume:
+                await self._set_unpause_on_resume(env, should_be_unpaused_on_resume=False)
+            case AllAgentAction.unpause_on_resume:
+                await self._set_unpause_on_resume(env, should_be_unpaused_on_resume=True)
+            case AllAgentAction.remove_all_agent_venvs:
+                await self._remove_executor_venvs(env)
+            case _ as _never:
+                assert_never(_never)
+
+    async def _remove_executor_venvs(self, env: data.Environment) -> None:
+        """
+        Remove the venvs of the executors used by the given environment.
+        """
+        agent_client = self.get_agent_client(tid=env.id, endpoint=AGENT_SCHEDULER_ID, live_agent_only=False)
+        if agent_client:
+            self.add_background_task(agent_client.remove_executor_venvs())
         else:
-            raise BadRequest(f"Unknown agent action: {action.name}")
+            raise Conflict(f"No scheduler process is running for environment {env.id}")
 
     @handle(methods_v2.agent_action, env="tid")
     async def agent_action(self, env: data.Environment, name: str, action: AgentAction) -> None:
@@ -315,16 +328,17 @@ class AgentManager(ServerSlice, SessionListener):
             raise Forbidden("Can not pause or unpause agents when the environment has been halted.")
         if not env.halted and action in {AgentAction.keep_paused_on_resume, AgentAction.unpause_on_resume}:
             raise Forbidden("Cannot set on_resume state of agents when the environment is not halted.")
-        if action is AgentAction.pause:
-            await self._pause_agent(env, name)
-        elif action is AgentAction.unpause:
-            await self._unpause_agent(env, name)
-        elif action is AgentAction.keep_paused_on_resume:
-            await self._set_unpause_on_resume(env, should_be_unpaused_on_resume=False, endpoint=name)
-        elif action is AgentAction.unpause_on_resume:
-            await self._set_unpause_on_resume(env, should_be_unpaused_on_resume=True, endpoint=name)
-        else:
-            raise BadRequest(f"Unknown agent action: {action.name}")
+        match action:
+            case AgentAction.pause:
+                await self._pause_agent(env, name)
+            case AgentAction.unpause:
+                await self._unpause_agent(env, name)
+            case AgentAction.keep_paused_on_resume:
+                await self._set_unpause_on_resume(env, should_be_unpaused_on_resume=False, endpoint=name)
+            case AgentAction.unpause_on_resume:
+                await self._set_unpause_on_resume(env, should_be_unpaused_on_resume=True, endpoint=name)
+            case _ as _never:
+                assert_never(_never)
 
     async def _update_paused_status_agent(
         self,
@@ -915,19 +929,6 @@ class AgentManager(ServerSlice, SessionListener):
             if env is None:
                 raise NotFound(f"Environment with {env_id} does not exist.")
 
-            # get a resource version
-            res = await data.Resource.get_latest_version(env_id, resource_id)
-
-            if res is None:
-                return 404, {"message": "The resource has no recent version."}
-
-            if res.status in UNDEPLOYABLE_NAMES:
-                LOGGER.debug(
-                    "Ignore fact request for %s, resource is in an undeployable state.",
-                    resource_id,
-                )
-                return 503, {"message": "The resource is in an undeployable state."}
-
             # only request facts of a resource every _fact_resource_block time
             now = time.time()
             if (
@@ -938,7 +939,7 @@ class AgentManager(ServerSlice, SessionListener):
                 agent = const.AGENT_SCHEDULER_ID
                 client = self.get_agent_client(env_id, agent)
                 if client is not None:
-                    await client.get_parameter(str(env_id), agent, res.to_dict())
+                    await client.get_parameter(env_id, agent, resource_id)
 
                 self._fact_resource_block_set[resource_id] = now
 
@@ -1287,19 +1288,12 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
 
         privatestatedir: str = self._get_state_dir_for_agent_in_env(env.id)
 
-        agent_deploy_interval: str = cast(str, await env.get(data.AUTOSTART_AGENT_DEPLOY_INTERVAL, connection=connection))
-
-        agent_repair_interval: str = cast(str, await env.get(data.AUTOSTART_AGENT_REPAIR_INTERVAL, connection=connection))
-
         # generate config file
         config = f"""[config]
 state-dir=%(statedir)s
 log-dir={global_config.log_dir.get()}
 
 environment=%(env_id)s
-
-agent-deploy-interval=%(agent_deploy_interval)s
-agent-repair-interval=%(agent_repair_interval)s
 
 [agent]
 executor-cap={agent_cfg.agent_executor_cap.get()}
@@ -1312,8 +1306,6 @@ host=localhost
             "env_id": environment_id,
             "port": port,
             "statedir": privatestatedir,
-            "agent_deploy_interval": agent_deploy_interval,
-            "agent_repair_interval": agent_repair_interval,
         }
 
         if server_config.server_enable_auth.get():

@@ -23,8 +23,8 @@ import uuid
 import pytest
 
 from inmanta import data
-from inmanta.const import ResourceState
 from inmanta.types import ResourceVersionIdStr
+from utils import insert_with_link_to_configuration_model
 
 
 @pytest.fixture
@@ -50,15 +50,17 @@ async def create_resource_in_multiple_versions(
     version_attributes_map: dict[int, dict[str, object]],
     agent: str = "internal",
     resource_type: str = "std::testing::NullResource",
-    status: ResourceState = ResourceState.deployed,
 ):
     key = f"{resource_type}[{agent},name={name}]"
+
     for version, attributes in version_attributes_map.items():
+        resource_set = data.ResourceSet(environment=environment, id=uuid.uuid4())
+        await insert_with_link_to_configuration_model(resource_set, versions=[version])
         res = data.Resource.new(
             environment=environment,
             resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),
             attributes={**attributes, **{"name": name}},
-            status=status,
+            resource_set=resource_set,
         )
         await res.insert()
 

@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump strawberry-sqlalchemy-mapper from 0.6.3 to 0.6.4
+destination-branches:
+- master
+sections: {}

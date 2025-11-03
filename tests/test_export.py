@@ -19,13 +19,14 @@ Contact: code@inmanta.com
 import json
 import logging
 import os
+import uuid
 from collections.abc import Mapping
 from typing import Optional
 
 import pytest
 
-import inmanta.resources
-from inmanta import config, const, module
+from inmanta import config, const, module, util
+from inmanta.agent.code_manager import CodeManager
 from inmanta.ast import CompilerException, ExternalException, RuntimeException
 from inmanta.const import ResourceState
 from inmanta.data import Environment, Resource
@@ -33,7 +34,8 @@ from inmanta.export import DependencyCycleException
 from inmanta.module import InmantaModuleRequirement
 from inmanta.server import SLICE_RESOURCE
 from inmanta.server.server import Server
-from utils import LogSequence
+from packaging.version import Version
+from utils import LogSequence, PipIndex, create_python_package
 
 
 async def assert_resource_set_assignment(environment, assignment: dict[str, Optional[str]]) -> None:
@@ -44,7 +46,7 @@ async def assert_resource_set_assignment(environment, assignment: dict[str, Opti
     :param assignment: Map the value of name attribute of resource Res to the resource set that resource is expected to
                        belong to.
     """
-    resources = await Resource.get_resources_in_latest_version(environment=environment)
+    resources = await Resource.get_resources_in_latest_version_as_dto(environment=environment)
     assert len(resources) == len(assignment)
     actual_assignment = {r.attributes["key"]: r.resource_set for r in resources}
     assert actual_assignment == assignment
@@ -295,20 +297,15 @@ async def test_server_export(snippetcompiler, server: Server, client, environmen
     assert len(result.result["versions"]) == 1
     assert result.result["versions"][0]["total"] == 1
 
-    version = result.result["versions"][0]["version"]
     result = await client.get_version(tid=environment, id=result.result["versions"][0]["version"])
     assert result.code == 200
-
-    for res in result.result["resources"]:
-        res["attributes"]["id"] = res["id"]
-        resource = inmanta.resources.Resource.deserialize(res["attributes"])
-        assert resource.version == resource.id.version == version
 
     resources = await server.get_slice(SLICE_RESOURCE).get_resources_in_latest_version(
         environment=await Environment.get_by_id(environment)
     )
-
-    assert resources[0].attributes["version"] == version
+    assert len(resources) == len(result.result["resources"])
+    assert len(resources) == 1
+    assert resources[0].resource_id == result.result["resources"][0]["resource_id"]
 
 
 async def test_dict_export_server(snippetcompiler, server, client, environment):
@@ -328,6 +325,73 @@ a = exp::Test2(mydict={"a":"b"}, mylist=["a","b"])
     assert result.code == 200
     assert len(result.result["versions"]) == 1
     assert result.result["versions"][0]["total"] == 1
+
+
+async def test_project_constraints_at_exporter_boundary(snippetcompiler, server, client, environment, tmpdir):
+    """
+    Test that constraints set in the requirements.txt of the project are propagated into the agent's EnvBlueprint
+    during the export flow.
+    """
+    index: PipIndex = PipIndex(str(tmpdir.join("index")))
+    for v in ("1.0.0", "2.0.0"):
+        create_python_package(
+            "dependency_package",
+            Version(v),
+            str(tmpdir.join(f"dependency_package-{v}")),
+            publish_index=index,
+        )
+
+    config.Config.set("config", "environment", environment)
+    snippetcompiler.setup_for_snippet(
+        """
+import many_dependencies
+
+a = many_dependencies::Test(name="my_test_resource")
+""",
+        autostd=True,
+        index_url=index.url,
+    )
+
+    await snippetcompiler.do_export_and_deploy()
+
+    result = await client.list_versions(tid=environment)
+    assert result.code == 200
+    assert len(result.result["versions"]) == 1
+    assert result.result["versions"][0]["total"] == 1
+
+    codemanager = CodeManager()
+    module_install_specs = await codemanager.get_code(environment=uuid.UUID(environment), model_version=1, agent_name="agent")
+
+    for module_install_spec in module_install_specs:
+        assert module_install_spec.blueprint.project_constraints is None
+
+    constraints = [
+        "dependency-package<2.0.0",
+        "jinja2<3.1.6",
+    ]
+
+    snippetcompiler.setup_for_snippet(
+        """
+import many_dependencies
+
+a = many_dependencies::Test(name="my_test_resource")
+""",
+        autostd=True,
+        python_requires=[util.parse_requirement(requirement=constraint) for constraint in constraints],
+        index_url=index.url,
+        extra_index_url=["https://pypi.org/simple"],
+    )
+
+    await snippetcompiler.do_export_and_deploy()
+
+    result = await client.list_versions(tid=environment)
+    assert result.code == 200
+    assert len(result.result["versions"]) == 2
+    assert result.result["versions"][1]["total"] == 1
+
+    module_install_specs = await codemanager.get_code(environment=uuid.UUID(environment), model_version=2, agent_name="agent")
+    for module_install_spec in module_install_specs:
+        assert module_install_spec.blueprint.project_constraints == "\n".join(constraints)
 
 
 async def test_old_compiler(server, client, environment):
@@ -801,6 +865,31 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
             """,
         partial_compile=True,
         resource_sets_to_remove=["resource_set_2"],
+    )
+    await assert_resource_set_assignment(
+        environment,
+        assignment={
+            "the_resource_a": "resource_set_1",
+            "the_resource_c2": "resource_set_1",
+            "the_resource_f": "resource_set_4",
+            "the_resource_z": None,
+        },
+    )
+
+    # Partial compile
+    await export_model(
+        model="""
+        import test_resources
+
+
+        a = test_resources::Resource(value="A2", agent="A", key="the_resource_a")
+        c2 = test_resources::Resource(value="A", agent="A", key="the_resource_c2")
+        f = test_resources::Resource(value="A", agent="A", key="the_resource_f")
+        std::ResourceSet(name="resource_set_1", resources=[a,c2])
+        std::ResourceSet(name="resource_set_4", resources=[f])
+        std::ResourceSet(name="resource_set_3", resources=[])
+                """,
+        partial_compile=True,
     )
     await assert_resource_set_assignment(
         environment,

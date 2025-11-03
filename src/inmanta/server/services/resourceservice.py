@@ -38,7 +38,7 @@ from inmanta.data.dataview import (
     ResourceView,
 )
 from inmanta.data.model import (
-    DiscoveredResource,
+    DiscoveredResourceABC,
     LatestReleasedResource,
     LinkedDiscoveredResource,
     ReleasedResourceDetails,
@@ -235,10 +235,10 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
         attributes: dict[PrimitiveTypes, PrimitiveTypes] = {},
         connection: Optional[Connection] = None,
     ) -> list[Resource]:
-        result = await data.Resource.get_resources_in_latest_version(
+        result = await data.Resource.get_resources_in_latest_version_as_dto(
             environment.id, resource_type, attributes, connection=connection
         )
-        return [r.to_dto() for r in result]
+        return result
 
     @handle(methods_v2.get_resource_actions, env="tid")
     async def get_resource_actions(
@@ -369,7 +369,7 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
         try:
             handler = ResourceView(env, limit, first_id, last_id, start, end, filter, sort, deploy_summary)
 
-            out = await handler.execute()
+            out: ReturnValueWithMeta[Sequence[LatestReleasedResource]] = await handler.execute()
             if deploy_summary:
                 out.metadata["deploy_summary"] = await data.Resource.get_resource_deploy_summary(env.id)
             return out
@@ -491,7 +491,7 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
     @handle(methods_v2.discovered_resources_get, env="tid")
     async def discovered_resources_get(
         self, env: data.Environment, discovered_resource_id: ResourceIdStr
-    ) -> DiscoveredResource:
+    ) -> DiscoveredResourceABC:
         if not self.feature_manager.enabled(resource_discovery):
             raise Forbidden(message="The resource discovery feature is not enabled.")
 
@@ -510,7 +510,7 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
         end: Optional[str] = None,
         sort: str = "discovered_resource_id.asc",
         filter: Optional[dict[str, list[str]]] = None,
-    ) -> ReturnValue[Sequence[DiscoveredResource]]:
+    ) -> ReturnValue[Sequence[DiscoveredResourceABC]]:
         if not self.feature_manager.enabled(resource_discovery):
             raise Forbidden(message="The resource discovery feature is not enabled.")
 

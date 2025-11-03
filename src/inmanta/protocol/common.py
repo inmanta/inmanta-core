@@ -16,6 +16,7 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import asyncio
 import enum
 import gzip
 import importlib
@@ -25,14 +26,15 @@ import json
 import logging
 import re
 import time
+import typing
 import uuid
 from collections import defaultdict
-from collections.abc import Coroutine, Iterable, MutableMapping
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Mapping, MutableMapping, Sequence
 from datetime import datetime
 from enum import Enum
 from functools import partial
 from inspect import Parameter
-from typing import TYPE_CHECKING, Any, Callable, Generic, Optional, TypeVar, Union, cast, get_type_hints
+from typing import TYPE_CHECKING, Any, Generic, Iterator, Optional, TypeVar, Union, cast, get_type_hints
 from urllib import parse
 
 import docstring_parser
@@ -41,17 +43,20 @@ import typing_inspect
 from pydantic import ValidationError
 from pydantic.main import create_model
 from tornado import web
+from tornado.httpclient import HTTPRequest
 
+import typing_extensions
 from inmanta import const, execute, types, util
-from inmanta.data.model import BaseModel, DateTimeNormalizerModel
+from inmanta.protocol import exceptions
 from inmanta.protocol.auth import auth
 from inmanta.protocol.auth.decorators import AuthorizationMetadata
-from inmanta.protocol.exceptions import BadRequest, BaseHttpException
 from inmanta.protocol.openapi import model as openapi_model
 from inmanta.stable_api import stable_api
-from inmanta.types import ArgumentTypes, HandlerType, JsonType, MethodType, ReturnTypes
+from inmanta.types import ArgumentTypes, BaseModel, DateTimeNormalizerModel, HandlerType, JsonType, ReturnTypes
 
 if TYPE_CHECKING:
+    from inmanta.protocol.rest.client import RESTClient
+
     from .endpoints import CallTarget
 
 
@@ -66,6 +71,10 @@ OCTET_STREAM_CONTENT = "application/octet-stream"
 ZIP_CONTENT = "application/zip"
 UTF8_CHARSET = "charset=UTF-8"
 HTML_CONTENT_WITH_UTF8_CHARSET = f"{HTML_CONTENT}; {UTF8_CHARSET}"
+
+
+R = typing_extensions.TypeVar("R", bound=types.ReturnTypes, covariant=True, default=types.ReturnTypes)
+V = typing_extensions.TypeVar("V", bound=types.SimpleTypes, covariant=True, default=types.SimpleTypes)
 
 
 class CallContext:
@@ -90,7 +99,7 @@ class ArgOption:
 
     def __init__(
         self,
-        getter: Callable[[Any, dict[str, str]], Coroutine[Any, Any, Any]],
+        getter: Callable[[Any, dict[str, str]], types.AsyncioCoroutine[Any]],
         # Type is Any to Any because it transforms from method to handler but in the current typing there is no link
         header: Optional[str] = None,
         reply_header: bool = True,
@@ -343,7 +352,7 @@ VALID_URL_ARG_TYPES = (Enum, uuid.UUID, str, float, int, bool, datetime)
 VALID_SIMPLE_ARG_TYPES = (BaseModel, Enum, uuid.UUID, str, float, int, bool, datetime, bytes, pydantic.AnyUrl)
 
 
-class MethodProperties:
+class MethodProperties(Generic[R]):
     """
     This class stores the information from a method definition
     """
@@ -375,7 +384,7 @@ class MethodProperties:
 
     def __init__(
         self,
-        function: MethodType,
+        function: Callable[..., R | ReturnValue[R]],
         path: str,
         operation: str,
         reply: bool,
@@ -453,7 +462,7 @@ class MethodProperties:
         self.function_name = function.__name__
         self._varkw: bool = varkw
         self._varkw_name: Optional[str] = None
-        self._return_type: Optional[type] = None
+        self._return_type: Optional[type[R]] = None
         self.token_param = token_param
 
         self._parsed_docstring = docstring_parser.parse(text=function.__doc__, style=docstring_parser.DocstringStyle.REST)
@@ -535,7 +544,7 @@ class MethodProperties:
         return self._enforce_auth
 
     @property
-    def return_type(self) -> type:
+    def return_type(self) -> type[R]:
         if self._return_type is None:
             raise InvalidMethodDefinition("Only typed methods have a return type")
         return self._return_type
@@ -552,7 +561,7 @@ class MethodProperties:
         except ValidationError as e:
             error_msg = f"Failed to validate argument\n{str(e)}"
             LOGGER.exception(error_msg)
-            raise BadRequest(error_msg, {"validation_errors": e.errors()})
+            raise exceptions.BadRequest(error_msg, {"validation_errors": e.errors()})
 
     def arguments_to_pydantic(self) -> type[pydantic.BaseModel]:
         """
@@ -601,6 +610,7 @@ class MethodProperties:
             raise InvalidMethodDefinition(f"token_param ({self.token_param}) is missing in parameters of method.")
 
         if not typed:
+            self._return_type = typing.Any  # type: ignore
             return
 
         # now validate the arguments and return type
@@ -634,7 +644,7 @@ class MethodProperties:
 
         self._return_type = self._validate_return_type(type_hints["return"], strict=self.strict_typing)
 
-    def _validate_return_type(self, arg_type: type, *, strict: bool = True) -> type:
+    def _validate_return_type(self, arg_type: type, *, strict: bool = True) -> type[R]:
         """Validate the return type"""
         # Note: we cannot call issubclass on a generic type!
         arg = "return type"
@@ -650,7 +660,7 @@ class MethodProperties:
         if is_return_value_type(arg_type):
             return_type = typing_inspect.get_args(arg_type, evaluate=True)[0]
             self._validate_type_arg(arg, return_type, strict=strict, allow_none_type=True)
-            return return_type
+            return return_type  # type: ignore
 
         elif (
             not typing_inspect.is_generic_type(arg_type)
@@ -706,8 +716,10 @@ class MethodProperties:
             assert orig is not None  # Make mypy happy
             is_literal_type: bool = typing_inspect.is_literal_type(orig)
 
-            if not is_literal_type and not types.issubclass(orig, (list, dict)):
-                raise InvalidMethodDefinition(f"Type {arg_type} of argument {arg} can only be generic List, Dict or Literal")
+            if not is_literal_type and orig not in (list, dict, Sequence, Mapping):
+                raise InvalidMethodDefinition(
+                    f"Type {arg_type} of argument {arg} can only be generic list / Sequence, dict / Mapping or Literal"
+                )
 
             args = typing_inspect.get_args(arg_type, evaluate=True)
             if len(args) == 0:
@@ -721,7 +733,7 @@ class MethodProperties:
             elif len(args) == 1:  # A generic list
                 unsubscripted_arg = typing_inspect.get_origin(args[0]) if typing_inspect.get_origin(args[0]) else args[0]
                 assert unsubscripted_arg is not None  # Make mypy happy
-                if in_url and (types.issubclass(unsubscripted_arg, dict) or types.issubclass(unsubscripted_arg, list)):
+                if in_url and (unsubscripted_arg in (list, dict, Sequence, Mapping)):
                     raise InvalidMethodDefinition(
                         f"Type {arg_type} of argument {arg} is not allowed for {self.operation}, "
                         f"lists of dictionaries and lists of lists are not supported for GET requests"
@@ -737,7 +749,7 @@ class MethodProperties:
                     typing_inspect.get_origin(args[1]) if typing_inspect.get_origin(args[1]) else args[1]
                 )
                 assert unsubscripted_dict_value_arg is not None  # Make mypy happy
-                if in_url and (typing_inspect.is_union_type(args[1]) or types.issubclass(unsubscripted_dict_value_arg, dict)):
+                if in_url and (typing_inspect.is_union_type(args[1]) or unsubscripted_dict_value_arg in (dict, Mapping)):
                     raise InvalidMethodDefinition(
                         f"Type {arg_type} of argument {arg} is not allowed for {self.operation}, "
                         f"nested dictionaries and union types for dictionary values are not supported for GET requests"
@@ -853,7 +865,7 @@ class MethodProperties:
         try:
             module = importlib.import_module(module_path)
             cls = module.__getattribute__(cls_name)
-            if not inspect.isclass(cls) or BaseHttpException not in cls.mro():
+            if not inspect.isclass(cls) or exceptions.BaseHttpException not in cls.mro():
                 return 500
             cls_instance = cls()
             return cls_instance.to_status()
@@ -915,7 +927,7 @@ class MethodProperties:
         url = "/%s/v%d" % (self._api_prefix, self._api_version)
         return url + self._path.generate_path({k: parse.quote(str(v), safe="") for k, v in msg.items()})
 
-    def build_call(self, args: list[object], kwargs: dict[str, object] = {}) -> Request:
+    def build_call(self, args: Sequence[object], kwargs: Mapping[str, object] = {}) -> Request:
         """
         Build a call from the given arguments. This method returns the url, headers, and body for the call.
         """
@@ -988,6 +1000,21 @@ class MethodProperties:
             return openapi_model.ParameterType.query
         else:
             return None
+
+    @typing.overload
+    def is_pageable[T: types.SimpleTypes](self: "MethodProperties[list[T]]") -> typing.Literal[True]: ...
+
+    @typing.overload
+    def is_pageable(self: "MethodProperties[types.SinglePageTypes]") -> typing.Literal[False]: ...
+
+    @typing.overload
+    def is_pageable(self) -> bool: ...  # catch-all for unknown parameter types and non-list sequence types
+
+    def is_pageable(self) -> bool:
+        """
+        Returns True iff this is a pageable method, i.e. if its return type is a list.
+        """
+        return self.return_type is list or typing.get_origin(self.return_type) is list
 
 
 class UrlMethod:
@@ -1095,18 +1122,44 @@ def shorten(msg: str, max_len: int = 10) -> str:
 
 
 @stable_api
-class Result:
+class Result(Generic[R]):
     """
     A result of a method call
     """
 
-    def __init__(self, code: int = 0, result: Optional[JsonType] = None) -> None:
+    def __init__(
+        self,
+        code: int = 0,
+        result: Optional[JsonType] = None,
+        *,
+        client: Optional["RESTClient"] = None,
+        method_properties: Optional[MethodProperties[R]] = None,
+        environment: Optional[str] = None,
+    ) -> None:
+        """
+        :param code: HTTP response code.
+        :param result: HTTP response as a dictionary.
+        :param client: A client that can perform HTTP requests.
+        :param method_properties: The MethodProperties of the method called initially to produce this result.
+        :param environment: The environment in which the initial call was performed, if any.
+        """
         self._result = result
         self.code = code
-        """
-        The result code of the method call.
-        """
-        self._callback: Optional[Callable[["Result"], None]] = None
+        self._client: Optional["RESTClient"] = client
+
+        self._callback: Optional[Callable[["Result[R]"], None]] = None
+        self._method_properties: Optional[MethodProperties[R]] = method_properties
+        self._environment = environment
+
+    @property
+    def method_properties(self) -> MethodProperties[R]:
+        if self._method_properties is None:
+            raise Exception(
+                "This Result object does not support paging. Make sure you "
+                "set the client and method_properties parameters when constructing "
+                "a Result object manually (e.g. outside of a regular API call)."
+            )
+        return self._method_properties
 
     def get_result(self) -> Optional[JsonType]:
         """
@@ -1139,11 +1192,252 @@ class Result:
             time.sleep(0.1)
             count += 0.1
 
-    def callback(self, fnc: Callable[["Result"], None]) -> None:
+    def callback(self, fnc: Callable[["Result[R]"], None]) -> None:
         """
         Set a callback function that is to be called when the result is ready.
         """
         self._callback = fnc
+
+    def value(self) -> R:
+        """
+        Returns the value wrapped in this result, parsed as the method's return type. Only works for typed methods.
+        If paged, returns only the values for the page represented by this result. To get all results, see `all()`.
+
+        Converts return codes to http exceptions where applicable.
+
+        :raises BaseHttpException: when return code is not 200
+        """
+        if self.code != 200:
+            exc_mapping: Mapping[int, type[exceptions.BaseHttpException]] = {
+                400: exceptions.BadRequest,
+                401: exceptions.UnauthorizedException,
+                403: exceptions.Forbidden,
+                404: exceptions.NotFound,
+                409: exceptions.Conflict,
+                500: exceptions.ServerError,
+                503: exceptions.ShutdownInProgress,
+            }
+            exception: type[exceptions.BaseHttpException] = exc_mapping.get(self.code, exceptions.ServerError)
+
+            raise (
+                exception(message=self.result.get("message", None), details=self.result.get("error_details", None))
+                if self.result is not None
+                else exception()
+            )
+
+        warnings: Optional[object] = self.result.get("metadata", {}).get("warnings", None) if self.result is not None else None
+        if warnings is not None:
+            if not isinstance(warnings, list):
+                raise exceptions.BadRequest("Invalid warnings metadata attached to method response.")
+            for warning in warnings:
+                if not isinstance(warning, str):
+                    raise exceptions.BadRequest("Invalid warnings metadata attached to method response.")
+                LOGGER.warning(warning)
+
+        if self.method_properties.return_type is type(None):
+            return None
+
+        # typed methods always require an envelope key
+        if self.result is None or self.method_properties.envelope_key not in self.result:
+            raise exceptions.BadRequest("No data was provided in the body. Make sure to only use typed methods.")
+
+        try:
+            ta = pydantic.TypeAdapter(self.method_properties.return_type)
+        except InvalidMethodDefinition:
+            raise exceptions.BadRequest("Typed client can only be used with typed methods.")
+
+        return ta.validate_python(self.result[self.method_properties.envelope_key])
+
+    @typing.overload
+    def pageable[V: types.SimpleTypes](self: "Result[list[V]]") -> "PageableResult[V]": ...
+
+    @typing.overload
+    def pageable(self: "Result[types.SinglePageTypes]") -> typing.NoReturn: ...
+
+    @typing.overload
+    def pageable(self) -> object: ...  # catch-all for unknown parameter types and non-list sequence types
+
+    def pageable(self) -> object:
+        """
+        Converts this result to a pageable result, if the result type is pageable.
+
+        Internal method.
+        """
+        if not self.method_properties.is_pageable():
+            raise Exception(f"This result object for type {self.method_properties.return_type} is not pageable")
+        return PageableResult(
+            self.code,
+            self._result,
+            client=self._client,
+            # type ignore because it can't be statically proven that method properties has the appropriate type
+            method_properties=self._method_properties,  # type: ignore
+            environment=self._environment,
+        )
+
+
+class PageableResult(Result[list[V]], Generic[V]):
+    """
+    Result for a list value, that offers methods for paging.
+    """
+
+    async def all(self) -> AsyncIterator[V]:
+        """
+        Returns an async iterator over all values returned by this call. Follows paging links if there are any.
+        Values are processed and validated as in `value()`, i.e. iterates over the value as returned by the API method,
+        without wrapping in a `Result` object. If there are pages, simply chains results from multiple pages after each other.
+        """
+        page: "PageableResult[V]"
+        async for page in self._pages():
+            unwrapped: Sequence[V] = page.value()
+            for item in unwrapped:
+                yield item
+
+    def all_sync(self, *, timeout: int = 120, ioloop: Optional[asyncio.AbstractEventLoop] = None) -> Iterator[V]:
+        """
+        Returns an iterator over all values returned by this call. For detailed behavior, see `all()`.
+
+        In an async context, call `all()` instead.
+
+        :param timeout: The number of seconds to wait on each API call.
+        """
+        page: "PageableResult[V]"
+        async_pages: AsyncIterator["PageableResult[V]"] = self._pages()
+
+        while True:
+            try:
+                page = util.wait_sync(anext(async_pages), timeout=timeout, ioloop=ioloop)
+            except StopAsyncIteration:
+                return
+            except TimeoutError:
+                raise ConnectionRefusedError()
+            yield from page.value()
+
+    async def _pages(self) -> AsyncIterator["PageableResult[V]"]:
+        """
+        Returns an async iterator over pages, starting from this one.
+        """
+        result: Optional["PageableResult[V]"] = self
+        while result is not None:
+            yield result
+            result = await result.next_page()
+
+    async def next_page(self) -> Optional["PageableResult[V]"]:
+        if self._client is None:
+            raise Exception(
+                "The next_page() method cannot be called on this Result object. Make sure you "
+                "set the client and method_properties parameters when constructing "
+                "a Result object manually (e.g. outside of a regular API call)."
+            )
+
+        if not self.result:
+            return None
+
+        next_link_url = self.result.get("links", {}).get("next")
+        if not next_link_url:
+            return None
+
+        server_url = self._client._get_client_config()
+        url = server_url + next_link_url
+        headers = {"X-Inmanta-tid": self._environment} if self._environment else None
+        request = HTTPRequest(url=url, method="GET", headers=headers)
+        result: Result[list[V]] = self._client._decode_response(
+            await self._client.client.fetch(request), self.method_properties, self._environment
+        )
+
+        return result.pageable()
+
+
+class ClientCall(Awaitable[Result[R]]):
+    """
+    A client method call, pending a result. Can be awaited to get a Result, and offers helper methods to access the value
+    wrapped in that result so that helper methods can be simply chained on the client method call, rather than to have to nest
+    awaits.
+
+    This is a stateful, intermediate object, and it is not meant to be stored for calling multiple methods on it.
+    """
+
+    def __init__(self, result: Awaitable[Result[R]]) -> None:
+        self._first_result: Awaitable[Result[R]] = result
+
+    @typing.overload
+    @staticmethod
+    def create[V: types.SimpleTypes](
+        result: Awaitable[Result[list[V]]], *, properties: MethodProperties[list[V]]
+    ) -> "PageableClientCall[V]": ...
+
+    @typing.overload
+    @staticmethod
+    def create[T: types.ReturnTypes](result: Awaitable[Result[T]], *, properties: MethodProperties[T]) -> "ClientCall[T]": ...
+
+    @staticmethod
+    def create[T: types.ReturnTypes](result: Awaitable[Result[T]], *, properties: MethodProperties[T]) -> "ClientCall[T]":
+        """
+        Creates a ClientCall object from a result awaitable. Determines whether to create a plain or a pageable client call
+        instance based on the associated method properties object.
+        """
+        return PageableClientCall(result) if properties.is_pageable() else ClientCall(result)  # type: ignore
+
+    async def value(self) -> R:
+        """
+        Returns the value wrapped in this result, parsed as the method's return type. Only works for typed methods.
+        If paged, returns only the values for the page represented by this result. To get all results, see `all()`.
+
+        Converts return codes to http exceptions where appliccable.
+
+        :raises BaseHttpException: when return code is not 200
+        """
+        return (await self).value()
+
+    def sync(self, *, timeout: int = 120, ioloop: Optional[asyncio.AbstractEventLoop] = None) -> Result[R]:
+        """
+        Returns a result in a syncronous context. Must not be called from an async context.
+        """
+        try:
+            return util.wait_sync(self, timeout=timeout, ioloop=ioloop)
+        except TimeoutError:
+            raise ConnectionRefusedError()
+
+    def __await__(self) -> types.AsyncioGenerator[Result[R]]:
+        return self._first_result.__await__()
+
+
+class PageableClientCall(ClientCall[list[V]], Awaitable[PageableResult[V]]):
+    """
+    A client method call for a pageable result.
+    """
+
+    def __await__(self) -> types.AsyncioGenerator[PageableResult[V]]:
+        async def wrap_pageable() -> PageableResult[V]:
+            result: Result[list[V]] = await self._first_result
+            return result.pageable()
+
+        return wrap_pageable().__await__()
+
+    def sync(self, *, timeout: int = 120, ioloop: Optional[asyncio.AbstractEventLoop] = None) -> PageableResult[V]:
+        try:
+            awaitable: Awaitable[PageableResult[V]] = self  # type: ignore
+            return util.wait_sync(awaitable, timeout=timeout, ioloop=ioloop)
+        except TimeoutError:
+            raise ConnectionRefusedError()
+
+    async def all(self) -> AsyncIterator[V]:
+        """
+        Returns an async iterator over all values returned by this call. Follows paging links if there are any.
+        Values are processed and validated as in `value()`, i.e. iterates over the value as returned by the API method,
+        without wrapping in a `Result` object. If there are pages, simply chains results from multiple pages after each other.
+        """
+        async for v in (await self).all():
+            yield v
+
+    def all_sync(self, *, timeout: int = 120, ioloop: Optional[asyncio.AbstractEventLoop] = None) -> Iterator[V]:
+        """
+        Returns an iterator over all values returned by this call. For detailed behavior, see `all()`.
+
+        In an async context, call `all()` instead.
+
+        :param timeout: The number of seconds to wait on each API call.
+        """
+        yield from self.sync(timeout=timeout, ioloop=ioloop).all_sync(timeout=timeout, ioloop=ioloop)
 
 
 class SessionManagerInterface:

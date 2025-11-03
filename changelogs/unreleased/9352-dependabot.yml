@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump crontab from 1.0.4 to 1.0.5
+destination-branches:
+- master
+sections: {}
