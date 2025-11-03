@@ -144,26 +144,23 @@ def get_types_and_scopes() -> tuple[dict[str, inmanta_type.Type], Namespace]:
 @stable_api
 class ProjectLoader:
     """
-    Singleton providing methods for managing project loading and associated side effects when (sequentially) loading more than one project within the same process. Since these operations have global
+    Singleton providing methods for managing project loading and associated side effects when (sequentially) loading
+    more than one project within the same process. Since these operations have global
     side effects, managing them calls for a centralized manager rather than managing them on the Project instance level.
     This class is used by pytest-inmanta, because it executes multiple compiles within the same process.
 
     This class manages the setting and loading of a project, as well as the following side effects:
         - Python modules: under normal operation, an inmanta module's Python modules are loaded when the project is loaded.
-            However, to support top-level Python imports in test cases, pytest-inmanta instructs the project to not clean
-            up loaded Python modules when setting a new project as this would force a reload, changing object identities.
-            One exception is when working with dynamic modules whose content might change between project loads (for example
-            the unittest module and any module created with Project.create_module). Therefore any dynamic modules are always
-            forcefully cleaned up, forcing a reload when next imported.
+            These modules should not be cleaned up in between two sequential project load operations to prevent that
+            object identities of top-level imports change. Dynamic modules are always forcefully cleaned up,
+            forcing a reload when next imported.
         - Python module state: since Python module objects are kept alive (see above), any state kept on those objects is
             carried over across compiles. To start each compile from a fresh state, any stateful modules must define one or
             more cleanup functions. This class is responsible for calling these functions when appropriate.
         - Objects registered using decorators: plugins, resources, providers, references and mutators are registered using
             their corresponding decorator. Under normal operation, loading a project registers all these objects as a side
-            effect of loading each module's Python modules. However, pytest-inmanta does not reload said Python modules
-            (see above). To make sure these objects are registered for loaded modules (and thus accessible from the model),
-            each loaded project starts with a clean (empty) set. Loading the project registers any plugins for newly loaded
-            modules while this class is responsible for completing the set with appropriate previously registered plugins.
+            effect of loading each module's Python modules. When loading more than one project sequentially, this class
+            is responsible for completing the set with appropriate previously registered plugins.
     """
 
     _registered_plugins: ClassVar[dict[str, Type[Plugin]]] = {}
