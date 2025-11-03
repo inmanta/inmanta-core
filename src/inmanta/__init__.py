@@ -16,7 +16,7 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-COMPILER_VERSION = "2026.0"
+COMPILER_VERSION = "2026.1"
 OPA_VERSION = "1.3.0"
 # This version is managed by bumpversion. Should you ever update it manually, make sure to consistently update it everywhere
 # (See the bumpversion.cfg file for relevant locations).
