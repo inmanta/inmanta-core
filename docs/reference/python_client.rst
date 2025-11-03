@@ -2,7 +2,6 @@ Python client
 -------------
 
 The rest API endpoints described below are also available as a `redoc spec <openapi.html#http://>`_.
-The rest API endpoints described below are also available as a `swagger spec <../swagger/index.html>`_.
 
 
 You can interact with the API endpoints detailed below by using the :py:class:`inmanta.protocol.endpoints.Client` python client:

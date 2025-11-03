@@ -22,4 +22,3 @@ Inmanta, please check out the :doc:`../quickstart` guide.
     openapi
     compatibility
     apilinks
-    embedded_swagger
