@@ -20,6 +20,7 @@ Module defining the v1 rest api
 
 import datetime
 import uuid
+from collections.abc import Mapping, Sequence
 from typing import Any, Literal, Optional, Union
 
 import inmanta.types
@@ -527,11 +528,12 @@ def put_version(
     version: int,
     resources: list,
     resource_state: dict[inmanta.types.ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]] = {},
-    unknowns: Optional[list[dict[str, PrimitiveTypes]]] = None,
+    unknowns: Optional[Sequence[Mapping[str, PrimitiveTypes]]] = None,
     version_info: Optional[dict] = None,
     compiler_version: Optional[str] = None,
     resource_sets: dict[inmanta.types.ResourceIdStr, Optional[str]] = {},
     pip_config: Optional[PipConfig] = None,
+    project_constraints: str | None = None,
 ):
     """
     Store a new version of the configuration model
@@ -548,6 +550,8 @@ def put_version(
     :param compiler_version: Optional. version of the compiler, if not provided, this call will return an error
     :param resource_sets: Optional. a dictionary describing which resource belongs to which resource set
     :param pip_config: Optional. Pip config used by this version
+    :param project_constraints: String of all the constraints set at the project level (if any) to be enforced during agent
+        code install
     """
 
 

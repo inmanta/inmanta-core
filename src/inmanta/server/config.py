@@ -160,6 +160,17 @@ server_ssl_cert = Option(
     "server", "ssl_cert_file", None, "SSL certificate file for the server key. Leave blank to disable SSL", is_str_opt
 )
 
+server_compatibility_file = Option(
+    "server",
+    "compatibility_file",
+    None,
+    "Path to the compatibility.json file. The constraints defined in the `python_package_constraints` field will be "
+    "enforced both during project install and during agent install. For more information about this file, please refer to "
+    "the compatibility page in the Inmanta documentation. Leave blank to disable the "
+    "enforcement of the constraints during installation.",
+    is_str_opt,
+)
+
 
 def ssl_enabled():
     """Is ssl enabled on the server, given the current server config"""

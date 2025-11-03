@@ -1,0 +1,6 @@
+---
+description: "Remove broken executor venvs when the server starts."
+change-type: patch
+destination-branches: [master, iso8]
+sections:
+  bugfix: "{{description}}"

@@ -15,8 +15,9 @@ from inmanta.agent import handler
 from inmanta.agent.handler import CRUDHandlerGeneric as CRUDHandler
 from inmanta.agent.handler import ResourcePurged, provider
 from inmanta.resources import PurgeableResource, resource
-from inmanta_plugins.lsm.allocation import AllocationSpec, ExternalServiceIdAllocator
 from psycopg2.extensions import ISOLATION_LEVEL_SERIALIZABLE
+
+from inmanta_plugins.lsm.allocation import AllocationSpec, ExternalServiceIdAllocator
 
 
 class PGServiceIdAllocator(ExternalServiceIdAllocator[int]):

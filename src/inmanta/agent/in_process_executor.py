@@ -24,6 +24,7 @@ from concurrent.futures.thread import ThreadPoolExecutor
 from typing import Any, Optional
 
 import inmanta.agent.cache
+import inmanta.loader as loader
 import inmanta.protocol
 import inmanta.util
 from inmanta import const, data, env, tracing
@@ -32,7 +33,6 @@ from inmanta.agent.executor import DeployReport, DryrunReport, FailedInmantaModu
 from inmanta.agent.handler import HandlerAPI, SkipResource, SkipResourceForDependencies
 from inmanta.const import NAME_RESOURCE_ACTION_LOGGER, ParameterSource
 from inmanta.data.model import AttributeStateChange
-from inmanta.loader import CodeLoader
 from inmanta.resources import Resource
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 from inmanta.util import NamedLock, join_threadpools
@@ -155,7 +155,6 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
     async def _execute(
         self,
         resource: Resource,
-        gid: uuid.UUID,
         ctx: handler.HandlerContext,
         requires: Mapping[ResourceIdStr, const.ResourceState],
     ) -> None:
@@ -163,13 +162,11 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         Get the handler for a given resource and run its ``deploy`` method.
 
         :param resource: The resource to deploy.
-        :param gid: Id of this deploy.
         :param ctx: The context to use during execution of this deploy.
         :param requires: A dictionary that maps each dependency of the resource to be deployed, to its latest resource
                          state that was not `deploying'.
         """
         # setup provider
-        ctx.debug("Start deploy %(deploy_id)s of resource %(resource_id)s", deploy_id=gid, resource_id=resource.id)
 
         provider: Optional[HandlerAPI[Any]] = None
         try:
@@ -240,16 +237,15 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         ctx = handler.HandlerContext(resource, action_id=action_id, logger=self.resource_action_logger)
 
         ctx.debug(
-            "Start run for resource %(resource)s because %(reason)s",
-            resource=str(resource_details.rvid),
-            deploy_id=gid,
-            agent=self.name,
+            "Start run because %(reason)s.",
             reason=reason,
+            deploy_id=gid,
+            resource=resource_details.id,
         )
 
         async with self.activity_lock:
             with self._cache:
-                await self._execute(resource, gid=gid, ctx=ctx, requires=requires)
+                await self._execute(resource, ctx=ctx, requires=requires)
 
         ctx.debug(
             "End run for resource %(r_id)s in deploy %(deploy_id)s",
@@ -508,14 +504,14 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         self.executors: dict[str, InProcessExecutor] = {}
         self._creation_locks: inmanta.util.NamedLock = inmanta.util.NamedLock()
 
-        self._loader: CodeLoader | None = None
+        self._loader: loader.CodeLoader | None = None
         self._env: env.VirtualEnv | None = None
         self._running = False
 
         if code_loader:
             self._env = env.VirtualEnv(env_dir)
             self._env.use_virtual_env()
-            self._loader = CodeLoader(code_dir, clean=True)
+            self._loader = loader.CodeLoader(code_dir, clean=True)
             # Lock to ensure only one actual install runs at a time
             self._loader_lock: asyncio.Lock = Lock()
             # Keep track for each resource type of the last loaded version
@@ -533,6 +529,12 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         await self.join(thread_pool_finalizer=[], timeout=const.SHUTDOWN_GRACE_IOLOOP * 0.9)
         self.executors.clear()
         self._running = True
+
+    def get_environment_manager(self) -> None:
+        return None
+
+    async def stop_all_executors(self) -> list[InProcessExecutor]:
+        raise NotImplementedError("Not used")
 
     async def stop_for_agent(self, agent_name: str) -> list[InProcessExecutor]:
         if agent_name in self.executors:

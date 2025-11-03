@@ -231,3 +231,33 @@ async def test_postgres_transaction_re_entry(postgresql_pool) -> None:
     # One should return true, the other false
     print(r1, r2)
     assert r1 + r2 == 1
+
+
+@pytest.mark.slowtest
+async def test_postgres_index_join_where(postgresql_pool) -> None:
+    """
+    Verify that the PG analyzer is sufficiently smart to combine constraints from join and where conditions to select
+    appropriate indexes, regardless of ordering.
+    """
+
+    async with postgresql_pool.acquire() as connection:
+        await connection.execute(
+            """\
+            CREATE TABLE IF NOT EXISTS mytable (x int PRIMARY key, y int, z int);
+            CREATE INDEX mytable_x_y_z_index ON mytable (x, y, z);
+            INSERT INTO mytable (x, y, z) VALUES (1, 2, 3), (3, 2, 5);
+            """
+        )
+        result = await connection.fetch(
+            """\
+            EXPLAIN ANALYZE
+            SELECT mytable.*
+            FROM mytable
+            INNER JOIN (VALUES (1, 2, 3)) AS v(x, y, z)
+            -- join on x and z, "skipping over" y in the index
+            ON mytable.x = v.x AND mytable.z = v.z
+            -- where condition on y => index constraints are complete now
+            WHERE mytable.y = 2
+            """
+        )
+        assert "Index Only Scan using mytable_x_y_z_index on mytable" in result[0][0]

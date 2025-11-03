@@ -1,0 +1,4 @@
+---
+description: "Fix jsonb deserialization in database migration script."
+change-type: patch
+destination-branches: [iso8]

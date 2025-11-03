@@ -1,0 +1,6 @@
+description: Improved and extended behavior of Result.all
+change-type: patch
+sections:
+  feature: "Added mypy plugin `inmanta.mypy` for the Python client (`inmanta.protocol.Client`)."
+destination-branches:
+  - iso8

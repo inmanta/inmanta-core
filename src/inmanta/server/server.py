@@ -21,6 +21,7 @@ import json
 import logging
 import os
 import pathlib
+import sys
 import uuid
 from typing import TYPE_CHECKING, Optional, Union, cast
 
@@ -34,6 +35,7 @@ from inmanta.protocol.common import HTML_CONTENT_WITH_UTF8_CHARSET, ReturnValue,
 from inmanta.protocol.openapi.converter import OpenApiConverter
 from inmanta.protocol.openapi.model import OpenAPI
 from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_SERVER, SLICE_TRANSPORT, protocol
+from inmanta.server.services.databaseservice import DatabaseService
 from inmanta.types import Apireturn, JsonType, Warnings
 from inmanta.util import ensure_directory_exist
 
@@ -112,12 +114,21 @@ class Server(protocol.ServerSlice):
 
         return attach_warnings(200, None, warnings)
 
-    async def _async_recompile(self, env: data.Environment, update_repo: bool, metadata: JsonType = {}) -> Warnings:
+    async def _async_recompile(
+        self,
+        env: data.Environment,
+        update_repo: bool,
+        metadata: JsonType = {},
+    ) -> Warnings:
         """
         Recompile an environment in a different thread and taking wait time into account.
         """
         _, warnings = await self.compiler.request_recompile(
-            env=env, force_update=update_repo, do_export=True, remote_id=uuid.uuid4(), metadata=metadata
+            env=env,
+            force_update=update_repo,
+            do_export=True,
+            remote_id=uuid.uuid4(),
+            metadata=metadata,
         )
         return warnings
 
@@ -132,6 +143,8 @@ class Server(protocol.ServerSlice):
 
         slices = await asyncio.gather(*(slice.get_slice_status() for slice in self._server.get_slices().values()))
 
+        db_slice: "DatabaseService" = cast("DatabaseService", self._server.get_slice(SLICE_DATABASE))
+        postgresql_version = await db_slice.get_postgresql_version()
         response = StatusResponse(
             product=product_metadata.product,
             edition=product_metadata.edition,
@@ -144,6 +157,8 @@ class Server(protocol.ServerSlice):
                 for feature in self.feature_manager.get_features()
             ],
             status=max(ReportedStatus(slice.reported_status) for slice in slices),
+            python_version=".".join(map(str, sys.version_info[:3])),
+            postgresql_version=postgresql_version,
         )
 
         return response

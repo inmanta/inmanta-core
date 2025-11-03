@@ -275,7 +275,9 @@ def install_project(modules_dir: str, name: str, working_dir: str, config=True, 
             fh.write(config_content)
     if config:
         Config.load_config()
-    Project.get().load_module_recursive(install=True)
+    project = Project.get()
+    project.autostd = False
+    Project.get().install_modules()
     return coroot
 
 

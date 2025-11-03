@@ -26,6 +26,7 @@ import pytest
 
 import inmanta.resources
 from inmanta import config, const, module
+from inmanta.agent.code_manager import CodeManager
 from inmanta.ast import CompilerException, ExternalException, RuntimeException
 from inmanta.const import ResourceState
 from inmanta.data import Environment, Resource
@@ -33,7 +34,8 @@ from inmanta.export import DependencyCycleException
 from inmanta.module import InmantaModuleRequirement
 from inmanta.server import SLICE_RESOURCE
 from inmanta.server.server import Server
-from utils import LogSequence
+from packaging.version import Version
+from utils import LogSequence, PipIndex, create_python_package
 
 
 async def assert_resource_set_assignment(environment, assignment: dict[str, Optional[str]]) -> None:
@@ -328,6 +330,85 @@ a = exp::Test2(mydict={"a":"b"}, mylist=["a","b"])
     assert result.code == 200
     assert len(result.result["versions"]) == 1
     assert result.result["versions"][0]["total"] == 1
+
+
+async def test_project_constraints_at_exporter_boundary(snippetcompiler, server, client, environment, tmpdir, agent):
+    """
+    Test that constraints set in the requirements.txt of the project are propagated into the agent's EnvBlueprint
+    during the export flow.
+    """
+    index: PipIndex = PipIndex(str(tmpdir.join("index")))
+    for v in ("1.0.0", "2.0.0"):
+        create_python_package(
+            "dependency_package",
+            Version(v),
+            str(tmpdir.join(f"dependency_package-{v}")),
+            publish_index=index,
+        )
+
+    config.Config.set("config", "environment", environment)
+    snippetcompiler.setup_for_snippet(
+        """
+import many_dependencies
+
+a = many_dependencies::Test(name="my_test_resource")
+""",
+        autostd=True,
+        index_url=index.url,
+        extra_index_url=["https://pypi.org/simple"],
+    )
+
+    await snippetcompiler.do_export_and_deploy()
+
+    result = await client.list_versions(tid=environment)
+    assert result.code == 200
+    assert len(result.result["versions"]) == 1
+    assert result.result["versions"][0]["total"] == 1
+
+    codemanager = CodeManager(agent._client)
+    module_install_specs, _ = await codemanager.get_code(
+        environment=environment,
+        version=1,
+        resource_types=["many_dependencies::Test"],
+    )
+
+    assert len(module_install_specs) > 0
+    for module_install_spec in module_install_specs:
+        assert module_install_spec.blueprint.project_constraints is None
+
+    constraints = [
+        "dependency-package<2.0.0",
+        "jinja2<3.1.6",
+    ]
+
+    snippetcompiler.setup_for_snippet(
+        """
+import many_dependencies
+
+a = many_dependencies::Test(name="my_test_resource")
+""",
+        autostd=True,
+        python_requires=[inmanta.util.parse_requirement(requirement=constraint) for constraint in constraints],
+        index_url=index.url,
+        extra_index_url=["https://pypi.org/simple"],
+    )
+
+    await snippetcompiler.do_export_and_deploy()
+
+    result = await client.list_versions(tid=environment)
+    assert result.code == 200
+    assert len(result.result["versions"]) == 2
+    assert result.result["versions"][1]["total"] == 1
+
+    module_install_specs, _ = await codemanager.get_code(
+        environment=environment,
+        version=2,
+        resource_types=["many_dependencies::Test"],
+    )
+    assert len(module_install_specs) > 0
+
+    for module_install_spec in module_install_specs:
+        assert module_install_spec.blueprint.project_constraints == "\n".join(constraints)
 
 
 async def test_old_compiler(server, client, environment):

@@ -682,6 +682,7 @@ class OrchestrationService(protocol.ServerSlice):
         pip_config: Optional[PipConfig] = None,
         *,
         connection: asyncpg.connection.Connection,
+        project_constraints: str | None = None,
     ) -> None:
         """
         :param rid_to_resource: This parameter should contain all the resources when a full compile is done.
@@ -695,6 +696,8 @@ class OrchestrationService(protocol.ServerSlice):
         :param removed_resource_sets: When a partial compile is done, this parameter should indicate the names of the resource
                                       sets that are removed by the partial compile. When no resource sets are removed by
                                       a partial compile or when a full compile is done, this parameter can be set to None.
+        :param project_constraints: A single string containing constraints on packages set at the project level that must
+            be taken into consideration during agent code installation.
 
         Pre-conditions:
             * The requires and provides relationships of the resources in rid_to_resource must be set correctly. For a
@@ -788,6 +791,7 @@ class OrchestrationService(protocol.ServerSlice):
                         ),
                         pip_config=pip_config,
                         is_suitable_for_partial_compiles=not resource_set_validator.has_cross_resource_set_dependency(),
+                        project_constraints=project_constraints,
                     )
                     await cm.insert(connection=connection)
             except asyncpg.exceptions.UniqueViolationError:
@@ -909,6 +913,7 @@ class OrchestrationService(protocol.ServerSlice):
         compiler_version: Optional[str] = None,
         resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
         pip_config: Optional[PipConfig] = None,
+        project_constraints: Optional[str] = None,
     ) -> Apireturn:
         """
         :param unknowns: dict with the following structure
@@ -947,6 +952,7 @@ class OrchestrationService(protocol.ServerSlice):
                     resource_sets,
                     pip_config=pip_config,
                     connection=con,
+                    project_constraints=project_constraints,
                 )
             # This must be outside all transactions, as it relies on the result of _put_version
             # and it starts a background task, so it can't re-use this connection
@@ -1023,6 +1029,7 @@ class OrchestrationService(protocol.ServerSlice):
 
                 base_model = current_versions[0]
                 base_version: int = base_model.version
+                base_constraints: str | None = base_model.project_constraints
                 if not base_model.is_suitable_for_partial_compiles:
                     resources_in_base_version = await data.Resource.get_resources_for_version(env.id, base_version)
                     resource_set_validator = ResourceSetValidator(set(resources_in_base_version))
@@ -1078,6 +1085,7 @@ class OrchestrationService(protocol.ServerSlice):
                     removed_resource_sets=removed_resource_sets,
                     pip_config=pip_config,
                     connection=con,
+                    project_constraints=base_constraints if base_constraints else None,
                 )
 
             returnvalue: ReturnValue[int] = ReturnValue[int](200, response=version)

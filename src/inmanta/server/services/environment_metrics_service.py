@@ -38,9 +38,8 @@ from inmanta.data import (
     EnvironmentMetricsGauge,
     EnvironmentMetricsTimer,
     Resource,
-    Setting,
 )
-from inmanta.data.model import EnvironmentMetricsResult
+from inmanta.data.model import EnvironmentMetricsResult, EnvSettingType
 from inmanta.protocol import methods_v2
 from inmanta.protocol.decorators import handle
 from inmanta.protocol.exceptions import BadRequest
@@ -208,7 +207,14 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         async with Environment.get_connection() as con:
             query = f"""
             WITH env_and_retention_time_in_hours AS (
-                SELECT id, (CASE WHEN e.settings ? $1 THEN (e.settings->>$1)::integer ELSE $2 END) AS retention_time_in_hours
+                SELECT
+                    id,
+                    (
+                        CASE
+                            WHEN e.settings->'settings' ? $1 THEN (e.settings->'settings'->$1->>'value')::integer
+                            ELSE $2
+                        END
+                    ) AS retention_time_in_hours
                 FROM {Environment.table_name()} AS e
                 WHERE e.halted IS FALSE
             ), env_and_delete_before_timestamp AS (
@@ -224,10 +230,12 @@ class EnvironmentMetricsService(protocol.ServerSlice):
             USING env_and_delete_before_timestamp AS e_to_dt
             WHERE emt.environment=e_to_dt.id AND emt.timestamp < e_to_dt.delete_before_timestamp
             """
-            environment_metrics_retention_setting: Setting = Environment.get_setting_definition(ENVIRONMENT_METRICS_RETENTION)
+            default_metrics_retention_time: EnvSettingType | None = Environment.get_default_for_setting(
+                ENVIRONMENT_METRICS_RETENTION
+            )
             values = [
                 ENVIRONMENT_METRICS_RETENTION,
-                environment_metrics_retention_setting.default,
+                default_metrics_retention_time,
                 datetime.now().astimezone(),
             ]
             await con.execute(query, *values)

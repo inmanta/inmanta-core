@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump cryptography from 46.0.2 to 46.0.3
+destination-branches:
+- iso8
+sections: {}

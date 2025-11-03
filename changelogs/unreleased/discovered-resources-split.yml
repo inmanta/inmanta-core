@@ -1,0 +1,7 @@
+description: Split discovered resource ids into component parts
+change-type: minor
+sections:
+  minor-improvement: The discovered resources list endpoint now returns resource type, agent and resource id value for the discovered resource.
+destination-branches:
+  - master
+  - iso8

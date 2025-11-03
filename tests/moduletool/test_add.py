@@ -16,7 +16,6 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import logging
 import os
 import shutil
 from typing import Optional
@@ -27,47 +26,10 @@ import pytest
 import inmanta.util
 from inmanta import env
 from inmanta.command import CLIException
-from inmanta.module import ModuleV1, ModuleV1Metadata, ModuleV2, ModuleV2Source, Project, ProjectMetadata
+from inmanta.module import ModuleV1, ModuleV2, ModuleV2Source, Project, ProjectMetadata
 from inmanta.moduletool import ModuleTool
 from packaging.version import Version
 from utils import PipIndex, module_from_template
-
-
-def test_module_add_v1_module_to_project(snippetcompiler_clean) -> None:
-    """
-    Add a V1 module to an inmanta project using the `inmanta module add` command.
-    """
-    project: Project = snippetcompiler_clean.setup_for_snippet(snippet="", autostd=False)
-    requirements_txt_file = os.path.join(project.path, "requirements.txt")
-
-    def _get_content_requirements_txt_file() -> str:
-        with open(requirements_txt_file, encoding="utf-8") as fd:
-            return fd.read()
-
-    def _assert_project_state(constraint: str) -> None:
-        with open(project.get_metadata_file_path(), encoding="utf-8") as fd:
-            project_metadata = ProjectMetadata.parse(fd)
-            assert constraint in project_metadata.requires
-        with open(os.path.join(snippetcompiler_clean.libs, "std", ModuleV1.MODULE_FILE), encoding="utf-8") as fd:
-            module_metadata = ModuleV1Metadata.parse(fd)
-            assert module_metadata.version == constraint.split("==")[1]
-        assert os.listdir(snippetcompiler_clean.libs) == ["std"]
-        assert not _get_content_requirements_txt_file()
-
-    assert not os.listdir(snippetcompiler_clean.libs)
-    assert not _get_content_requirements_txt_file()
-
-    version_constraint = "std==3.0.2"
-    ModuleTool().add(module_req=version_constraint, v1=True, override=False)
-    _assert_project_state(version_constraint)
-
-    new_version_constraint = "std==3.0.1"
-    with pytest.raises(CLIException, match="A dependency on the given module was already defined"):
-        ModuleTool().add(module_req=new_version_constraint, v1=True, override=False)
-    _assert_project_state(version_constraint)
-
-    ModuleTool().add(module_req=new_version_constraint, v1=True, override=True)
-    _assert_project_state(new_version_constraint)
 
 
 @pytest.mark.slowtest
@@ -211,35 +173,8 @@ def test_module_add_v2_module_to_v1_module(tmpdir: py.path.local, modules_dir: s
     assert env.process_env.get_installed_packages() == installed_packages
 
 
-def test_module_add_v1_module_to_v1_module(tmpdir: py.path.local, modules_dir: str, monkeypatch) -> None:
-    """
-    Add a V1 module to a V1 module using the `inmanta module add` command.
-    """
-    original_module_dir = os.path.join(modules_dir, "mod1")
-    module_dir = os.path.join(tmpdir, "mod1")
-    shutil.copytree(original_module_dir, module_dir)
-
-    def _assert_module_requirements(expected_requirements: list[str]) -> None:
-        module_v1 = ModuleV1(project=None, path=module_dir)
-        assert sorted(module_v1.metadata.requires) == sorted(expected_requirements)
-        assert not os.path.exists(os.path.join(module_dir, "requirements.txt"))
-
-    monkeypatch.chdir(module_dir)
-    _assert_module_requirements(expected_requirements=[])
-
-    ModuleTool().add(module_req="mod3", v1=True, override=False)
-    _assert_module_requirements(expected_requirements=["mod3"])
-
-    with pytest.raises(CLIException, match="A dependency on the given module was already defined"):
-        ModuleTool().add(module_req="mod3==1.0.1", v1=True, override=False)
-    _assert_module_requirements(expected_requirements=["mod3"])
-
-    ModuleTool().add(module_req="mod3==1.0.1", v1=True, override=True)
-    _assert_module_requirements(expected_requirements=["mod3==1.0.1"])
-
-
 @pytest.mark.slowtest
-def test_module_add_preinstalled(tmpdir: py.path.local, modules_v2_dir: str, snippetcompiler_clean, caplog) -> None:
+def test_module_add_preinstalled(tmpdir: py.path.local, modules_v2_dir: str, snippetcompiler_clean) -> None:
     """
     Verify that `inmanta module add` respects preinstalled modules when they're compatible and logs a warning when they're
     not.
@@ -276,48 +211,11 @@ def test_module_add_preinstalled(tmpdir: py.path.local, modules_v2_dir: str, sni
 
     # verify that compatible constraint does not reinstall or update
     ModuleTool().add(module_req=f"{module_name}~=1.0", v2=True, override=True)
-    caplog.clear()
-    with caplog.at_level(logging.WARNING):
-        assert ModuleTool().get_module(module_name).version == Version("1.0.0")
-        assert "does not match constraint" not in caplog.text
+    assert ModuleTool().get_module(module_name).version == Version("1.0.0")
 
-    # verify that incompatible constraint does reinstall and logs a warning
-    with caplog.at_level(logging.WARNING):
-        ModuleTool().add(module_req=f"{module_name}~=2.0", v2=True, override=True)
-        assert (
-            f"Currently installed {module_name}-1.0.0 does not match constraint ~=2.0: updating to compatible version."
-            in caplog.messages
-        )
+    # verify that incompatible constraint reinstalls
+    ModuleTool().add(module_req=f"{module_name}~=2.0", v2=True, override=True)
     assert ModuleTool().get_module(module_name).version == Version("2.0.0")
-
-
-def test_module_add_preinstalled_v1(snippetcompiler_clean, caplog, tmpvenv_active) -> None:
-    """
-    Verify that `inmanta module add` respects preinstalled v1 modules when they're compatible and logs a warning when they're
-    not.
-    """
-    module_name: str = "std"
-    snippetcompiler_clean.setup_for_snippet(snippet="", autostd=False)
-
-    # preinstall 2.0.0
-    ModuleTool().add(module_req=f"{module_name}==2.0.0", v1=True)
-    assert ModuleTool().get_module(module_name).version == Version("2.0.0")
-
-    # verify that compatible constraint does not reinstall or update
-    ModuleTool().add(module_req=f"{module_name}~=2.0", v1=True, override=True)
-    caplog.clear()
-    with caplog.at_level(logging.WARNING):
-        assert ModuleTool().get_module(module_name).version == Version("2.0.0")
-        assert not caplog.messages
-
-    # verify that incompatible constraint does reinstall and logs a warning
-    with caplog.at_level(logging.WARNING):
-        ModuleTool().add(module_req=f"{module_name}~=2.1.0", v1=True, override=True)
-        assert (
-            f"Currently installed {module_name}-2.0.0 does not match constraint ~=2.1.0: updating to compatible version."
-            in caplog.messages
-        )
-    assert Version("2.1.11") <= ModuleTool().get_module(module_name).version < Version("2.2")
 
 
 def test_module_add_v2_wrong_name_error(tmpdir: py.path.local, monkeypatch, modules_v2_dir: str) -> None:

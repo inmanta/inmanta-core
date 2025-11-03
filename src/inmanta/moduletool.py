@@ -20,6 +20,7 @@ import argparse
 import configparser
 import datetime
 import enum
+import gzip
 import inspect
 import itertools
 import logging
@@ -35,7 +36,7 @@ import tempfile
 import zipfile
 from argparse import ArgumentParser, RawTextHelpFormatter
 from collections import abc
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from configparser import ConfigParser
 from functools import total_ordering
 from re import Pattern
@@ -53,10 +54,10 @@ import inmanta.warnings
 import packaging.requirements
 import toml
 from build.env import DefaultIsolatedEnv
-from inmanta import const, env
-from inmanta.ast import CompilerException
+from inmanta import const, env, util
 from inmanta.command import CLIException, ShowUsageException
-from inmanta.const import CF_CACHE_DIR, MAX_UPDATE_ATTEMPT
+from inmanta.const import CF_CACHE_DIR
+from inmanta.data import model
 from inmanta.module import (
     DummyProject,
     FreezeOperator,
@@ -100,37 +101,15 @@ def add_deps_check_arguments(parser: argparse.ArgumentParser) -> None:
         dest="no_strict_deps_check",
         action="store_true",
         default=False,
-        help=(
-            "When this option is enabled, only version conflicts in the direct dependencies will result in an error. "
-            "All other version conflicts will result in a warning. This option is mutually exclusive with the "
-            r"\--strict-deps-check option."
-        ),
+        help="[Deprecated] This flag is ignored. It will be removed in a future version.",
     )
     parser.add_argument(
         "--strict-deps-check",
         dest="strict_deps_check",
         action="store_true",
         default=False,
-        help=(
-            "When this option is enabled, a version conflict in any (transitive) dependency will results in an error. "
-            r"This option is mutually exclusive with the \--no-strict-deps-check option."
-        ),
+        help="[Deprecated] This flag is ignored. It will be removed in a future version.",
     )
-
-
-def get_strict_deps_check(no_strict_deps_check: bool, strict_deps_check: bool) -> Optional[bool]:
-    """
-    Perform input validation on the --no-strict-deps-check and --strict-deps-check options and
-    return True iff strict dependency checking should be used.
-    """
-    if no_strict_deps_check and strict_deps_check:
-        raise Exception("Options --no-strict-deps-check and --strict-deps-check cannot be set together")
-    if not no_strict_deps_check and not strict_deps_check:
-        # If none of the *strict_deps_check options are provided, use the value set in the project.yml file
-        return None
-    if no_strict_deps_check:
-        return False
-    return strict_deps_check
 
 
 class ModuleLikeTool:
@@ -153,8 +132,8 @@ class ModuleLikeTool:
                 msg = f"{cmd} does not exist."
             raise ShowUsageException(msg)
 
-    def get_project(self, load: bool = False, strict_deps_check: Optional[bool] = None) -> Project:
-        project = Project.get(strict_deps_check=strict_deps_check)
+    def get_project(self, load: bool = False) -> Project:
+        project = Project.get()
         if load:
             project.load()
         return project
@@ -341,6 +320,45 @@ compatible with the dependencies specified by the updated modules.
         )
         add_deps_check_arguments(update)
 
+        download = subparser.add_parser(
+            "download",
+            help="Download all dependencies of the Inmanta project from the pip index, extract them and convert them into"
+            " their source format. The extracted modules will be stored in the directory indicated by the downloadpath"
+            " option in the project.yml file or into <project-dir>/libs if the downloadpath option was not defined.",
+            parents=parent_parsers,
+        )
+        download.add_argument(
+            "--install",
+            dest="install",
+            help="Install the downloaded module in editable mode into the active Python environment.",
+            action="store_true",
+        )
+
+    def download(self, install: bool) -> None:
+        project = self.get_project()
+        downloadpath = project.downloadpath if project.downloadpath else os.path.join(project.path, "libs")
+        os.makedirs(downloadpath, exist_ok=True)
+
+        dependencies, constraints = project.get_all_dependencies_and_constraints()
+        if not dependencies:
+            return
+        converter = PythonPackageToSourceConverter()
+        paths_python_packages: list[str] = converter.download_in_source_format(
+            output_dir=downloadpath,
+            dependencies=dependencies,
+            constraints=constraints,
+            ignore_transitive_dependencies=False,
+            pip_config=project.metadata.pip,
+            override_if_already_exists=True,
+        )
+        if paths_python_packages and install:
+            env.process_env.install_for_config(
+                requirements=[],
+                constraints=[*dependencies, *constraints],
+                config=project.metadata.pip,
+                paths=[env.LocalPackagePath(path=path, editable=True) for path in paths_python_packages],
+            )
+
     def freeze(self, outfile: Optional[str], recursive: Optional[bool], operator: Optional[str]) -> None:
         """
         !!! Big Side-effect !!! sets yaml parser to be order preserving
@@ -395,8 +413,7 @@ compatible with the dependencies specified by the updated modules.
         """
         Install all modules the project requires.
         """
-        strict = get_strict_deps_check(no_strict_deps_check, strict_deps_check)
-        project: Project = self.get_project(load=False, strict_deps_check=strict)
+        project: Project = self.get_project(load=False)
         project.install_modules()
 
     def update(
@@ -409,91 +426,13 @@ compatible with the dependencies specified by the updated modules.
         """
         Update all modules to the latest version compatible with the given module version constraints.
         """
-        strict = get_strict_deps_check(no_strict_deps_check, strict_deps_check)
         if project is None:
             # rename var to make mypy happy
-            my_project = self.get_project(load=False, strict_deps_check=strict)
+            my_project = self.get_project(load=False)
         else:
             my_project = project
 
-        def do_update(specs: Mapping[str, Sequence[InmantaModuleRequirement]], modules: list[str]) -> None:
-            v2_modules = {module for module in modules if my_project.module_source.path_for(module) is not None}
-
-            v2_python_specs: list[inmanta.util.CanonicalRequirement] = [
-                module_spec.get_python_package_requirement()
-                for module, module_specs in specs.items()
-                for module_spec in module_specs
-                if module in v2_modules
-            ]
-            if v2_python_specs:
-                # Get known requires and add them to prevent invalidating constraints through updates
-                # These could be constraints (-c) as well, but that requires additional sanitation
-                # Because for pip not every valid -r is a valid -c
-                current_requires = my_project.get_strict_python_requirements_as_list()
-                env.process_env.install_for_config(
-                    v2_python_specs + inmanta.util.parse_requirements(current_requires),
-                    my_project.metadata.pip,
-                    upgrade=True,
-                )
-                # Invalidate ast cache so that dependencies of installed modules can be updated as well
-                my_project.invalidate_state()
-
-            for v1_module in set(modules).difference(v2_modules):
-                spec = specs.get(v1_module, [])
-                try:
-                    ModuleV1.update(my_project, v1_module, spec, install_mode=my_project.install_mode)
-                    # Invalidate the state of the updated module
-                    my_project.invalidate_state(v1_module)
-                except Exception:
-                    LOGGER.exception("Failed to update module %s", v1_module)
-
-            # Load the newly installed modules into the modules cache
-            my_project.install_modules(bypass_module_cache=True, update_dependencies=True)
-
-        attempt = 0
-        done = False
-        last_failure: Optional[CompilerException] = None
-
-        while not done and attempt < MAX_UPDATE_ATTEMPT:
-            LOGGER.info("Performing update attempt %d of %d", attempt + 1, MAX_UPDATE_ATTEMPT)
-            try:
-                loaded_mods_pre_update = {module_name: mod.version for module_name, mod in my_project.modules.items()}
-
-                # get AST
-                my_project.load_module_recursive(install=True)
-                # get current full set of requirements
-                specs: dict[str, list[InmantaModuleRequirement]] = my_project.collect_imported_requirements()
-                if module is None:
-                    modules = list(specs.keys())
-                else:
-                    modules = [module]
-                do_update(specs, modules)
-
-                loaded_mods_post_update = {module_name: mod.version for module_name, mod in my_project.modules.items()}
-                if loaded_mods_pre_update == loaded_mods_post_update:
-                    # No changes => state has converged
-                    done = True
-                else:
-                    # New modules were downloaded or existing modules were updated to a new version. Perform another pass to
-                    # make sure that all dependencies, defined in these new modules, are taken into account.
-                    last_failure = CompilerException("Module update did not converge")
-            except CompilerException as e:
-                last_failure = e
-                # model is corrupt
-                LOGGER.info("The model is not currently in an executable state, performing intermediate updates")
-                # get all specs from all already loaded modules
-                specs = my_project.collect_requirements()
-
-                if module is None:
-                    # get all loaded/partly loaded modules
-                    modules = list(my_project.modules.keys())
-                else:
-                    modules = [module]
-                do_update(specs, modules)
-            attempt += 1
-
-        if last_failure is not None and not done:
-            raise last_failure
+        my_project.install_modules(update=True)
 
 
 @stable_api
@@ -511,16 +450,22 @@ class ModuleTool(ModuleLikeTool):
         add = subparser.add_parser(
             "add",
             help=add_help_msg,
-            description=f"{add_help_msg} When executed on a project, the module is installed as well. "
-            r"Either \--v1 or \--v2 has to be set.",
+            description=f"{add_help_msg} When executed on a project, the module is installed as well.",
             parents=parent_parsers,
         )
         add.add_argument(
             "module_req",
             help="The name of the module, optionally with a version constraint.",
         )
-        add.add_argument("--v1", dest="v1", help="Add the given module as a v1 module", action="store_true")
-        add.add_argument("--v2", dest="v2", help="Add the given module as a V2 module", action="store_true")
+        add.add_argument(
+            "--v2",
+            dest="v2",
+            help=(
+                "Add the given module as a V2 module. This is currently the only supported module version."
+                " This flag is kept for backwards compatibility."
+            ),
+            action="store_true",
+        )
         add.add_argument(
             "--override",
             dest="override",
@@ -722,20 +667,52 @@ When a development release is done using the \--dev option, this command:
             "this message will also be used as the commit message.",
         )
         release.add_argument("-a", "--all", dest="commit_all", help="Use commit -a", action="store_true")
+        download = subparser.add_parser(
+            "download",
+            help="Download the source distribution of an Inmanta module from a Python package repository,"
+            " extract it and convert it to its source format.",
+            parents=parent_parsers,
+        )
+        download.add_argument(
+            "module_req",
+            help="The name of the module, optionally with a version constraint.",
+        )
+        download.add_argument(
+            "--install",
+            dest="install",
+            help="Install the downloaded module in editable mode into the active Python environment.",
+            action="store_true",
+        )
+        download.add_argument(
+            "-d",
+            "--directory",
+            dest="directory",
+            help="Download the module in this directory instead of the current working directory.",
+        )
 
-    def add(self, module_req: str, v1: bool = False, v2: bool = False, override: bool = False) -> None:
+    def download(self, module_req: str, install: bool, directory: str | None) -> None:
+        if directory is None:
+            directory = os.getcwd()
+        module_requirement = InmantaModuleRequirement.parse(module_req)
+        converter = PythonPackageToSourceConverter()
+        paths_module_sources = converter.download_in_source_format(
+            output_dir=directory,
+            dependencies=[module_requirement.get_python_package_requirement()],
+            ignore_transitive_dependencies=True,
+        )
+        assert len(paths_module_sources) == 1
+        # Install in editable mode if requested
+        if install:
+            env.process_env.install_from_source(paths=[env.LocalPackagePath(path=paths_module_sources[0], editable=True)])
+
+    def add(self, module_req: str, v2: bool = True, override: bool = False) -> None:
         """
         Add a module dependency to an Inmanta module or project.
 
         :param module_req: The module to add, optionally with a version constraint.
-        :param v1: Whether the given module should be added as a V1 module or not.
         :param override: If set to True, override the version constraint when the module dependency already exists.
                          If set to False, this method raises an exception when the module dependency already exists.
         """
-        if not v1 and not v2:
-            raise CLIException("Either --v1 or --v2 has to be set", exitcode=1)
-        if v1 and v2:
-            raise CLIException("--v1 and --v2 cannot be set together", exitcode=1)
         module_like: Optional[ModuleLike] = ModuleLike.from_path(path=os.getcwd())
         if module_like is None:
             raise CLIException("Current working directory doesn't contain an Inmanta module or project", exitcode=1)
@@ -748,18 +725,18 @@ When a development release is done using the \--dev option, this command:
                 "A dependency on the given module was already defined, use --override to override the version constraint",
                 exitcode=1,
             )
+        module_like.add_module_requirement_persistent(requirement=module_requirement)
         if isinstance(module_like, Project):
             try:
-                module_like.install_module(module_requirement, install_as_v1_module=v1)
+                module_like.install_modules()
             except ModuleNotFoundException:
                 raise CLIException(
-                    f"Failed to install {module_requirement} as a {'v1' if v1 else 'v2'} module.",
+                    f"Failed to install {module_requirement}.",
                     exitcode=1,
                 )
             else:
                 # cached project might have inconsistent state after modifying the environment through another instance
                 self.get_project(load=False).invalidate_state()
-        module_like.add_module_requirement_persistent(requirement=module_requirement, add_as_v1_module=v1)
 
     def v1tov2(self, module: str) -> None:
         """
@@ -1922,3 +1899,153 @@ graft inmanta_plugins/{self._module.name}/templates
         config["options.packages.find"]["include"] = "inmanta_plugins*"
 
         return config
+
+
+class PythonPackageToSourceConverter:
+    """
+    A class that offers support to download Inmanta modules in source format
+    from a Python package repository.
+    """
+
+    def download_in_source_format(
+        self,
+        output_dir: str,
+        dependencies: Sequence[util.CanonicalRequirement],
+        ignore_transitive_dependencies: bool,
+        constraints: Sequence[util.CanonicalRequirement] | None = None,
+        pip_config: model.PipConfig | None = None,
+        override_if_already_exists: bool = False,
+    ) -> list[str]:
+        """
+        This method:
+            * Downloads the source distribution packages for the given
+              dependencies from a Python package repository.
+            * Extracts them.
+            * Converts them into their source format.
+
+        :param ignore_transitive_dependencies: False iff also download and extract the Inmanta modules
+                                               that are transitive dependencies of the given dependencies.
+        :param override_if_already_exists: True iff any directory in the output directory that already exists
+                                           will be overriden. Otherwise an exception is raised.
+        """
+        if not dependencies:
+            return []
+        result = []
+        with tempfile.TemporaryDirectory() as path_tmp_dir:
+            # Download the python package
+            download_dir = os.path.join(path_tmp_dir, "download")
+            os.mkdir(download_dir)
+            paths_source_packages: list[str] = self._download_source_packages(
+                dependencies=dependencies,
+                constraints=constraints,
+                ignore_transitive_dependencies=ignore_transitive_dependencies,
+                download_dir=download_dir,
+                pip_config=pip_config,
+            )
+            # Extract the packages and convert to source format
+            extract_dir = os.path.join(path_tmp_dir, "extract")
+            os.mkdir(extract_dir)
+            for path_current_package in paths_source_packages:
+                inmanta_module_name: str = util.get_module_name(path_distribution_pkg=path_current_package)
+                path_extracted_pkg = self._extract_source_package(path_current_package, extract_dir)
+                self._convert_to_source_format(path_extracted_pkg, inmanta_module_name)
+                # Move to desired output directory
+                path_pkg_in_output_dir = os.path.join(output_dir, inmanta_module_name)
+                if os.path.exists(path_pkg_in_output_dir):
+                    if override_if_already_exists:
+                        shutil.rmtree(path_pkg_in_output_dir)
+                    else:
+                        raise Exception(f"Directory {path_pkg_in_output_dir} already exists")
+                shutil.move(src=path_extracted_pkg, dst=path_pkg_in_output_dir)
+                result.append(path_pkg_in_output_dir)
+        return result
+
+    def _download_source_packages(
+        self,
+        dependencies: Sequence[util.CanonicalRequirement],
+        constraints: Sequence[util.CanonicalRequirement] | None,
+        ignore_transitive_dependencies: bool,
+        download_dir: str,
+        pip_config: model.PipConfig | None,
+    ) -> list[str]:
+        """
+        Download the source distribution packages for the given requirements into the download_dir.
+
+        :return: A list of paths to the source distribution packages that were downloaded.
+        """
+        assert not os.listdir(download_dir)
+
+        with tempfile.TemporaryDirectory() as path_tmp_dir:
+            # Stage 1: Determine which versions to download
+            requirements: list[util.CanonicalRequirement]
+            if len(dependencies) == 1 and not constraints:
+                # We only have one dependency, so we cannot have any version conflicts between dependencies.
+                requirements = list(dependencies)
+            else:
+                # Perform download with all dependencies, so that we know the exact version we need.
+                env.process_env.download_distributions(
+                    output_directory=path_tmp_dir,
+                    pip_config=pip_config,
+                    dependencies=dependencies,
+                    constraints=constraints,
+                    no_deps=False,
+                )
+                # Fetch the packages and their exact versions
+                requirements = []
+                dependencies_pkg_names: set[str] = {d.name for d in dependencies}
+                for filename in os.listdir(path_tmp_dir):
+                    if not filename.startswith("inmanta_module_"):
+                        # Not an Inmanta module
+                        continue
+                    pkg_name, version = util.get_pkg_name_and_version(filename)
+                    if ignore_transitive_dependencies and pkg_name not in dependencies_pkg_names:
+                        # It's a transitive dependency we can ignore
+                        continue
+                    requirements.append(util.parse_requirement(f"{pkg_name}=={version}"))
+
+            # Stage 2: Download the correct versions of the requested packages as source distribution.
+            for req in requirements:
+                try:
+                    env.process_env.download_distributions(
+                        output_directory=download_dir,
+                        pip_config=pip_config,
+                        dependencies=[req],
+                        constraints=constraints,
+                        no_deps=True,
+                        # Setting no_binary to :all: would imply that `pip download` downloads dependencies
+                        # (e.g. setuptools) of these modules in source format as well. This would make the
+                        # command fail if these dependencies are not available in a source distribution package.
+                        no_binary=req.name,
+                    )
+                except env.PackageNotFound:
+                    LOGGER.warning("Package %s is not available as a source distribution package. Skipping it.", str(req))
+
+        return [os.path.join(download_dir, filename) for filename in os.listdir(download_dir)]
+
+    def _extract_source_package(self, path_source_package: str, extract_dir: str) -> str:
+        """
+        Extract the given source distribution package into the given extract_dir directory.
+        """
+        assert not os.listdir(extract_dir)
+        with gzip.open(filename=path_source_package, mode="rb") as tar_file_obj:
+            with tarfile.TarFile(mode="r", fileobj=tar_file_obj) as tar:
+                tar.extractall(path=extract_dir, filter="data")
+
+        files_extract_dir = os.listdir(extract_dir)
+        assert len(files_extract_dir) == 1
+        return os.path.join(extract_dir, files_extract_dir[0])
+
+    def _convert_to_source_format(self, path_extracted_pkg: str, module_name: str) -> None:
+        """
+        Move the files from the extracted Python package into their location on the source code repository.
+        """
+        try:
+            # Remove this file as it will be replaced by the one present in the inmanta_plugins/<mod-name> directory.
+            os.remove(os.path.join(path_extracted_pkg, "setup.cfg"))
+        except FileNotFoundError:
+            pass
+        files_and_dirs_to_move = ["model", "templates", "files", "setup.cfg"]
+        for file_or_dir in files_and_dirs_to_move:
+            fq_path = os.path.join(path_extracted_pkg, "inmanta_plugins", module_name, file_or_dir)
+            if os.path.exists(fq_path):
+                shutil.move(src=fq_path, dst=path_extracted_pkg)

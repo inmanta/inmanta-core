@@ -97,10 +97,9 @@ import inmanta.types
 import inmanta.util
 from inmanta import const, tracing
 from inmanta.agent import executor, resourcepool
-from inmanta.agent.executor import DeployReport, FailedInmantaModules, GetFactReport
+from inmanta.agent.executor import DeployReport, FailedInmantaModules, GetFactReport, VirtualEnvironmentManager
 from inmanta.agent.resourcepool import PoolManager, PoolMember
 from inmanta.const import LOGGER_NAME_EXECUTOR
-from inmanta.loader import get_inmanta_module_name
 from inmanta.protocol.ipc_light import (
     FinalizingIPCClient,
     IPCMethod,
@@ -219,7 +218,7 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         # sub executors
         self.ctx = ExecutorContext(self, environment)
 
-        # venc keep alive
+        # venv keep alive
         # This interval and this task will be initialized when the InitCommand is received, see usage of `venv_cleanup_task`.
         # We set this to `None` as this field will be used to ensure that the InitCommand is only called once
         self.timer_venv_scheduler_interval: typing.Optional[float] = None
@@ -313,7 +312,7 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         """
         # makes mypy happy
         assert self.ctx.venv is not None
-        path = pathlib.Path(self.ctx.venv.env_path) / const.INMANTA_VENV_STATUS_FILENAME
+        path = pathlib.Path(self.ctx.venv.env_path) / ".inmanta" / const.INMANTA_VENV_STATUS_FILENAME
         path.touch()
         self.logger.log(
             const.LOG_LEVEL_TRACE, "Touching venv status %s, then sleeping %f", path, self.timer_venv_scheduler_interval
@@ -389,7 +388,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
         venv_path: str,
         storage_folder: str,
         session_gid: uuid.UUID,
-        sources: list[inmanta.loader.ModuleSource],
+        sources: list["inmanta.loader.ModuleSource"],
         venv_touch_interval: float = 60.0,
     ):
         """
@@ -434,7 +433,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
                 in_place.append(module_source)
             except Exception as e:
                 logger.info("Failed to load sources: %s", module_source, exc_info=True)
-                inmanta_module_name = get_inmanta_module_name(module_source.name)
+                inmanta_module_name = inmanta.loader.get_inmanta_module_name(module_source.name)
                 failed_modules[inmanta_module_name][module_source.name] = e
 
         # then try to import them
@@ -446,7 +445,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
                 )
             except Exception as e:
                 logger.info("Failed to import source: %s", module_source.name, exc_info=True)
-                inmanta_module_name = get_inmanta_module_name(module_source.name)
+                inmanta_module_name = inmanta.loader.get_inmanta_module_name(module_source.name)
                 failed_modules[inmanta_module_name][module_source.name] = ModuleImportException(e, module_source.name)
 
         return failed_modules
@@ -850,7 +849,7 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
         super().__init__()
         self.init_once()
 
-        # Can be overriden in tests
+        # Can be overridden in tests
         self.venv_checkup_interval: float = 60.0
 
         self.thread_pool = thread_pool
@@ -886,6 +885,12 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
 
     def get_lock_name_for(self, member_id: executor.ExecutorBlueprint) -> str:
         return member_id.blueprint_hash()
+
+    def get_environment_manager(self) -> VirtualEnvironmentManager:
+        """
+        Returns the VirtualEnvironmentManager used to create Python environments for the executors.
+        """
+        return self.environment_manager
 
     @classmethod
     def init_once(cls) -> None:
@@ -1029,6 +1034,12 @@ class MPManager(
         self.agent_map: collections.defaultdict[str, set[MPExecutor]] = collections.defaultdict(set)
         self.max_executors_per_agent = inmanta.agent.config.agent_executor_cap.get()
 
+    def get_environment_manager(self) -> VirtualEnvironmentManager:
+        """
+        Returns the VirtualEnvironmentManager used to create Python environments for the executors.
+        """
+        return self.process_pool.get_environment_manager()
+
     def get_lock_name_for(self, member_id: executor.ExecutorId) -> str:
         return member_id.identity()
 
@@ -1072,10 +1083,10 @@ class MPManager(
 
     async def create_member(self, executor_id: executor.ExecutorId) -> MPExecutor:
         try:
-            process = await self.process_pool.get(executor_id.blueprint)
+            process: MPProcess = await self.process_pool.get(executor_id.blueprint)
             # FIXME: we have a race here: the process can become empty between these two calls
             # Current thinking is that this race is unlikely
-            result = await process.get(executor_id)
+            result: MPExecutor = await process.get(executor_id)
 
             executors = self.agent_map.get(executor_id.agent_name)
             assert executors is not None  # make mypy happy
@@ -1121,6 +1132,14 @@ class MPManager(
         # the last two parameters are there to glue the signatures of the join methods in the two super classes
         await super().join()
         await self.process_pool.join()
+
+    async def stop_all_executors(self) -> list[MPExecutor]:
+        """
+        Requests all executors to shutdown and returns these executors.
+        """
+        children = set().union(*(e for e in self.agent_map.values()))
+        await asyncio.gather(*(child.request_shutdown() for child in children))
+        return list(children)
 
     async def stop_for_agent(self, agent_name: str) -> list[MPExecutor]:
         children = list(self.agent_map[agent_name])

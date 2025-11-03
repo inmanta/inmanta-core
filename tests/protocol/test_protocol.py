@@ -20,6 +20,7 @@ import asyncio
 import base64
 import datetime
 import json
+import logging
 import random
 import time
 import urllib.parse
@@ -36,6 +37,7 @@ from tornado import web
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 from tornado.httputil import url_concat
 
+import utils
 from inmanta import config, const, protocol
 from inmanta.const import ClientType
 from inmanta.data.model import BaseModel
@@ -444,7 +446,7 @@ async def test_pydantic_alias(server_config, async_finalizer):
     await roundtrip(projectt)
 
 
-async def test_return_non_warnings(server_config, async_finalizer):
+async def test_return_non_warnings(server_config, async_finalizer, caplog):
     """
     Test return none but pushing warnings
     """
@@ -478,6 +480,11 @@ async def test_return_non_warnings(server_config, async_finalizer):
     assert "metadata" in response.result
     assert "warnings" in response.result["metadata"]
     assert "error1" in response.result["metadata"]["warnings"]
+
+    with caplog.at_level(logging.WARNING):
+        assert await client.test_method("x").value() is None
+        utils.log_contains(caplog, "inmanta.protocol.common", logging.WARNING, "error1")
+        utils.log_contains(caplog, "inmanta.protocol.common", logging.WARNING, "error2")
 
 
 async def test_invalid_handler():
@@ -924,7 +931,10 @@ async def test_method_definition():
             Create a new project
             """
 
-    assert "Type collections.abc.Iterator[str] of argument name can only be generic List, Dict or Literal" in str(e.value)
+    assert (
+        "Type collections.abc.Iterator[str] of argument name can only be generic list / Sequence, dict / Mapping or Literal"
+        in str(e.value)
+    )
 
     with pytest.raises(InvalidMethodDefinition) as e:
 

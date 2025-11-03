@@ -23,64 +23,14 @@ import pytest
 
 import inmanta.util
 from inmanta import env
-from inmanta.config import Config
 from inmanta.data.model import PipConfig
 from inmanta.env import LocalPackagePath
-from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleV1, ModuleV2Source
+from inmanta.module import InmantaModuleRequirement, ModuleV2Source
 from inmanta.moduletool import ProjectTool
 from inmanta.parser import ParserException
-from moduletool.common import add_file, clone_repo
+from packaging.requirements import Requirement
 from packaging.version import Version
-from utils import PipIndex, create_python_package, module_from_template, v1_module_from_template
-
-
-@pytest.mark.parametrize_any(
-    "kwargs_update_method, mod2_should_be_updated, mod8_should_be_updated",
-    [({}, True, True), ({"module": "mod2"}, True, False), ({"module": "mod8"}, False, True)],
-)
-def test_module_update_with_install_mode_master(
-    tmpdir: py.path.local,
-    modules_repo: str,
-    tmpvenv_active,
-    kwargs_update_method: dict[str, str],
-    mod2_should_be_updated: bool,
-    mod8_should_be_updated: bool,
-) -> None:
-    # Make a copy of masterproject_multi_mod
-    masterproject_multi_mod = tmpdir.join("masterproject_multi_mod")
-    clone_repo(modules_repo, "masterproject_multi_mod", tmpdir)
-    libs_folder = os.path.join(masterproject_multi_mod, "libs")
-    os.mkdir(libs_folder)
-
-    # Set masterproject_multi_mod as current project
-    os.chdir(masterproject_multi_mod)
-    Config.load_config()
-
-    # Dependencies masterproject_multi_mod
-    for mod in ["mod2", "mod8"]:
-        # Clone mod in root tmpdir
-        clone_repo(modules_repo, mod, tmpdir)
-
-        # Clone mod from root of tmpdir into libs folder of masterproject_multi_mod
-        clone_repo(tmpdir, mod, libs_folder)
-
-        # Update module in root of tmpdir by adding an extra file
-        file_name_extra_file = "test_file"
-        path_mod = os.path.join(tmpdir, mod)
-        add_file(path_mod, file_name_extra_file, "test", "Second commit")
-
-        # Assert test_file not present in libs folder of masterproject_multi_mod
-        path_extra_file = os.path.join(libs_folder, mod, file_name_extra_file)
-        assert not os.path.exists(path_extra_file)
-
-    # Update module(s) of masterproject_multi_mod
-    ProjectTool().update(**kwargs_update_method)
-
-    # Assert availability of test_file in masterproject_multi_mod
-    extra_file_mod2 = os.path.join(libs_folder, "mod2", file_name_extra_file)
-    assert os.path.exists(extra_file_mod2) == mod2_should_be_updated
-    extra_file_mod8 = os.path.join(libs_folder, "mod8", file_name_extra_file)
-    assert os.path.exists(extra_file_mod8) == mod8_should_be_updated
+from utils import PipIndex, create_python_package, module_from_template
 
 
 @pytest.mark.parametrize("corrupt_module", [False, True])
@@ -151,77 +101,25 @@ def test_module_update_with_v2_module(
         new_content_init_cf="entity" if corrupt_module else None,  # Introduce syntax error in the module
     )
 
-    module_path = os.path.join(tmpdir, "modulepath")
-    os.mkdir(module_path)
-    mod11_dir = clone_repo(modules_repo, "mod11", module_path, tag="3.2.1")
-
     snippetcompiler_clean.setup_for_snippet(
         # Don't import module2 in the inmanta project. An import for module2 is present in module1 instead.
         # This tests whether the module update command takes into account all transitive dependencies.
-        snippet="""
-        import module1
-        import mod11
-        """,
+        snippet="",
         autostd=False,
         install_v2_modules=[
             LocalPackagePath(path=os.path.join(tmpdir, "module2-v2.0.1")),
             LocalPackagePath(path=patched_module_dir),
         ],
-        add_to_module_path=[module_path],
         index_url=pip_index.url,
-        project_requires=[
-            InmantaModuleRequirement.parse("module1<1.2.5"),
-            InmantaModuleRequirement.parse("mod11<4.2.0"),
-        ],
+        python_requires=[Requirement("inmanta-module-module1<1.2.5")],
         install_project=False,
     )
 
     assert_version_installed(module_name="module1", version="1.2.3")
     assert_version_installed(module_name="module2", version="2.0.1")
-    assert ModuleV1(project=None, path=mod11_dir).version == Version("3.2.1")
     ProjectTool().update()
     assert_version_installed(module_name="module1", version="1.2.4")
     assert_version_installed(module_name="module2", version="2.2.0")
-    assert ModuleV1(project=None, path=mod11_dir).version == Version("4.1.1")
-
-
-@pytest.mark.parametrize("install_mode", [InstallMode.release, InstallMode.prerelease])
-@pytest.mark.slowtest
-def test_module_update_with_v1_module(
-    tmpdir: py.path.local,
-    modules_dir: str,
-    snippetcompiler_clean,
-    modules_repo: str,
-    install_mode: InstallMode,
-) -> None:
-    """
-    Assert that the ast cache is invalidated after a module is installed. This so that dependencies of
-    installed modules are updated as well.
-
-    Dependency graph:
-
-        -> Inmanta project
-            -> mod13 (v1) -> mod11 (v1)
-    """
-    module_path = os.path.join(tmpdir, "modulepath")
-    os.mkdir(module_path)
-    mod11_dir = clone_repo(modules_repo, "mod11", module_path, tag="3.2.1")
-    mod13_dir = clone_repo(modules_repo, "mod13", module_path, tag="1.2.3")
-
-    snippetcompiler_clean.setup_for_snippet(
-        snippet="""
-        import mod13
-        """,
-        autostd=False,
-        add_to_module_path=[module_path],
-        install_mode=install_mode,
-        install_project=False,
-    )
-    assert ModuleV1(project=None, path=mod13_dir).version == Version("1.2.3")
-    assert ModuleV1(project=None, path=mod11_dir).version == Version("3.2.1")
-    ProjectTool().update()
-    assert ModuleV1(project=None, path=mod13_dir).version == Version("1.2.4")
-    assert ModuleV1(project=None, path=mod11_dir).version == Version("4.1.0")
 
 
 @pytest.mark.slowtest
@@ -229,7 +127,7 @@ def test_module_update_dependencies(
     tmpdir: py.path.local,
     monkeypatch,
     snippetcompiler_clean,
-    modules_dir: str,
+    modules_v2_dir: str,
 ) -> None:
     """
     Verify that `inmanta project update` correctly handles module's Python dependencies:
@@ -251,11 +149,21 @@ def test_module_update_dependencies(
     for v in ("1.0.0", "2.0.0"):
         create_python_package("c", Version(v), str(tmpdir.join(f"c-{v}")), publish_index=index)
 
+    # create my_mod
+    module_from_template(
+        source_dir=os.path.join(modules_v2_dir, "minimalv2module"),
+        dest_dir=str(tmpdir.join("modules", "my_mod")),
+        new_name="my_mod",
+        new_requirements=inmanta.util.parse_requirements(["a", "b~=1.0.0"]),
+        publish_index=index,
+    )
+
     snippetcompiler_clean.setup_for_snippet(
         snippet="import my_mod",
         autostd=False,
         install_project=False,
         add_to_module_path=[str(tmpdir.join("modules"))],
+        python_requires=inmanta.util.parse_requirements(["inmanta-module-my_mod"]),
         index_url=index.url,
     )
 
@@ -266,14 +174,6 @@ def test_module_update_dependencies(
             index_url=index.url,
             use_system_config=False,
         ),
-    )
-
-    # create my_mod
-    v1_module_from_template(
-        source_dir=os.path.join(modules_dir, "minimalv1module"),
-        dest_dir=str(tmpdir.join("modules", "my_mod")),
-        new_name="my_mod",
-        new_requirements=inmanta.util.parse_requirements(["a", "b~=1.0.0"]),
     )
 
     # run `inmanta project update` without running install first

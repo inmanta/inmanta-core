@@ -20,6 +20,7 @@ import copy
 import logging.config
 import pathlib
 import warnings
+from concurrent.futures.thread import ThreadPoolExecutor
 from glob import glob
 from re import Pattern
 from threading import Condition
@@ -30,9 +31,11 @@ import _pytest.logging
 import inmanta.deploy.state
 import toml
 from inmanta import logging as inmanta_logging
+from inmanta.agent.executor import Executor, ExecutorManager
 from inmanta.agent.handler import CRUDHandler, HandlerContext, ResourceHandler, SkipResource, TResource, provider
 from inmanta.agent.write_barier_executor import WriteBarierExecutorManager
 from inmanta.config import log_dir
+from inmanta.data.model import EnvSettingType
 from inmanta.db.util import PGRestore
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.protocol import auth
@@ -844,7 +847,38 @@ DISABLE_STATE_CHECK = False
 
 
 @pytest.fixture(scope="function")
-async def agent_factory(server, monkeypatch) -> AsyncIterator[Callable[[uuid.UUID], Awaitable[Agent]]]:
+def executor_factory():
+
+    def default_executor(
+        environment: uuid.UUID,
+        client: inmanta.protocol.SessionClient,
+        eventloop: asyncio.AbstractEventLoop,
+        parent_logger: logging.Logger,
+        thread_pool: ThreadPoolExecutor,
+        code_dir: str,
+        env_dir: str,
+    ):
+        executor: ExecutorManager[Executor] = InProcessExecutorManager(
+            environment,
+            client,
+            eventloop,
+            parent_logger,
+            thread_pool,
+            code_dir,
+            env_dir,
+            False,
+        )
+
+        executor = WriteBarierExecutorManager(executor)
+        return executor
+
+    return default_executor
+
+
+@pytest.fixture(scope="function")
+async def agent_factory(
+    server, client, monkeypatch, executor_factory
+) -> AsyncIterator[Callable[[uuid.UUID], Awaitable[Agent]]]:
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     agents: list[Agent] = []
 
@@ -860,7 +894,7 @@ async def agent_factory(server, monkeypatch) -> AsyncIterator[Callable[[uuid.UUI
         # Restore state-dir
         config.Config.set("config", "state-dir", str(server_state_dir))
 
-        executor = InProcessExecutorManager(
+        executor = executor_factory(
             environment,
             a._client,
             asyncio.get_running_loop(),
@@ -868,11 +902,7 @@ async def agent_factory(server, monkeypatch) -> AsyncIterator[Callable[[uuid.UUI
             a.thread_pool,
             str(pathlib.Path(a._storage["executors"]) / "code"),
             str(pathlib.Path(a._storage["executors"]) / "venvs"),
-            False,
         )
-
-        executor = WriteBarierExecutorManager(executor)
-
         a.executor_manager = executor
         a.scheduler.executor_manager = executor
         a.scheduler.code_manager = utils.DummyCodeManager(a._client)
@@ -889,6 +919,15 @@ async def agent_factory(server, monkeypatch) -> AsyncIterator[Callable[[uuid.UUI
     global DISABLE_STATE_CHECK
     try:
         if not DISABLE_STATE_CHECK:
+            all_environments = {agent.environment for agent in agents}
+            for environment in all_environments:
+                # Make sure that the scheduler doesn't deploy anything anymore, because this would alter
+                # the last_deploy timestamp in the resource_state.
+                await client.all_agents_action(tid=environment, action=const.AgentAction.pause.value).value()
+                # Set data.RESET_DEPLOY_PROGRESS_ON_START back to False in all of the environments of the created agents
+                # Because this teardown asserts that the state is correct on restart and this setting breaks that assertion
+                result = await client.set_setting(environment, data.RESET_DEPLOY_PROGRESS_ON_START, False)
+                assert result.code == 200, result.result
             for agent in agents:
                 await agent.stop_working()
                 the_state = copy.deepcopy(dict(agent.scheduler._state.resource_state))
@@ -921,13 +960,22 @@ async def agent(
 
 
 @pytest.fixture(scope="function")
-async def agent_no_state_check(server, environment, agent_factory: Callable[[uuid.UUID], Awaitable[Agent]], monkeypatch):
-    """Construct an agent that can execute using the resource container"""
+async def agent_factory_no_state_check(
+    agent_factory: Callable[[uuid.UUID], Awaitable[Agent]],
+) -> Callable[[uuid.UUID], Awaitable[Agent]]:
     global DISABLE_STATE_CHECK
     DISABLE_STATE_CHECK = True
+    yield agent_factory
+
+
+@pytest.fixture(scope="function")
+async def agent_no_state_check(
+    server, environment, agent_factory_no_state_check: Callable[[uuid.UUID], Awaitable[Agent]], monkeypatch
+):
+    """Construct an agent that can execute using the resource container"""
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
-    a: Agent = await agent_factory(uuid.UUID(environment))
+    a: Agent = await agent_factory_no_state_check(uuid.UUID(environment))
     await utils.retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     yield a
@@ -1262,11 +1310,11 @@ class SnippetCompilationTest(KeepOnFail):
         python_requires: Optional[list[Requirement]] = None,
         install_mode: Optional[InstallMode] = None,
         relation_precedence_rules: Optional[list[RelationPrecedenceRule]] = None,
-        strict_deps_check: Optional[bool] = None,
         use_pip_config_file: bool = False,
         index_url: Optional[str] = None,
         extra_index_url: list[str] = [],
         main_file: str = "main.cf",
+        pre: bool | None = None,
     ) -> Project:
         """
         Sets up the project to compile a snippet of inmanta DSL. Activates the compiler environment (and patches
@@ -1284,7 +1332,6 @@ class SnippetCompilationTest(KeepOnFail):
                              no install mode is set explicitly in the project.yml file.
         :param relation_precedence_policy: The relation precedence policy that should be stored in the project.yml file of the
                                            Inmanta project.
-        :param strict_deps_check: True iff the returned project should have strict dependency checking enabled.
         :param use_pip_config_file: True iff the pip config file should be used and no source is required for v2 to work
                                     False if a package source is needed for v2 modules to work
         :param main_file: Path to the .cf file to use as main entry point. A relative or an absolute path can be provided.
@@ -1306,6 +1353,7 @@ class SnippetCompilationTest(KeepOnFail):
             index_url,
             extra_index_url,
             main_file,
+            pre=pre,
         )
 
         dirty_venv = autostd or install_project or install_v2_modules or self.re_check_venv or python_requires
@@ -1314,7 +1362,6 @@ class SnippetCompilationTest(KeepOnFail):
             autostd or ministd,
             install_project,
             install_v2_modules,
-            strict_deps_check=strict_deps_check,
             main_file=main_file,
             dirty_venv=dirty_venv,
         )
@@ -1325,13 +1372,10 @@ class SnippetCompilationTest(KeepOnFail):
         install_project: bool,
         install_v2_modules: Optional[list[LocalPackagePath]] = None,
         main_file: str = "main.cf",
-        strict_deps_check: Optional[bool] = None,
         dirty_venv: bool = True,
     ):
         loader.PluginModuleFinder.reset()
-        self.project = Project(
-            self.project_dir, autostd=autostd, main_file=main_file, venv_path=self.venv, strict_deps_check=strict_deps_check
-        )
+        self.project = Project(self.project_dir, autostd=autostd, main_file=main_file, venv_path=self.venv)
         Project.set(self.project)
 
         if dirty_venv:
@@ -1379,6 +1423,8 @@ class SnippetCompilationTest(KeepOnFail):
         extra_index_url: list[str] = [],
         main_file: str = "main.cf",
         ministd: bool = False,
+        environment_settings: dict[str, EnvSettingType] | None = None,
+        pre: bool | None = None,
     ) -> None:
         add_to_module_path = add_to_module_path if add_to_module_path is not None else []
         python_package_sources = python_package_sources if python_package_sources is not None else []
@@ -1426,6 +1472,14 @@ class SnippetCompilationTest(KeepOnFail):
                     f"""                extra_index_url: [{", ".join(url for url in extra_index_url)}]
 """
                 )
+            if pre is not None:
+                cfg.write(
+                    f"""                pre: {str(pre).lower()}
+"""
+                )
+            if environment_settings:
+                cfg.write("\n            environment_settings:\n")
+                cfg.write("\n".join(f"                {name}: {value}" for name, value in environment_settings.items()))
         with open(os.path.join(self.project_dir, "requirements.txt"), "w", encoding="utf-8") as fd:
             fd.write("\n".join(str(req) for req in python_requires))
         self.main = os.path.join(self.project_dir, main_file)
@@ -1507,6 +1561,7 @@ class SnippetCompilationTest(KeepOnFail):
             include_status=include_status,
             partial_compile=partial_compile,
             resource_sets_to_remove=resource_sets_to_remove,
+            export_env_var_settings=deploy,
         )
 
     async def do_export_and_deploy(

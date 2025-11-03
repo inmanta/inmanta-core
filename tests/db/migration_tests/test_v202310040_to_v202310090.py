@@ -47,5 +47,5 @@ async def test_type_change(
         """
     )
     settings = json.loads(result[0]["settings"])
-    assert isinstance(settings[data.AUTOSTART_AGENT_DEPLOY_INTERVAL], str)
-    assert isinstance(settings[data.AUTOSTART_AGENT_REPAIR_INTERVAL], str)
+    assert isinstance(settings["settings"][data.AUTOSTART_AGENT_DEPLOY_INTERVAL]["value"], str)
+    assert isinstance(settings["settings"][data.AUTOSTART_AGENT_REPAIR_INTERVAL]["value"], str)

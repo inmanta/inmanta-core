@@ -18,13 +18,14 @@ Contact: code@inmanta.com
 
 import datetime
 import json
+import os
 import typing
 import urllib
 import uuid
 from collections import abc
 from collections.abc import Sequence
 from enum import Enum, StrEnum
-from typing import ClassVar, Mapping, Optional, Self, Union
+from typing import ClassVar, Mapping, Optional, Self, Union, assert_never
 
 import pydantic.schema
 from pydantic import ConfigDict, Field, computed_field, field_validator, model_validator
@@ -34,47 +35,13 @@ import inmanta.ast.export as ast_export
 import pydantic_core.core_schema
 from inmanta import const, data, protocol, resources
 from inmanta.stable_api import stable_api
-from inmanta.types import ArgumentTypes, JsonType
+from inmanta.types import ArgumentTypes
+from inmanta.types import BaseModel as BaseModel  # Keep in place for backwards compat with <=ISO8
+from inmanta.types import JsonType
 from inmanta.types import ResourceIdStr as ResourceIdStr  # Keep in place for backwards compat with <=ISO8
 from inmanta.types import ResourceType as ResourceType  # Keep in place for backwards compat with <=ISO8
 from inmanta.types import ResourceVersionIdStr as ResourceVersionIdStr  # Keep in place for backwards compat with <=ISO8
 from inmanta.types import SimpleTypes
-
-
-def api_boundary_datetime_normalizer(value: datetime.datetime) -> datetime.datetime:
-    if value.tzinfo is None:
-        return value.replace(tzinfo=datetime.timezone.utc)
-    else:
-        return value
-
-
-@stable_api
-class DateTimeNormalizerModel(pydantic.BaseModel):
-    """
-    A model that normalizes all datetime values to be timezone aware. Assumes that all naive timestamps represent UTC times.
-    """
-
-    @field_validator("*", mode="after")
-    @classmethod
-    def validator_timezone_aware_timestamps(cls: type, value: object) -> object:
-        """
-        Ensure that all datetime times are timezone aware.
-        """
-        if isinstance(value, datetime.datetime):
-            return api_boundary_datetime_normalizer(value)
-        else:
-            return value
-
-
-@stable_api
-class BaseModel(DateTimeNormalizerModel):
-    """
-    Base class for all data objects in Inmanta
-    """
-
-    # Populate models with the value property of enums, rather than the raw enum.
-    # This is useful to serialise model.dict() later
-    model_config: ClassVar[ConfigDict] = ConfigDict(use_enum_values=True)
 
 
 class ExtensionStatus(BaseModel):
@@ -124,6 +91,18 @@ class FeatureStatus(BaseModel):
 class StatusResponse(BaseModel):
     """
     Response for the status method call
+
+    :param product: The name of the product.
+    :param edition: The edition of the product.
+    :param version: The version of the product.
+    :param license: The license used by the product.
+    :param extensions: The status of the extensions of the server
+    :param slices: The status of the slices of the server.
+    :param features: The status of the features offered by the slices of the server.
+    :param status: The overall status of the server
+    :param python_version: The python version used by the server.
+    :param postgresql_version: The postgresql version used by the database slice
+        None if it is not initialized or an error occurred with the database slice.
     """
 
     product: str
@@ -134,6 +113,8 @@ class StatusResponse(BaseModel):
     slices: list[SliceStatus]
     features: list[FeatureStatus]
     status: ReportedStatus
+    python_version: str
+    postgresql_version: str | None
 
 
 @stable_api
@@ -318,9 +299,63 @@ class EnvironmentSetting(BaseModel):
     allowed_values: Optional[list[EnvSettingType]] = None
 
 
+class ProtectedBy(str, Enum):
+    """
+    An enum that indicates the reason why an environment setting can be protected.
+    """
+
+    # The environment setting is managed using the environment_settings property of the project.yml file.
+    project_yml = "project.yml"
+
+    def get_detailed_description(self) -> str:
+        """
+        Return a string that explains in detail why the environment setting is protected.
+        """
+        match self:
+            case ProtectedBy.project_yml:
+                return "Setting is managed by the project.yml file of the Inmanta project."
+            case _ as unreachable:
+                assert_never(unreachable)
+
+    @classmethod
+    def _missing_(cls: type[Self], value: object) -> Optional[Self]:
+        """
+        This is a workaround for the issue where the protocol layer inconsistently handles enums.
+        Enums are serialized using their name, but deserialized using their value. This method makes
+        sure that we can deserialize enums using their name.
+        """
+        return next((p for p in cls if p.name == value), None) if isinstance(value, str) else None
+
+
+class EnvironmentSettingDefinitionAPI(EnvironmentSetting):
+    """
+    The definition of an environment setting as served out over the API.
+    """
+
+    protected: bool = False
+    protected_by: ProtectedBy | None = None
+
+
+class EnvironmentSettingDetails(BaseModel):
+    """
+    A class that stores the value and other metadata about an environment setting.
+
+    :param value: The value of the environment setting.
+    :param protected: True iff the environment setting cannot be updated using the normal
+                      endpoints to update environment settings.
+    :param protected_by: This field indicates the reason why the environment setting is protected.
+                         This field is set to None if the environment setting is not protected.
+    """
+
+    value: EnvSettingType
+    protected: bool = False
+    protected_by: ProtectedBy | None = None
+
+
 class EnvironmentSettingsReponse(BaseModel):
+
     settings: dict[str, EnvSettingType]
-    definition: dict[str, EnvironmentSetting]
+    definition: dict[str, EnvironmentSettingDefinitionAPI]
 
 
 class ModelMetadata(BaseModel):
@@ -722,6 +757,7 @@ class Notification(BaseModel):
     :param uri: A link to an api endpoint of the server, that is relevant to the message,
                 and can be used to get further information about the problem.
                 For example a compile related problem should have the uri: `/api/v2/compilereport/<compile_id>`
+    :param compile_id: The id of the compile that is associated with this notification.
     :param read: Whether the notification was read or not
     :param cleared: Whether the notification was cleared or not
     """
@@ -733,6 +769,7 @@ class Notification(BaseModel):
     message: str
     severity: const.NotificationSeverity
     uri: Optional[str] = None
+    compile_id: uuid.UUID | None = None
     read: bool
     cleared: bool
 
@@ -805,7 +842,7 @@ def _check_resource_id_str(v: str) -> ResourceIdStr:
 ResourceId: typing.TypeAlias = typing.Annotated[ResourceIdStr, pydantic.AfterValidator(_check_resource_id_str)]
 
 
-class DiscoveredResource(BaseModel):
+class DiscoveredResourceABC(BaseModel):
     """
     :param discovered_resource_id: The name of the resource
     :param values: The actual resource
@@ -829,7 +866,17 @@ class DiscoveredResource(BaseModel):
         return f"/api/v2/resource/{urllib.parse.quote(self.discovery_resource_id, safe='')}"
 
 
-class LinkedDiscoveredResource(DiscoveredResource):
+class DiscoveredResource(DiscoveredResourceABC):
+    """
+    Discovered resource for API returns. Contains additional (redundant) metadata to improve user experience.
+    """
+
+    resource_type: ResourceType
+    agent: str
+    resource_id_value: str
+
+
+class LinkedDiscoveredResource(DiscoveredResourceABC):
     """
     DiscoveredResource linked to the discovery resource that discovered it.
 
@@ -837,15 +884,19 @@ class LinkedDiscoveredResource(DiscoveredResource):
            discovered resource.
     """
 
-    # This class is used as API input. Its behaviour can be directly incorporated into the DiscoveredResource parent class
+    # This class is used as API input. Its behaviour can be directly incorporated into the DiscoveredResourceABC parent class
     # when providing the id of the discovery resource is mandatory for all discovered resource. Ticket link:
     # https://github.com/inmanta/inmanta-core/issues/8004
 
     discovery_resource_id: ResourceId
 
     def to_dao(self, env: uuid.UUID) -> "data.DiscoveredResource":
+        parsed_id: resources.Id = resources.Id.parse_id(self.discovered_resource_id)
         return data.DiscoveredResource(
             discovered_resource_id=self.discovered_resource_id,
+            resource_type=parsed_id.entity_type,
+            agent=parsed_id.agent_name,
+            resource_id_value=parsed_id.attribute_value,
             values=self.values,
             discovered_at=datetime.datetime.now(),
             environment=env,
@@ -905,6 +956,46 @@ class PipConfig(BaseModel):
     def has_source(self) -> bool:
         """Can this config get packages from anywhere?"""
         return bool(self.index_url) or self.use_system_config
+
+    def get_index_args(self) -> list[str]:
+        """
+        Returns the index-related arguments that should be used to run a pip command
+        with this pip config.
+        """
+        index_args: list[str] = []
+        if self.index_url:
+            index_args.append("--index-url")
+            index_args.append(self.index_url)
+        elif not self.use_system_config:
+            # If the config doesn't set index url
+            # and we are not using system config,
+            # then we need to disable the index.
+            # This can only happen if paths is also set.
+            index_args.append("--no-index")
+        for extra_index_url in self.extra_index_url:
+            index_args.append("--extra-index-url")
+            index_args.append(extra_index_url)
+        return index_args
+
+    def get_environment_variables(self) -> dict[str, str]:
+        """
+        Returns the environment variables that should be used to run a pip command
+        with this pip config.
+        """
+        sub_env = os.environ.copy()
+        if not self.use_system_config:
+            # If we don't use system config, unset env vars
+            for key in ("PIP_EXTRA_INDEX_URL", "PIP_INDEX_URL", "PIP_PRE", "PIP_NO_INDEX"):
+                sub_env.pop(key, None)
+
+            # setting this env_var to os.devnull disables the loading of all pip configuration file
+            sub_env["PIP_CONFIG_FILE"] = os.devnull
+        if self.pre is not None:
+            # Make sure that IF pip pre is set, we enforce it
+            # The `--pre` option can only enable it
+            # The env var can both enable and disable
+            sub_env["PIP_PRE"] = str(self.pre)
+        return sub_env
 
 
 LEGACY_PIP_DEFAULT = PipConfig(use_system_config=True)
@@ -987,3 +1078,8 @@ class DataBaseReport(BaseModel):
             free_connections=self.free_connections + other.free_connections,
             pool_exhaustion_time=self.pool_exhaustion_time + other.pool_exhaustion_time,
         )
+
+
+class GetSourceCodeResponse(BaseModel):
+    sources: list[Source]
+    project_constraints: str | None

@@ -30,7 +30,7 @@ from logging import DEBUG
 
 import pytest
 
-from inmanta import config
+from inmanta import config, protocol
 from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
 from inmanta.agent.code_manager import CodeManager
@@ -41,7 +41,7 @@ from inmanta.env import process_env
 from inmanta.protocol import Client
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.server.server import Server
-from inmanta.util import get_compiler_version
+from inmanta.util import get_compiler_version, hash_file
 from utils import ClientHelper, DummyCodeManager, log_index, retry_limited, wait_until_deployment_finishes
 
 LOGGER = logging.getLogger(__name__)
@@ -113,16 +113,20 @@ async def make_source_structure(
         return hv
 
 
+async def upload_file(client: protocol.Client, content: str) -> str:
+    content = content.encode()
+
+    _hash = hash_file(content)
+    body = base64.b64encode(content).decode("ascii")
+
+    res = await client.upload_file(id=_hash, content=body)
+    assert res.code == 200
+    return _hash
+
+
 @pytest.mark.slowtest
 async def test_agent_installs_dependency_containing_extras(
-    server_pre_start,
-    server,
-    client,
-    environment,
-    monkeypatch,
-    index_with_pkgs_containing_optional_deps: str,
-    clienthelper,
-    agent,
+    server_pre_start, server, client, index_with_pkgs_containing_optional_deps: str, clienthelper, agent, environment
 ) -> None:
     """
     Test whether the agent code loading works correctly when a python dependency is provided that contains extras.
@@ -163,6 +167,7 @@ def test():
         version=version,
         resource_types=["test::Test"],
     )
+
     await agent.executor_manager.get_executor("agent1", "localhost", install_spec)
 
     installed_packages = process_env.get_installed_packages()
@@ -350,3 +355,109 @@ raise Exception("Fail code loading")
 
     expected_error_message = "Agent agent failed to load the following modules: test."
     check_for_message(data=result.result["data"], must_be_present=expected_error_message)
+
+
+async def test_project_constraints_in_agent_code_install(server, client, environment, clienthelper, agent):
+    """
+    Check that registered constraints get propagated into the agents' venv blueprints.
+
+    The test_process_manager test in test_agent_executor.py checks that these constraints
+    are taken into account during agent code install.
+    """
+    codemanager = CodeManager(agent._client)
+
+    version = await clienthelper.get_version()
+
+    def get_resources(version: int) -> list[dict]:
+        resources = [
+            {
+                "key": "key1",
+                "value": "value1",
+                "id": "test::ResType_A[agent_X,key=key1],v=%d" % version,
+                "send_event": False,
+                "purged": False,
+                "requires": [],
+            },
+            {
+                "key": "key1",
+                "value": "value1",
+                "id": "test::ResType_A[agent_Y,key=key1],v=%d" % version,
+                "send_event": False,
+                "purged": False,
+                "requires": [],
+            },
+        ]
+        return resources
+
+    sources = {}
+    content = "#The code"
+
+    constraints = "dummy_constraint~=1.2.3\ndummy_constraint<5.5.5"
+    await make_source_structure(
+        sources,
+        "inmanta_plugins/test/__init__.py",
+        "inmanta_plugins.test",
+        content,
+        dependencies=[],
+        client=client,
+    )
+
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=get_resources(version),
+        compiler_version=get_compiler_version(),
+        resource_sets={"test::ResType_A[agent_X,key=key1]": "set-a", "test::ResType_A[agent_Y,key=key1]": "set-b"},
+        project_constraints=constraints,
+    )
+    assert result.code == 200
+
+    res = await client.upload_code_batched(tid=environment, id=version, resources={"test::ResType_A": sources})
+    assert res.code == 200
+
+    result = await client.list_versions(tid=environment)
+    assert result.code == 200
+    assert len(result.result["versions"]) == 1
+    assert result.result["versions"][0]["total"] == 2
+
+    install_spec, _ = await codemanager.get_code(
+        environment=environment,
+        version=version,
+        resource_types=["test::ResType_A"],
+    )
+
+    assert install_spec[0].blueprint.project_constraints == constraints
+
+    version = await clienthelper.get_version()
+    sources = {}
+    content = "#The code"
+
+    await make_source_structure(
+        sources,
+        "inmanta_plugins/test/__init__.py",
+        "inmanta_plugins.test",
+        content,
+        dependencies=[],
+        client=client,
+    )
+
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=get_resources(version),
+        compiler_version=get_compiler_version(),
+        resource_sets={"test::ResType_A[agent_X,key=key1]": "set-a", "test::ResType_A[agent_Y,key=key1]": "set-b"},
+        project_constraints=None,
+    )
+    assert result.code == 200
+
+    res = await client.upload_code_batched(tid=environment, id=version, resources={"test::ResType_A": sources})
+    assert res.code == 200
+
+    install_spec, _ = await codemanager.get_code(
+        environment=environment,
+        version=version,
+        resource_types=["test::ResType_A"],
+    )
+
+    assert install_spec[0].blueprint.project_constraints is None

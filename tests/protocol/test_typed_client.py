@@ -47,7 +47,7 @@ async def test_local_client(server_config, async_finalizer) -> None:
 
     # client based calls
     client = LocalClient("client", rs)
-    response = await client.test_method(name="y", project="x")
+    response = await client.test_method(name="y", project="x").value()
     assert response == "y -> x"
 
 

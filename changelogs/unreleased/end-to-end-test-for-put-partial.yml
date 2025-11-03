@@ -1,0 +1,4 @@
+description: End to end test for put partial
+issue-nr: 9485
+change-type: patch
+destination-branches: [iso8]
