@@ -382,7 +382,8 @@ async def test_scheduler_initialize_multiple_versions(
         def res(n: int) -> None:
             return {
                 "key": f"key{n}",
-                "value": f"val{n}",
+                # force change of intent for each version for easier "deploy done" waiting
+                "value": f"val{n},version={version}",
                 "id": f"test::Resource[agent1,key=key{n}],v={version}",
                 "requires": [],
                 "purged": False,
@@ -410,7 +411,7 @@ async def test_scheduler_initialize_multiple_versions(
         # set up initial state: make sure there is something to reset
         # start the agent, deploy the first version, then halt the agent again
         agent = await start_agent()
-        await clienthelper.wait_for_deployed()
+        await clienthelper.wait_for_deployed(version)
 
         for rid in (rid1, rid2):
             assert (await client.resource_details(tid=environment, rid=rid).value()).status == const.ResourceState.deployed
@@ -442,7 +443,7 @@ async def test_scheduler_initialize_multiple_versions(
     else:
         await agent.scheduler.start()
 
-    await clienthelper.wait_for_deployed()
+    await clienthelper.wait_for_deployed(version)
 
     assert (await client.resource_details(tid=environment, rid=rid1).value()).status == const.ResourceState.deployed
     assert (await client.resource_details(tid=environment, rid=rid2).value()).status == "orphaned"
