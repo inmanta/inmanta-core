@@ -22,11 +22,11 @@ import sys
 import uuid
 from typing import Collection
 
+import inmanta.loader
 from inmanta import protocol
 from inmanta.agent import executor
 from inmanta.agent.executor import ResourceInstallSpec
 from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig
-from inmanta.loader import ModuleSource
 from inmanta.protocol import Client, SyncClient
 from inmanta.types import ResourceType
 from inmanta.util.async_lru import async_lru_cache
@@ -68,11 +68,13 @@ class CodeManager:
         if result.code == 200 and result.result is not None:
             sync_client = SyncClient(client=self._client, ioloop=asyncio.get_running_loop())
             requirements: set[str] = set()
-            sources: list["ModuleSource"] = []
+            sources: list["inmanta.loader.ModuleSource"] = []
             # Encapsulate source code details in ``ModuleSource`` objects
-            for source in result.result["data"]:
+            module_sources = result.result["data"]["sources"]
+            project_constraints = result.result["data"]["project_constraints"]
+            for source in module_sources:
                 sources.append(
-                    ModuleSource(
+                    inmanta.loader.ModuleSource(
                         name=source["module_name"],
                         is_byte_code=source["is_byte_code"],
                         hash_value=source["hash"],
@@ -80,6 +82,7 @@ class CodeManager:
                     )
                 )
                 requirements.update(source["requirements"])
+
             resource_install_spec = ResourceInstallSpec(
                 resource_type,
                 version,
@@ -89,6 +92,7 @@ class CodeManager:
                     requirements=list(requirements),
                     sources=sources,
                     python_version=sys.version_info[:2],
+                    project_constraints=project_constraints if project_constraints else None,
                 ),
             )
             return resource_install_spec

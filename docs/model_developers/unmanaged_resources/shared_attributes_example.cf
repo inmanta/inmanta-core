@@ -1,5 +1,3 @@
-import ip
-
 entity Credentials:
     """
     An entity that holds the shared attributes between the Interface and InterfaceDiscovery entity.
@@ -17,7 +15,7 @@ entity InterfaceBase:
 end
 
 InterfaceBase.credentials [1] -- Credentials
-InterfaceBase.host [1] -- ip::Host
+InterfaceBase.host [1] -- std::Host
 
 implement InterfaceBase using std::none
 

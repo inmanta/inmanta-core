@@ -17,13 +17,10 @@ Contact: code@inmanta.com
 """
 
 import logging
-import time
-from uuid import UUID
 
 import pytest
 
-from inmanta import const
-from inmanta.config import Config
+from inmanta import const, data
 from inmanta.const import AgentAction
 from utils import get_resource, log_contains, log_doesnt_contain, resource_action_consistency_check, retry_limited
 
@@ -116,87 +113,6 @@ async def test_deploy_trigger(server, client, clienthelper, resource_container, 
 
 
 @pytest.mark.parametrize(
-    "agent_deploy_interval",
-    [
-        "2",
-        "*/2 * * * * * *",
-    ],
-)
-async def test_spontaneous_deploy(
-    server,
-    client,
-    agent,
-    resource_container,
-    environment,
-    clienthelper,
-    caplog,
-    agent_deploy_interval,
-):
-    """
-    Test that a deploy run is executed every 2 seconds in the new agent
-     as specified in the agent_repair_interval (using a cron or not)
-    """
-    with caplog.at_level(logging.DEBUG):
-        resource_container.Provider.reset()
-
-        env_id = UUID(environment)
-
-        Config.set("config", "agent-deploy-interval", agent_deploy_interval)
-        # Disable repairs
-        Config.set("config", "agent-repair-interval", "0")
-
-        timer_manager = agent.scheduler._timer_manager
-        await timer_manager.initialize()
-
-        resource_container.Provider.set_fail("agent1", "key1", 1)
-
-        version = await clienthelper.get_version()
-
-        resources = [
-            {
-                "key": "key1",
-                "value": "value1",
-                "id": "test::Resource[agent1,key=key1],v=%d" % version,
-                "purged": False,
-                "send_event": False,
-                "requires": [],
-            }
-        ]
-
-        await clienthelper.put_version_simple(resources, version)
-
-        # do a deploy
-        start = time.time()
-
-        result = await client.release_version(
-            tid=env_id,
-            id=version,
-        )
-        assert result.code == 200
-
-        assert result.result["model"]["released"]
-
-        result = await client.get_version(env_id, version)
-        assert result.code == 200
-
-        await clienthelper.wait_for_deployed()
-
-        await clienthelper.wait_full_success()
-
-        duration = time.time() - start
-
-        assert await clienthelper.done_count() == 1
-
-        assert resource_container.Provider.isset("agent1", "key1")
-
-    # approximate check, the number of heartbeats can vary, but not by a factor of 10
-    beats = [message for logger_name, log_level, message in caplog.record_tuples if "Received heartbeat from" in message]
-    assert (
-        len(beats) < duration * 10
-    ), f"Sent {len(beats)} heartbeats over a time period of {duration} seconds, sleep mechanism is broken"
-
-
-@pytest.mark.parametrize(
     "agent_repair_interval",
     [
         "2",
@@ -210,9 +126,12 @@ async def test_spontaneous_repair(server, client, agent, resource_container, env
     """
     resource_container.Provider.reset()
     env_id = environment
-    Config.set("config", "agent-repair-interval", agent_repair_interval)
+
+    result = await client.set_setting(environment, data.AUTOSTART_AGENT_REPAIR_INTERVAL, agent_repair_interval)
+    assert result.code == 200
     # Disable deploys
-    Config.set("config", "agent-deploy-interval", "0")
+    result = await client.set_setting(environment, data.AUTOSTART_AGENT_DEPLOY_INTERVAL, 0)
+    assert result.code == 200
 
     timer_manager = agent.scheduler._timer_manager
     await timer_manager.initialize()

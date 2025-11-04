@@ -92,6 +92,12 @@ class WriteBarierExecutorManager(executor.ExecutorManager[WriteBarierExecutor]):
             raise ValueError(f"{self.__class__.__name__}.get_executor() expects at least one resource install specification")
         return WriteBarierExecutor(await self.delegate.get_executor(agent_name, agent_uri, code))
 
+    def get_environment_manager(self) -> executor.VirtualEnvironmentManager | None:
+        return self.delegate.get_environment_manager()
+
+    async def stop_all_executors(self) -> list[WriteBarierExecutor]:
+        return [WriteBarierExecutor(e) for e in await self.delegate.stop_all_executors()]
+
     async def stop_for_agent(self, agent_name: str) -> list[WriteBarierExecutor]:
         return [WriteBarierExecutor(e) for e in await self.delegate.stop_for_agent(agent_name)]
 

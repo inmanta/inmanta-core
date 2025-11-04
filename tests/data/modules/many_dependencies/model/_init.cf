@@ -1,0 +1,6 @@
+entity Test extends std::PurgeableResource:
+	string agent ="agent"
+	string name
+end
+
+implement Test using std::none

@@ -25,8 +25,7 @@ from collections.abc import Collection
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
-from inmanta import util
-from inmanta.agent import config as agent_config
+from inmanta import data, util
 from inmanta.deploy.state import Blocked, Compliance, ResourceState
 from inmanta.deploy.work import TaskPriority
 from inmanta.types import ResourceIdStr
@@ -172,22 +171,38 @@ class TimerManager:
         await self.reload_config()
 
     async def reload_config(self) -> None:
-        deploy_timer: int | str = agent_config.agent_deploy_interval.get()
-        repair_timer: int | str = agent_config.agent_repair_interval.get()
 
-        if isinstance(deploy_timer, str):
-            new_deploy_cron: str | None = deploy_timer
-            new_periodic_deploy_interval: int | None = None
-        else:
+        async with data.Environment.get_connection() as connection:
+            assert self._resource_scheduler.environment is not None
+            environment = await data.Environment.get_by_id(self._resource_scheduler.environment, connection=connection)
+            assert environment is not None
+            deploy_timer = await environment.get(data.AUTOSTART_AGENT_DEPLOY_INTERVAL, connection=connection)
+            assert isinstance(deploy_timer, str)  # make mypy happy
+            repair_timer = await environment.get(data.AUTOSTART_AGENT_REPAIR_INTERVAL, connection=connection)
+            assert isinstance(repair_timer, str)  # make mypy happy
+
+        new_deploy_cron: str | None
+        new_periodic_deploy_interval: int | None
+        new_repair_cron: str | None
+        new_periodic_repair_interval: int | None
+
+        try:
+            deploy_timer = int(deploy_timer)
             new_deploy_cron = None
             new_periodic_deploy_interval = deploy_timer if deploy_timer > 0 else None
+        except ValueError:
+            assert isinstance(deploy_timer, str)  # make mypy happy
+            new_deploy_cron = deploy_timer
+            new_periodic_deploy_interval = None
 
-        if isinstance(repair_timer, str):
-            new_repair_cron: str | None = repair_timer
-            new_periodic_repair_interval: int | None = None
-        else:
+        try:
+            repair_timer = int(repair_timer)
             new_repair_cron = None
             new_periodic_repair_interval = repair_timer if repair_timer > 0 else None
+        except ValueError:
+            assert isinstance(repair_timer, str)  # make mypy happy
+            new_repair_cron = repair_timer
+            new_periodic_repair_interval = None
 
         if not new_periodic_repair_interval and not new_periodic_deploy_interval:
             self.periodic_repair_interval = new_periodic_repair_interval
@@ -247,7 +262,7 @@ class TimerManager:
 
         async def _action() -> None:
             await self._resource_scheduler.deploy(
-                reason=f"Global deploy triggered because of cron expression for deploy interval: '{cron_expression}'",
+                reason="a global deploy was triggered by a cron expression",
                 priority=TaskPriority.INTERVAL_DEPLOY,
             )
 
@@ -266,7 +281,7 @@ class TimerManager:
 
         async def _action() -> None:
             await self._resource_scheduler.repair(
-                reason=f"Global repair triggered because of cron expression for repair interval: '{cron_expression}'",
+                reason="a global repair was triggered by a cron expression",
                 priority=TaskPriority.INTERVAL_REPAIR,
             )
 
@@ -322,20 +337,14 @@ class TimerManager:
         def _setup_repair(repair_interval: int) -> None:
             self.resource_timers[resource].set_timer(
                 when=(last_deployed + timedelta(seconds=repair_interval)),
-                reason=(
-                    f"Individual repair triggered for resource {resource} because last "
-                    f"repair happened more than {repair_interval}s ago."
-                ),
+                reason=f"previous repair happened more than {repair_interval}s ago",
                 priority=(TaskPriority.INTERVAL_REPAIR),
             )
 
         def _setup_deploy(deploy_interval: int) -> None:
             self.resource_timers[resource].set_timer(
                 when=(last_deployed + timedelta(seconds=deploy_interval)),
-                reason=(
-                    f"Individual deploy triggered for resource {resource} because last "
-                    f"deploy happened more than {deploy_interval}s ago."
-                ),
+                reason=f"previous deploy happened more than {deploy_interval}s ago",
                 priority=(TaskPriority.INTERVAL_DEPLOY),
             )
 
@@ -395,7 +404,7 @@ class TimerManager:
 
     def remove_timers(self, resources: Collection[ResourceIdStr]) -> None:
         """
-        Cancel and remove timers for resources that have been completely dropped from the model.
+        Cancel and remove timers (if they exist) for resources that have been completely dropped from the model.
         """
         self.stop_timers(resources)
         for resource in resources:

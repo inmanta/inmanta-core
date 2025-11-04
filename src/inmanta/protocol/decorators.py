@@ -17,14 +17,14 @@ Contact: code@inmanta.com
 """
 
 import inspect
-from typing import Callable, Optional, TypeVar, Union
+from collections.abc import Callable
+from typing import Optional, TypeVar, Union
 
-from inmanta import const
-from inmanta.types import Apireturn, HandlerType, MethodType
+from inmanta import const, types
 
 from . import common
 
-FuncT = TypeVar("FuncT", bound=HandlerType)
+FuncT = TypeVar("FuncT", bound=types.HandlerType)
 
 
 class handle:
@@ -37,7 +37,7 @@ class handle:
     :param kwargs: Map arguments in the message from one name to an other
     """
 
-    def __init__(self, method: Callable[..., Apireturn], api_version: Optional[int] = None, **kwargs: str) -> None:
+    def __init__(self, method: Callable[..., types.MethodReturn], api_version: Optional[int] = None, **kwargs: str) -> None:
         self.method = method
         self.mapping: dict[str, str] = kwargs
         self._api_version = api_version
@@ -55,10 +55,10 @@ class handle:
         return function
 
 
-MethodT = TypeVar("MethodT", bound=MethodType)
+MethodT = TypeVar("MethodT", bound=types.MethodType)
 
 
-def method(
+def method[C: Callable](
     path: str,
     operation: str = "POST",
     reply: bool = True,
@@ -74,7 +74,7 @@ def method(
     envelope: bool = False,
     envelope_key: str = const.ENVELOPE_KEY,
     enforce_auth: bool = True,
-) -> Callable[..., Callable]:
+) -> Callable[[C], C]:
     """
     Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
     and model the protocol.
@@ -131,7 +131,7 @@ def method(
     return wrapper
 
 
-def typedmethod(
+def typedmethod[C: Callable](
     path: Union[str, list[str]],
     operation: str = "POST",
     reply: bool = True,
@@ -149,7 +149,7 @@ def typedmethod(
     enforce_auth: bool = True,
     varkw: bool = False,
     token_param: str | None = None,
-) -> Callable[..., Callable]:
+) -> Callable[[C], C]:
     """
     Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
     and model the protocol.

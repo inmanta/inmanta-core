@@ -1,0 +1,4 @@
+---
+description: Only export the environment settings when the model is exported too.
+change-type: patch
+destination-branches: [master, iso8]

@@ -1,0 +1,8 @@
+---
+description: "Added support to set environment settings, required by an Inmanta project, in the project.yml file."
+issue-nr: 7654
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [iso8]
+sections:
+  feature: "{{description}}"

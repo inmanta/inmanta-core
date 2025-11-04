@@ -16,11 +16,11 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import itertools
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from urllib import parse
 
-import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 from inmanta.server import config
@@ -144,7 +144,7 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
 
     # Resource repartition and expected filtering results:
 
-    #                                        |              FILTER
+    #                                        |          FILTER.managed
     # discovered    managed   orphaned       |  TRUE        FALSE          NONE
     # ---------------------------------------+-------------------------------------
     #     R1            x                    |   x                           x
@@ -153,65 +153,112 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
     #     R4                      x          |   x                           x
     #     R5                                 |                x              x
     #     R6                                 |                x              x
+    #     O1            x                    |   x                           x
+    #     O2            x                    |   x                           x
+    #     O3                      x          |   x                           x
+    #     O4                      x          |   x                           x
+    #     O5                                 |                x              x
+    #     O6                                 |                x              x
 
     await clienthelper.set_auto_deploy(auto=True)
-    discovered_resources = []
-    discovery_resource_id = "test::DiscoveryResource[agent1,key=key]"
-
-    for i in range(1, 7):
-        rid = f"test::Resource[agent1,key{i}=key{i}]"
-        discovered_resources.append(
-            {
-                "discovered_resource_id": rid,
-                "values": {"value1": f"test{i}", "value2": f"test{i + 1}"},
-                "managed_resource_uri": (
-                    f"/api/v2/resource/{parse.quote(rid, safe='')}" if i <= 4 else None
-                ),  # Last 2 resources are not known to the orchestrator
-                "discovery_resource_id": discovery_resource_id,
-            }
-        )
-
-    result = await agent._client.discovered_resource_create_batch(environment, discovered_resources)
-    assert result.code == 200
-
-    version1 = await clienthelper.get_version()
-    orphaned_resources = [
+    discovery_resource_id: str = "test::DiscoveryResource[agent1,key=key]"
+    discovered_resources: list[Mapping[str, object]] = []
+    orphan_version = await clienthelper.get_version()
+    managed_version = orphan_version + 1
+    orphaned_resources: list[Mapping[str, object]] = [
         {
-            "id": ResourceVersionIdStr(f"{res['discovered_resource_id']},v={version1}"),
-            "values": res["values"],
-            "requires": [],
-            "purged": False,
-            "send_event": False,
-        }
-        for res in discovered_resources[2:-2]
-    ]
-    resources = orphaned_resources + [
-        {
-            "id": ResourceVersionIdStr(f"{discovery_resource_id},v={version1}"),
+            "id": ResourceVersionIdStr(f"{discovery_resource_id},v={orphan_version}"),
             "values": {},
             "requires": [],
             "purged": False,
             "send_event": False,
         }
     ]
-    await clienthelper.put_version_simple(resources=resources, version=version1, wait_for_released=True)
-
-    # Create some Resources that are already managed:
-    version2 = await clienthelper.get_version()
-    managed_resources = [
-        {
-            "id": ResourceVersionIdStr(f"{res['discovered_resource_id']},v={version2}"),
-            "values": res["values"],
-            "requires": [],
-            "purged": False,
-            "send_event": False,
-        }
-        for res in discovered_resources[:2]
+    managed_resources: list[Mapping[str, object]] = [
+        {**orphaned_resources[0], "id": ResourceVersionIdStr(f"{discovery_resource_id},v={managed_version}")}
     ]
-    await clienthelper.put_version_simple(resources=managed_resources, version=version2, wait_for_released=True)
 
-    filter_values = [None, {"managed": True}, {"managed": False}]
-    expected_results = [discovered_resources, discovered_resources[:-2], discovered_resources[-2:]]
+    for res_type, i in itertools.product(("OtherResource", "Resource"), range(1, 7)):
+        agent_name: str = "agent1" if i <= 3 else "agent2"
+        rid = f"test::{res_type}[{agent_name},key{i}=key{i}]"
+        values = {"value1": f"test{i}", "value2": f"test{i + 1}"}
+        discovered_resources.append(
+            {
+                "discovered_resource_id": rid,
+                "resource_type": f"test::{res_type}",
+                "agent": agent_name,
+                "resource_id_value": f"key{i}",
+                "values": values,
+                "managed_resource_uri": (
+                    f"/api/v2/resource/{parse.quote(rid, safe='')}" if i <= 4 else None
+                ),  # Last 2 resources are not known to the orchestrator
+                "discovery_resource_id": discovery_resource_id,
+            }
+        )
+        if i <= 2:
+            managed_resources.append(
+                {
+                    "id": ResourceVersionIdStr(f"{rid},v={managed_version}"),
+                    "values": values,
+                    "requires": [],
+                    "purged": False,
+                    "send_event": False,
+                }
+            )
+        elif i <= 4:
+            orphaned_resources.append(
+                {
+                    "id": ResourceVersionIdStr(f"{rid},v={orphan_version}"),
+                    "values": {},
+                    "requires": [],
+                    "purged": False,
+                    "send_event": False,
+                }
+            )
+
+    # report the discovered resources
+    await agent._client.discovered_resource_create_batch(environment, discovered_resources).value()
+    # create the to-orphan version
+    await clienthelper.put_version_simple(resources=orphaned_resources, version=orphan_version, wait_for_released=True)
+    # Create the new version with the managed resources
+    version2 = await clienthelper.get_version()
+    assert managed_version == version2  # assert assumption made above to construct rvids
+    await clienthelper.put_version_simple(resources=managed_resources, version=managed_version, wait_for_released=True)
+
+    filter_values = [
+        # managed
+        None,
+        {"managed": True},
+        {"managed": False},
+        # resource type
+        {"resource_type": "Resource"},  # partial match => all
+        {"resource_type": "t::Resource"},
+        {"resource_type": "OtherResource"},
+        # agent
+        {"agent": "agent"},  # partial match => all
+        {"agent": "agent1"},
+        {"agent": "agent2"},
+        # rid value
+        {"resource_id_value": "key"},  # partial match => all
+        {"resource_id_value": "2"},
+    ]
+    expected_results = [
+        # managed
+        discovered_resources,
+        discovered_resources[:4] + discovered_resources[6:-2],
+        discovered_resources[4:6] + discovered_resources[-2:],
+        # resource type
+        discovered_resources,
+        discovered_resources[6:],
+        discovered_resources[:6],
+        # agent
+        discovered_resources,
+        discovered_resources[:3] + discovered_resources[6:-3],
+        discovered_resources[3:6] + discovered_resources[-3:],
+        # rid value
+        discovered_resources,
+        [discovered_resources[1], discovered_resources[7]],
+    ]
 
     def check_expected_result(expected_result: Sequence[dict[str, object]], result: Sequence[dict[str, object]]) -> None:
         """
@@ -245,7 +292,7 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
     assert len(result.result["data"]) == 2
     check_expected_result(discovered_resources[:2], result.result["data"])
 
-    assert result.result["metadata"] == {"total": 6, "before": 0, "after": 4, "page_size": 2}
+    assert result.result["metadata"] == {"total": 12, "before": 0, "after": 10, "page_size": 2}
     assert result.result["links"].get("next") is not None
     assert result.result["links"].get("prev") is None
 
@@ -267,7 +314,7 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
 
     assert response["links"].get("prev") is not None
     assert response["links"].get("next") is not None
-    assert response["metadata"] == {"total": 6, "before": 2, "after": 2, "page_size": 2}
+    assert response["metadata"] == {"total": 12, "before": 2, "after": 8, "page_size": 2}
 
     # Test link for previous page
     url = f"""{base_url}{response["links"]["prev"]}"""
@@ -282,7 +329,7 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
     check_expected_result(discovered_resources[0:2], response["data"])
     assert response["links"].get("prev") is None
     assert response["links"].get("next") is not None
-    assert response["metadata"] == {"total": 6, "before": 0, "after": 4, "page_size": 2}
+    assert response["metadata"] == {"total": 12, "before": 0, "after": 10, "page_size": 2}
 
 
 async def test_discovery_resource_bad_res_id(server, client, agent, environment):
@@ -309,13 +356,13 @@ async def test_discovery_resource_bad_res_id(server, client, agent, environment)
     assert expected_error_message in result.result["message"]
 
     # Check that the discovered_resource_create endpoint requires the discovery_resource_id to be provided
-    with pytest.raises(TypeError) as e:
-        result = await agent._client.discovered_resource_create(
-            tid=environment,
-            discovered_resource_id="invalid_rid",
-            values={"value1": "test1", "value2": "test2"},
-        )
-    assert "discovered_resource_create() missing 1 required positional argument: 'discovery_resource_id'" in e.value.args
+    result = await agent._client.discovered_resource_create(
+        tid=environment,
+        discovered_resource_id="invalid_rid",
+        values={"value1": "test1", "value2": "test2"},
+    )
+    assert result.code == 400
+    assert "Invalid request: Field 'discovery_resource_id' is required." in result.result["message"]
 
     result = await agent._client.discovered_resource_create(
         tid=environment,

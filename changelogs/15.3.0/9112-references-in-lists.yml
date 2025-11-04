@@ -1,0 +1,6 @@
+description: Added support for references in lists
+issue-nr: 9112
+change-type: minor
+destination-branches: [iso8]
+sections:
+  minor-improvement: "{{description}}"

@@ -19,6 +19,7 @@ Contact: code@inmanta.com
 import configparser
 import importlib
 import itertools
+import json
 import logging
 import operator
 import os
@@ -61,10 +62,10 @@ from inmanta.ast import CompilerException, LocatableString, Location, Namespace,
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements import BiStatement, DefinitionStatement, DynamicStatement, Statement
 from inmanta.ast.statements.define import DefineImport
-from inmanta.env import assert_pip_has_source
 from inmanta.file_parser import PreservativeYamlParser, RequirementsTxtParser
 from inmanta.parser import plyInmantaParser
 from inmanta.parser.plyInmantaParser import cache_manager
+from inmanta.server import config
 from inmanta.stable_api import stable_api
 from inmanta.util import get_compiler_version
 from inmanta.warnings import InmantaWarning
@@ -183,7 +184,7 @@ class InvalidModuleException(CompilerExceptionWithExtendedTrace):
 
 class ModuleNotFoundException(CompilerExceptionWithExtendedTrace):
     """
-    This exception is raised if a module is not found in any of the repositories.
+    This exception is raised if a module is not found in the project's venv.
     """
 
 
@@ -544,40 +545,16 @@ class ModuleSource(Generic[TModule]):
         path: Optional[str] = self.path_for(module_name)
         return self.from_path(project, module_name, path) if path is not None else None
 
-    def get_module(
-        self, project: "Project", module_spec: list[InmantaModuleRequirement], install: bool = False
-    ) -> Optional[TModule]:
+    def get_module(self, project: "Project", module_spec: list[InmantaModuleRequirement]) -> Optional[TModule]:
         """
         Returns the appropriate module instance for a given module spec.
 
         :param project: The project associated with the module.
         :param module_spec: The module specification including any constraints on its version. In this case,
                             the project is responsible for verifying constraint compatibility.
-        :param install: Whether to attempt to install the module if it hasn't been installed yet.
         """
         module_name: str = self._get_module_name(module_spec)
         installed: Optional[TModule] = self.get_installed_module(project, module_name)
-
-        def _should_install_module() -> bool:
-            """
-            Return True iff the given module should get installed
-            """
-            if not install:
-                # No install was requested
-                return False
-            if installed is None:
-                # Package is not installed
-                return True
-            if isinstance(installed, ModuleV2):
-                python_pkg_req = [r.get_python_package_requirement() for r in module_spec]
-                if not project.virtualenv.are_installed(python_pkg_req):
-                    # Package could define an extra that is not installed yet
-                    return True
-            # Already installed
-            return False
-
-        if _should_install_module():
-            return self.install(project, module_spec)
         return installed
 
     def _format_constraints(self, module_name: str, module_spec: list[InmantaModuleRequirement]) -> str:
@@ -633,18 +610,6 @@ class ModuleSource(Generic[TModule]):
                     out.append("- " + inmanta_module_name + ": " + str(previous_snapshot[inmanta_module_name]))
 
             LOGGER.debug("\n".join(out))
-
-    @abstractmethod
-    def install(self, project: "Project", module_spec: list[InmantaModuleRequirement]) -> Optional[TModule]:
-        """
-        Attempt to install a module given a module spec. Updates a module that is already installed only if it does not match
-        the constraints.
-
-        :param project: The project associated with the module.
-        :param module_spec: The module specification including any constraints on its version.
-        :return: The module object when the module was installed. When the module could not be found, None is returned.
-        """
-        raise NotImplementedError("Abstract method")
 
     @abstractmethod
     def path_for(self, name: str) -> Optional[str]:
@@ -708,48 +673,6 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
     @classmethod
     def get_namespace_package_name(cls, module_name: str) -> str:
         return f"{const.PLUGINS_PACKAGE}.{module_name}"
-
-    def install(self, project: "Project", module_spec: list[InmantaModuleRequirement]) -> Optional["ModuleV2"]:
-        module_name: str = self._get_module_name(module_spec)
-
-        assert_pip_has_source(project.metadata.pip, f"a v2 module {module_name}")
-
-        requirements: list[inmanta.util.CanonicalRequirement] = [req.get_python_package_requirement() for req in module_spec]
-        preinstalled: Optional[ModuleV2] = self.get_installed_module(project, module_name)
-
-        # Get known requires and add them to prevent invalidating constraints through updates
-        # These could be constraints (-c) as well, but that requires additional sanitation
-        # Because for pip not every valid -r is a valid -c
-        current_requires = project.get_strict_python_requirements_as_list()
-        requirements += inmanta.util.parse_requirements(current_requires)
-
-        if preinstalled is not None:
-            # log warning if preinstalled version does not match constraints
-            preinstalled_version: str = str(preinstalled.version)
-            if not all(preinstalled_version in constraint for constraint in module_spec):
-                LOGGER.warning(
-                    "Currently installed %s-%s does not match constraint %s: updating to compatible version.",
-                    module_name,
-                    preinstalled_version,
-                    ",".join(str(constraint.specifier) for constraint in module_spec if len(constraint.specifier) > 0),
-                )
-        try:
-            self.log_pre_install_information(module_name, module_spec)
-            modules_pre_install = self.take_v2_modules_snapshot(header="Modules versions before installation:")
-            env.process_env.install_for_config(
-                requirements,
-                project.metadata.pip,
-            )
-            self.log_post_install_information(module_name)
-            self.log_snapshot_difference_v2_modules(modules_pre_install, header="Modules versions after installation:")
-        except env.PackageNotFound:
-            return None
-        path: Optional[str] = self.path_for(module_name)
-        if path is None:
-            python_package: str = ModuleV2Source.get_package_name_for(module_name)
-            namespace_package: str = self.get_namespace_package_name(module_name)
-            raise InvalidModuleException(f"{python_package} does not contain a {namespace_package} module.")
-        return self.from_path(project, module_name, path)
 
     def log_pre_install_information(self, module_name: str, module_spec: list[InmantaModuleRequirement]) -> None:
         LOGGER.debug("Installing module %s (v2) %s.", module_name, super()._format_constraints(module_name, module_spec))
@@ -893,50 +816,6 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
             module.path,
             remote_repo,
         )
-
-    def install(self, project: "Project", module_spec: list[InmantaModuleRequirement]) -> Optional["ModuleV1"]:
-        module_name: str = self._get_module_name(module_spec)
-        preinstalled: Optional[ModuleV1] = self.get_installed_module(project, module_name)
-        if preinstalled is not None:
-            preinstalled_version: str = str(preinstalled.version)
-            if all(preinstalled_version in constraint for constraint in module_spec):
-                return preinstalled
-            else:
-                LOGGER.warning(
-                    "Currently installed %s-%s does not match constraint %s: updating to compatible version.",
-                    module_name,
-                    preinstalled_version,
-                    ",".join(str(constraint.specifier) for constraint in module_spec if len(constraint.specifier) > 0),
-                )
-                self.log_pre_install_information(module_name, module_spec)
-                modules_pre_install = self.take_modules_snapshot(project, header="Modules versions before installation:")
-                module = ModuleV1.update(
-                    project, module_name, module_spec, preinstalled.path, fetch=False, install_mode=project.install_mode
-                )
-                self.log_snapshot_difference_v1_modules(
-                    project, modules_pre_install, header="Modules versions after installation:"
-                )
-                self.log_post_install_information(module)
-                return module
-        else:
-            if project.downloadpath is None:
-                raise CompilerException(
-                    f"Can not install module {module_name} because 'downloadpath' is not set in {project.PROJECT_FILE}"
-                )
-            download_path: str = os.path.join(project.downloadpath, module_name)
-            result = self.remote_repo.clone(module_name, project.downloadpath)
-            if not result:
-                return None
-
-            self.log_pre_install_information(module_name, module_spec)
-            modules_pre_install = self.take_modules_snapshot(project, header="Modules versions before installation:")
-            module = ModuleV1.update(
-                project, module_name, module_spec, download_path, fetch=False, install_mode=project.install_mode
-            )
-            self.log_snapshot_difference_v1_modules(project, modules_pre_install, header="Modules versions after installation:")
-            self.log_post_install_information(module)
-
-            return module
 
     def path_for(self, name: str) -> Optional[str]:
         return self.local_repo.path_for(name)
@@ -1362,7 +1241,7 @@ class ModuleV1Metadata(ModuleMetadata, MetadataFieldRequires):
         return packaging.version.Version(self.version)
 
     def to_v2(self) -> "ModuleV2Metadata":
-        values = self.dict()
+        values = self.model_dump()
         if values["description"] is not None:
             values["description"] = values["description"].replace("\n", " ")
         del values["compiler_version"]
@@ -1480,7 +1359,7 @@ class ModuleV2Metadata(ModuleMetadata):
 
         if not out.has_section("metadata"):
             out.add_section("metadata")
-        for k, v in self.dict(exclude_none=True, exclude={"install_requires", "version_tag"}).items():
+        for k, v in self.model_dump(exclude_none=True, exclude={"install_requires", "version_tag"}).items():
             out.set("metadata", k, str(v))
 
         if self.version_tag:
@@ -1616,12 +1495,6 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
         should freeze lists. The following syntax should be used to specify a rule
         `<first-type>.<relation-name> before <then-type>.<relation-name>`. With this rule in
         place, the compiler will first freeze `first-type.relation-name` and only then `then-type.relation-name`.
-    :param strict_deps_check: Determines whether the compiler or inmanta tools that install/update module dependencies,
-        should check the virtual environment for version conflicts in a strict way or not.
-        A strict check means that all transitive dependencies will be checked for version conflicts and that any violation will
-        result in an error.
-        When a non-strict check is done, only version conflicts in a direct dependency will result in an error.
-        All other violations will only result in a warning message.
     :param agent_install_dependency_modules: [DEPRECATED] If true, when a module declares Python dependencies on
         other (v2) modules, the agent will install these dependency modules with pip. This option should only be enabled
         if the agent is configured with the appropriate pip related environment variables. The option allows to an extent
@@ -1639,6 +1512,10 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
         on in transient scenarios like this.
     :param pip: A configuration section that holds information about the pip configuration that should be taken into account
                 when installing Python packages (See: :py:class:`inmanta.module.ProjectPipConfig` for more details).
+    :param environment_settings: The environment settings that need to be configured on the server for this project.
+                                 The settings will be applied on the server when the `inmanta export` command is run.
+                                 Environment settings specified here cannot be updated via the regular API endpoints
+                                 to update environment settings as long as they are in this dictionary.
     """
 
     _raw_parser: typing.ClassVar[type[YamlParser]] = YamlParser
@@ -1658,9 +1535,9 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
     relation_precedence_policy: list[
         Annotated[str, StringConstraints(strip_whitespace=True, pattern=_re_relation_precedence_rule, min_length=1)]
     ] = []
-    strict_deps_check: bool = True
     agent_install_dependency_modules: bool = True
     pip: ProjectPipConfig = ProjectPipConfig()
+    environment_settings: dict[str, inmanta.data.model.EnvSettingType] | None = None
 
     @field_validator("modulepath", mode="before")
     @classmethod
@@ -1802,7 +1679,7 @@ class ModuleLike(ABC, Generic[TMetadata]):
         raise NotImplementedError()
 
     @abstractmethod
-    def add_module_requirement_persistent(self, requirement: InmantaModuleRequirement, add_as_v1_module: bool) -> None:
+    def add_module_requirement_persistent(self, requirement: InmantaModuleRequirement) -> None:
         """
         Add a new module requirement to the files that define requirements on other modules. This could include the
         requirements.txt file next to the metadata file of the project or module. This method updates the files on disk.
@@ -1954,8 +1831,8 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
     ) -> None:
         """
         Initialize the project, this includes
-         * Loading the project.yaml (into self._metadata)
-         * Setting paths from project.yaml
+         * Loading the project.yml (into self._metadata)
+         * Setting paths from project.yml
          * Loading all modules in the module path (into self.modules)
         It does not include
          * verify if project.yml corresponds to the modules in self.modules
@@ -1968,8 +1845,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         :param path: The directory where the project is located
         :param venv_path: Path to the directory that will contain the Python virtualenv.
                           This can be an existing or a non-existing directory.
-        :param strict_deps_check: Overrides the strict_deps_check configuration option from the project.yml file if the
-                                  provided value is different from None.
+        :param strict_deps_check: [Deprecated] ignored. Kept for backwards compatibility.
         """
         if not os.path.exists(path):
             raise ProjectNotFoundException(f"Directory {path} doesn't exist")
@@ -2014,11 +1890,6 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         if attach_cf_cache:
             cache_manager.attach_to_project(path)
 
-        if strict_deps_check is not None:
-            self.strict_deps_check = strict_deps_check
-        else:
-            self.strict_deps_check = self._metadata.strict_deps_check
-
         self._complete_ast: Optional[tuple[list[Statement], list[BasicBlock]]] = None
         # Cache for the complete ast
 
@@ -2028,23 +1899,6 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
     @classmethod
     def from_path(cls: type[TProject], path: str) -> Optional[TProject]:
         return cls(path=path) if os.path.exists(os.path.join(path, cls.PROJECT_FILE)) else None
-
-    def install_module(self, module_req: InmantaModuleRequirement, install_as_v1_module: bool) -> None:
-        """
-        Install the given module. If attempting to as v2, this method implicitly trusts any Python package with the
-        corresponding name.
-        Does not reinstall if the given module requirement is already met.
-        """
-        installed_module: Optional[Module]
-        if install_as_v1_module:
-            installed_module = self.module_source_v1.install(self, module_spec=[module_req])
-        else:
-            installed_module = self.module_source.install(self, module_spec=[module_req])
-        if not installed_module:
-            raise ModuleNotFoundException(
-                f"Failed to install module {module_req} as {'V1' if install_as_v1_module else 'V2'} module"
-            )
-        self.modules[installed_module.name] = installed_module
 
     @classmethod
     def get_name_from_metadata(cls, metadata: ProjectMetadata) -> str:
@@ -2080,12 +1934,12 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             raise ProjectNotFoundException("Unable to find an inmanta project (project.yml expected)")
 
     @classmethod
-    def get(cls, main_file: str = "main.cf", strict_deps_check: Optional[bool] = None) -> "Project":
+    def get(cls, main_file: str = "main.cf") -> "Project":
         """
         Get the instance of the project
         """
         if cls._project is None:
-            cls._project = Project(cls.get_project_dir(os.curdir), main_file=main_file, strict_deps_check=strict_deps_check)
+            cls._project = Project(cls.get_project_dir(os.curdir), main_file=main_file)
 
         return cls._project
 
@@ -2104,35 +1958,100 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             loader.unload_inmanta_plugins()
         loader.PluginModuleFinder.reset()
 
-    def install_modules(self, *, bypass_module_cache: bool = False, update_dependencies: bool = False) -> None:
+    def get_all_dependencies_and_constraints(
+        self,
+    ) -> tuple[Sequence[inmanta.util.CanonicalRequirement], Sequence[inmanta.util.CanonicalRequirement]]:
         """
-        Installs all modules, both v1 and v2.
+        Returns a tuple that contains all the dependencies and constraints that should be used when
+        installing this project. The first element in the tuple contains the dependencies (defined in
+        the requirements.txt file). The second element contains the 'pure' constraints (defined in the
+        _metadata.requires of the project.yml and the python_package_constraints of the compatibility.json).
+
+        Use the get_all_constraints method to retrieve all constraints (i.e. 'pure' constraints and constraints
+        inferred from dependencies)
+        """
+        dependencies: Sequence[inmanta.util.CanonicalRequirement] = [
+            inmanta.util.parse_requirement(req) for req in self.get_all_python_requirements_as_list()
+        ]
+        constraints: Sequence[inmanta.util.CanonicalRequirement] = [
+            *chain(
+                [
+                    InmantaModuleRequirement(inmanta.util.parse_requirement(requirement=spec)).get_python_package_requirement()
+                    for spec in self._metadata.requires
+                ],
+                self.get_product_constraints(),
+            )
+        ]
+        return dependencies, constraints
+
+    def get_product_constraints(self) -> list[inmanta.util.CanonicalRequirement]:
+        compatibility_file: str | None = config.server_compatibility_file.get()
+        if not compatibility_file:
+            # Don't fetch product constraints when compatibility_file is None or ""
+            return []
+        if not os.path.exists(compatibility_file):
+            raise Exception("The configured compatibility file doesn't exist: %s" % compatibility_file)
+
+        with open(compatibility_file) as fh:
+            compatibility_data = json.load(fh)
+
+        module_constraints: Mapping[str, str] = compatibility_data.get("python_package_constraints", {})
+        return [inmanta.util.parse_requirement(f"{k}{v}") for k, v in module_constraints.items()]
+
+    def get_all_constraints(self) -> str:
+        """
+        Compile a list of all package installation constraints defined at the project level. This method
+        inspects the requirements.txt file and the 'requires' section of the project.yml and compiles a list of
+        requirements.
+
+        These requirements follow this schema: `<package_name><operator><version_constraint>`.
+        """
+        dependencies, constraints = self.get_all_dependencies_and_constraints()
+
+        sanitized_constraints = []
+
+        for req in itertools.chain(dependencies, constraints):
+            # Requirements specified by an url or without a version constraint are not valid
+            # to use inside a constraint file: ignore them.
+            if req.url or not req.specifier:
+                continue
+
+            # Extras are not valid inside a constraint file: drop them.
+            if req.extras:
+                req.extras = set()
+            sanitized_constraints.append(str(req))
+
+        return "\n".join(sorted(sanitized_constraints))
+
+    def install_modules(self, *, bypass_module_cache: bool = False, update: bool = False) -> None:
+        """
+        Installs all modules.
 
         :param bypass_module_cache: Fetch the module data from disk even if a cache entry exists.
-        :param update_dependencies: Update all Python dependencies (recursive) to their latest versions.
+        :param update: Update all modules and their Python dependencies (recursive) to their latest versions.
         """
         if not self.is_using_virtual_env():
             self.use_virtual_env()
 
-        self.load_module_recursive(install=True, bypass_module_cache=bypass_module_cache)
-
-        # Verify non-python part
-        self.verify_modules_cache()
-        self.verify_module_version_compatibility()
-
-        # do python install
-        pyreq: list[inmanta.util.CanonicalRequirement] = inmanta.util.parse_requirements(self.collect_python_requirements())
-
-        if len(pyreq) > 0:
+        # install all dependencies
+        dependencies: Sequence[inmanta.util.CanonicalRequirement]
+        constraints: Sequence[inmanta.util.CanonicalRequirement]
+        dependencies, constraints = self.get_all_dependencies_and_constraints()
+        if len(dependencies) > 0:
+            modules_pre = self.module_source.take_v2_modules_snapshot(header="Module versions before installation:")
             # upgrade both direct and transitive module dependencies: eager upgrade strategy
             self.virtualenv.install_for_config(
-                pyreq,
+                dependencies,
                 config=self.metadata.pip,
-                upgrade=update_dependencies,
+                upgrade=update,
                 upgrade_strategy=env.PipUpgradeStrategy.EAGER,
+                constraints=constraints,
+            )
+            self.module_source.log_snapshot_difference_v2_modules(
+                modules_pre, header="Successfully installed modules for project"
             )
 
-        self.verify()
+        self.load_module_recursive(bypass_module_cache=bypass_module_cache)
 
     def load(self, install: bool = False) -> None:
         """
@@ -2148,7 +2067,6 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             self.get_complete_ast()
             self.loaded = True
             start = time()
-            self.verify()
             self.load_plugins()
             end = time()
             LOGGER.debug("Plugin loading took %0.03f seconds", end - start)
@@ -2215,8 +2133,6 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         full_module_name: str,
         *,
         allow_v1: bool = False,
-        install_v1: bool = False,
-        install_v2: bool = False,
         bypass_module_cache: bool = False,
     ) -> "Module":
         """
@@ -2248,20 +2164,15 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
         if use_module_cache():
             return self.modules[module_name]
-        return self.load_module(module_name, allow_v1=allow_v1, install_v1=install_v1, install_v2=install_v2)
+        return self.load_module(module_name, allow_v1=allow_v1)
 
-    def load_module_recursive(
-        self, install: bool = False, bypass_module_cache: bool = False
-    ) -> list[tuple[str, list[Statement], BasicBlock]]:
+    def load_module_recursive(self, *, bypass_module_cache: bool = False) -> list[tuple[str, list[Statement], BasicBlock]]:
         """
         Loads this project's modules and submodules by recursively following import statements starting from the project's main
         file.
 
         For each imported submodule, return a triple of name, statements, basicblock
 
-        :param install: Run in install mode, installing any modules that have not yet been installed. If install is False,
-            all modules are expected to be preinstalled. For security reasons installation of v2 modules is based on explicit
-            Python requirements rather than on imports.
         :param bypass_module_cache: Fetch the module data from disk even if a cache entry exists.
         """
         ast_by_top_level_mod: dict[str, list[tuple[str, list[Statement], BasicBlock]]] = defaultdict(list)
@@ -2273,75 +2184,17 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         # All imports of the entire project
         all_imports: set[DefineImport] = set(imports)
 
-        v2_modules: set[str] = set()
-        """
-        Set of modules that should be loaded as a V2 module.
-        """
-        set_up: set[str] = set()
-        """
-        Set of top level modules that have been set up (setup_module()).
-        """
         done: dict[str, dict[str, DefineImport]] = defaultdict(dict)
         """
         Submodules, grouped by top level that have been fully loaded: AST has been loaded into ast_by_top_level_mod and its
         imports have been added to the queue (load_sub_module()).
         """
 
-        def require_v2(module_name: str) -> None:
-            """
-            Ensure that the module with the given name gets loaded as a V2 module in a next iteration.
-            """
-            if module_name in v2_modules:
-                # already v2
-                return
-            v2_modules.add(module_name)
-            if module_name in set_up:
-                set_up.remove(module_name)
-            if module_name in done:
-                # some submodules already loaded as v1 => reload
-                add_imports_to_be_loaded(done[module_name].values())
-                del done[module_name]
-                if module_name in ast_by_top_level_mod:
-                    del ast_by_top_level_mod[module_name]
-
-        def load_module_v2_requirements(module_like: ModuleLike) -> None:
-            """
-            Loads all v2 modules explicitly required by the supplied module like instance, installing them if install=True. If
-            any of these requirements have already been loaded as v1, queues them for reload.
-            """
-            for requirement in module_like.get_module_v2_requirements():
-                # load module
-                self.get_module(
-                    requirement.name,
-                    allow_v1=False,
-                    install_v2=install,
-                    bypass_module_cache=bypass_module_cache,
-                )
-                # queue AST reload
-                require_v2(requirement.name)
-
-        def setup_module(module: Module) -> None:
-            """
-            Sets up a top level module, making sure all its v2 requirements are loaded correctly. V2 modules do not support
-            import-based installation because of security reasons (it would mean we implicitly trust any `inmanta-module-x`
-            package for the module we're trying to load). As a result we need to make sure all required v2 modules are present
-            in a set up stage.
-            """
-            if module.name in set_up:
-                # already set up
-                return
-            if isinstance(module, ModuleV2):
-                # register it as a v2 module so that any subsequent require_v2 calls
-                require_v2(module.name)
-            load_module_v2_requirements(module)
-            set_up.add(module.name)
-
         def load_sub_module(module: Module, imp: DefineImport) -> None:
             """
             Loads a submodule's AST and processes its imports. Enforces dependency generation directionality (v1 can depend on
             v2 but not the other way around). If any modules have already been loaded with an incompatible generation, queues
             them for reload.
-            Does not install any v2 modules.
             """
             parts: list[str] = imp.name.split("::")
             for i in range(1, len(parts) + 1):
@@ -2356,23 +2209,14 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
                 # get imports and add to list
                 subs_imports: list[DefineImport] = module.get_imports(subs)
                 add_imports_to_be_loaded(subs_imports)
-                if isinstance(module, ModuleV2):
-                    # A V2 module can only depend on V2 modules. Ensure that all dependencies
-                    # of this module will be loaded as a V2 module.
-                    for dep_module_name in (subs_imp.name.split("::")[0] for subs_imp in subs_imports):
-                        require_v2(dep_module_name)
 
         def add_imports_to_be_loaded(new_imports: Iterable[DefineImport]) -> None:
             imports.extend(new_imports)
             all_imports.update(new_imports)
 
-        # load this project's v2 requirements
-        load_module_v2_requirements(self)
-
         # Loop over imports. For each import:
-        # 1. Load the top level module. For v1, install if install=True, for v2 import-based installation is disabled for
-        #   security reasons. v2 modules installation is done in step 2.
-        # 2. Set up top level module if it has not been set up yet, loading v2 requirements and installing them if install=True.
+        # 1. Load the top level module.
+        # 2. Set up top level module if it has not been set up yet, loading v2 requirements.
         # 3. Load AST for imported submodule and its parent modules, queueing any transitive imports.
         while len(imports) > 0:
             imp: DefineImport = imports.pop()
@@ -2387,23 +2231,13 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
                 # get module
                 module: Module = self.get_module(
                     module_name,
-                    allow_v1=module_name not in v2_modules,
-                    install_v1=install,
-                    install_v2=False,
+                    # we never install on-the-fly anymore, so we can simplify by relaxing the allow-v1 constraint
+                    allow_v1=True,
                     bypass_module_cache=bypass_module_cache,
                 )
-                setup_module(module)
                 load_sub_module(module, imp)
             except (InvalidModuleException, ModuleNotFoundException) as e:
                 raise ModuleLoadingException(ns, imp, e)
-
-        # Remove modules from self.modules that were not part of an import statement.
-        # This happens when a module or a project defines a V2 module requirement in
-        # its dependencies, but the requirement is never imported anywhere.
-        loaded_modules: set[str] = set(self.modules.keys())
-        imported_modules: set[str] = {i.name.split("::")[0] for i in all_imports}
-        for module_to_unload in loaded_modules - imported_modules:
-            self.invalidate_state(module_to_unload)
 
         return list(chain.from_iterable(ast_by_top_level_mod.values()))
 
@@ -2412,8 +2246,6 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         module_name: str,
         *,
         allow_v1: bool = False,
-        install_v1: bool = False,
-        install_v2: bool = False,
     ) -> "Module":
         """
         Get a module instance for a given module name. The install parameters allow to install the module if it has not been
@@ -2421,10 +2253,6 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
         :param module_name: The name of the module.
         :param allow_v1: Allow this module to be loaded as v1.
-        :param install_v1: Allow installing this module as v1 if it has not yet been installed. This option is ignored if
-            allow_v1=False.
-        :param install_v2: Allow installing this module as v2 if it has not yet been installed, implicitly trusting any Python
-            package with the corresponding name.
         """
         if not self.is_using_virtual_env():
             self.use_virtual_env()
@@ -2434,16 +2262,12 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         )
         module: Optional[Union[ModuleV1, ModuleV2]]
         try:
-            module = self.module_source.get_module(self, module_reqs, install=install_v2)
+            module = self.module_source.get_module(self, module_reqs)
             if module is not None and self.module_source_v1.path_for(module_name) is not None:
                 LOGGER.warning("Module %s is installed as a V1 module and a V2 module: V1 will be ignored.", module_name)
             if module is None and allow_v1:
-                module = self.module_source_v1.get_module(self, module_reqs, install=install_v1)
+                module = self.module_source_v1.get_module(self, module_reqs)
         except InvalidModuleException:
-            raise
-        except env.ConflictingRequirements:
-            raise
-        except env.PackageNotFound:
             raise
         except Exception as e:
             raise InvalidModuleException(f"Could not load module {module_name}") from e
@@ -2475,129 +2299,6 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
         for module in self.modules.values():
             module.load_plugins()
-
-    def verify(self) -> None:
-        """
-        Verifies the integrity of the loaded project, with respect to both inter-module requirements and the Python environment.
-        """
-        LOGGER.info("verifying project")
-        self.verify_modules_cache()
-        self.verify_module_version_compatibility()
-        self.verify_python_requires()
-
-    def verify_python_environment(self) -> None:
-        """
-        Verifies the integrity of the loaded project with respect to the Python environment, over which the project has no
-        direct control.
-        """
-        self.verify_modules_cache()
-        self.verify_python_requires()
-
-    def verify_modules_cache(self) -> None:
-        if not self._modules_cache_is_valid():
-            raise CompilerException(
-                "Not all modules were loaded correctly as a result of transitive dependencies. A recompile should load them"
-                " correctly."
-            )
-
-    def verify_module_version_compatibility(self) -> None:
-        """
-        Check if all the required modules for this module have been loaded. Assumes the modules cache is valid and up to date.
-
-        :raises CompilerException: When one or more of the requirements of the project is not satisfied.
-        """
-        requirements: dict[str, list[InmantaModuleRequirement]] = self.collect_requirements()
-
-        exc_message = ""
-        for name, spec in requirements.items():
-            if name not in self.modules:
-                # the module is in the project requirements but it is not part of the loaded AST so there is no need to verify
-                # its compatibility
-                LOGGER.warning("Module %s is present in requires but it is not used by the model.", name)
-                continue
-            module = self.modules[name]
-            current_version = Version(version=str(module.version))
-            for r in spec:
-                if current_version not in r:
-                    exc_message += f"\n\t* requirement {r} on module {name} not fulfilled, now at version {current_version}."
-
-        if exc_message:
-            exc_message = f"The following requirements were not satisfied:{exc_message}"
-            if self.metadata.install_mode == InstallMode.master:
-                exc_message += (
-                    "\nThe release type of the project is set to 'master'. Set it to a value that is "
-                    "appropriate for the version constraint or remove the version constraint. After that, "
-                    "run `inmanta project update` to resolve this issue."
-                )
-            else:
-                exc_message += "\nRun `inmanta project update` to resolve this."
-            raise CompilerException(exc_message)
-
-    def verify_python_requires(self) -> None:
-        """
-        Verifies no incompatibilities exist within the Python environment with respect to installed module v2 requirements.
-        """
-        if self.strict_deps_check:
-            constraints: list[inmanta.util.CanonicalRequirement] = inmanta.util.parse_requirements(
-                self.collect_python_requirements()
-            )
-            env.process_env.check(strict_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*"), constraints=constraints)
-        else:
-            if not env.process_env.check_legacy(in_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*")):
-                raise CompilerException(
-                    "Not all installed modules are compatible: requirements conflicts were found. Please resolve any conflicts"
-                    " before attempting another compile. Run `pip check` to check for any incompatibilities."
-                )
-
-    def _modules_cache_is_valid(self) -> bool:
-        """
-        Verify the modules cache after changes have been made to the Python environment. Returns False if any modules
-        somehow got installed as another generation or with another version as the one that has been loaded into the AST.
-
-        When this situation occurs, the compiler state is invalid and the compile needs to either abort or attempt recovery.
-        The modules cache, from which the AST was loaded, is out of date, therefore at least a partial AST regeneration
-        would be required to recover.
-
-        Scenario's that could trigger this state:
-            1.
-                - latest v2 mod a is installed
-                - some v1 mod depends on v2 mod b, which depends on a<2
-                - during loading, after a has been loaded, mod b is installed
-                - Python downgrades transitive dependency a to a<2
-            2.
-                - latest v2 mod a is installed
-                - some v1 (or even v2 when in install mode) mod depends on a<2
-                - after loading, during plugin requirements install, `pip install a<2` is run
-                - Python downgrades direct dependency a to a<2
-        In both cases, a<2 might be a valid version, but since it was installed transitively after the compiler has loaded
-        module a, steps would need to be taken to take this change into account.
-        """
-        result: bool = True
-        for name, module in self.modules.items():
-            installed: Optional[ModuleV2] = self.module_source.get_installed_module(self, name)
-            if installed is None:
-                if module.GENERATION == ModuleGeneration.V1:
-                    # Loaded module as V1 and no installed V2 module found: no issues with this module
-                    continue
-                raise CompilerException(
-                    f"Invalid state: compiler has loaded module {name} as v2 but it is nowhere to be found."
-                )
-            else:
-                if module.GENERATION == ModuleGeneration.V1:
-                    LOGGER.warning(
-                        "Compiler has loaded module %s as v1 but it has later been installed as v2 as a side effect.", name
-                    )
-                    result = False
-                elif installed.version != module.version:
-                    LOGGER.warning(
-                        "Compiler has loaded module %s==%s but %s==%s has later been installed as a side effect.",
-                        name,
-                        module.version,
-                        name,
-                        installed.version,
-                    )
-                    result = False
-        return result
 
     def is_using_virtual_env(self) -> bool:
         return self.virtualenv.is_using_virtual_env()
@@ -2645,21 +2346,11 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             for v1_mod in v1_modules:
                 LOGGER.info(f"  {v1_mod.name}: {v1_mod.version}")
 
-    def add_module_requirement_persistent(self, requirement: InmantaModuleRequirement, add_as_v1_module: bool) -> None:
-        # Add requirement to metadata file
-        if add_as_v1_module:
-            self.add_module_requirement_to_requires_and_write(requirement)
-            # Refresh in-memory metadata
-            with open(self.get_metadata_file_path(), encoding="utf-8") as fd:
-                self._metadata = ProjectMetadata.parse(fd)
+    def add_module_requirement_persistent(self, requirement: InmantaModuleRequirement) -> None:
         # Update requirements.txt file
         requirements_txt_file_path = os.path.join(self._path, "requirements.txt")
-        if not add_as_v1_module:
-            requirements_txt_file = RequirementsTxtFile(requirements_txt_file_path, create_file_if_not_exists=True)
-            requirements_txt_file.set_requirement_and_write(requirement.get_python_package_requirement())
-        elif os.path.exists(requirements_txt_file_path):
-            requirements_txt_file = RequirementsTxtFile(requirements_txt_file_path)
-            requirements_txt_file.remove_requirement_and_write(requirement.get_python_package_requirement().name)
+        requirements_txt_file = RequirementsTxtFile(requirements_txt_file_path, create_file_if_not_exists=True)
+        requirements_txt_file.set_requirement_and_write(requirement.get_python_package_requirement())
 
     def get_module_requirements(self) -> list[str]:
         return [*self.metadata.requires, *(str(req) for req in self.get_module_v2_requirements())]
@@ -2669,13 +2360,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         Get the requires for this project
         """
         # filter on import stmt
-        reqs = []
-        for spec in self._metadata.requires:
-            req = [inmanta.util.parse_requirement(requirement=spec)]
-            if len(req) > 1:
-                print(f"Module file for {self._path} has bad line in requirements specification {spec}")
-            reqe = InmantaModuleRequirement(req[0])
-            reqs.append(reqe)
+        reqs = [InmantaModuleRequirement(inmanta.util.parse_requirement(requirement=spec)) for spec in self._metadata.requires]
         return [*reqs, *self.get_module_v2_requirements()]
 
     def collect_requirements(self) -> "Dict[str, List[InmantaModuleRequirement]]":
@@ -2702,16 +2387,6 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
         return {name: get_spec(name) for name in imports}
 
-    def collect_python_requirements(self) -> Sequence[str]:
-        """
-        Collect the list of all python requirements of all modules in this project, excluding those on inmanta modules.
-        """
-        reqs = chain(
-            chain.from_iterable([mod.get_strict_python_requirements_as_list() for mod in self.modules.values()]),
-            self.get_strict_python_requirements_as_list(),
-        )
-        return list(set(reqs))
-
     def get_root_namespace(self) -> Namespace:
         return self.root_ns
 
@@ -2730,7 +2405,8 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         return out
 
     def get_all_python_requirements_as_list(self) -> list[str]:
-        return self._get_requirements_txt_as_list()
+        auto: Sequence[str] = [const.STD_PACKAGE] if self.autostd else []
+        return [*self._get_requirements_txt_as_list(), *auto]
 
     def module_v2_source_configured(self) -> bool:
         """
@@ -2895,7 +2571,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         for impor in todo:
             if impor not in out:
                 v1_mode: bool = self.GENERATION == ModuleGeneration.V1
-                mainmod = self._project.get_module(impor, install_v1=v1_mode, allow_v1=v1_mode)
+                mainmod = self._project.get_module(impor, allow_v1=v1_mode)
                 vers: packaging.version.Version = mainmod.version
                 # track submodules for cycle avoidance
                 out[impor] = mode + " " + str(vers)
@@ -3267,24 +2943,13 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
     def get_module_requirements(self) -> list[str]:
         return [*self.metadata.requires, *(str(req) for req in self.get_module_v2_requirements())]
 
-    def add_module_requirement_persistent(self, requirement: InmantaModuleRequirement, add_as_v1_module: bool) -> None:
+    def add_module_requirement_persistent(self, requirement: InmantaModuleRequirement) -> None:
         requirements_txt_file_path = os.path.join(self._path, "requirements.txt")
-        if add_as_v1_module:
-            # Add requirement to module.yml file
-            self.add_module_requirement_to_requires_and_write(requirement)
-            # Refresh in-memory metadata
-            with open(self.get_metadata_file_path(), encoding="utf-8") as fd:
-                self._metadata = ModuleV1Metadata.parse(fd)
-            # Remove requirement from requirements.txt file
-            if os.path.exists(requirements_txt_file_path):
-                requirements_txt_file = RequirementsTxtFile(requirements_txt_file_path)
-                requirements_txt_file.remove_requirement_and_write(requirement.get_python_package_requirement().name)
-        else:
-            # Add requirement to requirements.txt
-            requirements_txt_file = RequirementsTxtFile(requirements_txt_file_path, create_file_if_not_exists=True)
-            requirements_txt_file.set_requirement_and_write(requirement.get_python_package_requirement())
-            # Remove requirement from module.yml file
-            self.remove_module_requirement_from_requires_and_write(requirement.name)
+        # Add requirement to requirements.txt
+        requirements_txt_file = RequirementsTxtFile(requirements_txt_file_path, create_file_if_not_exists=True)
+        requirements_txt_file.set_requirement_and_write(requirement.get_python_package_requirement())
+        # Remove requirement from module.yml file
+        self.remove_module_requirement_from_requires_and_write(requirement.name)
 
     def versions(self) -> list[packaging.version.Version]:
         """
@@ -3413,9 +3078,7 @@ class ModuleV2(Module[ModuleV2Metadata]):
     def get_module_requirements(self) -> list[str]:
         return [str(req) for req in self.get_module_v2_requirements()]
 
-    def add_module_requirement_persistent(self, requirement: InmantaModuleRequirement, add_as_v1_module: bool) -> None:
-        if add_as_v1_module:
-            raise Exception("Cannot add V1 requirement to a V2 module")
+    def add_module_requirement_persistent(self, requirement: InmantaModuleRequirement) -> None:
         # Parse config file
         config_parser = ConfigParser()
         config_parser.read(self.get_metadata_file_path())

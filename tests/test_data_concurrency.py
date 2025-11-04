@@ -34,6 +34,7 @@ import asyncpg
 import pytest
 
 from inmanta import const, data
+from inmanta.protocol.common import Result
 
 
 def slowdown_queries(
@@ -149,8 +150,11 @@ async def test_release_version_concurrently(
 
     slowdown_queries(monkeypatch)
 
-    f1 = asyncio.create_task(client.release_version(environment, version2))
-    f2 = asyncio.create_task(client.release_version(environment, version2))
+    async def release() -> Result[None]:
+        return await client.release_version(environment, version2)
+
+    f1 = asyncio.create_task(release())
+    f2 = asyncio.create_task(release())
 
     # get results
     r1 = await f1

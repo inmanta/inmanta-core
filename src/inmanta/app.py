@@ -83,6 +83,14 @@ def server_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Se
         help="Maximum time in seconds the server will wait for the database to be up before starting. "
         "A value of 0 means the server will not wait. If set to a negative value, the server will wait indefinitely.",
     )
+    parser.add_argument(
+        "--compatibility-file",
+        type=str,
+        dest="compatibility_file",
+        help="Path to the compatibility.json file. The constraints defined in the `python_package_constraints` field will be "
+        "enforced both during project install and during agent install. For more information about this file, please refer to "
+        "the compatibility page in the Inmanta documentation.",
+    )
 
 
 @command("server", help_msg="Start the inmanta server", parser_config=server_parser_config, component="server")
@@ -95,6 +103,9 @@ def start_server(options: argparse.Namespace) -> None:
 
     if options.db_wait_time is not None:
         Config.set("database", "wait_time", str(options.db_wait_time))
+
+    if options.compatibility_file is not None:
+        Config.set("server", "compatibility_file", str(options.compatibility_file))
 
     tracing.configure_logfire("server")
     util.ensure_event_loop()
@@ -313,10 +324,7 @@ def compile_project(options: argparse.Namespace) -> None:
     if options.dataflow_graphic is True:
         Config.set("compiler", "dataflow_graphic_enable", "true")
 
-    strict_deps_check = moduletool.get_strict_deps_check(
-        no_strict_deps_check=options.no_strict_deps_check, strict_deps_check=options.strict_deps_check
-    )
-    module.Project.get(options.main_file, strict_deps_check=strict_deps_check)
+    module.Project.get(options.main_file)
 
     with tracing.span("compile"):
         summary_reporter = CompileSummaryReporter()
@@ -475,7 +483,7 @@ def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Se
     parser.add_argument(
         "--soft-delete",
         dest="soft_delete",
-        help="This flag prevents the deletion of resource sets (marked for deletion via the ``--delete-resource-set`` cli"
+        help="This flag prevents the deletion of resource sets (marked for deletion via the ``--delete-resource-set`` cli "
         "option or the INMANTA_REMOVED_SET_ID env variable) that contain resources that are currently being exported.",
         action="store_true",
         default=False,
@@ -553,10 +561,7 @@ def export(options: argparse.Namespace) -> None:
     if "type" not in metadata:
         metadata["type"] = "manual"
 
-    strict_deps_check = moduletool.get_strict_deps_check(
-        no_strict_deps_check=options.no_strict_deps_check, strict_deps_check=options.strict_deps_check
-    )
-    module.Project.get(options.main_file, strict_deps_check=strict_deps_check)
+    module.Project.get(options.main_file)
 
     from inmanta.export import Exporter  # noqa: H307
 

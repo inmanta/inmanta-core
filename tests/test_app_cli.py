@@ -33,7 +33,13 @@ from inmanta.command import ShowUsageException
 from inmanta.compiler.config import feature_compiler_cache
 from inmanta.config import Config
 from inmanta.const import INMANTA_REMOVED_SET_ID
-from inmanta.data import AUTO_DEPLOY
+from inmanta.data import (
+    AUTO_DEPLOY,
+    ENVIRONMENT_METRICS_RETENTION,
+    NOTIFICATION_RETENTION,
+    RESOURCE_ACTION_LOGS_RETENTION,
+    model,
+)
 from utils import v1_module_from_template
 
 
@@ -63,6 +69,7 @@ async def install_project(python_env: env.PythonEnvironment, project_dir: py.pat
         python_env.python_path,
         "-m",
         "inmanta.app",
+        "-Xvvv",  # for assert failure messages
         "project",
         "install",
     ]
@@ -167,6 +174,16 @@ async def test_export(
     result = await client.environment_settings_set(tid=environment, id=AUTO_DEPLOY, value=True)
     assert result.code == 200
 
+    # Put settings in-place to test the export of the environment settings in the project.yml file
+    result = await client.environment_settings_set(tid=environment, id=RESOURCE_ACTION_LOGS_RETENTION, value=5)
+    assert result.code == 200
+    result = await client.environment_setting_get(tid=environment, id=ENVIRONMENT_METRICS_RETENTION)
+    assert result.code == 200
+    assert result.result["data"]["settings"][ENVIRONMENT_METRICS_RETENTION] == 336
+    result = await client.environment_setting_get(tid=environment, id=NOTIFICATION_RETENTION)
+    assert result.code == 200
+    assert result.result["data"]["settings"][NOTIFICATION_RETENTION] == 365
+
     workspace = tmpdir.mkdir("tmp")
     path_main_file = workspace.join("main.cf")
     path_project_yml_file = workspace.join("project.yml")
@@ -179,6 +196,9 @@ name: testproject
 modulepath: {libs_dir}
 downloadpath: {libs_dir}
 repo: https://github.com/inmanta/
+environment_settings:
+    {ENVIRONMENT_METRICS_RETENTION}: 100
+    {NOTIFICATION_RETENTION}: 200
 """
     )
 
@@ -240,6 +260,26 @@ std::testing::NullResource(name="test", agentname="non_existing_agent")
 
     # wait for release by auto release
     await clienthelper.wait_for_released(None)
+
+    # Verify that the environment settings were updated correctly
+    result = await client.environment_setting_get(tid=environment, id=RESOURCE_ACTION_LOGS_RETENTION)
+    assert result.code == 200
+    # This setting is not present in the project.yml file, so it should be changed.
+    assert result.result["data"]["settings"][RESOURCE_ACTION_LOGS_RETENTION] == 5
+    result = await client.environment_setting_get(tid=environment, id=ENVIRONMENT_METRICS_RETENTION)
+    assert result.code == 200
+    assert result.result["data"]["settings"][ENVIRONMENT_METRICS_RETENTION] == 100
+    result = await client.environment_setting_get(tid=environment, id=NOTIFICATION_RETENTION)
+    assert result.code == 200
+    assert result.result["data"]["settings"][NOTIFICATION_RETENTION] == 200
+    result = await client.environment_settings_list(tid=environment)
+    for setting_name, s in result.result["data"]["definition"].items():
+        if setting_name in {ENVIRONMENT_METRICS_RETENTION, NOTIFICATION_RETENTION}:
+            assert s["protected"]
+            assert model.ProtectedBy(s["protected_by"]) == model.ProtectedBy.project_yml
+        else:
+            assert not s["protected"]
+            assert s["protected_by"] is None
 
     shutil.rmtree(workspace)
 

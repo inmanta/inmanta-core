@@ -299,7 +299,7 @@ class AgentQueues:
         self._tasks_by_resource[task.resource][task] = item
         self._get_queue(task.id.agent_name).put_nowait(item)
 
-    def send_shutdown(self) -> None:
+    def send_shutdown(self, reason: str = "Scheduler shutdown") -> None:
         """
         Wake up all workers after shutdown is signalled
         """
@@ -307,7 +307,7 @@ class AgentQueues:
             task=tasks.PoisonPill(resource=ResourceIdStr("system::Terminate[all,stop=True]")),
             priority=TaskPriority.TERMINATED,
             requested_at=-1,
-            reason="Scheduler shutdown",
+            reason=reason,
         )
         for queue in self._agent_queues.values():
             queue.put_nowait(poison_pill)
@@ -397,6 +397,9 @@ class ScheduledWork:
         self.agent_queues.reset()
         self._waiting.clear()
 
+    def add_poison_pill_to_agent_queues(self, reason: str) -> None:
+        self.agent_queues.send_shutdown(reason=reason)
+
     def deploy_with_context(
         self,
         resources: Set[ResourceIdStr],
@@ -415,6 +418,7 @@ class ScheduledWork:
 
         :param resources: Set of resources that should be deployed. Adds a deploy task to the scheduled work for each
             of these, unless it is already scheduled.
+        :param reason: The reason for this deploy.
         :param priority: The priority of this deploy.
         :param deploying: Set of resources for which a non-stale deploy is in progress, i.e. the scheduler does not need to
             take action to deploy the latest intent for any of these resources because that deploy is already in progress
@@ -595,6 +599,8 @@ class ScheduledWork:
         when we know it can't progress e.g. it is undefined and thus known to be blocked
         on another resource.
         Does not affect dry-run tasks because they do not act on the latest desired state.
+
+        Does nothing if no work is found for this resource.
         """
         # delete from waiting collection if deploy task is waiting to be queued
         if resource in self._waiting:
