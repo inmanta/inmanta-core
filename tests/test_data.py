@@ -951,36 +951,49 @@ async def test_model_delete_cascade(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 
-    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
-    await env.insert()
+    environments = []
+    for i in range(0, 2):
+        env = data.Environment(name=f"dev{i}", project=project.id, repo_url="", repo_branch="")
+        environments.append(env.id)
+        await env.insert()
 
-    version = int(time.time())
-    cm = data.ConfigurationModel(
-        environment=env.id,
-        version=version,
-        date=datetime.datetime.now(),
-        total=0,
-        version_info={},
-        is_suitable_for_partial_compiles=False,
-    )
-    await cm.insert()
+        version = int(time.time())
+        cm = data.ConfigurationModel(
+            environment=env.id,
+            version=version,
+            date=datetime.datetime.now(),
+            total=0,
+            version_info={},
+            is_suitable_for_partial_compiles=False,
+        )
+        await cm.insert()
 
-    name = "file"
-    key = "std::testing::NullResource[agent1,name=" + name + "]"
-    resource_set = await make_resource_set(env.id, [version])
-    rvid = key + ",v=%d" % version
+        name = "file"
+        key = "std::testing::NullResource[agent1,name=" + name + "]"
+        resource_set = await make_resource_set(env.id, [version])
+        rvid = key + ",v=%d" % version
 
-    resource = data.Resource.new(
-        environment=env.id, resource_version_id=rvid, resource_set=resource_set, attributes={"name": name}
-    )
-    await resource.insert()
+        resource = data.Resource.new(
+            environment=env.id, resource_version_id=rvid, resource_set=resource_set, attributes={"name": name}
+        )
+        await resource.insert()
+        parameter = data.Parameter(
+            name="param",
+            value="test_val",
+            environment=env.id,
+            source="test",
+            updated=datetime.datetime.now(),
+            resource_id=key,
+            expires=True,
+        )
+        await parameter.insert()
 
-    unknown_parameter = data.UnknownParameter(name="test", environment=env.id, version=version, source="")
-    await unknown_parameter.insert()
+        unknown_parameter = data.UnknownParameter(name="test", environment=env.id, version=version, source="")
+        await unknown_parameter.insert()
 
+    # delete the last cm created
     await cm.delete_cascade()
 
-    assert (await data.ConfigurationModel.get_list()) == []
     id = Id.parse_resource_version_id(rvid)
     assert (
         await data.Resource.get_resource_for_version(
@@ -988,6 +1001,11 @@ async def test_model_delete_cascade(init_dataclasses_and_load_schema):
         )
     ) is None
     assert (await data.UnknownParameter.get_by_id(unknown_parameter.id)) is None
+
+    # Resources and Parameters on other environments remain untouched
+    assert len(await data.Resource.get_list(environment=environments[0])) == 1
+    assert len(await data.Parameter.get_list(environment=environments[0])) == 1
+    assert len(await data.UnknownParameter.get_list(environment=environments[0])) == 1
 
 
 async def test_model_get_version_nr_latest_version(init_dataclasses_and_load_schema):
