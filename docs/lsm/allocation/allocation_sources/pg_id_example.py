@@ -10,10 +10,11 @@ import os
 from typing import Optional
 from uuid import UUID
 
-import inmanta_plugins.lsm.allocation as lsm
 import psycopg2
-from inmanta_plugins.lsm.allocation import ExternalServiceIdAllocator, T
 from psycopg2.extensions import ISOLATION_LEVEL_SERIALIZABLE
+
+import inmanta_plugins.lsm.allocation as lsm
+from inmanta_plugins.lsm.allocation import ExternalServiceIdAllocator, T
 
 
 class PGServiceIdAllocator(ExternalServiceIdAllocator[T]):

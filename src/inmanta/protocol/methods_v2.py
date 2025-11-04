@@ -20,11 +20,12 @@ Module defining the v2 rest api
 
 import datetime
 import uuid
+from collections.abc import Mapping, Sequence
 from typing import Any, Literal, Optional, Union
 
 import inmanta.types
 from inmanta import const
-from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, ParameterSource, ResourceState
+from inmanta.const import AgentAction, AllAgentAction, ApiDocsFormat, Change, ClientType, ParameterSource, ResourceState
 from inmanta.data import model
 from inmanta.data.model import DataBaseReport, LinkedDiscoveredResource, PipConfig
 from inmanta.protocol import methods
@@ -46,11 +47,11 @@ from inmanta.types import PrimitiveTypes, ResourceIdStr
 )
 def put_partial(
     tid: uuid.UUID,
-    module_version_info: dict[str, model.InmantaModule],
-    resource_state: Optional[dict[ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]]] = None,
-    unknowns: Optional[list[dict[str, PrimitiveTypes]]] = None,
-    resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
-    removed_resource_sets: Optional[list[str]] = None,
+    module_version_info: Mapping[str, model.InmantaModule],
+    resource_state: Optional[Mapping[ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]]] = None,
+    unknowns: Optional[Sequence[Mapping[str, PrimitiveTypes]]] = None,
+    resource_sets: Optional[Mapping[ResourceIdStr, Optional[str]]] = None,
+    removed_resource_sets: Optional[Sequence[str]] = None,
     pip_config: Optional[PipConfig] = None,
     allow_handler_code_update: bool = False,
     **kwargs: object,  # bypass the type checking for the resources and version_info argument
@@ -309,7 +310,7 @@ def environment_clear(id: uuid.UUID) -> None:
     client_types=[ClientType.api, ClientType.compiler],
     api_version=2,
 )
-def environment_create_token(tid: uuid.UUID, client_types: list[str], idempotent: bool = True) -> str:
+def environment_create_token(tid: uuid.UUID, client_types: Sequence[str], idempotent: bool = True) -> str:
     """
     Create or get a new token for the given client types. Tokens generated with this call are scoped to the current
     environment.
@@ -401,6 +402,28 @@ def environment_setting_delete(tid: uuid.UUID, id: str) -> ReturnValue[None]:
     """
 
 
+@typedmethod(
+    path="/protected_environment_settings",
+    operation="POST",
+    arg_options=methods.ENV_OPTS,
+    api=True,
+    client_types=[ClientType.compiler],
+    api_version=2,
+)
+def protected_environment_settings_set_batch(
+    tid: uuid.UUID, settings: dict[str, model.EnvSettingType], protected_by: model.ProtectedBy
+) -> None:
+    """
+    Set the values for the given environment settings and mark them as protected.
+    If any other environment setting in that environment was protected for the same reason,
+    its protected status will be cancelled.
+
+    :param tid: The id of the environment from which to update the environment settings.
+    :param settings: The values for each environment setting that has to be updated.
+    :param protected_by: The reason why the environment settings must be protected.
+    """
+
+
 @auth(auth_label=const.CoreAuthorizationLabel.DESIRED_STATE_WRITE, read_only=False, environment_param="tid")
 @typedmethod(
     path="/reserve_version", operation="POST", arg_options=methods.ENV_OPTS, client_types=[ClientType.compiler], api_version=2
@@ -476,6 +499,22 @@ def notify_timer_update(tid: uuid.UUID) -> None:
     """
 
 
+@typedmethod(
+    path="/executors/remove_venvs",
+    operation="DELETE",
+    server_agent=True,
+    timeout=5,
+    arg_options=methods.AGENT_ENV_OPTS,
+    client_types=[],
+    reply=False,
+    enforce_auth=False,
+)
+def remove_executor_venvs() -> None:
+    """
+    Remove all the Python virtual environments.
+    """
+
+
 @auth(auth_label=const.CoreAuthorizationLabel.AGENT_PAUSE_RESUME, read_only=False, environment_param="tid")
 @typedmethod(
     path="/agent/<name>/<action>", operation="POST", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
@@ -492,7 +531,7 @@ def agent_action(tid: uuid.UUID, name: str, action: AgentAction) -> None:
                     * pause: A paused agent cannot execute any deploy operations.
                     * unpause: A unpaused agent will be able to execute deploy operations.
                     * keep_paused_on_resume: The agent will still be paused when the environment is resumed
-                    * unpause_on_resume: The agent will be unpaused when the environment is resumed
+                    * unpause_on_resume: The agent will be unpaused when the environment is resumed.
 
     :raises Forbidden: The given environment has been halted and the action is pause/unpause,
                         or the environment is not halted and the action is related to the on_resume behavior
@@ -503,7 +542,7 @@ def agent_action(tid: uuid.UUID, name: str, action: AgentAction) -> None:
 @typedmethod(
     path="/agents/<action>", operation="POST", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
-def all_agents_action(tid: uuid.UUID, action: AgentAction) -> None:
+def all_agents_action(tid: uuid.UUID, action: AllAgentAction) -> None:
     """
     Execute an action on all agents in the given environment.
 
@@ -515,6 +554,13 @@ def all_agents_action(tid: uuid.UUID, action: AgentAction) -> None:
                     * unpause: A unpaused agent will be able to execute deploy operations.
                     * keep_paused_on_resume: The agents will still be paused when the environment is resumed
                     * unpause_on_resume: The agents will be unpaused when the environment is resumed
+                    * remove_all_agent_venvs: Remove all agent venvs in the given environment. During this
+                                              process the agent operations in that environment are temporarily
+                                              suspended. The removal of the agent venvs will happen asynchronously
+                                              with respect to this API call. It might take a long time until the
+                                              venvs are actually removed, because all executing agent operations
+                                              will be allowed to finish first. As such, a long deploy operation
+                                              might delay the removal of the venvs considerably.
 
     :raises Forbidden: The given environment has been halted and the action is pause/unpause,
                         or the environment is not halted and the action is related to the on_resume behavior
@@ -530,7 +576,7 @@ def get_agents(
     end: Optional[Union[datetime.datetime, bool, str]] = None,
     first_id: Optional[str] = None,
     last_id: Optional[str] = None,
-    filter: Optional[dict[str, list[str]]] = None,
+    filter: Optional[Mapping[str, Sequence[str]]] = None,
     sort: str = "name.asc",
 ) -> list[model.Agent]:
     """
@@ -613,7 +659,7 @@ def get_resource_actions(
     action_id: Optional[uuid.UUID] = None,
     first_timestamp: Optional[datetime.datetime] = None,
     last_timestamp: Optional[datetime.datetime] = None,
-    exclude_changes: Optional[list[Change]] = None,
+    exclude_changes: Optional[Sequence[Change]] = None,
 ) -> ReturnValue[list[model.ResourceAction]]:
     """
     Return resource actions matching the search criteria.
@@ -710,7 +756,7 @@ def resource_list(
     last_id: Optional[inmanta.types.ResourceVersionIdStr] = None,
     start: Optional[str] = None,
     end: Optional[str] = None,
-    filter: Optional[dict[str, list[str]]] = None,
+    filter: Optional[Mapping[str, Sequence[str]]] = None,
     sort: str = "resource_type.desc",
     deploy_summary: bool = False,
 ) -> list[model.LatestReleasedResource]:
@@ -824,7 +870,7 @@ def resource_logs(
     limit: Optional[int] = None,
     start: Optional[datetime.datetime] = None,
     end: Optional[datetime.datetime] = None,
-    filter: Optional[dict[str, list[str]]] = None,
+    filter: Optional[Mapping[str, Sequence[str]]] = None,
     sort: str = "timestamp.desc",
 ) -> list[model.ResourceLog]:
     """
@@ -918,7 +964,7 @@ def get_compile_reports(
     last_id: Optional[uuid.UUID] = None,
     start: Optional[datetime.datetime] = None,
     end: Optional[datetime.datetime] = None,
-    filter: Optional[dict[str, list[str]]] = None,
+    filter: Optional[Mapping[str, Sequence[str]]] = None,
     sort: str = "requested.desc",
 ) -> list[model.CompileReport]:
     """
@@ -993,7 +1039,7 @@ def list_desired_state_versions(
     limit: Optional[int] = None,
     start: Optional[int] = None,
     end: Optional[int] = None,
-    filter: Optional[dict[str, list[str]]] = None,
+    filter: Optional[Mapping[str, Sequence[str]]] = None,
     sort: str = "version.desc",
 ) -> list[model.DesiredStateVersion]:
     """
@@ -1052,7 +1098,7 @@ def get_resources_in_version(
     last_id: Optional[inmanta.types.ResourceVersionIdStr] = None,
     start: Optional[str] = None,
     end: Optional[str] = None,
-    filter: Optional[dict[str, list[str]]] = None,
+    filter: Optional[Mapping[str, Sequence[str]]] = None,
     sort: str = "resource_type.desc",
 ) -> list[model.VersionedResource]:
     """
@@ -1150,7 +1196,7 @@ def get_parameters(
     last_id: Optional[uuid.UUID] = None,
     start: Optional[Union[datetime.datetime, str]] = None,
     end: Optional[Union[datetime.datetime, str]] = None,
-    filter: Optional[dict[str, list[str]]] = None,
+    filter: Optional[Mapping[str, Sequence[str]]] = None,
     sort: str = "name.asc",
 ) -> list[model.Parameter]:
     """
@@ -1194,7 +1240,7 @@ def set_parameter(
     name: str,
     source: ParameterSource,
     value: str,
-    metadata: Optional[dict[str, str]] = None,
+    metadata: Optional[Mapping[str, str]] = None,
     recompile: bool = False,
 ) -> ReturnValue[model.Parameter]:
     """
@@ -1225,7 +1271,7 @@ def get_all_facts(
     last_id: Optional[uuid.UUID] = None,
     start: Optional[str] = None,
     end: Optional[str] = None,
-    filter: Optional[dict[str, list[str]]] = None,
+    filter: Optional[Mapping[str, Sequence[str]]] = None,
     sort: str = "name.asc",
 ) -> list[model.Fact]:
     """
@@ -1269,7 +1315,7 @@ def set_fact(
     source: ParameterSource,
     value: str,
     resource_id: str,
-    metadata: Optional[dict[str, str]] = None,
+    metadata: Optional[Mapping[str, str]] = None,
     recompile: bool = False,
     expires: Optional[bool] = True,
 ) -> ReturnValue[model.Fact]:
@@ -1357,7 +1403,7 @@ def list_notifications(
     last_id: Optional[uuid.UUID] = None,
     start: Optional[datetime.datetime] = None,
     end: Optional[datetime.datetime] = None,
-    filter: Optional[dict[str, list[str]]] = None,
+    filter: Optional[Mapping[str, Sequence[str]]] = None,
     sort: str = "created.desc",
 ) -> list[model.Notification]:
     """
@@ -1470,7 +1516,7 @@ def get_pip_config(tid: uuid.UUID, version: int) -> Optional[model.PipConfig]:
 )
 def get_environment_metrics(
     tid: uuid.UUID,
-    metrics: list[str],
+    metrics: Sequence[str],
     start_interval: datetime.datetime,
     end_interval: datetime.datetime,
     nb_datapoints: int,
@@ -1610,7 +1656,7 @@ def delete_role(name: str) -> None:
 
 @auth(auth_label=const.CoreAuthorizationLabel.ROLE_ASSIGNMENT_READ, read_only=True)
 @typedmethod(path="/role_assignment/<username>", operation="GET", client_types=[ClientType.api], api_version=2)
-def list_roles_for_user(username: str) -> list[model.RoleAssignment]:
+def list_roles_for_user(username: str) -> model.RoleAssignmentsPerEnvironment:
     """
     Returns the roles assigned to the given user.
 
@@ -1679,7 +1725,7 @@ def discovered_resource_create(
     client_types=[ClientType.agent],
     api_version=2,
 )
-def discovered_resource_create_batch(tid: uuid.UUID, discovered_resources: list[LinkedDiscoveredResource]) -> None:
+def discovered_resource_create_batch(tid: uuid.UUID, discovered_resources: Sequence[LinkedDiscoveredResource]) -> None:
     """
     create multiple discovered resource in the DB
     :param tid: The id of the environment this resource belongs to
@@ -1718,7 +1764,7 @@ def discovered_resources_get_batch(
     start: Optional[str] = None,
     end: Optional[str] = None,
     sort: str = "discovered_resource_id.asc",
-    filter: Optional[dict[str, list[str]]] = None,
+    filter: Optional[Mapping[str, Sequence[str]]] = None,
 ) -> list[model.DiscoveredResource]:
     """
     Get a list of discovered resources.
@@ -1735,7 +1781,8 @@ def discovered_resources_get_batch(
     :param end: The upper limit for the order by column (exclusive).
                 Only one of 'start' and 'end' should be specified at the same time.
     :param sort: Return the results sorted according to the parameter value.
-            The following sorting attributes are supported: 'discovered_resource_id'.
+            The following sorting attributes are supported: 'discovered_resource_id', 'resource_type', 'agent',
+            'resource_id_value'.
             The following orders are supported: 'asc', 'desc'
     :param filter: Filter the list of returned resources.
         Default behavior: return all discovered resources.
@@ -1745,6 +1792,9 @@ def discovered_resources_get_batch(
               resources that are present in any released configuration model of environment tid.
             - filter.managed=false: only return discovered resources that the orchestrator is unaware of i.e. resources
               that are not part of any released configuration model of environment tid.
+            - filter.resource_type: filter by resource type.
+            - filter.agent: filter by agent.
+            - filter.resource_id_value: filter by resource id value.
 
     :return: A list of all matching released resources
     :raise NotFound: This exception is raised when the referenced environment is not found

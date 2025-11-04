@@ -21,24 +21,26 @@ import base64
 import itertools
 import logging
 import time
+import uuid
 from collections.abc import Sequence
-from typing import Any, Callable, Optional, Union
+from typing import Any, Callable, Literal, Optional, Union
 
 import pydantic
 
-from inmanta import const, loader, protocol, references
+import inmanta.loader
+import inmanta.module
+from inmanta import const, protocol, references
 from inmanta.agent.handler import Commander
 from inmanta.ast import CompilerException, Namespace, UnknownException
 from inmanta.ast.entity import Entity
 from inmanta.config import Option, is_list, is_uuid_opt
-from inmanta.const import ResourceState
-from inmanta.data.model import PipConfig
-from inmanta.execute.proxy import DynamicProxy, ProxyContext, ProxyMode
+from inmanta.data import model
+from inmanta.execute import proxy
+from inmanta.execute.proxy import DynamicProxy, ProxyContext
 from inmanta.execute.runtime import Instance
-from inmanta.module import Project
 from inmanta.resources import Id, IgnoreResourceException, Resource, resource, to_id
 from inmanta.stable_api import stable_api
-from inmanta.types import ResourceVersionIdStr
+from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 from inmanta.util import get_compiler_version, hash_file
 
 LOGGER = logging.getLogger(__name__)
@@ -77,7 +79,7 @@ class DependencyCycleException(Exception):
         return "Cycle in dependencies: %s" % self.cycle
 
 
-def upload_code(conn: protocol.SyncClient, code_manager: loader.CodeManager) -> None:
+def upload_code(conn: protocol.SyncClient, code_manager: "inmanta.loader.CodeManager") -> None:
     res = conn.stat_files(list(code_manager.get_file_hashes()))
     if res is None or res.code != 200:
         raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
@@ -129,9 +131,9 @@ class Exporter:
         self.options = options
 
         self._resources: ResourceDict = {}
-        self._resource_sets: dict[str, Optional[str]] = {}
+        self._resource_sets: dict[ResourceIdStr, Optional[str]] = {}
         self._removed_resource_sets: set[str] = set()
-        self._resource_state: dict[str, ResourceState] = {}
+        self._resource_state: dict[ResourceIdStr, Literal[const.ResourceState.available, const.ResourceState.undefined]] = {}
         self._unknown_objects: set[str] = set()
         # Actual version (placeholder for partial export) is set as soon as export starts.
         self._version: Optional[int] = None
@@ -139,6 +141,7 @@ class Exporter:
         self.failed = False
 
         self._file_store: dict[str, bytes] = {}
+        self.client = protocol.SyncClient("compiler")
 
     def _get_instance_proxies_of_types(self, types: list[str]) -> dict[str, Sequence[ProxiedType]]:
         """Returns a dict of instances for the given types"""
@@ -146,8 +149,7 @@ class Exporter:
         for t in types:
             if self.types is not None and t in self.types:
                 proxies[t] = [
-                    DynamicProxy.return_value(i, context=ProxyContext(path=f"<{i}>", mode=ProxyMode.EXPORT))
-                    for i in self.types[t].get_all_instances()
+                    DynamicProxy.return_value(i, context=ProxyContext(path=f"<{i}>")) for i in self.types[t].get_all_instances()
                 ]
             else:
                 proxies[t] = []
@@ -175,9 +177,7 @@ class Exporter:
                         res = Resource.create_from_model(
                             self,
                             resource_type,
-                            DynamicProxy.return_value(
-                                instance, context=ProxyContext(path=f"<{instance}>", mode=ProxyMode.EXPORT)
-                            ),
+                            DynamicProxy.return_value(instance, context=ProxyContext(path=f"<{instance}>")),
                         )
                         resource_mapping[instance] = res
                         self.add_resource(res)
@@ -211,7 +211,7 @@ class Exporter:
         :param types: All Inmanta types present in the model. Maps the name of the type to the corresponding entity.
         :param resource_mapping: Maps in-model instances of resources to their deserialized Resource representation.
         """
-        resource_sets: dict[str, Optional[str]] = {}
+        resource_sets: dict[ResourceIdStr, Optional[str]] = {}
         resource_set_instances: list["Instance"] = (
             types["std::ResourceSet"].get_all_instances() if "std::ResourceSet" in types else []
         )
@@ -221,7 +221,7 @@ class Exporter:
             resources_in_set: list[Instance] = resource_set_instance.get_attribute("resources").get_value()
             for resource_in_set in resources_in_set:
                 if resource_in_set in resource_mapping:
-                    resource_id: str = resource_mapping[resource_in_set].id.resource_str()
+                    resource_id: ResourceIdStr = resource_mapping[resource_in_set].id.resource_str()
                     if resource_id in resource_sets and resource_sets[resource_id] != name:
                         raise CompilerException(
                             f"resource '{resource_id}' can not be part of multiple ResourceSets: "
@@ -262,11 +262,12 @@ class Exporter:
         if name not in Exporter.__export_functions:
             raise Exception("Export function %s does not exist." % name)
 
-        types, function = Exporter.__export_functions[name]
-        if len(types) > 0:
-            function(self, types=self._get_instance_proxies_of_types(types))
-        else:
-            function(self)
+        with proxy.exportcontext:
+            types, function = Exporter.__export_functions[name]
+            if len(types) > 0:
+                function(self, types=self._get_instance_proxies_of_types(types))
+            else:
+                function(self)
 
     def _call_dep_manager(self, types: ModelDict) -> None:
         """
@@ -358,8 +359,7 @@ class Exporter:
             LOGGER.warning("The environment for this model should be set for export to server!")
             return 0
         else:
-            conn = protocol.SyncClient("compiler")
-            result = conn.reserve_version(tid)
+            result = self.client.reserve_version(tid)
             if result.code != 200:
                 raise Exception(f"Unable to reserve version number from server (msg: {result.result})")
             return result.result["data"]
@@ -371,20 +371,29 @@ class Exporter:
         metadata: dict[str, str] = {},
         no_commit: bool = False,
         include_status: bool = False,
-        model_export: bool = False,
         export_plugin: Optional[str] = None,
         partial_compile: bool = False,
         resource_sets_to_remove: Optional[Sequence[str]] = None,
         allow_handler_code_update: bool = False,
-    ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, ResourceState]]]:
+        export_env_var_settings: bool = True,
+    ) -> (
+        tuple[int, ResourceDict]
+        | tuple[int, ResourceDict, dict[ResourceIdStr, Literal[const.ResourceState.available, const.ResourceState.undefined]]]
+    ):
         """
         Run the export functions. Return value for partial json export uses 0 as version placeholder.
+
+        :param export_env_var_settings: True iff the environment settings, defined in the project.yml file,
+                                        will be updated on the server. This argument is used by the test suite
+                                        to make sure we don't connect to the server if the test itself doesn't
+                                        need a server at all.
         """
         start = time.time()
         if not partial_compile and resource_sets_to_remove:
             raise Exception("Cannot remove resource sets when a full compile was done")
         self._removed_resource_sets = set(resource_sets_to_remove) if resource_sets_to_remove is not None else set()
 
+        project = inmanta.module.Project.get()
         self.types = types
         self.scopes = scopes
 
@@ -415,13 +424,25 @@ class Exporter:
 
         resources = self.resources_to_list()
 
+        export_to_json = self.options and self.options.json
+
+        # Update the environment settings, mentioned in the project.yml file, on the server.
+        if not self.failed and not no_commit and export_env_var_settings and not export_to_json:
+            result = self.client.protected_environment_settings_set_batch(
+                tid=self._get_env_id(),
+                settings=project.metadata.environment_settings or {},
+                protected_by=model.ProtectedBy.project_yml,
+            )
+            if result.code != 200:
+                raise Exception("Failed to update the environment settings, defined in the project.yml file, on the server.")
+
         export_done = time.time()
         LOGGER.debug("Generating resources from the compiled model took %0.03f seconds", export_done - start)
 
         if len(self._resources) == 0:
             LOGGER.warning("Empty deployment model.")
 
-        if self.options and self.options.json:
+        if export_to_json:
             with open(self.options.json, "wb+") as fd:
                 fd.write(protocol.json_encode(resources).encode("utf-8"))
 
@@ -432,10 +453,9 @@ class Exporter:
                 metadata,
                 partial_compile,
                 list(self._removed_resource_sets),
-                Project.get().metadata.pip,
                 allow_handler_code_update=allow_handler_code_update,
             )
-            LOGGER.info("Committed resources with version %d" % self._version)
+            LOGGER.info("Committed resources with version %d", self._version)
 
         exported_version: int = self._version
         if include_status:
@@ -493,8 +513,7 @@ class Exporter:
 
     def register_code(
         self,
-        conn: protocol.SyncClient,
-        code_manager: loader.CodeManager,
+        code_manager: "inmanta.loader.CodeManager",
     ) -> None:
         """Deploy code to the server"""
 
@@ -518,7 +537,14 @@ class Exporter:
                 if not type_name.startswith("core::"):
                     code_manager.register_code(resource_type, obj)
 
-        upload_code(conn, code_manager)
+        upload_code(self.client, code_manager)
+
+    def _get_env_id(self) -> uuid.UUID:
+        tid = cfg_env.get()
+        if tid is None:
+            LOGGER.error("The environment for this model should be set!")
+            raise Exception("The environment for this model should be set!")
+        return tid
 
     def commit_resources(
         self,
@@ -527,7 +553,6 @@ class Exporter:
         metadata: dict[str, str],
         partial_compile: bool,
         resource_sets_to_remove: list[str],
-        pip_config: PipConfig,
         allow_handler_code_update: bool = False,
     ) -> int:
         """
@@ -535,44 +560,39 @@ class Exporter:
 
         :return: The version for which resources were committed.
         """
-        tid = cfg_env.get()
-        if tid is None:
-            LOGGER.error("The environment for this model should be set!")
-            raise Exception("The environment for this model should be set!")
+        tid = self._get_env_id()
 
         if version is None and not partial_compile:
             raise Exception("Full export requires version to be set")
 
-        conn = protocol.SyncClient("compiler")
-
-        code_manager = loader.CodeManager()
+        code_manager = inmanta.loader.CodeManager()
         code_manager.build_agent_map(self._resources)
 
-        self.register_code(conn, code_manager)
+        self.register_code(code_manager)
 
-        LOGGER.info("Uploading %d files" % len(self._file_store))
+        LOGGER.info("Uploading %d files", len(self._file_store))
 
         # collect all hashes and send them at once to the server to check
         # if they are already uploaded
         hashes = list(self._file_store.keys())
 
-        result = conn.stat_files(files=hashes)
+        result = self.client.stat_files(files=hashes)
 
         if result.code != 200:
             raise Exception("Unable to check status of files at server")
 
         to_upload = result.result["files"]
 
-        LOGGER.info("Only %d files are new and need to be uploaded" % len(to_upload))
+        LOGGER.info("Only %d files are new and need to be uploaded", len(to_upload))
         for hash_id in to_upload:
             content = self._file_store[hash_id]
 
-            result = conn.upload_file(id=hash_id, content=base64.b64encode(content).decode("ascii"))
+            result = self.client.upload_file(id=hash_id, content=base64.b64encode(content).decode("ascii"))
 
             if result.code != 200:
-                LOGGER.error("Unable to upload file with hash %s" % hash_id)
+                LOGGER.error("Unable to upload file with hash %s", hash_id)
             else:
-                LOGGER.debug("Uploaded file with hash %s" % hash_id)
+                LOGGER.debug("Uploaded file with hash %s", hash_id)
 
         # Collecting version information
         version_info = {const.EXPORT_META_DATA: metadata}
@@ -587,9 +607,9 @@ class Exporter:
                 else:
                     LOGGER.debug("  %s not in any resource set", rid)
 
-        def do_put(**kwargs: object) -> protocol.Result:
+        def do_put(project_constraints: str | None = None, **kwargs: object) -> protocol.Result:
             if partial_compile:
-                result = conn.put_partial(
+                result = self.client.put_partial(
                     tid=tid,
                     resources=resources,
                     resource_sets=self._resource_sets,
@@ -602,7 +622,8 @@ class Exporter:
                     **kwargs,
                 )
             else:
-                result = conn.put_version(
+                assert version is not None
+                result = self.client.put_version(
                     tid=tid,
                     version=version,
                     resources=resources,
@@ -612,12 +633,16 @@ class Exporter:
                     version_info=version_info,
                     compiler_version=get_compiler_version(),
                     module_version_info=code_manager.get_module_version_info(),
+                    project_constraints=project_constraints,
                     **kwargs,
                 )
             return result
 
         # Backward compatibility with ISO6 servers
-        result = do_put(pip_config=pip_config)
+        project = inmanta.module.Project.get()
+        pip_config = project.metadata.pip
+        project_constraints = project.get_all_constraints()
+        result = do_put(project_constraints=project_constraints, pip_config=pip_config)
         if (
             result.code == 400
             and isinstance(result.result, dict)

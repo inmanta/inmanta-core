@@ -1,0 +1,6 @@
+---
+description: "Remove test case test__a_long_wait_should_not_corrupt_sample because it's unstable"
+issue-nr: 9363
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso8]

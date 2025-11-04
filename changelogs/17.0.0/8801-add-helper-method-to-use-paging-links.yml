@@ -1,0 +1,8 @@
+description: >
+  Add ``Result.all()`` helper method to easily iterate over results returned by
+  v2 Rest API endpoints that support paging. See [documentation](helper_method_for_paging) for more information.
+issue-nr: 8801
+change-type: minor
+destination-branches: [master, iso8]
+sections:
+  minor-improvement: "{{description}}"

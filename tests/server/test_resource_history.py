@@ -19,6 +19,7 @@ Contact: code@inmanta.com
 import datetime
 import itertools
 import json
+import logging
 import uuid
 from collections import defaultdict
 from operator import itemgetter
@@ -32,10 +33,15 @@ from inmanta.const import ResourceState
 from inmanta.server import config
 from inmanta.types import ResourceVersionIdStr
 from inmanta.util import parse_timestamp
+from utils import insert_with_link_to_configuration_model
+
+LOGGER: logging.Logger = logging.getLogger(__name__)
 
 
 class ResourceFactory:
     """Helper to construct resources and keep track of them"""
+
+    resource_set_per_version: dict[tuple[UUID, int], data.ResourceSet] = {}
 
     def __init__(self, environment: UUID) -> None:
         # Resources, as rid -> version -> resource
@@ -62,11 +68,17 @@ class ResourceFactory:
         if environment is None:
             environment = self.env
         key = f"{resource_type}[{agent},name={name}]"
+        if (environment, version) not in self.resource_set_per_version:
+            resource_set = data.ResourceSet(environment=environment, id=uuid.uuid4())
+            await insert_with_link_to_configuration_model(resource_set, versions=[version])
+            self.resource_set_per_version[(environment, version)] = resource_set
+
         res = data.Resource.new(
             environment=environment,
             resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),
+            resource_set=self.resource_set_per_version[(environment, version)],
             attributes={**attributes, **{"name": name}, "version": version},
-            status=status,
+            is_undefined=status is ResourceState.undefined,
         )
         count = next(self.resource_counter)
         self.deploy_times[key][version] = datetime.datetime.strptime(f"2021-07-07T11:{count}:00.0", "%Y-%m-%dT%H:%M:%S.%f")
@@ -465,6 +477,17 @@ async def test_resource_history_paging(server, client, order_by_column, order, e
     assert attribute_hashes(result.result["data"]) == all_resource_ids_in_expected_order
 
     assert result.result["metadata"] == {"total": 5, "before": 0, "after": 0, "page_size": 5}
+
+    full_history = await client.resource_history(env.id, resource_with_long_history, sort=f"{order_by_column}.{order}").value()
+
+    result = await client.resource_history(env.id, resource_with_long_history, sort=f"{order_by_column}.{order}", limit=2)
+
+    idx = 0
+    async for item in result.all():
+        assert item == full_history[idx]
+        idx += 1
+
+    assert idx == len(full_history)
 
 
 async def test_history_not_continuous_versions(server, client, environment):

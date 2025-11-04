@@ -21,9 +21,11 @@ import functools
 import json
 import logging
 import os
+import sys
 import uuid
 from datetime import UTC, datetime, timedelta, timezone
 from functools import partial
+from typing import Awaitable
 
 import pytest
 from dateutil import parser
@@ -39,10 +41,11 @@ from inmanta.protocol import Client
 from inmanta.resources import Id
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_SERVER
 from inmanta.server import config as opt
-from inmanta.server.bootloader import InmantaBootloader
+from inmanta.server.bootloader import InmantaBootloader, PostgreSQLVersion
+from inmanta.server.protocol import ServerStartFailure
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 from inmanta.util import get_compiler_version
-from utils import log_contains, log_doesnt_contain, retry_limited
+from utils import insert_with_link_to_configuration_model, log_contains, log_doesnt_contain, retry_limited
 
 LOGGER = logging.getLogger(__name__)
 
@@ -583,83 +586,138 @@ async def test_server_logs_address(server_config, caplog, async_finalizer):
         log_contains(caplog, "protocol.rest", logging.INFO, f"Server listening on {address}:")
 
 
-class MockConnection:
-    """
-    Mock connection class to simulate an asyncpg connection.
-    This class includes a close method to mimic closing a database connection.
-    """
-
-    async def close(self, timeout: int) -> None:
-        return
-
-
-@pytest.mark.parametrize("db_wait_time", ["20", "0"])
-async def test_bootloader_db_wait(monkeypatch, tmpdir, caplog, db_wait_time: str) -> None:
-    """
-    Tests the Inmanta server bootloader's behavior with respect to waiting for the database to be ready before proceeding
-    with the startup, based on the 'db_wait_time' configuration.
-    """
-    state_dir: str = tmpdir.mkdir("state_dir").strpath
-    config.Config.set("database", "wait_time", db_wait_time)
-    config.Config.set("config", "state-dir", state_dir)
-
-    state = {"first_connect": True}
-
-    async def mock_asyncpg_connect(*args, **kwargs) -> MockConnection:
-        """
-        Mock function to replace asyncpg.connect.
-        Will raise an Exception on the first invocation.
-        """
-        if state["first_connect"]:
-            state["first_connect"] = False
-            raise Exception("Connection failure")
-        else:
-            return MockConnection()
-
-    async def mock_start(self) -> None:
-        """Mocks the call to self.restserver.start()."""
-        return
-
-    monkeypatch.setattr("inmanta.server.protocol.Server.start", mock_start)
-    monkeypatch.setattr("asyncpg.connect", mock_asyncpg_connect)
-    ibl: InmantaBootloader = InmantaBootloader(configure_logging=True)
-    caplog.set_level(logging.INFO)
-    caplog.clear()
-    start_task: asyncio.Task = asyncio.create_task(ibl.start())
-    await start_task
-
-    if db_wait_time != "0":
-        log_contains(caplog, "inmanta.server.bootloader", logging.INFO, "Waiting for database to be up.")
-        log_contains(caplog, "inmanta.server.bootloader", logging.INFO, "Successfully connected to the database.")
-    else:
-        # If db_wait_time is "0", the wait_for_db method is not called,
-        # hence "Successfully connected to the database." log message will not appear.
-        log_doesnt_contain(caplog, "inmanta.server.bootloader", logging.INFO, "Successfully connected to the database.")
-
-    log_contains(caplog, "inmanta.server.server", logging.INFO, "Starting server endpoint")
-
-    await ibl.stop(timeout=20)
+@pytest.fixture
+async def postgresql_version_from_db(postgresql_client) -> Awaitable[PostgreSQLVersion]:
+    yield await PostgreSQLVersion.from_database(postgresql_client)
 
 
 @pytest.mark.parametrize("db_wait_time", ["2", "0"])
-async def test_bootloader_connect_running_db(server_config, postgres_db, caplog, db_wait_time: str):
+@pytest.mark.parametrize("minimal_pg_version", [0, sys.maxsize])
+async def test_bootloader_connect_running_db(
+    tmp_path, server_config, postgres_db, caplog, db_wait_time: str, minimal_pg_version: int, postgresql_version_from_db
+):
     """
     Tests that the bootloader can connect to a database and can start for both wait_up values
     """
     config.Config.set("database", "wait_time", db_wait_time)
+
+    required_version = write_compatibility_json_file(dir=tmp_path, minimal_pg_version=minimal_pg_version)
     ibl: InmantaBootloader = InmantaBootloader(configure_logging=True)
+
     caplog.clear()
     caplog.set_level(logging.INFO)
-    await ibl.start()
-    await ibl.stop(timeout=20)
 
-    if db_wait_time != "0":
-        log_contains(caplog, "inmanta.server.bootloader", logging.INFO, "Successfully connected to the database.")
-    else:
-        # If db_wait_time is "0", the wait_for_db method is not called,
-        # hence "Successfully connected to the database." log message will not appear.
-        log_doesnt_contain(caplog, "inmanta.server.bootloader", logging.INFO, "Successfully connected to the database.")
-    log_contains(caplog, "inmanta.server.server", logging.INFO, "Starting server endpoint")
+    def _check_database_connectivity_logs():
+        if db_wait_time == "0":
+            # If db_wait_time is "0", the wait_for_db method is not called,
+            # hence "Successfully connected to the database." log message will not appear.
+            log_doesnt_contain(
+                caplog,
+                "inmanta.server.bootloader",
+                logging.INFO,
+                "Successfully connected to the database.",
+            )
+        else:
+            log_contains(
+                caplog,
+                "inmanta.server.bootloader",
+                logging.INFO,
+                "Successfully connected to the database.",
+            )
+
+    try:
+        if minimal_pg_version == sys.maxsize:
+            unsupported_pg_version_error = (
+                f"The database at {postgres_db.host} is using PostgreSQL version "
+                f"{postgresql_version_from_db}. This version is not supported by this "
+                "version of the Inmanta orchestrator. Please make sure to update to PostgreSQL "
+                f"{required_version}."
+            )
+
+            with pytest.raises(ServerStartFailure) as exc_info:
+                await ibl.start()
+                _check_database_connectivity_logs()
+                assert unsupported_pg_version_error in str(exc_info.value)
+
+            return
+
+        else:
+            await ibl.start()
+            _check_database_connectivity_logs()
+            log_contains(
+                caplog,
+                "inmanta.server.bootloader",
+                logging.INFO,
+                f"Successfully connected to the database (PostgreSQL server version {postgresql_version_from_db}).",
+            )
+
+        log_contains(caplog, "inmanta.server.server", logging.INFO, "Starting server endpoint")
+
+    finally:
+        await ibl.stop(timeout=20)
+
+
+async def test_bootloader_start_invalid_compatibility_file(tmp_path, server_config, postgres_db, caplog):
+    """
+    Make sure a proper exception is raised when an invalid compatibility file is
+    being used during server startup.
+    """
+
+    # Write an invalid compatibility file (i.e. no 'system_requirements->postgres_version' section)
+    json_data = {}
+    compatibility_file = os.path.join(tmp_path, "compatibility.json")
+    with open(compatibility_file, "w", encoding="utf-8") as fh:
+        json.dump(json_data, fh)
+    config.Config.set("server", "compatibility_file", compatibility_file)
+
+    ibl: InmantaBootloader = InmantaBootloader(configure_logging=True)
+
+    caplog.set_level(logging.INFO)
+
+    try:
+        invalid_compatibility_file_error = (
+            "Invalid compatibility file schema. Missing 'system_requirements.postgres_version' section in file: %s"
+            % compatibility_file
+        )
+
+        with pytest.raises(ServerStartFailure) as exc_info:
+            await ibl.start()
+            assert invalid_compatibility_file_error in str(exc_info.value)
+
+    finally:
+        await ibl.stop(timeout=20)
+
+
+async def test_bootloader_start_no_compatibility_file(tmp_path, server_config, postgres_db, caplog, postgresql_version_from_db):
+    """
+    Make sure the minimal postgres version compatibility check is disabled
+    when no compatibility file is set.
+    """
+
+    ibl: InmantaBootloader = InmantaBootloader(configure_logging=True)
+
+    caplog.set_level(logging.DEBUG)
+
+    try:
+        await ibl.start()
+        log_contains(
+            caplog,
+            "inmanta.server.bootloader",
+            logging.DEBUG,
+            "No compatibility file is set. Bypassing minimal required postgres version check.",
+        )
+
+        log_contains(
+            caplog,
+            "inmanta.server.bootloader",
+            logging.INFO,
+            "Successfully connected to the database (PostgreSQL server version",
+        )
+
+        log_contains(caplog, "inmanta.server.server", logging.INFO, "Starting server endpoint")
+
+    finally:
+        await ibl.stop(timeout=20)
 
 
 async def test_get_resource_actions(postgresql_client, client, clienthelper, server, environment, null_agent):
@@ -816,10 +874,12 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
             is_suitable_for_partial_compiles=False,
         )
         await cm.insert()
+        resource_set = data.ResourceSet(environment=env.id, id=uuid.uuid4())
+        await insert_with_link_to_configuration_model(resource_set, versions=[i])
         res1 = data.Resource.new(
             environment=env.id,
             resource_version_id="std::testing::NullResource[agent1,name=motd],v=%s" % str(i),
-            status=const.ResourceState.deployed,
+            resource_set=resource_set,
             attributes={"attr": [{"a": 1, "b": "c"}], "path": "/etc/motd"},
         )
         await res1.insert()
@@ -951,38 +1011,41 @@ async def test_send_in_progress(server, client, environment, agent):
     rvid_r3_v1 = f"{rvid_r3},v={model_version}"
 
     async def make_resource_with_last_non_deploying_status(
-        status: const.ResourceState,
         last_non_deploying_status: const.NonDeployingResourceState,
         resource_version_id: str,
         attributes: dict[str, object],
         version: int,
     ) -> None:
+        resource_set = data.ResourceSet(environment=env_id, id=uuid.uuid4())
+        await insert_with_link_to_configuration_model(resource_set, versions=[version])
         r1 = data.Resource.new(
             environment=env_id,
-            status=status,
             resource_version_id=resource_version_id,
+            resource_set=resource_set,
             attributes=attributes,
         )
         await r1.insert()
         await data.ResourcePersistentState.populate_for_version(environment=uuid.UUID(environment), model_version=version)
-        await r1.update_persistent_state(last_deploy=datetime.now(tz=UTC), last_non_deploying_status=last_non_deploying_status)
+        await data.ResourcePersistentState.update_persistent_state(
+            environment=uuid.UUID(environment),
+            resource_id=r1.resource_id,
+            last_deploy=datetime.now(tz=UTC),
+            last_non_deploying_status=last_non_deploying_status,
+        )
 
     await make_resource_with_last_non_deploying_status(
-        status=const.ResourceState.skipped,
         last_non_deploying_status=const.NonDeployingResourceState.skipped,
         resource_version_id=rvid_r1_v1,
         attributes={"purge_on_delete": False, "requires": [rvid_r2, rvid_r3]},
         version=model_version,
     )
     await make_resource_with_last_non_deploying_status(
-        status=const.ResourceState.deployed,
         last_non_deploying_status=const.NonDeployingResourceState.deployed,
         resource_version_id=rvid_r2_v1,
         attributes={"purge_on_delete": False, "requires": []},
         version=model_version,
     )
     await make_resource_with_last_non_deploying_status(
-        status=const.ResourceState.failed,
         last_non_deploying_status=const.NonDeployingResourceState.failed,
         resource_version_id=rvid_r3_v1,
         attributes={"purge_on_delete": False, "requires": []},
@@ -1031,10 +1094,12 @@ async def test_send_in_progress_action_id_conflict(server, client, environment, 
     model_version = 1
     rvid_r1_v1 = ResourceVersionIdStr(f"std::testing::NullResource[agent1,name=file1],v={model_version}")
 
+    resource_set = data.ResourceSet(environment=env_id, id=uuid.uuid4())
+    await insert_with_link_to_configuration_model(resource_set, versions=[model_version])
     await data.Resource.new(
         environment=env_id,
-        status=const.ResourceState.skipped,
         resource_version_id=rvid_r1_v1,
+        resource_set=resource_set,
         attributes={"purge_on_delete": False, "requires": []},
     ).insert()
 
@@ -1235,34 +1300,13 @@ async def test_send_deploy_done_error_handling(server, client, environment, agen
 
     rvid_r1_v1 = ResourceVersionIdStr(f"std::testing::NullResource[agent1,name=file1],v={model_version}")
 
-    # Resource doesn't exist
-    with pytest.raises(ValueError) as exec_info:
-        await update_manager.send_deploy_done(
-            attribute_hash="",
-            result=executor.DeployReport(
-                rvid=rvid_r1_v1,
-                action_id=uuid.uuid4(),
-                resource_state=const.HandlerResourceState.deployed,
-                messages=[],
-                changes={},
-                change=const.Change.nochange,
-            ),
-            state=state.ResourceState(
-                compliance=state.Compliance.COMPLIANT,
-                last_deploy_result=state.DeployResult.DEPLOYED,
-                blocked=state.Blocked.NOT_BLOCKED,
-                last_deployed=datetime.now().astimezone(),
-            ),
-            started=datetime.now().astimezone(),
-            finished=datetime.now().astimezone(),
-        )
-    assert "The resource with the given id does not exist in the given environment" in str(exec_info.value)
-
+    resource_set = data.ResourceSet(environment=env_id, id=uuid.uuid4())
+    await insert_with_link_to_configuration_model(resource_set, versions=[model_version])
     # Create resource
     await data.Resource.new(
         environment=env_id,
-        status=const.ResourceState.available,
         resource_version_id=rvid_r1_v1,
+        resource_set=resource_set,
         attributes={"purge_on_delete": False, "requires": []},
     ).insert()
 
@@ -1366,8 +1410,13 @@ async def test_cleanup_old_agents(server, client, env1_halted, env2_halted):
     name = "file1"
     resource_id = f"std::testing::NullResource[agent4,name={name}]"
 
+    resource_set = data.ResourceSet(environment=env1.id, id=uuid.uuid4())
+    await insert_with_link_to_configuration_model(resource_set, versions=[version])
     await data.Resource.new(
-        environment=env1.id, resource_version_id=ResourceVersionIdStr(f"{resource_id},v={version}"), attributes={"name": name}
+        environment=env1.id,
+        resource_version_id=ResourceVersionIdStr(f"{resource_id},v={version}"),
+        resource_set=resource_set,
+        attributes={"name": name},
     ).insert()
 
     # should get purged
@@ -1416,66 +1465,6 @@ async def test_cleanup_old_agents(server, client, env1_halted, env2_halted):
             (env1.id, "agent4"),
         ]
         assert sorted(agents_after_purge) == sorted(expected_agents_after_purge)
-
-
-async def test_serialization_attributes_of_resource_to_api(client, server, environment, clienthelper, null_agent) -> None:
-    """
-    Due to a bug, the version of a resource was always included in the attribute dictionary.
-    This issue has been patched in the database, but at the API boundary we still serve the version
-    field in the attributes dictionary for backwards compatibility. This test verifies that behavior.
-    """
-    version = await clienthelper.get_version()
-    resource_id = "test::Resource[agent1,key=key1]"
-    resources = [
-        {
-            "id": f"{resource_id},v={version}",
-            "att": "val",
-            "version": version,
-            "send_event": False,
-            "purged": False,
-            "requires": [],
-        }
-    ]
-    attributes_on_api = {k: v for k, v in resources[0].items() if k != "id"}
-    result = await client.put_version(
-        tid=environment,
-        version=version,
-        resources=resources,
-        unknowns=[],
-        version_info={},
-        compiler_version=get_compiler_version(),
-        module_version_info={},
-    )
-    assert result.code == 200
-
-    result = await client.release_version(tid=environment, id=version)
-    assert result.code == 200
-
-    # Verify that the version field is not present in the attributes dictionary in the database.
-    result = await data.Resource.get_list()
-    assert len(result) == 1
-    resource_dao = result[0]
-    assert "version" not in resource_dao.attributes
-
-    # Ensure that the serialization of the resource DAO contains the version field in the attributes dictionary
-    resource_dto = resource_dao.to_dto()
-    assert resource_dto.attributes["version"] == version
-    resource_dct = resource_dao.to_dict()
-    assert resource_dct["attributes"]["version"] == version
-
-    # Retrieve the resource via the API and ensure that the version field is present in the attributes dictionary
-    result = await client.resource_history(environment, resource_id)
-    assert result.code == 200
-    assert len(result.result["data"]) == 1
-    assert result.result["data"][0]["attributes"] == attributes_on_api
-
-    result = await client.versioned_resource_details(tid=environment, version=version, rid=resource_id)
-    assert result.code == 200
-    assert result.result["data"]["attributes"] == attributes_on_api, result.result["data"]
-
-    result = await client.resource_details(tid=environment, rid=resource_id)
-    assert result.code == 200
-    assert result.result["data"]["attributes"] == attributes_on_api
 
 
 @pytest.mark.parametrize("v1_partial,v2_partial", [(False, False), (False, True)])
@@ -1695,3 +1684,45 @@ async def test_delete_active_version(client, clienthelper, server, environment, 
     result = await client.delete_version(tid=environment, id=version)
     assert result.code == 400
     assert result.result["message"] == "Invalid request: Cannot delete the active version"
+
+
+def write_compatibility_json_file(dir: str, minimal_pg_version: int) -> PostgreSQLVersion:
+    compatibility_file = os.path.join(dir, "compatibility.json")
+    json_data = {"system_requirements": {"postgres_version": minimal_pg_version}}
+    with open(compatibility_file, "w", encoding="utf-8") as fh:
+        json.dump(json_data, fh)
+
+    config.Config.set("server", "compatibility_file", compatibility_file)
+
+    required_version = PostgreSQLVersion.from_compatibility_file()
+
+    return required_version
+
+
+@pytest.mark.parametrize("minimal_pg_version", [0, sys.maxsize])
+async def test_postgresqlversion_comparison(tmp_path, minimal_pg_version, postgresql_version_from_db):
+    """
+    Unit test for the PostgreSQLVersion utility class. This test checks the 'from_database' and the
+    'from_compatibility_file' constructors as well as the class' comparison operator.
+    """
+    required_version = write_compatibility_json_file(dir=tmp_path, minimal_pg_version=minimal_pg_version)
+    installed_version = postgresql_version_from_db
+
+    if minimal_pg_version == 0:
+        assert installed_version > required_version
+    else:
+        assert installed_version < required_version
+
+
+async def test_postgresqlversion(tmp_path):
+    """
+    Unit test for the PostgreSQLVersion utility class. This test checks the correct parsing and conversion of
+    the human-readable version (set in the compatibility file) into a machine-readable version by the 'from_compatibility_file'
+    constructor.
+    """
+    human_readable_input = ["13", "16.10", "17.6"]
+    expected_machine_readable_output = [130_000, 160_010, 170_006]
+
+    for _input, _output in zip(human_readable_input, expected_machine_readable_output):
+        version = write_compatibility_json_file(dir=tmp_path, minimal_pg_version=_input)
+        assert version.version == _output

@@ -1,0 +1,4 @@
+---
+description: "Fix migration where we add the created column to the rps table"
+change-type: patch
+destination-branches: [master]

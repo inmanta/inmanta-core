@@ -16,36 +16,107 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import asyncio
+import concurrent
 import copy
+import csv
+import datetime
+import json
+import logging
 import logging.config
+import os
 import pathlib
+import queue
+import random
+import re
+import shutil
+import site
+import socket
 import stat
+import string
+import subprocess
+import sys
 import tempfile
+import time
+import traceback
+import uuid
+import venv
 import warnings
+import weakref
+from collections import abc, defaultdict, namedtuple
+from collections.abc import AsyncIterator, Awaitable, Iterator
+from concurrent.futures.thread import ThreadPoolExecutor
+from configparser import ConfigParser
 from glob import glob
 from re import Pattern
 from threading import Condition
+from typing import Any, Callable, Dict, Generic, Optional, Union
 
+import asyncpg
+import psutil
+import py
+import pytest
+from asyncpg.exceptions import DuplicateDatabaseError
+from click import testing
+from tornado import netutil
 from tornado.httpclient import AsyncHTTPClient
 
 import _pytest.logging
+import inmanta
+import inmanta.agent
+import inmanta.app
+import inmanta.compiler as compiler
+import inmanta.compiler.config
 import inmanta.deploy.state
+import inmanta.main
+import inmanta.server.agentmanager as agentmanager
+import inmanta.user_setup
+import inmanta.util
 import requests
 import toml
+from inmanta import config, const, data, env, loader
 from inmanta import logging as inmanta_logging
+from inmanta import protocol, resources
+from inmanta.agent import handler
+from inmanta.agent.agent_new import Agent
+from inmanta.agent.executor import DeployReport, Executor, ExecutorManager
 from inmanta.agent.handler import CRUDHandler, HandlerContext, ResourceHandler, SkipResource, TResource, provider
+from inmanta.agent.in_process_executor import InProcessExecutorManager
 from inmanta.agent.write_barier_executor import WriteBarierExecutorManager
+from inmanta.ast import CompilerException
 from inmanta.config import log_dir
-from inmanta.data.model import AuthMethod
+from inmanta.const import ResourceState
+from inmanta.data.model import AuthMethod, EnvSettingType
+from inmanta.data.schema import SCHEMA_VERSION_TABLE
+from inmanta.db import util as db_util
 from inmanta.db.util import PGRestore
+from inmanta.deploy import scheduler
+from inmanta.env import ActiveEnv, CommandRunner, LocalPackagePath, VirtualEnv, process_env, store_venv, swap_process_env
+from inmanta.export import ResourceDict, cfg_env, unknown_parameters
 from inmanta.logging import InmantaLoggerConfig
+from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
+from inmanta.moduletool import DefaultIsolatedEnvCached, ModuleTool, V2ModuleBuilder
+from inmanta.parser.plyInmantaParser import cache_manager
+from inmanta.protocol import VersionMatch
 from inmanta.protocol.auth import auth
 from inmanta.references import mutator, reference
-from inmanta.resources import PurgeableResource, Resource, resource
+from inmanta.resources import Id, PurgeableResource, Resource, resource
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_COMPILER
+from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.config import AuthorizationProviderName
+from inmanta.server.protocol import Server, SliceStartupException
+from inmanta.server.services import orchestrationservice
+from inmanta.server.services.compilerservice import CompilerService, CompileRun
 from inmanta.tornado import LoopResolverWithUnixSocketSuppport
+from inmanta.types import JsonType, ResourceIdStr, ResourceVersionIdStr
 from inmanta.util import ScheduledTask, Scheduler, TaskMethod, TaskSchedule
+from inmanta.vendor import pyformance
+from inmanta.vendor.pyformance import MetricsRegistry
+from inmanta.warnings import WarningsManager
+from libpip2pi.commands import dir2pi
 from packaging.requirements import Requirement
+from packaging.version import Version
+from pytest_postgresql import factories
 
 """
 About the use of @parametrize_any and @slowtest:
@@ -101,73 +172,6 @@ About the fixtures that control the behavior related to the scheduler:
                     => Usage: Add the `@pytest.mark.parametrize("no_agent", [True])` annotation on the test case.
 """
 
-import asyncio
-import concurrent
-import csv
-import datetime
-import json
-import logging
-import os
-import queue
-import random
-import re
-import shutil
-import site
-import socket
-import string
-import subprocess
-import sys
-import time
-import traceback
-import uuid
-import venv
-import weakref
-from collections import abc, defaultdict, namedtuple
-from collections.abc import AsyncIterator, Awaitable, Iterator
-from configparser import ConfigParser
-from typing import Any, Callable, Dict, Generic, Optional, Union
-
-import asyncpg
-import psutil
-import py
-import pytest
-from asyncpg.exceptions import DuplicateDatabaseError
-from click import testing
-from tornado import netutil
-
-import inmanta
-import inmanta.agent
-import inmanta.app
-import inmanta.compiler as compiler
-import inmanta.compiler.config
-import inmanta.main
-import inmanta.server.agentmanager as agentmanager
-import inmanta.user_setup
-from inmanta import config, const, data, env, loader, protocol, resources
-from inmanta.agent import handler
-from inmanta.agent.agent_new import Agent
-from inmanta.agent.in_process_executor import InProcessExecutorManager
-from inmanta.ast import CompilerException
-from inmanta.data.schema import SCHEMA_VERSION_TABLE
-from inmanta.db import util as db_util
-from inmanta.env import ActiveEnv, CommandRunner, LocalPackagePath, VirtualEnv, process_env, store_venv, swap_process_env
-from inmanta.export import ResourceDict, cfg_env, unknown_parameters
-from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
-from inmanta.moduletool import DefaultIsolatedEnvCached, ModuleTool, V2ModuleBuilder
-from inmanta.parser.plyInmantaParser import cache_manager
-from inmanta.protocol import VersionMatch
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_COMPILER
-from inmanta.server.bootloader import InmantaBootloader
-from inmanta.server.protocol import Server, SliceStartupException
-from inmanta.server.services import orchestrationservice
-from inmanta.server.services.compilerservice import CompilerService, CompileRun
-from inmanta.types import JsonType, ResourceIdStr
-from inmanta.vendor import pyformance
-from inmanta.vendor.pyformance import MetricsRegistry
-from inmanta.warnings import WarningsManager
-from libpip2pi.commands import dir2pi
-from packaging.version import Version
-from pytest_postgresql import factories
 
 # Import test modules differently when conftest is put into the inmanta_tests packages
 PYTEST_PLUGIN_MODE: bool = __file__ and os.path.dirname(__file__).split("/")[-1] == "inmanta_tests"
@@ -179,6 +183,7 @@ else:
 logger = logging.getLogger(__name__)
 
 TABLES_TO_KEEP = [x.table_name() for x in data._classes] + [
+    "resource_set_configuration_model",
     "resourceaction_resource",
     "inmanta_module",
     "agent_modules",
@@ -388,6 +393,7 @@ async def postgresql_client(postgres_db, database_name_internal):
         password=postgres_db.password,
         database=database_name_internal,
     )
+    await data.asyncpg_on_connect(client)
     yield client
     await client.close()
 
@@ -952,7 +958,38 @@ DISABLE_STATE_CHECK = False
 
 
 @pytest.fixture(scope="function")
-async def agent_factory(server, client, monkeypatch) -> AsyncIterator[Callable[[uuid.UUID], Awaitable[Agent]]]:
+def executor_factory():
+
+    def default_executor(
+        environment: uuid.UUID,
+        client: inmanta.protocol.SessionClient,
+        eventloop: asyncio.AbstractEventLoop,
+        parent_logger: logging.Logger,
+        thread_pool: ThreadPoolExecutor,
+        code_dir: str,
+        env_dir: str,
+    ):
+        executor: ExecutorManager[Executor] = InProcessExecutorManager(
+            environment,
+            client,
+            eventloop,
+            parent_logger,
+            thread_pool,
+            code_dir,
+            env_dir,
+            False,
+        )
+
+        executor = WriteBarierExecutorManager(executor)
+        return executor
+
+    return default_executor
+
+
+@pytest.fixture(scope="function")
+async def agent_factory(
+    server, client, monkeypatch, executor_factory
+) -> AsyncIterator[Callable[[uuid.UUID], Awaitable[Agent]]]:
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     agents: list[Agent] = []
 
@@ -968,7 +1005,7 @@ async def agent_factory(server, client, monkeypatch) -> AsyncIterator[Callable[[
         # Restore state-dir
         config.Config.set("config", "state-dir", str(server_state_dir))
 
-        executor = InProcessExecutorManager(
+        executor = executor_factory(
             environment,
             a._client,
             asyncio.get_running_loop(),
@@ -976,11 +1013,7 @@ async def agent_factory(server, client, monkeypatch) -> AsyncIterator[Callable[[
             a.thread_pool,
             str(pathlib.Path(a._storage["executors"]) / "code"),
             str(pathlib.Path(a._storage["executors"]) / "venvs"),
-            False,
         )
-
-        executor = WriteBarierExecutorManager(executor)
-
         a.executor_manager = executor
         a.scheduler.executor_manager = executor
         a.scheduler.code_manager = utils.DummyCodeManager()
@@ -1001,12 +1034,11 @@ async def agent_factory(server, client, monkeypatch) -> AsyncIterator[Callable[[
             for environment in all_environments:
                 # Make sure that the scheduler doesn't deploy anything anymore, because this would alter
                 # the last_deploy timestamp in the resource_state.
-                result = await client.all_agents_action(tid=environment, action=const.AgentAction.pause.value)
-                assert result.code == 200
+                await client.all_agents_action(tid=environment, action=const.AgentAction.pause.value).value()
                 # Set data.RESET_DEPLOY_PROGRESS_ON_START back to False in all of the environments of the created agents
                 # Because this teardown asserts that the state is correct on restart and this setting breaks that assertion
                 result = await client.set_setting(environment, data.RESET_DEPLOY_PROGRESS_ON_START, False)
-                assert result.code == 200
+                assert result.code == 200, result.result
             for agent in agents:
                 await agent.stop_working()
                 the_state = copy.deepcopy(dict(agent.scheduler._state.resource_state))
@@ -1039,13 +1071,22 @@ async def agent(
 
 
 @pytest.fixture(scope="function")
-async def agent_no_state_check(server, environment, agent_factory: Callable[[uuid.UUID], Awaitable[Agent]], monkeypatch):
-    """Construct an agent that can execute using the resource container"""
+async def agent_factory_no_state_check(
+    agent_factory: Callable[[uuid.UUID], Awaitable[Agent]],
+) -> Callable[[uuid.UUID], Awaitable[Agent]]:
     global DISABLE_STATE_CHECK
     DISABLE_STATE_CHECK = True
+    yield agent_factory
+
+
+@pytest.fixture(scope="function")
+async def agent_no_state_check(
+    server, environment, agent_factory_no_state_check: Callable[[uuid.UUID], Awaitable[Agent]], monkeypatch
+):
+    """Construct an agent that can execute using the resource container"""
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
-    a: Agent = await agent_factory(uuid.UUID(environment))
+    a: Agent = await agent_factory_no_state_check(uuid.UUID(environment))
     await utils.retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     yield a
@@ -1381,11 +1422,11 @@ class SnippetCompilationTest(KeepOnFail):
         python_requires: Optional[list[Requirement]] = None,
         install_mode: Optional[InstallMode] = None,
         relation_precedence_rules: Optional[list[RelationPrecedenceRule]] = None,
-        strict_deps_check: Optional[bool] = None,
         use_pip_config_file: bool = False,
         index_url: Optional[str] = None,
         extra_index_url: list[str] = [],
         main_file: str = "main.cf",
+        pre: bool | None = None,
     ) -> Project:
         """
         Sets up the project to compile a snippet of inmanta DSL. Activates the compiler environment (and patches
@@ -1403,7 +1444,6 @@ class SnippetCompilationTest(KeepOnFail):
                              no install mode is set explicitly in the project.yml file.
         :param relation_precedence_policy: The relation precedence policy that should be stored in the project.yml file of the
                                            Inmanta project.
-        :param strict_deps_check: True iff the returned project should have strict dependency checking enabled.
         :param use_pip_config_file: True iff the pip config file should be used and no source is required for v2 to work
                                     False if a package source is needed for v2 modules to work
         :param main_file: Path to the .cf file to use as main entry point. A relative or an absolute path can be provided.
@@ -1425,6 +1465,7 @@ class SnippetCompilationTest(KeepOnFail):
             index_url,
             extra_index_url,
             main_file,
+            pre=pre,
         )
 
         dirty_venv = autostd or install_project or install_v2_modules or self.re_check_venv or python_requires
@@ -1433,7 +1474,6 @@ class SnippetCompilationTest(KeepOnFail):
             autostd or ministd,
             install_project,
             install_v2_modules,
-            strict_deps_check=strict_deps_check,
             main_file=main_file,
             dirty_venv=dirty_venv,
         )
@@ -1444,13 +1484,10 @@ class SnippetCompilationTest(KeepOnFail):
         install_project: bool,
         install_v2_modules: Optional[list[LocalPackagePath]] = None,
         main_file: str = "main.cf",
-        strict_deps_check: Optional[bool] = None,
         dirty_venv: bool = True,
     ):
         loader.PluginModuleFinder.reset()
-        self.project = Project(
-            self.project_dir, autostd=autostd, main_file=main_file, venv_path=self.venv, strict_deps_check=strict_deps_check
-        )
+        self.project = Project(self.project_dir, autostd=autostd, main_file=main_file, venv_path=self.venv)
         Project.set(self.project)
 
         if dirty_venv:
@@ -1498,6 +1535,8 @@ class SnippetCompilationTest(KeepOnFail):
         extra_index_url: list[str] = [],
         main_file: str = "main.cf",
         ministd: bool = False,
+        environment_settings: dict[str, EnvSettingType] | None = None,
+        pre: bool | None = None,
     ) -> None:
         add_to_module_path = add_to_module_path if add_to_module_path is not None else []
         python_package_sources = python_package_sources if python_package_sources is not None else []
@@ -1545,6 +1584,14 @@ class SnippetCompilationTest(KeepOnFail):
                     f"""                extra_index_url: [{", ".join(url for url in extra_index_url)}]
 """
                 )
+            if pre is not None:
+                cfg.write(
+                    f"""                pre: {str(pre).lower()}
+"""
+                )
+            if environment_settings:
+                cfg.write("\n            environment_settings:\n")
+                cfg.write("\n".join(f"                {name}: {value}" for name, value in environment_settings.items()))
         with open(os.path.join(self.project_dir, "requirements.txt"), "w", encoding="utf-8") as fd:
             fd.write("\n".join(str(req) for req in python_requires))
         self.main = os.path.join(self.project_dir, main_file)
@@ -1622,10 +1669,10 @@ class SnippetCompilationTest(KeepOnFail):
         return export.run(
             types,
             scopes,
-            model_export=False,
             include_status=include_status,
             partial_compile=partial_compile,
             resource_sets_to_remove=resource_sets_to_remove,
+            export_env_var_settings=deploy,
         )
 
     async def do_export_and_deploy(
@@ -2851,3 +2898,156 @@ def resource_container(clean_reset):
         wait_for_condition_with_waiters=wait_for_condition_with_waiters,
     )
     Provider.reset()
+
+
+@pytest.fixture
+async def mixed_resource_generator(
+    server, client, clienthelper, null_agent, monkeypatch
+) -> AsyncIterator[Callable[[str, int, int], Awaitable[None]]]:
+    """
+    Generates resources with a mix of different status in the provided environment.
+
+    Each instance creates 2 new versions with put_partial (except for the first one that does a full compile)
+    The first version creates <resources_per_version> resources
+    The second version updates (changes an attribute of) <resources_per_version> - 10 resources and creates 10 new ones
+        The resources that are not updated on the second version are orphaned
+    This gives us a total of <instances> * (<resources_per_version> + 10) resources:
+        <instances> undefined
+        <instances> skipped for undefined
+        <instances> failed
+        <instances> skipped
+        min(<resources_per_version> / 2, 10) *<instances> orphans
+        <resources_per_version> - 5 deployed
+    """
+
+    async def _mixed_resource_generator(environment: str, instances: int, resources_per_version: int) -> None:
+        env_obj = await data.Environment.get_by_id(environment)
+        await env_obj.set(data.AUTO_DEPLOY, True)
+
+        if resources_per_version < 5:
+            raise Exception("resources_per_version cannot be less than 5")
+        deploy_counter = 0
+
+        dummy_scheduler = scheduler.ResourceScheduler(uuid.UUID(environment), executor_manager=None, client=client)
+
+        async def mock_run(self) -> None:
+            """Mocks the call to TaskRunner._run."""
+            return
+
+        # We want dummy_scheduler._running=True so that read_version runs correctly
+        # But we don't want the TaskRunner to actually run anything that is scheduled (we will do that manually)
+        monkeypatch.setattr("inmanta.deploy.scheduler.TaskRunner._run", mock_run)
+        await dummy_scheduler._initialize()
+
+        async def make_resource_set(agent_index: int, iteration: int) -> list[dict[str, object]]:
+            is_full = agent_index == 0 and iteration == 0
+            if is_full:
+                version = await clienthelper.get_version()
+            else:
+                version = 0
+
+            def resource_id(ri: int) -> str:
+                if iteration > 0 and ri >= resources_per_version / 2:
+                    ri += 10
+                return f"test::XResource{int(ri / (resources_per_version / 5))}[agent{agent_index},sub={ri}]"
+
+            attributes = [
+                {
+                    "id": f"{resource_id(ri)},v={version}",
+                    "send_event": False,
+                    "purged": False,
+                    "requires": [] if ri % 2 == 0 else [resource_id(ri - 1)],
+                    "my_attribute": iteration,
+                }
+                for ri in range(resources_per_version)
+            ]
+            resource_state = {resource_id(0): ResourceState.undefined}
+            resource_sets = {resource_id(ri): f"set{agent_index}" for ri in range(resources_per_version)}
+            if is_full:
+                result = await client.put_version(
+                    environment,
+                    version,
+                    attributes,
+                    module_version_info={},
+                    resource_state=resource_state,
+                    unknowns=[],
+                    version_info={},
+                    compiler_version=inmanta.util.get_compiler_version(),
+                    resource_sets=resource_sets,
+                )
+                assert result.code == 200
+            else:
+                result = await client.put_partial(
+                    environment,
+                    module_version_info={},
+                    resource_state=resource_state,
+                    unknowns=[],
+                    version_info={},
+                    resources=attributes,
+                    resource_sets=resource_sets,
+                )
+                assert result.code == 200
+                version = result.result["data"]
+            await utils.wait_until_version_is_released(client, environment, version)
+
+            # Updates the scheduler state
+            await dummy_scheduler.read_version()
+
+            # Get all resources
+            result = await client.get_version(tid=environment, id=version)
+            assert result.code == 200
+            all_resources: list[dict[str, object]] = result.result["resources"]
+
+            resources_in_dirty_set: list[dict[str, object]] = [
+                r
+                for r in all_resources
+                if r["resource_id"] in dummy_scheduler._state.dirty and r["agent"] == f"agent{agent_index}"
+            ]
+
+            async def deploy(resource: dict[str, object]) -> None:
+                nonlocal deploy_counter
+                deploy_counter = deploy_counter + 1
+                rid = ResourceIdStr(resource["resource_id"])
+                action_id = uuid.uuid4()
+                deploy_intent = await dummy_scheduler.deploy_start(action_id, rid)
+                if "sub=4]" in rid:
+                    # never finish deploying r4
+                    return
+                if deploy_intent is not None:
+                    await dummy_scheduler.deploy_done(
+                        deploy_intent,
+                        DeployReport(
+                            rvid=ResourceVersionIdStr(f"{rid},v={version}"),
+                            action_id=action_id,
+                            resource_state=(
+                                const.HandlerResourceState.failed
+                                if "sub=2]" in rid
+                                else (
+                                    const.HandlerResourceState.skipped
+                                    if "sub=3]" in rid
+                                    else const.HandlerResourceState.deployed
+                                )
+                            ),
+                            messages=[],
+                            changes={},
+                            change=None,
+                        ),
+                    )
+
+            await asyncio.gather(*(deploy(resource) for resource in resources_in_dirty_set))
+            return resources_in_dirty_set
+
+        first_iteration_resources = {}
+        for agent in range(instances):
+            for iteration in [0, 1]:
+                resources = await make_resource_set(agent, iteration)
+                logger.warning("deploys: %d, agent: %d, iteration: %d", deploy_counter, agent, iteration)
+                # Since we are using null_agent we need to manually mark orphans
+                if iteration == 0:
+                    first_iteration_resources[agent] = {Id.parse_id(res["resource_id"]).resource_str() for res in resources}
+                elif iteration == 1:
+                    new_rids = {Id.parse_id(res["resource_id"]).resource_str() for res in resources}
+                    orphans = first_iteration_resources[agent] - new_rids
+                    await dummy_scheduler.state_update_manager.mark_as_orphan(environment=environment, resource_ids=orphans)
+
+    yield _mixed_resource_generator

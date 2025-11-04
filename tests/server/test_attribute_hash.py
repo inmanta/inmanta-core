@@ -18,7 +18,7 @@ Contact: code@inmanta.com
 
 import uuid
 
-from inmanta.data import Resource
+from inmanta.data import Resource, ResourceSet
 
 
 def test_attribute_hash():
@@ -50,7 +50,12 @@ def test_attribute_hash():
     env = uuid.uuid4()
 
     def get_hash(attributes) -> str:
-        r = Resource.new(environment=env, resource_version_id="test::Test[a,b=c],v=3", attributes=attributes)
+        r = Resource.new(
+            environment=env,
+            resource_version_id="test::Test[a,b=c],v=3",
+            resource_set=ResourceSet(environment=env, id=uuid.uuid4()),
+            attributes=attributes,
+        )
         r.make_hash()
         return r.attribute_hash
 

@@ -1,0 +1,8 @@
+description: >
+  Python package constraints set in the requirements.txt file at the project level are now
+  enforced in the virtual environments of the agents.
+issue-nr: 9407
+change-type: minor
+destination-branches: [master]
+sections:
+  feature: "{{description}}"

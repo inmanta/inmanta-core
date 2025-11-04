@@ -1,0 +1,3 @@
+description: Improve graphql paging system
+change-type: patch
+destination-branches: [master]

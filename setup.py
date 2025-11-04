@@ -6,13 +6,13 @@ requires = [
     "build~=1.0",
     "click-plugins~=1.0",
     # click has been known to publish non-backwards compatible minors in the past (removed deprecated code in 8.1.0)
-    "click>=8.0,<8.3",
+    "click>=8.0,<8.4",
     "colorlog~=6.4",
     "cookiecutter>=1,<3",
     "crontab>=0.23,<2.0",
-    "cryptography>=36,<46",
+    "cryptography>=36,<47",
     # docstring-parser has been known to publish non-backwards compatible minors in the past
-    "docstring-parser>=0.10,<0.17",
+    "docstring-parser>=0.10,<0.18",
     "email-validator>=1,<3",
     "jinja2~=3.0",
     "more-itertools>=8,<11",
@@ -36,7 +36,8 @@ requires = [
     "toml~=0.10 ",
     "setproctitle~=1.3",
     "SQLAlchemy~=2.0",
-    "strawberry-sqlalchemy-mapper==0.6.3",
+    "strawberry-sqlalchemy-mapper==0.7.0",
+    "jsonpath-ng~=1.7",
 ]
 
 
@@ -47,7 +48,7 @@ with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
 
 # This version is managed by bumpversion. Should you ever update it manually, make sure to consistently update it everywhere
 # (See the bumpversion.cfg file for relevant locations).
-version = "16.0.0"
+version = "17.0.0"
 
 setup(
     version=version,
@@ -121,7 +122,7 @@ setup(
         # option to install a matched pair of inmanta-core and pytest-inmanta-extensions
         "pytest-inmanta-extensions": [f"pytest-inmanta-extensions~={version}.0.dev"],
         "datatrace": ["graphviz"],
-        "tracing": ["logfire>=0.46,<4.0", "opentelemetry-instrumentation-asyncpg~=0.46b0"],
+        "tracing": ["logfire>=0.46,<5.0", "opentelemetry-instrumentation-asyncpg~=0.46b0"],
     },
     entry_points={
         "console_scripts": [
@@ -129,5 +130,9 @@ setup(
             "inmanta = inmanta.app:app",
             "inmanta-initial-user-setup = inmanta.user_setup:main",
         ],
+        "inmanta.mypy.methods": [
+            "methods_v2 = inmanta.protocol.methods_v2",
+            "methods = inmanta.protocol.methods",
+        ]
     },
 )

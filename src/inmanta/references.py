@@ -32,10 +32,10 @@ from pydantic import ValidationError
 
 import inmanta
 import inmanta.resources
+import jsonpath_ng
 import typing_extensions
 from inmanta import util
 from inmanta.types import JsonType, ResourceIdStr, StrictJson
-from inmanta.util import dict_path
 
 ReferenceType = typing.Annotated[str, pydantic.StringConstraints(pattern="^([a-z0-9_]+::)+[A-Z][A-z0-9_-]*$")]
 PrimitiveTypes = str | float | int | bool | None
@@ -190,8 +190,13 @@ class MutatedJsonArgument(Argument):
         start_value: JsonType = self.value
         for destination, valueref in self.references.items():
             value = valueref.get_arg_value(resource, logger)
-            dict_path_expr = dict_path.to_path(destination)
-            dict_path_expr.set_element(start_value, value)
+
+            # backward compat between 8.2 and higher
+            # jsonpath_ng does not allow starting with ., dictpath does
+            if destination.startswith("."):
+                destination = "$" + destination
+            jsonpath_expr = jsonpath_ng.parse(destination)
+            jsonpath_expr.update(start_value, value)
         return start_value
 
 
@@ -349,7 +354,7 @@ class ReferenceLike:
                     # The collector here is purely to collect the path/reference pairs
                     # The set of reference it collects will be discarded
                     # The root ReferenceCollector will traverse past this point as well to collect the actual reference
-                    cleaned_value = collector.collect_references(value, "")
+                    cleaned_value = collector.collect_references(value, "$")
                     try:
                         if collector.references:
                             arguments.append(
@@ -591,8 +596,8 @@ class ReplaceValue(Mutator):
 
     def run(self, logger: "handler.LoggerABC") -> None:
         value = self.resolve_other(self.value, logger)
-        dict_path_expr = dict_path.to_path(self.destination)
-        dict_path_expr.set_element(self.resource, value)
+        jsonpath_expr = jsonpath_ng.parse(self.destination)
+        jsonpath_expr.update(self.resource, value)
 
 
 @typing.runtime_checkable

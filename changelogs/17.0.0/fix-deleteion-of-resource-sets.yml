@@ -1,0 +1,4 @@
+---
+description: "Fix deletion of resource sets"
+change-type: patch
+destination-branches: [master]

@@ -111,7 +111,7 @@ async def test_discovery_resource_handler_basic_test(
     )
     assert result.code == 200
 
-    resource_list = await data.Resource.get_resources_in_latest_version(uuid.UUID(environment))
+    resource_list = await data.Resource.get_resources_in_latest_version_as_dto(uuid.UUID(environment))
     assert resource_list, resource_list
 
     # Ensure that a dry-run doesn't do anything for a DiscoveryHandler
@@ -148,6 +148,9 @@ async def test_discovery_resource_handler_basic_test(
             "values": {"val": val},
             "managed_resource_uri": None,
             "discovery_resource_id": resource_id,
+            "resource_type": "test::MyUnmanagedResource",
+            "agent": "discovery_agent",
+            "resource_id_value": str(val),
             "discovery_resource_uri": f"/api/v2/resource/{parse.quote(resource_id)}",
         }
         for val in all_values

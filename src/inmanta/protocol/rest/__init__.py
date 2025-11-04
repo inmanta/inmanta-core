@@ -22,7 +22,7 @@ import inspect
 import json
 import logging
 import uuid
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any, Dict, List, Optional, Tuple, Type, cast, get_type_hints  # noqa: F401
 
 import pydantic
@@ -39,7 +39,6 @@ from inmanta.stable_api import stable_api
 from inmanta.types import Apireturn, JsonType
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
-INMANTA_MT_HEADER = "X-Inmanta-tid"
 
 """
 
@@ -216,9 +215,11 @@ class CallArguments:
             if len(non_none_arg_types) == 1:
                 arg_type = non_none_arg_types[0]
 
-        is_generic_list = arg_type and typing_inspect.is_generic_type(arg_type) and typing_inspect.get_origin(arg_type) is list
+        is_generic_list = (
+            arg_type and typing_inspect.is_generic_type(arg_type) and issubclass(typing_inspect.get_origin(arg_type), Sequence)
+        )
         is_single_type_list = len(typing_inspect.get_args(arg_type, evaluate=True)) == 1
-        arg_value_is_not_list = not isinstance(arg_value, list)
+        arg_value_is_not_list = not isinstance(arg_value, Sequence) or isinstance(arg_value, str)
 
         if is_generic_list and is_single_type_list and arg_value_is_not_list:
             return [arg_value]
@@ -361,8 +362,8 @@ class CallArguments:
         dict_value_arg_type = (
             typing_inspect.get_origin(dict_args[1]) if typing_inspect.get_origin(dict_args[1]) else dict_args[1]
         )
-        if issubclass(dict_value_arg_type, list):
-            value = {key: [val] if not isinstance(val, list) else val for key, val in value.items()}
+        if issubclass(dict_value_arg_type, Sequence) and not issubclass(dict_value_arg_type, str):
+            value = {key: [val] if not isinstance(val, Sequence) or isinstance(val, str) else val for key, val in value.items()}
         return value
 
     def _is_dict_or_optional_dict(self, arg_type: type[object]) -> bool:
@@ -371,7 +372,7 @@ class CallArguments:
         arg_type = typing_inspect.get_origin(arg_type) if typing_inspect.get_origin(arg_type) else arg_type
         if typing_inspect.is_new_type(arg_type):
             arg_type = type(arg_type)
-        return issubclass(arg_type, dict)
+        return issubclass(arg_type, Mapping)
 
     def _validate_union_return(self, arg_type: type[object], value: object) -> None:
         """Validate a return with a union type

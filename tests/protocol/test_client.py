@@ -17,8 +17,14 @@ Contact: code@inmanta.com
 """
 
 import logging
+import uuid
+
+import pytest
 
 import utils
+from inmanta.data import model
+from inmanta.protocol import exceptions
+from inmanta.protocol.common import Result
 
 
 async def test_request_too_long(environment, client, caplog):
@@ -35,3 +41,20 @@ async def test_request_too_long(environment, client, caplog):
     utils.log_contains(
         caplog, "inmanta.protocol.rest.client", logging.ERROR, r"Failed to send request, header is too long (estimated size "
     )
+
+
+async def test_typed_value(environment, client) -> None:
+    """
+    Verify the behavior of the .value() method on ClientCall and Result
+    """
+    env_object: model.Environment = await client.environment_get(uuid.UUID(environment)).value()
+    assert isinstance(env_object, model.Environment)
+
+    # .value() on Result
+    assert isinstance((await client.environment_get(uuid.UUID(environment))).value(), model.Environment)
+
+    assert env_object.id == uuid.UUID(environment)
+
+    invalid_call: Result[model.Environment] = await client.environment_get("not-a-uuid")
+    with pytest.raises(exceptions.BadRequest):
+        invalid_call.value()

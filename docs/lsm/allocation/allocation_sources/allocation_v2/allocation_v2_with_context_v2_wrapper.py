@@ -7,6 +7,7 @@ Inmanta LSM
 """
 
 from inmanta.util import dict_path
+
 from inmanta_plugins.lsm.allocation import AllocationSpecV2
 from inmanta_plugins.lsm.allocation_v2.framework import (
     AllocatorV2,

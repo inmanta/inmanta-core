@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump inmanta-dev-dependencies from 2.172.0 to 2.174.0
+destination-branches:
+- master
+sections: {}

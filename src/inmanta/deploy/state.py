@@ -23,13 +23,14 @@ import enum
 import itertools
 import uuid
 from collections import defaultdict
-from collections.abc import Mapping, Sequence, Set
+from collections.abc import Mapping, Set
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Optional, Self, cast
 
 import asyncpg
 
+import inmanta.types
 from inmanta import const, resources
 from inmanta.types import ResourceIdStr
 from inmanta.util.collections import BidirectionalManyMapping
@@ -118,6 +119,25 @@ class DeployResult(StrEnum):
                 raise Exception(f"Unexpected handler_resource_state {resource_state.name}")
 
 
+def get_compliance_status(
+    is_orphan: bool,
+    is_undefined: bool,
+    last_deployed_attribute_hash: str | None,
+    current_intent_attribute_hash: str | None,
+    last_deploy_result: DeployResult,
+) -> Compliance | None:
+    if is_orphan:
+        return None
+    elif is_undefined:
+        return Compliance.UNDEFINED
+    elif last_deployed_attribute_hash is None or current_intent_attribute_hash != last_deployed_attribute_hash:
+        return Compliance.HAS_UPDATE
+    elif last_deploy_result is DeployResult.DEPLOYED:
+        return Compliance.COMPLIANT
+    else:
+        return Compliance.NON_COMPLIANT
+
+
 class AgentStatus(StrEnum):
     """
     The status of the agent responsible of a given resource.
@@ -196,6 +216,7 @@ class ModelState:
 
     version: int
     intent: dict["ResourceIdStr", ResourceIntent] = dataclasses.field(default_factory=dict)
+    resource_sets: dict[Optional[str], set["ResourceIdStr"]] = dataclasses.field(default_factory=dict)
     requires: RequiresProvidesMapping = dataclasses.field(default_factory=RequiresProvidesMapping)
     resource_state: dict["ResourceIdStr", ResourceState] = dataclasses.field(default_factory=dict)
     # resources with a known or assumed difference between intent and actual state
@@ -223,12 +244,12 @@ class ModelState:
             return None
 
         result = ModelState(version=last_processed_model_version)
-        resource_records: Sequence[Mapping[str, object]] = (
-            await data.Resource.get_resources_for_version_raw_with_persistent_state(
+        model: Optional[tuple[int, inmanta.types.ResourceSets[dict[str, object]]]] = (
+            await data.Resource.get_resources_for_version_raw(
                 environment=environment,
                 version=last_processed_model_version,
-                projection=["resource_id", "attributes", "attribute_hash"],
-                projection_persistent=[
+                projection=("resource_id", "attributes", "attribute_hash"),
+                projection_persistent=(
                     "is_orphan",
                     "is_undefined",
                     "current_intent_attribute_hash",
@@ -238,27 +259,28 @@ class ModelState:
                     "last_success",
                     "last_deploy",
                     "last_produced_events",
-                ],
-                project_attributes=[
+                ),
+                project_attributes=(
                     "requires",
                     const.RESOURCE_ATTRIBUTE_SEND_EVENTS,
                     const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS,
-                ],
+                ),
                 connection=connection,
             )
         )
-        if not resource_records:
-            configuration_model: Optional[data.ConfigurationModel] = await data.ConfigurationModel.get_one(
-                environment=environment, version=last_processed_model_version, released=True, connection=connection
-            )
-            if configuration_model is None:
-                # the version does not exist at all (anymore)
-                return None
-            # otherwise it's simply an empty version => continue with normal flow
-        by_resource_id: Mapping[ResourceIdStr, Mapping[str, object]] = {
-            ResourceIdStr(cast(str, r["resource_id"])): r for r in resource_records
+        if not model:
+            # the version does not exist at all (anymore)
+            return None
+
+        # build intermediate lookup collection
+        type ResourceSetStr = Optional[str]
+        by_resource_id: Mapping[ResourceIdStr, tuple[ResourceSetStr, Mapping[str, object]]] = {
+            ResourceIdStr(cast(str, r["resource_id"])): (rs, r)
+            for rs, resource_records in model[1].items()
+            for r in resource_records
         }
-        for resource_id, res in by_resource_id.items():
+
+        for resource_id, (resource_set, res) in by_resource_id.items():
             # Populate state
 
             compliance_status: Compliance
@@ -298,6 +320,9 @@ class ModelState:
             )
             result.intent[resource_id] = resource_intent
 
+            # Populate resource sets
+            result.resource_sets.setdefault(resource_set, set()).add(resource_id)
+
             # Populate resources_by_agent
             result.resources_by_agent[resource_intent.id.agent_name].add(resource_id)
 
@@ -314,7 +339,7 @@ class ModelState:
                     # Check whether the resource should be deployed because of an outstanding event.
                     last_success = res["last_success"] or const.DATETIME_MIN_UTC
                     for req in requires:
-                        req_res = by_resource_id[req]
+                        _, req_res = by_resource_id[req]
                         assert req_res is not None
                         last_produced_events = req_res["last_produced_events"]
                         if (

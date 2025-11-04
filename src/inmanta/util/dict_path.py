@@ -232,7 +232,9 @@ class WildDictPath(abc.ABC):
     """
 
     # Special characters should be escaped in data elements of the dict path
-    # to prevent incorrect interpretation of the dict path.
+    # to prevent incorrect interpretation of the dict path. The '.' character is
+    # the only exception: it can be left unescaped when used in "value" elements
+    # of the key-value pairs in list selectors (e.g. "neighbors[ip=2.2.2.2]")
     SPECIAL_CHARACTERS: list[str] = ["\\", "[", "]", ".", "*", "="]
     REGEX_SPECIAL_CHARACTER = rf"([{re.escape(''.join(SPECIAL_CHARACTERS))}])"
     PATTERN_SPECIAL_CHARACTER = re.compile(REGEX_SPECIAL_CHARACTER)
@@ -480,7 +482,7 @@ class WildKeyedList(WildDictPath):
         rf"(?P<key_attribute>({WildDictPath.REGEX_NORMAL_CHARACTER}|{WildDictPath.REGEX_ESCAPED_SPECIAL_CHARACTER})+|\*)"
     )
     REGEX_KEY_VALUE = (
-        rf"(?P<key_value>({WildDictPath.REGEX_NORMAL_CHARACTER}|{WildDictPath.REGEX_ESCAPED_SPECIAL_CHARACTER})*|\*|\\0)"
+        rf"(?P<key_value>({WildDictPath.REGEX_NORMAL_CHARACTER}|{WildDictPath.REGEX_ESCAPED_SPECIAL_CHARACTER}|\.)*|\*|\\0)"
     )
     KEY_VALUE_PAIR = rf"\[{REGEX_KEY_ATTRIBUTE}={REGEX_KEY_VALUE}]"
 
@@ -710,7 +712,15 @@ class WildComposedPath(WildDictPath):
     """
 
     element_types: Sequence[type[WildDictPath]] = [WildInDict, WildKeyedList]
-    COMPOSED_DICT_PATH_PATTERN = re.compile(r"(?:[^.\\]|\\.)+")
+    # The '?' near the end of the KEYED_LIST_FILTER regex "... *?\])" is here for
+    # non-greedy matching. We need it to match pairs of closest square brackets:
+
+    #  e.g. for the following scenario: list[a=b].item.sublist[c=d][e=f]
+    #               with lazy match:        <--->             <---><--->  (good)
+    #               with greedy match:      <-------------------------->  (bad)
+
+    KEYED_LIST_FILTER = r"(?:\[(?:[^\\]|\\.)*?\])"
+    COMPOSED_DICT_PATH_PATTERN = re.compile(rf"(?:{KEYED_LIST_FILTER}|[^.\\\[]|\\.)+")
 
     def __init__(self, path_str: Optional[str] = None, path: Optional[Sequence[WildDictPath]] = None) -> None:
         if (path_str is None) == (path is None):
@@ -731,8 +741,14 @@ class WildComposedPath(WildDictPath):
 
     @classmethod
     def split_on_dots(cls, path_str: str) -> list[str]:
-        """
-        Split the given `path_str` on dot characters if they are not escaped with a backslash.
+        r"""
+        Split the given `path_str` into a list of individual items.
+
+        The '.' character is used as the separator when it is not backslash escaped
+        and when it is outside a list item selector.
+
+        e.g. "neighbors[ip=2.2.2.2].pre\.fix"  ==>  [ "neighbors[ip=2.2.2.2], "pre\.fix" ]
+
         """
         match = cls.COMPOSED_DICT_PATH_PATTERN.findall(path_str)
         if not match:

@@ -104,13 +104,15 @@ class ResourceDetails:
 
 @dataclasses.dataclass
 class EnvBlueprint:
-    """Represents a blueprint for creating virtual environments with specific pip configurations and requirements."""
+    """Represents a blueprint for creating virtual environments
+    with specific pip configurations, requirements and constraints."""
 
     environment_id: uuid.UUID
     pip_config: PipConfig
     requirements: Sequence[str]
-    _hash_cache: Optional[str] = dataclasses.field(default=None, init=False, repr=False)
+    _hash_cache: str | None = dataclasses.field(default=None, init=False, repr=False)
     python_version: tuple[int, int]
+    project_constraints: str | None = dataclasses.field(default=None, kw_only=True)
 
     def __post_init__(self) -> None:
         # remove duplicates and make uniform
@@ -118,9 +120,9 @@ class EnvBlueprint:
 
     def blueprint_hash(self) -> str:
         """
-        Generate a stable hash for an EnvBlueprint instance by serializing its pip_config
-        and requirements in a sorted, consistent manner. This ensures that the hash value is
-        independent of the order of requirements and consistent across interpreter sessions.
+        Generate a stable hash for an EnvBlueprint instance by serializing its pip_config, requirements
+        and project constraints in a sorted, consistent manner. This ensures that the hash value is
+        independent of the order of requirements/constraints and consistent across interpreter sessions.
         Also cache the hash to only compute it once.
         """
         if self._hash_cache is None:
@@ -129,6 +131,7 @@ class EnvBlueprint:
                 "pip_config": self.pip_config.model_dump(),
                 "requirements": self.requirements,
                 "python_version": self.python_version,
+                "project_constraints": self.project_constraints,
             }
 
             # Serialize the blueprint dictionary to a JSON string, ensuring consistent ordering
@@ -142,11 +145,18 @@ class EnvBlueprint:
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, EnvBlueprint):
             return False
-        return (self.environment_id, self.pip_config, set(self.requirements), self.python_version) == (
+        return (
+            self.environment_id,
+            self.pip_config,
+            set(self.requirements),
+            self.python_version,
+            self.project_constraints,
+        ) == (
             other.environment_id,
             other.pip_config,
             set(other.requirements),
             other.python_version,
+            other.project_constraints,
         )
 
     def __hash__(self) -> int:
@@ -154,9 +164,10 @@ class EnvBlueprint:
 
     def __str__(self) -> str:
         req = ",".join(str(req) for req in self.requirements)
+        constraints = ",".join(self.project_constraints.split("\n")) if self.project_constraints else ""
         return (
-            f"EnvBlueprint(environment_id={self.environment_id}, requirements=[{str(req)}],"
-            f" pip={self.pip_config}, python_version={self.python_version})"
+            f"EnvBlueprint(environment_id={self.environment_id}, requirements=[{str(req)}], "
+            f"constraints=[{constraints}], pip={self.pip_config}, python_version={self.python_version})"
         )
 
 
@@ -186,6 +197,12 @@ class ExecutorBlueprint(EnvBlueprint):
         assert len(env_ids) == 1
         sources = list({source for cd in code for source in cd.blueprint.sources})
         requirements = list({req for cd in code for req in cd.blueprint.requirements})
+
+        # Check that constraints set at the project level are consistent across all modules
+        all_constraints = {cd.blueprint.project_constraints for cd in code}
+        assert len(all_constraints) == 1
+        constraints = all_constraints.pop()
+
         pip_configs = [cd.blueprint.pip_config for cd in code]
         python_versions = [cd.blueprint.python_version for cd in code]
         if not pip_configs:
@@ -206,12 +223,13 @@ class ExecutorBlueprint(EnvBlueprint):
             sources=sources,
             requirements=requirements,
             python_version=base_python_version,
+            project_constraints=constraints,
         )
 
     def blueprint_hash(self) -> str:
         """
-        Generate a stable hash for an ExecutorBlueprint instance by serializing its pip_config, sources
-        and requirements in a sorted, consistent manner. This ensures that the hash value is
+        Generate a stable hash for an ExecutorBlueprint instance by serializing its pip_config, sources,
+        requirements and constraints in a sorted, consistent manner. This ensures that the hash value is
         independent of the order of requirements and consistent across interpreter sessions.
         Also cache the hash to only compute it once.
         """
@@ -225,6 +243,7 @@ class ExecutorBlueprint(EnvBlueprint):
                     [source.metadata.hash_value, source.metadata.name, source.metadata.is_byte_code] for source in self.sources
                 ],
                 "python_version": self.python_version,
+                "project_constraints": self.project_constraints,
             }
 
             # Serialize the extended blueprint dictionary to a JSON string, ensuring consistent ordering
@@ -244,17 +263,26 @@ class ExecutorBlueprint(EnvBlueprint):
             pip_config=self.pip_config,
             requirements=self.requirements,
             python_version=self.python_version,
+            project_constraints=self.project_constraints,
         )
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, ExecutorBlueprint):
             return False
-        return (self.environment_id, self.pip_config, self.requirements, self.sources, self.python_version) == (
+        return (
+            self.environment_id,
+            self.pip_config,
+            self.requirements,
+            self.sources,
+            self.python_version,
+            self.project_constraints,
+        ) == (
             other.environment_id,
             other.pip_config,
             other.requirements,
             other.sources,
             other.python_version,
+            other.project_constraints,
         )
 
     def __hash__(self) -> int:
@@ -314,9 +342,53 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
     def __init__(self, env_path: str, io_threadpool: ThreadPoolExecutor):
         PythonEnvironment.__init__(self, env_path=env_path)
         resourcepool.PoolMember.__init__(self, my_id=os.path.basename(env_path))
-        self.inmanta_venv_status_file: pathlib.Path = pathlib.Path(self.env_path) / const.INMANTA_VENV_STATUS_FILENAME
-        self.folder_name: str = pathlib.Path(self.env_path).name
+
+        # The .inmanta dir contains
+        #   - a status file for bookkeeping. Its presence indicates the successful creation
+        #     of the ExecutorVirtualEnvironment and its age determines if this env can be cleaned up.
+        #   - (Optionally) a requirements.txt file. It holds the python package constraints
+        #     set at the project level enforced on the agent when installing code.
+        self.inmanta_storage: pathlib.Path = pathlib.Path(self.env_path) / ".inmanta"
+
+        self.inmanta_venv_status_file: pathlib.Path = self.inmanta_storage / const.INMANTA_VENV_STATUS_FILENAME
+
         self.io_threadpool = io_threadpool
+
+    def ensure_disk_layout_backwards_compatibility(self) -> None:
+        """
+        Backwards compatibility helper: move files that used to live in the
+        top-level dir of the venv into the dedicated storage dir.
+
+        This upgrades from the layout prior to september 2025
+
+        it should be called under the lock of the VirtualEnvironmentManager
+        """
+        created_storage = False
+
+        for file_name in ["requirements.txt", const.INMANTA_VENV_STATUS_FILENAME]:
+            legacy_path: pathlib.Path = pathlib.Path(self.env_path) / file_name
+            if legacy_path.exists():
+                new_path: pathlib.Path = pathlib.Path(self.inmanta_storage) / file_name
+                if not new_path.exists():
+                    if not created_storage:
+                        os.makedirs(self.inmanta_storage, exist_ok=True)
+                        created_storage = True
+                    # Use copy2 to preserve last access time metadata (for the status file).
+                    shutil.copy2(src=legacy_path, dst=new_path)
+                os.remove(legacy_path)
+
+    def _write_constraint_file(self, blueprint: EnvBlueprint) -> str | None:
+        """
+        Write the constraint file defined in the blueprint to disk and return the path
+        to it, or None if no such constraint file is defined.
+        """
+        if blueprint.project_constraints is not None:
+            constraint_file_path = self.inmanta_storage / "requirements.txt"
+            with constraint_file_path.open("w") as f:
+                f.write(blueprint.project_constraints)
+            return str(constraint_file_path)
+
+        return None
 
     async def create_and_install_environment(self, blueprint: EnvBlueprint) -> None:
         """
@@ -327,10 +399,15 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         """
         req: list[str] = list(blueprint.requirements)
         await asyncio.get_running_loop().run_in_executor(self.io_threadpool, self.init_env)
+        # Ensure our storage folder exists
+        os.makedirs(self.inmanta_storage, exist_ok=True)
+
+        constraint_file: str | None = self._write_constraint_file(blueprint)
         if len(req):  # install_for_config expects at least 1 requirement or a path to install
             await self.async_install_for_config(
                 requirements=[packaging.requirements.Requirement(requirement_string=e) for e in req],
                 config=blueprint.pip_config,
+                constraint_files=[constraint_file] if constraint_file else None,
             )
 
         self.touch()
@@ -367,10 +444,19 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
 
     def remove_venv(self) -> None:
         """
-        Remove the venv of the executor
+        Remove the venv of the executor.
+
+        This method must be called on a threadpool to not block the ioloop.
         """
         try:
+            # Remove the status file first. Like this we will rebuild the venv on use
+            # if the rmtree() call was interrupted because of a system failure.
+            os.remove(self.inmanta_venv_status_file)
+        except Exception:
+            pass
+        try:
             LOGGER.debug("Removing venv %s", self.env_path)
+            # Will also delete .inmanta storage dir
             shutil.rmtree(self.env_path)
         except Exception:
             LOGGER.exception(
@@ -380,10 +466,11 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
 
     def reset(self) -> None:
         """
-        Remove the venv of the executor and recreate the directory of the venv
+        Remove the venv of the executor and recreate the directory of the venv.
+
+        This method must be called on a threadpool to not block the ioloop.
         """
         self.remove_venv()
-        os.makedirs(self.env_path)
 
 
 class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, str, ExecutorVirtualEnvironment]):
@@ -422,6 +509,34 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
     def get_lock_name_for(self, member_id: str) -> str:
         return member_id
 
+    async def remove_all_venvs(self) -> None:
+        """
+        Removes all the venvs from disk. It's the responsibility of the caller
+        to make sure the venvs are no longer used.
+        """
+        folders = [file for file in self.envs_dir.iterdir() if file.is_dir()]
+        for folder in folders:
+            if folder.name in self.pool:
+                # The ExecutorVirtualEnvironment is managed by this VirtualEnvironmentManager.
+                # Rely on the normal shutdown flow to clean up all datastructures correctly.
+                virtual_environment = self.pool[folder.name]
+                future: asyncio.Future[None] = asyncio.Future()
+
+                async def venv_cleanup_is_done(exec_virt_env: resourcepool.PoolMember[resourcepool.TPoolID]) -> None:
+                    future.set_result(None)
+
+                virtual_environment.termination_listeners.append(venv_cleanup_is_done)
+                await virtual_environment.request_shutdown()
+                await future
+            else:
+                # This should normally not happen, unless somebody added a directory manually
+                # to the venv directory while the server was running. Let's clean it up anyway.
+                fq_path = os.path.join(self.envs_dir, folder.name)
+                try:
+                    await asyncio.get_running_loop().run_in_executor(self.thread_pool, shutil.rmtree, fq_path)
+                except Exception:
+                    LOGGER.exception("An error occurred while removing the venv located %s", fq_path)
+
     async def init_environment_map(self) -> None:
         """
         Initialize the environment map of the VirtualEnvironmentManager: It will read everything on disk to reconstruct a
@@ -431,7 +546,12 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
         for folder in folders:
             # No lock here, singe shot prior to start
             current_folder = self.envs_dir / folder
-            self.pool[folder.name] = ExecutorVirtualEnvironment(env_path=str(current_folder), io_threadpool=self.thread_pool)
+            virtual_environment = ExecutorVirtualEnvironment(env_path=str(current_folder), io_threadpool=self.thread_pool)
+            virtual_environment.ensure_disk_layout_backwards_compatibility()
+            if virtual_environment.is_correctly_initialized():
+                self.pool[folder.name] = virtual_environment
+            else:
+                await asyncio.get_running_loop().run_in_executor(self.thread_pool, virtual_environment.remove_venv)
 
     async def get_environment(self, blueprint: EnvBlueprint) -> ExecutorVirtualEnvironment:
         """
@@ -465,7 +585,7 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
                 env_dir,
                 internal_id,
             )
-            is_new = False  # Returning the path and False for existing directory
+            is_new = False
 
         process_environment = ExecutorVirtualEnvironment(env_dir, self.thread_pool)
 
@@ -637,11 +757,26 @@ class ExecutorManager(abc.ABC, typing.Generic[E]):
         """
 
     @abc.abstractmethod
+    def get_environment_manager(self) -> VirtualEnvironmentManager | None:
+        """
+        Returns the VirtualEnvironmentManager used by this ExecutorManager or None if this
+        ExecutorManager doesn't have a VirtualEnvironmentManager.
+        """
+
+    @abc.abstractmethod
+    async def stop_all_executors(self) -> list[E]:
+        """
+        Stop all executors started by the ExecutorManager.
+        """
+        pass
+
+    @abc.abstractmethod
     async def stop_for_agent(self, agent_name: str) -> list[E]:
         """
         Indicate that all executors for this agent can be stopped.
 
-        This is considered to be a hint , the manager can choose to follow or not
+        Because multiple agents can run on the same executor, this method only stops the executor if no more
+        agents are running on it.
 
         If executors are stopped, they are returned
         """

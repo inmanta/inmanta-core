@@ -17,7 +17,7 @@ Contact: code@inmanta.com
 """
 
 import inmanta.types
-from utils import get_resource
+from utils import get_resource, insert_with_link_to_configuration_model
 
 """
 This module contains tests related to database concurrency issues. Whenever we fix a concurrency issue, be it performance
@@ -34,6 +34,7 @@ import asyncpg
 import pytest
 
 from inmanta import const, data
+from inmanta.protocol.common import Result
 
 
 def slowdown_queries(
@@ -102,10 +103,12 @@ async def test_4889_deadlock_delete_resource_action_insert(monkeypatch, environm
     await confmodel.insert()
 
     resource = inmanta.types.ResourceVersionIdStr(f"mymod::myresource[myagent,id=1],v={version}")
+    resource_set = data.ResourceSet(environment=env_id, id=uuid.uuid4())
+    await insert_with_link_to_configuration_model(resource_set, versions=[version])
     await data.Resource.new(
         environment=env_id,
-        status=const.ResourceState.available,
         resource_version_id=resource,
+        resource_set=resource_set,
         attributes={},
     ).insert()
 
@@ -149,8 +152,11 @@ async def test_release_version_concurrently(
 
     slowdown_queries(monkeypatch)
 
-    f1 = asyncio.create_task(client.release_version(environment, version2))
-    f2 = asyncio.create_task(client.release_version(environment, version2))
+    async def release() -> Result[None]:
+        return await client.release_version(environment, version2)
+
+    f1 = asyncio.create_task(release())
+    f2 = asyncio.create_task(release())
 
     # get results
     r1 = await f1

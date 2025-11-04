@@ -28,6 +28,7 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 from inmanta import data
 from inmanta.server import config
 from inmanta.types import ResourceVersionIdStr
+from utils import insert_with_link_to_configuration_model
 
 
 @pytest.fixture
@@ -44,10 +45,15 @@ async def env_with_facts(environment, client) -> tuple[str, list[str], list[str]
         is_suitable_for_partial_compiles=False,
     ).insert()
 
+    resource_set = data.ResourceSet(environment=env_id, id=uuid.uuid4())
+    await insert_with_link_to_configuration_model(resource_set, versions=[version])
     name = "file1"
     resource_id = f"std::testing::NullResource[agent1,name={name}]"
     res1_v1 = data.Resource.new(
-        environment=env_id, resource_version_id=ResourceVersionIdStr(f"{resource_id},v={version}"), attributes={"name": name}
+        environment=env_id,
+        resource_version_id=ResourceVersionIdStr(f"{resource_id},v={version}"),
+        resource_set=resource_set,
+        attributes={"name": name},
     )
     await res1_v1.insert()
     name = "file2"
@@ -55,6 +61,7 @@ async def env_with_facts(environment, client) -> tuple[str, list[str], list[str]
     await data.Resource.new(
         environment=env_id,
         resource_version_id=ResourceVersionIdStr(f"{resource_id_2},v={version}"),
+        resource_set=resource_set,
         attributes={"name": name},
     ).insert()
     resource_id_3 = "std::testing::NullResource[agent1,name=file3]"
@@ -64,6 +71,7 @@ async def env_with_facts(environment, client) -> tuple[str, list[str], list[str]
     await data.Resource.new(
         environment=env_id,
         resource_version_id=ResourceVersionIdStr(f"{resource_id_4},v={version}"),
+        resource_set=resource_set,
         attributes={"name": name},
     ).insert()
 
