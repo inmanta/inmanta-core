@@ -474,6 +474,10 @@ class reference:
         """
         self.name = name
 
+    @classmethod
+    def add_reference(cls, name: str, reference_type: type[Reference[RefValue]]) -> None:
+        cls._reference_classes[name] = reference_type
+
     def __call__[C: type[Reference]](self, cls: C) -> C:
         """Register a new reference. If we already have it explicitly delete it (reload)"""
         if self.name in type(self)._reference_classes:
@@ -513,6 +517,10 @@ class mutator:
         :param name: This name is used to indicate the type of the mutator
         """
         self.name = name
+
+    @classmethod
+    def add_mutator(cls, name: str, mutator_type: type[Mutator]) -> None:
+        cls._mutator_classes[name] = mutator_type
 
     def __call__[T: Mutator](self, cls: type[T]) -> type[T]:
         """Register a new mutator. If we already have it explicitly delete it (reload)"""
