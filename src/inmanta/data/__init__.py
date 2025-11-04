@@ -4827,7 +4827,7 @@ class ResourcePersistentState(BaseDocument):
         """
         await cls._execute_query(
             f"""
-            WITH previous_released_version AS(
+            WITH previous_released_version AS (
                 SELECT max(c.version) AS version
                 FROM {ConfigurationModel.table_name()} AS c
                 WHERE c.environment = $1 AND c.released AND c.version < $2
@@ -4871,11 +4871,11 @@ class ResourcePersistentState(BaseDocument):
             WHERE rscm.environment=$1 AND rscm.model=$2
                 AND NOT EXISTS (
                     SELECT 1
-                    FROM resource_set_configuration_model AS rscm2
+                    FROM resource_set_configuration_model AS prev_rscm
                     INNER JOIN previous_released_version AS prev
-                        ON rscm2.model = prev.version
-                    WHERE rscm2.environment = rscm.environment
-                        AND rscm2.resource_set = rscm.resource_set
+                        ON prev_rscm.model = prev.version
+                    WHERE prev_rscm.environment = rscm.environment
+                        AND prev_rscm.resource_set = rscm.resource_set
                 )
             ON CONFLICT DO NOTHING
             """,
