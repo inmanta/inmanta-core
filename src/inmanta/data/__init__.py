@@ -4822,10 +4822,16 @@ class ResourcePersistentState(BaseDocument):
     ) -> None:
         """
         Make sure that the resource_persistent_state table has a record for each resource present in the
-        given model version. This method assumes that the given model_version is the latest released version.
+        given model version. This method assumes that the given model_version is the latest released version and that the table
+        has already been populated for the previously released version.
         """
         await cls._execute_query(
             f"""
+            WITH previous_released_version AS(
+                SELECT max(c.version) AS version
+                FROM {ConfigurationModel.table_name()} AS c
+                WHERE c.environment = $1 AND c.released AND c.version < $2
+            )
             INSERT INTO {cls.table_name()} (
                 environment,
                 resource_id,
@@ -4863,6 +4869,14 @@ class ResourcePersistentState(BaseDocument):
                 ON rscm.environment=r.environment
                 AND rscm.resource_set=r.resource_set
             WHERE rscm.environment=$1 AND rscm.model=$2
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM resource_set_configuration_model AS rscm2
+                    INNER JOIN previous_released_version AS prev
+                        ON rscm2.model = prev.version
+                    WHERE rscm2.environment = rscm.environment
+                        AND rscm2.resource_set = rscm.resource_set
+                )
             ON CONFLICT DO NOTHING
             """,
             environment,
