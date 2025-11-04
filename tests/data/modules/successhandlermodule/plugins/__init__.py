@@ -26,26 +26,6 @@ from inmanta.plugins import plugin
 from inmanta.references import reference, Reference, mutator, Mutator
 
 
-@resources.resource("successhandlermodule::SuccessResource", agent="agent", id_attribute="name")
-class SuccessResource(resources.PurgeableResource):
-    """
-    This resource's handler will always succeed
-    """
-
-    name: str
-    agent: str
-
-    fields = ("name", "agent")
-
-
-@provider("successhandlermodule::SuccessResource", name="wait_for_file")
-class SuccessResourceHandler(CRUDHandler):
-
-    def execute(self, ctx: HandlerContext, resource: SuccessResource, dry_run: bool = False) -> None:
-
-        ctx.set_status(const.ResourceState.deployed)
-
-
 @resources.resource("successhandlermodule::SuccessResourceWithReference", agent="agent", id_attribute="name")
 class SuccessResourceWithReference(resources.PurgeableResource):
     """
