@@ -863,6 +863,11 @@ def wait_sync[T](
     :param ioloop: await on an existing io loop, on another thread. Otherwise an io loop is started on the current thread.
     """
     with_timeout: types.AsyncioCoroutine[T] = asyncio.wait_for(awaitable, timeout)
+
+    if ioloop is None:
+        # Fallback to ensure the agent doesn't leak ioloops via its threadpool
+        ioloop = get_default_event_loop()
+
     if ioloop is not None:
         # run it on the given loop
         return asyncio.run_coroutine_threadsafe(with_timeout, ioloop).result()
