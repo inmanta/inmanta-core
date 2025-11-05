@@ -37,7 +37,7 @@ import typing
 import uuid
 import warnings
 from abc import ABC, abstractmethod
-from asyncio import CancelledError, Lock, Task, ensure_future, gather
+from asyncio import AbstractEventLoop, CancelledError, Lock, Task, ensure_future, gather
 from collections import abc, defaultdict
 from collections.abc import Awaitable, Coroutine, Iterable, Iterator
 from concurrent.futures import ThreadPoolExecutor
@@ -1060,3 +1060,28 @@ def get_module_name(path_distribution_pkg: str) -> str:
     filename = os.path.basename(path_distribution_pkg)
     pkg_name: str = filename.split("-", maxsplit=1)[0]
     return pkg_name.removeprefix("inmanta_module_")
+
+
+default_event_loop: AbstractEventLoop | None
+
+
+def set_default_event_loop(eventloop: AbstractEventLoop | None) -> None:
+    global default_event_loop
+    default_event_loop = eventloop
+
+
+@stable_api
+def get_default_event_loop() -> AbstractEventLoop | None:
+    """
+    Returns the default event loop.
+
+    This is intended to be used by other threads, that want to run code on the eventloop of the main thread.
+
+    It should be used to prevent leaking eventloops when using threadpools.
+    The main use case is the `Client` class
+
+    Only thread safe methods of the eventloop should be used.
+
+    If an event loop is returned it will either be running or already shutdown.
+    """
+    return default_event_loop  # noqa: F821

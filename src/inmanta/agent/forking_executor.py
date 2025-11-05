@@ -117,6 +117,7 @@ from inmanta.protocol.ipc_light import (
     ReturnType,
 )
 from inmanta.types import ResourceIdStr
+from inmanta.util import set_default_event_loop
 from setproctitle import setproctitle
 
 LOGGER = logging.getLogger(LOGGER_NAME_EXECUTOR)
@@ -554,6 +555,7 @@ def mp_worker_entrypoint(
 
     async def serve() -> None:
         loop = asyncio.get_running_loop()
+        set_default_event_loop(loop)
         # Start serving
         # also performs setup of log shipper
         # this is part of stage 2 logging setup
@@ -562,6 +564,7 @@ def mp_worker_entrypoint(
         )
         inmanta.signals.setup_signal_handlers(protocol.stop)
         await protocol.stopped.wait()
+        set_default_event_loop(None)
 
     # Async init
     asyncio.run(serve())

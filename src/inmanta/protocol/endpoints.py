@@ -31,7 +31,7 @@ from urllib import parse
 from inmanta import config as inmanta_config
 from inmanta import const, tracing, types, util
 from inmanta.protocol import common
-from inmanta.util import TaskHandler
+from inmanta.util import TaskHandler, get_default_event_loop
 
 from .rest import client
 
@@ -427,6 +427,10 @@ class SyncClient:
             raise Exception("Either name or client needs to be provided.")
 
         self.timeout = timeout
+        if ioloop is None:
+            # Fall back to default loop to prevent leaking ioloops
+            ioloop = get_default_event_loop()
+
         self._ioloop: Optional[asyncio.AbstractEventLoop] = ioloop
         if client is None:
             assert name is not None  # Make mypy happy
