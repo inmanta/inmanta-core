@@ -421,9 +421,24 @@ def to_dsl_type(python_type: type[object], location: Range, resolver: Namespace)
             return entity
         raise TypingException(None, f"invalid type {python_type}, this dataclass has no associated inmanta entity")
 
-    # Lists and dicts
+    # Lists and dicts and Annotated
     if typing_inspect.is_generic_type(python_type):
         origin = typing.get_origin(python_type)
+
+        # Annotated
+        if origin is typing.Annotated:
+            for meta in reversed(python_type.__metadata__):  # type: ignore
+                if isinstance(meta, ModelType):
+                    dsl_type = parse_dsl_type(meta.model_type, location, resolver)
+                    # override for specific case of a dataclass: we don't want to convert
+                    # correct typing is difficult due to import loop, see dsl_type.is_entity()
+                    if typing.get_args(python_type)[0] is DynamicProxy and dsl_type.is_entity():
+                        return UnConvertibleEntity(dsl_type)
+                    return dsl_type
+
+            # the annotation doesn't concern us => use base type
+            return to_dsl_type(typing.get_args(python_type)[0], location, resolver)
+
         if origin is not None:
             out = _convert_origin_to_dsl_type(python_type, origin, location, resolver)
             if out is not None:
@@ -456,20 +471,6 @@ def to_dsl_type(python_type: type[object], location: Range, resolver: Namespace)
                 out = _convert_to_reference(base, origin, location, resolver)
                 if out is not None:
                     return out
-
-        # Annotated
-        if origin is typing.Annotated:
-            for meta in reversed(python_type.__metadata__):  # type: ignore
-                if isinstance(meta, ModelType):
-                    dsl_type = parse_dsl_type(meta.model_type, location, resolver)
-                    # override for specific case of a dataclass: we don't want to convert
-                    # correct typing is difficult due to import loop, see dsl_type.is_entity()
-                    if typing.get_args(python_type)[0] is DynamicProxy and dsl_type.is_entity():
-                        return UnConvertibleEntity(dsl_type)
-                    return dsl_type
-
-            # the annotation doesn't concern us => use base type
-            return to_dsl_type(typing.get_args(python_type)[0], location, resolver)
 
     if python_type in python_to_model:
         return python_to_model[python_type]
