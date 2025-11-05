@@ -1067,7 +1067,7 @@ def get_module_name(path_distribution_pkg: str) -> str:
     return pkg_name.removeprefix("inmanta_module_")
 
 
-default_event_loop: AbstractEventLoop | None
+default_event_loop: AbstractEventLoop | None = None
 
 
 def set_default_event_loop(eventloop: AbstractEventLoop | None) -> None:
@@ -1089,4 +1089,4 @@ def get_default_event_loop() -> AbstractEventLoop | None:
 
     If an event loop is returned it will either be running or already shutdown.
     """
-    return default_event_loop  # noqa: F821
+    return default_event_loop
