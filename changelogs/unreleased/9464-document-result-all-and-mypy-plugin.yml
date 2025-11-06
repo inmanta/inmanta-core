@@ -1,4 +1,6 @@
 ---
-description: "Add documentation for the Client mypy plugin and the paging helper methods"
+description: >
+  Add documentation for the Client mypy plugin and the paging helper methods. Add python code
+  samples on the redoc API reference.
 change-type: patch
 destination-branches: [master, iso8]
