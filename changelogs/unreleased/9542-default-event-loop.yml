@@ -3,4 +3,4 @@ issue-nr: 9542
 change-type: minor
 destination-branches: [master, iso8]
 sections:
-  feature: "{{description}}"
+  bugfix: "{{description}}"
