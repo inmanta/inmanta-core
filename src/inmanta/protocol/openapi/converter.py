@@ -468,12 +468,16 @@ class OperationHandler:
         parameters = function_parameter_handler.get_parameters()
         responses = self._build_responses(url_method.properties)
 
+        request_body_parameters: list[str] = []
+
         if url_method.get_operation() in ["POST", "PUT", "PATCH"]:
             extra_params = {"requestBody": function_parameter_handler.convert_request_body()}
-            request_body_parameters = extra_params.get("requestBody").content["application/json"].schema_.properties
+            try:
+                request_body_parameters = list(extra_params["requestBody"].content["application/json"].schema_.properties.keys())
+            except (KeyError, AttributeError):
+                pass
         else:
             extra_params = {}
-            request_body_parameters = {}
 
         tags = self._get_tags_of_operation(url_method)
         code_samples = self._generate_code_sample(
@@ -491,7 +495,7 @@ class OperationHandler:
         )
 
     def _generate_code_sample(
-        self, method_name: str, parameters: Sequence[Parameter], request_body_parameters: dict
+        self, method_name: str, parameters: Sequence[Parameter], request_body_parameters: Sequence[str]
     ) -> list[CodeSample]:
         """
         Generate a python code sample for the given method and parameters. The returned sample is wrapped in a list to match
@@ -500,7 +504,7 @@ class OperationHandler:
         """
         tab_padding = " " * 4
         all_parameters = itertools.chain(
-            [param.name if param.name != INMANTA_MT_HEADER else "tid" for param in parameters], request_body_parameters.keys()
+            [param.name if param.name != INMANTA_MT_HEADER else "tid" for param in parameters], request_body_parameters
         )
         arguments = f"\n{',\n'.join(f"{tab_padding}{param}=..." for param in all_parameters)}\n" if all_parameters else ""
         source = (

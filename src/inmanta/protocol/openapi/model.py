@@ -249,10 +249,10 @@ class Operation(BaseModel):
     description: Optional[str] = None
     parameters: Optional[list[Union[Parameter, Reference]]] = None
     requestBody: Optional[Union[RequestBody, Reference]] = None
-    code_samples: Optional[list[CodeSample]] = Field(serialization_alias="x-codeSamples", default=None)
     responses: dict[str, Response]
     deprecated: Optional[bool] = None
     tags: Optional[list[str]] = None
+    code_samples: Optional[list[CodeSample]] = Field(serialization_alias="x-codeSamples", default=None)
 
 
 class PathItem(BaseModel):
