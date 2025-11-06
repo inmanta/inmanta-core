@@ -31,7 +31,7 @@ from urllib import parse
 from inmanta import config as inmanta_config
 from inmanta import const, tracing, types, util
 from inmanta.protocol import common
-from inmanta.util import TaskHandler, get_default_event_loop
+from inmanta.util import TaskHandler
 
 from .rest import client
 

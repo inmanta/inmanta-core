@@ -860,7 +860,9 @@ def wait_sync[T](
 
     Must not be called from handlers, see Handler.run_sync for that.
 
-    :param ioloop: await on an existing io loop, on another thread. If not given, the following are tried in order the default loop (see `get_default_event_loop()`) is used if it is set, or an io loop is started on the current thread.
+    :param ioloop: await on an existing io loop, on another thread.
+    If not given, the default loop (see `get_default_event_loop()`) is used.
+    If it is not set an io loop is started on the current thread.
     """
     with_timeout: types.AsyncioCoroutine[T] = asyncio.wait_for(awaitable, timeout)
 
