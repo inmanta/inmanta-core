@@ -1,0 +1,7 @@
+description: "Added more debug logging to the agent's resource scheduler"
+change-type: patch
+sections:
+  minor-improvement: "{{description}}"
+destination-branches:
+  - master
+  - iso8
