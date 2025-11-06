@@ -1,0 +1,6 @@
+description: "Fix issue where using SyncClient() in handlers would leak open files"
+issue-nr: 9542
+change-type: minor
+destination-branches: [master, iso8]
+sections:
+  bugfix: "{{description}}"

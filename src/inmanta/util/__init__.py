@@ -37,7 +37,7 @@ import typing
 import uuid
 import warnings
 from abc import ABC, abstractmethod
-from asyncio import CancelledError, Lock, Task, ensure_future, gather
+from asyncio import AbstractEventLoop, CancelledError, Lock, Task, ensure_future, gather
 from collections import abc, defaultdict
 from collections.abc import Awaitable, Coroutine, Iterable, Iterator
 from concurrent.futures import ThreadPoolExecutor
@@ -866,9 +866,16 @@ def wait_sync[T](
 
     Must not be called from handlers, see Handler.run_sync for that.
 
-    :param ioloop: await on an existing io loop, on another thread. Otherwise an io loop is started on the current thread.
+    :param ioloop: await on an existing io loop, on another thread.
+    If not given, the default loop (see `get_default_event_loop()`) is used.
+    If it is not set an io loop is started on the current thread.
     """
     with_timeout: types.AsyncioCoroutine[T] = asyncio.wait_for(awaitable, timeout)
+
+    if ioloop is None:
+        # Fallback to ensure the agent doesn't leak ioloops via its threadpool
+        ioloop = get_default_event_loop()
+
     if ioloop is not None:
         # run it on the given loop
         return asyncio.run_coroutine_threadsafe(with_timeout, ioloop).result()
@@ -1066,3 +1073,28 @@ def get_module_name(path_distribution_pkg: str) -> str:
     filename = os.path.basename(path_distribution_pkg)
     pkg_name: str = filename.split("-", maxsplit=1)[0]
     return pkg_name.removeprefix("inmanta_module_")
+
+
+default_event_loop: AbstractEventLoop | None = None
+
+
+def set_default_event_loop(eventloop: AbstractEventLoop | None) -> None:
+    global default_event_loop
+    default_event_loop = eventloop
+
+
+@stable_api
+def get_default_event_loop() -> AbstractEventLoop | None:
+    """
+    Returns the default event loop.
+
+    This is intended to be used by other threads, that want to run code on the eventloop of the main thread.
+
+    It should be used to prevent leaking eventloops when using threadpools.
+    The main use case is the `Client` class
+
+    Only thread safe methods of the eventloop should be used.
+
+    If an event loop is returned it will be running.
+    """
+    return default_event_loop
