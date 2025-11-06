@@ -3,7 +3,5 @@ issue-nr: 9577
 issue-repo: inmanta-core
 change-type: patch
 destination-branches:
-- master
-- iso8
 - iso7
 sections: {}
