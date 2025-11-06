@@ -473,7 +473,9 @@ class OperationHandler:
         if url_method.get_operation() in ["POST", "PUT", "PATCH"]:
             extra_params = {"requestBody": function_parameter_handler.convert_request_body()}
             try:
-                request_body_parameters = list(extra_params["requestBody"].content["application/json"].schema_.properties.keys())
+                request_body_parameters = list(
+                    extra_params["requestBody"].content["application/json"].schema_.properties.keys()
+                )
             except (KeyError, AttributeError):
                 pass
         else:
