@@ -5830,7 +5830,8 @@ class ConfigurationModel(BaseDocument):
                     NOT EXISTS(
                         SELECT 1
                         FROM {Resource.table_name()} r
-                        WHERE p.resource_id=r.resource_id
+                        WHERE p.environment=r.environment
+                        AND p.resource_id=r.resource_id
                     )
                 )
                 """,
