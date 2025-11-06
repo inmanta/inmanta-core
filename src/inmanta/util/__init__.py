@@ -1087,6 +1087,6 @@ def get_default_event_loop() -> AbstractEventLoop | None:
 
     Only thread safe methods of the eventloop should be used.
 
-    If an event loop is returned it will either be running or already shutdown.
+    If an event loop is returned it will be running.
     """
     return default_event_loop

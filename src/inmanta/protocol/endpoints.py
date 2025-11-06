@@ -427,10 +427,6 @@ class SyncClient:
             raise Exception("Either name or client needs to be provided.")
 
         self.timeout = timeout
-        if ioloop is None:
-            # Fall back to default loop to prevent leaking ioloops
-            ioloop = get_default_event_loop()
-
         self._ioloop: Optional[asyncio.AbstractEventLoop] = ioloop
         if client is None:
             assert name is not None  # Make mypy happy
