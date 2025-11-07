@@ -1,0 +1,6 @@
+change-type: patch
+description: Remove docs related to API cleanup
+destination-branches:
+- master
+- iso8
+sections: {}
