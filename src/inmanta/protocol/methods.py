@@ -35,6 +35,10 @@ from inmanta.types import JsonType, PrimitiveTypes, ResourceIdStr
 
 
 async def convert_environment(env: uuid.UUID, metadata: dict) -> "data.Environment":
+    """
+
+    :meta private:
+    """
     metadata[const.INMANTA_URN + "env"] = str(env)
     env = await data.Environment.get_by_id(env)
     if env is None:
@@ -43,6 +47,10 @@ async def convert_environment(env: uuid.UUID, metadata: dict) -> "data.Environme
 
 
 async def add_env(env: uuid.UUID, metadata: dict) -> uuid.UUID:
+    """
+
+    :meta private:
+    """
     metadata[const.INMANTA_URN + "env"] = str(env)
     return env
 
@@ -58,6 +66,10 @@ async def ignore_env(obj: Any, metadata: dict) -> Any:
 
 
 async def convert_resource_version_id(rvid: inmanta.types.ResourceVersionIdStr, metadata: dict) -> "resources.Id":
+    """
+
+    :meta private:
+    """
     try:
         return resources.Id.parse_resource_version_id(rvid)
     except Exception:

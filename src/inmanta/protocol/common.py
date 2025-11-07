@@ -1384,7 +1384,7 @@ class ClientCall(Awaitable[Result[R]]):
         Returns the value wrapped in this result, parsed as the method's return type. Only works for typed methods.
         If paged, returns only the values for the page represented by this result. To get all results, see `all()`.
 
-        Converts return codes to http exceptions where appliccable.
+        Converts return codes to http exceptions where applicable.
 
         :raises BaseHttpException: when return code is not 200
         """
@@ -1392,7 +1392,7 @@ class ClientCall(Awaitable[Result[R]]):
 
     def sync(self, *, timeout: int = 120, ioloop: Optional[asyncio.AbstractEventLoop] = None) -> Result[R]:
         """
-        Returns a result in a syncronous context. Must not be called from an async context.
+        Returns a result in a synchronous context. Must not be called from an async context.
         """
         try:
             return util.wait_sync(self, timeout=timeout, ioloop=ioloop)

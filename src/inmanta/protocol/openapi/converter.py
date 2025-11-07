@@ -505,12 +505,14 @@ class OperationHandler:
         (see https://redocly.com/docs-legacy/api-reference-docs/specification-extensions/x-code-samples#usage)
         """
         tab_padding = " " * 4
-        all_parameters = itertools.chain(
-            [param.name if param.name != INMANTA_MT_HEADER else "tid" for param in parameters], request_body_parameters
+        all_parameters = list(
+            itertools.chain(
+                [param.name if param.name != INMANTA_MT_HEADER else "tid" for param in parameters], request_body_parameters
+            )
         )
         arguments = f"\n{',\n'.join(f"{tab_padding}{param}=..." for param in all_parameters)}\n" if all_parameters else ""
         source = (
-            "client = inmanta.protocol.endpoints.Client(name='client_name', timeout=120)\n"
+            "client = inmanta.protocol.endpoints.Client(name='api', timeout=120)\n"
             f"result = await client.{method_name}({arguments})"
         )
         code_samples = CodeSample(lang="Python", source=source)
