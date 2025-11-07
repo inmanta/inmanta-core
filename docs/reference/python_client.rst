@@ -8,7 +8,7 @@ You can interact with the API endpoints detailed below by using the :py:class:`i
 
 .. code-block:: python
 
-    client = inmanta.protocol.endpoints.Client(name="client_name", timeout=120)
+    client = inmanta.protocol.endpoints.Client(name="api", timeout=120)
 
     result = await client.environment_list(details=True)
 
@@ -17,6 +17,18 @@ You can interact with the API endpoints detailed below by using the :py:class:`i
     for key, value in result.result["data"].items():
         ...
 
+
+When calling a :ref:`v2 endpoint <v2-endpoints>`, use the :py:meth:`inmanta.protocol.common.Result.value` method
+to retrieve a fully typed object e.g.:
+
+.. code-block:: python
+
+    client = inmanta.protocol.endpoints.Client(name="api", timeout=120)
+
+    env_uuid = ...
+    env_object: inmanta.data.model.Environment = await client.environment_get(env_uuid).value()
+
+    assert isinstance(env_object, inmanta.data.model.Environment)
 
 
 Paging, sorting and filtering
@@ -27,11 +39,32 @@ They share the following parameters:
 
 limit
     specifies the page size, so the maximum number of items returned from the query
-start and first_id
-    These parameters define the lower limit for the page,
-end and last_id
-    These parameters define the upper limit for the page
-    (only one of the (`start`, `first_id`), (`end`, `last_id`) pairs should be specified at the same time).
+
+
+sort
+    The sort parameter describes how the result set should be sorted.
+
+    It should follow the pattern ``?<attribute_to_sort_by>.<order>``, for example ``?value.desc`` (case insensitive).
+
+    The documentation of each method describes the supported attributes to sort by.
+
+start
+    Define the lower limit for the page as an exclusive boundary. This parameter can be passed on its
+    own, or along with the ``first_id`` parameter.
+
+first_id
+    Continuation token to define the lower limit for the page as an exclusive boundary.
+
+end
+    Define the upper limit for the page as an exclusive boundary. This parameter can be passed on its
+    own, or along with the ``last_id`` parameter.
+
+
+last_id
+    Continuation token to define the upper limit for the page as an **inclusive** boundary.
+
+
+(only one of the (``start``, ``first_id``), (``end``, ``last_id``) pairs should be specified at the same time).
 
 filter
     The ``filter`` parameter is used for filtering the result set.
@@ -45,13 +78,6 @@ filter
     For example ``?filter.<filter_key>=value&filter.<filter_key2>=value2`` returns results that match both filters.
 
     The documentation of each method describes the supported filters.
-
-sort
-    The sort parameter describes how the result set should be sorted.
-
-    It should follow the pattern ``?<attribute_to_sort_by>.<order>``, for example ``?value.desc`` (case insensitive).
-
-    The documentation of each method describes the supported attributes to sort by.
 
 .. _helper_method_for_paging:
 
@@ -88,13 +114,11 @@ sort
 
 .. _python_client_mypy_plugin:
 
-Type inspection
-===============
+Static type checking
+====================
 
 
-Is it possible to inspect typing information about the :py:class:`inmanta.protocol.common.Result` (or :py:class:`inmanta.protocol.common.PageableResult`)
-returned by an endpoint by using the inmanta mypy plugin.
-
+The inmanta mypy plugin provides static type checking on the methods called via the python client.
 Make sure you add the inmanta plugin to your mypy configuration, e.g. using the ``pyproject.toml`` file:
 
 
@@ -104,27 +128,25 @@ Make sure you add the inmanta plugin to your mypy configuration, e.g. using the 
     plugins = 'inmanta.mypy'
 
 
-For example, given the following python file:
+And then use mypy for static type checking, e.g. given the following python file:
 
 .. code-block:: python
 
-    from inmanta.protocol.endpoints import Client
+    client = inmanta.protocol.endpoints.Client(name="api", timeout=120)
+
+    env_id: str = "123"
+    result = await client.resource_list(env_id)
 
 
-    async def main() -> None:
-        c: Client
-        reveal_type(c)
-
-        reveal_type(c.environment_list)
-        reveal_type(await c.environment_list().value())
-        reveal_type(c.environment_list().all())
-
-
-Use mypy to reveal typing information:
+Use mypy for type checking:
 
 .. code-block:: sh
 
     $ mypy <path/to/file.py>
+
+    (...) error: Argument 1 to "resource_list" has incompatible type "str"; expected "UUID"  [arg-type]
+    Found 1 error in 1 file (checked 1 source file)
+
 
 
 Endpoints
@@ -136,6 +158,7 @@ V1 endpoints
 .. automodule:: inmanta.protocol.methods
     :members:
 
+.. _v2-endpoints:
 
 V2 endpoints
 ============
