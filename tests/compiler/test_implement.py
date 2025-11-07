@@ -88,3 +88,25 @@ x = Child()
         """,
         "Conditional implementation with parents not allowed (reported in Implement(Child) ({dir}/main.cf:10:11))",
     )
+
+
+def test_implement_unknown_condition(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """\
+        import std
+        import tests
+
+        entity A: end
+        implement A using std::none
+        implement A using contradiction when tests::unknown()
+
+        implementation contradiction for std::Entity:
+            x = 0
+            x = 1
+        end
+
+        A()
+        """
+    )
+
+    compiler.do_compile()

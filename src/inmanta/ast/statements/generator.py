@@ -142,7 +142,7 @@ class SubConstructor(RequiresEmitStatement):
                 % condition
             )
             raise e
-        if not condition:
+        if isinstance(condition, Unknown) or not condition:
             return None
 
         implementations = self.implements.implementations
