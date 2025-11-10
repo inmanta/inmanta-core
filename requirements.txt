@@ -30,7 +30,7 @@ ply==3.11
 psutil==7.1.3
 pydantic==2.12.4
 PyJWT==2.10.1
-pynacl==1.6.0
+pynacl==1.6.1
 python-dateutil==2.9.0.post0
 pyyaml==6.0.3
 rpdb==0.2.0
