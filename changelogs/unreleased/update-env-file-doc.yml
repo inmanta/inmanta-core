@@ -1,0 +1,6 @@
+description: Add warning in env vars config for container based installs documentation
+change-type: patch
+destination-branches:
+  - master
+  - iso8
+  - iso7
