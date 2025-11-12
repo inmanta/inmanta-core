@@ -107,8 +107,8 @@ class RequestedPagingBoundaries:
 
     :param start: min boundary value (exclusive) for the requested page for the primary sort column.
     :param end: max boundary value (exclusive) for the requested page for the primary sort column.
-    :param first_id: min boundary value (exclusive) for requested the page for the secondary sort column, if there is one.
-    :param last_id: max boundary value (exclusive) for requested the page for the secondary sort column, if there is one.
+    :param first_id: min boundary value (exclusive) for the requested page for the secondary sort column, if there is one.
+    :param last_id: max boundary value (exclusive) for the requested page for the secondary sort column, if there is one.
     """
 
     def __init__(
