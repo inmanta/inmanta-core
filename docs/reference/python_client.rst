@@ -48,20 +48,22 @@ sort
 
     The documentation of each method describes the supported attributes to sort by.
 
-start
-    Define the lower limit for the page as an exclusive boundary. This parameter can be passed on its
-    own, or along with the ``first_id`` parameter.
 
-first_id
-    Continuation token to define the lower limit for the page as an exclusive boundary.
+start
+    Min boundary value (exclusive) for the requested page for the primary sort column, regardless of sorting order.
 
 end
-    Define the upper limit for the page as an exclusive boundary. This parameter can be passed on its
-    own, or along with the ``last_id`` parameter.
+    Max boundary value (exclusive) for the requested page for the primary sort column, regardless of sorting order.
 
+first_id
+    Min boundary value (exclusive) for the requested page for the secondary sort column, if there is one, regardless of sorting order.
+    When used along with the ``start`` parameter, the value of this parameter is used as a tiebreaker on the secondary sort column
+    for records whose primary sort column is equal to the ``start`` parameter.
 
 last_id
-    Continuation token to define the upper limit for the page as an **inclusive** boundary.
+    Max boundary value (exclusive) for the requested page for the secondary sort column, if there is one, regardless of sorting order.
+    When used along with the ``end`` parameter, the value of this parameter is used as a tiebreaker on the secondary sort column
+    for records whose primary sort column is equal to the ``end`` parameter.
 
 
 (only one of the (``start``, ``first_id``), (``end``, ``last_id``) pairs should be specified at the same time).
