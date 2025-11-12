@@ -1,0 +1,6 @@
+---
+description: Corrected an error in the podman-based install documentation about how to start the orchestrator container when the system boots.
+change-type: patch
+destination-branches: [master, iso8]
+sections:
+  bugfix: "{{description}}"

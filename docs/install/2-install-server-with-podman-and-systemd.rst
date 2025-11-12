@@ -368,7 +368,14 @@ Then start the orchestrator database and server by running the following command
 
 You should be able to reach the orchestrator at this address: `http://127.0.0.1:8888 <http://127.0.0.1:8888>`_ on the host.
 
-(Optional) To make sure the orchestrator is started when the host is booted, enable the container services:
+(Optional) To make sure the orchestrator is started when the host is booted, add the following install section to the `.container` file:
+
+.. code-block:: systemd
+
+    [Install]
+    WantedBy=default.target
+
+Then regenerate the unit files:
 
 .. tab-set::
 
@@ -377,16 +384,15 @@ You should be able to reach the orchestrator at this address: `http://127.0.0.1:
 
         .. code-block:: console
 
-            $ systemctl --user enable inmanta-orchestrator-db.service
-            $ systemctl --user enable inmanta-orchestrator-server.service
+            $ systemctl --user daemon-reload
 
     .. tab-item:: Root setup
         :sync: rootful-setup
 
         .. code-block:: console
 
-            # sudo -i -u inmanta -- systemctl --user enable inmanta-orchestrator-db.service
-            # sudo -i -u inmanta -- systemctl --user enable inmanta-orchestrator-server.service
+            # sudo -i -u inmanta -- systemctl --user daemon-reload
+
 
 Troubleshooting
 ###############
