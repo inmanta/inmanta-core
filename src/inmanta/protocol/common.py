@@ -1132,7 +1132,8 @@ class Result(Generic[R]):
     def value(self) -> R:
         """
         Returns the value wrapped in this result, parsed as the method's return type. Only works for typed methods.
-        If paged, returns only the values for the page represented by this result. To get all results, see `all()`.
+        If paged, returns only the values for the page represented by this result. To get all results, see
+        :meth:`inmanta.protocol.common.PageableResult.all`.
 
         Converts return codes to http exceptions where applicable.
 
@@ -1206,6 +1207,7 @@ class Result(Generic[R]):
         )
 
 
+@stable_api
 class PageableResult(Result[list[V]], Generic[V]):
     """
     Result for a list value, that offers methods for paging.
@@ -1214,8 +1216,8 @@ class PageableResult(Result[list[V]], Generic[V]):
     async def all(self) -> AsyncIterator[V]:
         """
         Returns an async iterator over all values returned by this call. Follows paging links if there are any.
-        Values are processed and validated as in `value()`, i.e. iterates over the value as returned by the API method,
-        without wrapping in a `Result` object. If there are pages, simply chains results from multiple pages after each other.
+        Values are processed and validated as in ``value()``, i.e. iterates over the value as returned by the API method,
+        without wrapping in a ``Result`` object. If there are pages, simply chains results from multiple pages after each other.
         """
         page: "PageableResult[V]"
         async for page in self._pages():
@@ -1225,9 +1227,9 @@ class PageableResult(Result[list[V]], Generic[V]):
 
     def all_sync(self, *, timeout: int = 120, ioloop: Optional[asyncio.AbstractEventLoop] = None) -> Iterator[V]:
         """
-        Returns an iterator over all values returned by this call. For detailed behavior, see `all()`.
+        Returns an iterator over all values returned by this call. For detailed behavior, see ``all()``.
 
-        In an async context, call `all()` instead.
+        In an async context, call ``all()`` instead.
 
         :param timeout: The number of seconds to wait on each API call.
         """
@@ -1313,7 +1315,7 @@ class ClientCall(Awaitable[Result[R]]):
         Returns the value wrapped in this result, parsed as the method's return type. Only works for typed methods.
         If paged, returns only the values for the page represented by this result. To get all results, see `all()`.
 
-        Converts return codes to http exceptions where appliccable.
+        Converts return codes to http exceptions where applicable.
 
         :raises BaseHttpException: when return code is not 200
         """
@@ -1321,7 +1323,7 @@ class ClientCall(Awaitable[Result[R]]):
 
     def sync(self, *, timeout: int = 120, ioloop: Optional[asyncio.AbstractEventLoop] = None) -> Result[R]:
         """
-        Returns a result in a syncronous context. Must not be called from an async context.
+        Returns a result in a synchronous context. Must not be called from an async context.
         """
         try:
             return util.wait_sync(self, timeout=timeout, ioloop=ioloop)

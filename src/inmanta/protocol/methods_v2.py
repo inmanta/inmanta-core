@@ -515,19 +515,21 @@ def all_agents_action(tid: uuid.UUID, action: AllAgentAction) -> None:
 
     :param tid: The environment of the agents.
     :param action: The type of action that should be executed on the agents.
-                    Pause and unpause can only be used when the environment is not halted,
-                    while the on_resume actions can only be used when the environment is halted.
-                    * pause: A paused agent cannot execute any deploy operations.
-                    * unpause: A unpaused agent will be able to execute deploy operations.
-                    * keep_paused_on_resume: The agents will still be paused when the environment is resumed
-                    * unpause_on_resume: The agents will be unpaused when the environment is resumed
-                    * remove_all_agent_venvs: Remove all agent venvs in the given environment. During this
-                                              process the agent operations in that environment are temporarily
-                                              suspended. The removal of the agent venvs will happen asynchronously
-                                              with respect to this API call. It might take a long time until the
-                                              venvs are actually removed, because all executing agent operations
-                                              will be allowed to finish first. As such, a long deploy operation
-                                              might delay the removal of the venvs considerably.
+
+      Pause and unpause can only be used when the environment is not halted,
+      while the on_resume actions can only be used when the environment is halted.
+
+      * pause: A paused agent cannot execute any deploy operations.
+      * unpause: A unpaused agent will be able to execute deploy operations.
+      * keep_paused_on_resume: The agents will still be paused when the environment is resumed
+      * unpause_on_resume: The agents will be unpaused when the environment is resumed
+      * remove_all_agent_venvs: Remove all agent venvs in the given environment. During this
+         process the agent operations in that environment are temporarily
+         suspended. The removal of the agent venvs will happen asynchronously
+         with respect to this API call. It might take a long time until the
+         venvs are actually removed, because all executing agent operations
+         will be allowed to finish first. As such, a long deploy operation
+         might delay the removal of the venvs considerably.
 
     :raises Forbidden: The given environment has been halted and the action is pause/unpause,
                         or the environment is not halted and the action is related to the on_resume behavior
