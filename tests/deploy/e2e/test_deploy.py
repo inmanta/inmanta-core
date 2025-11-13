@@ -1068,7 +1068,10 @@ async def test_deploy_and_events(
 
 
 dep_states_reload = [
+    ResourceProvider(0, "skip", lambda p, a, k: p.set_skip(a, k, 1)),
     ResourceProvider(0, "fail", lambda p, a, k: p.set_fail(a, k, 1)),
+    ResourceProvider(0, "nochange", lambda p, a, k: p.set(a, k, "value1")),
+    ResourceProvider(1, "nochange", lambda p, a, k: None),
 ]
 
 
