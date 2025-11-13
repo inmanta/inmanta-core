@@ -604,6 +604,10 @@ You can set the environment variables by updating your Systemd unit file, relyin
 options of the ``podman run`` command.  Those variables will be accessible to the inmanta server, the compiler
 and any agent started by the server.
 
+.. warning::
+    If you are migrating from an rpm install, be aware that the format of environment files for `podman` (and `docker` for that matter) are different from what is supported by systemd which you may have been relying on up to now.
+    The format is simply `[KEY]=[VALUE]` separated by new lines, without any quoting or multi-line support.
+    cf. `podman#19565 <https://github.com/containers/podman/issues/19565#issuecomment-1672891535>`_.
 
 Log rotation
 ############
