@@ -75,6 +75,8 @@ class HandlerResourceState(str, Enum):
     # HandlerResourceState will get the TEMPORARILY_BLOCKED blocked status.
     skipped_for_dependency = "skipped_for_dependency"
     unavailable = "unavailable"
+    # Used to report non-compliance of reporting resource.
+    non_compliant = "non_compliant"
 
 
 class NonDeployingResourceState(str, Enum):
@@ -434,6 +436,9 @@ RESOURCE_ATTRIBUTE_RECEIVE_EVENTS: typing.Final[str] = "receive_events"
 # resource attributes for references
 RESOURCE_ATTRIBUTE_REFERENCES: typing.Final[str] = "references"
 RESOURCE_ATTRIBUTE_MUTATORS: typing.Final[str] = "mutators"
+
+# resource attribute for report-only mode
+RESOURCE_ATTRIBUTE_REPORT_ONLY: typing.Final[str] = "report_only"
 
 # Per component log variables
 LOG_CONTEXT_VAR_ENVIRONMENT = "environment"

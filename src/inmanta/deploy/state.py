@@ -109,7 +109,7 @@ class DeployResult(StrEnum):
     @classmethod
     def from_handler_resource_state(cls, handler_resource_state: const.HandlerResourceState) -> "DeployResult":
         match handler_resource_state:
-            case const.HandlerResourceState.deployed:
+            case const.HandlerResourceState.deployed | const.HandlerResourceState.non_compliant:
                 return DeployResult.DEPLOYED
             case const.HandlerResourceState.skipped | const.HandlerResourceState.skipped_for_dependency:
                 return DeployResult.SKIPPED
@@ -191,6 +191,7 @@ class ResourceState:
     last_deploy_result: DeployResult
     blocked: Blocked
     last_deployed: datetime.datetime | None
+    last_deploy_compliant: bool | None
 
     def is_dirty(self) -> bool:
         """
@@ -255,6 +256,7 @@ class ModelState:
                     "current_intent_attribute_hash",
                     "last_deployed_attribute_hash",
                     "last_deploy_result",
+                    "last_deploy_compliant",
                     "blocked",
                     "last_success",
                     "last_deploy",
@@ -299,16 +301,15 @@ class ModelState:
                 or res["current_intent_attribute_hash"] != res["last_deployed_attribute_hash"]
             ):
                 compliance_status = Compliance.HAS_UPDATE
-            elif DeployResult[res["last_deploy_result"]] is DeployResult.DEPLOYED:
-                compliance_status = Compliance.COMPLIANT
             else:
-                compliance_status = Compliance.NON_COMPLIANT
+                compliance_status = Compliance.COMPLIANT if res["last_deploy_compliant"] else Compliance.NON_COMPLIANT
 
             resource_state = ResourceState(
                 compliance=compliance_status,
                 last_deploy_result=DeployResult[res["last_deploy_result"]],
                 blocked=Blocked[res["blocked"]],
                 last_deployed=last_deployed,
+                last_deploy_compliant=res["last_deploy_compliant"],
             )
             result.resource_state[resource_id] = resource_state
 
@@ -406,6 +407,7 @@ class ModelState:
                 last_deploy_result=DeployResult.DEPLOYED if known_compliant else DeployResult.NEW,
                 blocked=blocked,
                 last_deployed=last_deployed,
+                last_deploy_compliant=True if compliance_status == Compliance.COMPLIANT else None,
             )
             if resource not in self.requires:
                 self.requires[resource] = set()
@@ -472,13 +474,10 @@ class ModelState:
         :param resource: The id of the resource to find the dependencies for
         """
         dependencies: Set[ResourceIdStr] = self.requires.get(resource, set())
-        return any(
-            # Determine based on latest deploy result rather than compliance status, because compliance status is unstable
-            # (e.g. HAS_UPDATE).
-            # Make sure to not skip on NEW (never deployed) resources, because they will not generate a discovery event.
-            self.resource_state[dep_id].last_deploy_result not in (DeployResult.DEPLOYED, DeployResult.NEW)
-            for dep_id in dependencies
-        )
+        for dep_id in dependencies:
+            if self.resource_state[dep_id].last_deploy_compliant is False:
+                return True
+        return False
 
     def update_transitive_state(
         self,

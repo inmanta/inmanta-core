@@ -36,6 +36,7 @@ import asyncpg
 from inmanta import const, data, types
 from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
+from inmanta.const import HandlerResourceState
 from inmanta.data import Environment
 from inmanta.data.model import Discrepancy, SchedulerStatusReport
 from inmanta.deploy import timers, work
@@ -1369,9 +1370,10 @@ class ResourceScheduler(TaskManager):
 
             state: ResourceState = self._state.resource_state[resource]
 
-            recovered_from_failure: bool = deploy_result is DeployResult.DEPLOYED and state.last_deploy_result not in (
-                DeployResult.DEPLOYED,
-                DeployResult.NEW,
+            # It is a bit awkward to use result.resource_state instead of Compliance for this check here but we need to preserve
+            # the state.compliance at this stage to check for undefined below
+            recovered_from_failure: bool = (
+                state.last_deploy_compliant is False and result.resource_state is HandlerResourceState.deployed
             )
 
             # The second part of the or would not be required because is implied by the first,
@@ -1397,12 +1399,16 @@ class ResourceScheduler(TaskManager):
                 return state.copy()
 
             # We are not stale
-            state.compliance = Compliance.COMPLIANT if deploy_result is DeployResult.DEPLOYED else Compliance.NON_COMPLIANT
+            # We use result.resource_state instead of deploy_result because result.resource_state excludes non-compliant reports
+            state.compliance = (
+                Compliance.COMPLIANT if result.resource_state is HandlerResourceState.deployed else Compliance.NON_COMPLIANT
+            )
 
             # first update state, then send out events
             self._deploying_latest.remove(resource)
             state.last_deploy_result = deploy_result
             state.last_deployed = finished
+            state.last_deploy_compliant = state.compliance is Compliance.COMPLIANT
 
             # Check if we need to mark a resource as temporarily blocked
             # We only do that if it is not already blocked (Blocked.BLOCKED)
@@ -1419,7 +1425,7 @@ class ResourceScheduler(TaskManager):
                 # Remove this resource from the dirty set when we block it
                 self._state.dirty.discard(resource)
             elif deploy_result is DeployResult.DEPLOYED:
-                # Remove this resource from the dirty set if it is successfully deployed
+                # Remove this resource from the dirty set if it is successfully deployed (even if it is non-compliant)
                 self._state.dirty.discard(resource)
                 if state.blocked is Blocked.TEMPORARILY_BLOCKED:
                     # For now, we make sure to schedule even TEMPORARILY_BLOCKED resources for repair, just in case we have made
