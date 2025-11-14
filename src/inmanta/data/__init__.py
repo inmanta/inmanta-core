@@ -4739,6 +4739,8 @@ class ResourcePersistentState(BaseDocument):
     is_deploying: bool
     # Written at deploy time (except for NEW -> no race condition possible with deploy path)
     last_deploy_result: state.DeployResult
+    # Was the last deploy compliant, used for recovering scheduler state
+    last_deploy_compliant: Optional[bool] = None
     # Written both when processing a new version and at deploy time. As such, this should be updated
     # under the scheduler lock to prevent race conditions with the deploy time updates.
     blocked: state.Blocked
@@ -4896,6 +4898,7 @@ class ResourcePersistentState(BaseDocument):
         last_success: Optional[datetime.datetime] = None,
         last_produced_events: Optional[datetime.datetime] = None,
         last_deployed_attribute_hash: Optional[str] = None,
+        last_deploy_compliant: Optional[bool] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
         # TODO[#8541]: accept state.ResourceState and write blocked status as well
         last_deploy_result: Optional[state.DeployResult] = None,
@@ -4911,6 +4914,7 @@ class ResourcePersistentState(BaseDocument):
             "last_produced_events": last_produced_events,
             "last_deployed_attribute_hash": last_deployed_attribute_hash,
             "last_deployed_version": last_deployed_version,
+            "last_deploy_compliant": last_deploy_compliant,
         }
         query_parts = [f"{k}={args(v)}" for k, v in invalues.items() if v is not None]
         if last_deploy_result:
@@ -4935,7 +4939,7 @@ class ResourcePersistentState(BaseDocument):
             self.is_undefined,
             self.last_deployed_attribute_hash,
             self.current_intent_attribute_hash,
-            self.last_deploy_result,
+            self.last_deploy_compliant,
         )
 
 

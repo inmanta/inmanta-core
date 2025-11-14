@@ -488,6 +488,7 @@ async def wait_until_deployment_finishes(
             + summary["by_state"]["skipped_for_undefined"]
             + summary["by_state"]["unavailable"]
             + summary["by_state"]["undefined"]
+            + summary["by_state"]["non_compliant"]
             >= total
         )
 
@@ -1109,6 +1110,7 @@ def assert_resource_persistent_state(
     last_deploy_result: state.DeployResult,
     blocked: state.Blocked,
     expected_compliance: Optional[state.Compliance],
+    last_deploy_compliant: Optional[bool],
 ) -> None:
     """
     Assert that the given ResourcePersistentState record has the given content.
@@ -1129,6 +1131,9 @@ def assert_resource_persistent_state(
         f"{resource_persistent_state.resource_id}"
         f" ({resource_persistent_state.get_compliance_status()} != {expected_compliance})"
     )
+    assert (
+        resource_persistent_state.last_deploy_compliant is last_deploy_compliant
+    ), f"{resource_persistent_state.resource_id} ({resource_persistent_state.last_deploy_compliant} != {last_deploy_compliant})"
 
 
 async def run_compile_and_wait_until_compile_is_done(

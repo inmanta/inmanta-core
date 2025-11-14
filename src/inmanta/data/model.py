@@ -512,6 +512,7 @@ class ReleasedResourceState(StrEnum):
     undefined = "undefined"  # The state of this resource is unknown at this moment in the orchestration process
     skipped_for_undefined = "skipped_for_undefined"  # This resource depends on an undefined resource
     orphaned = "orphaned"
+    non_compliant = "non_compliant"
 
 
 class VersionedResource(BaseModel):
