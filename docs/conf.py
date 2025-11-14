@@ -394,6 +394,7 @@ linkcheck_ignore = [
 linkcheck_anchors_ignore=[
     # Ignore Scroll To Text Fragment anchors, because they are not supposed to be present in the HTML body.
     f"{re.escape(':~:text=')}.*",
+    f"issuecomment-\d+",
 ]
 
 graphviz_output_format = "svg"
