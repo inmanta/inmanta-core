@@ -4,3 +4,6 @@ change-type: minor
 destination-branches: [master]
 sections:
   feature: "{{description}}"
+  upgrade-note: >
+    non_compliant as been added as an option to the ResourceState enum.
+    Handlers that override the deploy may encounter this new state in the `requires` argument.

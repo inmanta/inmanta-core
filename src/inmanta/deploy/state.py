@@ -204,6 +204,25 @@ class ResourceState:
         """
         return dataclasses.replace(self)
 
+    def to_handler_state(self) -> const.ResourceState:
+        match self:
+            case ResourceState(compliance=Compliance.UNDEFINED):
+                return const.ResourceState.undefined
+            case ResourceState(blocked=Blocked.BLOCKED):
+                return const.ResourceState.skipped_for_undefined
+            case ResourceState(compliance=Compliance.HAS_UPDATE):
+                return const.ResourceState.available
+            case ResourceState(last_deploy_result=DeployResult.SKIPPED):
+                return const.ResourceState.skipped
+            case ResourceState(last_deploy_result=DeployResult.FAILED):
+                return const.ResourceState.failed
+            case ResourceState(compliance=Compliance.NON_COMPLIANT):
+                return const.ResourceState.non_compliant
+            case ResourceState(last_deploy_result=DeployResult.DEPLOYED):
+                return const.ResourceState.deployed
+            case _:
+                raise Exception(f"Unable to deduce handler state: {self}")
+
 
 @dataclass(kw_only=True)
 class ModelState:

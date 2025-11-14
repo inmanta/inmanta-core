@@ -1592,23 +1592,10 @@ class ResourceScheduler(TaskManager):
         dependencies_state = {}
         for dep_id in dependencies:
             resource_state_object: ResourceState = self._state.resource_state[dep_id]
-            match resource_state_object:
-                case ResourceState(compliance=Compliance.UNDEFINED):
-                    dependencies_state[dep_id] = const.ResourceState.undefined
-                case ResourceState(blocked=Blocked.BLOCKED):
-                    dependencies_state[dep_id] = const.ResourceState.skipped_for_undefined
-                case ResourceState(compliance=Compliance.HAS_UPDATE):
-                    dependencies_state[dep_id] = const.ResourceState.available
-                case ResourceState(last_deploy_result=DeployResult.SKIPPED):
-                    dependencies_state[dep_id] = const.ResourceState.skipped
-                case ResourceState(last_deploy_result=DeployResult.FAILED):
-                    dependencies_state[dep_id] = const.ResourceState.failed
-                case ResourceState(compliance=Compliance.NON_COMPLIANT):
-                    dependencies_state[dep_id] = const.ResourceState.non_compliant
-                case ResourceState(last_deploy_result=DeployResult.DEPLOYED):
-                    dependencies_state[dep_id] = const.ResourceState.deployed
-                case _:
-                    raise Exception(f"Failed to parse the resource state for {dep_id}: {resource_state_object}")
+            try:
+                dependencies_state[dep_id] = resource_state_object.to_handler_state()
+            except Exception as e:
+                raise Exception(f"Failed to parse the resource state for {dep_id}: {e}") from e
         return dependencies_state
 
     async def get_resource_state(self) -> SchedulerStatusReport:
