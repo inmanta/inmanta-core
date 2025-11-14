@@ -1,0 +1,6 @@
+---
+description: Added support for report-only resources
+change-type: minor
+destination-branches: [master]
+sections:
+  feature: "{{description}}"
