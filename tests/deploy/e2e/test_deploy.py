@@ -1611,7 +1611,7 @@ async def test_lsm_states(resource_container, server, client, clienthelper, envi
 
 async def test_skipped_for_dependency(resource_container, server, client, clienthelper, environment, agent):
     """
-    Asserts the state of a resource, on the scheduler, whose dependency has been skipped
+    Asserts the state of a resource reporting or not, on the scheduler, whose dependency has been skipped
     """
     version = await clienthelper.get_version()
 
@@ -1619,6 +1619,7 @@ async def test_skipped_for_dependency(resource_container, server, client, client
 
     rid1 = "test::Resource[agent1,key=key]"
     rid2 = "test::Resource[agent1,key=key2]"
+    rid3 = "test::Resource[agent1,key=key3]"
 
     resources = [
         {
@@ -1639,16 +1640,36 @@ async def test_skipped_for_dependency(resource_container, server, client, client
             "send_event": True,
             "receive_events": False,
         },
+        {
+            "key": "key3",
+            "value": "value",
+            "id": f"{rid3},v={version}",
+            "requires": [rid1],
+            "purged": False,
+            "send_event": True,
+            "receive_events": False,
+            "report_only": True,
+        },
     ]
     await clienthelper.set_auto_deploy(True)
     await clienthelper.put_version_simple(resources, version, wait_for_released=True)
     await clienthelper.wait_for_deployed(version=version)
     scheduler = agent.scheduler
+
     assert scheduler._state.resource_state[rid2] == ResourceState(
         compliance=Compliance.NON_COMPLIANT,
         last_deploy_result=DeployResult.SKIPPED,
         blocked=Blocked.TEMPORARILY_BLOCKED,
         last_deployed=scheduler._state.resource_state[rid2].last_deployed,  # ignore
+        last_deploy_compliant=False,
+    )
+    # Report-only resource gets executed even though dependency failed
+    # But non-compliant because resource does not exist
+    assert scheduler._state.resource_state[rid3] == ResourceState(
+        compliance=Compliance.NON_COMPLIANT,
+        last_deploy_result=DeployResult.DEPLOYED,
+        blocked=Blocked.NOT_BLOCKED,
+        last_deployed=scheduler._state.resource_state[rid3].last_deployed,  # ignore
         last_deploy_compliant=False,
     )
     assert scheduler._state.resource_state[rid1] == ResourceState(
@@ -1705,6 +1726,74 @@ async def test_skipped_for_dependency(resource_container, server, client, client
     # We can't rely on clienthelper.wait_for_deployed() here to wait until the re-deployment has finished,
     # because that method waits only until all resources reach a deployed state, not necessarily until the scheduler is stable
     await retry_limited(wait_for_resource_state, timeout=10)
+
+    # key1 will no longer skip, but we switch to report mode, but the resource was never deployed so it will be non-compliant
+    # key2 will also switch to report mode, but previous version already deployed so it will be compliant
+    # key3 requires key1 and will skip because it is non-compliant
+    version = await clienthelper.get_version()
+    resources = [
+        {
+            "key": "key",
+            "value": "value",
+            "id": f"{rid1},v={version}",
+            "requires": [],
+            "purged": False,
+            "send_event": True,
+            "receive_events": False,
+            "report_only": True,
+        },
+        {
+            "key": "key2",
+            "value": "value",
+            "id": f"{rid2},v={version}",
+            "requires": [],
+            "purged": False,
+            "send_event": True,
+            "receive_events": False,
+            "report_only": True,
+        },
+        {
+            "key": "key3",
+            "value": "value",
+            "id": f"{rid3},v={version}",
+            "requires": [rid1],
+            "purged": False,
+            "send_event": True,
+            "receive_events": False,
+        },
+    ]
+    await clienthelper.set_auto_deploy(True)
+    await clienthelper.put_version_simple(resources, version, wait_for_released=True)
+
+    async def wait_for_resource_state_reporting() -> bool:
+        if scheduler._state.resource_state[rid1] != ResourceState(
+            compliance=Compliance.NON_COMPLIANT,
+            last_deploy_result=DeployResult.DEPLOYED,
+            blocked=Blocked.NOT_BLOCKED,
+            last_deployed=scheduler._state.resource_state[rid1].last_deployed,  # ignore
+            last_deploy_compliant=False,
+        ):
+            return False
+        if scheduler._state.resource_state[rid2] != ResourceState(
+            compliance=Compliance.COMPLIANT,
+            last_deploy_result=DeployResult.DEPLOYED,
+            blocked=Blocked.NOT_BLOCKED,
+            last_deployed=scheduler._state.resource_state[rid2].last_deployed,  # ignore
+            last_deploy_compliant=True,
+        ):
+            return False
+
+        if scheduler._state.resource_state[rid3] != ResourceState(
+            compliance=Compliance.NON_COMPLIANT,
+            last_deploy_result=DeployResult.SKIPPED,
+            blocked=Blocked.TEMPORARILY_BLOCKED,
+            last_deployed=scheduler._state.resource_state[rid3].last_deployed,  # ignore
+            last_deploy_compliant=False,
+        ):
+            return False
+        return True
+
+    await retry_limited(wait_for_resource_state_reporting, timeout=10)
 
 
 async def test_redeploy_after_dependency_recovered(resource_container, server, client, clienthelper, environment, agent):

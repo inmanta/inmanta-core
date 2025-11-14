@@ -34,5 +34,10 @@ async def update(connection: Connection) -> None:
             WHEN last_deploy_result='DEPLOYED' THEN TRUE
             WHEN last_deploy_result='FAILED' OR last_deploy_result='SKIPPED' THEN FALSE
         END;
+
+    -- Add 'non_compliant' to resource_state state machines
+    ALTER TYPE non_deploying_resource_state ADD VALUE 'non_compliant';
+
+    ALTER TYPE resourcestate ADD VALUE 'non_compliant';
     """
     await connection.execute(schema)

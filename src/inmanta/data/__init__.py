@@ -4939,7 +4939,7 @@ class ResourcePersistentState(BaseDocument):
             self.is_undefined,
             self.last_deployed_attribute_hash,
             self.current_intent_attribute_hash,
-            self.last_deploy_result,
+            self.last_deploy_compliant,
         )
 
 

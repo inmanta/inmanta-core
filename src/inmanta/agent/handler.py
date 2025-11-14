@@ -600,6 +600,7 @@ class HandlerAPI(ABC, Generic[TResource]):
         # report-only resources don't care about dependencies
         if resource.report_only:
             execute_and_reload()
+            return
         # Check if any dependencies got into any unexpected state
         dependencies_in_unexpected_state = filter_resources_by_state(
             requires,

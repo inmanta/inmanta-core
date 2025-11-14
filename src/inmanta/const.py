@@ -39,6 +39,8 @@ SQL_RESOURCE_STATUS_SELECTOR: typing.LiteralString = """
             THEN 'skipped_for_undefined'
         WHEN rps.current_intent_attribute_hash <> rps.last_deployed_attribute_hash
             THEN 'available'
+        WHEN rps.last_non_deploying_status::text = 'non_compliant'
+            THEN 'deployed'
         ELSE
             rps.last_non_deploying_status::text
     END
@@ -57,6 +59,8 @@ class ResourceState(str, Enum):
     cancelled = "cancelled"  # When a new version is pushed, in progress deploys are cancelled
     undefined = "undefined"  # The state of this resource is unknown at this moment in the orchestration process
     skipped_for_undefined = "skipped_for_undefined"  # This resource depends on an undefined resource
+    # Used to report non-compliance of reporting resource.
+    non_compliant = "non_compliant"
 
 
 class HandlerResourceState(str, Enum):
@@ -89,6 +93,7 @@ class NonDeployingResourceState(str, Enum):
     cancelled = ResourceState.cancelled.value
     undefined = ResourceState.undefined.value
     skipped_for_undefined = ResourceState.skipped_for_undefined.value
+    non_compliant = ResourceState.non_compliant.value
 
 
 class DeprecatedResourceState(str, Enum):
@@ -122,6 +127,7 @@ DONE_STATES = [
     ResourceState.deployed,
     ResourceState.failed,
     ResourceState.cancelled,
+    ResourceState.non_compliant,
 ] + UNDEPLOYABLE_STATES
 
 # starting states
@@ -138,6 +144,7 @@ VALID_STATES_ON_STATE_UPDATE = [
     ResourceState.cancelled,
     ResourceState.undefined,
     ResourceState.skipped_for_undefined,
+    ResourceState.non_compliant,
 ]
 
 UNKNOWN_STRING = "<<undefined>>"

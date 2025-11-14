@@ -1601,10 +1601,12 @@ class ResourceScheduler(TaskManager):
                     dependencies_state[dep_id] = const.ResourceState.available
                 case ResourceState(last_deploy_result=DeployResult.SKIPPED):
                     dependencies_state[dep_id] = const.ResourceState.skipped
-                case ResourceState(last_deploy_result=DeployResult.DEPLOYED):
-                    dependencies_state[dep_id] = const.ResourceState.deployed
                 case ResourceState(last_deploy_result=DeployResult.FAILED):
                     dependencies_state[dep_id] = const.ResourceState.failed
+                case ResourceState(compliance=Compliance.NON_COMPLIANT):
+                    dependencies_state[dep_id] = const.ResourceState.non_compliant
+                case ResourceState(last_deploy_result=DeployResult.DEPLOYED):
+                    dependencies_state[dep_id] = const.ResourceState.deployed
                 case _:
                     raise Exception(f"Failed to parse the resource state for {dep_id}: {resource_state_object}")
         return dependencies_state
