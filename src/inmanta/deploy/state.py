@@ -132,7 +132,10 @@ def get_compliance_status(
         return Compliance.UNDEFINED
     elif last_deployed_attribute_hash is None or current_intent_attribute_hash != last_deployed_attribute_hash:
         return Compliance.HAS_UPDATE
-    return last_deploy_compliant
+    elif last_deploy_compliant:
+        return Compliance.COMPLIANT
+    elif last_deploy_compliant is False:
+        return Compliance.NON_COMPLIANT
 
 
 class AgentStatus(StrEnum):
