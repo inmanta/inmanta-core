@@ -738,6 +738,7 @@ async def test_deploy_summary(server, client, env_with_resources):
             "cancelled": 0,
             "undefined": 0,
             "skipped_for_undefined": 0,
+            "non_compliant": 0,
         },
     }
     result = await client.resource_list(env.id, deploy_summary=True)
@@ -775,6 +776,7 @@ async def test_deploy_summary(server, client, env_with_resources):
             "cancelled": 0,
             "undefined": 0,
             "skipped_for_undefined": 0,
+            "non_compliant": 0,
         },
     }
     result = await client.resource_list(env2.id, deploy_summary=True)
@@ -811,6 +813,7 @@ async def test_resources_paging_performance(client, environment, mixed_resource_
             "skipped_for_undefined": instances,
             "unavailable": 0,
             "undefined": instances,
+            "non_compliant": 0,
         },
         "total": instances * resources_per_version,
     }

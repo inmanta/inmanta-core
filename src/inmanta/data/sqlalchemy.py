@@ -787,7 +787,8 @@ class ResourcePersistentState(Base):
                 ),
                 state.Compliance.HAS_UPDATE.name,
             ),
-            else_=cls.last_deploy_compliant,
+            (cls.last_deploy_compliant.is_(True), state.Compliance.COMPLIANT.name),
+            else_=state.Compliance.NON_COMPLIANT.name,
         )
 
 

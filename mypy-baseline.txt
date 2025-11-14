@@ -503,7 +503,6 @@ src/inmanta/deploy/state.py:0: error: Argument "last_deploy_compliant" to "Resou
 src/inmanta/deploy/state.py:0: error: Enum index should be a string (actual index type "object")  [misc]
 src/inmanta/deploy/state.py:0: error: Enum index should be a string (actual index type "object")  [misc]
 src/inmanta/deploy/state.py:0: error: Enum index should be a string (actual index type "object")  [misc]
-src/inmanta/deploy/state.py:0: error: Incompatible return value type (got "bool | None", expected "Compliance | None")  [return-value]
 src/inmanta/deploy/state.py:0: error: Unsupported left operand type for > ("object")  [operator]
 src/inmanta/docstring_parser.py:0: error: Argument 1 to "DocString" has incompatible type "str"; expected "Docstring"  [arg-type]
 src/inmanta/docstring_parser.py:0: error: Incompatible types in assignment (expression has type "Docstring", variable has type "str")  [assignment]

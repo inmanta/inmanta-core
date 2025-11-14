@@ -134,8 +134,7 @@ def get_compliance_status(
         return Compliance.HAS_UPDATE
     elif last_deploy_compliant:
         return Compliance.COMPLIANT
-    elif last_deploy_compliant is False:
-        return Compliance.NON_COMPLIANT
+    return Compliance.NON_COMPLIANT
 
 
 class AgentStatus(StrEnum):

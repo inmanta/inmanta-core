@@ -39,8 +39,6 @@ SQL_RESOURCE_STATUS_SELECTOR: typing.LiteralString = """
             THEN 'skipped_for_undefined'
         WHEN rps.current_intent_attribute_hash <> rps.last_deployed_attribute_hash
             THEN 'available'
-        WHEN rps.last_non_deploying_status::text = 'non_compliant'
-            THEN 'deployed'
         ELSE
             rps.last_non_deploying_status::text
     END
@@ -93,6 +91,7 @@ class NonDeployingResourceState(str, Enum):
     cancelled = ResourceState.cancelled.value
     undefined = ResourceState.undefined.value
     skipped_for_undefined = ResourceState.skipped_for_undefined.value
+    # Used to report non-compliance of reporting resource.
     non_compliant = ResourceState.non_compliant.value
 
 

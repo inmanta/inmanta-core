@@ -488,6 +488,7 @@ async def wait_until_deployment_finishes(
             + summary["by_state"]["skipped_for_undefined"]
             + summary["by_state"]["unavailable"]
             + summary["by_state"]["undefined"]
+            + summary["by_state"]["non_compliant"]
             >= total
         )
 
