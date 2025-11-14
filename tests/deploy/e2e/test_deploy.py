@@ -1611,7 +1611,7 @@ async def test_lsm_states(resource_container, server, client, clienthelper, envi
 
 async def test_skipped_for_dependency(resource_container, server, client, clienthelper, environment, agent):
     """
-    Asserts the state of a resource reporting or not, on the scheduler, whose dependency has been skipped
+    Asserts the state of a resource (reporting and executing), on the scheduler, whose dependency has been skipped
     """
     version = await clienthelper.get_version()
 

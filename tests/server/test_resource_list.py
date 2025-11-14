@@ -798,7 +798,8 @@ async def test_resources_paging_performance(client, environment, mixed_resource_
     #   2 failed
     #   2 skipped
     #   2 deploying
-    #   190 deployed
+    #   2 non_compliant
+    #   188 deployed
     await mixed_resource_generator(environment, instances, resources_per_version)
     result = await client.resource_list(environment, limit=5, deploy_summary=True)
     assert result.code == 200
@@ -806,14 +807,14 @@ async def test_resources_paging_performance(client, environment, mixed_resource_
         "by_state": {
             "available": 0,
             "cancelled": 0,
-            "deployed": (resources_per_version - 5) * instances,
+            "deployed": (resources_per_version - 6) * instances,
             "deploying": instances,
             "failed": instances,
             "skipped": instances,
             "skipped_for_undefined": instances,
             "unavailable": 0,
             "undefined": instances,
-            "non_compliant": 0,
+            "non_compliant": 2,
         },
         "total": instances * resources_per_version,
     }
@@ -827,7 +828,7 @@ async def test_resources_paging_performance(client, environment, mixed_resource_
         ({}, instances * (resources_per_version + 10)),
         ({"status": "!orphaned"}, instances * resources_per_version),
         ({"status": "deploying"}, instances),
-        ({"status": "deployed"}, (resources_per_version - 5) * instances),
+        ({"status": "deployed"}, (resources_per_version - 6) * instances),
         ({"status": "available"}, 0),
         ({"agent": "agent0"}, resources_per_version + 10),
         ({"agent": "someotheragent"}, 0),

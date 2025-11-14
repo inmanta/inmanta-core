@@ -2916,6 +2916,8 @@ async def mixed_resource_generator(
         <instances> skipped for undefined
         <instances> failed
         <instances> skipped
+        <instances> deploying
+        <instances> non-compliant
         min(<resources_per_version> / 2, 10) *<instances> orphans
         <resources_per_version> - 5 deployed
     """
@@ -2958,6 +2960,7 @@ async def mixed_resource_generator(
                     "purged": False,
                     "requires": [] if ri % 2 == 0 else [resource_id(ri - 1)],
                     "my_attribute": iteration,
+                    "report_only": True if ri in (6, 7) else False,
                 }
                 for ri in range(resources_per_version)
             ]
@@ -3013,21 +3016,23 @@ async def mixed_resource_generator(
                 if "sub=4]" in rid:
                     # never finish deploying r4
                     return
+                expected_resource_state: const.HandlerResourceState
+                if "sub=2]" in rid:
+                    expected_resource_state = const.HandlerResourceState.failed
+                elif "sub=3]" in rid:
+                    expected_resource_state = const.HandlerResourceState.skipped
+                elif "sub=5]" in rid:
+                    expected_resource_state = const.HandlerResourceState.non_compliant
+                else:
+                    expected_resource_state = const.HandlerResourceState.deployed
+
                 if deploy_intent is not None:
                     await dummy_scheduler.deploy_done(
                         deploy_intent,
                         DeployReport(
                             rvid=ResourceVersionIdStr(f"{rid},v={version}"),
                             action_id=action_id,
-                            resource_state=(
-                                const.HandlerResourceState.failed
-                                if "sub=2]" in rid
-                                else (
-                                    const.HandlerResourceState.skipped
-                                    if "sub=3]" in rid
-                                    else const.HandlerResourceState.deployed
-                                )
-                            ),
+                            resource_state=expected_resource_state,
                             messages=[],
                             changes={},
                             change=None,
