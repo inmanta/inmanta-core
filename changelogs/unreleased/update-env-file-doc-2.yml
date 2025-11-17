@@ -1,0 +1,6 @@
+description: Fix link check for github issue in env file config documentation
+change-type: patch
+destination-branches:
+  - master
+  - iso8
+  - iso7
