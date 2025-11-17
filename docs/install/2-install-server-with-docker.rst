@@ -191,6 +191,12 @@ to make some environment variables available to the compiler or agent, you can s
 In the example shown above, this can be done by using either of the ``environment`` or ``env_file`` attributes in the ``server`` service of the docker compose file.
 More details about these options can be found in `docker's documentation <https://docs.docker.com/reference/compose-file/services/>`_.
 
+.. warning::
+    If you are migrating from an rpm install, be aware that the format of environment files for `docker` (and `podman` for that matter) are different from what is supported by systemd which you may have been relying on up to now.
+    The format is simply `[KEY]=[VALUE]` separated by new lines, without any quoting or multi-line support.
+    cf. `podman#19565 <https://github.com/containers/podman/issues/19565#issuecomment-1672891535>`_.
+
+
 Accessing the orchestrator file system
 ######################################
 

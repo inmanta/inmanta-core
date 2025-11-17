@@ -368,7 +368,14 @@ Then start the orchestrator database and server by running the following command
 
 You should be able to reach the orchestrator at this address: `http://127.0.0.1:8888 <http://127.0.0.1:8888>`_ on the host.
 
-(Optional) To make sure the orchestrator is started when the host is booted, enable the container services:
+(Optional) To make sure the orchestrator is started when the host is booted, add the following install section to the `.container` file:
+
+.. code-block:: systemd
+
+    [Install]
+    WantedBy=default.target
+
+Then regenerate the unit files:
 
 .. tab-set::
 
@@ -377,16 +384,15 @@ You should be able to reach the orchestrator at this address: `http://127.0.0.1:
 
         .. code-block:: console
 
-            $ systemctl --user enable inmanta-orchestrator-db.service
-            $ systemctl --user enable inmanta-orchestrator-server.service
+            $ systemctl --user daemon-reload
 
     .. tab-item:: Root setup
         :sync: rootful-setup
 
         .. code-block:: console
 
-            # sudo -i -u inmanta -- systemctl --user enable inmanta-orchestrator-db.service
-            # sudo -i -u inmanta -- systemctl --user enable inmanta-orchestrator-server.service
+            # sudo -i -u inmanta -- systemctl --user daemon-reload
+
 
 Troubleshooting
 ###############
@@ -447,6 +453,11 @@ The inmanta server will share any environment variable it received from podman w
 to make some environment variables available to the compiler or agent, you can simply tell podman to pass them on to the orchestrator container.
 In the example shown above, this can be done by using either of the ``Environment`` or ``EnvironmentFile`` options in the orchestrator container unit (``inmanta-orchestrator-server.container``).
 More details about these options can be found in `podman's documentation <https://docs.podman.io/en/latest/markdown/podman-systemd.unit.5.html#environment>`_.
+
+.. warning::
+    If you are migrating from an rpm install, be aware that the format of environment files for `podman` (and `docker` for that matter) are different from what is supported by systemd which you may have been relying on up to now.
+    The format is simply `[KEY]=[VALUE]` separated by new lines, without any quoting or multi-line support.
+    cf. `podman#19565 <https://github.com/containers/podman/issues/19565#issuecomment-1672891535>`_.
 
 Accessing the orchestrator file system
 ######################################

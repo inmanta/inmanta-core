@@ -41,7 +41,7 @@ myst_enable_extensions = ["colon_fence"]
 def setup(app):
     # cut off license headers
     from sphinx.ext.autodoc import cut_lines
-    app.connect('autodoc-process-docstring', cut_lines(15, what=['module']))
+    app.connect('autodoc-process-docstring', cut_lines(17, what=['module']))
 def check_dot_command():
     if shutil.which("dot") is None:
         raise Exception("The 'dot' command is not available. Please install Graphviz (https://graphviz.org) "
@@ -394,6 +394,7 @@ linkcheck_ignore = [
 linkcheck_anchors_ignore=[
     # Ignore Scroll To Text Fragment anchors, because they are not supposed to be present in the HTML body.
     f"{re.escape(':~:text=')}.*",
+    "issuecomment-[0-9]+",
 ]
 
 graphviz_output_format = "svg"
