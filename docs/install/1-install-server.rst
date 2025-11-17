@@ -24,7 +24,7 @@ Install the software
             Add the epel yum repository:
 
             .. code-block:: sh
-                
+
                 sudo dnf install -y epel-release
 
             Install the Inmanta packages:
@@ -197,7 +197,7 @@ Install the software
     Add the epel yum repository:
 
     .. code-block:: sh
-        
+
         sudo dnf install -y epel-release
 
     Create a repositories file to point yum to the inmanta service orchestrator release repository. Create a file
