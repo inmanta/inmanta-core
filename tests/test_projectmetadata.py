@@ -126,6 +126,28 @@ def test_deprecation_warning_repo_of_type_package(tmp_path):
         Project(tmp_path, autostd=False)
 
 
+def test_deprecation_warning_requires_field(tmp_path):
+    # Verify that a deprecation warning is raised when the requires field is set
+    with pytest.warns(
+        ProjectConfigurationWarning,
+        match=re.escape(
+            "The requires field of the project.yml file is deprecated. Add dependencies/constraints"
+            " in the requirements.txt file of the project. The requires field will be dropped in the"
+            " next major release."
+        ),
+    ):
+        with (tmp_path / "project.yml").open("w") as fh:
+            fh.write(
+                """
+    name: testproject
+    downloadpath: libs
+    requires:
+      - std
+    """
+            )
+        Project(tmp_path, autostd=False)
+
+
 @pytest.mark.parametrize("use_system_config, value", [(True, True), (True, False), (False, False)])
 def test_pip_config(tmp_path, caplog, use_system_config, value):
     """
