@@ -17,9 +17,17 @@ Install the software
 
     .. tab-set::
 
-        .. tab-item:: RHEL 8 and 9
+        .. tab-item:: RHEL 9
 
-            For RHEL, Almalinux and Rockylinux 8 and 9  based systems use dnf:
+            For RHEL, Almalinux and Rockylinux 9 based systems use dnf.
+
+            Add the epel yum repository:
+
+            .. code-block:: sh
+                
+                sudo dnf install -y epel-release
+
+            Install the Inmanta packages:
 
             .. code-block:: sh
                 :substitutions:
@@ -185,6 +193,12 @@ Install the software
 
     Step 1: Install the software
     ----------------------------
+
+    Add the epel yum repository:
+
+    .. code-block:: sh
+        
+        sudo dnf install -y epel-release
 
     Create a repositories file to point yum to the inmanta service orchestrator release repository. Create a file
     ``/etc/yum.repos.d/inmanta.repo`` with the following content:
