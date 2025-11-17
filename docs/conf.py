@@ -391,4 +391,8 @@ linkcheck_ignore = [
     r'https://github.com/inmanta/examples/tree/master/Networking/SR%20Linux#user-content-sr-linux-topology',
 ]
 
+linkcheck_anchors_ignore=[
+    "issuecomment-[0-9]+",
+]
+
 graphviz_output_format = "svg"
