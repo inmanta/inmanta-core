@@ -23,6 +23,8 @@ from collections import abc
 import asyncpg
 import pytest
 
+from inmanta import data
+
 file_name_regex = re.compile("test_v([0-9]{9})_to_v[0-9]{9}")
 part = file_name_regex.match(__name__)[1]
 
@@ -31,4 +33,24 @@ part = file_name_regex.match(__name__)[1]
 async def test_make_discovery_resource_id_column_mandatory(
     postgresql_client: asyncpg.Connection, migrate_db_from: abc.Callable[[], abc.Awaitable[None]]
 ) -> None:
+    # Make sure we have a discovered resource where the discovery_resource_id column is not set.
+    await postgresql_client.execute(
+        f"""
+        UPDATE {data.DiscoveredResource.table_name()}
+        SET discovery_resource_id=NULL
+        WHERE discovered_resource_id='discovery::Discovered[myagent,name=discovered]'
+        """
+    )
+    assert 2 == (await postgresql_client.fetchval(f"SELECT count(*) FROM {data.DiscoveredResource.table_name()}"))
+
     await migrate_db_from()
+
+    assert 1 == (await postgresql_client.fetchval(f"SELECT count(*) FROM {data.DiscoveredResource.table_name()}"))
+    # Verify that the discovered resource, with the discovery_resource_id column unset, is removed.
+    assert 0 == await postgresql_client.fetchval(
+        f"""
+        SELECT count(*)
+        FROM {data.DiscoveredResource.table_name()}
+        WHERE discovered_resource_id='discovery::Discovered[myagent,name=discovered]'
+        """
+    )
