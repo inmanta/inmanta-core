@@ -1,0 +1,8 @@
+---
+description: "Discovery resources now require the discovery_resource_id to be set."
+issue-nr: 8004
+issue-repo: inmanta-core
+change-type: major
+destination-branches: [master]
+sections:
+  upgrade-note: "{{description}}"
