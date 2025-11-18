@@ -190,6 +190,7 @@ class ResourceState:
     last_deploy_result: DeployResult
     blocked: Blocked
     last_deployed: datetime.datetime | None
+    # last_deploy_compliant is None for resources that have yet to be deployed
     last_deploy_compliant: bool | None
 
     def is_dirty(self) -> bool:
@@ -221,7 +222,7 @@ class ResourceState:
             case ResourceState(last_deploy_result=DeployResult.DEPLOYED):
                 return const.ResourceState.deployed
             case _:
-                raise Exception(f"Unable to deduce handler state: {self}")
+                raise AssertionError(f"Unable to deduce handler state: {self}")
 
 
 @dataclass(kw_only=True)
@@ -319,8 +320,10 @@ class ModelState:
                 or res["current_intent_attribute_hash"] != res["last_deployed_attribute_hash"]
             ):
                 compliance_status = Compliance.HAS_UPDATE
+            elif res["last_deploy_compliant"]:
+                compliance_status = Compliance.COMPLIANT
             else:
-                compliance_status = Compliance.COMPLIANT if res["last_deploy_compliant"] else Compliance.NON_COMPLIANT
+                compliance_status = Compliance.NON_COMPLIANT
 
             resource_state = ResourceState(
                 compliance=compliance_status,
@@ -492,10 +495,7 @@ class ModelState:
         :param resource: The id of the resource to find the dependencies for
         """
         dependencies: Set[ResourceIdStr] = self.requires.get(resource, set())
-        for dep_id in dependencies:
-            if self.resource_state[dep_id].last_deploy_compliant is False:
-                return True
-        return False
+        return any(self.resource_state[dep_id].last_deploy_compliant is False for dep_id in dependencies)
 
     def update_transitive_state(
         self,

@@ -1370,11 +1370,8 @@ class ResourceScheduler(TaskManager):
 
             state: ResourceState = self._state.resource_state[resource]
 
-            # It is a bit awkward to use result.resource_state instead of Compliance for this check here but we need to preserve
-            # the state.compliance at this stage to check for undefined below
-            recovered_from_failure: bool = (
-                state.last_deploy_compliant is False and result.resource_state is HandlerResourceState.deployed
-            )
+            result_compliant = result.resource_state is HandlerResourceState.deployed
+            recovered_from_failure: bool = state.last_deploy_compliant is False and result_compliant
 
             # The second part of the or would not be required because is implied by the first,
             # except that we don't enforce the hash diff.
@@ -1398,12 +1395,8 @@ class ResourceScheduler(TaskManager):
                     self._send_events(resource_intent, stale_deploy=True, recovered_from_failure=True)
                 return state.copy()
 
+            state.compliance = Compliance.COMPLIANT if result_compliant else Compliance.NON_COMPLIANT
             # We are not stale
-            # We use result.resource_state instead of deploy_result because result.resource_state excludes non-compliant reports
-            state.compliance = (
-                Compliance.COMPLIANT if result.resource_state is HandlerResourceState.deployed else Compliance.NON_COMPLIANT
-            )
-
             # first update state, then send out events
             self._deploying_latest.remove(resource)
             state.last_deploy_result = deploy_result
