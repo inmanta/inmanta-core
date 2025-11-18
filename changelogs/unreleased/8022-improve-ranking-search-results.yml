@@ -1,0 +1,8 @@
+---
+description: "The search tool on the documentation pages now ranks automatically generated documentation last, to prevent that a match on a common term in these pages clutters the search results."
+issue-nr: 8022
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso8]
+sections:
+  minor-improvement: "{{description}}"
