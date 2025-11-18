@@ -406,42 +406,96 @@ def test_project_loader_dynamic_modules(snippetcompiler):
     compiler_obj = Compiler()
     compiler_obj.compile()
 
-    # Verify we have compiler state
-    registered_resources = {k: id(v) for k, v in resources.resource.get_resources()}
-    assert registered_resources
-    registered_providers = {k: id(v) for k, v in handler.Commander.get_handlers().items()}
-    assert registered_providers
-    registered_references = {k: id(v) for k, v in references.reference.get_references() if not k.startswith("core::")}
+    # Helpers to mark specific instances
+    def mark(an_object: object) -> None:
+        setattr(an_object, "$$MARK$$", "mark")
+
+    def assert_marked(an_object: object) -> None:
+        assert hasattr(an_object, "$$MARK$$")
+
+    def assert_not_marked(an_object: object) -> None:
+        assert not hasattr(an_object, "$$MARK$$")
+
+    assert resources.resource.get_resources()
+    for k, resource in resources.resource.get_resources():
+        mark(resource)
+
+    assert handler.Commander.get_handlers().items()
+    for k, handl in handler.Commander.get_handlers().items():
+        mark(handl)
+
+    registered_references = [v for k, v in references.reference.get_references() if not k.startswith("core::")]
     assert registered_references
-    registered_mutators = {k: id(v) for k, v in references.mutator.get_mutators() if not k.startswith("core::")}
+    for ref in registered_references:
+        mark(ref)
+
+    registered_mutators = [v for k, v in references.mutator.get_mutators() if not k.startswith("core::")]
     assert registered_mutators
-    registered_plugins = {k: id(v) for k, v in plugins.PluginMeta.get_functions().items()}
-    assert registered_plugins
-    registered_modules = {k: id(v) for k, v in module.Project.get().modules.items()}
+    for mut in registered_mutators:
+        mark(mut)
+
+    registered_plugins = {v for k, v in plugins.PluginMeta.get_functions().items()}
+    for plugin in registered_plugins:
+        mark(plugin)
+
+    registered_modules = {v for k, v in module.Project.get().modules.items()}
     assert registered_modules
+    for mod in registered_modules:
+        mark(mod)
 
     ProjectLoader.load(snippetcompiler.project)
     compiler_obj.compile()
 
     # Verify that the identity of the compiler state objects didn't change
-    assert {k: id(v) for k, v in resources.resource.get_resources()} == registered_resources
-    assert {k: id(v) for k, v in handler.Commander.get_handlers().items()} == registered_providers
-    assert {k: id(v) for k, v in references.reference.get_references() if not k.startswith("core::")} == registered_references
-    assert {k: id(v) for k, v in references.mutator.get_mutators() if not k.startswith("core::")} == registered_mutators
-    assert {k: id(v) for k, v in plugins.PluginMeta.get_functions().items()} == registered_plugins
-    assert {k: id(v) for k, v in module.Project.get().modules.items()} == registered_modules
+
+    for k, resource in resources.resource.get_resources():
+        assert_marked(resource)
+
+    for k, handl in handler.Commander.get_handlers().items():
+        assert_marked(handl)
+
+    registered_references = [v for k, v in references.reference.get_references() if not k.startswith("core::")]
+    for ref in registered_references:
+        assert_marked(ref)
+
+    registered_mutators = [v for k, v in references.mutator.get_mutators() if not k.startswith("core::")]
+    for mut in registered_mutators:
+        assert_marked(mut)
+
+    registered_plugins = {v for k, v in plugins.PluginMeta.get_functions().items()}
+    for plugin in registered_plugins:
+        assert_marked(plugin)
+
+    registered_modules = {v for k, v in module.Project.get().modules.items()}
+    for mod in registered_modules:
+        assert_marked(mod)
 
     ProjectLoader.register_dynamic_module("successhandlermodule")
     ProjectLoader.load(snippetcompiler.project)
     compiler_obj.compile()
 
     # Verify that the identity of the compiler state objects did change
-    assert {k: id(v) for k, v in resources.resource.get_resources()} != registered_resources
-    assert {k: id(v) for k, v in handler.Commander.get_handlers().items()} != registered_providers
-    assert {k: id(v) for k, v in references.reference.get_references() if not k.startswith("core::")} != registered_references
-    assert {k: id(v) for k, v in references.mutator.get_mutators() if not k.startswith("core::")} != registered_mutators
-    assert {k: id(v) for k, v in plugins.PluginMeta.get_functions().items()} != registered_plugins
-    assert {k: id(v) for k, v in module.Project.get().modules.items()} != registered_modules
+    for k, resource in resources.resource.get_resources():
+        assert_not_marked(resource)
+
+    for k, handl in handler.Commander.get_handlers().items():
+        assert_not_marked(handl)
+
+    registered_references = [v for k, v in references.reference.get_references() if not k.startswith("core::")]
+    for ref in registered_references:
+        assert_not_marked(ref)
+
+    registered_mutators = [v for k, v in references.mutator.get_mutators() if not k.startswith("core::")]
+    for mut in registered_mutators:
+        assert_not_marked(mut)
+
+    registered_plugins = {v for k, v in plugins.PluginMeta.get_functions().items()}
+    for plugin in registered_plugins:
+        assert_not_marked(plugin)
+
+    registered_modules = {v for k, v in module.Project.get().modules.items()}
+    for mod in registered_modules:
+        assert_not_marked(mod)
 
 
 def test_project_loader(snippetcompiler):
