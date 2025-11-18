@@ -1531,7 +1531,6 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
     repo: list[ModuleRepoInfo] = []
     downloadpath: Optional[str] = None
     install_mode: InstallMode = InstallMode.release
-    requires: list[str] = []
     relation_precedence_policy: list[
         Annotated[str, StringConstraints(strip_whitespace=True, pattern=_re_relation_precedence_rule, min_length=1)]
     ] = []
