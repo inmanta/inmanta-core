@@ -353,7 +353,7 @@ def get_settings(root: "Environment") -> scalars.JSON:
             )
         else:
             default_value = setting_info.default
-            assert default_value is not None # Should never happen but setting_info.default is Optional
+            assert default_value is not None  # Should never happen but setting_info.default is Optional
             setting_values[key] = model.EnvironmentSettingDetails(value=default_value)
     setting_definitions = dict(sorted(data.Environment.get_setting_definitions_for_api(setting_values).items()))
     return {"settings": setting_values, "definition": setting_definitions}
