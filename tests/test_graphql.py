@@ -20,6 +20,7 @@ import pytest
 
 import inmanta.data.sqlalchemy as models
 from inmanta import const, data
+from inmanta.data import model
 from inmanta.deploy import state
 from inmanta.graphql.schema import to_snake_case
 from inmanta.server import SLICE_COMPILER
@@ -192,6 +193,55 @@ async def test_graphql_schema(server, client):
     result = await client.graphql_schema()
     assert result.code == 200
     assert result.result["data"]["__schema"]
+
+
+async def test_query_environment_settings(server, client, setup_database):
+    """
+    Assert that the settings returned are correct
+    """
+    env_id = "11111111-1234-5678-1234-000000000002"
+    modified_settings = {data.AUTO_DEPLOY: False, data.RESOURCE_ACTION_LOGS_RETENTION: 12}
+    result = await client.protected_environment_settings_set_batch(
+        tid=env_id,
+        settings=modified_settings,
+        protected_by=model.ProtectedBy.project_yml,
+    )
+    assert result.code == 200
+    query = (
+        """
+{
+    environments(filter:{id: "%s"}) {
+        edges {
+            node {
+              id
+              settings
+            }
+        }
+    }
+}
+
+"""
+        % env_id
+    )
+
+    result = await client.graphql(query=query)
+    assert result.code == 200
+    # Result settings
+    settings = result.result["data"]["data"]["environments"]["edges"][0]["node"]["settings"]
+    # Expected settings
+    api_result = await client.list_settings(tid=env_id)
+    assert api_result.code == 200
+    assert settings["definition"] == api_result.result["metadata"]
+    for setting_name in data.Environment._settings.keys():
+        setting_value = settings["settings"][setting_name]
+        if setting_name in modified_settings:
+            assert setting_value["value"] == modified_settings[setting_name]
+            assert setting_value["protected"]
+            assert setting_value["protected_by"] == model.ProtectedBy.project_yml
+        else:
+            assert setting_value["value"] == api_result.result["metadata"][setting_name]["default"]
+            assert setting_value["protected"] is False
+            assert setting_value["protected_by"] is None
 
 
 async def test_query_environments_with_filtering(server, client, setup_database):
