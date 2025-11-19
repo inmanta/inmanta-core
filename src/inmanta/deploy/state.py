@@ -182,15 +182,14 @@ class ResourceState:
     State of a resource. Consists of multiple independent (mostly) state vectors that make up the final state.
 
     :param last_deployed: when was this resource last deployed
+    :param last_deploy_compliant: Was the last deploy for this resource compliant.
+        None for resources that have yet to be deployed
     """
 
-    # FIXME: review / finalize resource state. Based on draft design in
-    #   https://docs.google.com/presentation/d/1F3bFNy2BZtzZgAxQ3Vbvdw7BWI9dq0ty5c3EoLAtUUY/edit#slide=id.g292b508a90d_0_5
     compliance: Compliance
     last_deploy_result: DeployResult
     blocked: Blocked
     last_deployed: datetime.datetime | None
-    # last_deploy_compliant is None for resources that have yet to be deployed
     last_deploy_compliant: bool | None
 
     def is_dirty(self) -> bool:
@@ -222,7 +221,7 @@ class ResourceState:
             case ResourceState(last_deploy_result=DeployResult.DEPLOYED):
                 return const.ResourceState.deployed
             case _:
-                raise AssertionError(f"Unable to deduce handler state: {self}")
+                raise Exception(f"Unable to deduce handler state: {self}")
 
 
 @dataclass(kw_only=True)
