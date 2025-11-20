@@ -28,7 +28,7 @@ from uuid import UUID
 
 import pytest
 
-from deploy.scheduler_mocks import FAIL_DEPLOY, DummyManager, TestScheduler
+from deploy.scheduler_mocks import FAIL_DEPLOY, NON_COMPLIANT_DEPLOY, DummyManager, TestScheduler
 from deploy.test_scheduler_agent import retry_limited_fast
 from inmanta import const, data
 from inmanta.deploy import state
@@ -38,7 +38,6 @@ from inmanta.deploy.work import TaskPriority
 from inmanta.protocol.common import custom_json_encoder
 from inmanta.types import ResourceIdStr
 from inmanta.util import CronSchedule, IntervalSchedule, ScheduledTask, Scheduler, TaskMethod, TaskSchedule
-from tests.deploy.scheduler_mocks import NON_COMPLIANT_DEPLOY
 from utils import make_requires
 
 

@@ -33,7 +33,7 @@ from typing import Mapping, Optional, Sequence
 import pytest
 
 import utils
-from deploy.scheduler_mocks import FAIL_DEPLOY, DummyExecutor, ManagedExecutor, TestAgent, TestScheduler
+from deploy.scheduler_mocks import FAIL_DEPLOY, NON_COMPLIANT_DEPLOY, DummyExecutor, ManagedExecutor, TestAgent, TestScheduler
 from inmanta import const, data, util
 from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
@@ -47,7 +47,6 @@ from inmanta.protocol.common import custom_json_encoder
 from inmanta.resources import Id
 from inmanta.types import ResourceIdStr
 from inmanta.util import retry_limited
-from tests.deploy.scheduler_mocks import NON_COMPLIANT_DEPLOY
 from utils import make_requires
 
 
@@ -232,8 +231,6 @@ async def test_deploy_report_only(agent: TestAgent, make_resource_minimal) -> No
     Verify that a report_only resource is correctly scheduled as a deploy
     """
     rid1 = ResourceIdStr("test::Resource[agent1,name=1]")
-
-    # make agent1 and agent2's executors managed, leave the agent3 to execute without delay
     executor1: ManagedExecutor = agent.executor_manager.register_managed_executor("agent1")
 
     resources = {ResourceIdStr(rid1): make_resource_minimal(rid1, values={"value": "a", "report_only": True}, requires=[])}

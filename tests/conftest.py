@@ -2477,7 +2477,7 @@ def resource_container(clean_reset):
                 current.value = self.get(resource.id.get_agent_name(), resource.key)
             else:
                 current.value = None
-            # Moved here to test reporting resources
+            # Fail in read stage to test reporting resources
             if self.fail(resource.id.get_agent_name(), resource.key):
                 raise Exception("Failed")
             return current
