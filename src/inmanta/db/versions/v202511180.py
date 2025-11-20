@@ -24,9 +24,10 @@ async def update(connection: Connection) -> None:
     Make discovery_resource_id a mandatory column.
     """
     schema = """
-    -- Drop all discovered resources that were creating using the previous major
-    -- release of the orchestrator.
-    DELETE FROM public.discoveredresource
+    -- Add dummy discovery_resource_id for discovered resources that do not have
+    -- a discovery_resource_id set.
+    UPDATE public.discoveredresource
+    SET discovery_resource_id='core::UnknownDiscoveryResource[internal,key=unknown]'
     WHERE discovery_resource_id IS NULL;
 
     -- Make discovery_resource_id column mandatory

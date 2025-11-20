@@ -45,11 +45,11 @@ async def test_make_discovery_resource_id_column_mandatory(
 
     await migrate_db_from()
 
-    assert 1 == (await postgresql_client.fetchval(f"SELECT count(*) FROM {data.DiscoveredResource.table_name()}"))
+    assert 2 == (await postgresql_client.fetchval(f"SELECT count(*) FROM {data.DiscoveredResource.table_name()}"))
     # Verify that the discovered resource, with the discovery_resource_id column unset, is removed.
-    assert 0 == await postgresql_client.fetchval(
+    assert "core::UnknownDiscoveryResource[internal,key=unknown]" == await postgresql_client.fetchval(
         f"""
-        SELECT count(*)
+        SELECT discovery_resource_id
         FROM {data.DiscoveredResource.table_name()}
         WHERE discovered_resource_id='discovery::Discovered[myagent,name=discovered]'
         """
