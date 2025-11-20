@@ -3,9 +3,6 @@ src/inmanta/agent/cache.py:0: error: Function is missing a type annotation for o
 src/inmanta/agent/forking_executor.py:0: error: Argument 1 of "connection_made" is incompatible with supertype "asyncio.protocols.BaseProtocol"; supertype defines the argument type as "BaseTransport"  [override]
 src/inmanta/agent/forking_executor.py:0: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#incompatible-overrides
 src/inmanta/agent/forking_executor.py:0: note: This violates the Liskov substitution principle
-src/inmanta/agent/handler.py:0: error: "TPurgeableResource" has no attribute "report_only"  [attr-defined]
-src/inmanta/agent/handler.py:0: error: "TResource" has no attribute "report_only"  [attr-defined]
-src/inmanta/agent/handler.py:0: error: "TResource" has no attribute "report_only"  [attr-defined]
 src/inmanta/agent/handler.py:0: error: Argument 3 to "log" of "LogLine" has incompatible type "**dict[str, object]"; expected "datetime | None"  [arg-type]
 src/inmanta/agent/handler.py:0: error: Returning Any from function declared to return "bool"  [no-any-return]
 src/inmanta/agent/reporting.py:0: error: Incompatible types in assignment (expression has type "None", variable has type Module)  [assignment]
@@ -1018,10 +1015,8 @@ src/inmanta/references.py:0: error: Incompatible types in assignment (expression
 src/inmanta/references.py:0: error: Parameter 1 of Literal[...] is invalid  [valid-type]
 src/inmanta/references.py:0: error: Returning Any from function declared to return "type[T] | None"  [no-any-return]
 src/inmanta/resources.py:0: error: "Resource" has no attribute "receive_events"; maybe "get_receive_events"?  [attr-defined]
-src/inmanta/resources.py:0: error: "Resource" has no attribute "report_only"; maybe "get_report_only"?  [attr-defined]
 src/inmanta/resources.py:0: error: Function is missing a type annotation  [no-untyped-def]
 src/inmanta/resources.py:0: error: Incompatible return value type (got "Resource", expected "R")  [return-value]
-src/inmanta/resources.py:0: error: Returning Any from function declared to return "bool"  [no-any-return]
 src/inmanta/resources.py:0: error: Returning Any from function declared to return "bool"  [no-any-return]
 src/inmanta/resources.py:0: error: Returning Any from function declared to return "bool"  [no-any-return]
 src/inmanta/server/agentmanager.py:0: error: Call to untyped function "get_status" in typed context  [no-untyped-call]

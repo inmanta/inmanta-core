@@ -318,6 +318,7 @@ class Resource(metaclass=ResourceMeta):
         const.RESOURCE_ATTRIBUTE_REPORT_ONLY,
     )
     send_event: bool  # Deprecated field
+    report_only: bool  # Used for typing
     model: "proxy.DynamicProxy"
     map: dict[str, Callable[[Optional["export.Exporter"], "proxy.DynamicProxy"], Any]]
 
