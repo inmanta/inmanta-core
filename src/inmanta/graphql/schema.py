@@ -340,6 +340,10 @@ def get_is_compiling(root: "Environment", info: strawberry.Info) -> bool:
 
 
 def get_settings(root: "Environment") -> scalars.JSON:
+    """
+    Returns all environment settings (the ones set by the user and default values for the ones that are not)
+    and their definitions.
+    """
     assert hasattr(root, "settings")
     modified_settings = root.settings["settings"]
     assert modified_settings is not None
