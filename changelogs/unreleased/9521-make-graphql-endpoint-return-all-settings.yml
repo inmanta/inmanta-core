@@ -1,0 +1,6 @@
+---
+description: "Make GraphQL endpoint return all settings and definitions"
+issue-nr: 9521
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [master]

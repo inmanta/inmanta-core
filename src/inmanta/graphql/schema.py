@@ -23,13 +23,14 @@ from typing import Sequence, cast
 
 import inmanta.data.sqlalchemy as models
 import strawberry
-from inmanta.data import get_session, get_session_factory
+from inmanta import data
+from inmanta.data import get_session, get_session_factory, model
 from inmanta.deploy import state
 from inmanta.server.services.compilerservice import CompilerService
 from sqlakeyset import Marker, unserialize_bookmark
 from sqlakeyset.asyncio import select_page
 from sqlalchemy import Boolean, Select, UnaryExpression, and_, asc, case, desc, func, not_, select
-from strawberry import relay
+from strawberry import relay, scalars
 from strawberry.schema.config import StrawberryConfig
 from strawberry.types import Info
 from strawberry.types.info import ContextType
@@ -338,6 +339,30 @@ def get_is_compiling(root: "Environment", info: strawberry.Info) -> bool:
     return compiler_service.is_environment_compiling(environment_id=root.id)
 
 
+def get_settings(root: "Environment") -> scalars.JSON:
+    """
+    Returns all environment settings (the ones set by the user and default values for the ones that are not)
+    and their definitions.
+    """
+    assert hasattr(root, "settings")
+    modified_settings = root.settings["settings"]
+    assert modified_settings is not None
+    setting_values: dict[str, model.EnvironmentSettingDetails] = {}
+    for key, setting_info in data.Environment._settings.items():
+        if stored_setting := modified_settings.get(key, None):
+            setting_values[key] = model.EnvironmentSettingDetails(
+                value=stored_setting["value"],
+                protected=stored_setting.get("protected", False),
+                protected_by=stored_setting.get("protected_by", None),
+            )
+        else:
+            default_value = setting_info.default
+            assert default_value is not None  # Should never happen but setting_info.default is Optional
+            setting_values[key] = model.EnvironmentSettingDetails(value=default_value)
+    setting_definitions = dict(sorted(data.Environment.get_setting_definitions_for_api(setting_values).items()))
+    return {"settings": setting_values, "definition": setting_definitions}
+
+
 @mapper.type(models.Environment)
 class Environment:
     # Add every relation/attribute that we don't want to expose in our GraphQL endpoint to `__exclude__`
@@ -359,9 +384,11 @@ class Environment:
         "resource_set",
         "resource_set_configuration_model",
         "role_assignment",
+        "settings",
     ]
     is_expert_mode: bool = strawberry.field(resolver=get_expert_mode)
     is_compiling: bool = strawberry.field(resolver=get_is_compiling)
+    settings: scalars.JSON = strawberry.field(resolver=get_settings)
 
 
 @strawberry.input
