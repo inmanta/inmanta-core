@@ -456,7 +456,7 @@ async def test_dump_db(
     await server.get_slice(SLICE_RESOURCE).discovered_resources_create_batch(
         env=env1,
         discovered_resources=[
-            model.LinkedDiscoveredResource(
+            model.DiscoveredResourceInput(
                 discovered_resource_id=inmanta.types.ResourceIdStr(rid),
                 values={},
                 discovery_resource_id="discovery::Discovery[discovery,name=discoverer]",

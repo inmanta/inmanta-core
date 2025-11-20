@@ -6945,13 +6945,13 @@ class DiscoveredResource(BaseDocument):
     resource_type: ResourceType
     resource_id_value: str
 
-    discovery_resource_id: Optional[ResourceIdStr]
+    discovery_resource_id: ResourceIdStr
     values: dict[str, object]
 
     __primary_key__ = ("environment", "discovered_resource_id")
 
-    def to_dto(self) -> m.DiscoveredResource:
-        return m.DiscoveredResource(
+    def to_dto(self) -> m.DiscoveredResourceOutput:
+        return m.DiscoveredResourceOutput(
             discovered_resource_id=self.discovered_resource_id,
             resource_type=self.resource_type,
             agent=self.agent,

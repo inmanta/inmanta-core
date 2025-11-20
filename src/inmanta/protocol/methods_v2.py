@@ -27,7 +27,7 @@ import inmanta.types
 from inmanta import const
 from inmanta.const import AgentAction, AllAgentAction, ApiDocsFormat, Change, ClientType, ParameterSource, ResourceState
 from inmanta.data import model
-from inmanta.data.model import DataBaseReport, LinkedDiscoveredResource, PipConfig
+from inmanta.data.model import DataBaseReport, PipConfig
 from inmanta.protocol import methods
 from inmanta.protocol.auth.decorators import auth
 from inmanta.protocol.common import ReturnValue
@@ -1727,9 +1727,9 @@ def discovered_resource_create(
     client_types=[ClientType.agent],
     api_version=2,
 )
-def discovered_resource_create_batch(tid: uuid.UUID, discovered_resources: Sequence[LinkedDiscoveredResource]) -> None:
+def discovered_resource_create_batch(tid: uuid.UUID, discovered_resources: Sequence[model.DiscoveredResourceInput]) -> None:
     """
-    create multiple discovered resource in the DB
+    create multiple discovered resources.
     :param tid: The id of the environment this resource belongs to
     :param discovered_resources: List of discovered_resources containing the discovered_resource_id and values for each resource
     """
@@ -1743,7 +1743,7 @@ def discovered_resource_create_batch(tid: uuid.UUID, discovered_resources: Seque
     client_types=[ClientType.api],
     api_version=2,
 )
-def discovered_resources_get(tid: uuid.UUID, discovered_resource_id: ResourceIdStr) -> model.DiscoveredResource:
+def discovered_resources_get(tid: uuid.UUID, discovered_resource_id: ResourceIdStr) -> model.DiscoveredResourceOutput:
     """
     Get a single discovered resource.
 
@@ -1767,7 +1767,7 @@ def discovered_resources_get_batch(
     end: Optional[str] = None,
     sort: str = "discovered_resource_id.asc",
     filter: Optional[Mapping[str, Sequence[str]]] = None,
-) -> list[model.DiscoveredResource]:
+) -> list[model.DiscoveredResourceOutput]:
     """
     Get a list of discovered resources.
 

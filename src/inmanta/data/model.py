@@ -897,17 +897,15 @@ class DiscoveredResourceABC(BaseModel):
     values: dict[str, object]
     managed_resource_uri: Optional[str] = None
 
-    discovery_resource_id: Optional[ResourceId]
+    discovery_resource_id: ResourceId
 
     @computed_field  # type: ignore[misc]
     @property
     def discovery_resource_uri(self) -> str | None:
-        if self.discovery_resource_id is None:
-            return None
         return f"/api/v2/resource/{urllib.parse.quote(self.discovery_resource_id, safe='')}"
 
 
-class DiscoveredResource(DiscoveredResourceABC):
+class DiscoveredResourceOutput(DiscoveredResourceABC):
     """
     Discovered resource for API returns. Contains additional (redundant) metadata to improve user experience.
     """
@@ -917,19 +915,10 @@ class DiscoveredResource(DiscoveredResourceABC):
     resource_id_value: str
 
 
-class LinkedDiscoveredResource(DiscoveredResourceABC):
+class DiscoveredResourceInput(DiscoveredResourceABC):
     """
-    DiscoveredResource linked to the discovery resource that discovered it.
-
-    :param discovery_resource_id: Resource id of the (managed) discovery resource that reported this
-           discovered resource.
+    A discovered resource that is sent to the API.
     """
-
-    # This class is used as API input. Its behaviour can be directly incorporated into the DiscoveredResourceABC parent class
-    # when providing the id of the discovery resource is mandatory for all discovered resource. Ticket link:
-    # https://github.com/inmanta/inmanta-core/issues/8004
-
-    discovery_resource_id: ResourceId
 
     def to_dao(self, env: uuid.UUID) -> "data.DiscoveredResource":
         parsed_id: resources.Id = resources.Id.parse_id(self.discovered_resource_id)

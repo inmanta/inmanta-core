@@ -346,7 +346,7 @@ async def test_discovery_resource_bad_res_id(server, client, agent, environment)
 
     expected_error_message = (
         "Invalid request: Failed to validate argument\n"
-        "1 validation error for LinkedDiscoveredResource\n"
+        "1 validation error for DiscoveredResourceInput\n"
         "discovered_resource_id\n"
         "  Value error, Invalid id for resource invalid_rid "
         "[type=value_error, input_value='invalid_rid', input_type=str]\n"
@@ -372,7 +372,7 @@ async def test_discovery_resource_bad_res_id(server, client, agent, environment)
     )
     expected_error_message = (
         "Invalid request: Failed to validate argument\n"
-        "1 validation error for LinkedDiscoveredResource\n"
+        "1 validation error for DiscoveredResourceInput\n"
         "discovery_resource_id\n"
         "  Value error, Invalid id for resource invalid_rid "
         "[type=value_error, input_value='invalid_rid', input_type=str]\n"

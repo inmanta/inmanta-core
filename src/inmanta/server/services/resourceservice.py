@@ -38,9 +38,7 @@ from inmanta.data.dataview import (
     ResourceView,
 )
 from inmanta.data.model import (
-    DiscoveredResourceABC,
     LatestReleasedResource,
-    LinkedDiscoveredResource,
     ReleasedResourceDetails,
     Resource,
     ResourceAction,
@@ -469,7 +467,7 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
         discovery_resource_id: ResourceIdStr,
     ) -> None:
         try:
-            discovered_resource = LinkedDiscoveredResource(
+            discovered_resource = model.DiscoveredResourceInput(
                 discovered_resource_id=discovered_resource_id, values=values, discovery_resource_id=discovery_resource_id
             )
         except ValidationError as e:
@@ -483,7 +481,7 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
 
     @handle(methods_v2.discovered_resource_create_batch, env="tid")
     async def discovered_resources_create_batch(
-        self, env: data.Environment, discovered_resources: list[LinkedDiscoveredResource]
+        self, env: data.Environment, discovered_resources: list[model.DiscoveredResourceInput]
     ) -> None:
         dao_list = [res.to_dao(env.id) for res in discovered_resources]
         await data.DiscoveredResource.insert_many_with_overwrite(dao_list)
@@ -491,7 +489,7 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
     @handle(methods_v2.discovered_resources_get, env="tid")
     async def discovered_resources_get(
         self, env: data.Environment, discovered_resource_id: ResourceIdStr
-    ) -> DiscoveredResourceABC:
+    ) -> model.DiscoveredResourceOutput:
         if not self.feature_manager.enabled(resource_discovery):
             raise Forbidden(message="The resource discovery feature is not enabled.")
 
@@ -510,7 +508,7 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
         end: Optional[str] = None,
         sort: str = "discovered_resource_id.asc",
         filter: Optional[dict[str, list[str]]] = None,
-    ) -> ReturnValue[Sequence[DiscoveredResourceABC]]:
+    ) -> ReturnValue[Sequence[model.DiscoveredResourceOutput]]:
         if not self.feature_manager.enabled(resource_discovery):
             raise Forbidden(message="The resource discovery feature is not enabled.")
 

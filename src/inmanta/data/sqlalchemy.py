@@ -619,7 +619,7 @@ class Discoveredresource(Base):
     discovered_resource_id: Mapped[str] = mapped_column(String, primary_key=True)
     values: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     discovered_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False)
-    discovery_resource_id: Mapped[Optional[str]] = mapped_column(String)
+    discovery_resource_id: Mapped[Optional[str]] = mapped_column(String, nullable=False)
 
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="discoveredresource")
 

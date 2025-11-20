@@ -35,7 +35,7 @@ import inmanta
 from inmanta import const, data, protocol, resources, tracing
 from inmanta.agent.cache import AgentCache
 from inmanta.const import ParameterSource, ResourceState
-from inmanta.data.model import AttributeStateChange, BaseModel, LinkedDiscoveredResource
+from inmanta.data.model import AttributeStateChange, BaseModel, DiscoveredResourceInput
 from inmanta.protocol import Result, json_encode
 from inmanta.stable_api import stable_api
 from inmanta.types import ResourceIdStr, SimpleTypes
@@ -1129,7 +1129,7 @@ class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered])
             self.pre(ctx, resource)
 
             def _call_discovered_resource_create_batch(
-                discovered_resources: Sequence[LinkedDiscoveredResource],
+                discovered_resources: Sequence[DiscoveredResourceInput],
             ) -> Awaitable[Result]:
                 return self.get_client().discovered_resource_create_batch(
                     tid=self._agent.environment,
@@ -1137,8 +1137,8 @@ class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered])
                 )
 
             discovered_resources_raw: Mapping[ResourceIdStr, TDiscovered] = self.discover_resources(ctx, resource)
-            discovered_resources: Sequence[LinkedDiscoveredResource] = [
-                LinkedDiscoveredResource(
+            discovered_resources: Sequence[DiscoveredResourceInput] = [
+                DiscoveredResourceInput(
                     discovered_resource_id=resource_id,
                     values=values.model_dump(),
                     discovery_resource_id=resource.id.resource_str(),
