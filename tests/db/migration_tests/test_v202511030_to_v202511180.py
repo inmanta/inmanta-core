@@ -54,3 +54,10 @@ async def test_make_discovery_resource_id_column_mandatory(
         WHERE discovered_resource_id='discovery::Discovered[myagent,name=discovered]'
         """
     )
+    assert "discovery::Discovery[discovery,name=discoverer]" == await postgresql_client.fetchval(
+        f"""
+        SELECT discovery_resource_id
+        FROM {data.DiscoveredResource.table_name()}
+        WHERE discovered_resource_id='discovery::deep::submod::Dis-co-ve-red[my-agent,name=NameWithSpecial!,[::#&^@chars]'
+        """
+    )
