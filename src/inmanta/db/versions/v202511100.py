@@ -27,7 +27,7 @@ async def update(connection: Connection) -> None:
     ALTER TABLE public.resource_persistent_state
         ADD COLUMN last_deploy_compliant BOOLEAN;
 
-    -- SKIPPED/NEW will remain as NULL
+    -- NEW will remain as NULL
     UPDATE public.resource_persistent_state
     SET last_deploy_compliant=
         CASE

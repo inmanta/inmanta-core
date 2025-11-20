@@ -477,7 +477,7 @@ async def test_resource_count_metric(clienthelper, client, agent):
     metrics_service.register_metric_collector(metrics_collector=rcmc)
 
     # flush the metrics for the first time:
-    # create 30 records: (3 envs * 11 statuses)
+    # create 33 records: (3 envs * 11 statuses)
     # 2 records with count different from 0 (3 resources in available state for the first environment and 2 for the second)
     await metrics_service.flush_metrics()
     result_gauge = await data.EnvironmentMetricsGauge.get_list()

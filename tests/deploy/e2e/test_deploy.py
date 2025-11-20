@@ -1729,7 +1729,7 @@ async def test_skipped_for_dependency(resource_container, server, client, client
 
     # key1 will no longer skip, but we switch to report mode, but the resource was never deployed so it will be non-compliant
     # key2 will also switch to report mode, but previous version already deployed so it will be compliant
-    # key3 requires key1 and will skip because it is non-compliant
+    # key3 switches to enforcing mode; requires key1 and will skip because it is non-compliant
     version = await clienthelper.get_version()
     resources = [
         {

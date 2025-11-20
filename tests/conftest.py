@@ -2960,7 +2960,6 @@ async def mixed_resource_generator(
                     "purged": False,
                     "requires": [] if ri % 2 == 0 else [resource_id(ri - 1)],
                     "my_attribute": iteration,
-                    "report_only": True if ri in (6, 7) else False,
                 }
                 for ri in range(resources_per_version)
             ]
@@ -3016,15 +3015,15 @@ async def mixed_resource_generator(
                 if "sub=4]" in rid:
                     # never finish deploying r4
                     return
-                expected_resource_state: const.HandlerResourceState
+                reported_resource_state: const.HandlerResourceState
                 if "sub=2]" in rid:
-                    expected_resource_state = const.HandlerResourceState.failed
+                    reported_resource_state = const.HandlerResourceState.failed
                 elif "sub=3]" in rid:
-                    expected_resource_state = const.HandlerResourceState.skipped
+                    reported_resource_state = const.HandlerResourceState.skipped
                 elif "sub=5]" in rid:
-                    expected_resource_state = const.HandlerResourceState.non_compliant
+                    reported_resource_state = const.HandlerResourceState.non_compliant
                 else:
-                    expected_resource_state = const.HandlerResourceState.deployed
+                    reported_resource_state = const.HandlerResourceState.deployed
 
                 if deploy_intent is not None:
                     await dummy_scheduler.deploy_done(
@@ -3032,7 +3031,7 @@ async def mixed_resource_generator(
                         DeployReport(
                             rvid=ResourceVersionIdStr(f"{rid},v={version}"),
                             action_id=action_id,
-                            resource_state=expected_resource_state,
+                            resource_state=reported_resource_state,
                             messages=[],
                             changes={},
                             change=None,
