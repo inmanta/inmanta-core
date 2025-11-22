@@ -28,7 +28,7 @@ from uuid import UUID
 
 import pytest
 
-from deploy.scheduler_mocks import FAIL_DEPLOY, DummyManager, TestScheduler
+from deploy.scheduler_mocks import FAIL_DEPLOY, NON_COMPLIANT_DEPLOY, DummyManager, TestScheduler
 from deploy.test_scheduler_agent import retry_limited_fast
 from inmanta import const, data
 from inmanta.deploy import state
@@ -181,6 +181,7 @@ def make_resource_minimal(environment_mock):
 async def test_config_update(inmanta_config, make_resource_minimal, environment, server, client):
     """
     Test that the TimerManager correctly responds to changes to the config for deploy and repair timers.
+    Test that reporting resources receive the correct timers
     """
     env_id = UUID(environment)
 
@@ -198,10 +199,17 @@ async def test_config_update(inmanta_config, make_resource_minimal, environment,
     rid1 = "test::Resource[agent1,name=1]"
     rid2 = "test::Resource[agent2,name=2]"
     rid3 = "test::Resource[agent3,name=3]"
+    rid4 = "test::Resource[agent4,name=4]"
+    rid5 = "test::Resource[agent5,name=5]"
+    rid6 = "test::Resource[agent6,name=6]"
 
     # one deployed
     # one failed
     # one undeployable
+    # -- reporting resources --
+    # one compliant
+    # one non-compliant
+    # one failed
     resources = {
         ResourceIdStr(rid1): make_resource_minimal(
             rid1,
@@ -216,6 +224,36 @@ async def test_config_update(inmanta_config, make_resource_minimal, environment,
         ResourceIdStr(rid3): make_resource_minimal(
             rid3,
             values={"value": "vx", const.RESOURCE_ATTRIBUTE_SEND_EVENTS: False, FAIL_DEPLOY: False},
+            requires={},
+        ),
+        ResourceIdStr(rid4): make_resource_minimal(
+            rid4,
+            values={
+                "value": "vx",
+                const.RESOURCE_ATTRIBUTE_SEND_EVENTS: False,
+                const.RESOURCE_ATTRIBUTE_REPORT_ONLY: True,
+                FAIL_DEPLOY: False,
+            },
+            requires={},
+        ),
+        ResourceIdStr(rid5): make_resource_minimal(
+            rid5,
+            values={
+                "value": "vx",
+                const.RESOURCE_ATTRIBUTE_SEND_EVENTS: False,
+                const.RESOURCE_ATTRIBUTE_REPORT_ONLY: True,
+                NON_COMPLIANT_DEPLOY: True,
+            },
+            requires={},
+        ),
+        ResourceIdStr(rid6): make_resource_minimal(
+            rid6,
+            values={
+                "value": "vx",
+                const.RESOURCE_ATTRIBUTE_SEND_EVENTS: False,
+                const.RESOURCE_ATTRIBUTE_REPORT_ONLY: True,
+                FAIL_DEPLOY: True,
+            },
             requires={},
         ),
     }
@@ -259,6 +297,9 @@ async def test_config_update(inmanta_config, make_resource_minimal, environment,
     is_approx(rid1, 3600)
     is_approx(rid2, 60)
     is_disabled(rid3)
+    is_approx(rid4, 3600)
+    is_approx(rid5, 60)
+    is_approx(rid6, 60)
 
     # Updated timers
     result = await client.set_setting(environment, data.AUTOSTART_AGENT_DEPLOY_INTERVAL, "600")
@@ -272,6 +313,9 @@ async def test_config_update(inmanta_config, make_resource_minimal, environment,
     is_approx(rid1, 36000)
     is_approx(rid2, 600)
     is_disabled(rid3)
+    is_approx(rid4, 36000)
+    is_approx(rid5, 600)
+    is_approx(rid6, 600)
 
     # Repair on cron job
     result = await client.set_setting(environment, data.AUTOSTART_AGENT_DEPLOY_INTERVAL, "60")

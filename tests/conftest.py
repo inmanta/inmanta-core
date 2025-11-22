@@ -2477,15 +2477,14 @@ def resource_container(clean_reset):
                 current.value = self.get(resource.id.get_agent_name(), resource.key)
             else:
                 current.value = None
-
+            # Fail in read stage to test reporting resources
+            if self.fail(resource.id.get_agent_name(), resource.key):
+                raise Exception("Failed")
             return current
 
         def do_changes(self, ctx, resource, changes):
             if self.skip(resource.id.get_agent_name(), resource.key):
                 raise SkipResource()
-
-            if self.fail(resource.id.get_agent_name(), resource.key):
-                raise Exception("Failed")
 
             if "purged" in changes:
                 self.touch(resource.id.get_agent_name(), resource.key)
@@ -2916,6 +2915,8 @@ async def mixed_resource_generator(
         <instances> skipped for undefined
         <instances> failed
         <instances> skipped
+        <instances> deploying
+        <instances> non-compliant
         min(<resources_per_version> / 2, 10) *<instances> orphans
         <resources_per_version> - 5 deployed
     """
@@ -3013,21 +3014,23 @@ async def mixed_resource_generator(
                 if "sub=4]" in rid:
                     # never finish deploying r4
                     return
+                reported_resource_state: const.HandlerResourceState
+                if "sub=2]" in rid:
+                    reported_resource_state = const.HandlerResourceState.failed
+                elif "sub=3]" in rid:
+                    reported_resource_state = const.HandlerResourceState.skipped
+                elif "sub=5]" in rid:
+                    reported_resource_state = const.HandlerResourceState.non_compliant
+                else:
+                    reported_resource_state = const.HandlerResourceState.deployed
+
                 if deploy_intent is not None:
                     await dummy_scheduler.deploy_done(
                         deploy_intent,
                         DeployReport(
                             rvid=ResourceVersionIdStr(f"{rid},v={version}"),
                             action_id=action_id,
-                            resource_state=(
-                                const.HandlerResourceState.failed
-                                if "sub=2]" in rid
-                                else (
-                                    const.HandlerResourceState.skipped
-                                    if "sub=3]" in rid
-                                    else const.HandlerResourceState.deployed
-                                )
-                            ),
+                            resource_state=reported_resource_state,
                             messages=[],
                             changes={},
                             change=None,

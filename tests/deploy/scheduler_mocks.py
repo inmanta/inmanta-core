@@ -43,6 +43,7 @@ from inmanta.types import ResourceIdStr
 from utils import DummyCodeManager
 
 FAIL_DEPLOY: str = "fail_deploy"
+NON_COMPLIANT_DEPLOY: str = "non_compliant_deploy"
 
 
 class DummyExecutor(executor.Executor):
@@ -78,11 +79,13 @@ class DummyExecutor(executor.Executor):
         assert reason
         self.seen.append(resource_details)
         self.execute_count += 1
-        result = (
-            const.HandlerResourceState.failed
-            if resource_details.attributes.get(FAIL_DEPLOY, False) is True
-            else const.HandlerResourceState.deployed
-        )
+        result: const.HandlerResourceState
+        if resource_details.attributes.get(FAIL_DEPLOY, False) is True:
+            result = const.HandlerResourceState.failed
+        elif resource_details.attributes.get(NON_COMPLIANT_DEPLOY, False) is True:
+            result = const.HandlerResourceState.non_compliant
+        else:
+            result = const.HandlerResourceState.deployed
         return DeployReport(
             resource_details.rvid,
             action_id,

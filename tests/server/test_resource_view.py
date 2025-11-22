@@ -105,6 +105,7 @@ async def test_consistent_resource_state_reporting(
             last_deploy_result=state.DeployResult.FAILED,
             blocked=state.Blocked.NOT_BLOCKED,
             last_deployed=now,
+            last_deploy_compliant=False,
         ),
         started=now,
         finished=now,

@@ -672,6 +672,15 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
     total_resources_in_latest_version = resources_per_version * instances
     total_resources = total_resources_in_latest_version + (orphans * instances)
     await mixed_resource_generator(environment, instances, resources_per_version)
+
+    # Quick way of simulating a non-compliant report
+    # It has to be non-orphan otherwise the complianceState returned will be None
+    rps = await data.ResourcePersistentState.get_one(
+        environment=environment, last_deploy_result=state.DeployResult.DEPLOYED, is_orphan=False
+    )
+    assert rps
+    await rps.update_fields(last_deploy_compliant=False)
+
     filters = [
         # (1 undefined, 1 skipped for undefined) * <instances>
         {
@@ -747,6 +756,18 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
                     "lastDeployResult": state.DeployResult.NEW.name,
                     "isDeploying": False,
                     "complianceState": state.Compliance.HAS_UPDATE.name,
+                }
+            },
+        },
+        # Non-compliant report
+        {
+            "query": "lastDeployResult: {eq: DEPLOYED} isDeploying: false complianceState: {eq: NON_COMPLIANT}",
+            "result": 1,
+            "assertion": {
+                "state": {
+                    "lastDeployResult": state.DeployResult.DEPLOYED.name,
+                    "isDeploying": False,
+                    "complianceState": state.Compliance.NON_COMPLIANT.name,
                 }
             },
         },
