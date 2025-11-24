@@ -201,6 +201,8 @@ class AuthJWTConfig:
             # Make sure we don't have a partially loaded config.
             cls.reset()
             raise
+        else:
+            cls._config_successfully_loaded = True
 
     @classmethod
     def list(cls) -> list[str]:
