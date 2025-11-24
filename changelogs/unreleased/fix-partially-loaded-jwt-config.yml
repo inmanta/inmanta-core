@@ -1,0 +1,6 @@
+---
+description: "Fix bug where the server might end up with a partially loaded JWT config if an API call is made to the server while the third-party authentication provider is not up yet."
+change-type: patch
+destination-branches: [master, iso8, iso7]
+sections:
+  bugfix: "{{description}}"
