@@ -1310,7 +1310,7 @@ class AgentView(DataView[AgentOrder, model.Agent]):
         ]
 
 
-class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredResource]):
+class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredResourceOutput]):
     def __init__(
         self,
         environment: data.Environment,
@@ -1381,7 +1381,7 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
 
     def construct_dtos(self, records: Sequence[Record]) -> Sequence[dict[str, str]]:
         return [
-            model.DiscoveredResource(
+            model.DiscoveredResourceOutput(
                 discovered_resource_id=rid.resource_str(),
                 resource_type=rid.entity_type,
                 agent=rid.agent_name,
