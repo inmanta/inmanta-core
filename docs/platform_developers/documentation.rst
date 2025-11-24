@@ -3,15 +3,6 @@ Documentation writing
 
 Inmanta uses Sphinx to generate documentation.
 
-Inmanta code documentation
---------------------------
-
-Modules
-*******
-
-Python core
-***********
-
 Sphinx tooling
 --------------
 The inmanta-sphinx package provides additional sphinx directives. The directives can render inmanta module documentation

@@ -105,7 +105,7 @@ Limitations
 -----------
 
 * The compiler cannot verify all constraints that would be verified when a full build is run. Some index constraints, for instance, cannot be verified. The model creator is in charge of making sure that these constraints are met.
-    See `Modeling guidelines`_ on how to design your model.
+  See `Modeling guidelines`_ on how to design your model.
 * If just a partial compile is performed, it is possible for a shared resource to become obsolete.
   The shared resource will become obsolete when a partial compile deletes the last resource that depended on it, but it is preserved as a server-managed resource because partial compiles cannot delete shared resources.
   A full compile is required to remove shared resources. Scheduled full compilations that ``garbage-collect`` these shared resources are one way to fix this.
