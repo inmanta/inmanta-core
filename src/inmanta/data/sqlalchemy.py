@@ -740,6 +740,7 @@ class ResourcePersistentState(Base):
             "cancelled",
             "undefined",
             "skipped_for_undefined",
+            "non_compliant",
             name="non_deploying_resource_state",
         ),
         nullable=False,
@@ -760,6 +761,7 @@ class ResourcePersistentState(Base):
     last_deployed_version: Mapped[Optional[int]] = mapped_column(Integer)
     current_intent_attribute_hash: Mapped[Optional[str]] = mapped_column(String)
     is_deploying: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text("false"))
+    last_deploy_compliant: Mapped[Optional[bool]] = mapped_column(Boolean)
 
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="resource_persistent_state")
 
@@ -770,7 +772,7 @@ class ResourcePersistentState(Base):
             self.is_undefined,
             self.last_deployed_attribute_hash,
             self.current_intent_attribute_hash,
-            state.DeployResult(self.last_deploy_result.lower()),
+            self.last_deploy_compliant,
         )
 
     @compliance_state.inplace.expression
@@ -786,7 +788,7 @@ class ResourcePersistentState(Base):
                 ),
                 state.Compliance.HAS_UPDATE.name,
             ),
-            (cls.last_deploy_result == state.DeployResult.DEPLOYED.name, state.Compliance.COMPLIANT.name),
+            (cls.last_deploy_compliant.is_(True), state.Compliance.COMPLIANT.name),
             else_=state.Compliance.NON_COMPLIANT.name,
         )
 
@@ -1006,6 +1008,7 @@ class Resourceaction(Base):
             "cancelled",
             "undefined",
             "skipped_for_undefined",
+            "non_compliant",
             name="resourcestate",
         ),
         server_default=text("'available'::resourcestate"),

@@ -477,11 +477,11 @@ async def test_resource_count_metric(clienthelper, client, agent):
     metrics_service.register_metric_collector(metrics_collector=rcmc)
 
     # flush the metrics for the first time:
-    # create 30 records: (3 envs * 10 statuses)
+    # create 33 records: (3 envs * 11 statuses)
     # 2 records with count different from 0 (3 resources in available state for the first environment and 2 for the second)
     await metrics_service.flush_metrics()
     result_gauge = await data.EnvironmentMetricsGauge.get_list()
-    assert len(result_gauge) == 30
+    assert len(result_gauge) == 33
     assert any(
         x.count == 3 and x.metric_name == "resource.resource_count" and x.category == "available" and x.environment == env_uuid1
         for x in result_gauge
@@ -518,19 +518,20 @@ async def test_resource_count_metric(clienthelper, client, agent):
             last_deploy_result=state.DeployResult.DEPLOYED,
             blocked=state.Blocked.NOT_BLOCKED,
             last_deployed=now,
+            last_deploy_compliant=True,
         ),
         started=now,
         finished=now,
     )
 
     # flush the metrics for the second time:
-    # 60 records in total and 5 with a count different from 0
+    # 66 records in total and 5 with a count different from 0
     # the 2 old record +
     # 3 new records (1 for available state and one for the deployed state for the first environment
     # and one for the available state for the second environment)
     await metrics_service.flush_metrics()
     result_gauge = await data.EnvironmentMetricsGauge.get_list()
-    assert len(result_gauge) == 60
+    assert len(result_gauge) == 66
     assert any(
         x.count == 3 and x.metric_name == "resource.resource_count" and x.category == "available" and x.environment == env_uuid1
         for x in result_gauge
@@ -595,7 +596,7 @@ async def test_resource_count_metric(clienthelper, client, agent):
 
     await metrics_service.flush_metrics()
     result_gauge = await data.EnvironmentMetricsGauge.get_list()
-    assert len(result_gauge) == 90
+    assert len(result_gauge) == 99
     # Assert that we only fetch the status of the resources on the latest version of the model
     non_zero_status = sorted(
         [x for x in result_gauge if x.environment == env_uuid1 and x.count != 0], key=lambda x: x.timestamp, reverse=True
@@ -687,7 +688,7 @@ async def test_resource_count_metric_released(client, server, agent, clienthelpe
 
     await metrics_service.flush_metrics()
     result_gauge = await data.EnvironmentMetricsGauge.get_list()
-    assert len(result_gauge) == 10
+    assert len(result_gauge) == 11
     assert any(
         x.count == 3
         and x.metric_name == "resource.resource_count"
@@ -695,7 +696,7 @@ async def test_resource_count_metric_released(client, server, agent, clienthelpe
         and str(x.environment) == environment
         for x in result_gauge
     )
-    assert 9 == len([obj for obj in result_gauge if obj.count == 0])
+    assert 10 == len([obj for obj in result_gauge if obj.count == 0])
 
 
 async def test_resource_count_empty_datapoint(client, server):
@@ -720,8 +721,8 @@ async def test_resource_count_empty_datapoint(client, server):
 
     await metrics_service.flush_metrics()
     result_gauge = await data.EnvironmentMetricsGauge.get_list()
-    # 2 envs with each 10 statuses with count 0
-    assert len(result_gauge) == 20
+    # 2 envs with each 11 statuses with count 0
+    assert len(result_gauge) == 22
     assert all(hasattr(res, "category") and res.category != "__None__" and res.count == 0 for res in result_gauge)
 
 

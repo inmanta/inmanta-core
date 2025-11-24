@@ -496,7 +496,7 @@ src/inmanta/deploy/scheduler.py:0: error: "object" has no attribute "__iter__"; 
 src/inmanta/deploy/state.py:0: error: "object" has no attribute "__iter__"; maybe "__dir__" or "__str__"? (not iterable)  [attr-defined]
 src/inmanta/deploy/state.py:0: error: Argument "attribute_hash" to "ResourceIntent" has incompatible type "object"; expected "str"  [arg-type]
 src/inmanta/deploy/state.py:0: error: Argument "attributes" to "ResourceIntent" has incompatible type "object"; expected "Mapping[str, object]"  [arg-type]
-src/inmanta/deploy/state.py:0: error: Enum index should be a string (actual index type "object")  [misc]
+src/inmanta/deploy/state.py:0: error: Argument "last_deploy_compliant" to "ResourceState" has incompatible type "object"; expected "bool | None"  [arg-type]
 src/inmanta/deploy/state.py:0: error: Enum index should be a string (actual index type "object")  [misc]
 src/inmanta/deploy/state.py:0: error: Enum index should be a string (actual index type "object")  [misc]
 src/inmanta/deploy/state.py:0: error: Enum index should be a string (actual index type "object")  [misc]

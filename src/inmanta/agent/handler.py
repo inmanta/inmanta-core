@@ -592,6 +592,15 @@ class HandlerAPI(ABC, Generic[TResource]):
 
             return {rid: state for rid, state in reqs.items() if state in states}
 
+        def execute_and_reload() -> None:
+            self.execute(ctx, resource)
+            if _should_reload():
+                self.do_reload(ctx, resource)
+
+        # report-only resources don't care about dependencies
+        if resource.report_only:
+            execute_and_reload()
+            return
         # Check if any dependencies got into any unexpected state
         dependencies_in_unexpected_state = filter_resources_by_state(
             requires,
@@ -627,9 +636,7 @@ class HandlerAPI(ABC, Generic[TResource]):
 
         failed_dependencies = [req for req, status in requires.items() if status != ResourceState.deployed]
         if not any(failed_dependencies):
-            self.execute(ctx, resource)
-            if _should_reload():
-                self.do_reload(ctx, resource)
+            execute_and_reload()
         else:
             ctx.set_resource_state(const.HandlerResourceState.skipped_for_dependency)
             ctx.info(
@@ -879,7 +886,11 @@ class ResourceHandler(HandlerAPI[TResource]):
                 changes = self.list_changes(ctx, resource)
                 ctx.update_changes(changes)
 
-            if not dry_run:
+            if resource.report_only:
+                ctx.set_resource_state(
+                    const.HandlerResourceState.non_compliant if changes else const.HandlerResourceState.deployed
+                )
+            elif not dry_run:
                 with tracing.span("do_changes"):
                     self.do_changes(ctx, resource, changes)
                     ctx.set_resource_state(const.HandlerResourceState.deployed)
@@ -1039,7 +1050,11 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
             for field, values in changes.items():
                 ctx.add_change(field, desired=values["desired"], current=values["current"])
 
-            if not dry_run:
+            if resource.report_only:
+                ctx.set_resource_state(
+                    const.HandlerResourceState.non_compliant if changes else const.HandlerResourceState.deployed
+                )
+            elif not dry_run:
                 if "purged" in changes:
                     if not changes["purged"]["desired"]:
                         ctx.debug("Calling create_resource")
