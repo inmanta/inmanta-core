@@ -1,5 +1,5 @@
 Python client
--------------
+=============
 
 The rest API endpoints described below are also available as a `redoc spec <openapi.html#http://>`_.
 
@@ -32,7 +32,7 @@ to retrieve a fully typed object e.g.:
 
 
 Paging, sorting and filtering
-=============================
+#############################
 
 The (v2) API endpoints that offer paging, sorting and filtering follow a convention.
 They share the following parameters:
@@ -117,7 +117,7 @@ filter
 .. _python_client_mypy_plugin:
 
 Static type checking
-====================
+####################
 
 
 The inmanta mypy plugin provides static type checking on the methods called via the python client.
@@ -152,18 +152,19 @@ Use mypy for type checking:
 
 
 Endpoints
----------
+#########
 
+This section contains an overview of all the API endpoints the server offers.
 
 V1 endpoints
-============
+------------
 .. automodule:: inmanta.protocol.methods
     :members:
 
 .. _v2-endpoints:
 
 V2 endpoints
-============
+------------
 
 .. automodule:: inmanta.protocol.methods_v2
     :members:

@@ -155,14 +155,54 @@ class AuthJWTConfig:
 
     sections: dict[str, "AuthJWTConfig"] = {}
     issuers: dict[str, "AuthJWTConfig"] = {}
+    _config_successfully_loaded: bool = False
 
     validate_cert: bool
     key: bytes
 
     @classmethod
     def reset(cls) -> None:
+        cls._config_successfully_loaded = False
         cls.sections = {}
         cls.issuers = {}
+
+    @classmethod
+    def _load_config_and_validate(cls) -> None:
+        if cls._config_successfully_loaded:
+            return
+
+        try:
+            cfg = config.Config.get_instance()
+            prefix_len = len(AUTH_JWT_PREFIX)
+
+            for config_section in cfg.keys():
+                if config_section[:prefix_len] == AUTH_JWT_PREFIX:
+                    name = config_section[prefix_len:]
+                    if name not in cls.sections:
+                        obj = cls(name, config_section, cfg[config_section])
+                        cls.sections[name] = obj
+                        if obj.issuer in cls.issuers:
+                            raise ValueError("Only one configuration per issuer is supported")
+
+                        cls.issuers[obj.issuer] = obj
+
+            # Verify that only one has sign set to true
+            sign = False
+            for section in cls.sections.values():
+                if section.sign:
+                    if sign:
+                        raise ValueError("Only one auth_jwt section may have sign set to true")
+                    else:
+                        sign = True
+
+            if len(cls.sections.keys()) > 0 and not sign:
+                raise ValueError("One auth_jwt section should have sign set to true")
+        except Exception:
+            # Make sure we don't have a partially loaded config.
+            cls.reset()
+            raise
+        else:
+            cls._config_successfully_loaded = True
 
     @classmethod
     def list(cls) -> list[str]:
@@ -170,32 +210,7 @@ class AuthJWTConfig:
         Return a list of all defined auth jwt configurations. This method will load new sections if they were added
         since the last invocation.
         """
-        cfg = config.Config.get_instance()
-        prefix_len = len(AUTH_JWT_PREFIX)
-
-        for config_section in cfg.keys():
-            if config_section[:prefix_len] == AUTH_JWT_PREFIX:
-                name = config_section[prefix_len:]
-                if name not in cls.sections:
-                    obj = cls(name, config_section, cfg[config_section])
-                    cls.sections[name] = obj
-                    if obj.issuer in cls.issuers:
-                        raise ValueError("Only one configuration per issuer is supported")
-
-                    cls.issuers[obj.issuer] = obj
-
-        # Verify that only one has sign set to true
-        sign = False
-        for section in cls.sections.values():
-            if section.sign:
-                if sign:
-                    raise ValueError("Only one auth_jwt section may have sign set to true")
-                else:
-                    sign = True
-
-        if len(cls.sections.keys()) > 0 and not sign:
-            raise ValueError("One auth_jwt section should have sign set to true")
-
+        cls._load_config_and_validate()
         return list(cls.sections.keys())
 
     @classmethod
@@ -203,7 +218,7 @@ class AuthJWTConfig:
         """
         Get the config with the given name
         """
-        cls.list()
+        cls._load_config_and_validate()
         if name in cls.sections:
             return cls.sections[name]
         return None
@@ -213,7 +228,7 @@ class AuthJWTConfig:
         """
         Get the configuration with sign is true
         """
-        cls.list()
+        cls._load_config_and_validate()
         for cfg in cls.sections.values():
             if cfg.sign:
                 return cfg
@@ -226,8 +241,7 @@ class AuthJWTConfig:
         again. For loading additional configuration, call list() first. This method is in the auth path for each API
         request.
         """
-        if len(cls.issuers) == 0:
-            cls.list()
+        cls._load_config_and_validate()
         if issuer in cls.issuers:
             return cls.issuers[issuer]
         return None

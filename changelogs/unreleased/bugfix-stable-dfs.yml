@@ -1,0 +1,7 @@
+description: "Bugfix in util.stable_depth_first"
+change-type: patch
+sections:
+  bugfix: "Fixed broken cycle detection in inmanta.util.stable_depth_first function."
+destination-branches:
+  - master
+  - iso8

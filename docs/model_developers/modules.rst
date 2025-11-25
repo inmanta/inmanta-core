@@ -185,7 +185,7 @@ The format for requires in requirements.txt is the following:
 
 
 Installing modules
-==================
+##################
 Since modules often have dependencies on other modules, it is common to develop against multiple
 modules (or a project and one or more modules) simultaneously. One might for example need to
 extend a dependent module to add support for some new feature. Because this use case is so common,
@@ -193,7 +193,7 @@ this section will describe how to work on multiple modules simultaneously so tha
 visible to the compiler. This procedure is of course applicable for working on a single module as well.
 
 Setting up the dev environment
-##############################
+------------------------------
 To set up the development environment for a project, activate your development Python environment and
 install the project with ``inmanta project install``.
 If you want to be able to make changes to one of these modules, the easiest way is to
@@ -218,7 +218,7 @@ by the compiler.
 
 
 Module installation on the server
-#################################
+---------------------------------
 
 The orchestrator server generally installs modules from the configured Python package
 repository, respecting the project's constraints on its modules and all inter-module constraints. The server is then responsible
@@ -232,7 +232,7 @@ from the Python package repository but instead contains all Python code as prese
 
 
 Configure the Inmanta server to install modules from a private python package repository
-----------------------------------------------------------------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Modules can be installed from a Python package repository that requires authentication. This section explains how the Inmanta server should be configured to install modules from such a Python package repository.
 
