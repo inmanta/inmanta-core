@@ -742,6 +742,15 @@ class Entity(NamedType, WithComment):
             # allow inheritance: delegate to child type
             return instance.type.to_python(instance, path=path)
 
+        def domain_conversion(value: object) -> object:
+            if isinstance(value, NoneValue):
+                return None
+            if isinstance(value, list):
+                return [domain_conversion(v) for v in value]
+            if isinstance(value, dict):
+                return {k: domain_conversion(v) for k, v in value.items()}
+            return value
+
         def create() -> object:
             # Convert values
             # All values are primitive, so this is trivial
@@ -752,7 +761,7 @@ class Entity(NamedType, WithComment):
                 # declared (potentially nested) in the Python domain.
                 self._paired_dataclass_field_types[k].validate(v)
             assert self._paired_dataclass is not None
-            return self._paired_dataclass(**kwargs)
+            return self._paired_dataclass(**{k: domain_conversion(v) for k, v in kwargs.items()})
 
         if instance.dataclass_self is None:
             # Handle unsets

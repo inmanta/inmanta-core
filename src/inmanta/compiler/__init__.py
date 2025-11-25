@@ -428,7 +428,7 @@ class Compiler:
         Exports compiler data if the option has been set.
         """
         with open(compiler_config.export_compile_data_file.get(), "w") as file:
-            file.write("%s\n" % self._data.export().json())
+            file.write("%s\n" % self._data.export().model_dump_json())
 
     def handle_exception(self, exception: CompilerException) -> None:
         try:

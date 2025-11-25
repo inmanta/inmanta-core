@@ -1,0 +1,7 @@
+description: Convert NoneValue to None in dataclass fields on plugin boundary.
+change-type: patch
+sections:
+  bugfix: "Compiler: in dataclass fields, properly convert internal ``null`` value to Python ``None`` value."
+destination-branches:
+  - master
+  - iso8
