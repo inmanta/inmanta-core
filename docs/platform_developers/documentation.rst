@@ -3,15 +3,6 @@ Documentation writing
 
 Inmanta uses Sphinx to generate documentation.
 
-Inmanta code documentation
---------------------------
-
-Modules
-*******
-
-Python core
-***********
-
 Sphinx tooling
 --------------
 The inmanta-sphinx package provides additional sphinx directives. The directives can render inmanta module documentation
@@ -46,16 +37,16 @@ generate documentation:
 sphinxcontrib.inmanta.dsl
 *************************
 
-This exention adds objects and directives to add documentation for Inmanta dsl objects such as
+This extension adds objects and directives to add documentation for Inmanta dsl objects such as
 entities, relations, ...
 
-RST files can reference to inmanta configuration code with ```:inmanta:entity:`std::testing::NullResource````. This renders to
+RST files can reference inmanta configuration code with ```:inmanta:entity:`std::testing::NullResource````. This renders as
 :inmanta:entity:`std::testing::NullResource`
 
 sphinx-inmanta-api
 ******************
 
-This scripts generates an RST file that provides the API documentation of a module. The documentation is generated
+This script generates an RST file that provides the API documentation of a module. The documentation is generated
 by compiling an empty project with this module included. The generator then uses the compiler representation to emit 
 RST code, using the directives from the inmanta.dsl domain extension. This script has the following options:
 
