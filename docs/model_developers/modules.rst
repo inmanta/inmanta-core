@@ -12,7 +12,7 @@ files.
    Use the procedure in :ref:`this section<convert-v1-to-v2>` to convert an old V1 module to a V2 module.
 
 Module format
-################
+#############
 
 A complete module might contain the following files:
 
