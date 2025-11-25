@@ -33,8 +33,8 @@ Context
 Procedure
 ++++++++++
 
-1. Check modules install mode: 
-   
+1. Check modules install mode:
+
    * Ensure that ``pip.pre`` is not set in ``project.yml``.
 
 2. Freeze all modules with:

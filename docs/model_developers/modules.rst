@@ -103,7 +103,7 @@ The ``setup.cfg`` file defines metadata about the module. The following code sni
 * The ``options.extras_require`` config option can be used to define optional dependencies, only required by a specific
   feature of the inmanta module.
 
-A full list of all available options can be found in :ref:`here<modules_v2_setup_cfg>`.
+A full list of all available options can be found in :ref:`here<modules_setup_cfg>`.
 
 The pyproject.toml file
 -----------------------

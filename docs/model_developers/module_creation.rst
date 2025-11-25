@@ -4,7 +4,7 @@ Module creation guide
 ============================
 
 This guide explains how to create a module.
-For detailed documentation see: :ref:`modules_v2_setup_cfg`.
+For detailed documentation see: :ref:`modules_setup_cfg`.
 
 Create a new source module
 ---------------------------
@@ -22,5 +22,5 @@ Create a new source module
 
 
 Inside the module the compiler expects a ``setup.cfg`` file that defines metadata
-about the module. :ref:`modules_v2_setup_cfg` provides an overview about the supported metadata
+about the module. :ref:`modules_setup_cfg` provides an overview about the supported metadata
 attributes.

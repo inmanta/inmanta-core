@@ -225,6 +225,7 @@ update environment settings or via the web-console. In other words, these enviro
 project.yml file only. To unprotect an environment setting, remove it from the project.yml file again and run the
 ``inmanta export`` command.
 
+.. _modules_setup_cfg:
 
 Module metadata file
 ####################
