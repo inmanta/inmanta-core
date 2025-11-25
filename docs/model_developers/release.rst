@@ -3,13 +3,12 @@
 Releasing and distributing modules
 ==================================
 
-V2 modules
-##########
+This page describes how Inmanta modules are released and distributed.
 
 .. _modules-distribution-v2:
 
-Distributing V2 modules
------------------------
+V2 modules
+##########
 
 V2 modules are distributed as Python packages. To build a package for a module, run ``inmanta module build`` in
 the source directory of the module. The resulting Python wheel can then be found in the dist directory of the module.

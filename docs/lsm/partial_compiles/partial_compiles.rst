@@ -173,9 +173,9 @@ Limitations
 -------------------
 
 1. When doing normal compiles, the model can very effectively find conflicts between services (e.g. using indexes), because it has an overview of all instances.
-    When using partial compile, conflicts between groups can not be detected, because the compiler never sees them together.
-    This means that the model must be designed to be conflict free or rely on an (external) inventory to avoid conflicts.
-    *This is why we always advice to run models in full compile mode until performance becomes an issue*: it gives the model time to mature and to detect subtle conflicts.
+   When using partial compile, conflicts between groups can not be detected, because the compiler never sees them together.
+   This means that the model must be designed to be conflict free or rely on an (external) inventory to avoid conflicts.
+   *This is why we always advice to run models in full compile mode until performance becomes an issue*: it gives the model time to mature and to detect subtle conflicts.
 
 
 For more details, see :ref:`limitation section in the core documentation<partial-compiles-limitations>`
