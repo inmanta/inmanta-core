@@ -93,8 +93,7 @@ Navigate into the project and install the module dependencies using the inmanta 
 
     inmanta project install
 
-V1 modules will be downloaded to the ``downloadpath`` configured in the ``project.yml`` file. V2 modules are installed in the
-active Python environment. For more details go :ref:`here <project-creation-guide>`. Once you are done with creating a project,
+Modules are installed in the active Python environment. For more details go :ref:`here <project-creation-guide>`. Once you are done with creating a project,
 you can open VS Code by running:
 
 .. code-block:: bash

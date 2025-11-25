@@ -1,26 +1,20 @@
 .. _moddev-module:
 
 Understanding Modules
-========================
+=====================
 In Inmanta all orchestration model code and related files, templates, plugins and resource handlers are packaged in a module.
-Modules can be defined in two different formats, the V1 format and the V2 format. The biggest difference between both formats is
-that all Python tools can run on V2 modules, because V2 modules are essentially Python packages. New modules should use the V2
-module format. The following sections describe the directory layout of the V1 and the V2 module formats and their metadata
+Inmanta modules are essentially Python packages. The following sections describe the module format and their metadata
 files.
-
 
 .. note::
 
-    V2 modules can not depend on V1 modules.
+   This page provides information about V2 modules, given that V1 modules are no longer supported.
+   Use the procedure in :ref:`this section<convert-v1-to-v2>` to convert an old V1 module to a V2 module.
 
+Module format
+#############
 
-.. _moddev-module-v2:
-
-V2 module format
-################
-
-
-A complete V2 module might contain the following files:
+A complete module might contain the following files:
 
 .. code-block:: sh
 
@@ -109,7 +103,7 @@ The ``setup.cfg`` file defines metadata about the module. The following code sni
 * The ``options.extras_require`` config option can be used to define optional dependencies, only required by a specific
   feature of the inmanta module.
 
-A full list of all available options can be found in :ref:`here<modules_v2_setup_cfg>`.
+A full list of all available options can be found in :ref:`here<modules_setup_cfg>`.
 
 The pyproject.toml file
 -----------------------
@@ -140,96 +134,18 @@ You might notice that the model, files and templates directories, nor the metada
 directory. The inmanta build tool takes care of this to ensure the included files are included in the package
 installation directory.
 
-
-.. _moddev-module-v1:
-
-V1 module format
-################
-
-A complete module might contain the following files:
-
-.. code-block:: sh
-
-    module
-    |
-    |__ module.yml
-    |
-    |__ model
-    |    |__ _init.cf
-    |    |__ services.cf
-    |
-    |__ plugins
-    |    |__ functions.py
-    |
-    |__ files
-    |    |__ file1.txt
-    |
-    |__ templates
-    |    |__ conf_file.conf.tmpl
-    |
-    |__ requirements.txt
-
-The directory layout of the V1 module is similar to that of a V2 module. The following difference exist:
-
-* The metadata file of the module is called ``module.yml`` instead of ``setup.cfg``. The structure of the ``module.yml``
-  file also differs from the structure of the ``setup.cfg`` file. More information about this ``module.yml`` file is available
-  in the next section.
-* The files contained in the ``inmanta_plugins/<module-name>/`` directory in the V2 format, are present in the ``plugins``
-  directory in the V1 format.
-* The ``requirements.txt`` file defines the dependencies of this module to other V2 modules and the dependencies to external
-  libraries used by the code in the ``plugins`` directory. This file is not present in the V2 module format, since V2 modules
-  defined their dependencies in the ``setup.cfg`` file. Dependencies with extras are supported in the
-  ``requirements.txt`` file using the ``dependency[extra-a,extra-b]`` syntax.
-* The ``pyproject.toml`` file doesn't exist in a V1 module, because V1 modules cannot be packaged into a Python package.
-
-Module metadata
----------------
-The module.yml file provides metadata about the module. This file is a yaml file with the following
-three keys mandatory:
-
-* *name*: The name of the module. This name should also match the name of the module directory.
-* *license*: The license under which the module is distributed.
-* *version*: The version of this module. For a new module a start version could be 0.1dev0 These
-  versions are parsed using the same version parser as python setuptools.
-* *deprecated*: Optional field. If set to True, this module will print a warning deprecation message when used.
-
-For example the following module.yml from the :doc:`../quickstart`
-
-.. code-block:: yaml
-
-    name: lamp
-    license: Apache 2.0
-    version: 0.1
-
-The *requires* key can be used to define the dependencies of this module on other Inmanta modules. Each entry in the list
-should contain the name of an Inmanta module, optionally associated with a version constraint. These version specs use `PEP440
-syntax <https://www.python.org/dev/peps/pep-0440/#version-specifiers>`_. Adding a new entry to the requires list should be done
-using the ``inmanta module add <module-name>`` command.
-
-An example of a ``module.yml`` file that defines requires:
-
-.. code-block:: yaml
-
-    license: Apache 2.0
-    name: ip
-    source: git@github.com:inmanta/ip
-    version: 0.1.15
-    requires:
-        - net ~= 0.2.4
-        - std >1.0 <2.5
-
-``source`` indicates the authoritative repository where the module is maintained.
-
-A full list of all available options can be found in :ref:`here<module_yml>`.
+.. _convert-v1-to-v2:
 
 Convert a module from V1 to V2 format
 #####################################
 
-To convert a V1 module to the V2 format, execute the following command in the module folder
+V1 modules are no longer supported by the orchestration platform. To convert a V1 module to the V2 format,
+execute the following command in the module folder:
 
 .. code-block:: bash
 
    inmanta module v1tov2
+
 
 Inmanta module template
 #######################
@@ -279,22 +195,8 @@ visible to the compiler. This procedure is of course applicable for working on a
 Setting up the dev environment
 ------------------------------
 To set up the development environment for a project, activate your development Python environment and
-install the project with ``inmanta project install``. To set up the environment for a single v2 module,
-run ``pip install -e .`` instead.
-
-The following subsections explain any additional steps you need to take if you want to make changes
-to one of the dependent modules as well.
-
-v1 modules
-~~~~~~~~~~
-Any modules you find in the project's ``modulepath`` after starting from a clean project and setting
-up the development environment are v1 modules. You can make changes to these modules and they will
-be reflected in the next compile. No additional steps are required.
-
-v2 modules
-~~~~~~~~~~
-All other modules are v2 and have been installed by ``inmanta project install`` into the active Python
-environment. If you want to be able to make changes to one of these modules, the easiest way is to
+install the project with ``inmanta project install``.
+If you want to be able to make changes to one of these modules, the easiest way is to
 check out the module repo separately and run ``pip install -e <path>`` on it, overwriting the published
 package that was installed previously. This will install the module in editable form: any changes you make
 to the checked out files will be picked up by the compiler. You can also do this prior to installing the
@@ -305,18 +207,14 @@ the output of ``pip list --editable``.
 
 
 Working on the dev environment
-------------------------------
-After setting up, you should be left with a dev environment where all required v2 modules have been
-installed (either in editable or in packaged form). If you're working on a project, all required v1
-modules should be checked out in the ``modulepath`` directory.
+##############################
 
-When you run a compile from the active Python environment context, the compiler will find both the
-v1 and v2 modules and use them for both their model and their plugins.
-
-Similarly, when you run a module's unit tests, the installed v2 modules will automatically be used
-by the compiler. As for v1 modules, by default, the ``pytest-inmanta`` extension makes sure the
-compile itself runs against an isolated project, downloading any v1 module dependencies. If you want to compile against local
-versions of v1 modules, have a look at the ``--use-module-in-place`` option in the ``pytest-inmanta`` documentation.
+After setting up, you should be left with a dev environment where all required modules have been
+installed (either in editable or in packaged form).
+When you run a compile from the active Python environment context, the compiler will find the
+modules and use them for both their model and their plugins.
+Similarly, when you run a module's unit tests, the installed modules will automatically be used
+by the compiler.
 
 
 Module installation on the server
@@ -336,7 +234,7 @@ from the Python package repository but instead contains all Python code as prese
 Configure the Inmanta server to install modules from a private python package repository
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-V2 modules can be installed from a Python package repository that requires authentication. This section explains how the Inmanta server should be configured to install v2 modules from such a Python package repository.
+Modules can be installed from a Python package repository that requires authentication. This section explains how the Inmanta server should be configured to install modules from such a Python package repository.
 
 Create a file named ``/var/lib/inmanta/.netrc`` in the orchestrator's file system.
 Add the following content to the file:
