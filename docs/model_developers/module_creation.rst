@@ -4,20 +4,10 @@ Module creation guide
 ============================
 
 This guide explains how to create a module.
-For detailed documentation see: :ref:`module_yml` and :ref:`modules_v2_setup_cfg`.
+For detailed documentation see: :ref:`modules_v2_setup_cfg`.
 
 Create a new source module
 ---------------------------
-
-For a v1 module:
-
-.. code-block:: sh
-  :linenos:
-
-  pip install cookiecutter
-  cookiecutter --checkout v1 gh:inmanta/inmanta-module-template
-
-For a v2 module:
 
 .. code-block:: sh
   :linenos:
@@ -31,6 +21,6 @@ For a v2 module:
     This is a best practice to version control your infrastructure code.
 
 
-Inside the module the compiler expects a ``module.yml`` file (for v1) or a ``setup.cfg`` file (for v2) that defines metadata
-about the module. :ref:`module_yml` and :ref:`modules_v2_setup_cfg` provide an overview about the supported metadata
+Inside the module the compiler expects a ``setup.cfg`` file that defines metadata
+about the module. :ref:`modules_v2_setup_cfg` provides an overview about the supported metadata
 attributes.

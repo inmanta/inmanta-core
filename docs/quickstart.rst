@@ -499,10 +499,7 @@ ______________________________
 
 We host modules to set up and manage many systems on our Github. These are available under https://github.com/inmanta/.
 
-When you use an import statement in your model, Inmanta downloads these modules and their dependencies when you run ``inmanta project install``.
-V2 modules (See :ref:`moddev-module-v2`) need to be declared as Python dependencies in addition
-to using them in an import statement. Some of our public modules are hosted in the v2 format on https://pypi.org/.
-
+Modules need to be declared as Python dependencies in addition to using them in an import statement (See :ref:`moddev-module`). Inmanta downloads these modules and their dependencies when you run ``inmanta project install``.
 
 
 Update the configuration model

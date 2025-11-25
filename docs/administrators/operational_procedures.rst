@@ -33,10 +33,9 @@ Context
 Procedure
 ++++++++++
 
-1. Check modules install mode:
-
-   - For v1 modules (if any): ensure that ``install_mode`` in ``project.yml`` is set to ``release``.
-   - For v2 modules (if any): ensure that ``pip.pre`` is not set in ``project.yml``.
+1. Check modules install mode: 
+   
+   * Ensure that ``pip.pre`` is not set in ``project.yml``.
 
 2. Freeze all modules with:
 
