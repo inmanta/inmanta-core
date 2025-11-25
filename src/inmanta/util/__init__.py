@@ -718,7 +718,7 @@ def stable_depth_first(nodes: list[str], edges: dict[str, list[str]]) -> list[st
         try:
             if node in edges:
                 for edge in edges[node]:
-                    dfs(edge, seen | set(node))
+                    dfs(edge, seen | {node})
             out.append(node)
         except CycleException as e:
             e.add(node)
