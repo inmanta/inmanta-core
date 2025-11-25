@@ -37,7 +37,7 @@ generate documentation:
 sphinxcontrib.inmanta.dsl
 *************************
 
-This extention adds objects and directives to add documentation for Inmanta dsl objects such as
+This extension adds objects and directives to add documentation for Inmanta dsl objects such as
 entities, relations, ...
 
 RST files can reference inmanta configuration code with ```:inmanta:entity:`std::testing::NullResource````. This renders as
