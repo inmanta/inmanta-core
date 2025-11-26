@@ -287,7 +287,7 @@ html_show_copyright = True
 # base URL from which the finished HTML is served.
 # html_use_opensearch = ''
 
-html_search_scorer='scorer.js'
+html_search_scorer=os.path.join(os.path.dirname(os.path.abspath(__file__)), "scorer.js")
 
 # This is the file name suffix for HTML files (e.g. ".xhtml").
 # html_file_suffix = None
