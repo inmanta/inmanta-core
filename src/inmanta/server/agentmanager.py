@@ -1321,7 +1321,7 @@ executor-retention-time={agent_cfg.agent_executor_retention_time.get()}
 
 [agent_rest_transport]
 port=%(port)s
-host=localhost
+host={opt.internal_server_address.get()}
 """ % {
             "env_id": environment_id,
             "port": port,
