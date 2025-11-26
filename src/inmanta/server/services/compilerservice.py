@@ -447,6 +447,7 @@ class CompileRun:
                 if stage_result and (stage_result.returncode is None or stage_result.returncode > 0):
                     return False, None
 
+            server_address = opt.internal_server_address.get()
             server_port = opt.server_bind_port.get()
 
             app_cli_args = ["-vvv"]
@@ -465,7 +466,7 @@ class CompileRun:
                 "-e",
                 str(environment_id),
                 "--server_address",
-                "localhost",
+                server_address,
                 "--server_port",
                 str(server_port),
                 "--metadata",
