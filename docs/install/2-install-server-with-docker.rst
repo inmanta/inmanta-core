@@ -196,6 +196,10 @@ More details about these options can be found in `docker's documentation <https:
     The format is simply `[KEY]=[VALUE]` separated by new lines, without any quoting or multi-line support.
     cf. `podman#19565 <https://github.com/containers/podman/issues/19565#issuecomment-1672891535>`_.
 
+Compatibility check
+###################
+
+The Docker container for the Inmanta server contains a compatibility file at ``/usr/share/inmanta/compatibility/compatibility.json``. This file contains amongst other things the system requirements of that version of the Inmanta orchestrator. The container sets the ``server.compatibility-file`` config option via the ``INMANTA_SERVER_COMPATIBILITY_FILE`` environment variable to this file by default. As such, the Inmanta orchestrator will fail to start if the container would run against an incompatible PostgreSQL version.
 
 Accessing the orchestrator file system
 ######################################
