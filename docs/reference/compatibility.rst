@@ -1,3 +1,5 @@
+.. _compatibility-file:
+
 Compatibility
 *************
 
