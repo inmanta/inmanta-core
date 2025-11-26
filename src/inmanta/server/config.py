@@ -259,6 +259,14 @@ server_address: Option[str] = Option(
                            This is required for example to inject the inmanta agent in virtual machines at boot time.""",
 )
 
+internal_server_address: Option[str] = Option(
+    "server",
+    "internal_server_address",
+    "localhost",
+    """The internal ip address of the server.
+       This address is used by processes started by the server (e.g. compilers and schedulers) to connect back to the Inmanta server.""",
+)
+
 server_wait_after_param = Option(
     "server", "wait-after-param", 5, "Time to wait before recompile after new paramters have been received", is_time
 )
