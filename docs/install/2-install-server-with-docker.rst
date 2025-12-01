@@ -197,6 +197,9 @@ More details about these options can be found in `docker's documentation <https:
     cf. `podman#19565 <https://github.com/containers/podman/issues/19565#issuecomment-1672891535>`_.
 
 
+.. include:: compatibility_check.rst
+
+
 Accessing the orchestrator file system
 ######################################
 

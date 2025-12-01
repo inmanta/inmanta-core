@@ -459,6 +459,10 @@ More details about these options can be found in `podman's documentation <https:
     The format is simply `[KEY]=[VALUE]` separated by new lines, without any quoting or multi-line support.
     cf. `podman#19565 <https://github.com/containers/podman/issues/19565#issuecomment-1672891535>`_.
 
+
+.. include:: compatibility_check.rst
+
+
 Accessing the orchestrator file system
 ######################################
 
