@@ -164,11 +164,8 @@ server_compatibility_file = Option(
     "server",
     "compatibility_file",
     None,
-    """Path to the compatibility.json file. If set, the server will perform the following checks:
-       1) During startup, the server will perform a version compatibility check for the PostgreSQL version being used.
-          The Inmanta server will fail to start if it runs against a PostgreSQL version lower than the minimal
-          PostgreSQL version defined in the compatibility file.
-       2) The constraints defined in the `python_package_constraints` field of the compatibility file will be
+    """Path to the compatibility.json file. If set, the server will perform the following check:
+       1) The constraints defined in the `python_package_constraints` field of the compatibility file will be
           enforced both during project install and during agent install.
        The Inmanta Docker container comes with a compatibility file at /usr/share/inmanta/compatibility/compatibility.json.
        The container doesn't set this config option by default.
