@@ -162,13 +162,13 @@ rst_prolog = f"""\
 # the documents and not their structure.
 
 
-exclude_patterns = ['adr/*.md']
+exclude_patterns = ["adr/*.md", "install/compatibility_check.rst"]
 
 if not tags.has("iso"):
     exclude_patterns += [
         "lsm",
         "administrators/operational_procedures_with_lsm.rst",
-        "administrators/support.rst"
+        "administrators/support.rst",
     ]
 
 # The reST default role (used for this markup: `text`) to use for all documents.
