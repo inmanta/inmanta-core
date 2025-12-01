@@ -164,10 +164,14 @@ server_compatibility_file = Option(
     "server",
     "compatibility_file",
     None,
-    "Path to the compatibility.json file. The constraints defined in the `python_package_constraints` field will be "
-    "enforced both during project install and during agent install. For more information about this file, please refer to "
-    "the compatibility page in the Inmanta documentation. Leave blank to disable the "
-    "enforcement of the constraints during installation.",
+    """Path to the compatibility.json file. If set, the server will perform the following check:
+       1) The constraints defined in the `python_package_constraints` field of the compatibility file will be
+          enforced both during project install and during agent install.
+       The Inmanta Docker container comes with a compatibility file at /usr/share/inmanta/compatibility/compatibility.json.
+       The container doesn't set this config option by default.
+       For more information about this compatibility file, please refer to the compatibility page in the Inmanta documentation.
+       Leave blank to disable the version compatibility check and the enforcement of the constraints during installation.
+    """,
     is_str_opt,
 )
 
