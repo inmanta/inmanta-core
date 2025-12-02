@@ -1928,13 +1928,19 @@ async def test_event_recovery_reporting(resource_container, server, client, clie
         last_deployed=scheduler._state.resource_state[rid1].last_deployed,  # ignore
         last_deploy_compliant=True,
     )
-    assert scheduler._state.resource_state[rid2] == ResourceState(
-        compliance=Compliance.COMPLIANT,
-        last_deploy_result=DeployResult.DEPLOYED,
-        blocked=Blocked.NOT_BLOCKED,
-        last_deployed=scheduler._state.resource_state[rid2].last_deployed,  # ignore
-        last_deploy_compliant=True,
-    )
+
+    def resource_state_rid2_converged() -> bool:
+        return scheduler._state.resource_state[rid2] == ResourceState(
+            compliance=Compliance.COMPLIANT,
+            last_deploy_result=DeployResult.DEPLOYED,
+            blocked=Blocked.NOT_BLOCKED,
+            last_deployed=scheduler._state.resource_state[rid2].last_deployed,  # ignore
+            last_deploy_compliant=True,
+        )
+
+    # Run this check as retry_limited, because wait_for_deployed() only tracks
+    # resources that are deploying or have a new desired state.
+    await retry_limited(resource_state_rid2_converged, timeout=3)
 
 
 async def test_redeploy_after_dependency_recovered(resource_container, server, client, clienthelper, environment, agent):
