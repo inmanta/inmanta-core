@@ -1,0 +1,4 @@
+description: created sphinx dependabot group
+change-type: patch
+destination-branches:
+  - master
