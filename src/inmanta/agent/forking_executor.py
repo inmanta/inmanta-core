@@ -577,8 +577,9 @@ def mp_worker_entrypoint(
 
 class MPProcess(PoolManager[executor.ExecutorId, executor.ExecutorId, "MPExecutor"], PoolMember[executor.ExecutorBlueprint]):
     """
-
-    Physical process proxy, hands out child executors
+    Physical process proxy. Proxies calls via an ExecutorClient to the Process that runs the true executor.
+    Hands out MPExecutor instances as local executor interfaces to the executor (single InProcessExecutor) inside the external
+    process.
 
     Termination scenarios:
     - connection loss:
@@ -731,7 +732,8 @@ class MPProcess(PoolManager[executor.ExecutorId, executor.ExecutorId, "MPExecuto
 
 
 class MPExecutor(executor.Executor, resourcepool.PoolMember[executor.ExecutorId]):
-    """A Single Child Executor
+    """
+    A single Executor interface that delegates to a true executor managed by a MPProcess.
 
     termination:
     - stop requested by parent:
@@ -827,6 +829,10 @@ class MPExecutor(executor.Executor, resourcepool.PoolMember[executor.ExecutorId]
 
 
 class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.ExecutorBlueprint, MPProcess]):
+    """
+    Pool that manages processes (MPProcess) in which we run executors. Hands out processes when requested, creating them if
+    required. Maintains one process per executor blueprint.
+    """
 
     def __init__(
         self,
@@ -1005,10 +1011,8 @@ class MPManager(
     executor.ExecutorManager[MPExecutor],
 ):
     """
-    This is the executor that provides the new behavior (ISO8+),
-    where the agent forks executors in specific venvs to prevent code reloading.
-
-    Executors are co-hosted on processes if they share a blueprint
+    Executor manager for forking executors. Relies on MPPool to manage processes, one per executor blueprint. Each
+    process runs a single InProcessExecutor inside the process, and exposes a local MPExecutor as an interface to it.
     """
 
     def __init__(
