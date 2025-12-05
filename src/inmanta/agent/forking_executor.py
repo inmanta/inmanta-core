@@ -577,29 +577,29 @@ def mp_worker_entrypoint(
 
 class MPProcess(PoolManager[executor.ExecutorId, executor.ExecutorId, "MPExecutor"], PoolMember[executor.ExecutorBlueprint]):
     """
-    Manager for a single child processes that can host multiple executors (for the same blueprint).
+     Manager for a single child processes that can host multiple executors (for the same blueprint).
 
-    It hands out MPExecutor instances as local Executor interfaces to a matching executor (InProcessExecutor) inside the
-    external process.
+     It hands out MPExecutor instances as local Executor interfaces to a matching executor (InProcessExecutor) inside the
+     external process.
 
-    It is responsible for:
-     1. cleaning up the process
-     2. holding the IPC connection to the process (ExecutorClient communicating with ExecutorServer inside the process)
-     3. Updating the process for requested state changes (e.g. shutdown)
-     4. Updating the cache state for external events (e.g. process is killed)
+     It is responsible for:
+      1. cleaning up the process
+      2. holding the IPC connection to the process (ExecutorClient communicating with ExecutorServer inside the process)
+      3. Updating the process for requested state changes (e.g. shutdown)
+      4. Updating the cache state for external events (e.g. process is killed)
 
-   It is not responsible for setting up the process, this is done in the MPPool
+    It is not responsible for setting up the process, this is done in the MPPool
 
-    Termination scenarios:
-    - connection loss:
-       - all outstand calls fail, future calls fail as well
-       - signal parent to drop this instance and all its children from the cache
-       - clean up using _force_stop
-    - no more children
-       - send stop to remote end
-       - wait for connection loss
-    - termination request from parent
-       - send stop to children
+     Termination scenarios:
+     - connection loss:
+        - all outstand calls fail, future calls fail as well
+        - signal parent to drop this instance and all its children from the cache
+        - clean up using _force_stop
+     - no more children
+        - send stop to remote end
+        - wait for connection loss
+     - termination request from parent
+        - send stop to children
     """
 
     def __init__(
@@ -745,8 +745,8 @@ class MPExecutor(executor.Executor, resourcepool.PoolMember[executor.ExecutorId]
     A single Executor interface that delegates to a true executor managed by a MPProcess.
 
     This is an executor for a given agent.  Multiple MPExecutors can co-exist on a single MPProcess as long as they have the same blueprint.
-    
-     This MPExecutor represents/proxies to a separate executor instance (InProcessExecutor) inside a specific process (MPProcess) 
+
+     This MPExecutor represents/proxies to a separate executor instance (InProcessExecutor) inside a specific process (MPProcess)
 
     termination:
     - stop requested by parent:
