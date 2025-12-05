@@ -40,7 +40,8 @@ from inmanta.util import NamedLock, join_threadpools
 
 class InProcessExecutor(executor.Executor, executor.AgentInstance):
     """
-    This is an executor that executes in the process it is started in
+    This is an executor that executes in the process it is started in. It executes the appropriate handler code in this same
+    process.
 
     !!! This executor takes no steps to prevent handlers to mutate the resources passed into the methods !!!
     """
@@ -480,6 +481,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
 class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
     """
     This is the executor that provides the backward compatible behavior, conforming to the agent in ISO7.
+    It is no longer used outside of testing.
 
     It spawns an InProcessExecutor and makes sure all code is installed and loadable locally.
     """
