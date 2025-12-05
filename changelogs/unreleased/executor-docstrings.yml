@@ -1,0 +1,5 @@
+description: added some docstrings to executor classes
+change-type: patch
+destination-branches:
+  - master
+  - iso8
