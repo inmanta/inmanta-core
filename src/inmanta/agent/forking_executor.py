@@ -577,9 +577,17 @@ def mp_worker_entrypoint(
 
 class MPProcess(PoolManager[executor.ExecutorId, executor.ExecutorId, "MPExecutor"], PoolMember[executor.ExecutorBlueprint]):
     """
-    Physical process proxy. Proxies calls via an ExecutorClient to the Process that runs the true executor.
-    Hands out MPExecutor instances as local executor interfaces to the executor (single InProcessExecutor) inside the external
-    process.
+    Manager for a single child processes that can host multiple executors. 
+    
+    It hands out MPExecutor instances as local Executor interfaces to the executor inside the external process.
+
+    It is responsible for:
+     1. cleaning up the process 
+     2. holding the IPC connection to the process
+     3. Updating the process for requested state changes (e.g. shutdown)
+     4. Updating the cache state for external events (e.g. process is killed)
+   
+   It is not responsible for setting up the process, this is done in the MPPool 
 
     Termination scenarios:
     - connection loss:
