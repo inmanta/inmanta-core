@@ -744,9 +744,9 @@ class MPExecutor(executor.Executor, resourcepool.PoolMember[executor.ExecutorId]
     """
     A single Executor interface that delegates to a true executor managed by a MPProcess.
 
-    This is an executor for a given agent. While other agents may have the same blueprint and run inside the same process
-    (managed by MPProcess), they are represented as a separate executor instance pair (MPExecutor + InProcessExecutor inside
-    the external process).
+    This is an executor for a given agent.  Multiple MPExecutors can co-exist on a single MPProcess as long as they have the same blueprint.
+    
+     This MPExecutor represents/proxies to a separate executor instance (InProcessExecutor) inside a specific process (MPProcess) 
 
     termination:
     - stop requested by parent:
