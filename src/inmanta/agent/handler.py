@@ -890,6 +890,11 @@ class ResourceHandler(HandlerAPI[TResource]):
                 ctx.set_resource_state(
                     const.HandlerResourceState.non_compliant if changes else const.HandlerResourceState.deployed
                 )
+                ctx.info(
+                    msg="Resource %(resource_id)s was marked as non-compliant.",
+                    resource_id=resource.id.resource_str(),
+                    changes=changes,
+                )
             elif not dry_run:
                 with tracing.span("do_changes"):
                     self.do_changes(ctx, resource, changes)
@@ -900,7 +905,7 @@ class ResourceHandler(HandlerAPI[TResource]):
             ctx.set_resource_state(const.HandlerResourceState.skipped_for_dependency)
             ctx.warning(
                 msg="Resource %(resource_id)s was skipped: %(reason)s",
-                resource_id=resource.id,
+                resource_id=resource.id.resource_str(),
                 reason=e.args,
             )
         except SkipResource as e:
@@ -912,7 +917,7 @@ class ResourceHandler(HandlerAPI[TResource]):
             ctx.set_resource_state(const.HandlerResourceState.failed)
             ctx.exception(
                 "An error occurred during deployment of %(resource_id)s (exception: %(exception)s)",
-                resource_id=resource.id,
+                resource_id=resource.id.resource_str(),
                 exception=f"{e.__class__.__name__}('{e}')",
             )
         finally:
@@ -1054,6 +1059,11 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
                 ctx.set_resource_state(
                     const.HandlerResourceState.non_compliant if changes else const.HandlerResourceState.deployed
                 )
+                ctx.info(
+                    msg="Resource %(resource_id)s was marked as non-compliant.",
+                    resource_id=resource.id.resource_str(),
+                    changes=changes,
+                )
             elif not dry_run:
                 if "purged" in changes:
                     if not changes["purged"]["desired"]:
@@ -1078,7 +1088,7 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
             ctx.set_resource_state(const.HandlerResourceState.skipped_for_dependency)
             ctx.warning(
                 msg="Resource %(resource_id)s was skipped: %(reason)s",
-                resource_id=resource.id,
+                resource_id=resource.id.resource_str(),
                 reason=e.args,
             )
         except SkipResource as e:
