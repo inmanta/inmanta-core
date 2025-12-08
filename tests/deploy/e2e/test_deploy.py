@@ -1817,6 +1817,52 @@ async def test_skipped_for_dependency(resource_container, server, client, client
     await retry_limited(wait_for_resource_state_reporting, timeout=10)
 
 
+async def test_resource_action_of_non_compliant_resource(resource_container, server, client, clienthelper, environment, agent):
+    """
+    Asserts that a non-compliant report-only resource logs its non-compliance to the resource action.
+    """
+
+    version = await clienthelper.get_version()
+
+    rid1 = "test::Resource[agent1,key=key]"
+    rvid = f"{rid1},v={version}"
+
+    resources = [
+        {
+            "key": "key",
+            "value": "value",
+            "id": rvid,
+            "requires": [],
+            "purged": False,
+            "send_event": False,
+            "receive_events": False,
+            "report_only": True,
+        },
+    ]
+    await clienthelper.set_auto_deploy(True)
+    await clienthelper.put_version_simple(resources, version, wait_for_released=True)
+    await clienthelper.wait_for_deployed(version=version)
+    scheduler = agent.scheduler
+
+    assert scheduler._state.resource_state[rid1] == ResourceState(
+        compliance=Compliance.NON_COMPLIANT,
+        last_deploy_result=DeployResult.DEPLOYED,
+        blocked=Blocked.NOT_BLOCKED,
+        last_deployed=scheduler._state.resource_state[rid1].last_deployed,  # ignore
+        last_deploy_compliant=False,
+    )
+
+    result = await client.get_resource(tid=environment, id=rvid, logs=True, log_action=const.ResourceAction.deploy)
+    assert result.code == 200
+    logs = result.result["logs"]
+    assert len(logs) == 1
+    log = logs.pop()
+    assert log["changes"]
+    # Start, Reported non-compliant, End
+    assert len(log["messages"]) == 3
+    assert log["messages"][1]["msg"] == "Resource test::Resource[agent1,key=key] was marked as non-compliant."
+
+
 async def test_event_recovery_reporting(resource_container, server, client, clienthelper, environment, agent):
     """
     Asserts that a resource blocked on a reporting resource will be unblocked when it is compliant

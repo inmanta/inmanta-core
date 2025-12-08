@@ -887,14 +887,15 @@ class ResourceHandler(HandlerAPI[TResource]):
                 ctx.update_changes(changes)
 
             if resource.report_only:
-                ctx.set_resource_state(
-                    const.HandlerResourceState.non_compliant if changes else const.HandlerResourceState.deployed
-                )
-                ctx.info(
-                    msg="Resource %(resource_id)s was marked as non-compliant.",
-                    resource_id=resource.id.resource_str(),
-                    changes=changes,
-                )
+                if changes:
+                    ctx.set_resource_state(const.HandlerResourceState.non_compliant)
+                    ctx.info(
+                        msg="Resource %(resource_id)s was marked as non-compliant.",
+                        resource_id=resource.id.resource_str(),
+                        changes=changes,
+                    )
+                else:
+                    ctx.set_resource_state(const.HandlerResourceState.deployed)
             elif not dry_run:
                 with tracing.span("do_changes"):
                     self.do_changes(ctx, resource, changes)
@@ -1056,14 +1057,15 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
                 ctx.add_change(field, desired=values["desired"], current=values["current"])
 
             if resource.report_only:
-                ctx.set_resource_state(
-                    const.HandlerResourceState.non_compliant if changes else const.HandlerResourceState.deployed
-                )
-                ctx.info(
-                    msg="Resource %(resource_id)s was marked as non-compliant.",
-                    resource_id=resource.id.resource_str(),
-                    changes=changes,
-                )
+                if changes:
+                    ctx.set_resource_state(const.HandlerResourceState.non_compliant)
+                    ctx.info(
+                        msg="Resource %(resource_id)s was marked as non-compliant.",
+                        resource_id=resource.id.resource_str(),
+                        changes=changes,
+                    )
+                else:
+                    ctx.set_resource_state(const.HandlerResourceState.deployed)
             elif not dry_run:
                 if "purged" in changes:
                     if not changes["purged"]["desired"]:
