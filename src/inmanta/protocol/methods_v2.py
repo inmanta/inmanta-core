@@ -1804,6 +1804,45 @@ def discovered_resources_get_batch(
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.DISCOVERED_RESOURCES_DELETE, read_only=True, environment_param="tid")
+@typedmethod(
+    path="/discovered/<discovered_resource_id>",
+    operation="DELETE",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def discovered_resource_delete(
+    tid: uuid.UUID,
+    discovered_resource_id: str,
+) -> None:
+    """
+    Delete a discovered resource.
+
+    :param tid: The id of the environment this resource belongs to
+    :param discovered_resource_id: The id of the discovered_resource
+
+    :raise NotFound: This exception is raised when the referenced discovered resource is not found on the environment
+    """
+
+
+@auth(auth_label=const.CoreAuthorizationLabel.DISCOVERED_RESOURCES_DELETE, read_only=True, environment_param="tid")
+@typedmethod(
+    path="/discovered/",
+    operation="DELETE",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def discovered_resource_delete_batch(tid: uuid.UUID, discovered_resource_ids: Sequence[str]) -> None:
+    """
+    Delete multiple discovered resources.
+
+    :param tid: The id of the environment this resource belongs to
+    :param discovered_resource_ids: List of discovered resource ids to delete
+    """
+
+
 @auth(auth_label=const.CoreAuthorizationLabel.GRAPHQL_READ, read_only=True)
 @typedmethod(
     path="/graphql",
