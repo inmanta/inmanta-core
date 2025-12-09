@@ -34,7 +34,7 @@ async def test_discovery_resource_single(server, client, agent, environment):
     discovered_resource_id = "test::Resource[agent1,key=key]"
     discovery_resource_id = "test::DiscoveryResource[agent1,key=key]"
     values = {"value1": "test1", "value2": "test2"}
-    result = await agent._client.discovered_resource_id(
+    result = await agent._client.discovered_resource_create(
         tid=environment,
         discovered_resource_id=discovered_resource_id,
         discovery_resource_id=discovery_resource_id,
