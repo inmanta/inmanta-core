@@ -1804,7 +1804,7 @@ def discovered_resources_get_batch(
     """
 
 
-@auth(auth_label=const.CoreAuthorizationLabel.DISCOVERED_RESOURCES_DELETE, read_only=True, environment_param="tid")
+@auth(auth_label=const.CoreAuthorizationLabel.DISCOVERED_RESOURCES_DELETE, read_only=False, environment_param="tid")
 @typedmethod(
     path="/discovered/<discovered_resource_id>",
     operation="DELETE",
@@ -1822,11 +1822,11 @@ def discovered_resource_delete(
     :param tid: The id of the environment this resource belongs to
     :param discovered_resource_id: The id of the discovered_resource
 
-    :raise NotFound: This exception is raised when the referenced discovered resource is not found on the environment
+    :raise NotFound: When the referenced discovered resource is not found on the environment
     """
 
 
-@auth(auth_label=const.CoreAuthorizationLabel.DISCOVERED_RESOURCES_DELETE, read_only=True, environment_param="tid")
+@auth(auth_label=const.CoreAuthorizationLabel.DISCOVERED_RESOURCES_DELETE, read_only=False, environment_param="tid")
 @typedmethod(
     path="/discovered/",
     operation="DELETE",

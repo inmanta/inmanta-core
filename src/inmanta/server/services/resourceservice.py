@@ -533,7 +533,7 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
                 environment=env.id, discovered_resource_id=discovered_resource_id, connection=connection
             )
             if not result:
-                raise NotFound(f"Discovered Resource with name {discovered_resource_id} not found in env {env.id}")
+                raise NotFound(f"Discovered Resource with id {discovered_resource_id} not found in env {env.id}")
             await result.delete(connection=connection)
 
     @handle(methods_v2.discovered_resource_delete_batch, env="tid")
