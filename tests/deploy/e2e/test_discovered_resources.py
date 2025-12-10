@@ -74,7 +74,7 @@ async def test_discovery_resource_single(server, client, agent, environment):
 
     result = await client.discovered_resource_delete(environment, discovered_resource_id)
     assert result.code == 404
-    assert f"Discovered Resource with name {discovered_resource_id} not found in env {environment}" in result.result["message"]
+    assert f"Discovered Resource with id {discovered_resource_id} not found in env {environment}" in result.result["message"]
 
 
 async def test_discovered_resource_batch(server, client, agent, environment):
