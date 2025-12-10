@@ -360,7 +360,7 @@ class DynamicProxy:
             value = instance.get_attribute(attribute).get_value()
         except NotFoundException as e:
             # allow for hasattr(proxy, "some_attr")
-            raise AttributeNotFound(e.stmt, e.name)
+            raise AttributeError(e.stmt, e.name)
 
         return self._return_value(value, relative_path=f".{attribute}")
 
