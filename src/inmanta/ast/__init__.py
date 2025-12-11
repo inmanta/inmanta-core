@@ -1084,6 +1084,7 @@ class UnknownException(Exception):
         super().__init__()
         self.unknown = unknown
 
+
 # custom class to enable clean wrapping on the plugin boundary
 class UnexpectedReference(RuntimeException):
     """
