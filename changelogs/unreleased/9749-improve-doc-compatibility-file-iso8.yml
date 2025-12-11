@@ -1,0 +1,6 @@
+---
+description: "Improve the documentation of the compatibility.json file."
+issue-nr: 9749
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [iso8]

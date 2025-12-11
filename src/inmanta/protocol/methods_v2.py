@@ -515,19 +515,21 @@ def all_agents_action(tid: uuid.UUID, action: AllAgentAction) -> None:
 
     :param tid: The environment of the agents.
     :param action: The type of action that should be executed on the agents.
-                    Pause and unpause can only be used when the environment is not halted,
-                    while the on_resume actions can only be used when the environment is halted.
-                    * pause: A paused agent cannot execute any deploy operations.
-                    * unpause: A unpaused agent will be able to execute deploy operations.
-                    * keep_paused_on_resume: The agents will still be paused when the environment is resumed
-                    * unpause_on_resume: The agents will be unpaused when the environment is resumed
-                    * remove_all_agent_venvs: Remove all agent venvs in the given environment. During this
-                                              process the agent operations in that environment are temporarily
-                                              suspended. The removal of the agent venvs will happen asynchronously
-                                              with respect to this API call. It might take a long time until the
-                                              venvs are actually removed, because all executing agent operations
-                                              will be allowed to finish first. As such, a long deploy operation
-                                              might delay the removal of the venvs considerably.
+
+      Pause and unpause can only be used when the environment is not halted,
+      while the on_resume actions can only be used when the environment is halted.
+
+      * pause: A paused agent cannot execute any deploy operations.
+      * unpause: A unpaused agent will be able to execute deploy operations.
+      * keep_paused_on_resume: The agents will still be paused when the environment is resumed
+      * unpause_on_resume: The agents will be unpaused when the environment is resumed
+      * remove_all_agent_venvs: Remove all agent venvs in the given environment. During this
+         process the agent operations in that environment are temporarily
+         suspended. The removal of the agent venvs will happen asynchronously
+         with respect to this API call. It might take a long time until the
+         venvs are actually removed, because all executing agent operations
+         will be allowed to finish first. As such, a long deploy operation
+         might delay the removal of the venvs considerably.
 
     :raises Forbidden: The given environment has been halted and the action is pause/unpause,
                         or the environment is not halted and the action is related to the on_resume behavior
@@ -1670,6 +1672,46 @@ def discovered_resources_get_batch(
     :return: A list of all matching released resources
     :raise NotFound: This exception is raised when the referenced environment is not found
     :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid
+    """
+
+
+@typedmethod(
+    path="/discovered/<discovered_resource_id>",
+    operation="DELETE",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def discovered_resource_delete(
+    tid: uuid.UUID,
+    discovered_resource_id: str,
+) -> None:
+    """
+    Delete a discovered resource.
+
+    :param tid: The id of the environment this resource belongs to
+    :param discovered_resource_id: The id of the discovered_resource
+
+    :raise NotFound: When the referenced discovered resource is not found on the environment
+    """
+
+
+@typedmethod(
+    path="/discovered/",
+    operation="DELETE",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def discovered_resource_delete_batch(tid: uuid.UUID, discovered_resource_ids: Sequence[str]) -> None:
+    """
+    Delete multiple discovered resources.
+    If one or more discovered resources are not found on the environment,
+    they will be ignored and the other discovered resources will be deleted.
+    A 200 will be returned even if any/all provided discovered resources are ignored.
+
+    :param tid: The id of the environment this resource belongs to
+    :param discovered_resource_ids: List of discovered resource ids to delete
     """
 
 

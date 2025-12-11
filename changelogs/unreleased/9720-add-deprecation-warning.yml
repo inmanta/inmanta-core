@@ -1,0 +1,8 @@
+---
+description: "The `requires` field of the project.yml file is deprecated and will be removed in the next major release."
+issue-nr: 9720
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [iso8]
+sections:
+  deprecation-note: "{{description}}"

@@ -288,3 +288,25 @@ def test_docs(snippetcompiler):
 
     run_for_example("1")
     run_for_example("2")
+
+
+def test_dataclass_plugin_boundary_null(snippetcompiler):
+    """
+    Verify null conversion for dataclass fields on the plugin boundary.
+    """
+    snippetcompiler.setup_for_snippet(
+        """\
+import dataclasses
+
+x = dataclasses::NullableDC(n=1)
+y = dataclasses::NullableDC(n=null)
+z = dataclasses::CollectionDC(l=[1, null, 3], d={"one": 1, "null": null})
+
+dataclasses::takes_nullable_dc(x)
+dataclasses::takes_nullable_dc(y)
+dataclasses::takes_collection_dc(z)
+        """,
+        ministd=True,
+    )
+
+    compiler.do_compile()

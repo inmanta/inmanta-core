@@ -17,6 +17,7 @@ Inmanta, please check out the :doc:`../quickstart` guide.
     api
     json
     modules
+    python_client
     openapi
     compatibility
     apilinks

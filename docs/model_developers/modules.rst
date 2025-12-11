@@ -269,7 +269,7 @@ The format for requires in requirements.txt is the following:
 
 
 Installing modules
-==================
+##################
 Since modules often have dependencies on other modules, it is common to develop against multiple
 modules (or a project and one or more modules) simultaneously. One might for example need to
 extend a dependent module to add support for some new feature. Because this use case is so common,
@@ -277,7 +277,7 @@ this section will describe how to work on multiple modules simultaneously so tha
 visible to the compiler. This procedure is of course applicable for working on a single module as well.
 
 Setting up the dev environment
-##############################
+------------------------------
 To set up the development environment for a project, activate your development Python environment and
 install the project with ``inmanta project install``. To set up the environment for a single v2 module,
 run ``pip install -e .`` instead.
@@ -286,13 +286,13 @@ The following subsections explain any additional steps you need to take if you w
 to one of the dependent modules as well.
 
 v1 modules
-----------
+~~~~~~~~~~
 Any modules you find in the project's ``modulepath`` after starting from a clean project and setting
 up the development environment are v1 modules. You can make changes to these modules and they will
 be reflected in the next compile. No additional steps are required.
 
 v2 modules
-----------
+~~~~~~~~~~
 All other modules are v2 and have been installed by ``inmanta project install`` into the active Python
 environment. If you want to be able to make changes to one of these modules, the easiest way is to
 check out the module repo separately and run ``pip install -e <path>`` on it, overwriting the published
@@ -305,7 +305,7 @@ the output of ``pip list --editable``.
 
 
 Working on the dev environment
-##############################
+------------------------------
 After setting up, you should be left with a dev environment where all required v2 modules have been
 installed (either in editable or in packaged form). If you're working on a project, all required v1
 modules should be checked out in the ``modulepath`` directory.
@@ -320,7 +320,7 @@ versions of v1 modules, have a look at the ``--use-module-in-place`` option in t
 
 
 Module installation on the server
-#################################
+---------------------------------
 
 The orchestrator server generally installs modules from the configured Python package
 repository, respecting the project's constraints on its modules and all inter-module constraints. The server is then responsible
@@ -334,7 +334,7 @@ from the Python package repository but instead contains all Python code as prese
 
 
 Configure the Inmanta server to install modules from a private python package repository
-----------------------------------------------------------------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 V2 modules can be installed from a Python package repository that requires authentication. This section explains how the Inmanta server should be configured to install v2 modules from such a Python package repository.
 

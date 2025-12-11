@@ -79,6 +79,10 @@ class resource:  # noqa: N801
         return cls
 
     @classmethod
+    def add_resource(cls, cls_name: str, resource_type: type["Resource"], options: dict[str, str]) -> None:
+        cls._resources[cls_name] = (resource_type, options)
+
+    @classmethod
     def validate(cls) -> None:
         fq_name_resource_decorator = f"{cls.__module__}.{cls.__name__}"
         fq_name_resource_class = f"{Resource.__module__}.{Resource.__name__}"
