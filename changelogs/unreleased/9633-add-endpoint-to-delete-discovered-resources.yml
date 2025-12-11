@@ -5,6 +5,6 @@ description: >
 issue-nr: 9633
 issue-repo: inmanta-core
 change-type: minor
-destination-branches: [master, iso8]
+destination-branches: [iso8]
 sections:
   minor-improvement: "{{description}}"
