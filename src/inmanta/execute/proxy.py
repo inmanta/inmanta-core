@@ -25,7 +25,7 @@ from dataclasses import is_dataclass
 from types import TracebackType
 from typing import TYPE_CHECKING, Callable, ContextManager, Optional, Self, Union
 
-# Keep UnsetException, UnknownException and in place for backward compat with <iso8
+# Keep UnsetException and UnknownException in place for backward compat with <iso8
 from inmanta import references
 from inmanta.ast import UnsetException  # noqa F401
 from inmanta.ast import Location, NotFoundException, RuntimeException, UnexpectedReference, UnknownException
