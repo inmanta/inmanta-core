@@ -479,6 +479,7 @@ class CoreAuthorizationLabel(AuthorizationLabel):
     DESIRED_STATE_READ = "desired-state.read"
     DESIRED_STATE_WRITE = "desired-state.write"
     DISCOVERED_RESOURCES_READ = "discovered-resources.read"
+    DISCOVERED_RESOURCES_DELETE = "discovered-resources.delete"
     DOCS_READ = "docs.read"
     DRYRUN_READ = "dryrun.read"
     DRYRUN_WRITE = "dryrun.write"

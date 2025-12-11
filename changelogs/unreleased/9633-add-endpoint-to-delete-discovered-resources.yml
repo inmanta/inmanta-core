@@ -1,0 +1,10 @@
+---
+description: >
+  Add an endpoint to delete a single discovered resource.
+  Add an endpoint to batch delete discovered resources.
+issue-nr: 9633
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [master, iso8]
+sections:
+  minor-improvement: "{{description}}"

@@ -19,6 +19,7 @@ Contact: code@inmanta.com
 import asyncio
 import datetime
 import logging
+import typing
 import uuid
 from collections import abc, defaultdict
 from collections.abc import Sequence
@@ -519,3 +520,34 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
             return out
         except (InvalidFilter, InvalidSort, data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
             raise BadRequest(e.message) from e
+
+    @handle(methods_v2.discovered_resource_delete, env="tid")
+    async def discovered_resource_delete(self, env: data.Environment, discovered_resource_id: ResourceIdStr) -> None:
+        """
+        Deletes a discovered resource based on id.
+
+        :raise NotFound: This exception is raised if the discovered resource is not found in the provided environment
+        """
+        async with data.Resource.get_connection() as connection:
+            result = await data.DiscoveredResource.get_one(
+                environment=env.id, discovered_resource_id=discovered_resource_id, connection=connection
+            )
+            if not result:
+                raise NotFound(f"Discovered Resource with id {discovered_resource_id} not found in env {env.id}")
+            await result.delete(connection=connection)
+
+    @handle(methods_v2.discovered_resource_delete_batch, env="tid")
+    async def discovered_resource_delete_batch(
+        self, env: data.Environment, discovered_resource_ids: typing.Sequence[str]
+    ) -> None:
+        """
+        Deletes one or more discovered resources based on id.
+        Does not raise an Exception if one or more of the discovered resources are not found.
+        """
+        async with data.Resource.get_connection() as connection:
+            query = f"""
+            DELETE FROM {data.DiscoveredResource.table_name()} as dr
+            WHERE dr.environment=$1
+                AND dr.discovered_resource_id=ANY($2)
+            """
+            await connection.execute(query, env.id, discovered_resource_ids)
