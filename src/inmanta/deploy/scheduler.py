@@ -1382,14 +1382,14 @@ class ResourceScheduler(TaskManager):
                 or state.compliance is Compliance.UNDEFINED
             ):
                 # We are stale but still the last deploy
-                # We can update the last_deploy_result (which is about last deploy)
+                # We can update the last_execution_result (which is about last deploy)
                 # We can't update compliance (which is about active state only)
                 # None of the event propagation or other update happen either for the same reason
                 # except for the event to notify dependents of failure recovery (to unblock skipped for dependencies)
                 # because we might otherwise miss the recovery (in the sense that the next deploy wouldn't be a transition
                 # from a bad to a good state, since we're transitioning to that good state now).
 
-                state.last_deploy_result = deploy_result
+                state.last_execution_result = deploy_result
                 state.last_deployed = finished
                 if recovered_from_failure:
                     self._send_events(resource_intent, stale_deploy=True, recovered_from_failure=True)
@@ -1399,7 +1399,7 @@ class ResourceScheduler(TaskManager):
             # We are not stale
             # first update state, then send out events
             self._deploying_latest.remove(resource)
-            state.last_deploy_result = deploy_result
+            state.last_execution_result = deploy_result
             state.last_deployed = finished
             state.last_deploy_compliant = state.compliance is Compliance.COMPLIANT
 
@@ -1668,13 +1668,13 @@ class ResourceScheduler(TaskManager):
 
                 scheduler_resource_state: ResourceState = self._state.resource_state[rid]
                 if db_deploy_result:
-                    if scheduler_resource_state.last_deploy_result != db_deploy_result:
+                    if scheduler_resource_state.last_execution_result != db_deploy_result:
                         resource_discrepancies.append(
                             Discrepancy(
                                 rid=rid,
-                                field="last_deploy_result",
+                                field="last_execution_result",
                                 expected=db_deploy_result,
-                                actual=scheduler_resource_state.last_deploy_result,
+                                actual=scheduler_resource_state.last_execution_result,
                             )
                         )
                 if db_blocked_status:

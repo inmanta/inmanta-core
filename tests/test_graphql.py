@@ -174,7 +174,7 @@ async def setup_database(project_default, server, client):
     "input, output",
     [
         ("isDeploying", "is_deploying"),
-        ("lastDeployResult", "last_deploy_result"),
+        ("lastDeployResult", "last_execution_result"),
         ("resourceIdValue", "resource_id_value"),
         ("blocked", "blocked"),
     ],
@@ -676,7 +676,7 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
     # Quick way of simulating a non-compliant report
     # It has to be non-orphan otherwise the complianceState returned will be None
     rps = await data.ResourcePersistentState.get_one(
-        environment=environment, last_deploy_result=state.DeployResult.DEPLOYED, is_orphan=False
+        environment=environment, last_execution_result=state.DeployResult.DEPLOYED, is_orphan=False
     )
     assert rps
     await rps.update_fields(last_deploy_compliant=False)

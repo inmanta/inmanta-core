@@ -24,24 +24,14 @@ import asyncpg
 import pytest
 
 from inmanta import data
-from inmanta.deploy.state import DeployResult
 
 file_name_regex = re.compile("test_v([0-9]{9})_to_v[0-9]{9}")
 part = file_name_regex.match(__name__)[1]
 
 
 @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), f"dumps/v{part}.sql"))
-async def test_add_last_deploy_compliant_to_rps_table(
+async def test_rename_last_deploy_result(
     postgresql_client: asyncpg.Connection, migrate_db_from: abc.Callable[[], abc.Awaitable[None]]
 ) -> None:
-    """
-    This adds the last_deploy_compliant column to the rps table
-    """
+    # This migration just renames a column
     await migrate_db_from()
-    all_rps = await data.ResourcePersistentState.get_list()
-    deployed_rps = {rps for rps in all_rps if rps.last_execution_result is DeployResult.DEPLOYED}
-    failed_skipped_rps = {rps for rps in all_rps if rps.last_execution_result in (DeployResult.FAILED, DeployResult.SKIPPED)}
-    remaining_rps = set(all_rps) - deployed_rps - failed_skipped_rps
-    assert all([rps.last_deploy_compliant for rps in deployed_rps])
-    assert all([not rps.last_deploy_compliant for rps in failed_skipped_rps])
-    assert all([rps.last_deploy_compliant is None for rps in remaining_rps])
