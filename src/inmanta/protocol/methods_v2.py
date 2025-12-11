@@ -1837,6 +1837,9 @@ def discovered_resource_delete(
 def discovered_resource_delete_batch(tid: uuid.UUID, discovered_resource_ids: Sequence[str]) -> None:
     """
     Delete multiple discovered resources.
+    If one or more discovered resources are not found on the environment,
+    they will be ignored and the other discovered resources will be deleted.
+    A 200 will be returned even if any/all provided discovered resources are ignored.
 
     :param tid: The id of the environment this resource belongs to
     :param discovered_resource_ids: List of discovered resource ids to delete
