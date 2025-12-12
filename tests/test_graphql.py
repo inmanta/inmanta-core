@@ -174,7 +174,7 @@ async def setup_database(project_default, server, client):
     "input, output",
     [
         ("isDeploying", "is_deploying"),
-        ("lastDeployResult", "last_execution_result"),
+        ("lastExecutionResult", "last_execution_result"),
         ("resourceIdValue", "resource_id_value"),
         ("blocked", "blocked"),
     ],
@@ -731,9 +731,9 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
         },
         # 1 undefined, 1 skipped for undefined, 1 still deploying
         {
-            "query": "lastDeployResult: {eq: NEW}",
+            "query": "lastExecutionResult: {eq: NEW}",
             "result": 3 * instances,
-            "assertion": {"state": {"lastDeployResult": state.DeployResult.NEW.name}},
+            "assertion": {"state": {"lastExecutionResult": state.DeployResult.NEW.name}},
         },
         {"query": "isDeploying: true", "result": instances, "assertion": {"state": {"isDeploying": True}}},
         {
@@ -743,17 +743,17 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
         },
         # 1 undefined, 1 skipped for undefined
         {
-            "query": "lastDeployResult: {eq: NEW} isDeploying: false",
+            "query": "lastExecutionResult: {eq: NEW} isDeploying: false",
             "result": 2 * instances,
-            "assertion": {"state": {"lastDeployResult": state.DeployResult.NEW.name, "isDeploying": False}},
+            "assertion": {"state": {"lastExecutionResult": state.DeployResult.NEW.name, "isDeploying": False}},
         },
         #  1 skipped for undefined
         {
-            "query": "lastDeployResult: {eq: NEW} isDeploying: false complianceState: {neq: UNDEFINED}",
+            "query": "lastExecutionResult: {eq: NEW} isDeploying: false complianceState: {neq: UNDEFINED}",
             "result": instances,
             "assertion": {
                 "state": {
-                    "lastDeployResult": state.DeployResult.NEW.name,
+                    "lastExecutionResult": state.DeployResult.NEW.name,
                     "isDeploying": False,
                     "complianceState": state.Compliance.HAS_UPDATE.name,
                 }
@@ -761,11 +761,11 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
         },
         # Non-compliant report
         {
-            "query": "lastDeployResult: {eq: DEPLOYED} isDeploying: false complianceState: {eq: NON_COMPLIANT}",
+            "query": "lastExecutionResult: {eq: DEPLOYED} isDeploying: false complianceState: {eq: NON_COMPLIANT}",
             "result": 1,
             "assertion": {
                 "state": {
-                    "lastDeployResult": state.DeployResult.DEPLOYED.name,
+                    "lastExecutionResult": state.DeployResult.DEPLOYED.name,
                     "isDeploying": False,
                     "complianceState": state.Compliance.NON_COMPLIANT.name,
                 }
@@ -789,7 +789,7 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
                         isUndefined
                         blocked
                         isDeploying
-                        lastDeployResult
+                        lastExecutionResult
                         lastDeploy
                         complianceState
                         currentIntentAttributeHash
@@ -815,7 +815,7 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
     query = (
         """
     {
-        resources ( filter: {environment: "%s" lastDeployResult: {eq: NEW}}
+        resources ( filter: {environment: "%s" lastExecutionResult: {eq: NEW}}
             orderBy: [{key: "complianceState" order: "asc"}]) {
             edges {
                 node {
@@ -844,7 +844,7 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
     query = (
         """
     {
-        resources (filter: {environment: "%s" lastDeployResult: {eq: NEW}}
+        resources (filter: {environment: "%s" lastExecutionResult: {eq: NEW}}
             orderBy: [{key: "complianceState" order: "desc"}, {key: "isDeploying" order: "asc"}]) {
             edges {
                 node {
@@ -876,7 +876,7 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
     query = (
         """
        {
-           resources (filter: {environment: "%s" lastDeployResult: {eq: NEW}}
+           resources (filter: {environment: "%s" lastExecutionResult: {eq: NEW}}
                     orderBy: [{key: "complianceState" order: "desc"}, {key: "isDeploying" order: "desc"}]) {
                edges {
                    node {
