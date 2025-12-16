@@ -50,7 +50,7 @@ Sphinx-Substitution-Extensions==2025.12.15
 texttable==1.7.0
 time-machine==3.1.0
 toml==0.10.2
-tornado==6.5.3
+tornado==6.5.4
 types-python-dateutil==2.9.0.20251115
 types-PyYAML==6.0.12.20250915
 types-setuptools==80.9.0.20250822
