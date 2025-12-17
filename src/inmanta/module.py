@@ -1539,6 +1539,19 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
     pip: ProjectPipConfig = ProjectPipConfig()
     environment_settings: dict[str, inmanta.data.model.EnvSettingType] | None = None
 
+    @field_validator("requires", mode="after")
+    @classmethod
+    def validate_requires(cls, requires: list[str]) -> list[str]:
+        if requires:
+            warnings.warn(
+                ProjectConfigurationWarning(
+                    "The requires field of the project.yml file is deprecated. Add dependencies/constraints"
+                    " in the requirements.txt file of the project. The requires field will be dropped in the"
+                    " next major release."
+                )
+            )
+        return requires
+
     @field_validator("modulepath", mode="before")
     @classmethod
     def modulepath_to_list(cls, v: object) -> object:

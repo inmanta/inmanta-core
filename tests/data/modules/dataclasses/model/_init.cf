@@ -17,3 +17,14 @@ entity SimpleDC extends DataclassABC:
     int n
 end
 implement SimpleDC using std::none
+
+entity NullableDC extends DataclassABC:
+    int? n
+end
+implement NullableDC using std::none
+
+entity CollectionDC extends DataclassABC:
+    list l
+    dict d
+end
+implement CollectionDC using std::none

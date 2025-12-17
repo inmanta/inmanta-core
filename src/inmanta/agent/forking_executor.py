@@ -110,6 +110,7 @@ from inmanta.protocol.ipc_light import (
     ReturnType,
 )
 from inmanta.types import ResourceIdStr
+from inmanta.util import set_default_event_loop
 from setproctitle import setproctitle
 
 LOGGER = logging.getLogger(LOGGER_NAME_EXECUTOR)
@@ -550,14 +551,19 @@ def mp_worker_entrypoint(
 
     async def serve() -> None:
         loop = asyncio.get_running_loop()
-        # Start serving
-        # also performs setup of log shipper
-        # this is part of stage 2 logging setup
-        transport, protocol = await loop.connect_accepted_socket(
-            functools.partial(ExecutorServer, name, environment, logger, not cli_log), socket
-        )
-        inmanta.signals.setup_signal_handlers(protocol.stop)
-        await protocol.stopped.wait()
+        set_default_event_loop(loop)
+
+        try:
+            # Start serving
+            # also performs setup of log shipper
+            # this is part of stage 2 logging setup
+            transport, protocol = await loop.connect_accepted_socket(
+                functools.partial(ExecutorServer, name, environment, logger, not cli_log), socket
+            )
+            inmanta.signals.setup_signal_handlers(protocol.stop)
+            await protocol.stopped.wait()
+        finally:
+            set_default_event_loop(None)
 
     # Async init
     asyncio.run(serve())
@@ -567,19 +573,29 @@ def mp_worker_entrypoint(
 
 class MPProcess(PoolManager[executor.ExecutorId, executor.ExecutorId, "MPExecutor"], PoolMember[executor.ExecutorBlueprint]):
     """
+     Manager for a single child processes that can host multiple executors (for the same blueprint).
 
-    Physical process proxy, hands out child executors
+     It hands out MPExecutor instances as local Executor interfaces to a matching executor (InProcessExecutor) inside the
+     external process.
 
-    Termination scenarios:
-    - connection loss:
-       - all outstand calls fail, future calls fail as well
-       - signal parent to drop this instance and all its children from the cache
-       - clean up using _force_stop
-    - no more children
-       - send stop to remote end
-       - wait for connection loss
-    - termination request from parent
-       - send stop to children
+     It is responsible for:
+      1. cleaning up the process
+      2. holding the IPC connection to the process (ExecutorClient communicating with ExecutorServer inside the process)
+      3. Updating the process for requested state changes (e.g. shutdown)
+      4. Updating the cache state for external events (e.g. process is killed)
+
+    It is not responsible for setting up the process, this is done in the MPPool
+
+     Termination scenarios:
+     - connection loss:
+        - all outstand calls fail, future calls fail as well
+        - signal parent to drop this instance and all its children from the cache
+        - clean up using _force_stop
+     - no more children
+        - send stop to remote end
+        - wait for connection loss
+     - termination request from parent
+        - send stop to children
     """
 
     def __init__(
@@ -725,7 +741,13 @@ class MPProcess(PoolManager[executor.ExecutorId, executor.ExecutorId, "MPExecuto
 
 
 class MPExecutor(executor.Executor, resourcepool.PoolMember[executor.ExecutorId]):
-    """A Single Child Executor
+    """
+    A single Executor interface that delegates to a true executor managed by a MPProcess.
+
+    This is an executor for a given agent. Multiple MPExecutors can co-exist on a single MPProcess as long as they have the
+    same blueprint.
+
+    This MPExecutor represents/proxies to a separate executor instance (InProcessExecutor) inside a specific process (MPProcess)
 
     termination:
     - stop requested by parent:
@@ -825,6 +847,10 @@ class MPExecutor(executor.Executor, resourcepool.PoolMember[executor.ExecutorId]
 
 
 class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.ExecutorBlueprint, MPProcess]):
+    """
+    Pool that manages processes (MPProcess) in which we run executors. Hands out processes when requested, creating them if
+    required. Maintains one process per executor blueprint.
+    """
 
     def __init__(
         self,
@@ -996,10 +1022,8 @@ class MPManager(
     executor.ExecutorManager[MPExecutor],
 ):
     """
-    This is the executor that provides the new behavior (ISO8+),
-    where the agent forks executors in specific venvs to prevent code reloading.
-
-    Executors are co-hosted on processes if they share a blueprint
+    Executor manager for forking executors. Relies on MPPool to manage processes, one per executor blueprint. Each
+    process runs a single InProcessExecutor inside the process, and exposes a local MPExecutor as an interface to it.
     """
 
     def __init__(

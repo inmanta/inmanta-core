@@ -1,0 +1,8 @@
+---
+description: "Added the `server.internal-server-address` config option."
+issue-nr: 9761
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [master, iso8]
+sections:
+  minor-improvement: "{{description}}"
