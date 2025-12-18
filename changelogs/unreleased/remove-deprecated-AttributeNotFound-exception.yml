@@ -1,0 +1,3 @@
+description: Remove deprecated AttributeNotFound exception
+change-type: minor
+destination-branches: [master]
