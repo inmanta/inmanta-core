@@ -14,7 +14,7 @@ docstring-parser==0.17.0
 email-validator==2.3.0
 furo==2025.9.25
 graphviz==0.21
-inmanta-dev-dependencies==2.185.0
+inmanta-dev-dependencies==2.186.0
 inmanta-module-std
 inmanta-sphinx==2.3.0
 jinja2==3.1.6
@@ -22,7 +22,7 @@ logfire==4.16.0
 more-itertools==10.8.0
 myst-parser==4.0.1
 openapi_spec_validator==0.7.2
-opentelemetry-instrumentation-asyncpg==0.60b0
+opentelemetry-instrumentation-asyncpg==0.60b1
 packaging==25.0
 pip==25.3
 pip2pi==0.8.2
@@ -47,12 +47,12 @@ sphinxcontrib-redoc==1.6.0
 sphinxcontrib-serializinghtml==2.0.0
 sphinx-design==0.6.1
 Sphinx-Substitution-Extensions==2025.11.17
-SQLAlchemy==2.0.44
+SQLAlchemy==2.0.45
 strawberry-sqlalchemy-mapper==0.8.0
 texttable==1.7.0
 time-machine==3.1.0
 toml==0.10.2
-tornado==6.5.2
+tornado==6.5.4
 types-python-dateutil==2.9.0.20251115
 types-PyYAML==6.0.12.20250915
 types-setuptools==80.9.0.20250822

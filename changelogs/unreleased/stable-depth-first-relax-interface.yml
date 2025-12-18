@@ -1,0 +1,5 @@
+description: Relax interface for stable-depth-first util method
+change-type: patch
+destination-branches:
+  - master
+  - iso8
