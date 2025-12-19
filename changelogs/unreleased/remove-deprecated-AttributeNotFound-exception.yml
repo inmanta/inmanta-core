@@ -3,5 +3,5 @@ description: Remove deprecated AttributeNotFound exception. Attempting to access
 change-type: major
 destination-branches: [master]
 sections:
-  deprecation-note: "{{description}}"
+  upgrade-note: "{{description}}"
 
