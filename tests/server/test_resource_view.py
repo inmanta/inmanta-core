@@ -102,7 +102,7 @@ async def test_consistent_resource_state_reporting(
         ),
         state=state.ResourceState(
             compliance=state.Compliance.NON_COMPLIANT,
-            last_deploy_result=state.DeployResult.FAILED,
+            last_execution_result=state.DeployResult.FAILED,
             blocked=state.Blocked.NOT_BLOCKED,
             last_deployed=now,
             last_deploy_compliant=False,

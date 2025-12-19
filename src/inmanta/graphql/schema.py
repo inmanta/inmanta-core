@@ -469,7 +469,7 @@ class ResourceFilter(StrawberryFilter):
     purged: bool | None = strawberry.UNSET
     blocked: EnumFilter[state.Blocked] | None = strawberry.UNSET
     compliance_state: EnumFilter[state.Compliance] | None = strawberry.UNSET
-    last_deploy_result: EnumFilter[state.DeployResult] | None = strawberry.UNSET
+    last_execution_result: EnumFilter[state.DeployResult] | None = strawberry.UNSET
     is_deploying: bool | None = strawberry.UNSET
     is_orphan: bool | None = strawberry.UNSET
 
@@ -483,7 +483,7 @@ class ResourceFilter(StrawberryFilter):
 
     @property
     def get_models_to_join(self) -> set[type[models.Base]]:
-        rps_join = ["blocked", "compliance_state", "last_deploy_result", "is_deploying", "is_orphan"]
+        rps_join = ["blocked", "compliance_state", "last_execution_result", "is_deploying", "is_orphan"]
         for attr in rps_join:
             if getattr(self, attr) is not strawberry.UNSET:
                 return {self.rps_model}
@@ -497,7 +497,7 @@ class ResourceFilter(StrawberryFilter):
             "agent": self.model,
             "blocked": self.rps_model,
             "compliance_state": self.rps_model,
-            "last_deploy_result": self.rps_model,
+            "last_execution_result": self.rps_model,
         }
         for key, model in key_to_model.items():
             attr = getattr(self, key)
@@ -538,7 +538,7 @@ class ResourceOrder(StrawberryOrder):
             "resource_id_value": self.model,
             "blocked": self.rps_model,
             "compliance_state": self.rps_model,
-            "last_deploy_result": self.rps_model,
+            "last_execution_result": self.rps_model,
             "is_deploying": self.rps_model,
         }
 
