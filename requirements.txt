@@ -48,7 +48,7 @@ sphinxcontrib-serializinghtml==2.0.0
 sphinx-design==0.6.1
 Sphinx-Substitution-Extensions==2025.12.15
 texttable==1.7.0
-time-machine==3.1.0
+time-machine==3.2.0
 toml==0.10.2
 tornado==6.5.4
 types-python-dateutil==2.9.0.20251115
