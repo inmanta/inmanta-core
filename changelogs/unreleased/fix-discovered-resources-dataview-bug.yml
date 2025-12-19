@@ -1,0 +1,5 @@
+---
+description: >
+  Fix bug where the discovered_resources_get_batch endpoint would crash if the discovery_resource_id was not managed
+change-type: patch
+destination-branches: [master]

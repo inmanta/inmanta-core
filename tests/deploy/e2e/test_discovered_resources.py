@@ -104,6 +104,11 @@ async def test_discovered_resource_batch(server, client, agent, environment):
     result = await agent._client.discovered_resource_create_batch(environment, resources)
     assert result.code == 200
 
+    # checks for a bug where this endpoint would crash if the discovery_resource_id was not managed (as is this case)
+    result = await client.discovered_resources_get_batch(environment)
+    assert result.code == 200
+    assert len(result.result["data"]) == 3
+
     for res in resources:
         result = await client.discovered_resources_get(environment, res["discovered_resource_id"])
         assert result.code == 200
