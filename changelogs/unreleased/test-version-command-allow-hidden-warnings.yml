@@ -1,0 +1,5 @@
+description: 'Allow invisible warnings in the inmanta --version test case'
+change-type: patch
+destination-branches:
+  - master
+  - iso8

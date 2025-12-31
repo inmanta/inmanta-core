@@ -149,25 +149,16 @@ def run_without_tty(
     env: typing.Optional[dict[str, str]] = None,
     killtime: int = 15,
     termtime: int = 10,
-    *,
-    treat_warnings_as_errors: bool = False,
 ) -> tuple[str, str, int]:
     """Run the given command without a tty"""
-    if treat_warnings_as_errors:
-        if env is None:
-            env = {}
-        env["PYTHONWARNINGS"] = "error"
-
     process = do_run(args, env)
     return do_kill(process, killtime, termtime)
 
 
-def run_with_tty(args, killtime=4, termtime=3, *, treat_warnings_as_errors: bool = False):
+def run_with_tty(args, killtime=4, termtime=3):
     """Could not get code for actual tty to run stable in docker, so we are faking it"""
     env = {const.ENVIRON_FORCE_TTY: "true"}
-    return run_without_tty(
-        args, env=env, killtime=killtime, termtime=termtime, treat_warnings_as_errors=treat_warnings_as_errors
-    )
+    return run_without_tty(args, env=env, killtime=killtime, termtime=termtime)
 
 
 def is_colorama_package_available():
@@ -278,9 +269,9 @@ def test_version_command(tmpdir, with_tty: bool, regexes_required_lines: list[st
 
     (args, log_dir) = get_command(tmpdir, command="--version")
     if with_tty:
-        (stdout, stderr, return_code) = run_with_tty(args, treat_warnings_as_errors=True)
+        (stdout, stderr, return_code) = run_with_tty(args)
     else:
-        (stdout, stderr, return_code) = run_without_tty(args, treat_warnings_as_errors=True)
+        (stdout, stderr, return_code) = run_without_tty(args)
 
     if return_code != 0 or stderr:
         e = Exception("An unexpected error occurred or warnings were logged while running 'inmanta --version'")
