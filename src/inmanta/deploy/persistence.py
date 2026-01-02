@@ -283,7 +283,7 @@ class ToDbUpdateManager(StateUpdateManager):
                         environment=self.environment,
                         resource_id=resource_id_parsed.resource_str(),
                         created_at=finished,
-                        diff=result.changes,
+                        diff={attr_name: attr_change.model_dump() for attr_name, attr_change in result.changes.items()},
                         connection=connection,
                     )
 
