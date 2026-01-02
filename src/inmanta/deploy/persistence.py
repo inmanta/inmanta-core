@@ -278,6 +278,15 @@ class ToDbUpdateManager(StateUpdateManager):
                     connection=connection,
                 )
 
+                if status == const.ResourceState.non_compliant:
+                    await data.ResourcePersistentState.persist_non_compliant_diff(
+                        environment=self.environment,
+                        resource_id=resource_id_parsed.resource_str(),
+                        created_at=finished,
+                        diff=result.changes,
+                        connection=connection,
+                    )
+
                 if not stale_deploy and change is Change.purged and status == const.ResourceState.deployed:
                     await data.Parameter.delete_all(
                         environment=self.environment, resource_id=resource_id_parsed.resource_str(), connection=connection

@@ -383,6 +383,17 @@ async def test_dump_db(
                 "purged": False,
                 "requires": [],
             },
+            # non_compliant resource
+            {
+                "key": "key10",
+                "value": "val10",
+                "version": version,
+                "id": f"test::Resource[agent1,key=key10],v={version}",
+                "send_event": True,
+                "purged": False,
+                "requires": [],
+                "report_only": True,
+            },
         ],
         resource_state={
             "test::Resource[agent1,key=key1]": const.ResourceState.available,
@@ -391,6 +402,7 @@ async def test_dump_db(
             "test::Resource[agent1,key=key4]": const.ResourceState.undefined,
             "test::Resource[agent1,key=key5]": const.ResourceState.available,
             "test::Resource[agent1,key=key7]": const.ResourceState.available,
+            "test::Resource[agent1,key=key10]": const.ResourceState.available,
             res_id_to_delete: const.ResourceState.available,
         },
         compiler_version=util.get_compiler_version(),
