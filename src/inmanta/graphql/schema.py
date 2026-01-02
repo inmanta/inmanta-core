@@ -324,6 +324,7 @@ def get_expert_mode(root: "Environment") -> bool:
     Checks settings of environment to figure out if expert mode is enabled or not
     """
     assert hasattr(root, "settings")  # Make mypy happy
+    assert isinstance(root.settings, dict)
     if "enable_lsm_expert_mode" not in root.settings["settings"]:
         return False
     return cast(bool, root.settings["settings"]["enable_lsm_expert_mode"]["value"])
@@ -343,8 +344,13 @@ def get_settings(root: "Environment") -> scalars.JSON:
     """
     Returns all environment settings (the ones set by the user and default values for the ones that are not)
     and their definitions.
+
+    Strawberry is a bit finicky with its return types, it can't handle a dict return type we have to cast it as scalars.JSON.
+    root.settings is of type scalars.JSON, and scalars.JSON is defined as an object
+    so we have to do some assertions on it to make mypy happy.
     """
     assert hasattr(root, "settings")
+    assert isinstance(root.settings, dict)
     modified_settings = root.settings["settings"]
     assert modified_settings is not None
     setting_values: dict[str, model.EnvironmentSettingDetails] = {}
@@ -360,7 +366,7 @@ def get_settings(root: "Environment") -> scalars.JSON:
             assert default_value is not None  # Should never happen but setting_info.default is Optional
             setting_values[key] = model.EnvironmentSettingDetails(value=default_value)
     setting_definitions = dict(sorted(data.Environment.get_setting_definitions_for_api(setting_values).items()))
-    return {"settings": setting_values, "definition": setting_definitions}
+    return cast(scalars.JSON, {"settings": setting_values, "definition": setting_definitions})
 
 
 @mapper.type(models.Environment)
