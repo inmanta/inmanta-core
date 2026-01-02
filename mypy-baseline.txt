@@ -641,13 +641,6 @@ src/inmanta/graphql/schema.py:0: error: Returning Any from function declared to 
 src/inmanta/graphql/schema.py:0: error: Type argument "Environment" of "ListConnection" must be a subtype of "Node"  [type-var]
 src/inmanta/graphql/schema.py:0: error: Type argument "Notification" of "ListConnection" must be a subtype of "Node"  [type-var]
 src/inmanta/graphql/schema.py:0: error: Type argument "Resource" of "ListConnection" must be a subtype of "Node"  [type-var]
-src/inmanta/graphql/schema.py:0: error: Value of type scalars.JSON? is not indexable  [index]
-src/inmanta/graphql/schema.py:0: error: Value of type scalars.JSON? is not indexable  [index]
-src/inmanta/graphql/schema.py:0: error: Value of type scalars.JSON? is not indexable  [index]
-src/inmanta/graphql/schema.py:0: error: Variable "strawberry.scalars.JSON" is not valid as a type  [valid-type]
-src/inmanta/graphql/schema.py:0: error: Variable "strawberry.scalars.JSON" is not valid as a type  [valid-type]
-src/inmanta/graphql/schema.py:0: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#variables-vs-type-aliases
-src/inmanta/graphql/schema.py:0: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#variables-vs-type-aliases
 src/inmanta/loader.py:0: error: Argument 1 to "getsourcefile" has incompatible type "object"; expected Module | type[Any] | MethodType | FunctionType | TracebackType | FrameType | CodeType | Callable[..., Any]  [arg-type]
 src/inmanta/loader.py:0: error: Incompatible types in assignment (expression has type "None", variable has type "PluginModuleFinder")  [assignment]
 src/inmanta/loader.py:0: error: Incompatible types in assignment (expression has type "None", variable has type "PluginModuleFinder")  [assignment]
