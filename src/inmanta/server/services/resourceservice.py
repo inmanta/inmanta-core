@@ -148,6 +148,11 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
         self.schedule(
             data.ResourceAction.purge_logs, opt.server_purge_resource_action_logs_interval.get(), cancel_on_stop=False
         )
+        self.schedule(
+            data.ResourcePersistentState.purge_old_diffs,
+            opt.server_purge_resource_action_logs_interval.get(),
+            cancel_on_stop=False,
+        )
         await super().start()
 
     async def stop(self) -> None:
