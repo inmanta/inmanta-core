@@ -4748,6 +4748,9 @@ class ResourcePersistentState(BaseDocument):
     # Written at deploy time (Exception for initial record creation  -> no race condition possible with deploy path)
     last_non_deploying_status: const.NonDeployingResourceState = const.NonDeployingResourceState.available
 
+    # A foreign key to the resource_diff table. This is only relevant if this resource is in the non_compliant state
+    non_compliant_diff: Optional[uuid.UUID] = None
+
     @classmethod
     async def mark_as_orphan(
         cls, environment: UUID, resource_ids: Set[ResourceIdStr], connection: Optional[Connection] = None
@@ -4885,6 +4888,63 @@ class ResourcePersistentState(BaseDocument):
             model_version,
             connection=connection,
         )
+
+    @classmethod
+    async def persist_non_compliant_diff(
+        cls,
+        environment: uuid.UUID,
+        resource_id: ResourceIdStr,
+        created_at: datetime.datetime,
+        diff: dict[str, m.AttributeStateChange],
+        connection: Optional[asyncpg.connection.Connection],
+    ) -> None:
+        """
+        Persist the non-compliant diff int othe resource_diff table.
+        Add the generated uuid of that diff to rps.non_compliant_diff
+        """
+        query = """
+        WITH new_diff AS (
+            INSERT INTO resource_diff (id, environment, resource_id, created, diff)
+            VALUES (gen_random_uuid(), $1, $2, $3, $4)
+            RETURNING id
+        )
+        UPDATE public.resource_persistent_state AS rps
+        SET non_compliant_diff=new_diff.id
+        FROM new_diff
+        WHERE rps.environment=$1
+            AND rps.resource_id=$2;
+        """
+        await cls._execute_query(query, environment, resource_id, created_at, json.dumps(diff), connection=connection)
+
+    @classmethod
+    async def purge_old_diffs(cls) -> None:
+        """
+        Purge every diff that is older than RESOURCE_ACTION_LOGS_RETENTION
+        except for diffs that are currently referenced by the rps table
+        """
+        default_retention_time = Environment._settings[RESOURCE_ACTION_LOGS_RETENTION].default
+
+        query = f"""
+            WITH non_halted_envs AS (
+                SELECT
+                    id,
+                    (
+                        COALESCE((settings->'settings'->'resource_action_logs_retention'->>'value')::int, $1)
+                    ) AS retention_days
+                FROM {Environment.table_name()}
+                WHERE NOT halted
+            )
+            DELETE FROM public.resource_diff AS rd
+            USING non_halted_envs
+            WHERE rd.environment=non_halted_envs.id
+                AND rd.created < now() AT TIME ZONE 'UTC' - make_interval(days => non_halted_envs.retention_days)
+                AND NOT EXISTS (
+                  SELECT 1
+                  FROM {cls.table_name()} AS rps
+                  WHERE rps.non_compliant_diff=rd.id
+              );
+        """
+        await cls._execute_query(query, default_retention_time)
 
     @classmethod
     async def update_persistent_state(
