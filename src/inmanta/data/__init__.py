@@ -4895,7 +4895,7 @@ class ResourcePersistentState(BaseDocument):
         environment: uuid.UUID,
         resource_id: ResourceIdStr,
         created_at: datetime.datetime,
-        diff: dict[str, m.AttributeStateChange],
+        diff: dict[str, object],
         connection: Optional[asyncpg.connection.Connection],
     ) -> None:
         """
