@@ -2,8 +2,6 @@
 -- PostgreSQL database dump
 --
 
-\restrict DdAzD3WY61KVOvOIC9s1CknN7g15PAwyZJgAqQuUo2lD65oUjtFHsMHscxhaLHc
-
 -- Dumped from database version 18.1
 -- Dumped by pg_dump version 18.1
 
@@ -1993,6 +1991,4 @@ ALTER TABLE ONLY public.discoveredresource
 --
 -- PostgreSQL database dump complete
 --
-
-\unrestrict DdAzD3WY61KVOvOIC9s1CknN7g15PAwyZJgAqQuUo2lD65oUjtFHsMHscxhaLHc
 
