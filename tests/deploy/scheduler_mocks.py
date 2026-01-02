@@ -279,7 +279,7 @@ class DummyStateManager(StateUpdateManager):
         for resource, cstate in self.state.items():
             deploy_result, blocked, status = state_translation_table[cstate]
             if deploy_result:
-                assert scheduler._state.resource_state[resource].last_deploy_result == deploy_result
+                assert scheduler._state.resource_state[resource].last_execution_result == deploy_result
             if blocked:
                 assert scheduler._state.resource_state[resource].blocked == blocked
             if status:

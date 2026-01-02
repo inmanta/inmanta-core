@@ -751,7 +751,7 @@ class ResourcePersistentState(Base):
     resource_id_value: Mapped[str] = mapped_column(String, nullable=False)
     is_undefined: Mapped[bool] = mapped_column(Boolean, nullable=False)
     is_orphan: Mapped[bool] = mapped_column(Boolean, nullable=False)
-    last_deploy_result: Mapped[str] = mapped_column(String, nullable=False)
+    last_execution_result: Mapped[str] = mapped_column(String, nullable=False)
     blocked: Mapped[str] = mapped_column(String, nullable=False)
     created: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False)
     last_deploy: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
