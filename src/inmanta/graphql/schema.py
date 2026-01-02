@@ -366,7 +366,7 @@ def get_settings(root: "Environment") -> scalars.JSON:
             assert default_value is not None  # Should never happen but setting_info.default is Optional
             setting_values[key] = model.EnvironmentSettingDetails(value=default_value)
     setting_definitions = dict(sorted(data.Environment.get_setting_definitions_for_api(setting_values).items()))
-    return cast(scalars.JSON, {"settings": setting_values, "definition": setting_definitions})
+    return scalars.JSON({"settings": setting_values, "definition": setting_definitions})
 
 
 @mapper.type(models.Environment)
