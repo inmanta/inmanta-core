@@ -4738,7 +4738,7 @@ class ResourcePersistentState(BaseDocument):
     # Set to true when a version starts its deployment, set to false when it finishes
     is_deploying: bool
     # Written at deploy time (except for NEW -> no race condition possible with deploy path)
-    last_deploy_result: state.DeployResult
+    last_execution_result: state.DeployResult
     # Was the last deploy compliant, used for recovering scheduler state
     last_deploy_compliant: Optional[bool] = None
     # Written both when processing a new version and at deploy time. As such, this should be updated
@@ -4844,7 +4844,7 @@ class ResourcePersistentState(BaseDocument):
                 is_undefined,
                 is_orphan,
                 is_deploying,
-                last_deploy_result,
+                last_execution_result,
                 blocked,
                 created
             )
@@ -4901,7 +4901,7 @@ class ResourcePersistentState(BaseDocument):
         last_deploy_compliant: Optional[bool] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
         # TODO[#8541]: accept state.ResourceState and write blocked status as well
-        last_deploy_result: Optional[state.DeployResult] = None,
+        last_execution_result: Optional[state.DeployResult] = None,
     ) -> None:
         """Update the data in the resource_persistent_state table"""
         args = ArgumentCollector(2)
@@ -4917,8 +4917,8 @@ class ResourcePersistentState(BaseDocument):
             "last_deploy_compliant": last_deploy_compliant,
         }
         query_parts = [f"{k}={args(v)}" for k, v in invalues.items() if v is not None]
-        if last_deploy_result:
-            query_parts.append(f"last_deploy_result={args(last_deploy_result.name)}")
+        if last_execution_result:
+            query_parts.append(f"last_execution_result={args(last_execution_result.name)}")
         if not query_parts:
             return
         query = f"UPDATE public.resource_persistent_state SET {','.join(query_parts)} WHERE environment=$1 and resource_id=$2"
