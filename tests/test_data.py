@@ -1984,7 +1984,13 @@ async def test_match_tables_in_db_against_table_definitions_in_orm(
     table_names_in_database = [x["table_name"] for x in table_names]
     table_names_in_classes_list = [x.table_name() for x in data._classes]
     # Schema management table and join tables are not in the classes list.
-    join_tables = {"schemamanager", "resourceaction_resource", "role_assignment", "resource_set_configuration_model"}
+    join_tables = {
+        "schemamanager",
+        "resourceaction_resource",
+        "role_assignment",
+        "resource_set_configuration_model",
+        "resource_diff",
+    }
     # The following tables are not in the classes list, they are managed via the sqlalchemy ORM.
     sql_alchemy_tables: set[str] = {"inmanta_module", "module_files", "agent_modules"}
     assert len(table_names_in_classes_list) + len(join_tables) + len(sql_alchemy_tables) == len(table_names_in_database)
