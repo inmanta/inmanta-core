@@ -4896,10 +4896,10 @@ class ResourcePersistentState(BaseDocument):
         resource_id: ResourceIdStr,
         created_at: datetime.datetime,
         diff: dict[str, object],
-        connection: Optional[asyncpg.connection.Connection],
+        connection: Optional[asyncpg.connection.Connection] = None,
     ) -> None:
         """
-        Persist the non-compliant diff int othe resource_diff table.
+        Persist the non-compliant diff into the resource_diff table.
         Add the generated uuid of that diff to rps.non_compliant_diff
         """
         query = """
