@@ -4895,7 +4895,8 @@ class ResourcePersistentState(BaseDocument):
         environment: uuid.UUID,
         resource_id: ResourceIdStr,
         created_at: datetime.datetime,
-        diff: dict[str, object],
+        diff: Mapping[str, object],
+        *,
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> None:
         """
@@ -4920,7 +4921,7 @@ class ResourcePersistentState(BaseDocument):
     async def purge_old_diffs(cls) -> None:
         """
         Purge every diff that is older than RESOURCE_ACTION_LOGS_RETENTION
-        except for diffs that are currently referenced by the rps table
+        and not currently referenced by the rps table
         """
         default_retention_time = Environment._settings[RESOURCE_ACTION_LOGS_RETENTION].default
 

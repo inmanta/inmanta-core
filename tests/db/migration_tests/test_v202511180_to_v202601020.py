@@ -34,7 +34,7 @@ async def test_add_resource_diff_table(
     postgresql_client: asyncpg.Connection, migrate_db_from: abc.Callable[[], abc.Awaitable[None]]
 ) -> None:
     """
-    This adds the resource_diff table to the database and the non_compliant_diff column to .
+    This adds the resource_diff table to the database and the non_compliant_diff column to the rps table.
     TODO: update this test when we add the endpoint to fetch the diff
     """
     await migrate_db_from()

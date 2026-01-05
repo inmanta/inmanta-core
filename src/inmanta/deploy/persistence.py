@@ -278,7 +278,7 @@ class ToDbUpdateManager(StateUpdateManager):
                     connection=connection,
                 )
 
-                if status == const.ResourceState.non_compliant:
+                if status is const.ResourceState.non_compliant:
                     await data.ResourcePersistentState.persist_non_compliant_diff(
                         environment=self.environment,
                         resource_id=resource_id_parsed.resource_str(),
