@@ -1863,6 +1863,109 @@ async def test_resource_action_of_non_compliant_resource(resource_container, ser
     assert log["messages"][1]["msg"] == "Resource test::Resource[agent1,key=key] was marked as non-compliant."
 
 
+async def test_non_compliant_diff(resource_container, server, client, clienthelper, environment, agent):
+    """
+    Asserts that the diff for a resource is correctly updated when we reach the non-compliant state
+    TODO: Flesh out this test when we implement the endpoint to fetch the diff
+    """
+
+    version = await clienthelper.get_version()
+
+    rid1 = "test::Resource[agent1,key=key]"
+
+    # Set rid1 to "actual_value"
+    resources = [
+        {
+            "key": "key",
+            "value": "actual_value",
+            "id": f"{rid1},v={version}",
+            "requires": [],
+            "purged": False,
+            "send_event": False,
+            "receive_events": False,
+        },
+    ]
+    await clienthelper.set_auto_deploy(True)
+    await clienthelper.put_version_simple(resources, version, wait_for_released=True)
+    await clienthelper.wait_for_deployed(version=version)
+
+    rps = await data.ResourcePersistentState.get_one(environment=environment, resource_id=rid1)
+    assert rps.non_compliant_diff is None
+    assert rps.last_non_deploying_status == const.NonDeployingResourceState.deployed
+
+    # Make rid1 reporting and change the desired state
+    version = await clienthelper.get_version()
+    resources = [
+        {
+            "key": "key",
+            "value": "diff_value",
+            "id": f"{rid1},v={version}",
+            "requires": [],
+            "purged": False,
+            "send_event": False,
+            "receive_events": False,
+            "report_only": True,
+        },
+    ]
+    await clienthelper.set_auto_deploy(True)
+    await clienthelper.put_version_simple(resources, version, wait_for_released=True)
+    await clienthelper.wait_for_deployed(version=version)
+
+    # non_compliant diff got populated in the rps table
+    rps = await data.ResourcePersistentState.get_one(environment=environment, resource_id=rid1)
+    assert rps.non_compliant_diff is not None
+    assert rps.last_non_deploying_status == const.NonDeployingResourceState.non_compliant
+
+    non_compliant_diff_id = rps.non_compliant_diff
+
+    # Make report succeed again
+    # Even though we are compliant, we don't update non_compliant_diff
+    version = await clienthelper.get_version()
+    resources = [
+        {
+            "key": "key",
+            "value": "actual_value",
+            "id": f"{rid1},v={version}",
+            "requires": [],
+            "purged": False,
+            "send_event": False,
+            "receive_events": False,
+            "report_only": True,
+        }
+    ]
+    await clienthelper.set_auto_deploy(True)
+    await clienthelper.put_version_simple(resources, version, wait_for_released=True)
+    await clienthelper.wait_for_deployed(version=version)
+
+    rps = await data.ResourcePersistentState.get_one(environment=environment, resource_id=rid1)
+    assert rps.non_compliant_diff is not None
+    assert rps.last_non_deploying_status == const.NonDeployingResourceState.deployed
+    assert rps.non_compliant_diff == non_compliant_diff_id
+
+    # Make report fail again
+    version = await clienthelper.get_version()
+    resources = [
+        {
+            "key": "key",
+            "value": "another_diff_value",
+            "id": f"{rid1},v={version}",
+            "requires": [],
+            "purged": False,
+            "send_event": False,
+            "receive_events": False,
+            "report_only": True,
+        }
+    ]
+    await clienthelper.set_auto_deploy(True)
+    await clienthelper.put_version_simple(resources, version, wait_for_released=True)
+    await clienthelper.wait_for_deployed(version=version)
+
+    rps = await data.ResourcePersistentState.get_one(environment=environment, resource_id=rid1)
+    assert rps.non_compliant_diff is not None
+    assert rps.last_non_deploying_status == const.NonDeployingResourceState.non_compliant
+    assert rps.non_compliant_diff != non_compliant_diff_id
+
+
 async def test_event_recovery_reporting(resource_container, server, client, clienthelper, environment, agent):
     """
     Asserts that a resource blocked on a reporting resource will be unblocked when it is compliant
