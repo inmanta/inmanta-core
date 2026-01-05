@@ -47,7 +47,8 @@ async def update(connection: Connection) -> None:
         WHERE rps.last_non_deploying_status::text='non_compliant'
     ),
     changes_for_non_compliant_resources AS (
-      SELECT ra.environment as environment,
+      SELECT DISTINCT ON (ra.environment, jt.resource_id)
+        ra.environment as environment,
         ra.changes as changes,
         ra.finished as last_executed_at,
         jt.resource_id as resource_id
@@ -62,8 +63,9 @@ async def update(connection: Connection) -> None:
       AND ra.action::text='deploy'
       AND ra.status::text='non_compliant'
       ORDER BY
-        ra.finished DESC
-      LIMIT 1
+          ra.environment,
+          jt.resource_id,
+          ra.finished DESC
   ),
   new_diff AS (
         INSERT INTO resource_diff (environment, resource_id, created, diff)

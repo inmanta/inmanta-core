@@ -1907,7 +1907,6 @@ async def test_non_compliant_diff(resource_container, server, client, clienthelp
             "report_only": True,
         },
     ]
-    await clienthelper.set_auto_deploy(True)
     await clienthelper.put_version_simple(resources, version, wait_for_released=True)
     await clienthelper.wait_for_deployed(version=version)
 
@@ -1919,7 +1918,6 @@ async def test_non_compliant_diff(resource_container, server, client, clienthelp
     non_compliant_diff_id = rps.non_compliant_diff
 
     # Make report succeed again
-    # Even though we are compliant, we don't update non_compliant_diff
     version = await clienthelper.get_version()
     resources = [
         {
@@ -1933,14 +1931,12 @@ async def test_non_compliant_diff(resource_container, server, client, clienthelp
             "report_only": True,
         }
     ]
-    await clienthelper.set_auto_deploy(True)
     await clienthelper.put_version_simple(resources, version, wait_for_released=True)
     await clienthelper.wait_for_deployed(version=version)
 
     rps = await data.ResourcePersistentState.get_one(environment=environment, resource_id=rid1)
-    assert rps.non_compliant_diff is not None
+    assert rps.non_compliant_diff is None
     assert rps.last_non_deploying_status == const.NonDeployingResourceState.deployed
-    assert rps.non_compliant_diff == non_compliant_diff_id
 
     # Make report fail again
     version = await clienthelper.get_version()
@@ -1956,7 +1952,6 @@ async def test_non_compliant_diff(resource_container, server, client, clienthelp
             "report_only": True,
         }
     ]
-    await clienthelper.set_auto_deploy(True)
     await clienthelper.put_version_simple(resources, version, wait_for_released=True)
     await clienthelper.wait_for_deployed(version=version)
 

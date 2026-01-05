@@ -43,7 +43,7 @@ async def test_add_resource_diff_table(
     non_compliant_rps = {
         rps for rps in all_rps if rps.last_non_deploying_status is const.NonDeployingResourceState.non_compliant
     }
-    assert len(non_compliant_rps) > 0
+    assert len(non_compliant_rps) == 2
     remaining_rps = set(all_rps) - non_compliant_rps
     assert len(remaining_rps) > 0
 

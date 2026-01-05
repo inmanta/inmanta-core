@@ -2098,9 +2098,12 @@ async def test_purge_log_and_diff(postgresql_client, init_dataclasses_and_load_s
         await data.ResourcePersistentState.persist_non_compliant_diff(
             env.id, res1_id, created_at=timestamp_six_days_ago, diff=example_diff
         )
-        await data.ResourcePersistentState.persist_non_compliant_diff(
+        diff_id = await data.ResourcePersistentState.persist_non_compliant_diff(
             env.id, res1_id, created_at=timestamp_eight_days_ago, diff=example_diff
         )
+        rps1 = await data.ResourcePersistentState.get_one(environment=env.id, resource_id=res1_id)
+        assert rps1
+        await rps1.update(non_compliant_diff=diff_id)
 
     if env1_halted:
         await envs[0].update_fields(halted=True)
