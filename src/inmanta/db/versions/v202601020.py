@@ -35,14 +35,23 @@ async def update(connection: Connection) -> None:
             REFERENCES public.resource_persistent_state(environment, resource_id) ON DELETE CASCADE
     );
 
+    -- used for purging old_diffs --
+    CREATE INDEX resource_diff_environment_created ON public.resource_diff (environment, created);
+
+    -- used to join with rps table --
+    CREATE INDEX resource_diff_environment_resource_id ON public.resource_diff (environment, resource_id);
+
     ALTER TABLE public.resource_persistent_state
         ADD COLUMN non_compliant_diff uuid,
         ADD CONSTRAINT resource_persistent_state_non_compliant_diff_fkey
         FOREIGN KEY (non_compliant_diff) REFERENCES public.resource_diff(id) ON DELETE RESTRICT;
 
+    -- used to join with resource_diff table --
+    CREATE INDEX resource_persistent_state_non_compliant_diff ON public.resource_persistent_state (non_compliant_diff);
+
     -- populate resource_diff table --
     WITH non_compliant_resources AS (
-        SELECT *
+        SELECT rps.environment, rps.resource_id
         FROM public.resource_persistent_state AS rps
         WHERE rps.last_non_deploying_status::text='non_compliant'
     ),
