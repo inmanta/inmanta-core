@@ -5007,6 +5007,64 @@ class ResourcePersistentState(BaseDocument):
             self.last_deploy_compliant,
         )
 
+    @classmethod
+    async def get_compliance_report(cls, env: uuid.UUID, resource_ids: Sequence[ResourceIdStr]) -> m.ComplianceReport:
+        async with cls.get_connection() as connection:
+            query = f"""
+            SELECT r.resource_id,
+                COALESCE(r.attributes->>'report_only', false) AS report_only,
+                rd.diff,
+                rps.last_deploy AS last_executed_at,
+                rps.is_undefined,
+                rps.last_deployed_attribute_hash,
+                rps.current_intent_attribute_hash,
+                rps.last_deploy_result,
+                rps.blocked,
+                rps.last_deploy_compliant
+            FROM {Scheduler.table_name()} AS s
+            INNER JOIN public.resource_set_configuration_model AS rscm
+                ON s.environment=rscm.environment
+                AND s.last_processed_model_version=rscm.model
+            INNER JOIN {Resource.table_name()} AS r
+                ON rscm.environment=r.environment
+                AND rscm.resource_set=r.resource_set
+            INNER JOIN {cls.table_name()} AS rps
+                ON r.environment=rps.environment
+                AND r.resource_id=rps.resource_id
+            LEFT JOIN public.resource_diff AS rd
+                ON rps.non_compliant_diff=rd.id
+            WHERE
+                NOT rps.is_orphan
+                AND rps.environment=$1
+                AND rps.resource_id=ANY($2)
+            """
+            result = await cls.select_query(query, [env, resource_ids], no_obj=True, connection=connection)
+            if len(result) != len(resource_ids):
+                missing_rids = set(resource_ids) - {r["resource_id"] for r in result}
+                raise NotFound(
+                    f"Unable to find the following resource ids in the latest version processed by the scheduler: {missing_rids}"
+                )
+            diff: dict[ResourceIdStr, m.ResourceComplianceDiff] = {}
+            for record in result:
+                compliance_status = state.get_compliance_status(
+                    is_orphan=False, # We filter out orphan resources in the query
+                    is_undefined=record["is_undefined"],
+                    last_deployed_attribute_hash=record["last_deployed_attribute_hash"],
+                    current_intent_attribute_hash=record["current_intent_attribute_hash"],
+                    last_deploy_compliant=record["last_deploy_compliant"],
+                )
+                assert compliance_status is not None  # make mypy happy
+                report_only = record["report_only"]
+                non_compliant_resource = report_only and compliance_status is state.Compliance.NON_COMPLIANT
+
+                diff[ResourceIdStr(record["resource_id"])] = m.ResourceComplianceDiff(
+                    report_only=report_only,
+                    compliance_status=compliance_status,
+                    attribute_diff=record["diff"] if non_compliant_resource else None,
+                    last_executed_at=record["last_executed_at"],
+                )
+            return m.ComplianceReport(status=status, diff=diff)
+
 
 class InvalidResourceSetMigration(Exception):
     """

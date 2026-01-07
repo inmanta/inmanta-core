@@ -1889,3 +1889,24 @@ def health() -> ReturnValue[None]:
     In contrast to the 'GET /api/v1/serverstatus' endpoint, this endpoint does not require authentication.
     """
     pass
+
+
+@auth(auth_label=const.CoreAuthorizationLabel.REPORT_READ, read_only=True, environment_param="tid")
+@typedmethod(
+    path="/get_compliance_status/",
+    operation="POST",
+    agent_server=True,
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.agent],
+    api_version=2,
+)
+def get_compliance_status(tid: uuid.UUID, resource_ids: Sequence[str]) -> model.ComplianceReport:
+    """
+    Get the compliance status for the following resource_ids
+
+    :param tid: The id of the environment these resources belong to.
+    :param resource_ids: A list of resource ids to retrieve the compliance status for.
+
+    :return: A list of CompileRun objects representing the current state of the compiler queue,
+             with each entry detailing a specific compile run.
+    """
