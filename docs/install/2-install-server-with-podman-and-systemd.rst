@@ -327,6 +327,11 @@ Step 2: Generate the systemd services
 
 Once the quadlet files are in place, let podman generate the corresponding systemd unit files by calling ``daemon-reload``.
 
+.. warning::
+
+    Interacting with systemctl using an unprivileged user requires you to login with that user directly. Logging in with a different
+    user and changing the current user using the ``su`` command will result in a ``Failed to connect to bus`` error.
+
 .. tab-set::
 
     .. tab-item:: User setup
@@ -435,6 +440,16 @@ If the user running the container can not access the journal, because it is not 
 
             # sudo -i -u inmanta
             $ systemctl --user start inmanta-orchestrator-server.service; podman logs -f inmanta-orchestrator
+
+
+Listen on non-loopback interface
+################################
+
+The above-mentioned configuration exposes the orchestrator port on the loopback interface of the host machine using
+the ``PublishPort=127.0.0.1:8888:8888`` config option in the ``inmanta-orchestrator-server.container`` file.
+Change the ``127.0.0.1`` value of that option to a different interface if the orchestrator should be exposed
+on a different interface than the loopback interface.
+
 
 Overwrite default server configuration
 ######################################

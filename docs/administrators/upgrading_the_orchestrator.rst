@@ -36,15 +36,40 @@ This section describes how to upgrade an orchestrator in-place.
 
     pg_dump -U <db_user> -W -h <host> <db_name> > <db_dump_file>
 
-3. Replace the content of the ``/etc/yum.repos.d/inmanta.repo`` file with the content for the new ISO version.
-   This information can be obtained from the :ref:`installation documentation page<install-server>` for the
-   new ISO version.
-4. Upgrade the Inmanta server. The orchestrator will automatically restart when the upgrade has finished.
-   It might take some time before the orchestrator goes up, as some database migrations will be done.
+3. Update the artifact repository to the repository for the new major release:
 
-.. code-block:: bash
+   .. tab-set::
 
-    dnf update inmanta-service-orchestrator-server
+       .. tab-item:: RPM-based installation
+
+           Replace the content of the ``/etc/yum.repos.d/inmanta.repo`` file with the content for the new ISO version.
+           This information can be obtained from the :ref:`installation documentation page<install-server>` for the
+           new ISO version.
+
+       .. tab-item:: Container-based installation
+
+           Replace the tag to the container image in the configuration with the one for the new ISO version.
+           This information can be obtained from the :ref:`installation documentation page<install-server-with-podman>`
+           for the new ISO version.
+
+4. Upgrade the Inmanta server by running the following command(s). The orchestrator will automatically
+   restart when the upgrade has finished. It might take some time before the orchestrator goes up,
+   as some database migrations will be done.
+
+   .. tab-set::
+
+       .. tab-item:: RPM-based installation
+
+           .. code-block:: bash
+
+               sudo dnf update inmanta-service-orchestrator-server
+
+       .. tab-item:: Container-based installation
+
+           .. code-block:: bash
+
+               systemctl --user daemon-reload
+               systemctl --user restart inmanta-server
 
 5. When accessing the web console, all the environments will be visible, and still halted.
 6. One environment at a time:
@@ -56,7 +81,7 @@ This section describes how to upgrade an orchestrator in-place.
 
    .. warning::
 
-       Make sure the compilation has finished and was successful before moving on to the next steps.
+       Make sure the compilation has finished and was successful.
 
 
 Upgrading by migrating from one orchestrator to another orchestrator
@@ -86,20 +111,35 @@ Procedure
       version :code:`X` to major version :code:`X+2`, should be done by upgrading from :code:`X` to :code:`X+1` and then from :code:`X+1` to :code:`X+2`.
 
 
-_________
-
 1. **[New Orchestrator]**: Make sure the desired version of the orchestrator is installed, by following the
-installation instructions (see :ref:`install-server`) and set up a project to validate that the orchestrator is configured correctly (config, credentials, access to packages, etc.).
-
-_________
-
-
+   installation instructions (see :ref:`RPM installation<install-server>` or :ref:`container-based installation<install-server-with-podman>`) and set up a project to validate that the orchestrator is configured correctly (config, credentials, access to packages, etc.).
 2. **[Old Orchestrator]** Halt all environments (by pressing the ``STOP`` button in the web-console for each environment).
 3. **[Old Orchestrator]** Stop and disable the server:
 
-.. code-block:: bash
+   .. tab-set::
 
-    sudo systemctl disable --now inmanta-server.service
+       .. tab-item:: RPM-based installation
+
+           .. code-block:: bash
+
+               sudo systemctl disable --now inmanta-server.service
+
+       .. tab-item:: Container-based installation
+
+           Make sure that the following section is not part of the ``.container`` file to prevent it from starting at boot.
+
+           .. code-block:: systemd
+
+               [Install]
+               WantedBy=default.target
+
+           Activate the new config and stop the server.
+
+           .. code-block:: bash
+
+               systemctl --user daemon-reload
+               systemctl --user stop inmanta-server.service
+
 
 4. **[Old Orchestrator]** Make a dump of the server database using ``pg_dump``.
 
@@ -108,15 +148,23 @@ _________
 
     pg_dump -U <db_user> -W -h <host> <db_name> > <db_dump_file>
 
-_________
-
-
 
 5. **[New Orchestrator]** Make sure the server is stopped:
 
-.. code-block:: bash
+   .. tab-set::
 
-    sudo systemctl stop inmanta-server.service
+       .. tab-item:: RPM-based installation
+
+           .. code-block:: bash
+
+               sudo systemctl stop inmanta-server.service
+
+       .. tab-item:: Container-based installation
+
+           .. code-block:: bash
+
+               systemctl --user stop inmanta-server.service
+
 
 6. **[New Orchestrator]** Drop the inmanta database and recreate it:
 
@@ -142,9 +190,30 @@ _________
 
 8. **[New Orchestrator]** Start the orchestrator service, it might take some time before the orchestrator goes up, as some database migration will be done:
 
-.. code-block:: bash
+   .. tab-set::
 
-    sudo systemctl enable --now inmanta-server.service
+       .. tab-item:: RPM-based installation
+
+           .. code-block:: bash
+
+               sudo systemctl enable --now inmanta-server.service
+
+       .. tab-item:: Container-based installation
+
+           Make sure that the following section is part of the ``.container`` file to make the server start at boot.
+
+           .. code-block:: systemd
+
+               [Install]
+               WantedBy=default.target
+
+           Activate the new config and start the server.
+
+           .. code-block:: bash
+
+               systemctl --user daemon-reload
+               systemctl --user start inmanta-server.service
+
 
 9. **[New Orchestrator]** When accessing the web console, all the environments will be visible, and still halted.
 10. **[New Orchestrator]** One environment at a time:
@@ -156,5 +225,5 @@ _________
 
     .. warning::
 
-        Make sure the compilation has finished and was successful before moving on to the next steps.
+        Make sure the compilation has finished and was successful.
 
