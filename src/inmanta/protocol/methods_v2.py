@@ -1910,3 +1910,4 @@ def get_compliance_report(tid: uuid.UUID, resource_ids: Sequence[ResourceIdStr])
     :return: A dict of CompileRun objects representing the current state of the compiler queue,
              with each entry detailing a specific compile run.
     """
+    pass

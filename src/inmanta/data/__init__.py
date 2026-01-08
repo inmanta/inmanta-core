@@ -55,7 +55,7 @@ from inmanta import const, resources, util
 from inmanta.const import NAME_RESOURCE_ACTION_LOGGER, AgentStatus, LogLevel, ResourceState
 from inmanta.data import model as m
 from inmanta.data import schema
-from inmanta.data.model import AuthMethod, BaseModel, PagingBoundaries, PipConfig, ReleasedResourceState
+from inmanta.data.model import AttributeStateChange, AuthMethod, BaseModel, PagingBoundaries, PipConfig, ReleasedResourceState
 from inmanta.data.sqlalchemy import AgentModules, InmantaModule, ModuleFiles
 from inmanta.deploy import state
 from inmanta.protocol.exceptions import BadRequest, NotFound
@@ -5044,7 +5044,7 @@ class ResourcePersistentState(BaseDocument):
             """
             result = await cls.select_query(query, [env, resource_ids], no_obj=True, connection=connection)
             if len(result) != len(resource_ids):
-                missing_rids = set(resource_ids) - {r["resource_id"] for r in result}
+                missing_rids = set(resource_ids) - {ResourceIdStr(str(r["resource_id"])) for r in result}
                 raise NotFound(
                     f"Unable to find the following resource ids in the latest version processed by the scheduler {missing_rids}"
                 )
@@ -5052,24 +5052,24 @@ class ResourcePersistentState(BaseDocument):
             for record in result:
                 compliance_status = state.get_compliance_status(
                     is_orphan=False,  # We filter out orphan resources in the query
-                    is_undefined=record["is_undefined"],
-                    last_deployed_attribute_hash=record["last_deployed_attribute_hash"],
-                    current_intent_attribute_hash=record["current_intent_attribute_hash"],
-                    last_deploy_compliant=record["last_deploy_compliant"],
+                    is_undefined=cast(bool, record["is_undefined"]),
+                    last_deployed_attribute_hash=cast(str | None, record["last_deployed_attribute_hash"]),
+                    current_intent_attribute_hash=cast(str | None, record["current_intent_attribute_hash"]),
+                    last_deploy_compliant=cast(bool, record["last_deploy_compliant"]),
                 )
                 assert compliance_status is not None  # make mypy happy
-                report_only = record["report_only"]
+                report_only = cast(bool, record["report_only"])
                 non_compliant_resource = report_only and compliance_status is state.Compliance.NON_COMPLIANT
 
-                diff[ResourceIdStr(record["resource_id"])] = m.ResourceComplianceDiff(
+                diff[ResourceIdStr(str(record["resource_id"]))] = m.ResourceComplianceDiff(
                     report_only=report_only,
-                    attribute_diff=record["diff"] if non_compliant_resource else None,
+                    attribute_diff=cast(dict[str, AttributeStateChange], record["diff"]) if non_compliant_resource else None,
                     resource_state=state.ResourceState(
                         compliance=compliance_status,
                         last_deploy_result=state.DeployResult(str(record["last_deploy_result"]).lower()),
                         blocked=state.Blocked(str(record["blocked"]).lower()),
-                        last_deployed=record["last_executed_at"],
-                        last_deploy_compliant=record["last_deploy_compliant"],
+                        last_deployed=cast(datetime.datetime | None, record["last_executed_at"]),
+                        last_deploy_compliant=cast(bool, record["last_deploy_compliant"]),
                     ),
                 )
             return diff
