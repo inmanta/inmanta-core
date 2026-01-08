@@ -189,6 +189,7 @@ TABLES_TO_KEEP = [x.table_name() for x in data._classes] + [
     "agent_modules",
     "module_files",
     "role_assignment",
+    "resource_diff",
 ]  # Join table
 
 # Save the cwd as early as possible to prevent that it gets overridden by another fixture

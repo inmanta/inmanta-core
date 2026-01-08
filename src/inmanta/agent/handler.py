@@ -347,10 +347,15 @@ class HandlerContext(LoggerABC):
 
     def set_resource_state(self, new_state: const.HandlerResourceState) -> None:
         """
-        Set the state of the resource
+        Set the state of the resource.
+        If setting the state to non_compliant, requires that the changes are registered first.
+        It is not possible to set the state to non_compliant and not register changes.
         """
+        if new_state is const.HandlerResourceState.non_compliant and len(self._changes) == 0:
+            raise InvalidOperation("Unable to set state to non_compliant before changes are set.")
+
         self._resource_state = new_state
-        if new_state == const.HandlerResourceState.skipped_for_dependency:
+        if new_state is const.HandlerResourceState.skipped_for_dependency:
             # This is the only state that is not present in const.ResourceState
             self._status = const.ResourceState.skipped
         else:

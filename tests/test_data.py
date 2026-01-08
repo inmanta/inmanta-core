@@ -1984,7 +1984,13 @@ async def test_match_tables_in_db_against_table_definitions_in_orm(
     table_names_in_database = [x["table_name"] for x in table_names]
     table_names_in_classes_list = [x.table_name() for x in data._classes]
     # Schema management table and join tables are not in the classes list.
-    join_tables = {"schemamanager", "resourceaction_resource", "role_assignment", "resource_set_configuration_model"}
+    join_tables = {
+        "schemamanager",
+        "resourceaction_resource",
+        "role_assignment",
+        "resource_set_configuration_model",
+        "resource_diff",
+    }
     # The following tables are not in the classes list, they are managed via the sqlalchemy ORM.
     sql_alchemy_tables: set[str] = {"inmanta_module", "module_files", "agent_modules"}
     assert len(table_names_in_classes_list) + len(join_tables) + len(sql_alchemy_tables) == len(table_names_in_database)
@@ -1997,7 +2003,10 @@ async def test_match_tables_in_db_against_table_definitions_in_orm(
 
 @pytest.mark.parametrize("env1_halted", [True, False])
 @pytest.mark.parametrize("env2_halted", [True, False])
-async def test_purgelog_test(init_dataclasses_and_load_schema, env1_halted, env2_halted):
+async def test_purge_log_and_diff(postgresql_client, init_dataclasses_and_load_schema, env1_halted, env2_halted):
+    """
+    Tests ResourceAction.purge_logs and ResourcePersistentState.persist_non_compliant_diff/purge_old_logs
+    """
     project = data.Project(name="test")
     await project.insert()
 
@@ -2005,6 +2014,9 @@ async def test_purgelog_test(init_dataclasses_and_load_schema, env1_halted, env2
 
     timestamp_eight_days_ago = datetime.datetime.now().astimezone() - datetime.timedelta(days=8)
     timestamp_six_days_ago = datetime.datetime.now().astimezone() - datetime.timedelta(days=6)
+
+    res1_id = ResourceIdStr("std::testing::NullResource[agent1,name=file1]")
+    res1_vid = f"{res1_id},v=1"
 
     for i in range(2):
         env = data.Environment(name=f"dev-{i}", project=project.id, repo_url="", repo_branch="")
@@ -2024,7 +2036,6 @@ async def test_purgelog_test(init_dataclasses_and_load_schema, env1_halted, env2
         await cm.insert()
         resource_set = await make_resource_set(env.id, [version])
 
-        res1_vid = "std::testing::NullResource[agent1,name=file1],v=1"
         res1 = data.Resource.new(
             environment=env.id,
             resource_version_id=res1_vid,
@@ -2073,6 +2084,27 @@ async def test_purgelog_test(init_dataclasses_and_load_schema, env1_halted, env2
         )
         await ra2.insert()
 
+        await data.ResourcePersistentState.populate_for_version(env.id, model_version=1)
+
+        # Create 3 different diffs 2 inactive/outdated diffs and one that is still referenced by the rps table (active):
+        # 1 diff past the time limit (inactive)
+        # 1 diff still in the time limit (inactive)
+        # 1 diff past the time limit (active)
+        # In practice, having a fresher inactive diff will not happen.
+        example_diff = {"name": {"current": None, "desired": "file1"}}
+        await data.ResourcePersistentState.persist_non_compliant_diff(
+            env.id, res1_id, created_at=timestamp_eight_days_ago, diff=example_diff
+        )
+        await data.ResourcePersistentState.persist_non_compliant_diff(
+            env.id, res1_id, created_at=timestamp_six_days_ago, diff=example_diff
+        )
+        diff_id = await data.ResourcePersistentState.persist_non_compliant_diff(
+            env.id, res1_id, created_at=timestamp_eight_days_ago, diff=example_diff
+        )
+        rps1 = await data.ResourcePersistentState.get_one(environment=env.id, resource_id=res1_id)
+        assert rps1
+        await rps1.update(non_compliant_diff=diff_id)
+
     if env1_halted:
         await envs[0].update_fields(halted=True)
     if env2_halted:
@@ -2092,6 +2124,31 @@ async def test_purgelog_test(init_dataclasses_and_load_schema, env1_halted, env2
     if not (env1_halted or env2_halted):
         assert remaining_resource_action.environment == envs[0].id
         assert remaining_resource_action.started == timestamp_six_days_ago
+
+    resource_diffs = await postgresql_client.fetch("SELECT * FROM public.resource_diff")
+    assert len(resource_diffs) == 6  # 3 diffs in each environment
+    await data.ResourcePersistentState.purge_old_diffs()
+    number_diffs_env1 = 3 if env1_halted else 2  # if not halted one inactive diff is cleaned up
+    number_diffs_env2 = 3 if env2_halted else 1  # if not halted both inactive diffs are cleaned up
+    resource_diffs = await postgresql_client.fetch("SELECT * FROM public.resource_diff")
+    assert len(resource_diffs) == number_diffs_env2 + number_diffs_env1
+
+    if not env1_halted:
+        rps_1 = await data.ResourcePersistentState.get_one(environment=envs[0].id, resource_id=res1_id)
+        env_1_diffs = [diff for diff in resource_diffs if diff["environment"] == envs[0].id]
+        assert len(env_1_diffs) == number_diffs_env1
+        active_diff = [diff for diff in env_1_diffs if diff["created"] == timestamp_eight_days_ago]
+        assert len(active_diff) == 1
+        assert rps_1.non_compliant_diff == active_diff[0]["id"]
+        inactive_diff = [diff for diff in env_1_diffs if diff["created"] == timestamp_six_days_ago]
+        assert len(inactive_diff) == 1
+        assert rps_1.non_compliant_diff != inactive_diff[0]["id"]
+
+    if not env2_halted:
+        rps_1 = await data.ResourcePersistentState.get_one(environment=envs[1].id, resource_id=res1_id)
+        env_2_diffs = [diff for diff in resource_diffs if diff["environment"] == envs[1].id]
+        assert len(env_2_diffs) == number_diffs_env2
+        assert rps_1.non_compliant_diff == env_2_diffs[0]["id"]
 
 
 async def test_insert_many(init_dataclasses_and_load_schema):
