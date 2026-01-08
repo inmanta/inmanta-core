@@ -45,10 +45,6 @@ async def update(connection: Connection) -> None:
         ADD COLUMN non_compliant_diff uuid,
         ADD CONSTRAINT resource_persistent_state_non_compliant_diff_fkey
         FOREIGN KEY (non_compliant_diff) REFERENCES public.resource_diff(id) ON DELETE RESTRICT;
-
-    -- used to join with resource_diff table --
-    CREATE INDEX resource_persistent_state_non_compliant_diff ON public.resource_persistent_state (non_compliant_diff);
-
     """
 
     await connection.execute(schema)

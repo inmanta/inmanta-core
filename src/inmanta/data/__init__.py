@@ -4895,7 +4895,7 @@ class ResourcePersistentState(BaseDocument):
         environment: uuid.UUID,
         resource_id: ResourceIdStr,
         created_at: datetime.datetime,
-        diff: typing.Mapping[str, object],
+        diff: abc.Mapping[str, object],
         *,
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> uuid.UUID:
@@ -4938,7 +4938,9 @@ class ResourcePersistentState(BaseDocument):
                 AND NOT EXISTS (
                   SELECT 1
                   FROM {cls.table_name()} AS rps
-                  WHERE rps.non_compliant_diff=rd.id
+                  WHERE rps.environment=rd.environment
+                    AND rps.resource_id=rd.resource_id
+                    AND rps.non_compliant_diff=rd.id
               );
         """
         await cls._execute_query(query, default_retention_time)
