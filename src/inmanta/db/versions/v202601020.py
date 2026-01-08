@@ -50,42 +50,59 @@ async def update(connection: Connection) -> None:
     CREATE INDEX resource_persistent_state_non_compliant_diff ON public.resource_persistent_state (non_compliant_diff);
 
     -- populate resource_diff table --
-    WITH non_compliant_resources AS (
-        SELECT rps.environment, rps.resource_id
-        FROM public.resource_persistent_state AS rps
-        WHERE rps.last_non_deploying_status::text='non_compliant'
-    ),
-    changes_for_non_compliant_resources AS (
-      SELECT DISTINCT ON (ra.environment, jt.resource_id)
-        ra.environment as environment,
-        ra.changes as changes,
-        ra.finished as last_executed_at,
-        jt.resource_id as resource_id
-      FROM public.resourceaction as ra
-      INNER JOIN public.resourceaction_resource as jt
-          ON ra.environment = jt.environment
-          AND ra.action_id = jt.resource_action_id
-      INNER JOIN non_compliant_resources AS ncr
-        ON ra.environment=ncr.environment
-        AND jt.resource_id=ncr.resource_id
-      AND (ra.changes IS NOT NULL and ra.changes != '{}')
-      AND ra.action::text='deploy'
-      AND ra.status::text='non_compliant'
-      ORDER BY
-          ra.environment,
-          jt.resource_id,
-          ra.finished DESC
-  ),
-  new_diff AS (
-        INSERT INTO resource_diff (environment, resource_id, created, diff)
-        SELECT environment, resource_id, last_executed_at as created, changes as diff
-        FROM changes_for_non_compliant_resources
-        RETURNING id, environment, resource_id
-    )
-  UPDATE public.resource_persistent_state AS rps
-    SET non_compliant_diff=nd.id
-    FROM new_diff AS nd
-    WHERE rps.environment=nd.environment
-        AND rps.resource_id=nd.resource_id
+    DO $$
+    DECLARE
+        has_non_compliant boolean;
+    BEGIN
+        -- Check if there are any non-compliant resources
+        SELECT EXISTS (
+            SELECT 1
+            FROM public.resource_persistent_state AS rps
+            WHERE rps.last_non_deploying_status::text='non_compliant'
+        ) INTO has_non_compliant;
+
+        -- If there are no non-compliant resources we simply skip this part
+        IF has_non_compliant THEN
+            WITH non_compliant_resources AS (
+                SELECT rps.environment, rps.resource_id
+                FROM public.resource_persistent_state AS rps
+                WHERE rps.last_non_deploying_status::text='non_compliant'
+            ),
+            changes_for_non_compliant_resources AS (
+                SELECT DISTINCT ON (ra.environment, rar.resource_id)
+                    ra.environment as environment,
+                    ra.changes as changes,
+                    ra.finished as last_executed_at,
+                    rar.resource_id as resource_id
+                FROM public.resourceaction as ra
+                INNER JOIN public.resourceaction_resource as rar
+                    ON ra.environment = rar.environment
+                    AND ra.action_id = rar.resource_action_id
+                INNER JOIN non_compliant_resources AS ncr
+                    ON ra.environment=ncr.environment
+                    AND rar.resource_id=ncr.resource_id
+                WHERE ra.changes IS NOT NULL
+                  AND ra.changes != '{}'
+                  AND ra.action::text='deploy'
+                  AND ra.status::text='non_compliant'
+                ORDER BY
+                    ra.environment,
+                    rar.resource_id,
+                    ra.finished DESC
+            ),
+            new_diff AS (
+                INSERT INTO resource_diff (environment, resource_id, created, diff)
+                SELECT environment, resource_id, last_executed_at as created, changes as diff
+                FROM changes_for_non_compliant_resources
+                RETURNING id, environment, resource_id
+            )
+            UPDATE public.resource_persistent_state AS rps
+            SET non_compliant_diff=nd.id
+            FROM new_diff AS nd
+            WHERE rps.environment=nd.environment
+              AND rps.resource_id=nd.resource_id;
+        END IF;
+    END
+    $$;
     """
     await connection.execute(schema)
