@@ -49,15 +49,19 @@ async def update(connection: Connection) -> None:
     -- used to join with resource_diff table --
     CREATE INDEX resource_persistent_state_non_compliant_diff ON public.resource_persistent_state (non_compliant_diff);
 
-    SELECT 1
-    FROM public.resource_persistent_state AS rps
-    WHERE rps.last_non_deploying_status::text='non_compliant'
-    LIMIT 1;
     """
 
-    result = await connection.execute(schema)
+    await connection.execute(schema)
 
-    if result == "SELECT 1":
+    result = await connection.fetchval(
+        """
+        SELECT 1
+        FROM public.resource_persistent_state AS rps
+        WHERE rps.last_non_deploying_status::text='non_compliant'
+        LIMIT 1;
+    """
+    )
+    if result:
         await connection.execute(
             """
     -- populate resource_diff table --
