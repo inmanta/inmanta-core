@@ -52,10 +52,12 @@ async def update(connection: Connection) -> None:
     SELECT 1
     FROM public.resource_persistent_state AS rps
     WHERE rps.last_non_deploying_status::text='non_compliant'
+    LIMIT 1;
     """
+
     result = await connection.execute(schema)
 
-    if result != "SELECT 0":
+    if result == "SELECT 1":
         await connection.execute(
             """
     -- populate resource_diff table --
