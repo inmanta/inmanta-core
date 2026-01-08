@@ -49,20 +49,16 @@ async def update(connection: Connection) -> None:
     -- used to join with resource_diff table --
     CREATE INDEX resource_persistent_state_non_compliant_diff ON public.resource_persistent_state (non_compliant_diff);
 
-    -- populate resource_diff table --
-    DO $$
-    DECLARE
-        has_non_compliant boolean;
-    BEGIN
-        -- Check if there are any non-compliant resources
-        SELECT EXISTS (
-            SELECT 1
-            FROM public.resource_persistent_state AS rps
-            WHERE rps.last_non_deploying_status::text='non_compliant'
-        ) INTO has_non_compliant;
+    SELECT 1
+    FROM public.resource_persistent_state AS rps
+    WHERE rps.last_non_deploying_status::text='non_compliant'
+    """
+    result = await connection.execute(schema)
 
-        -- If there are no non-compliant resources we simply skip this part
-        IF has_non_compliant THEN
+    if result != "SELECT 0":
+        await connection.execute(
+            """
+    -- populate resource_diff table --
             WITH non_compliant_resources AS (
                 SELECT rps.environment, rps.resource_id
                 FROM public.resource_persistent_state AS rps
@@ -101,8 +97,5 @@ async def update(connection: Connection) -> None:
             FROM new_diff AS nd
             WHERE rps.environment=nd.environment
               AND rps.resource_id=nd.resource_id;
-        END IF;
-    END
-    $$;
     """
-    await connection.execute(schema)
+        )
