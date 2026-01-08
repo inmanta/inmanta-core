@@ -675,15 +675,13 @@ class ResourceDiff(BaseModel):
 class ResourceComplianceDiff(BaseModel):
     """
     :param report_only: Is this resource in report only mode
-    :param compliance_status: The status of this resource
+    :param resource_state: The state of this resource
     :param attribute_diff: The diff between the attributes of the current and desired state of a non_compliant resource
-    :param last_executed_at: When was this resource last executed
     """
 
     report_only: bool
-    compliance_status: state.Compliance
+    resource_state: state.ResourceState
     attribute_diff: dict[str, AttributeStateChange] | None
-    last_executed_at: datetime.datetime | None = None
 
 
 class Parameter(BaseModel):
@@ -770,18 +768,6 @@ class DryRun(BaseModel):
 class DryRunReport(BaseModel):
     summary: DryRun
     diff: list[ResourceDiff]
-
-
-class ComplianceReport(BaseModel):
-    """
-    An overall compliance report of a list of resources.
-
-    :param status: The compliance status of this group of resources
-    :param diff: The diff of non_compliant resources
-    """
-
-    status: state.Compliance
-    diff: dict[ResourceIdStr, ResourceComplianceDiff]
 
 
 class Notification(BaseModel):

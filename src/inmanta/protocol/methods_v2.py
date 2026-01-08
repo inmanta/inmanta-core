@@ -27,7 +27,7 @@ import inmanta.types
 from inmanta import const
 from inmanta.const import AgentAction, AllAgentAction, ApiDocsFormat, Change, ClientType, ParameterSource, ResourceState
 from inmanta.data import model
-from inmanta.data.model import DataBaseReport, PipConfig
+from inmanta.data.model import DataBaseReport, PipConfig, ResourceComplianceDiff
 from inmanta.protocol import methods
 from inmanta.protocol.auth.decorators import auth
 from inmanta.protocol.common import ReturnValue
@@ -1900,13 +1900,13 @@ def health() -> ReturnValue[None]:
     client_types=[ClientType.agent],
     api_version=2,
 )
-def get_compliance_status(tid: uuid.UUID, resource_ids: Sequence[str]) -> model.ComplianceReport:
+def get_compliance_status(tid: uuid.UUID, resource_ids: Sequence[ResourceIdStr]) -> dict[ResourceIdStr, ResourceComplianceDiff]:
     """
     Get the compliance status for the following resource_ids
 
     :param tid: The id of the environment these resources belong to.
     :param resource_ids: A list of resource ids to retrieve the compliance status for.
 
-    :return: A list of CompileRun objects representing the current state of the compiler queue,
+    :return: A dict of CompileRun objects representing the current state of the compiler queue,
              with each entry detailing a specific compile run.
     """

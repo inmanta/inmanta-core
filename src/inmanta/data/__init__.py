@@ -5008,11 +5008,13 @@ class ResourcePersistentState(BaseDocument):
         )
 
     @classmethod
-    async def get_compliance_report(cls, env: uuid.UUID, resource_ids: Sequence[ResourceIdStr]) -> m.ComplianceReport:
+    async def get_compliance_report(
+        cls, env: uuid.UUID, resource_ids: Sequence[ResourceIdStr]
+    ) -> dict[ResourceIdStr, m.ResourceComplianceDiff]:
         async with cls.get_connection() as connection:
             query = f"""
             SELECT r.resource_id,
-                COALESCE(r.attributes->>'report_only', false) AS report_only,
+                COALESCE((r.attributes->>'report_only')::boolean, false) AS report_only,
                 rd.diff,
                 rps.last_deploy AS last_executed_at,
                 rps.is_undefined,
@@ -5047,7 +5049,7 @@ class ResourcePersistentState(BaseDocument):
             diff: dict[ResourceIdStr, m.ResourceComplianceDiff] = {}
             for record in result:
                 compliance_status = state.get_compliance_status(
-                    is_orphan=False, # We filter out orphan resources in the query
+                    is_orphan=False,  # We filter out orphan resources in the query
                     is_undefined=record["is_undefined"],
                     last_deployed_attribute_hash=record["last_deployed_attribute_hash"],
                     current_intent_attribute_hash=record["current_intent_attribute_hash"],
@@ -5059,11 +5061,16 @@ class ResourcePersistentState(BaseDocument):
 
                 diff[ResourceIdStr(record["resource_id"])] = m.ResourceComplianceDiff(
                     report_only=report_only,
-                    compliance_status=compliance_status,
                     attribute_diff=record["diff"] if non_compliant_resource else None,
-                    last_executed_at=record["last_executed_at"],
+                    resource_state=state.ResourceState(
+                        compliance=compliance_status,
+                        last_deploy_result=state.DeployResult(str(record["last_deploy_result"]).lower()),
+                        blocked=state.Blocked(str(record["blocked"]).lower()),
+                        last_deployed=record["last_executed_at"],
+                        last_deploy_compliant=record["last_deploy_compliant"],
+                    ),
                 )
-            return m.ComplianceReport(status=status, diff=diff)
+            return diff
 
 
 class InvalidResourceSetMigration(Exception):

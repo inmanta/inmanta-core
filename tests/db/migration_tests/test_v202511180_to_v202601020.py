@@ -51,3 +51,10 @@ async def test_add_resource_diff_table(
         assert rps.non_compliant_diff is None
     for rps in non_compliant_rps:
         assert rps.non_compliant_diff is not None
+
+    result = await data.ResourcePersistentState.get_compliance_report(
+        env=next(iter(non_compliant_rps)).environment, resource_ids=[rps.resource_id for rps in non_compliant_rps]
+    )
+    assert len(result) == 2
+
+
