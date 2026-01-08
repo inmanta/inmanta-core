@@ -30,7 +30,7 @@ from pydantic import ValidationError
 from tornado.httputil import url_concat
 
 from inmanta import const, data, util
-from inmanta.data import APILIMIT, BaseDocument, InvalidSort, model
+from inmanta.data import APILIMIT, InvalidSort, model
 from inmanta.data.dataview import (
     DiscoveredResourceView,
     ResourceHistoryView,
@@ -558,8 +558,8 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
             """
             await connection.execute(query, env.id, discovered_resource_ids)
 
-    @handle(methods_v2.get_compliance_status, env="tid")
-    async def get_compliance_status(
+    @handle(methods_v2.get_compliance_report, env="tid")
+    async def get_compliance_report(
         self, env: data.Environment, resource_ids: typing.Sequence[ResourceIdStr]
     ) -> dict[ResourceIdStr, ResourceComplianceDiff]:
         """

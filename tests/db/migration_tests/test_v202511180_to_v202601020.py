@@ -56,5 +56,3 @@ async def test_add_resource_diff_table(
         env=next(iter(non_compliant_rps)).environment, resource_ids=[rps.resource_id for rps in non_compliant_rps]
     )
     assert len(result) == 2
-
-

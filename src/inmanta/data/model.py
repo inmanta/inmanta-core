@@ -37,7 +37,7 @@ import inmanta
 import inmanta.ast.export as ast_export
 import pydantic_core.core_schema
 from inmanta import const, data, protocol, resources
-from inmanta.deploy import state
+from inmanta.deploy.state import ResourceState
 from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes
 from inmanta.types import BaseModel as BaseModel  # Keep in place for backwards compat with <=ISO8
@@ -668,7 +668,7 @@ class ResourceDiff(BaseModel):
     """
 
     resource_id: ResourceIdStr
-    attributes: dict[str, AttributeStateChange]
+    attributes: dict[str, AttributeDiff]
     status: ResourceDiffStatus
 
 
@@ -680,7 +680,7 @@ class ResourceComplianceDiff(BaseModel):
     """
 
     report_only: bool
-    resource_state: state.ResourceState
+    resource_state: ResourceState
     attribute_diff: dict[str, AttributeStateChange] | None
 
 

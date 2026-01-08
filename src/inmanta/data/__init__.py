@@ -5046,7 +5046,7 @@ class ResourcePersistentState(BaseDocument):
             if len(result) != len(resource_ids):
                 missing_rids = set(resource_ids) - {r["resource_id"] for r in result}
                 raise NotFound(
-                    f"Unable to find the following resource ids in the latest version processed by the scheduler: {missing_rids}"
+                    f"Unable to find the following resource ids in the latest version processed by the scheduler {missing_rids}"
                 )
             diff: dict[ResourceIdStr, m.ResourceComplianceDiff] = {}
             for record in result:
