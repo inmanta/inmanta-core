@@ -11,6 +11,14 @@ end
 entity MixedRefsDataclass extends NoRefsDataclass, AllRefsDataclass:
 end
 
+
+entity ComplexDataclass extends DataclassABC:
+    int? opt_field
+    dict? opt_dct
+    #string[]? opt_lst
+end
+
 implement NoRefsDataclass using std::none
 implement AllRefsDataclass using std::none
 implement MixedRefsDataclass using std::none
+implement ComplexDataclass using std::none

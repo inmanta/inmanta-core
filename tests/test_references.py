@@ -737,6 +737,8 @@ def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", module
     run_snippet("refs::plugins::takes_no_refs_dataclass(refs::plugins::inheritance_return_specific())")
     ## declare generic reference, return specific reference
     run_snippet("refs::plugins::takes_no_refs_dataclass_ref(refs::plugins::inheritance_return_specific_ref())")
+    # TODO: comment + is this the right location?
+    run_snippet("refs::dc::create_complex_dataclass_reference()")
 
     # Scenario: plugin returns list attribute without reading elements, declares list[str] return
     ## allowed if attribute has no references

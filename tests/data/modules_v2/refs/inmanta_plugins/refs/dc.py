@@ -1,4 +1,5 @@
 import dataclasses
+from collections.abc import Mapping, Sequence
 from inmanta.agent.handler import LoggerABC
 from inmanta.plugins import plugin
 from inmanta.references import reference, Reference
@@ -22,14 +23,16 @@ class AllRefsDataclass(DataclassABC):
 class MixedRefsDataclass(AllRefsDataclass, NoRefsDataclass): ...
 
 
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class ComplexDataclass(DataclassABC):
+    opt_field: int | None
+    opt_dct: Mapping[str, object] | None
+    # TODO
+    #opt_lst: Sequence[str] | None
+
+
 @reference("refs::dc::NoRefsDataclassReference")
 class NoRefsDataclassReference(Reference[NoRefsDataclass]):
-    def __init__(self) -> None:
-        """
-        :param non_ref_value: The value
-        """
-        super().__init__()
-
     def resolve(self, logger: LoggerABC) -> NoRefsDataclass:
         return NoRefsDataclassReference()
 
@@ -62,6 +65,15 @@ class MixedRefsDataclassReference(AllRefsDataclassReferenceABC[MixedRefsDataclas
         super().__init__(maybe_ref_value, dc_type=MixedRefsDataclass)
 
 
+@reference("refs::dc::ComplexDataclassReference")
+class ComplexDataclassReference(Reference[ComplexDataclass]):
+    def resolve(self, logger: LoggerABC) -> ComplexDataclass:
+        return ComplexDataclassReference()
+
+    def __repr__(self) -> str:
+        return f"ComplexDataclassReference()"
+
+
 @plugin
 def create_no_refs_dataclass_reference() -> NoRefsDataclassReference:
     return NoRefsDataclassReference()
@@ -75,3 +87,8 @@ def create_all_refs_dataclass_reference(maybe_ref_value: str | Reference[str]) -
 @plugin
 def create_mixed_refs_dataclass_reference(maybe_ref_value: str | Reference[str]) -> MixedRefsDataclassReference:
     return MixedRefsDataclassReference(maybe_ref_value)
+
+
+@plugin
+def create_complex_dataclass_reference() -> Reference[ComplexDataclass]:
+    return ComplexDataclassReference()
