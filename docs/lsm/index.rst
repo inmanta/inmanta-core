@@ -113,6 +113,8 @@ The service inventory exposes CRUD operations on service instances in the invent
 - ``POST /lsm/v1/services/<service_type>/<service_id>/state``: Request a state transfer for the service instance with id ``service_id``.
 - ``DELETE /lsm/v1/service_inventory/<service_entity>/<service_id>``: Delete the service instance with id ``service_id``.
 
+The state machine attached to the lifecycle will determine whether the API call is successful or not.
+
 
 Configuration operations
 ========================
@@ -135,8 +137,6 @@ The following endpoints give information about the status of a given service ins
 - ``GET /lsm/v1/service_inventory/<service_entity>/<service_id>/resources``: Get the list of resources that determine the state of the service.
 - ``GET /lsm/v1/service_inventory/<service_entity>/<service_id>/diagnose``: Diagnose rejection or failure of a service entity.
 
-
-The state machine attached to the lifecycle will determine whether the API call is successful or not.
 
 ..
     TODO: Three set of attributes
