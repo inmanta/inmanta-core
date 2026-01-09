@@ -30,7 +30,7 @@ from inmanta import config, const, data
 from inmanta.agent import config as agent_config
 from inmanta.agent import executor
 from inmanta.data import PipConfig, model
-from utils import PipIndex, get_compiler_version, retry_limited, wait_until_deployment_finishes
+from utils import PipIndex, retry_limited, wait_until_deployment_finishes
 
 
 async def test_blueprint_hash_consistency(tmpdir):
@@ -304,7 +304,6 @@ class ResourceH(inmanta.agent.handler.CRUDHandler[Resource]):
         resource_state={},
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info=module_version_info,
     )
     assert result.code == 200
@@ -373,7 +372,6 @@ class ResourceH(inmanta.agent.handler.CRUDHandler[Resource]):
         resource_state={},
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info=module_version_info,
     )
     assert result.code == 200

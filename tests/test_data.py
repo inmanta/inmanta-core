@@ -30,7 +30,7 @@ import pytest
 from asyncpg import Connection, ForeignKeyViolationError, Pool
 
 import utils
-from inmanta import const, data, util
+from inmanta import const, data
 from inmanta.const import AgentStatus, LogLevel
 from inmanta.data import model  # noqa
 from inmanta.data import ArgumentCollector, QueryType
@@ -2660,7 +2660,6 @@ async def test_get_current_resource_state(server, environment, client, clienthel
             },
         ],
         resource_state={},
-        compiler_version=util.get_compiler_version(),
         module_version_info={},
     )
     assert result.code == 200, result.result
@@ -2696,7 +2695,6 @@ async def test_get_current_resource_state(server, environment, client, clienthel
             },
         ],
         resource_state={"std::testing::NullResource[agent1,name=test1]": const.ResourceState.undefined},
-        compiler_version=util.get_compiler_version(),
         module_version_info={},
     )
     assert result.code == 200, result.result
@@ -2776,7 +2774,6 @@ async def test_get_partial_resources_since_version_raw(environment, server, post
         resource_sets={
             get_resource_id(s, i): s for s in get_resource_set_names(nb_resource_sets) for i in range(nb_resources_per_set)
         },
-        compiler_version="0",
     )
     assert result.code == 200, result.result
     await release()

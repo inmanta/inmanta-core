@@ -24,7 +24,6 @@ import pytest
 
 from inmanta import data
 from inmanta.data import Environment, Setting, convert_boolean, model
-from inmanta.util import get_compiler_version
 from utils import log_contains
 
 
@@ -199,7 +198,6 @@ async def test_clear_protected_environment(server, client):
             version=version,
             resources=[],
             unknowns=[],
-            compiler_version=get_compiler_version(),
             module_version_info={},
         )
         assert result.code == 200

@@ -38,7 +38,6 @@ from inmanta import config, const, data
 from inmanta.const import AgentAction
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER
 from inmanta.server.bootloader import InmantaBootloader
-from inmanta.util import get_compiler_version
 from typing_extensions import Optional
 from utils import ClientHelper, retry_limited, wait_until_deployment_finishes
 
@@ -144,7 +143,6 @@ async def setup_environment_with_agent(client, project_name):
         resources=resources,
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert result.code == 200

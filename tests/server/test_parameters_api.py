@@ -29,7 +29,7 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 from inmanta import data
 from inmanta.const import ParameterSource
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_PARAM, config
-from inmanta.util import get_compiler_version, parse_timestamp
+from inmanta.util import parse_timestamp
 
 
 @pytest.fixture
@@ -306,7 +306,6 @@ async def test_dont_renew_old_facts(server, client, environment, clienthelper, c
             }
         ],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert result.code == 200
@@ -345,7 +344,6 @@ async def test_dont_renew_old_facts(server, client, environment, clienthelper, c
         resources=[],
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert result.code == 200

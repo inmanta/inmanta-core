@@ -27,7 +27,6 @@ from typing import Any
 from inmanta import const, data, resources
 from inmanta.const import ParameterSource
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_PARAM
-from inmanta.util import get_compiler_version
 from utils import (
     _deploy_resources,
     get_done_count,
@@ -116,7 +115,6 @@ async def test_purged_facts(resource_container, client, clienthelper, agent, env
         resources=resources,
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert result.code == 200
@@ -264,7 +262,6 @@ async def test_get_facts_extended(server, client, agent, clienthelper, resource_
         unknowns=[],
         version_info={},
         resource_state=resource_states,
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert result.code == 200

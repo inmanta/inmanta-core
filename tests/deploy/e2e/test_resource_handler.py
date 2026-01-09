@@ -28,7 +28,6 @@ from inmanta import const
 from inmanta.agent.handler import ResourceHandler
 from inmanta.data import model
 from inmanta.protocol import SessionClient, VersionMatch, common
-from inmanta.util import get_compiler_version
 from utils import _deploy_resources, log_contains, make_random_file, retry_limited, wait_until_deployment_finishes
 
 T = TypeVar("T")
@@ -183,7 +182,6 @@ async def test_format_token_in_logline(server, agent, client, environment, resou
         resources=[resource],
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
 

@@ -41,7 +41,7 @@ from inmanta.execute.runtime import Instance
 from inmanta.resources import Id, IgnoreResourceException, Resource, resource, to_id
 from inmanta.stable_api import stable_api
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
-from inmanta.util import get_compiler_version, hash_file
+from inmanta.util import hash_file
 
 LOGGER = logging.getLogger(__name__)
 
@@ -631,7 +631,6 @@ class Exporter:
                     unknowns=unknown_parameters,
                     resource_state=self._resource_state,
                     version_info=version_info,
-                    compiler_version=get_compiler_version(),
                     module_version_info=code_manager.get_module_version_info(),
                     project_constraints=project_constraints,
                     **kwargs,

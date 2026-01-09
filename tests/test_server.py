@@ -44,7 +44,6 @@ from inmanta.server import config as opt
 from inmanta.server.bootloader import InmantaBootloader, PostgreSQLVersion
 from inmanta.server.protocol import ServerStartFailure
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
-from inmanta.util import get_compiler_version
 from utils import insert_with_link_to_configuration_model, log_contains, log_doesnt_contain, retry_limited
 
 LOGGER = logging.getLogger(__name__)
@@ -119,7 +118,6 @@ async def test_create_too_many_versions(client, server, no_agent, n_versions_to_
             resources=resources,
             unknowns=[],
             version_info={},
-            compiler_version=get_compiler_version(),
             module_version_info={},
         )
         assert res.code == 200
@@ -181,7 +179,6 @@ async def test_purge_versions(server, client, environment, has_released_versions
             ],
             unknowns=[],
             version_info={},
-            compiler_version=get_compiler_version(),
             module_version_info={},
         )
         assert res.code == 200
@@ -260,7 +257,6 @@ async def test_n_versions_env_setting_scope(client, server):
             resources=[],
             unknowns=[],
             version_info={},
-            compiler_version=get_compiler_version(),
             module_version_info={},
         )
         assert res.code == 200
@@ -271,7 +267,6 @@ async def test_n_versions_env_setting_scope(client, server):
             resources=[],
             unknowns=[],
             version_info={},
-            compiler_version=get_compiler_version(),
             module_version_info={},
         )
         assert res.code == 200
@@ -324,7 +319,6 @@ async def test_resource_update(postgresql_client, client, clienthelper, server, 
         resources=resources,
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert res.code == 200
@@ -404,7 +398,6 @@ async def test_clear_environment(client, server, clienthelper, environment):
         resources=[],
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert result.code == 200
@@ -773,7 +766,6 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
         resources=resources,
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert res.code == 200
@@ -1517,7 +1509,6 @@ async def test_put_stale_version(client, server, environment, clienthelper, capl
                 resources=resources,
                 unknowns=[],
                 version_info={},
-                compiler_version=get_compiler_version(),
                 module_version_info={},
             )
             assert result.code == 200
@@ -1564,7 +1555,6 @@ async def test_set_fact_v2(
         resources=resources,
         unknowns=[],
         version_info={},
-        compiler_version=util.get_compiler_version(),
         module_version_info={},
     )
     assert result.code == 200

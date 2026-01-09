@@ -33,7 +33,6 @@ from inmanta.loader import InmantaModule
 from inmanta.protocol.common import Result
 from inmanta.resources import Id
 from inmanta.types import ResourceIdStr
-from inmanta.util import get_compiler_version
 
 
 async def test_requires_in_shared_set(server, client, environment, clienthelper):
@@ -67,7 +66,6 @@ async def test_requires_in_shared_set(server, client, environment, clienthelper)
         resource_state={},
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         resource_sets={"test::Resource[agent1,key=key2]": "set-1"},
         module_version_info={},
     )
@@ -144,7 +142,6 @@ async def test_put_partial_copies_unchanged_resource_sets(server, client, enviro
         resource_state={},
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         resource_sets={"test::Resource[agent1,key=key1]": "set-1", "test::Resource[agent1,key=key2]": "set-2"},
         module_version_info={},
     )
@@ -184,7 +181,6 @@ async def test_resource_sets_via_put_version(server, client, environment, client
         resource_state={},
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         resource_sets={
             "test::Resource[agent1,key=key1]": "set-a",
         },
@@ -244,7 +240,6 @@ async def test_resource_sets_via_put_version(server, client, environment, client
         resource_state={},
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
         module_version_info={},
     )
@@ -269,7 +264,6 @@ async def test_resource_sets_via_put_version(server, client, environment, client
         resource_state={},
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
         module_version_info={},
     )
@@ -294,7 +288,6 @@ async def test_resource_sets_via_put_version(server, client, environment, client
         resource_state={},
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         resource_sets={**resource_sets, "test::Resource[agent1,key=key4]": "set-c"},
         module_version_info={},
     )
@@ -394,7 +387,6 @@ async def test_put_partial_version_allocation(server, client, environment, clien
         resource_state={},
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
         module_version_info={},
     )
@@ -495,7 +487,6 @@ async def test_put_partial_replace_resource_set(server, client, environment, cli
         resource_state={},
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
         module_version_info=module_version_info,
     )
@@ -563,7 +554,6 @@ async def test_put_partial_resources_in_resource_set(server, client, environment
         resource_state={},
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
         module_version_info={},
     )
@@ -623,7 +613,6 @@ async def test_put_partial_merge_not_in_resource_set(server, client, environment
         resource_state={},
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         resource_sets={},
         module_version_info={},
     )
@@ -694,7 +683,6 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
         resource_state={},
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         resource_sets={"test::Resource[agent1,key=key1]": "set-a-old", "test::Resource[agent1,key=key2]": "set-b-old"},
         module_version_info={},
     )
@@ -880,7 +868,6 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
         resource_state={},
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         resource_sets={"test::Resource[agent1,key=key1]": "set-a-old", "test::Resource[agent1,key=key2]": "set-a-old"},
         module_version_info={},
     )
@@ -977,7 +964,6 @@ async def test_put_partial_update_not_in_resource_set(server, client, environmen
         resource_state={},
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         resource_sets={},
         module_version_info={},
     )
@@ -1045,7 +1031,6 @@ async def test_put_partial_update_multiple_resource_set(server, client, environm
         resource_state={},
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
         module_version_info={},
     )
@@ -1120,7 +1105,6 @@ async def test_resource_sets_dependency_graph(server, client, environment, clien
         resource_state={},
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
         module_version_info={},
     )
@@ -1241,7 +1225,6 @@ async def test_put_partial_mixed_scenario(server, client, environment, clienthel
         resource_state={},
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
         module_version_info={},
     )
@@ -1433,7 +1416,6 @@ async def test_put_partial_validation_error(server, client, environment, clienth
         resource_state={},
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
         module_version_info={},
     )
@@ -1495,7 +1477,6 @@ async def test_put_partial_verify_params(server, client, environment, clienthelp
         resource_state={},
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
         module_version_info={},
     )
@@ -1577,7 +1558,6 @@ async def test_put_partial_different_env(server, client):
         resource_state={},
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         resource_sets={},
         module_version_info={},
     )
@@ -1590,7 +1570,6 @@ async def test_put_partial_different_env(server, client):
         resource_state={},
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         resource_sets={},
         module_version_info={},
     )
@@ -1682,7 +1661,6 @@ async def test_put_partial_removed_rs_in_rs(server, client, environment, clienth
         resource_state={},
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
         module_version_info={},
     )
@@ -1771,7 +1749,6 @@ async def test_put_partial_with_resource_state_set(server, client, environment, 
         resource_state=resource_states,
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
         module_version_info={},
     )
@@ -1964,7 +1941,6 @@ async def test_put_partial_with_undeployable_resources(server, client, environme
         resource_state=resource_states,
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
         module_version_info={},
     )
@@ -2097,7 +2073,6 @@ async def test_put_partial_with_unknowns(server, client, environment, clienthelp
         resource_state={},
         unknowns=unknowns,
         version_info={},
-        compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
         module_version_info={},
     )
@@ -2211,7 +2186,6 @@ async def test_put_partial_dep_on_specific_set_removed(server, client, environme
         resource_state=resource_states,
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
         module_version_info={},
     )
@@ -2291,7 +2265,6 @@ async def test_put_partial_dep_on_non_existing_resource(server, client, environm
         resource_state=resource_states,
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
         module_version_info={},
     )
@@ -2382,7 +2355,6 @@ async def test_put_partial_inter_set_dependency(server, client, environment, cli
         resource_state=resource_states,
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
         module_version_info={},
     )
@@ -2475,7 +2447,6 @@ async def test_is_suitable_for_partial_compiles(server, client, environment, cli
             resource_state=resource_states,
             unknowns=[],
             version_info={},
-            compiler_version=get_compiler_version(),
             resource_sets=resource_sets,
             module_version_info={},
         )

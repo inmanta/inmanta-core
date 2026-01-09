@@ -2974,7 +2974,6 @@ async def mixed_resource_generator(
                     resource_state=resource_state,
                     unknowns=[],
                     version_info={},
-                    compiler_version=inmanta.util.get_compiler_version(),
                     resource_sets=resource_sets,
                 )
                 assert result.code == 200

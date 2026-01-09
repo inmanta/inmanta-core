@@ -26,7 +26,7 @@ from inmanta import const, data
 from inmanta.agent import executor
 from inmanta.deploy import persistence, state
 from inmanta.resources import Id
-from inmanta.util import get_compiler_version, make_attribute_hash
+from inmanta.util import make_attribute_hash
 from utils import get_resource
 
 
@@ -211,7 +211,6 @@ async def test_version(server, client, clienthelper, environment, cli):
         resources=resources,
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert result.code == 200
