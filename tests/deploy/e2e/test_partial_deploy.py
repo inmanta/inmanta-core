@@ -23,7 +23,6 @@ from collections.abc import Callable
 import pytest
 
 from deploy.scheduler_mocks import DummyManager
-from inmanta.util import get_compiler_version
 from utils import ClientHelper
 
 
@@ -154,7 +153,6 @@ async def test_partial_compile_scenarios_end_to_end(
             resources=resources,
             unknowns=[],
             version_info={},
-            compiler_version=get_compiler_version(),
             module_version_info={},
             resource_sets=set_collector,
         )

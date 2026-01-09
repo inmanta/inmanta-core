@@ -67,7 +67,6 @@ from inmanta.parser import plyInmantaParser
 from inmanta.parser.plyInmantaParser import cache_manager
 from inmanta.server import config
 from inmanta.stable_api import stable_api
-from inmanta.util import get_compiler_version
 from inmanta.warnings import InmantaWarning
 from packaging.specifiers import SpecifierSet
 from packaging.version import Version
@@ -82,6 +81,10 @@ T = TypeVar("T")
 TModule = TypeVar("TModule", bound="Module")
 TProject = TypeVar("TProject", bound="Project")
 TInmantaModuleRequirement = TypeVar("TInmantaModuleRequirement", bound="InmantaModuleRequirement")
+
+
+def get_compiler_version() -> str:
+    return "2026.1"
 
 
 @stable_api
