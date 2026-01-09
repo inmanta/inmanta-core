@@ -122,6 +122,7 @@ class Type(Locatable):
         """
         return self
 
+    # TODO: get rid?
     def get_no_reference(self) -> "Type":
         """
         Returns the same type, but with all references removed
@@ -224,7 +225,8 @@ class ReferenceType(Type):
         :param element_type: the type we refer to
         """
         super().__init__()
-        assert not element_type.supports_references()
+        # TODO: cleanup
+        assert not isinstance(element_type, (ReferenceType, OrReferenceType))
         self.element_type = element_type
         self.is_dataclass = False
         if element_type.is_entity():

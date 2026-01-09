@@ -196,7 +196,7 @@ class DefineEntity(TypeDefinitionStatement):
                 name = str(attribute.name)
                 attr_obj = Attribute(
                     entity_type,
-                    OrReferenceType(attribute.type.get_basetype(self.namespace)),
+                    attribute.type.get_basetype(self.namespace),
                     name,
                     attribute.get_location(),
                     attribute.type.multi,

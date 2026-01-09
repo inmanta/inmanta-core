@@ -50,17 +50,31 @@ class Attribute(Locatable):
         self.__nullable = nullable
 
         # The actual type
-        self.__type_internal: Type = value_type
-        if multi:
-            self.__type_internal = inmanta_type.TypedList(self.__type_internal)
-        if nullable:
-            self.__type_internal = inmanta_type.NullableType(self.__type_internal)
-
-        # Drop all reference for backward compatibility
-        self.__type: Type = self.__type_internal.get_no_reference()
+        # TODO: drop type internal???
+        self.__type: Type = self._type(value_type)
+        self.__type_internal: Type = self._internal_type(value_type)
 
         self.comment = None  # type: Optional[str]
         self.end: Optional[RelationAttribute] = None
+
+    # TODO: cleaner approach & better name
+    def _type(self, base_type: "Type") -> tuple["Type", "Type"]:
+        result: Type = base_type
+        # TODO: must not use is_multi() etc because child overrides it. But unintuitive. What to do?
+        if self.__multi:
+            result = inmanta_type.TypedList(result)
+        if self.__nullable:
+            result = inmanta_type.NullableType(result)
+        return result
+
+    # TODO: cleaner approach & better name
+    def _internal_type(self, base_type: "Type") -> tuple["Type", "Type"]:
+        result: Type = base_type
+        if self.__multi:
+            result = inmanta_type.TypedList(inmanta_type.OrReferenceType(result))
+        if self.__nullable:
+            result = inmanta_type.NullableType(result)
+        return inmanta_type.OrReferenceType(result)
 
     def get_type(self) -> "Type":
         """
@@ -170,6 +184,10 @@ class RelationAttribute(Attribute):
 
     def __repr__(self) -> str:
         return "[%d:%s] %s" % (self.low, self.high if self.high is not None else "", self.name)
+
+    # TODO: cleaner approach
+    def _internal_type(self, base_type: "Type") -> tuple["Type", "Type"]:
+        return self._type(base_type)
 
     def set_multiplicity(self, values: "Tuple[int, Optional[int]]") -> None:
         """
