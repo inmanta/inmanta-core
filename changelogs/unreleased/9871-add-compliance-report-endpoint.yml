@@ -1,0 +1,8 @@
+---
+description: "Add get_compliance_report endpoint."
+issue-nr: 9871
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [master]
+sections:
+    feature: "{{description}}"

@@ -55,7 +55,7 @@ from inmanta import const, resources, util
 from inmanta.const import NAME_RESOURCE_ACTION_LOGGER, AgentStatus, LogLevel, ResourceState
 from inmanta.data import model as m
 from inmanta.data import schema
-from inmanta.data.model import AuthMethod, BaseModel, PagingBoundaries, PipConfig, ReleasedResourceState
+from inmanta.data.model import AttributeStateChange, AuthMethod, BaseModel, PagingBoundaries, PipConfig, ReleasedResourceState
 from inmanta.data.sqlalchemy import AgentModules, InmantaModule, ModuleFiles
 from inmanta.deploy import state
 from inmanta.protocol.exceptions import BadRequest, NotFound
@@ -5008,6 +5008,71 @@ class ResourcePersistentState(BaseDocument):
             self.current_intent_attribute_hash,
             self.last_deploy_compliant,
         )
+
+    @classmethod
+    async def get_compliance_report(
+        cls, env: uuid.UUID, resource_ids: Sequence[ResourceIdStr]
+    ) -> dict[ResourceIdStr, m.ResourceComplianceDiff]:
+        async with cls.get_connection() as connection:
+            query = f"""
+            SELECT r.resource_id,
+                COALESCE((r.attributes->>'report_only')::boolean, false) AS report_only,
+                rd.diff,
+                rps.last_deploy AS last_executed_at,
+                rps.is_undefined,
+                rps.last_deployed_attribute_hash,
+                rps.current_intent_attribute_hash,
+                rps.last_deploy_result,
+                rps.blocked,
+                rps.last_deploy_compliant
+            FROM {Scheduler.table_name()} AS s
+            INNER JOIN public.resource_set_configuration_model AS rscm
+                ON s.environment=rscm.environment
+                AND s.last_processed_model_version=rscm.model
+            INNER JOIN {Resource.table_name()} AS r
+                ON rscm.environment=r.environment
+                AND rscm.resource_set=r.resource_set
+            INNER JOIN {cls.table_name()} AS rps
+                ON r.environment=rps.environment
+                AND r.resource_id=rps.resource_id
+            LEFT JOIN public.resource_diff AS rd
+                ON rps.non_compliant_diff=rd.id
+            WHERE
+                NOT rps.is_orphan
+                AND rps.environment=$1
+                AND rps.resource_id=ANY($2)
+            """
+            result = await cls.select_query(query, [env, resource_ids], no_obj=True, connection=connection)
+            if len(result) != len(resource_ids):
+                missing_rids = set(resource_ids) - {ResourceIdStr(str(r["resource_id"])) for r in result}
+                raise NotFound(
+                    f"Unable to find the following resource ids in the latest version processed by the scheduler {missing_rids}"
+                )
+            diff: dict[ResourceIdStr, m.ResourceComplianceDiff] = {}
+            for record in result:
+                compliance_status = state.get_compliance_status(
+                    is_orphan=False,  # We filter out orphan resources in the query
+                    is_undefined=cast(bool, record["is_undefined"]),
+                    last_deployed_attribute_hash=cast(str | None, record["last_deployed_attribute_hash"]),
+                    current_intent_attribute_hash=cast(str | None, record["current_intent_attribute_hash"]),
+                    last_deploy_compliant=cast(bool, record["last_deploy_compliant"]),
+                )
+                assert compliance_status is not None  # make mypy happy
+                report_only = cast(bool, record["report_only"])
+                non_compliant_resource = report_only and compliance_status is state.Compliance.NON_COMPLIANT
+
+                diff[ResourceIdStr(str(record["resource_id"]))] = m.ResourceComplianceDiff(
+                    report_only=report_only,
+                    attribute_diff=cast(dict[str, AttributeStateChange], record["diff"]) if non_compliant_resource else None,
+                    resource_state=state.ResourceState(
+                        compliance=compliance_status,
+                        last_deploy_result=state.DeployResult(str(record["last_deploy_result"]).lower()),
+                        blocked=state.Blocked(str(record["blocked"]).lower()),
+                        last_deployed=cast(datetime.datetime | None, record["last_executed_at"]),
+                        last_deploy_compliant=cast(bool, record["last_deploy_compliant"]),
+                    ),
+                )
+            return diff
 
 
 class InvalidResourceSetMigration(Exception):
