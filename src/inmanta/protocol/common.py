@@ -468,7 +468,7 @@ class MethodProperties(Generic[R]):
         self._varkw_name: Optional[str] = None
         self._return_type: Optional[type[R]] = None
         self.token_param = token_param
-        self.document_in_service_swagger = document_in_service_swagger  # TODO add some validation eg force ':return: ...' in docstring??
+        self.document_in_service_swagger = document_in_service_swagger
 
         self._parsed_docstring = docstring_parser.parse(text=function.__doc__, style=docstring_parser.DocstringStyle.REST)
         self._docstring_parameter_map = {p.arg_name: p.description for p in self._parsed_docstring.params}
