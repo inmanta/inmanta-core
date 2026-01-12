@@ -52,7 +52,7 @@ def test_for_error(snippetcompiler):
         implementation none for std::Entity:
         end
     """,
-        "A for loop can only be applied to lists and relations. Hint: 'a' resolves to "
+        "A for loop can only be applied to lists, dictionaries and relations. Hint: 'a' resolves to "
         "'__config__::A (instantiated at {dir}/main.cf:6)'. (reported in "
         "For(i) ({dir}/main.cf:7))",
     )
@@ -64,22 +64,9 @@ def test_for_error_2(snippetcompiler):
         for i in "foo":
         end
     """,
-        "A for loop can only be applied to lists and relations. Hint: 'foo' is not a "
+        "A for loop can only be applied to lists, dictionaries and relations. Hint: 'foo' is not a "
         "list. (reported in For(i) ({dir}/main.cf:2))",
     )
-
-def test_for_error_3(snippetcompiler):
-    snippetcompiler.setup_for_error(
-        """
-        md = {"1":2}
-        for k in md:
-        end
-    """,
-        "A for loop can only be applied to lists and relations. Hint: 'foo' is not a "
-        "list. (reported in For(i) ({dir}/main.cf:2))",
-    )
-
-
 
 
 def test_for_error_nullable_list(snippetcompiler):
@@ -95,7 +82,7 @@ def test_for_error_nullable_list(snippetcompiler):
             std::print(element)
         end
     """,
-        "A for loop can only be applied to lists and relations. "
+        "A for loop can only be applied to lists, dictionaries and relations. "
         "Hint: 'a.elements' resolves to 'null'. (reported in For(element) ({dir}/main.cf:8))",
         ministd=True,
     )
@@ -247,3 +234,26 @@ def test_for_loop_fully_gradual(snippetcompiler):
         ministd=True,
     )
     compiler.do_compile()
+
+
+def test_dict_keys_iteration(snippetcompiler, capsys):
+
+    snippetcompiler.setup_for_snippet(
+        """
+my_d = {
+    "B": "F",
+    "A": "O",
+    "R": "O"
+}
+for i in my_d:
+    std::print(i)
+end
+        """,
+        autostd=True,
+    )
+
+    capsys.readouterr()
+    compiler.do_compile()
+    out, _ = capsys.readouterr()
+    output = out.strip()
+    assert output == "\n".join([str(x) for x in "BAR"])

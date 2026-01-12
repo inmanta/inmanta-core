@@ -16,6 +16,7 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import logging
 from collections import abc
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
@@ -49,7 +50,7 @@ from inmanta.execute.runtime import (
     VariableABC,
     WrappedValueVariable,
 )
-import logging
+
 LOGGER = logging.getLogger(__name__)
 
 

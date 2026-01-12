@@ -243,9 +243,8 @@ class For(RequiresEmitStatement):
         super().execute(requires, resolver, queue)
         var = self.base.execute(requires, resolver, queue)
 
-
         if not isinstance(var, (list, Unknown, dict)):
-            msg = "A for loop can only be applied to lists and relations."
+            msg = "A for loop can only be applied to lists, dictionaries and relations."
             if isinstance(self.base, Reference):
                 msg += " Hint: '%s' resolves to '%s'." % (self.base, str(var))
             else:
