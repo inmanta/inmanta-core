@@ -178,8 +178,6 @@ def test_type_utility_methods() -> None:
             except NotImplementedError:
                 # Valid response
                 pass
-            # Ensure we are not stuck in an infinite loop
-            intype.get_no_reference()
             intype.get_base_type()
             # Make sure the recursive ones work
             assert intype.is_attribute_type() == is_attr, f"{intype}, is attribute expected {is_attr}"

@@ -21,6 +21,7 @@ import copy
 import dataclasses
 import functools
 import numbers
+import typing
 from collections import defaultdict, deque
 from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Optional
@@ -122,18 +123,12 @@ class Type(Locatable):
         """
         return self
 
-    # TODO: get rid of?
-    def get_no_reference(self) -> "Type":
-        """
-        Returns the same type, but with all references removed
-        """
-        return self
-
     def supports_references(self) -> bool:
         """
-        Returns True iff this type accepts any sort of reference value.
+        Returns True iff this type accepts any sort of reference value. Nested references, e.g. inside a list, are not
+        considered.
         """
-        return self.get_no_reference() is not self
+        return False
 
     def with_base_type(self, base_type: "Type") -> "Type":
         """
@@ -237,8 +232,7 @@ class ReferenceType(Type):
         :param element_type: the type we refer to
         """
         super().__init__()
-        # TODO: cleanup
-        assert not isinstance(element_type, (ReferenceType, OrReferenceType))
+        assert not element_type.supports_references()
         self.element_type = element_type
         self.is_dataclass = False
         if element_type.is_entity():
@@ -254,6 +248,9 @@ class ReferenceType(Type):
                 )
 
             self.is_dataclass = True
+
+    def supports_references(self) -> typing.Literal[True]:
+        return True
 
     def validate(self, value: Optional[object]) -> bool:
         ref: Optional[references.Reference[references.RefValue]] = references.unwrap_reference(value)
@@ -280,9 +277,6 @@ class ReferenceType(Type):
         return self.element_type.is_attribute_type()
 
     def get_base_type(self) -> "Type":
-        return self.element_type
-
-    def get_no_reference(self) -> "Type":
         return self.element_type
 
     def corresponds_to(self, type: "Type") -> bool:
@@ -320,6 +314,9 @@ class OrReferenceType(Type):
     def __init__(self, element_type: Type) -> None:
         self.element_type: Type = element_type
         self.reference_type: ReferenceType = ReferenceType(element_type)
+
+    def supports_references(self) -> typing.Literal[True]:
+        return True
 
     def validate(self, value: Optional[object]) -> bool:
         # We validate that the value is either a reference of the base type or the base type
@@ -368,9 +365,6 @@ class OrReferenceType(Type):
         return self.element_type.is_attribute_type()
 
     def get_base_type(self) -> "Type":
-        return self.element_type
-
-    def get_no_reference(self) -> "Type":
         return self.element_type
 
     def corresponds_to(self, type: "Type") -> bool:
@@ -480,12 +474,6 @@ class NullableType(Type):
 
     def get_base_type(self) -> Type:
         return self.element_type.get_base_type()
-
-    def get_no_reference(self) -> "Type":
-        base = self.element_type.get_no_reference()
-        if base is self.element_type:
-            return self
-        return NullableType(base)
 
     def with_base_type(self, base_type: Type) -> Type:
         return NullableType(self.element_type.with_base_type(base_type))
@@ -913,12 +901,6 @@ class TypedList(List):
 
         return True
 
-    def get_no_reference(self) -> "Type":
-        base = self.element_type.get_no_reference()
-        if base is self.element_type:
-            return self
-        return TypedList(base)
-
     def _wrap_type_string(self, string: str) -> str:
         return f"({string})[]" if " " in string else f"{string}[]"
 
@@ -999,9 +981,6 @@ class LiteralList(TypedList):
 
     def has_custom_to_python(self) -> bool:
         return False
-
-    def get_no_reference(self) -> Type:
-        return self
 
     def is_attribute_type(self) -> bool:
         return True
@@ -1131,12 +1110,6 @@ class TypedDict(Dict):
             return self.element_type.issubtype(other.element_type)
         return other.issupertype(self)
 
-    def get_no_reference(self) -> "Type":
-        base = self.element_type.get_no_reference()
-        if base is self.element_type:
-            return self
-        return TypedDict(base)
-
 
 @stable_api
 class LiteralDict(TypedDict):
@@ -1158,9 +1131,6 @@ class LiteralDict(TypedDict):
 
     def has_custom_to_python(self) -> bool:
         return False
-
-    def get_no_reference(self) -> Type:
-        return self
 
     def is_attribute_type(self) -> bool:
         return True
@@ -1234,17 +1204,11 @@ class Union(Type):
         Type.__init__(self)
         self.types: Sequence[Type] = types
 
+    def supports_references(self) -> typing.Literal[True]:
+        return True
+
     def get_base_type(self) -> "Type":
         return self
-
-    def get_no_reference(self) -> "Type":
-        # CACHE!!!
-        bases = {type.get_no_reference() for type in self.types}
-        if len(bases) == 1:
-            return next(iter(bases))
-        if bases == set(self.types):
-            return self
-        return Union(list(bases))
 
     def validate(self, value: object) -> bool:
         for typ in self.types:
@@ -1336,6 +1300,9 @@ class Union(Type):
     def issupertype(self, other: "Type") -> bool:
         return any(other.issubtype(tp) for tp in self.types)
 
+    def supports_references(self) -> bool:
+        return any(tp.supports_references() for tp in self.types)
+
     def __hash__(self) -> int:
         return hash((3141156432848106868, *self.types))
 
@@ -1377,11 +1344,12 @@ class Literal(Union):
     def issupertype(self, other: "Type") -> bool:
         return other.is_attribute_type()
 
-    def has_custom_to_python(self) -> bool:
+    def supports_references(self) -> bool:
+        # prevent infinite loop for magic type
         return False
 
-    def get_no_reference(self) -> "Type":
-        return self
+    def has_custom_to_python(self) -> bool:
+        return False
 
 
 @stable_api
