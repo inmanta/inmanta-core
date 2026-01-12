@@ -16,6 +16,7 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import typing
 from typing import TYPE_CHECKING, Optional, Tuple
 
 import inmanta.ast.type as inmanta_type
@@ -38,6 +39,8 @@ class Attribute(Locatable):
     :param entity: The entity this attribute belongs to
     """
 
+    SUPPORTS_REFERENCES: typing.ClassVar[bool] = True
+
     def __init__(
         self, entity: "Entity", value_type: "Type", name: str, location: Location, multi: bool = False, nullable: bool = False
     ) -> None:
@@ -49,26 +52,32 @@ class Attribute(Locatable):
         self.__multi = multi
         self.__nullable = nullable
 
-        # The actual type
-        # TODO: drop type internal???
-        self.__type: Type = self._type(value_type)
-        self.__type_internal: Type = self._internal_type(value_type)
+        self.__type: Type = self._wrap_type(value_type, multi=multi, nullable=nullable, with_references=False)
+        self.__type_internal: Type = self._wrap_type(
+            value_type, multi=multi, nullable=nullable, with_references=self.SUPPORTS_REFERENCES
+        )
 
         self.comment = None  # type: Optional[str]
         self.end: Optional[RelationAttribute] = None
 
-    # TODO: cleaner approach & better name
-    def _type(self, base_type: "Type") -> tuple["Type", "Type"]:
+    @classmethod
+    def _wrap_type(cls, base_type: "Type", *, multi: bool, nullable: bool, with_references: bool) -> "Type":
         result: Type = base_type
-        # TODO: must not use is_multi() etc because child overrides it. But unintuitive. What to do?
-        if self.__multi:
+        if multi:
+            if with_references:
+                # allow references for list elements
+                result = inmanta_type.OrReferenceType(result)
             result = inmanta_type.TypedList(result)
-        if self.__nullable:
+        if nullable:
             result = inmanta_type.NullableType(result)
+        if with_references:
+            # allow references for the value itself
+            result = inmanta_type.OrReferenceType(result)
         return result
 
-    # TODO: cleaner approach & better name
-    def _internal_type(self, base_type: "Type") -> tuple["Type", "Type"]:
+    # TODO: cleaner approach
+    # TODO: BAD NAME because only allows refs if cls.SUPPORTS_REFERENCES
+    def _type_or_ref(self, base_type: "Type") -> tuple["Type", "Type"]:
         result: Type = base_type
         if self.__multi:
             result = inmanta_type.TypedList(inmanta_type.OrReferenceType(result))
@@ -87,7 +96,7 @@ class Attribute(Locatable):
     @property
     def type_internal(self) -> "Type":
         """
-        Get the actual type used by the compiler for type checking.
+        Get the actual type used by the compiler for type checking, i.e. including reference types, if they are supported.
 
         The externally visible type will never include references
         The internal type may accommodate references
@@ -165,6 +174,8 @@ class RelationAttribute(Attribute):
     An attribute that is a relation
     """
 
+    SUPPORTS_REFERENCES = False
+
     def __init__(self, entity: "Entity", value_type: "Type", name: str, location: Location) -> None:
         """
         :ivar freeze_dependents: Contains the set of RelationAttributes that can only be frozen
@@ -186,7 +197,7 @@ class RelationAttribute(Attribute):
         return "[%d:%s] %s" % (self.low, self.high if self.high is not None else "", self.name)
 
     # TODO: cleaner approach
-    def _internal_type(self, base_type: "Type") -> tuple["Type", "Type"]:
+    def _type_or_ref(self, base_type: "Type") -> tuple["Type", "Type"]:
         return self._type(base_type)
 
     def set_multiplicity(self, values: "Tuple[int, Optional[int]]") -> None:
