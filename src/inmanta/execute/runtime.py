@@ -89,7 +89,13 @@ class ResultCollector(Generic[T_contra]):
         :return: Whether this collector is complete, i.e. it does not need to receive any further results and its associated
             waiter will no longer cause progress. Once this is signalled, this instance should get no further results.
         """
-        for subvalue in value if isinstance(value, list) else [value]:
+        if isinstance(value, list):
+            _iterator=value
+        elif isinstance(value, dict):
+            _iterator=value.keys()
+        else:
+            _iterator= [value]
+        for subvalue in _iterator :
             done: bool = self.receive_result(subvalue, location)
             if done:
                 return True

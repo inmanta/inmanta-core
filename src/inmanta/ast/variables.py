@@ -103,6 +103,8 @@ class Reference(ExpressionStatement):
         return result
 
     def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+        # if str(self) in ['ml', "md"]:
+        #     breakpoint()
         return requires[self.name]
 
     def execute_direct(self, requires: abc.Mapping[str, object]) -> object:

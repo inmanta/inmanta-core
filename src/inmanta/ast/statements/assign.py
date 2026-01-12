@@ -128,7 +128,6 @@ class CreateList(ReferenceStatement):
         """
         Create this list
         """
-        LOGGER.error(f"CreateList {requires=}")
         # gradual case, everything is in placeholder
         if self in requires:
             return requires[self]
