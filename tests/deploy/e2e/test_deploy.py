@@ -468,6 +468,35 @@ async def check_scheduler_state(resources, scheduler):
             assert scheduler._state.requires._primary[id_without_version] == set(expected_resource_attributes["requires"])
 
 
+async def test_put_version_without_compiler_version(server, client, clienthelper, environment, agent):
+    """
+    Test put_version without compiler_version
+    """
+
+    version = await clienthelper.get_version()
+
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=[
+            {
+                "key": "key1",
+                "value": "value",
+                "id": f"test::Resourcex[agent1,key=key1],v={version}",
+                "requires": [],
+                "purged": False,
+                "send_event": False,
+                "attributes": {"A": "B"},
+            }
+        ],
+        resource_state={},
+        unknowns=[],
+        version_info={},
+        module_version_info={},
+    )
+    assert result.code == 200
+
+
 async def test_deploy_empty(server, client, clienthelper, environment, agent):
     """
     Test deployment of empty model

@@ -1,0 +1,9 @@
+---
+description: >
+  Drop COMPILER_VERSION field.
+issue-nr: 4002
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [master]
+sections:
+  minor-improvement: "{{description}}"

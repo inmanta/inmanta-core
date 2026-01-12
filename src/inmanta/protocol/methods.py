@@ -532,7 +532,7 @@ def put_version(
                            to undefined when the resource depends on an unknown or available when it doesn't.
     :param unknowns: Optional. A list of unknown parameters that caused the model to be incomplete
     :param version_info: Optional. Module version information
-    :param compiler_version: Optional. version of the compiler, if not provided, this call will return an error
+    :param compiler_version: [DEPRECATED]: This argument is ignored.
     :param resource_sets: Optional. a dictionary describing which resource belongs to which resource set
     :param pip_config: Optional. Pip config used by this version
     :param module_version_info: Map of (module name, module version) to InmantaModule

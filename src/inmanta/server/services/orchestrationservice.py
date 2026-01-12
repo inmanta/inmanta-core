@@ -1020,9 +1020,6 @@ class OrchestrationService(protocol.ServerSlice):
         if resource_sets is None:
             resource_sets = {}
 
-        if not compiler_version:
-            raise BadRequest("Older compiler versions are no longer supported, please update your compiler")
-
         unknowns_objs = self._create_unknown_parameter_daos_from_api_unknowns(env.id, version, unknowns)
         rid_to_resource: dict[ResourceIdStr, ResourceDTO] = self._create_dto_resources_from_api_resources(
             env_id=env.id,
