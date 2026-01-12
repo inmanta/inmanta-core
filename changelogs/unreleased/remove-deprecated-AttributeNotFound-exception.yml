@@ -1,0 +1,7 @@
+description: Remove deprecated AttributeNotFound exception. Attempting to access a non-existing attribute
+  on a DynamicProxy object will now raise a plain AttributeError instead of an AttributeNotFound exception.
+change-type: major
+destination-branches: [master]
+sections:
+  upgrade-note: "{{description}}"
+

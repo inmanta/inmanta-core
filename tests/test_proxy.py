@@ -19,7 +19,7 @@ Contact: code@inmanta.com
 import pytest
 
 import inmanta.compiler as compiler
-from inmanta.ast import NotFoundException, OptionalValueException, RuntimeException
+from inmanta.ast import OptionalValueException, RuntimeException
 from inmanta.execute.proxy import DynamicProxy
 from inmanta.execute.util import NoneValue
 
@@ -110,8 +110,6 @@ x = A()
 
     assert isinstance(proxy, DynamicProxy)
     with pytest.raises(AttributeError):
-        proxy.x
-    with pytest.raises(NotFoundException):
         proxy.x
 
 
