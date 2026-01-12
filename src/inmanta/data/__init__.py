@@ -3836,6 +3836,7 @@ class Compile(BaseDocument):
     :param links: An object that contains relevant links to this compile.
         It is a dictionary where the key is something that identifies one or more links
         and the value is a list of urls. i.e. {"instances": ["link-1',"link-2"], "compiles": ["link-3"]}
+    :param reinstall_project_and_venv: True iff perform a clean checkout of the project and re-create the compiler venv.
     """
 
     __primary_key__ = ("id",)
@@ -3874,6 +3875,7 @@ class Compile(BaseDocument):
 
     soft_delete: bool = False
     links: dict[str, list[str]] = {}
+    reinstall_project_and_venv: bool = False
 
     @classmethod
     async def get_substitute_by_id(cls, compile_id: uuid.UUID, connection: Optional[Connection] = None) -> Optional["Compile"]:

@@ -21,12 +21,12 @@ import datetime
 import functools
 import logging
 import os
-import platform
 import queue
 import re
 import shutil
 import subprocess
 import uuid
+import platform
 from asyncio import Semaphore
 from collections import abc
 from typing import Optional
@@ -91,6 +91,7 @@ async def compile_and_assert(
     env_vars={},
     update=False,
     exporter_plugin=None,
+    reinstall: bool = False,
 ) -> tuple[CompileRun, abc.Mapping[str, object]]:
     """
     Create a compile data object and run it. Returns the compile run itself and the reports for each stage.
@@ -104,6 +105,7 @@ async def compile_and_assert(
         used_environment_variables=env_vars,
         force_update=update,
         exporter_plugin=exporter_plugin,
+        reinstall_project_and_venv=reinstall,
     )
     await compile.insert()
 
@@ -2148,3 +2150,72 @@ async def test_venv_upgrade_version_mismatch(tmp_path, caplog):
     await run.ensure_compiler_venv()
     log_contains(caplog, "inmanta.server.services.compilerservice", logging.INFO, "Discarding existing venv from")
     assert (project / ".env").exists()
+
+
+@pytest.mark.parametrize("no_agent", [True])
+async def test_reinstall_project_and_venv(environment_factory: EnvironmentFactory, server, client, tmpdir):
+    """
+    Test the feature that allows a reinstall of the Inmanta project and its compiler venv.
+    """
+    env = await environment_factory.create_environment(main="")
+
+    project_dir = os.path.join(tmpdir, "work")
+    ensure_directory_exist(project_dir)
+    python_version = ".".join(platform.python_version_tuple()[0:2])
+    venv_dir = os.path.join(project_dir, ".env")
+    versioned_venv_dir_full = os.path.join(project_dir, f".env-py{python_version}")
+    project_marker_file = os.path.join(project_dir, ".p")
+    venv_marker_file = os.path.join(venv_dir, ".v")
+
+    async def _compile_and_assert(env, reinstall: bool, marker_files_exist: bool):
+        _, stages = await compile_and_assert(
+            env=env,
+            client=client,
+            project_work_dir=project_dir,
+            export=True,
+            meta={},
+            env_vars={},
+            update=False,
+            exporter_plugin=None,
+            reinstall=reinstall,
+        )
+        assert all(s["returncode"] == 0 for s in stages.values())
+        assert os.path.exists(project_dir)
+        assert os.path.exists(venv_dir)
+        assert os.path.exists(versioned_venv_dir_full)
+        assert os.path.exists(project_marker_file) is marker_files_exist
+        assert os.path.exists(venv_marker_file) is marker_files_exist
+
+    def write_marker_file(path: str) -> None:
+        with open(path, "w"):
+            pass
+        assert os.path.exists(path)
+
+    # Perform a compile to create the project dir and venv dirs
+    result = await client.notify_change(id=env.id, update=False, reinstall=False)
+    assert result.code == 200
+    assert not os.path.exists(project_marker_file)
+    assert not os.path.exists(venv_marker_file)
+    ###TODO: REMOVE: await _compile_and_assert(env=env, reinstall=False, marker_files_exist=False)
+
+    # Write a marker file to the project and the venv directory
+    # so that we can detect whether the directory was removed.
+    write_marker_file(project_marker_file)
+    write_marker_file(venv_marker_file)
+
+    # Perform another compile but don't do a reinstall.
+    result = await client.notify_change(id=env.id, update=False, reinstall=False)
+    assert result.code == 200
+    assert os.path.exists(project_marker_file)
+    assert os.path.exists(venv_marker_file)
+    ###TODO REMOVE: await _compile_and_assert(env=env, reinstall=False, marker_files_exist=True)
+    # A compile that does reinstall the project and the venv.
+    result = await client.notify_change(id=env.id, update=False, reinstall=True)
+    assert result.code == 200
+    assert not os.path.exists(project_marker_file)
+    assert not os.path.exists(venv_marker_file)
+    ###TODO REMOVE: await _compile_and_assert(env=env, reinstall=True, marker_files_exist=False)
+
+    # TODO: Use notify endpoint: both GET and POST
+    # TODO: Verify log message
+

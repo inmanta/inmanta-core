@@ -28,6 +28,7 @@ import re
 import subprocess
 import traceback
 import uuid
+import shutil
 from asyncio import CancelledError
 from asyncio.subprocess import Process
 from collections.abc import AsyncIterator, Awaitable, Hashable, Mapping, Sequence
@@ -325,6 +326,10 @@ class CompileRun:
                 await self._error("Environment %s does not exist." % environment_id)
                 await self._end_stage(-1)
                 return False, None
+
+            if self.request.reinstall_project_and_venv and os.path.exists(project_dir):
+                await self._info(f"Removing project and venv directory for environment {environment_id} at {project_dir}")
+                shutil.rmtree(project_dir)
 
             if not os.path.exists(project_dir):
                 await self._info(f"Creating project directory for environment {environment_id} at {project_dir}")
@@ -712,6 +717,7 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
         soft_delete: bool = False,
         mergeable_env_vars: Optional[Mapping[str, str]] = None,
         links: Optional[dict[str, list[str]]] = None,
+        reinstall_project_and_venv: bool = False,
     ) -> tuple[Optional[uuid.UUID], Warnings]:
         """
         Recompile an environment in a different thread and taking wait time into account.
@@ -733,6 +739,7 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
         :param links: An object that contains relevant links to this compile.
             It is a dictionary where the key is something that identifies one or more links
             and the value is a list of urls. i.e. {"instances": ["link-1',"link-2"], "compiles": ["link-3"]}
+        :param reinstall_project_and_venv: True iff perform a clean checkout of the project and re-create the compiler venv.
         :return: the compile id of the requested compile and any warnings produced during the request
         """
         if in_db_transaction and not connection:
