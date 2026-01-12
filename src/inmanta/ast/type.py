@@ -122,7 +122,7 @@ class Type(Locatable):
         """
         return self
 
-    # TODO: get rid?
+    # TODO: get rid of?
     def get_no_reference(self) -> "Type":
         """
         Returns the same type, but with all references removed
@@ -184,24 +184,36 @@ class Type(Locatable):
         """
         return instance
 
-    def issupertype(self, other: "Type") -> bool:
-        """
-        Returns True iff this DSL type is a supertype of the other type in a non-trivial way.
-        Raises NotImplementedError if this DSL type has no special supertyping rules (i.e. most types).
-        """
-        raise NotImplementedError()
-
     def issubtype(self, other: "Type") -> bool:
         """
         Returns True iff this DSL type is a subtype of the other type.
+
+        Implementations may recurse but must do so in a way that progresses and will eventually terminate, i.e. one of:
+            - narrow on the self type, e.g. recurse on each of the options in a union / intersection type
+            - decend deeper into both types, e.g. if both are typed lists, check if their respective element types have a
+                subtype relation.
+        Implementations that do not return True or recurse, should fall back to calling issupertype with reversed arguemnts,
+        to give the other type's specifics a chance to declare that it is a supertype.
+
         False negatives may be unavoidable in complex cases. Does not return false positives.
         """
         if self == other:
             return True
-        try:
-            return other.issupertype(self)
-        except NotImplementedError:
-            return False
+        return other.issupertype(self)
+
+    # TODO: name. Something with narrow / sum / union?
+    def issupertype(self, other: "Type") -> bool:
+        """
+        Returns True iff this DSL type is a supertype of the other type due to specifics of the this type,
+        e.g. sum / union types.
+
+        issubtype is always the entrypoint for any actual sub / super type check.
+
+        Implementations must always narrow at least the self type when recursing (e.g. recurse on each of the options in a
+        union type), and must do so by calling issubtype, never issupertype directly. Non-composed types should have no need
+        to override the default implementation.
+        """
+        return False
 
     def __eq__(self, other: object) -> bool:
         if type(self) != Type:  # noqa: E721
@@ -290,10 +302,10 @@ class ReferenceType(Type):
     def __hash__(self) -> int:
         return hash((type(self), self.element_type))
 
-    def issupertype(self, other: "Type") -> bool:
-        if not isinstance(other, ReferenceType):
-            return False
-        return self.element_type.issupertype(other.element_type)
+    def issubtype(self, other: "Type") -> bool:
+        if isinstance(other, ReferenceType):
+            return other.element_type.issubtype(self.element_type)
+        return other.issupertype(self)
 
 
 class OrReferenceType(Type):
@@ -371,10 +383,13 @@ class OrReferenceType(Type):
             return self.element_type.corresponds_to(type.element_type)
         return False
 
+    # Due to the way unions with references are compacted to OrReference, it suffices to have a custom issupertype
+    # implementation. The default issubtype suffices because it will delegate to issupertype, which will end up here
+    # eventually, possibly by first going through Union.issupertype, in case of a wider union.
     def issupertype(self, other: "Type") -> bool:
         if not isinstance(other, (ReferenceType, OrReferenceType)):
-            return self.element_type.issupertype(other)
-        return self.element_type.issupertype(other.element_type)
+            return other.issubtype(self.element_type)
+        return other.element_type.issubtype(self.element_type)
 
 
 class NamedType(Type, Named):
@@ -504,8 +519,16 @@ class NullableType(Type):
     def has_custom_to_python(self) -> bool:
         return self.element_type.has_custom_to_python()
 
+    def issubtype(self, other: "Type") -> bool:
+        if isinstance(other, NullableType) and self.element_type.issubtype(other.element_type):
+            return True
+        return other.issupertype(self)
+
     def issupertype(self, other: "Type") -> bool:
-        return isinstance(other, Null) or other.issubtype(self.element_type)
+        return (
+            isinstance(other, Null)
+            or other.issubtype(self.element_type)
+        )
 
 
 class Any(Type):
@@ -546,8 +569,6 @@ class Any(Type):
         return type(self) == type(other)  # noqa: E721
 
     def issupertype(self, other: "Type") -> bool:
-        if other == self:
-            return False
         return True
 
     def __hash__(self):
@@ -607,9 +628,6 @@ class Primitive(Type):
         # Override to skip the null check in the parent class
         return None
 
-    def issupertype(self, other: "Type") -> bool:
-        return False
-
 
 @stable_api
 class Number(Primitive):
@@ -658,6 +676,9 @@ class Number(Primitive):
 
     def corresponds_to(self, type: "Type") -> bool:
         return isinstance(type, (Any, Float, Integer, Number))
+
+    def issubtype(self, other: "Type") -> bool:
+        return Float().issubtype(other) and Integer().issubtype(other)
 
     def issupertype(self, other: "Type") -> bool:
         return isinstance(other, (Float, Integer))
@@ -868,9 +889,6 @@ class List(Type):
             return True
         return isinstance(other, List)
 
-    def issupertype(self, other: "Type") -> bool:
-        raise NotImplementedError()
-
 
 @stable_api
 class TypedList(List):
@@ -954,16 +972,9 @@ class TypedList(List):
         return self.element_type.has_custom_to_python()
 
     def issubtype(self, other: "Type") -> bool:
-        if isinstance(other, Any):
-            return True
-        if not isinstance(other, TypedList):
-            return False
-        return self.element_type.issubtype(other.element_type)
-
-    def issupertype(self, other: "Type") -> bool:
-        if not isinstance(other, TypedList):
-            return False
-        return self.element_type.issupertype(other.element_type)
+        if isinstance(other, TypedList):
+            return self.element_type.issubtype(other.element_type)
+        return other.issupertype(self)
 
 
 @stable_api
@@ -1048,9 +1059,6 @@ class Dict(Type):
             return True
         return isinstance(other, Dict)
 
-    def issupertype(self, other: "Type") -> bool:
-        raise NotImplementedError()
-
     def __eq__(self, other: object) -> bool:
         return type(self) is type(other)
 
@@ -1119,16 +1127,9 @@ class TypedDict(Dict):
         return hash((type(self), self.element_type))
 
     def issubtype(self, other: "Type") -> bool:
-        if isinstance(other, Any):
-            return True
-        if not isinstance(other, TypedDict):
-            return False
-        return self.element_type.issubtype(other.element_type)
-
-    def issupertype(self, other: "Type") -> bool:
-        if not isinstance(other, TypedDict):
-            return False
-        return self.element_type.issupertype(other.element_type)
+        if isinstance(other, TypedDict):
+            return self.element_type.issubtype(other.element_type)
+        return other.issupertype(self)
 
     def get_no_reference(self) -> "Type":
         base = self.element_type.get_no_reference()
@@ -1329,11 +1330,11 @@ class Union(Type):
         # We don't know what location to use...
         return None
 
+    def issubtype(self, other: "Type") -> bool:
+        return self == other or all(element_type.issubtype(other) for element_type in self.types)
+
     def issupertype(self, other: "Type") -> bool:
         return any(other.issubtype(tp) for tp in self.types)
-
-    def issubtype(self, other: "Type") -> bool:
-        return all(element_type.issubtype(other) for element_type in self.types)
 
     def __hash__(self) -> int:
         return hash((3141156432848106868, *self.types))
@@ -1369,11 +1370,12 @@ class Literal(Union):
         # We allow any primitive
         return type.is_attribute_type()
 
-    def issupertype(self, other: "Type") -> bool:
-        return other != self and other.is_attribute_type()
-
     def issubtype(self, other: "Type") -> bool:
+        # don't split this type in its union counterparts for performance reasons. It will always appear as Literal
         return Type.issubtype(self, other)
+
+    def issupertype(self, other: "Type") -> bool:
+        return other.is_attribute_type()
 
     def has_custom_to_python(self) -> bool:
         return False
@@ -1484,7 +1486,7 @@ class ConstraintType(NamedType):
 
     def issubtype(self, other: "Type") -> bool:
         assert self.basetype is not None
-        return super().issubtype(other) or self.basetype.issubtype(other)
+        return self == other or self.basetype.issubtype(other)
 
 
 def create_function(tp: ConstraintType, expression: "ExpressionStatement") -> Callable[[object], object]:

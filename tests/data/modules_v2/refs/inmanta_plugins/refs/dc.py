@@ -27,8 +27,7 @@ class MixedRefsDataclass(AllRefsDataclass, NoRefsDataclass): ...
 class ComplexDataclass(DataclassABC):
     opt_field: int | None
     opt_dct: Mapping[str, object] | None
-    # TODO
-    #opt_lst: Sequence[str] | None
+    opt_lst: Sequence[str] | None
 
 
 @reference("refs::dc::NoRefsDataclassReference")

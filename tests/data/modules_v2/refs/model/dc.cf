@@ -15,7 +15,7 @@ end
 entity ComplexDataclass extends DataclassABC:
     int? opt_field
     dict? opt_dct
-    #string[]? opt_lst
+    string[]? opt_lst
 end
 
 implement NoRefsDataclass using std::none

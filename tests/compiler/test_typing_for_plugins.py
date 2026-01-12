@@ -174,13 +174,7 @@ def test_type_utility_methods() -> None:
             assert intype.issubtype(Any())
 
             try:
-                assert not intype.issupertype(intype)
-            except NotImplementedError:
-                # Valid response
-                pass
-
-            try:
-                assert not intype.issupertype(Any())
+                assert isinstance(intype, Any) or not intype.issupertype(Any())
             except NotImplementedError:
                 # Valid response
                 pass
@@ -320,3 +314,16 @@ def test_issubtype_widening() -> None:
 
     assert not entity.issubtype(Integer())
     assert not Integer().issubtype(entity)
+
+
+def test_issubtype_references() -> None:
+    """
+    Verify that issubtype works as expected with Reference and OrReference types.
+    """
+    # internal representation of a `string[]?` attribute type
+    or_ref_list = OrReferenceType(NullableType(TypedList(OrReferenceType(String()))))
+    plain_list = NullableType(TypedList(String()))
+    # reference type as constructed for dataclass attributes in Entity.from_python
+    plain_list_ref = ReferenceType(plain_list)
+    assert plain_list.issubtype(or_ref_list)
+    assert plain_list_ref.issubtype(or_ref_list)
