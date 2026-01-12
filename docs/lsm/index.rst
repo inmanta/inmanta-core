@@ -108,8 +108,8 @@ The service inventory exposes CRUD operations on service instances in the invent
 - ``POST /lsm/v1/service_inventory/<service_entity>``: Create a new service instance of type <service_entity>.
 - ``GET /lsm/v1/service_inventory/<service_entity>``: List all instances of a service entity.
 - ``GET /lsm/v1/service_inventory/<service_entity>/<service_id>``: Get the service instance with id ``service_id``.
-- ``PATCH /lsm/v1/service_inventory/<service_entity>/<service_id>``: Update the attributes of the service instance with id ``service_id``.
-- ``PATCH /lsm/v2/service_inventory/<service_entity>/<service_id>``: Update the attributes of the service instance with id ``service_id``.
+- ``PATCH /lsm/v1/service_inventory/<service_entity>/<service_id>``: Update the attributes of the service instance with id ``service_id`` (v1 endpoint, requires providing the full tree of attributes (i.e. including those that didn't change)).
+- ``PATCH /lsm/v2/service_inventory/<service_entity>/<service_id>``: Update the attributes of the service instance with id ``service_id`` (v2 endpoint with finer control (i.e. allows updating subtrees of attributes at the given :ref:`dictpath expressions<dict_path>`)).
 - ``POST /lsm/v1/service_inventory/<service_type>/<service_id>/state``: Request a state transfer for the service instance with id ``service_id``.
 - ``DELETE /lsm/v1/service_inventory/<service_entity>/<service_id>``: Delete the service instance with id ``service_id``.
 
