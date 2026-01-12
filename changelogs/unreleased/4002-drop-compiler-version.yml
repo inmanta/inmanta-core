@@ -1,8 +1,8 @@
 ---
 description: >
-  Drop COMPILER_VERSION field.
+  Drop inmanta.COMPILER_VERSION field.
   Drop utils.get_compiler_version().
-  Remove compiler_version field from put_version.
+  Remove compiler_version argument from put_version.
 issue-nr: 4002
 issue-repo: inmanta-core
 change-type: major
