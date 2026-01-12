@@ -7,3 +7,4 @@ change-type: minor
 destination-branches: [master]
 sections:
   minor-improvement: "{{description}}"
+  deprecation-note: "Deprecated compiler_version field on put_version endpoint"
