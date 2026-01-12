@@ -17,7 +17,7 @@ Contact: code@inmanta.com
 """
 
 from abc import abstractmethod
-from collections.abc import Hashable, Sequence, Set, Mapping
+from collections.abc import Hashable, Mapping, Sequence, Set
 from typing import TYPE_CHECKING, Deque, Generic, List, Literal, NewType, Optional, TypeVar, Union, cast
 
 import inmanta.ast
@@ -81,7 +81,9 @@ class ResultCollector(Generic[T_contra]):
         """
         raise NotImplementedError()
 
-    def receive_result_flatten(self, value: Union[T_contra, Sequence[T_contra], Mapping[T_contra, T]], location: Location) -> bool:
+    def receive_result_flatten(
+        self, value: Union[T_contra, Sequence[T_contra], Mapping[T_contra, T]], location: Location
+    ) -> bool:
         """
         Receive one or more values for gradual execution. When a list is passed, its values will be passed to receive_result
         one by one. Otherwise the value itself is passed unmodified.
