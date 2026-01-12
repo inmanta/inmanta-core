@@ -49,6 +49,9 @@ from inmanta.execute.runtime import (
     VariableABC,
     WrappedValueVariable,
 )
+import logging
+LOGGER = logging.getLogger(__name__)
+
 
 if TYPE_CHECKING:
     from inmanta.ast.assign import SetAttribute  # noqa: F401
@@ -273,6 +276,9 @@ class ExpressionStatement(RequiresEmitStatement):
         Execute the expression and return the value it resolves to.
         The requires dict contains the resolved values of the variables that were requested via requires_emit.
         """
+        LOGGER.warning(requires)
+        LOGGER.warning(f"{self=}")
+        LOGGER.warning(f"{self.__class__=}")
         super().execute(requires, resolver, queue)
         # resolve expression, then notify result collectors before returning
         result: object = self._resolve(requires, resolver, queue)

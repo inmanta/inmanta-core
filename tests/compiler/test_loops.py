@@ -68,6 +68,19 @@ def test_for_error_2(snippetcompiler):
         "list. (reported in For(i) ({dir}/main.cf:2))",
     )
 
+def test_for_error_3(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+        md = {"1":2}
+        for k in md:
+        end
+    """,
+        "A for loop can only be applied to lists and relations. Hint: 'foo' is not a "
+        "list. (reported in For(i) ({dir}/main.cf:2))",
+    )
+
+
+
 
 def test_for_error_nullable_list(snippetcompiler):
     snippetcompiler.setup_for_error(

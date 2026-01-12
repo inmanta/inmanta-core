@@ -65,6 +65,9 @@ from inmanta.execute.util import Unknown
 
 from . import ReferenceStatement
 
+import logging
+LOGGER = logging.getLogger(__name__)
+
 if TYPE_CHECKING:
     from inmanta.ast.statements.generator import WrappedKwargs  # noqa: F401
     from inmanta.ast.variables import Reference  # noqa: F401
@@ -125,6 +128,7 @@ class CreateList(ReferenceStatement):
         """
         Create this list
         """
+        LOGGER.error(f"CreateList {requires=}")
         # gradual case, everything is in placeholder
         if self in requires:
             return requires[self]
@@ -192,8 +196,10 @@ class CreateDict(ReferenceStatement):
 
     def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         """
-        Create this list
+        Create this dict
         """
+        raise ZeroDivisionError
+        LOGGER.error(f"CreateDict {requires=}")
         qlist = {}
 
         for i in range(len(self.items)):
@@ -207,6 +213,38 @@ class CreateDict(ReferenceStatement):
 
     def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
         return dataflow.NodeStub("CreateDict.get_node() placeholder for %s" % self).reference()
+
+    # def requires_emit_gradual(
+    #     self, resolver: Resolver, queue: QueueScheduler, resultcollector: Optional[ResultCollector]
+    # ) -> dict[object, VariableABC]:
+    #     if resultcollector is None:
+    #         return self.requires_emit(resolver, queue)
+    #
+    #     requires: dict[object, VariableABC] = self._requires_emit_promises(resolver, queue)
+    #
+    #     # if we are in gradual mode, transform to a list of assignments instead of assignment of a list
+    #     # to get more accurate gradual execution
+    #     # temp variable is required get all heuristics right
+    #
+    #     # ListVariable to hold all the stuff. Used as a proxy for gradual execution and to track promises.
+    #     # Freezes itself once all promises have been fulfilled, at which point it represents the full list literal created by
+    #     # this statement.
+    #     temp = ListLiteral(queue)
+    #
+    #     # add listener for gradual execution
+    #     temp.listener(resultcollector, self.location)
+    #
+    #     # Assignments, wired for gradual
+    #     for expr in self.items:
+    #         ExecutionUnit(queue, resolver, temp, expr.requires_emit_gradual(resolver, queue, temp), expr, self)
+    #
+    #     if not self.items:
+    #         # empty: just close
+    #         temp.freeze()
+    #
+    #     # pass temp
+    #     requires[self] = temp
+    #     return requires
 
     def __repr__(self) -> str:
         return "Dict()"
