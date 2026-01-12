@@ -1,0 +1,6 @@
+description: Add support in the Inmanta DSL to iterate over dictionary keys in for loops.
+issue-nr: 639
+change-type: minor
+destination-branches: [master, iso8]
+sections:
+  minor-improvement: "{{description}}"
