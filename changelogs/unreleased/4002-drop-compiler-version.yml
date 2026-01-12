@@ -1,10 +1,10 @@
 ---
 description: >
-  Drop COMPILER_VERSION field.
+  Drop inmanta.COMPILER_VERSION field.
 issue-nr: 4002
 issue-repo: inmanta-core
 change-type: minor
 destination-branches: [master]
 sections:
-  minor-improvement: "{{description}}"
+  upgrade-note: "{{description}}"
   deprecation-note: "Deprecated compiler_version field on put_version endpoint"
