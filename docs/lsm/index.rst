@@ -110,7 +110,7 @@ The service inventory exposes CRUD operations on service instances in the invent
 - ``GET /lsm/v1/service_inventory/<service_entity>/<service_id>``: Get the service instance with id ``service_id``.
 - ``PATCH /lsm/v1/service_inventory/<service_entity>/<service_id>``: Update the attributes of the service instance with id ``service_id``.
 - ``PATCH /lsm/v2/service_inventory/<service_entity>/<service_id>``: Update the attributes of the service instance with id ``service_id``.
-- ``POST /lsm/v1/services/<service_type>/<service_id>/state``: Request a state transfer for the service instance with id ``service_id``.
+- ``POST /lsm/v1/service_inventory/<service_type>/<service_id>/state``: Request a state transfer for the service instance with id ``service_id``.
 - ``DELETE /lsm/v1/service_inventory/<service_entity>/<service_id>``: Delete the service instance with id ``service_id``.
 
 The state machine attached to the lifecycle will determine whether the API call is successful or not.
