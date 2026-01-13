@@ -196,10 +196,9 @@ class Type(Locatable):
             return True
         return other.issupertype(self)
 
-    # TODO: name. Something with narrow / sum / union?
     def issupertype(self, other: "Type") -> bool:
         """
-        Returns True iff this DSL type is a supertype of the other type due to specifics of the this type,
+        Returns True iff this DSL type is a (non-strict) supertype of the other type due to specifics of the this type,
         e.g. sum / union types.
 
         issubtype is always the entrypoint for any actual sub / super type check.
