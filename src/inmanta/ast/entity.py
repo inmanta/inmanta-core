@@ -44,7 +44,7 @@ from inmanta.ast.statements.generator import SubConstructor
 from inmanta.ast.type import Any as inm_Any
 from inmanta.ast.type import Float, NamedType, NullableType, Type
 from inmanta.execute.runtime import Instance, QueueScheduler, Resolver, ResultVariable, dataflow
-from inmanta.execute.util import AnyType, NoneValue
+from inmanta.execute.util import AnyType, NoneValue, Unknown
 from inmanta.references import AttributeReference, PrimitiveTypes, Reference
 from inmanta.types import DataclassProtocol
 
@@ -743,6 +743,13 @@ class Entity(NamedType, WithComment):
             return instance.type.to_python(instance, path=path)
 
         def domain_conversion(value: object) -> object:
+            if isinstance(value, Unknown):
+                # For now, we simply reject unknowns. Eventually, we want to support `| Unknown` declaration, similar to what
+                # we allow for references. When we do, it will have to be integrated into `Type.validate()` rather than here
+                # during conversion. One of the blockers is consistency with unknowns in plugin arguments, and how to gradually
+                # migrate from the old `allow_unknowns: bool` to the new, more fine-grained unknown declaration.
+                # TODO: proper exception type + check if the wrapping exception provides sufficient context
+                raise Exception("Unknowns are not (yet) supported in dataclass instances in the Python domain.")
             if isinstance(value, NoneValue):
                 return None
             if isinstance(value, list):
@@ -759,6 +766,7 @@ class Entity(NamedType, WithComment):
                 assert k in self._paired_dataclass_field_types
                 # dynamic validation, mostly in case of references, because they are allowed in the model while they have to be
                 # declared (potentially nested) in the Python domain.
+                # TODO: validate is here, but domain_conversion() may be an easier place to hook in?
                 self._paired_dataclass_field_types[k].validate(v)
             assert self._paired_dataclass is not None
             return self._paired_dataclass(**{k: domain_conversion(v) for k, v in kwargs.items()})
