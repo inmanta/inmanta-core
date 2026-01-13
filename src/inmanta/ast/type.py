@@ -512,10 +512,7 @@ class NullableType(Type):
         return other.issupertype(self)
 
     def issupertype(self, other: "Type") -> bool:
-        return (
-            isinstance(other, Null)
-            or other.issubtype(self.element_type)
-        )
+        return isinstance(other, Null) or other.issubtype(self.element_type)
 
     def supports_references(self) -> bool:
         return self.element_type.supports_references()
@@ -1205,9 +1202,6 @@ class Union(Type):
     def __init__(self, types: Sequence[Type]) -> None:
         Type.__init__(self)
         self.types: Sequence[Type] = types
-
-    def supports_references(self) -> typing.Literal[True]:
-        return True
 
     def get_base_type(self) -> "Type":
         return self
