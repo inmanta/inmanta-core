@@ -1,4 +1,5 @@
 description: "Fixed plugins returning a reference to a dataclass with nullable attributes"
+issue-nr: 9837
 change-type: patch
 sections:
   bugfix: "{{description}}"
