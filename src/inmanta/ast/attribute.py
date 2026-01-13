@@ -75,16 +75,6 @@ class Attribute(Locatable):
             result = inmanta_type.OrReferenceType(result)
         return result
 
-    # TODO: cleaner approach
-    # TODO: BAD NAME because only allows refs if cls.SUPPORTS_REFERENCES
-    def _type_or_ref(self, base_type: "Type") -> tuple["Type", "Type"]:
-        result: Type = base_type
-        if self.__multi:
-            result = inmanta_type.TypedList(inmanta_type.OrReferenceType(result))
-        if self.__nullable:
-            result = inmanta_type.NullableType(result)
-        return inmanta_type.OrReferenceType(result)
-
     def get_type(self) -> "Type":
         """
         Get the declared type of this attribute.
@@ -195,10 +185,6 @@ class RelationAttribute(Attribute):
 
     def __repr__(self) -> str:
         return "[%d:%s] %s" % (self.low, self.high if self.high is not None else "", self.name)
-
-    # TODO: cleaner approach
-    def _type_or_ref(self, base_type: "Type") -> tuple["Type", "Type"]:
-        return self._type(base_type)
 
     def set_multiplicity(self, values: "Tuple[int, Optional[int]]") -> None:
         """
