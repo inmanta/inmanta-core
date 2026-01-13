@@ -518,6 +518,9 @@ class NullableType(Type):
             or other.issubtype(self.element_type)
         )
 
+    def supports_references(self) -> bool:
+        return self.element_type.supports_references()
+
 
 class Any(Type):
     """
