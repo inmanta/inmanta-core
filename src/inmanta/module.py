@@ -83,10 +83,6 @@ TProject = TypeVar("TProject", bound="Project")
 TInmantaModuleRequirement = TypeVar("TInmantaModuleRequirement", bound="InmantaModuleRequirement")
 
 
-def get_compiler_version() -> str:
-    return "2026.1"
-
-
 @stable_api
 class InmantaModuleRequirement:
     """
@@ -2888,8 +2884,8 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
         for r in requirements:
             versions = [x for x in r.specifier.filter(iterable=versions, prereleases=not release_only)]
 
-        comp_version_raw = get_compiler_version()
-        comp_version = Version(version=comp_version_raw)
+        # Compiler version was dropped so we just hardcoded the latest known compiler version
+        comp_version = Version(version="2026.1")
         return cls.__best_for_compiler_version(modulename, versions, path, comp_version)
 
     @classmethod
