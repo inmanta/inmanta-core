@@ -26,7 +26,6 @@ import pytest
 
 from inmanta import const, data, execute
 from inmanta.const import AgentAction
-from inmanta.util import get_compiler_version
 from utils import ClientHelper, retry_limited, wait_until_deployment_finishes
 
 logger = logging.getLogger("inmanta.test.dryrun")
@@ -105,7 +104,6 @@ async def test_dryrun_and_deploy(server, client, resource_container, environment
         resource_state=status,
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert result.code == 200
@@ -442,7 +440,6 @@ async def test_dryrun_v2(server, client, resource_container, environment, agent)
         resource_state=status,
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert result.code == 200

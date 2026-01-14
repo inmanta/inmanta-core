@@ -256,8 +256,8 @@ def test_log_file_set(tmpdir, log_level, with_tty, regexes_required_lines, regex
 @pytest.mark.parametrize_any(
     "with_tty, regexes_required_lines",
     [
-        (False, [r"Inmanta Service Orchestrator", r"Compiler version: ", r"Extensions:", r"\s*\* core:"]),
-        (True, [r"Inmanta Service Orchestrator", r"Compiler version: ", r"Extensions:", r"\s*\* core:"]),
+        (False, [r"Inmanta Service Orchestrator", r"Extensions:", r"\s*\* core:"]),
+        (True, [r"Inmanta Service Orchestrator", r"Extensions:", r"\s*\* core:"]),
     ],
 )
 @pytest.mark.timeout(60)
@@ -487,10 +487,10 @@ end
 @pytest.mark.parametrize_any(
     "with_tty, version_should_be_shown, regexes_required_lines, regexes_forbidden_lines",
     [
-        (False, True, [r"Inmanta Service Orchestrator", r"Compiler version: ", r"Extensions:", r"\s*\* core:"], []),
-        (True, True, [r"Inmanta Service Orchestrator", r"Compiler version: ", r"Extensions:", r"\s*\* core:"], []),
-        (False, False, [], [r"Inmanta Service Orchestrator", r"Compiler version: ", r"Extensions:", r"\s*\* core:"]),
-        (True, False, [], [r"Inmanta Service Orchestrator", r"Compiler version: ", r"Extensions:", r"\s*\* core:"]),
+        (False, True, [r"Inmanta Service Orchestrator", r"Extensions:", r"\s*\* core:"], []),
+        (True, True, [r"Inmanta Service Orchestrator", r"Extensions:", r"\s*\* core:"], []),
+        (False, False, [], [r"Inmanta Service Orchestrator", r"Extensions:", r"\s*\* core:"]),
+        (True, False, [], [r"Inmanta Service Orchestrator", r"Extensions:", r"\s*\* core:"]),
     ],
 )
 @pytest.mark.timeout(20)

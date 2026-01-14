@@ -30,7 +30,7 @@ import pytest
 
 import inmanta.protocol
 import inmanta.types
-from inmanta import const, data, util
+from inmanta import const, data
 from inmanta.agent.agent_new import Agent
 from inmanta.data import CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES, model
 from inmanta.data.schema import DBSchema
@@ -346,7 +346,6 @@ async def test_dump_db(
             "test::Resource[agent1,key=key5]": const.ResourceState.available,
             "test::Resource[agent1,key=key6]": const.ResourceState.available,
         },
-        compiler_version=util.get_compiler_version(),
         module_version_info={},
     )
     assert res.code == 200
@@ -405,7 +404,6 @@ async def test_dump_db(
             "test::Resource[agent1,key=key10]": const.ResourceState.available,
             res_id_to_delete: const.ResourceState.available,
         },
-        compiler_version=util.get_compiler_version(),
         module_version_info={},
     )
     assert res.code == 200
@@ -452,7 +450,6 @@ async def test_dump_db(
             "test::Resource[agent1,key=key7]": const.ResourceState.available,
             "test::Resource[agent1,key=key8]": const.ResourceState.available,
         },
-        compiler_version=util.get_compiler_version(),
         module_version_info={},
     )
     assert res.code == 200

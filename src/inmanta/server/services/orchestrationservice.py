@@ -1004,7 +1004,6 @@ class OrchestrationService(protocol.ServerSlice):
         unknowns: list[dict[str, PrimitiveTypes]],
         version_info: JsonType,
         module_version_info: Mapping[InmantaModuleName, InmantaModuleDTO],
-        compiler_version: str | None = None,
         resource_sets: dict[ResourceIdStr, str | None] | None = None,
         pip_config: PipConfig | None = None,
         project_constraints: str | None = None,
@@ -1019,9 +1018,6 @@ class OrchestrationService(protocol.ServerSlice):
         """
         if resource_sets is None:
             resource_sets = {}
-
-        if not compiler_version:
-            raise BadRequest("Older compiler versions are no longer supported, please update your compiler")
 
         unknowns_objs = self._create_unknown_parameter_daos_from_api_unknowns(env.id, version, unknowns)
         rid_to_resource: dict[ResourceIdStr, ResourceDTO] = self._create_dto_resources_from_api_resources(

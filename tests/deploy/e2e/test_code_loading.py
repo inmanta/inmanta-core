@@ -39,7 +39,7 @@ from inmanta.loader import InmantaModule as InmantaModuleDTO
 from inmanta.protocol import Client
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.server.server import Server
-from inmanta.util import get_compiler_version, hash_file
+from inmanta.util import hash_file
 from sqlalchemy.dialects.postgresql import insert
 from utils import ClientHelper, DummyCodeManager, log_index, retry_limited, wait_until_deployment_finishes
 
@@ -137,7 +137,6 @@ async def test_agent_installs_dependency_containing_extras(
         version=version,
         resources=resources,
         pip_config=PipConfig(index_url=index_with_pkgs_containing_optional_deps),
-        compiler_version=get_compiler_version(),
         module_version_info=module_version_info,
     )
     assert res.code == 200
@@ -377,7 +376,6 @@ async def test_agent_code_loading_with_failure(
                 },
             ],
             module_version_info=module_version_info,
-            compiler_version=get_compiler_version(),
             pip_config=PipConfig(),
         )
         assert res.code == 200
@@ -435,7 +433,6 @@ async def test_logging_on_code_loading_failure_missing_code(server, client, envi
                 "version": version,
             }
         ],
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert res.code == 200
@@ -506,7 +503,6 @@ async def test_logging_on_code_loading_error(server, client, environment, client
         resource_state={},
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info=module_version_info,
     )
 
@@ -639,7 +635,6 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
         resource_state={},
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info=module_version_info,
         resource_sets={"test::ResType_A[agent_X,key=key1]": "set-a", "test::ResType_A[agent_Y,key=key1]": "set-b"},
     )
@@ -945,7 +940,6 @@ async def test_project_constraints_in_agent_code_install(server, client, environ
         resource_state={},
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info=module_version_info_v0,
         resource_sets={"test::ResType_A[agent_X,key=key1]": "set-a", "test::ResType_A[agent_Y,key=key1]": "set-b"},
         project_constraints=constraints,
@@ -1003,7 +997,6 @@ async def test_project_constraints_in_agent_code_install(server, client, environ
         resource_state={},
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info=module_version_info_v1,
         resource_sets={"test::ResType_A[agent_X,key=key1]": "set-a", "test::ResType_A[agent_Y,key=key1]": "set-b"},
         project_constraints=None,
