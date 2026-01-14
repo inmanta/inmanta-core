@@ -30,6 +30,7 @@ from inmanta.data import SERVER_COMPILE
 from inmanta.data.model import AttributeStateChange, ReleasedResourceState, SchedulerStatusReport
 from inmanta.deploy.state import Blocked, Compliance, DeployResult, ResourceState
 from inmanta.deploy.work import TaskPriority
+from inmanta.protocol.exceptions import NotFound
 from inmanta.resources import Id
 from inmanta.server import SLICE_PARAM, SLICE_SERVER
 from inmanta.types import ResourceIdStr
@@ -1870,7 +1871,8 @@ async def test_non_compliant_diff(resource_container, server, client, clienthelp
 
     version = await clienthelper.get_version()
 
-    rid1 = "test::Resource[agent1,key=key]"
+    rid1 = ResourceIdStr("test::Resource[agent1,key=key]")
+    rid2 = ResourceIdStr("test::Resource[agent1,key=key2]")
     env_id = uuid.UUID(environment)
 
     # Set rid1 to "actual_value"
@@ -1879,6 +1881,15 @@ async def test_non_compliant_diff(resource_container, server, client, clienthelp
             "key": "key",
             "value": "actual_value",
             "id": f"{rid1},v={version}",
+            "requires": [],
+            "purged": False,
+            "send_event": False,
+            "receive_events": False,
+        },
+        {
+            "key": "key2",
+            "value": "actual_value",
+            "id": f"{rid2},v={version}",
             "requires": [],
             "purged": False,
             "send_event": False,
@@ -1893,7 +1904,11 @@ async def test_non_compliant_diff(resource_container, server, client, clienthelp
     assert rps.non_compliant_diff is None
     assert rps.last_non_deploying_status == const.NonDeployingResourceState.deployed
 
-    report = await data.ResourcePersistentState.get_compliance_report(env=env_id, resource_ids=[rid1])
+    rps2 = await data.ResourcePersistentState.get_one(environment=environment, resource_id=rid2)
+    assert rps.non_compliant_diff is None
+    assert rps.last_non_deploying_status == const.NonDeployingResourceState.deployed
+
+    report = await data.ResourcePersistentState.get_compliance_report(env=env_id, resource_ids=[rid1, rid2])
     assert report[rid1].resource_state == ResourceState(
         compliance=Compliance.COMPLIANT,
         last_deploy_result=DeployResult.DEPLOYED,
@@ -1903,6 +1918,16 @@ async def test_non_compliant_diff(resource_container, server, client, clienthelp
     )
     assert report[rid1].report_only is False
     assert report[rid1].attribute_diff is None
+
+    assert report[rid2].resource_state == ResourceState(
+        compliance=Compliance.COMPLIANT,
+        last_deploy_result=DeployResult.DEPLOYED,
+        blocked=Blocked.NOT_BLOCKED,
+        last_deployed=rps2.last_deploy,
+        last_deploy_compliant=True,
+    )
+    assert report[rid2].report_only is False
+    assert report[rid2].attribute_diff is None
 
     # Make rid1 reporting and change the desired state
     version = await clienthelper.get_version()
@@ -1927,6 +1952,17 @@ async def test_non_compliant_diff(resource_container, server, client, clienthelp
     assert rps.last_non_deploying_status == const.NonDeployingResourceState.non_compliant
 
     non_compliant_diff_id = rps.non_compliant_diff
+
+    # Assert that we return a not found if provided a rid that is not present on the latest processed version
+    expected_exception_output = (
+        "Unable to find the following resource ids in the latest version processed by the scheduler {'%s'}" % rid2
+    )
+    with pytest.raises(NotFound) as exc_info:
+        await data.ResourcePersistentState.get_compliance_report(env=env_id, resource_ids=[rid2])
+    assert expected_exception_output in exc_info.value.log_message
+    with pytest.raises(NotFound):
+        await data.ResourcePersistentState.get_compliance_report(env=env_id, resource_ids=[rid1, rid2])
+    assert expected_exception_output in exc_info.value.log_message
 
     report = await data.ResourcePersistentState.get_compliance_report(env=env_id, resource_ids=[rid1])
     assert report[rid1].resource_state == ResourceState(
