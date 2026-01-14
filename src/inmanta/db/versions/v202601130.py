@@ -22,7 +22,7 @@ from asyncpg import Connection
 async def update(connection: Connection) -> None:
     """
     This migration fixes the diff layout on resource_diff.
-    {rid: {current: x, actual: y}} -> {current: x, actual: y}
+    {rid: {current: x, desired: y}} -> {current: x, desired: y}
     """
     schema = """
         UPDATE public.resource_diff AS rd
