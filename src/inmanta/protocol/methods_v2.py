@@ -1895,9 +1895,8 @@ def health() -> ReturnValue[None]:
 @typedmethod(
     path="/get_compliance_report/",
     operation="POST",
-    agent_server=True,
     arg_options=methods.ENV_OPTS,
-    client_types=[ClientType.agent],
+    client_types=[ClientType.api],
     api_version=2,
 )
 def get_compliance_report(tid: uuid.UUID, resource_ids: Sequence[ResourceIdStr]) -> dict[ResourceIdStr, ResourceComplianceDiff]:
