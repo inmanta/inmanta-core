@@ -1054,6 +1054,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                     )
             converted_args.append(result)
 
+        # TODO: shouldn't this have the same exception logic?
         converted_kwargs = {}
         # Validate all kw arguments
         for name, value in kwargs.items():
