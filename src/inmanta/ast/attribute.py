@@ -62,6 +62,10 @@ class Attribute(Locatable):
 
     @classmethod
     def _wrap_type(cls, base_type: "Type", *, multi: bool, nullable: bool, with_references: bool) -> "Type":
+        """
+        Wraps the given base type with `[]`, `?` and `| Reference[...]` where appropriate, depending on the parameters.
+        Does not take cls.SUPPORTS_REFERENCES into account, i.e. expects caller to do so.
+        """
         result: Type = base_type
         if multi:
             if with_references:
