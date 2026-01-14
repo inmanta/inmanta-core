@@ -185,9 +185,9 @@ class Type(Locatable):
 
         Implementations may recurse but must do so in a way that progresses and will eventually terminate, i.e. one of:
             - narrow on the self type, e.g. recurse on each of the options in a union / intersection type
-            - decend deeper into both types, e.g. if both are typed lists, check if their respective element types have a
+            - descend deeper into both types, e.g. if both are typed lists, check if their respective element types have a
                 subtype relation.
-        Implementations that do not return True or recurse, should fall back to calling issupertype with reversed arguemnts,
+        Implementations that do not return True or recurse, should fall back to calling issupertype with reversed arguments,
         to give the other type's specifics a chance to declare that it is a supertype.
 
         False negatives may be unavoidable in complex cases. Does not return false positives.
@@ -198,7 +198,7 @@ class Type(Locatable):
 
     def issupertype(self, other: "Type") -> bool:
         """
-        Returns True iff this DSL type is a (non-strict) supertype of the other type due to specifics of the this type,
+        Returns True iff this DSL type is a (non-strict) supertype of the other type due to specifics of this type,
         e.g. sum / union types.
 
         issubtype is always the entrypoint for any actual sub / super type check.
