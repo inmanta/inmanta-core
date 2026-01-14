@@ -22,7 +22,6 @@ Tool to populate the database and dump it for database update testing
 import asyncio
 import os
 import shutil
-import time
 import uuid
 from typing import Awaitable, Callable
 from uuid import UUID

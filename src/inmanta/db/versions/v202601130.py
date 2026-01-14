@@ -21,8 +21,8 @@ from asyncpg import Connection
 
 async def update(connection: Connection) -> None:
     """
-    Create resource_diff table and add the non_compliant_diff field to the rps table.
-    Populate resource_diff table with the diffs from non_compliant resources found on the resourceaction table
+    This migration fixes the diff layout on resource_diff.
+    {rid: {current: x, actual: y}} -> {current: x, actual: y}
     """
     schema = """
         UPDATE public.resource_diff AS rd
