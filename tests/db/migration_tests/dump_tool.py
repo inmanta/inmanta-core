@@ -22,6 +22,7 @@ Tool to populate the database and dump it for database update testing
 import asyncio
 import os
 import shutil
+import time
 import uuid
 from typing import Awaitable, Callable
 from uuid import UUID
@@ -152,7 +153,7 @@ async def test_dump_db(
 
     check_result(await client.notify_change(id=env_id_1))
 
-    versions = await wait_for_version(client, env_id_1, env_1_version, compile_timeout=40)
+    versions = await wait_for_version(client, env_id_1, env_1_version, compile_timeout=50)
     v1 = versions["versions"][0]["version"]
 
     check_result(await client.release_version(env_id_1, v1))
@@ -383,12 +384,22 @@ async def test_dump_db(
                 "purged": False,
                 "requires": [],
             },
-            # non_compliant resource
+            # non_compliant resources
             {
                 "key": "key10",
                 "value": "val10",
                 "version": version,
                 "id": f"test::Resource[agent1,key=key10],v={version}",
+                "send_event": True,
+                "purged": False,
+                "requires": [],
+                "report_only": True,
+            },
+            {
+                "key": "key11",
+                "value": "val11",
+                "version": version,
+                "id": f"test::Resource[agent1,key=key11],v={version}",
                 "send_event": True,
                 "purged": False,
                 "requires": [],
@@ -403,6 +414,7 @@ async def test_dump_db(
             "test::Resource[agent1,key=key5]": const.ResourceState.available,
             "test::Resource[agent1,key=key7]": const.ResourceState.available,
             "test::Resource[agent1,key=key10]": const.ResourceState.available,
+            "test::Resource[agent1,key=key11]": const.ResourceState.available,
             res_id_to_delete: const.ResourceState.available,
         },
         compiler_version=util.get_compiler_version(),

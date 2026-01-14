@@ -1907,7 +1907,7 @@ def get_compliance_report(tid: uuid.UUID, resource_ids: Sequence[ResourceIdStr])
     :param tid: The id of the environment these resources belong to.
     :param resource_ids: A list of resource ids to retrieve the compliance status for.
 
-    :return: A dict of CompileRun objects representing the current state of the compiler queue,
-             with each entry detailing a specific compile run.
+    :return: A dict of ResourceComplianceDiff objects representing the current state of each requested resource.
+    :raises NotFound: When one or more resource_ids do not exist in the latest scheduled version for the environment.
     """
     pass

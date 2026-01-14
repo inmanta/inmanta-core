@@ -563,6 +563,6 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
         self, env: data.Environment, resource_ids: typing.Sequence[ResourceIdStr]
     ) -> dict[ResourceIdStr, ResourceComplianceDiff]:
         """
-        Get the compliance status report of a list of resources.
+        Get the compliance status report for a list of resources.
         """
         return await data.ResourcePersistentState.get_compliance_report(env.id, resource_ids)
