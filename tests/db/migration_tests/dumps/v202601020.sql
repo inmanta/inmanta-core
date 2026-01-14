@@ -2,15 +2,12 @@
 -- PostgreSQL database dump
 --
 
-\restrict aw8j8oK2BLK77gbyIyBzGrM0meDueIxbOg4HXYybndX8bLQUYBJfMYbmIPqskVO
-
 -- Dumped from database version 18.1
 -- Dumped by pg_dump version 18.1
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
-SET transaction_timeout = 0;
 SET client_encoding = 'UTF8';
 SET standard_conforming_strings = on;
 --SELECT pg_catalog.set_config('search_path', '', false);
@@ -2060,6 +2057,4 @@ ALTER TABLE ONLY public.discoveredresource
 --
 -- PostgreSQL database dump complete
 --
-
-\unrestrict aw8j8oK2BLK77gbyIyBzGrM0meDueIxbOg4HXYybndX8bLQUYBJfMYbmIPqskVO
 
