@@ -338,12 +338,9 @@ class Entity(NamedType, WithComment):
         return (not strict and superclass_candidate == self) or self.is_parent(superclass_candidate)
 
     def issubtype(self, other: "Type") -> bool:
-        return isinstance(other, inm_Any) or isinstance(other, Entity) and self.is_subclass(other, strict=False)
-
-    def issupertype(self, other: "Type") -> bool:
-        if not isinstance(other, Entity):
-            raise NotImplementedError()
-        return other.is_subclass(self, strict=True)
+        if isinstance(other, Entity):
+            return self.is_subclass(other, strict=False)
+        return other.issupertype(self)
 
     def validate(self, value: object) -> bool:
         """

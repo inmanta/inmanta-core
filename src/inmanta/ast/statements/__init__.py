@@ -248,7 +248,7 @@ class ExpressionStatement(RequiresEmitStatement):
         When this method is called, the caller must make sure to eventually call `execute` as well.
 
         Composite statements (e.g. conditional expression) will pass result collectors to their children rather than
-        report to them themselves.
+        report to them themselves. Child implementations must take care to do one or the other, not both.
         """
         return {**self.requires_emit(resolver, queue), (self, ResultCollector): WrappedValueVariable(resultcollector)}
 

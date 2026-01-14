@@ -730,6 +730,9 @@ def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", module
     ):
         run_snippet("refs::plugins::takes_mixed_refs_dataclass_or_ref(refs::dc::create_all_refs_dataclass_reference('hello'))")
 
+    # Scenario: reference to dataclass as return value is converted to dataclass of references without type errors (#9837)
+    run_snippet("refs::dc::create_complex_dataclass_reference()")
+
     # Scenario: inheritance on return type
     ## declare generic, return specific
     ### takes_no_refs_dataclass only accepts specific no_refs_dataclass.
