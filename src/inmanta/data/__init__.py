@@ -5032,6 +5032,8 @@ class ResourcePersistentState(BaseDocument):
             INNER JOIN {Resource.table_name()} AS r
                 ON rscm.environment=r.environment
                 AND rscm.resource_set=r.resource_set
+            INNER JOIN UNNEST($2::text[]) AS requested_rids(resource_id)
+                ON requested_rids.resource_id=r.resource_id
             INNER JOIN {cls.table_name()} AS rps
                 ON r.environment=rps.environment
                 AND r.resource_id=rps.resource_id
@@ -5040,7 +5042,6 @@ class ResourcePersistentState(BaseDocument):
             WHERE
                 NOT rps.is_orphan
                 AND rps.environment=$1
-                AND rps.resource_id=ANY($2)
             """
             result = await cls.select_query(query, [env, resource_ids], no_obj=True, connection=connection)
             if len(result) != len(resource_ids):
