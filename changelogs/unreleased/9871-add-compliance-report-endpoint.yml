@@ -1,5 +1,5 @@
 ---
-description: "Add `GET /api/v2/compliance_report` endpoint."
+description: "Add `POST /api/v2/compliance_report` endpoint."
 issue-nr: 9871
 issue-repo: inmanta-core
 change-type: minor
