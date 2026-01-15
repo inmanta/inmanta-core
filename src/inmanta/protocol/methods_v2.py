@@ -1893,7 +1893,7 @@ def health() -> ReturnValue[None]:
 
 @auth(auth_label=const.CoreAuthorizationLabel.REPORT_READ, read_only=True, environment_param="tid")
 @typedmethod(
-    path="/get_compliance_report/",
+    path="/compliance_report",
     operation="POST",
     arg_options=methods.ENV_OPTS,
     client_types=[ClientType.api],
