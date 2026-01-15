@@ -5046,11 +5046,10 @@ class ResourcePersistentState(BaseDocument):
             result = await cls.select_query(query, [env, resource_ids], no_obj=True, connection=connection)
             if len(result) != len(resource_ids):
                 missing_rids = set(resource_ids) - {ResourceIdStr(str(r["resource_id"])) for r in result}
-                raise NotFound(
-                    f"Unable to find the following resource ids in the latest version processed by the scheduler {missing_rids}"
-                )
+                raise NotFound(f"Unable to find the following resource ids in the active version: {missing_rids}")
             diff: dict[ResourceIdStr, m.ResourceComplianceDiff] = {}
             for record in result:
+                last_deploy_result = state.DeployResult(str(record["last_deploy_result"]).lower())
                 compliance_status = state.get_compliance_status(
                     is_orphan=False,  # We filter out orphan resources in the query
                     is_undefined=cast(bool, record["is_undefined"]),
@@ -5058,9 +5057,12 @@ class ResourcePersistentState(BaseDocument):
                     current_intent_attribute_hash=cast(str | None, record["current_intent_attribute_hash"]),
                     last_deploy_compliant=cast(bool, record["last_deploy_compliant"]),
                 )
-                assert compliance_status is not None  # make mypy happy
                 report_only = cast(bool, record["report_only"])
-                non_compliant_resource = report_only and compliance_status is state.Compliance.NON_COMPLIANT
+                non_compliant_resource = (
+                    report_only
+                    and compliance_status is state.Compliance.NON_COMPLIANT
+                    and last_deploy_result is state.DeployResult.DEPLOYED
+                )
 
                 diff[ResourceIdStr(str(record["resource_id"]))] = m.ResourceComplianceDiff(
                     report_only=report_only,
