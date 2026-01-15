@@ -1,0 +1,3 @@
+description: Unblock sphinx>=9 dependency updates.
+change-type: patch
+destination-branches: [master]
