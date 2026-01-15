@@ -17,6 +17,5 @@ Administrator documentation
     administrators/waf.rst
     administrators/support.rst
     administrators/upgrading_the_orchestrator.rst
-    administrators/migrating_from_rpms_to_containers.rst
     administrators/web-console.md
     administrators/on_disk_layout.rst

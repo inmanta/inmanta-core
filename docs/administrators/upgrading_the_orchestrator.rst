@@ -32,9 +32,23 @@ This section describes how to upgrade an orchestrator in-place.
 1. Halt all environments (by pressing the ``STOP`` button in the web-console for each environment).
 2. Create a backup of the database:
 
-.. code-block:: bash
+   .. tab-set::
 
-    pg_dump -U <db_user> -W -h <host> <db_name> > <db_dump_file>
+       .. tab-item:: RPM-based installation
+
+           .. code-block:: bash
+
+               pg_dump -U <db_user> -W -h <host> <db_name> > <db_dump_file>
+
+       .. tab-item:: Container-based installation
+
+           .. code-block:: bash
+
+               # Write the dump into the filesystem of the container
+               podman exec -it inmanta-db pg_dump -U <db_user> -W -h localhost -f /tmp/inmanta.sql <db_name>
+               # Copy the dump to the filesystem of the host
+               podman cp inmanta-db:/tmp/inmanta.sql .
+
 
 3. Update the artifact repository to the repository for the new major release:
 
@@ -42,19 +56,18 @@ This section describes how to upgrade an orchestrator in-place.
 
        .. tab-item:: RPM-based installation
 
-           Replace the content of the ``/etc/yum.repos.d/inmanta.repo`` file with the content for the new ISO version.
-           This information can be obtained from the :ref:`installation documentation page<install-server>` for the
-           new ISO version.
+           If you are doing an upgrade to a new major version, replace the content of the ``/etc/yum.repos.d/inmanta.repo`` file
+           with the content for the new ISO version. This information can be obtained from the
+           :ref:`installation documentation page<install-server>` for the new ISO version.
 
        .. tab-item:: Container-based installation
 
-           Replace the tag to the container image in the configuration with the one for the new ISO version.
-           This information can be obtained from the :ref:`installation documentation page<install-server-with-podman>`
-           for the new ISO version.
+           Replace the image tag in ``/home/inmanta/.config/containers/systemd/inmanta-server.image`` with
+           the one for the new ISO version. This information can be obtained from the
+           :ref:`installation documentation page<install-server-with-podman>` for the new ISO version.
 
-4. Upgrade the Inmanta server by running the following command(s). The orchestrator will automatically
-   restart when the upgrade has finished. It might take some time before the orchestrator goes up,
-   as some database migrations will be done.
+4. Upgrade the Inmanta server by running the following command(s). It might take some time before the
+   orchestrator goes up, as some database migrations will be done.
 
    .. tab-set::
 
@@ -69,7 +82,8 @@ This section describes how to upgrade an orchestrator in-place.
            .. code-block:: bash
 
                systemctl --user daemon-reload
-               systemctl --user restart inmanta-server
+               systemctl --user restart inmanta-server-image.service
+               systemctl --user restart inmanta-server.service
 
 5. When accessing the web console, all the environments will be visible, and still halted.
 6. One environment at a time:
@@ -126,7 +140,8 @@ Procedure
 
        .. tab-item:: Container-based installation
 
-           Make sure that the following section is not part of the ``.container`` file to prevent it from starting at boot.
+           Make sure that the following section is not part of the
+           ``/home/inmanta/.config/containers/systemd/inmanta-server.container`` file to prevent it from starting at boot.
 
            .. code-block:: systemd
 
@@ -143,10 +158,22 @@ Procedure
 
 4. **[Old Orchestrator]** Make a dump of the server database using ``pg_dump``.
 
+   .. tab-set::
 
-.. code-block:: bash
+       .. tab-item:: RPM-based installation
 
-    pg_dump -U <db_user> -W -h <host> <db_name> > <db_dump_file>
+          .. code-block:: bash
+
+              pg_dump -U <db_user> -W -h <host> -f <db_dump_file> <db_name>
+
+       .. tab-item:: Container-based installation
+
+           .. code-block:: bash
+
+               # Write the dump into the filesystem of the container
+               podman exec -it inmanta-db pg_dump -U <db_user> -W -h localhost -f /tmp/inmanta.sql <db_name>
+               # Copy the dump to the filesystem of the host
+               podman cp inmanta-db:/tmp/inmanta.sql .
 
 
 5. **[New Orchestrator]** Make sure the server is stopped:
@@ -169,23 +196,46 @@ Procedure
 6. **[New Orchestrator]** Drop the inmanta database and recreate it:
 
 
-.. code-block:: bash
+   .. tab-set::
 
-    # drop the database
-    $ psql -h <host> -U <db_user> -W
-    drop database <db_name>;
-    exit
+       .. tab-item:: RPM-based installation
 
-    # re-create it
-    $ sudo -u postgres -i bash -c "createdb -O <db_user> <db_name>"
+           .. code-block:: bash
+
+               # drop the database
+               psql -h <host> -U <db_user> -W -c "drop database <db_name>;" postgres
+
+               # re-create it
+               sudo -u postgres -i bash -c "createdb -O <db_user> <db_name>"
+
+       .. tab-item:: Container-based installation
+
+           .. code-block:: bash
+
+               # drop the database
+               podman exec -it inmanta-db psql -U <db_user> -W -h localhost -c "drop database <db_name>;" postgres
+
+               # re-create it
+               podman exec -it inmanta-db bash -c "createdb -U <db_user> -h localhost -W -O <db_user> <db_name>"
 
 
 7. **[New Orchestrator]** Load the dump of the server database using ``psql``.
 
 
-.. code-block:: bash
+   .. tab-set::
 
-    psql -U <db_user> -W -h <host> -f <db_dump_file> <db_name>
+       .. tab-item:: RPM-based installation
+
+           .. code-block:: bash
+
+               psql -U <db_user> -W -h <host> -f <db_dump_file> <db_name>
+
+       .. tab-item:: Container-based installation
+
+           .. code-block:: bash
+
+               podman cp <db_dump_file> inmanta-db:/tmp
+               podman exec -it inmanta-db psql -U <db_user> -W -h localhost -f /tmp/<db_dump_file> <db_name>
 
 
 8. **[New Orchestrator]** Start the orchestrator service, it might take some time before the orchestrator goes up, as some database migration will be done:
@@ -200,7 +250,8 @@ Procedure
 
        .. tab-item:: Container-based installation
 
-           Make sure that the following section is part of the ``.container`` file to make the server start at boot.
+           Make sure that the following section is part of the
+           ``/home/inmanta/.config/containers/systemd/inmanta-server.container`` file to make the server start at boot.
 
            .. code-block:: systemd
 
