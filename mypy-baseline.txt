@@ -617,7 +617,7 @@ src/inmanta/execute/scheduler.py:0: error: Module "inmanta.ast" has no attribute
 src/inmanta/export.py:0: error: Argument 1 to "parse_id" of "Id" has incompatible type "str"; expected "ResourceVersionIdStr | ResourceIdStr"  [arg-type]
 src/inmanta/export.py:0: error: Argument 1 to "set_version" of "Resource" has incompatible type "int | None"; expected "int"  [arg-type]
 src/inmanta/export.py:0: error: Argument 10 to "put_partial" has incompatible type "**dict[str, object]"; expected "PipConfig | None"  [arg-type]
-src/inmanta/export.py:0: error: Argument 11 to "put_version" has incompatible type "**dict[str, object]"; expected "PipConfig | None"  [arg-type]
+src/inmanta/export.py:0: error: Argument 10 to "put_version" has incompatible type "**dict[str, object]"; expected "PipConfig | None"  [arg-type]
 src/inmanta/export.py:0: error: Argument 2 to "add" of "Exporter" has incompatible type "tuple[str, ...]"; expected "list[str]"  [arg-type]
 src/inmanta/export.py:0: error: Argument 3 to "create_from_model" of "Resource" has incompatible type "str | tuple[object, ...] | int | float | DynamicProxy | Reference[str | float | int | bool | DataclassInstance | None] | None"; expected "DynamicProxy"  [arg-type]
 src/inmanta/export.py:0: error: Cannot infer value of type parameter "T" of "Option"  [misc]

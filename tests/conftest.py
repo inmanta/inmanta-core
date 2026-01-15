@@ -189,6 +189,7 @@ TABLES_TO_KEEP = [x.table_name() for x in data._classes] + [
     "agent_modules",
     "module_files",
     "role_assignment",
+    "resource_diff",
 ]  # Join table
 
 # Save the cwd as early as possible to prevent that it gets overridden by another fixture
@@ -2973,7 +2974,6 @@ async def mixed_resource_generator(
                     resource_state=resource_state,
                     unknowns=[],
                     version_info={},
-                    compiler_version=inmanta.util.get_compiler_version(),
                     resource_sets=resource_sets,
                 )
                 assert result.code == 200

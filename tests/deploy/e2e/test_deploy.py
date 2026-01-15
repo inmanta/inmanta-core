@@ -33,7 +33,6 @@ from inmanta.deploy.work import TaskPriority
 from inmanta.resources import Id
 from inmanta.server import SLICE_PARAM, SLICE_SERVER
 from inmanta.types import ResourceIdStr
-from inmanta.util import get_compiler_version
 from utils import (
     assert_resource_persistent_state,
     log_contains,
@@ -484,7 +483,6 @@ async def test_deploy_empty(server, client, clienthelper, environment, agent):
         resource_state={},
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert result.code == 200
@@ -556,7 +554,6 @@ async def test_deploy_to_empty(server, client, clienthelper, environment, agent,
         resource_state={},
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert result.code == 200
@@ -638,7 +635,6 @@ async def test_deploy_with_undefined(server, client, resource_container, agent, 
         resource_state=status,
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert result.code == 200
@@ -718,7 +714,6 @@ async def test_failing_deploy_no_handler(resource_container, agent, environment,
         resources=resources,
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert result.code == 200
@@ -795,7 +790,6 @@ async def test_unknown_parameters(
         resources=resources,
         unknowns=unknowns,
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert result.code == 200
@@ -1046,7 +1040,6 @@ async def test_deploy_and_events(
         resource_state=status,
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert result.code == 200
@@ -1105,7 +1098,6 @@ async def test_reload(server, client, clienthelper, environment, resource_contai
         resource_state=status,
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert result.code == 200
@@ -1257,7 +1249,6 @@ async def test_resource_status(resource_container, server, client, clienthelper,
             resource_state=resource_state,
             unknowns=[],
             version_info={},
-            compiler_version=get_compiler_version(),
             module_version_info={},
         )
         assert result.code == 200, result.result
@@ -1861,6 +1852,104 @@ async def test_resource_action_of_non_compliant_resource(resource_container, ser
     # Start, Reported non-compliant, End
     assert len(log["messages"]) == 3
     assert log["messages"][1]["msg"] == "Resource test::Resource[agent1,key=key] was marked as non-compliant."
+
+
+async def test_non_compliant_diff(resource_container, server, client, clienthelper, environment, agent):
+    """
+    Asserts that the diff for a resource is correctly updated when we reach the non-compliant state
+    TODO: Flesh out this test when we implement the endpoint to fetch the diff
+    """
+
+    version = await clienthelper.get_version()
+
+    rid1 = "test::Resource[agent1,key=key]"
+
+    # Set rid1 to "actual_value"
+    resources = [
+        {
+            "key": "key",
+            "value": "actual_value",
+            "id": f"{rid1},v={version}",
+            "requires": [],
+            "purged": False,
+            "send_event": False,
+            "receive_events": False,
+        },
+    ]
+    await clienthelper.set_auto_deploy(True)
+    await clienthelper.put_version_simple(resources, version, wait_for_released=True)
+    await clienthelper.wait_for_deployed(version=version)
+
+    rps = await data.ResourcePersistentState.get_one(environment=environment, resource_id=rid1)
+    assert rps.non_compliant_diff is None
+    assert rps.last_non_deploying_status == const.NonDeployingResourceState.deployed
+
+    # Make rid1 reporting and change the desired state
+    version = await clienthelper.get_version()
+    resources = [
+        {
+            "key": "key",
+            "value": "diff_value",
+            "id": f"{rid1},v={version}",
+            "requires": [],
+            "purged": False,
+            "send_event": False,
+            "receive_events": False,
+            "report_only": True,
+        },
+    ]
+    await clienthelper.put_version_simple(resources, version, wait_for_released=True)
+    await clienthelper.wait_for_deployed(version=version)
+
+    # non_compliant diff got populated in the rps table
+    rps = await data.ResourcePersistentState.get_one(environment=environment, resource_id=rid1)
+    assert rps.non_compliant_diff is not None
+    assert rps.last_non_deploying_status == const.NonDeployingResourceState.non_compliant
+
+    non_compliant_diff_id = rps.non_compliant_diff
+
+    # Make report succeed again
+    version = await clienthelper.get_version()
+    resources = [
+        {
+            "key": "key",
+            "value": "actual_value",
+            "id": f"{rid1},v={version}",
+            "requires": [],
+            "purged": False,
+            "send_event": False,
+            "receive_events": False,
+            "report_only": True,
+        }
+    ]
+    await clienthelper.put_version_simple(resources, version, wait_for_released=True)
+    await clienthelper.wait_for_deployed(version=version)
+
+    rps = await data.ResourcePersistentState.get_one(environment=environment, resource_id=rid1)
+    assert rps.non_compliant_diff is None
+    assert rps.last_non_deploying_status == const.NonDeployingResourceState.deployed
+
+    # Make report fail again
+    version = await clienthelper.get_version()
+    resources = [
+        {
+            "key": "key",
+            "value": "another_diff_value",
+            "id": f"{rid1},v={version}",
+            "requires": [],
+            "purged": False,
+            "send_event": False,
+            "receive_events": False,
+            "report_only": True,
+        }
+    ]
+    await clienthelper.put_version_simple(resources, version, wait_for_released=True)
+    await clienthelper.wait_for_deployed(version=version)
+
+    rps = await data.ResourcePersistentState.get_one(environment=environment, resource_id=rid1)
+    assert rps.non_compliant_diff is not None
+    assert rps.last_non_deploying_status == const.NonDeployingResourceState.non_compliant
+    assert rps.non_compliant_diff != non_compliant_diff_id
 
 
 async def test_event_recovery_reporting(resource_container, server, client, clienthelper, environment, agent):

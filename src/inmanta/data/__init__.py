@@ -4750,6 +4750,9 @@ class ResourcePersistentState(BaseDocument):
     # Written at deploy time (Exception for initial record creation  -> no race condition possible with deploy path)
     last_non_deploying_status: const.NonDeployingResourceState = const.NonDeployingResourceState.available
 
+    # A foreign key to the resource_diff table. This is only relevant if this resource is in the non_compliant state
+    non_compliant_diff: Optional[uuid.UUID] = None
+
     @classmethod
     async def mark_as_orphan(
         cls, environment: UUID, resource_ids: Set[ResourceIdStr], connection: Optional[Connection] = None
@@ -4889,6 +4892,62 @@ class ResourcePersistentState(BaseDocument):
         )
 
     @classmethod
+    async def persist_non_compliant_diff(
+        cls,
+        environment: uuid.UUID,
+        resource_id: ResourceIdStr,
+        created_at: datetime.datetime,
+        diff: abc.Mapping[str, object],
+        *,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> uuid.UUID:
+        """
+        Persist the non-compliant diff into the resource_diff table.
+
+        :returns: the id of the created diff
+        """
+        query = """
+            INSERT INTO resource_diff (id, environment, resource_id, created, diff)
+            VALUES (gen_random_uuid(), $1, $2, $3, $4)
+            RETURNING id
+        """
+        record = await cls._fetchrow(query, environment, resource_id, created_at, json.dumps(diff), connection=connection)
+        assert record  # make mypy happy
+        return uuid.UUID(str(record["id"]))
+
+    @classmethod
+    async def purge_old_diffs(cls) -> None:
+        """
+        Purge every diff that is older than RESOURCE_ACTION_LOGS_RETENTION
+        and not currently referenced by the rps table
+        """
+        default_retention_time = Environment._settings[RESOURCE_ACTION_LOGS_RETENTION].default
+
+        query = f"""
+            WITH non_halted_envs AS (
+                SELECT
+                    id,
+                    (
+                        COALESCE((settings->'settings'->'resource_action_logs_retention'->>'value')::int, $1)
+                    ) AS retention_days
+                FROM {Environment.table_name()}
+                WHERE NOT halted
+            )
+            DELETE FROM public.resource_diff AS rd
+            USING non_halted_envs
+            WHERE rd.environment=non_halted_envs.id
+                AND rd.created < now() AT TIME ZONE 'UTC' - make_interval(days => non_halted_envs.retention_days)
+                AND NOT EXISTS (
+                  SELECT 1
+                  FROM {cls.table_name()} AS rps
+                  WHERE rps.environment=rd.environment
+                    AND rps.resource_id=rd.resource_id
+                    AND rps.non_compliant_diff=rd.id
+              );
+        """
+        await cls._execute_query(query, default_retention_time)
+
+    @classmethod
     async def update_persistent_state(
         cls,
         environment: uuid.UUID,
@@ -4901,6 +4960,8 @@ class ResourcePersistentState(BaseDocument):
         last_produced_events: Optional[datetime.datetime] = None,
         last_deployed_attribute_hash: Optional[str] = None,
         last_deploy_compliant: Optional[bool] = None,
+        non_compliant_diff: Optional[uuid.UUID] = None,
+        cleanup_non_compliant_diff: Optional[bool] = False,
         connection: Optional[asyncpg.connection.Connection] = None,
         # TODO[#8541]: accept state.ResourceState and write blocked status as well
         last_deploy_result: Optional[state.DeployResult] = None,
@@ -4917,12 +4978,18 @@ class ResourcePersistentState(BaseDocument):
             "last_deployed_attribute_hash": last_deployed_attribute_hash,
             "last_deployed_version": last_deployed_version,
             "last_deploy_compliant": last_deploy_compliant,
+            "non_compliant_diff": non_compliant_diff,
         }
         query_parts = [f"{k}={args(v)}" for k, v in invalues.items() if v is not None]
+
         if last_deploy_result:
             query_parts.append(f"last_deploy_result={args(last_deploy_result.name)}")
         if not query_parts:
             return
+        if cleanup_non_compliant_diff:
+            if non_compliant_diff is not None:
+                raise Exception("Cannot provide both non_compliant_diff and cleanup_non_compliant_diff")
+            query_parts.append("non_compliant_diff=NULL")
         query = f"UPDATE public.resource_persistent_state SET {','.join(query_parts)} WHERE environment=$1 and resource_id=$2"
 
         result = await cls._execute_query(query, environment, resource_id, *args.args, connection=connection)
