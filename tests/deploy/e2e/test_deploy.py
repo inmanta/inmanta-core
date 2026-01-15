@@ -1955,7 +1955,7 @@ async def test_non_compliant_diff(resource_container, server, client, clienthelp
 
     # Assert that we return a not found if provided a rid that is not present on the latest processed version
     expected_exception_output = (
-        "Unable to find the following resource ids in the latest version processed by the scheduler {'%s'}" % rid2
+        "Unable to find the following resource ids in the active version: {'%s'}" % rid2
     )
     with pytest.raises(NotFound) as exc_info:
         await data.ResourcePersistentState.get_compliance_report(env=env_id, resource_ids=[rid2])
