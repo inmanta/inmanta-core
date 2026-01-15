@@ -76,6 +76,3 @@ updates:
       update-types: ["version-update:semver-major"]
     - dependency-name: "execnet"
       update-types: ["version-update:semver-major"]
-    - dependency-name: "sphinx"
-      # blocked on https://github.com/executablebooks/MyST-Parser/pull/1076
-      versions: [">=9"]
