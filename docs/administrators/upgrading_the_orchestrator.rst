@@ -193,7 +193,7 @@ Procedure
                systemctl --user stop inmanta-server.service
 
 
-6. **[New Orchestrator]** If the database already exists, drop and recreate it:
+6. **[New Orchestrator]** If the database already exists, drop and recreate it. It's not possible to remove a database that is in use. The command below assumes that the ``postgres`` database exists and you want to delete and recreate a database ``<db_name>`` which has a different name than ``postgres``.
 
 
    .. tab-set::
