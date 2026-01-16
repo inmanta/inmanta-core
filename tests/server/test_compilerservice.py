@@ -2167,6 +2167,8 @@ async def test_reinstall_project_and_venv(environment_factory: EnvironmentFactor
     project_marker_file = os.path.join(project_dir, ".p")
     venv_marker_file = os.path.join(venv_dir, ".v")
 
+    expected_log_message = f"Removing project and venv directory for environment {env.id} at {project_dir}"
+
     def write_marker_file(path: str) -> None:
         with open(path, "w"):
             pass
@@ -2197,6 +2199,4 @@ async def test_reinstall_project_and_venv(environment_factory: EnvironmentFactor
     await wait_for_version(client, env.id, cnt=3)
     assert not os.path.exists(project_marker_file)
     assert not os.path.exists(venv_marker_file)
-
-    # TODO: Verify log message
 
