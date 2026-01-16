@@ -193,7 +193,7 @@ Procedure
                systemctl --user stop inmanta-server.service
 
 
-6. **[New Orchestrator]** Drop the inmanta database and recreate it:
+6. **[New Orchestrator]** If the database already exists, drop and recreate it:
 
 
    .. tab-set::
