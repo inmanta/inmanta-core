@@ -45,7 +45,7 @@ from inmanta.data import APILIMIT, Compile, Report
 from inmanta.data.model import PipConfig
 from inmanta.env import PythonEnvironment, VirtualEnv
 from inmanta.export import cfg_env
-from inmanta.protocol import Result
+from inmanta.protocol.common import Result
 from inmanta.server import SLICE_COMPILER, SLICE_SERVER, protocol
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.protocol import Server
@@ -2152,8 +2152,11 @@ async def test_venv_upgrade_version_mismatch(tmp_path, caplog):
     assert (project / ".env").exists()
 
 
+@pytest.mark.parametrize("use_post_endpoint", [True, False])
 @pytest.mark.parametrize("no_agent", [True])
-async def test_reinstall_project_and_venv(environment_factory: EnvironmentFactory, server, client, tmpdir):
+async def test_reinstall_project_and_venv(
+    environment_factory: EnvironmentFactory, server, client, tmpdir, use_post_endpoint: bool
+):
     """
     Test the feature that allows a reinstall of the Inmanta project and its compiler venv.
     """
@@ -2188,8 +2191,14 @@ async def test_reinstall_project_and_venv(environment_factory: EnvironmentFactor
             pass
         assert os.path.exists(path)
 
+    async def request_compile(reinstall: bool) -> Result:
+        if use_post_endpoint:
+            return await client.notify_change(id=env.id, update=False, reinstall=reinstall)
+        else:
+            return await client.notify_change_get(id=env.id, update=False, reinstall=reinstall)
+
     # Perform a compile to create the project dir and venv dirs
-    result = await client.notify_change(id=env.id, update=False, reinstall=False)
+    result: Result = await request_compile(reinstall=False)
     assert result.code == 200
     await wait_for_version(client, env.id, cnt=1)
     assert not os.path.exists(project_marker_file)
@@ -2203,7 +2212,7 @@ async def test_reinstall_project_and_venv(environment_factory: EnvironmentFactor
     write_marker_file(venv_marker_file)
 
     # Perform another compile but don't do a reinstall.
-    result = await client.notify_change(id=env.id, update=False, reinstall=False)
+    result: Result = await request_compile(reinstall=False)
     assert result.code == 200
     await wait_for_version(client, env.id, cnt=2)
     assert os.path.exists(project_marker_file)
@@ -2212,7 +2221,7 @@ async def test_reinstall_project_and_venv(environment_factory: EnvironmentFactor
     assert not await does_removing_project_log_msg_exist()
 
     # A compile that reinstalls the project and the venv.
-    result = await client.notify_change(id=env.id, update=False, reinstall=True)
+    result: Result = await request_compile(reinstall=True)
     assert result.code == 200
     await wait_for_version(client, env.id, cnt=3)
     assert not os.path.exists(project_marker_file)
