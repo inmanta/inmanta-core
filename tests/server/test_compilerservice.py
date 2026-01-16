@@ -2167,7 +2167,21 @@ async def test_reinstall_project_and_venv(environment_factory: EnvironmentFactor
     project_marker_file = os.path.join(project_dir, ".p")
     venv_marker_file = os.path.join(venv_dir, ".v")
 
-    expected_log_message = f"Removing project and venv directory for environment {env.id} at {project_dir}"
+    async def does_removing_project_log_msg_exist() -> bool:
+        """
+        Returns True iff the compile log for the latest compile contains the log message that indicates that
+        a clean checkout was done for the project and that the compiler venv was created.
+        """
+        expected_log_message = f"Removing project and venv directory for environment {env.id} at {project_dir}"
+        result = await client.get_compile_reports(tid=env.id, limit=1, sort="requested.desc")
+        compile_report = await anext(result.all())
+        compile_id = compile_report.id
+
+        compile_details: model.CompileDetails = await client.compile_details(tid=env.id, id=compile_id).value()
+        if compile_details.reports is None:
+            raise Exception("No run reports found")
+        compile_stage_to_stdout = {r.name: r.outstream for r in compile_details.reports}
+        return expected_log_message in compile_stage_to_stdout["Init"]
 
     def write_marker_file(path: str) -> None:
         with open(path, "w"):
@@ -2180,6 +2194,7 @@ async def test_reinstall_project_and_venv(environment_factory: EnvironmentFactor
     await wait_for_version(client, env.id, cnt=1)
     assert not os.path.exists(project_marker_file)
     assert not os.path.exists(venv_marker_file)
+    assert not await does_removing_project_log_msg_exist()
 
     # Write a marker file to the project and the venv directory
     # so that we can detect whether the directory was removed.
@@ -2192,6 +2207,7 @@ async def test_reinstall_project_and_venv(environment_factory: EnvironmentFactor
     await wait_for_version(client, env.id, cnt=2)
     assert os.path.exists(project_marker_file)
     assert os.path.exists(venv_marker_file)
+    assert not await does_removing_project_log_msg_exist()
 
     # A compile that reinstalls the project and the venv.
     result = await client.notify_change(id=env.id, update=False, reinstall=True)
@@ -2199,4 +2215,5 @@ async def test_reinstall_project_and_venv(environment_factory: EnvironmentFactor
     await wait_for_version(client, env.id, cnt=3)
     assert not os.path.exists(project_marker_file)
     assert not os.path.exists(venv_marker_file)
+    assert await does_removing_project_log_msg_exist()
 
