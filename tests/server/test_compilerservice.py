@@ -2159,32 +2159,13 @@ async def test_reinstall_project_and_venv(environment_factory: EnvironmentFactor
     """
     env = await environment_factory.create_environment(main="")
 
-    project_dir = os.path.join(tmpdir, "work")
-    ensure_directory_exist(project_dir)
+    state_dir = config.state_dir.get()
+    project_dir = os.path.join(state_dir, "server", str(env.id), "compiler")
     python_version = ".".join(platform.python_version_tuple()[0:2])
     venv_dir = os.path.join(project_dir, ".env")
     versioned_venv_dir_full = os.path.join(project_dir, f".env-py{python_version}")
     project_marker_file = os.path.join(project_dir, ".p")
     venv_marker_file = os.path.join(venv_dir, ".v")
-
-    async def _compile_and_assert(env, reinstall: bool, marker_files_exist: bool):
-        _, stages = await compile_and_assert(
-            env=env,
-            client=client,
-            project_work_dir=project_dir,
-            export=True,
-            meta={},
-            env_vars={},
-            update=False,
-            exporter_plugin=None,
-            reinstall=reinstall,
-        )
-        assert all(s["returncode"] == 0 for s in stages.values())
-        assert os.path.exists(project_dir)
-        assert os.path.exists(venv_dir)
-        assert os.path.exists(versioned_venv_dir_full)
-        assert os.path.exists(project_marker_file) is marker_files_exist
-        assert os.path.exists(venv_marker_file) is marker_files_exist
 
     def write_marker_file(path: str) -> None:
         with open(path, "w"):
@@ -2194,9 +2175,9 @@ async def test_reinstall_project_and_venv(environment_factory: EnvironmentFactor
     # Perform a compile to create the project dir and venv dirs
     result = await client.notify_change(id=env.id, update=False, reinstall=False)
     assert result.code == 200
+    await wait_for_version(client, env.id, cnt=1)
     assert not os.path.exists(project_marker_file)
     assert not os.path.exists(venv_marker_file)
-    ###TODO: REMOVE: await _compile_and_assert(env=env, reinstall=False, marker_files_exist=False)
 
     # Write a marker file to the project and the venv directory
     # so that we can detect whether the directory was removed.
@@ -2206,16 +2187,16 @@ async def test_reinstall_project_and_venv(environment_factory: EnvironmentFactor
     # Perform another compile but don't do a reinstall.
     result = await client.notify_change(id=env.id, update=False, reinstall=False)
     assert result.code == 200
+    await wait_for_version(client, env.id, cnt=2)
     assert os.path.exists(project_marker_file)
     assert os.path.exists(venv_marker_file)
-    ###TODO REMOVE: await _compile_and_assert(env=env, reinstall=False, marker_files_exist=True)
-    # A compile that does reinstall the project and the venv.
+
+    # A compile that reinstalls the project and the venv.
     result = await client.notify_change(id=env.id, update=False, reinstall=True)
     assert result.code == 200
+    await wait_for_version(client, env.id, cnt=3)
     assert not os.path.exists(project_marker_file)
     assert not os.path.exists(venv_marker_file)
-    ###TODO REMOVE: await _compile_and_assert(env=env, reinstall=True, marker_files_exist=False)
 
-    # TODO: Use notify endpoint: both GET and POST
     # TODO: Verify log message
 

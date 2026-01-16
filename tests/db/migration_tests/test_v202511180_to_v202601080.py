@@ -41,5 +41,5 @@ async def test_add_reinstall_project_and_venv_column(
         FROM {data.Compile.table_name()}
         """
     )
-    assert len(result) != 0
+    assert len(result) > 0
     assert all(r["reinstall_project_and_venv"] is False for r in result)

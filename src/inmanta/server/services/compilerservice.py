@@ -789,6 +789,7 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
             failed_compile_message=failed_compile_message,
             soft_delete=soft_delete,
             links=links,
+            reinstall_project_and_venv=reinstall_project_and_venv,
         )
         if not in_db_transaction:
             async with self._queue_count_cache_lock:
