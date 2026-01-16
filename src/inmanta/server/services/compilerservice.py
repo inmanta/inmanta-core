@@ -25,10 +25,10 @@ import logging
 import os
 import platform
 import re
+import shutil
 import subprocess
 import traceback
 import uuid
-import shutil
 from asyncio import CancelledError
 from asyncio.subprocess import Process
 from collections.abc import AsyncIterator, Awaitable, Hashable, Mapping, Sequence

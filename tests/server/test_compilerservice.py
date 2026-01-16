@@ -21,12 +21,12 @@ import datetime
 import functools
 import logging
 import os
+import platform
 import queue
 import re
 import shutil
 import subprocess
 import uuid
-import platform
 from asyncio import Semaphore
 from collections import abc
 from typing import Optional
@@ -2163,9 +2163,9 @@ async def test_reinstall_project_and_venv(environment_factory: EnvironmentFactor
     project_dir = os.path.join(state_dir, "server", str(env.id), "compiler")
     python_version = ".".join(platform.python_version_tuple()[0:2])
     venv_dir = os.path.join(project_dir, ".env")
-    versioned_venv_dir_full = os.path.join(project_dir, f".env-py{python_version}")
+    versioned_venv_dir = os.path.join(project_dir, f".env-py{python_version}")
     project_marker_file = os.path.join(project_dir, ".p")
-    venv_marker_file = os.path.join(venv_dir, ".v")
+    venv_marker_file = os.path.join(versioned_venv_dir, ".v")
 
     async def does_removing_project_log_msg_exist() -> bool:
         """
@@ -2194,6 +2194,7 @@ async def test_reinstall_project_and_venv(environment_factory: EnvironmentFactor
     await wait_for_version(client, env.id, cnt=1)
     assert not os.path.exists(project_marker_file)
     assert not os.path.exists(venv_marker_file)
+    assert os.readlink(venv_dir) == os.path.basename(versioned_venv_dir)
     assert not await does_removing_project_log_msg_exist()
 
     # Write a marker file to the project and the venv directory
@@ -2207,6 +2208,7 @@ async def test_reinstall_project_and_venv(environment_factory: EnvironmentFactor
     await wait_for_version(client, env.id, cnt=2)
     assert os.path.exists(project_marker_file)
     assert os.path.exists(venv_marker_file)
+    assert os.readlink(venv_dir) == os.path.basename(versioned_venv_dir)
     assert not await does_removing_project_log_msg_exist()
 
     # A compile that reinstalls the project and the venv.
@@ -2215,5 +2217,7 @@ async def test_reinstall_project_and_venv(environment_factory: EnvironmentFactor
     await wait_for_version(client, env.id, cnt=3)
     assert not os.path.exists(project_marker_file)
     assert not os.path.exists(venv_marker_file)
+    assert os.path.exists(venv_dir)
+    assert os.path.exists(versioned_venv_dir)
+    assert os.readlink(venv_dir) == os.path.basename(versioned_venv_dir)
     assert await does_removing_project_log_msg_exist()
-

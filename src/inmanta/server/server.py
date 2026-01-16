@@ -102,7 +102,9 @@ class Server(protocol.ServerSlice):
         return result
 
     @handle(methods.notify_change, env="id")
-    async def notify_change(self, env: data.Environment, update: bool, metadata: JsonType, reinstall: bool = False) -> Apireturn:
+    async def notify_change(
+        self, env: data.Environment, update: bool, metadata: JsonType, reinstall: bool = False
+    ) -> Apireturn:
         LOGGER.info("Received change notification for environment %s", env.id)
         if "type" not in metadata:
             metadata["type"] = "api"
