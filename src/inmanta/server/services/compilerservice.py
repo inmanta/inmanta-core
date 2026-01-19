@@ -447,7 +447,7 @@ class CompileRun:
                 if stage_result and (stage_result.returncode is None or stage_result.returncode > 0):
                     return False, None
 
-            await self._start_stage("Prepare export command", "")
+            await self._start_stage("Loading configuration", "")
             server_address = opt.internal_server_address.get()
             server_port = opt.server_bind_port.get()
 
@@ -541,8 +541,11 @@ class CompileRun:
             pass
 
         except Exception as e:
-            await self._error(message=f"An error occurred while recompiling: \n {str(e)}")
-            await self._end_stage(1)
+            if self.stage is not None:
+                await self._error(message=f"An error occurred while recompiling: \n {str(e)}")
+                await self._end_stage(1)
+            else:
+                LOGGER.exception("An error occurred while recompiling")
         finally:
 
             async def warn(message: str) -> None:
