@@ -556,11 +556,11 @@ ssl={str(not ssl_enabled_on_server).lower()}
 
 
 @pytest.mark.slowtest
-async def test_generic_errors_during_compile_are_saved(
+async def test_config_loading_errors_during_compile_are_saved(
     tmpdir, request, environment_factory: EnvironmentFactory, server, client
 ) -> None:
     """
-    Test that generic errors during a compile are saved, if they happen in a specific stage.
+    Test that config loading errors during a compile are saved, to the compile logs.
     """
 
     project_work_dir = os.path.join(tmpdir, "work")
