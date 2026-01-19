@@ -45,7 +45,7 @@ sphinxcontrib-contentui==0.2.5
 sphinxcontrib.datatemplates==0.11.0
 sphinxcontrib-redoc==1.6.0
 sphinxcontrib-serializinghtml==2.0.0
-sphinx-design==0.6.1
+sphinx-design==0.7.0
 Sphinx-Substitution-Extensions==2026.1.12
 texttable==1.7.0
 time-machine==3.2.0
