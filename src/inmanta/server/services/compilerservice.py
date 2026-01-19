@@ -447,6 +447,7 @@ class CompileRun:
                 if stage_result and (stage_result.returncode is None or stage_result.returncode > 0):
                     return False, None
 
+            await self._start_stage("Prepare export command", "")
             server_address = opt.internal_server_address.get()
             server_port = opt.server_bind_port.get()
 
@@ -519,7 +520,7 @@ class CompileRun:
             env_vars_compile.update(self.request.used_environment_variables)
 
             cmd = app_cli_args + export_command
-
+            await self._end_stage(0)
             result: data.Report = await run_compile_stage_in_venv(
                 "Recompiling configuration model", cmd, cwd=project_dir, env=env_vars_compile
             )
@@ -539,9 +540,9 @@ class CompileRun:
             # unhandled exception in a backgrounded coroutine.
             pass
 
-        except Exception:
-            LOGGER.exception("An error occurred while recompiling")
-
+        except Exception as e:
+            await self._error(message=f"An error occurred while recompiling: \n {str(e)}")
+            await self._end_stage(1)
         finally:
 
             async def warn(message: str) -> None:
