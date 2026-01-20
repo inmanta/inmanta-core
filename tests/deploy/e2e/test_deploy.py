@@ -27,7 +27,7 @@ import pytest
 from inmanta import config, const, data, execute
 from inmanta.config import Config
 from inmanta.data import SERVER_COMPILE
-from inmanta.data.model import AttributeStateChange, ReleasedResourceState, SchedulerStatusReport
+from inmanta.data.model import AttributeStateChange, ReleasedResourceState, ResourceComplianceDiff, SchedulerStatusReport
 from inmanta.deploy.state import Blocked, Compliance, DeployResult, ResourceState
 from inmanta.deploy.work import TaskPriority
 from inmanta.protocol.exceptions import NotFound
@@ -1909,17 +1909,21 @@ async def test_non_compliant_diff(resource_container, server, client, clienthelp
     assert rps.last_non_deploying_status == const.NonDeployingResourceState.deployed
 
     report = await data.ResourcePersistentState.get_compliance_report(env=env_id, resource_ids=[rid1, rid2])
-    assert report[rid1].compliance is Compliance.COMPLIANT
-    assert report[rid1].last_execution_result is DeployResult.DEPLOYED
-    assert report[rid1].last_execution == rps.last_deploy
-    assert report[rid1].report_only is False
-    assert report[rid1].attribute_diff is None
+    assert report[rid1] == ResourceComplianceDiff(
+        report_only=False,
+        attribute_diff=None,
+        compliance=Compliance.COMPLIANT,
+        last_execution_result=DeployResult.DEPLOYED,
+        last_execution=rps.last_deploy,
+    )
 
-    assert report[rid2].report_only is False
-    assert report[rid2].attribute_diff is None
-    assert report[rid2].compliance is Compliance.COMPLIANT
-    assert report[rid2].last_execution_result is DeployResult.DEPLOYED
-    assert report[rid2].last_execution == rps2.last_deploy
+    assert report[rid2] == ResourceComplianceDiff(
+        report_only=False,
+        attribute_diff=None,
+        compliance=Compliance.COMPLIANT,
+        last_execution_result=DeployResult.DEPLOYED,
+        last_execution=rps2.last_deploy,
+    )
 
     # Make rid1 reporting and change the desired state
     version = await clienthelper.get_version()
@@ -1955,11 +1959,13 @@ async def test_non_compliant_diff(resource_container, server, client, clienthelp
     assert expected_exception_output in exc_info.value.log_message
 
     report = await data.ResourcePersistentState.get_compliance_report(env=env_id, resource_ids=[rid1])
-    assert report[rid1].compliance is Compliance.NON_COMPLIANT
-    assert report[rid1].last_execution_result is DeployResult.DEPLOYED
-    assert report[rid1].last_execution == rps.last_deploy
-    assert report[rid1].report_only is True
-    assert report[rid1].attribute_diff == {"value": AttributeStateChange(current="actual_value", desired="diff_value")}
+    assert report[rid1] == ResourceComplianceDiff(
+        report_only=True,
+        attribute_diff={"value": AttributeStateChange(current="actual_value", desired="diff_value")},
+        compliance=Compliance.NON_COMPLIANT,
+        last_execution_result=DeployResult.DEPLOYED,
+        last_execution=rps.last_deploy,
+    )
 
     # Make report succeed again
     version = await clienthelper.get_version()
@@ -1983,11 +1989,13 @@ async def test_non_compliant_diff(resource_container, server, client, clienthelp
     assert rps.last_non_deploying_status == const.NonDeployingResourceState.deployed
 
     report = await data.ResourcePersistentState.get_compliance_report(env=env_id, resource_ids=[rid1])
-    assert report[rid1].compliance is Compliance.COMPLIANT
-    assert report[rid1].last_execution_result is DeployResult.DEPLOYED
-    assert report[rid1].last_execution == rps.last_deploy
-    assert report[rid1].report_only is True
-    assert report[rid1].attribute_diff is None
+    assert report[rid1] == ResourceComplianceDiff(
+        report_only=True,
+        attribute_diff=None,
+        compliance=Compliance.COMPLIANT,
+        last_execution_result=DeployResult.DEPLOYED,
+        last_execution=rps.last_deploy,
+    )
 
     # Make report fail again
     version = await clienthelper.get_version()
@@ -2012,11 +2020,13 @@ async def test_non_compliant_diff(resource_container, server, client, clienthelp
     assert rps.non_compliant_diff != non_compliant_diff_id
 
     report = await data.ResourcePersistentState.get_compliance_report(env=env_id, resource_ids=[rid1])
-    assert report[rid1].compliance is Compliance.NON_COMPLIANT
-    assert report[rid1].last_execution_result is DeployResult.DEPLOYED
-    assert report[rid1].last_execution == rps.last_deploy
-    assert report[rid1].report_only is True
-    assert report[rid1].attribute_diff == {"value": AttributeStateChange(current="actual_value", desired="another_diff_value")}
+    assert report[rid1] == ResourceComplianceDiff(
+        report_only=True,
+        attribute_diff={"value": AttributeStateChange(current="actual_value", desired="another_diff_value")},
+        compliance=Compliance.NON_COMPLIANT,
+        last_execution_result=DeployResult.DEPLOYED,
+        last_execution=rps.last_deploy,
+    )
 
 
 async def test_event_recovery_reporting(resource_container, server, client, clienthelper, environment, agent):
