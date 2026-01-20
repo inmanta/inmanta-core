@@ -659,12 +659,13 @@ def do_dryrun(tid: uuid.UUID, id: uuid.UUID, agent: str, version: int):
     arg_options={"id": ArgOption(getter=convert_environment)},
     client_types=[const.ClientType.api],
 )
-def notify_change_get(id: uuid.UUID, update: bool = True):
+def notify_change_get(id: uuid.UUID, update: bool = True, reinstall: bool = False):
     """
     Simplified GET version of the POST method
 
     :param id: The id of the environment.
     :param update: Optional. Indicates whether to update the model code and modules. Defaults to true.
+    :param reinstall: Optional. Reinstall the Inmanta project and its compiler venv.
     """
 
 
@@ -675,13 +676,14 @@ def notify_change_get(id: uuid.UUID, update: bool = True):
     arg_options={"id": ArgOption(getter=convert_environment)},
     client_types=[const.ClientType.api],
 )
-def notify_change(id: uuid.UUID, update: bool = True, metadata: dict = {}):
+def notify_change(id: uuid.UUID, update: bool = True, metadata: dict = {}, reinstall: bool = False):
     """
     Notify the server that the repository of the environment with the given id, has changed.
 
     :param id: The id of the environment
     :param update: Optional. Update the model code and modules. Default value is true
     :param metadata: Optional. The metadata that indicates the source of the compilation trigger.
+    :param reinstall: Optional. Reinstall the Inmanta project and its compiler venv.
     """
 
 

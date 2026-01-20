@@ -1,0 +1,8 @@
+---
+description: Added support to the compiler service to start compiles that first perform a clean checkout of the project and recreate the compiler venv.
+issue-nr: 9809
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [master, iso8]
+sections:
+  minor-improvement: "{{description}}"
