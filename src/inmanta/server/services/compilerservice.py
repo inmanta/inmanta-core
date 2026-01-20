@@ -399,8 +399,6 @@ class CompileRun:
                 export_command.append("--ssl-ca-cert")
                 export_command.append(ssl_ca_cert)
 
-            self.tail_stdout = ""
-
             # Make mypy happy
             assert self.request.used_environment_variables is not None
             env_vars_compile: dict[str, str] = os.environ.copy()
@@ -521,6 +519,7 @@ class CompileRun:
                 if stage_result and (stage_result.returncode is None or stage_result.returncode > 0):
                     return False, None
 
+            self.tail_stdout = ""
             result: data.Report = await run_compile_stage_in_venv(
                 "Recompiling configuration model", cmd, cwd=project_dir, env=env_vars_compile
             )
@@ -542,7 +541,7 @@ class CompileRun:
 
         except Exception as e:
             if self.stage is not None:
-                await self._error(message=f"An error occurred while recompiling: \n {str(e)}")
+                await self._error(message=str(e))
                 await self._end_stage(1)
             else:
                 LOGGER.exception("An error occurred while recompiling")
