@@ -5064,7 +5064,7 @@ class ResourcePersistentState(BaseDocument):
                 diff[ResourceIdStr(str(record["resource_id"]))] = m.ResourceComplianceDiff(
                     report_only=report_only,
                     attribute_diff=(
-                        cast(dict[str, AttributeStateChange], record["diff"])
+                        cast(dict[str, AttributeStateChange] | None, record["diff"])
                         if compliance_status is state.Compliance.NON_COMPLIANT
                         else None
                     ),
