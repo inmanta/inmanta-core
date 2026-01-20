@@ -611,7 +611,7 @@ audience=https://localhost:8888/
     c = await data.Compile.get_report(compile.id)
     assert (
         c["reports"][-1]["errstream"]
-        == "An error occurred while recompiling: \n One auth_jwt section should have sign set to true\n"
+        == "One auth_jwt section should have sign set to true\n"
     )
 
 
