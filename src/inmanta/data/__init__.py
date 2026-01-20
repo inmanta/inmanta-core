@@ -4748,7 +4748,10 @@ class ResourcePersistentState(BaseDocument):
     # Written at deploy time (Exception for initial record creation  -> no race condition possible with deploy path)
     last_non_deploying_status: const.NonDeployingResourceState = const.NonDeployingResourceState.available
 
-    # A foreign key to the resource_diff table. This is only relevant if this resource is in the non_compliant state
+    # A foreign key to the resource_diff table.
+    # It is populated on `send_deploy_done` when the handler sets the resource state to `non_compliant`.
+    # It is cleaned up also on `send_deploy_done` when the handler reports any other resource state.
+    # This field is only meaningful when the Compliance of this resource is `NON_COMPLIANT` according to get_compliance_status()
     non_compliant_diff: Optional[uuid.UUID] = None
 
     @classmethod
@@ -5049,7 +5052,6 @@ class ResourcePersistentState(BaseDocument):
                 raise NotFound(f"Unable to find the following resource ids in the active version: {missing_rids}")
             diff: dict[ResourceIdStr, m.ResourceComplianceDiff] = {}
             for record in result:
-                last_deploy_result = state.DeployResult(str(record["last_deploy_result"]).lower())
                 compliance_status = state.get_compliance_status(
                     is_orphan=False,  # We filter out orphan resources in the query
                     is_undefined=cast(bool, record["is_undefined"]),
@@ -5058,15 +5060,14 @@ class ResourcePersistentState(BaseDocument):
                     last_deploy_compliant=cast(bool, record["last_deploy_compliant"]),
                 )
                 report_only = cast(bool, record["report_only"])
-                non_compliant_resource = (
-                    report_only
-                    and compliance_status is state.Compliance.NON_COMPLIANT
-                    and last_deploy_result is state.DeployResult.DEPLOYED
-                )
 
                 diff[ResourceIdStr(str(record["resource_id"]))] = m.ResourceComplianceDiff(
                     report_only=report_only,
-                    attribute_diff=cast(dict[str, AttributeStateChange], record["diff"]) if non_compliant_resource else None,
+                    attribute_diff=(
+                        cast(dict[str, AttributeStateChange], record["diff"])
+                        if compliance_status is state.Compliance.NON_COMPLIANT
+                        else None
+                    ),
                     resource_state=state.ResourceState(
                         compliance=compliance_status,
                         last_deploy_result=state.DeployResult(str(record["last_deploy_result"]).lower()),
