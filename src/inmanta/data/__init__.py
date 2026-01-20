@@ -5059,22 +5059,16 @@ class ResourcePersistentState(BaseDocument):
                     current_intent_attribute_hash=cast(str | None, record["current_intent_attribute_hash"]),
                     last_deploy_compliant=cast(bool, record["last_deploy_compliant"]),
                 )
-                report_only = cast(bool, record["report_only"])
-
                 diff[ResourceIdStr(str(record["resource_id"]))] = m.ResourceComplianceDiff(
-                    report_only=report_only,
+                    report_only=cast(bool, record["report_only"]),
                     attribute_diff=(
                         cast(dict[str, AttributeStateChange] | None, record["diff"])
                         if compliance_status is state.Compliance.NON_COMPLIANT
                         else None
                     ),
-                    resource_state=state.ResourceState(
-                        compliance=compliance_status,
-                        last_deploy_result=state.DeployResult(str(record["last_deploy_result"]).lower()),
-                        blocked=state.Blocked(str(record["blocked"]).lower()),
-                        last_deployed=cast(datetime.datetime | None, record["last_executed_at"]),
-                        last_deploy_compliant=cast(bool, record["last_deploy_compliant"]),
-                    ),
+                    compliance=compliance_status,
+                    last_execution_result=state.DeployResult(str(record["last_deploy_result"]).lower()),
+                    last_execution=cast(datetime.datetime | None, record["last_executed_at"]),
                 )
             return diff
 

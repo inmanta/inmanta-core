@@ -1909,25 +1909,17 @@ async def test_non_compliant_diff(resource_container, server, client, clienthelp
     assert rps.last_non_deploying_status == const.NonDeployingResourceState.deployed
 
     report = await data.ResourcePersistentState.get_compliance_report(env=env_id, resource_ids=[rid1, rid2])
-    assert report[rid1].resource_state == ResourceState(
-        compliance=Compliance.COMPLIANT,
-        last_deploy_result=DeployResult.DEPLOYED,
-        blocked=Blocked.NOT_BLOCKED,
-        last_deployed=rps.last_deploy,
-        last_deploy_compliant=True,
-    )
+    assert report[rid1].compliance is Compliance.COMPLIANT
+    assert report[rid1].last_execution_result is DeployResult.DEPLOYED
+    assert report[rid1].last_execution == rps.last_deploy
     assert report[rid1].report_only is False
     assert report[rid1].attribute_diff is None
 
-    assert report[rid2].resource_state == ResourceState(
-        compliance=Compliance.COMPLIANT,
-        last_deploy_result=DeployResult.DEPLOYED,
-        blocked=Blocked.NOT_BLOCKED,
-        last_deployed=rps2.last_deploy,
-        last_deploy_compliant=True,
-    )
     assert report[rid2].report_only is False
     assert report[rid2].attribute_diff is None
+    assert report[rid2].compliance is Compliance.COMPLIANT
+    assert report[rid2].last_execution_result is DeployResult.DEPLOYED
+    assert report[rid2].last_execution == rps2.last_deploy
 
     # Make rid1 reporting and change the desired state
     version = await clienthelper.get_version()
@@ -1963,13 +1955,9 @@ async def test_non_compliant_diff(resource_container, server, client, clienthelp
     assert expected_exception_output in exc_info.value.log_message
 
     report = await data.ResourcePersistentState.get_compliance_report(env=env_id, resource_ids=[rid1])
-    assert report[rid1].resource_state == ResourceState(
-        compliance=Compliance.NON_COMPLIANT,
-        last_deploy_result=DeployResult.DEPLOYED,
-        blocked=Blocked.NOT_BLOCKED,
-        last_deployed=rps.last_deploy,
-        last_deploy_compliant=False,
-    )
+    assert report[rid1].compliance is Compliance.NON_COMPLIANT
+    assert report[rid1].last_execution_result is DeployResult.DEPLOYED
+    assert report[rid1].last_execution == rps.last_deploy
     assert report[rid1].report_only is True
     assert report[rid1].attribute_diff == {"value": AttributeStateChange(current="actual_value", desired="diff_value")}
 
@@ -1995,13 +1983,9 @@ async def test_non_compliant_diff(resource_container, server, client, clienthelp
     assert rps.last_non_deploying_status == const.NonDeployingResourceState.deployed
 
     report = await data.ResourcePersistentState.get_compliance_report(env=env_id, resource_ids=[rid1])
-    assert report[rid1].resource_state == ResourceState(
-        compliance=Compliance.COMPLIANT,
-        last_deploy_result=DeployResult.DEPLOYED,
-        blocked=Blocked.NOT_BLOCKED,
-        last_deployed=rps.last_deploy,
-        last_deploy_compliant=True,
-    )
+    assert report[rid1].compliance is Compliance.COMPLIANT
+    assert report[rid1].last_execution_result is DeployResult.DEPLOYED
+    assert report[rid1].last_execution == rps.last_deploy
     assert report[rid1].report_only is True
     assert report[rid1].attribute_diff is None
 
@@ -2028,13 +2012,9 @@ async def test_non_compliant_diff(resource_container, server, client, clienthelp
     assert rps.non_compliant_diff != non_compliant_diff_id
 
     report = await data.ResourcePersistentState.get_compliance_report(env=env_id, resource_ids=[rid1])
-    assert report[rid1].resource_state == ResourceState(
-        compliance=Compliance.NON_COMPLIANT,
-        last_deploy_result=DeployResult.DEPLOYED,
-        blocked=Blocked.NOT_BLOCKED,
-        last_deployed=rps.last_deploy,
-        last_deploy_compliant=False,
-    )
+    assert report[rid1].compliance is Compliance.NON_COMPLIANT
+    assert report[rid1].last_execution_result is DeployResult.DEPLOYED
+    assert report[rid1].last_execution == rps.last_deploy
     assert report[rid1].report_only is True
     assert report[rid1].attribute_diff == {"value": AttributeStateChange(current="actual_value", desired="another_diff_value")}
 
