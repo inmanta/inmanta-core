@@ -552,6 +552,64 @@ ssl={str(not ssl_enabled_on_server).lower()}
 
 
 @pytest.mark.slowtest
+async def test_config_loading_errors_during_compile_are_saved(
+    tmpdir, request, environment_factory: EnvironmentFactory, server, client
+) -> None:
+    """
+    Test that config loading errors during a compile are saved, to the compile logs.
+    """
+
+    project_work_dir = os.path.join(tmpdir, "work")
+    ensure_directory_exist(project_work_dir)
+
+    main_cf = """
+import std::testing
+std::testing::NullResource(name="test")
+    """.strip()
+
+    # Add .inmanta file with inverse SSL config as the server itself.
+    config_file = os.path.join(tmpdir, "auth.cfg")
+    with open(config_file, "w+", encoding="utf-8") as fd:
+        fd.write(
+            """
+[server]
+auth=true
+auth_additional_header=Jwt-Assertion
+
+[auth_jwt_test]
+algorithm=HS256
+sign=false
+client_types=agent,compiler
+key=eciwliGyqECVmXtIkNpfVrtBLutZiITZKSKYhogeHMM
+expire=0
+issuer=https://localhost:8888/
+audience=https://localhost:8888/
+
+            """
+        )
+
+    config.Config.load_config(config_file)
+    env = await environment_factory.create_environment(main=main_cf)
+
+    compile = data.Compile(
+        remote_id=uuid.uuid4(),
+        environment=env.id,
+        force_update=False,
+    )
+    await compile.insert()
+
+    # compile with export
+    cr = CompileRun(compile, project_work_dir)
+    await cr.run()
+
+    c = await data.Compile.get_report(compile.id)
+    assert (
+        c["reports"][-1]["errstream"]
+        == "An error occurred while recompiling: \n One auth_jwt section should have sign set to true\n"
+    )
+
+
+@pytest.mark.slowtest
 async def test_compilerservice_compile_data(environment_factory: EnvironmentFactory, client, server) -> None:
     async def get_compile_data(main: str) -> model.CompileData:
         env: data.Environment = await environment_factory.create_environment(main)
