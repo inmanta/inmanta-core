@@ -334,6 +334,78 @@ class CompileRun:
             # venv of the Inmanta server.
             venv_dir = os.path.join(project_dir, ".env")
 
+            # Load configuration
+            server_address = opt.internal_server_address.get()
+            server_port = opt.server_bind_port.get()
+
+            app_cli_args = ["-vvv"]
+
+            if Config._min_c_config_file is not None:
+                app_cli_args.append("-c")
+                app_cli_args.append(Config._min_c_config_file)
+
+            if Config._config_dir is not None:
+                app_cli_args.append("--config-dir")
+                app_cli_args.append(Config._config_dir)
+
+            export_command = [
+                "export",
+                "-X",
+                "-e",
+                str(environment_id),
+                "--server_address",
+                server_address,
+                "--server_port",
+                str(server_port),
+                "--metadata",
+                json.dumps(self.request.metadata),
+                "--export-compile-data",
+                "--export-compile-data-file",
+                compile_data_json_file.name,
+            ]
+
+            if self.request.exporter_plugin:
+                export_command.append("--export-plugin")
+                export_command.append(self.request.exporter_plugin)
+
+            if self.request.partial:
+                export_command.append("--partial")
+
+            if self.request.removed_resource_sets is not None:
+                for resource_set in self.request.removed_resource_sets:
+                    export_command.append("--delete-resource-set")
+                    export_command.append(resource_set)
+
+            if self.request.soft_delete:
+                export_command.append("--soft-delete")
+
+            if not self.request.do_export:
+                f = NamedTemporaryFile()
+                export_command.append("-j")
+                export_command.append(f.name)
+
+            if config.Config.get("server", "auth", False):
+                token = encode_token(["compiler", "api"], str(environment_id))
+                export_command.append("--token")
+                export_command.append(token)
+
+            if opt.server_ssl_cert.get() is not None:
+                export_command.append("--ssl")
+            else:
+                export_command.append("--no-ssl")
+
+            ssl_ca_cert = opt.server_ssl_ca_cert.get()
+            if ssl_ca_cert is not None:
+                export_command.append("--ssl-ca-cert")
+                export_command.append(ssl_ca_cert)
+
+            # Make mypy happy
+            assert self.request.used_environment_variables is not None
+            env_vars_compile: dict[str, str] = os.environ.copy()
+            env_vars_compile.update(self.request.used_environment_variables)
+
+            cmd = app_cli_args + export_command
+
             async def ensure_venv() -> Optional[data.Report]:
                 """
                 Ensure a venv is present at `venv_dir`.
@@ -447,79 +519,7 @@ class CompileRun:
                 if stage_result and (stage_result.returncode is None or stage_result.returncode > 0):
                     return False, None
 
-            server_address = opt.internal_server_address.get()
-            server_port = opt.server_bind_port.get()
-
-            app_cli_args = ["-vvv"]
-
-            if Config._min_c_config_file is not None:
-                app_cli_args.append("-c")
-                app_cli_args.append(Config._min_c_config_file)
-
-            if Config._config_dir is not None:
-                app_cli_args.append("--config-dir")
-                app_cli_args.append(Config._config_dir)
-
-            export_command = [
-                "export",
-                "-X",
-                "-e",
-                str(environment_id),
-                "--server_address",
-                server_address,
-                "--server_port",
-                str(server_port),
-                "--metadata",
-                json.dumps(self.request.metadata),
-                "--export-compile-data",
-                "--export-compile-data-file",
-                compile_data_json_file.name,
-            ]
-
-            if self.request.exporter_plugin:
-                export_command.append("--export-plugin")
-                export_command.append(self.request.exporter_plugin)
-
-            if self.request.partial:
-                export_command.append("--partial")
-
-            if self.request.removed_resource_sets is not None:
-                for resource_set in self.request.removed_resource_sets:
-                    export_command.append("--delete-resource-set")
-                    export_command.append(resource_set)
-
-            if self.request.soft_delete:
-                export_command.append("--soft-delete")
-
-            if not self.request.do_export:
-                f = NamedTemporaryFile()
-                export_command.append("-j")
-                export_command.append(f.name)
-
-            if config.Config.get("server", "auth", False):
-                token = encode_token(["compiler", "api"], str(environment_id))
-                export_command.append("--token")
-                export_command.append(token)
-
-            if opt.server_ssl_cert.get() is not None:
-                export_command.append("--ssl")
-            else:
-                export_command.append("--no-ssl")
-
-            ssl_ca_cert = opt.server_ssl_ca_cert.get()
-            if ssl_ca_cert is not None:
-                export_command.append("--ssl-ca-cert")
-                export_command.append(ssl_ca_cert)
-
             self.tail_stdout = ""
-
-            # Make mypy happy
-            assert self.request.used_environment_variables is not None
-            env_vars_compile: dict[str, str] = os.environ.copy()
-            env_vars_compile.update(self.request.used_environment_variables)
-
-            cmd = app_cli_args + export_command
-
             result: data.Report = await run_compile_stage_in_venv(
                 "Recompiling configuration model", cmd, cwd=project_dir, env=env_vars_compile
             )
@@ -539,9 +539,12 @@ class CompileRun:
             # unhandled exception in a backgrounded coroutine.
             pass
 
-        except Exception:
-            LOGGER.exception("An error occurred while recompiling")
-
+        except Exception as e:
+            if self.stage is not None:
+                await self._error(message=str(e))
+                await self._end_stage(1)
+            else:
+                LOGGER.exception("An error occurred while recompiling")
         finally:
 
             async def warn(message: str) -> None:
