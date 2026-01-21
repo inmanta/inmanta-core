@@ -19,6 +19,7 @@ Contact: code@inmanta.com
 import os.path
 
 import pytest
+import textwrap
 
 from inmanta import compiler
 from inmanta.ast import (
@@ -310,3 +311,42 @@ dataclasses::takes_collection_dc(z)
     )
 
     compiler.do_compile()
+
+
+def test_dataclass_plugin_boundary_unknown(snippetcompiler):
+    """
+    Verify that unknowns are rejected in dataclass fields on the plugin boundary.
+    """
+    # TODO: more tests:
+    # - unknown nested in list
+    snippetcompiler.setup_for_snippet(
+        """\
+import dataclasses
+import tests
+
+x = dataclasses::NullableDC(n=tests::unknown())
+
+dataclasses::takes_nullable_dc(x)
+        """,
+        ministd=True,
+    )
+
+    # TODO: fix imports
+    import re
+    with pytest.raises(PluginTypeException) as exc_info:
+        compiler.do_compile()
+    breakpoint()
+    e: PluginTypeException = exc_info.value
+    msg: str = e.format_trace()
+    # TODO: fix regex
+    match = re.fullmatch(
+        textwrap.dedent(
+            """\
+            Value dataclasses::NullableDC [0-9a-f]* for argument v of plugin dataclasses::takes_nullable_dc has incompatible type. Expected type: dataclasses::NullableDC (reported in dataclasses::takes_nullable_dc(x) ([\\w/]*/main.cf:6:1))
+            caused by:
+              Encountered unknown in field 'n'. Unknowns are not currently supported in dataclass instances in the Python domain. (reported in dataclasses::takes_nullable_dc(x) ([\\w/]*/main.cf:6:1))
+            """.rstrip()
+        ),
+        msg,
+    )
+    assert match is not None, msg
