@@ -1,4 +1,7 @@
 description: Fixed plugin kwarg validation
 change-type: patch
+sections:
+  bugfix: "Improved type validation error messages for plugin kwargs to be in line with positional arg validation"
 destination-branches:
   - iso8
+  - master
