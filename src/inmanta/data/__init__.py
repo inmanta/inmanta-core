@@ -5068,7 +5068,7 @@ class ResourcePersistentState(BaseDocument):
                     ),
                     compliance=compliance_status,
                     last_execution_result=state.DeployResult(str(record["last_deploy_result"]).lower()),
-                    last_execution=cast(datetime.datetime | None, record["last_executed_at"]),
+                    last_executed_at=cast(datetime.datetime | None, record["last_executed_at"]),
                 )
             return diff
 

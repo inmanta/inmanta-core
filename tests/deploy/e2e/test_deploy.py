@@ -1914,7 +1914,7 @@ async def test_non_compliant_diff(resource_container, server, client, clienthelp
         attribute_diff=None,
         compliance=Compliance.COMPLIANT,
         last_execution_result=DeployResult.DEPLOYED,
-        last_execution=rps.last_deploy,
+        last_executed_at=rps.last_deploy,
     )
 
     assert report[rid2] == ResourceComplianceDiff(
@@ -1922,7 +1922,7 @@ async def test_non_compliant_diff(resource_container, server, client, clienthelp
         attribute_diff=None,
         compliance=Compliance.COMPLIANT,
         last_execution_result=DeployResult.DEPLOYED,
-        last_execution=rps2.last_deploy,
+        last_executed_at=rps2.last_deploy,
     )
 
     # Make rid1 reporting and change the desired state
@@ -1964,7 +1964,7 @@ async def test_non_compliant_diff(resource_container, server, client, clienthelp
         attribute_diff={"value": AttributeStateChange(current="actual_value", desired="diff_value")},
         compliance=Compliance.NON_COMPLIANT,
         last_execution_result=DeployResult.DEPLOYED,
-        last_execution=rps.last_deploy,
+        last_executed_at=rps.last_deploy,
     )
 
     # Make report succeed again
@@ -1994,7 +1994,7 @@ async def test_non_compliant_diff(resource_container, server, client, clienthelp
         attribute_diff=None,
         compliance=Compliance.COMPLIANT,
         last_execution_result=DeployResult.DEPLOYED,
-        last_execution=rps.last_deploy,
+        last_executed_at=rps.last_deploy,
     )
 
     # Make report fail again
@@ -2025,7 +2025,7 @@ async def test_non_compliant_diff(resource_container, server, client, clienthelp
         attribute_diff={"value": AttributeStateChange(current="actual_value", desired="another_diff_value")},
         compliance=Compliance.NON_COMPLIANT,
         last_execution_result=DeployResult.DEPLOYED,
-        last_execution=rps.last_deploy,
+        last_executed_at=rps.last_deploy,
     )
 
 

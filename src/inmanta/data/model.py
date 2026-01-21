@@ -677,14 +677,14 @@ class ResourceComplianceDiff(BaseModel):
     :param report_only: Is this resource in report only mode.
     :param compliance: The current compliance of this resource.
     :param last_execution_result: The result of the last execution of this resource.
-    :param last_execution: The timestamp of the last execution of this resource.
+    :param last_executed_at: The timestamp of the last execution of this resource.
     :param attribute_diff: The diff between the attributes of the current and desired state of a non_compliant resource.
     """
 
     report_only: bool
     compliance: Compliance
     last_execution_result: DeployResult
-    last_execution: datetime.datetime | None
+    last_executed_at: datetime.datetime | None
     attribute_diff: dict[str, AttributeStateChange] | None
 
 
