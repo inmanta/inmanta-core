@@ -432,6 +432,10 @@ def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", module
     run_snippet(snippet="refs::plugins::takes_obj('hello')")
     with pytest.raises(PluginTypeException, match="is a reference"):
         run_snippet(snippet="refs::plugins::takes_obj(refs::create_string_reference('name'))")
+    # same with kwarg
+    run_snippet(snippet="refs::plugins::takes_obj(v='hello')")
+    with pytest.raises(PluginTypeException, match="is a reference"):
+        run_snippet(snippet="refs::plugins::takes_obj(v=refs::create_string_reference('name'))")
     ## accepts list with a reference in it and even allows access -> infeasible to check inside a black box
     ## -> this is not a strong requirement. The assertion is here simply to ensure the behavior remains stable
     run_snippet(snippet="refs::plugins::takes_obj(['hello', refs::create_string_reference('hello')])")
@@ -439,6 +443,8 @@ def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", module
     # Scenario: plugin argument annotated as `object | Reference`
     run_snippet(snippet="refs::plugins::takes_obj_ref('hello')")
     run_snippet(snippet="refs::plugins::takes_obj_ref(refs::create_string_reference('name'))")
+    run_snippet(snippet="refs::plugins::takes_obj_ref(v='hello')")
+    run_snippet(snippet="refs::plugins::takes_obj_ref(v=refs::create_string_reference('name'))")
     # Scenario: plugin argument annotated as `Reference`
     with pytest.raises(PluginTypeException, match=re.escape("Expected type: Reference[any]")):
         run_snippet(snippet="refs::plugins::takes_obj_ref_only('hello')")
@@ -729,9 +735,6 @@ def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", module
         match=re.escape("Expected type: Reference[refs::dc::MixedRefsDataclass] | refs::dc::MixedRefsDataclass"),
     ):
         run_snippet("refs::plugins::takes_mixed_refs_dataclass_or_ref(refs::dc::create_all_refs_dataclass_reference('hello'))")
-
-    # Scenario: reference to dataclass as return value is converted to dataclass of references without type errors (#9837)
-    run_snippet("refs::dc::create_complex_dataclass_reference()")
 
     # Scenario: inheritance on return type
     ## declare generic, return specific

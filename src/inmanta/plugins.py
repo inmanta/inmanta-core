@@ -421,9 +421,24 @@ def to_dsl_type(python_type: type[object], location: Range, resolver: Namespace)
             return entity
         raise TypingException(None, f"invalid type {python_type}, this dataclass has no associated inmanta entity")
 
-    # Lists and dicts
+    # Lists and dicts and Annotated
     if typing_inspect.is_generic_type(python_type):
         origin = typing.get_origin(python_type)
+
+        # Annotated
+        if origin is typing.Annotated:
+            for meta in reversed(python_type.__metadata__):  # type: ignore
+                if isinstance(meta, ModelType):
+                    dsl_type = parse_dsl_type(meta.model_type, location, resolver)
+                    # override for specific case of a dataclass: we don't want to convert
+                    # correct typing is difficult due to import loop, see dsl_type.is_entity()
+                    if typing.get_args(python_type)[0] is DynamicProxy and dsl_type.is_entity():
+                        return UnConvertibleEntity(dsl_type)
+                    return dsl_type
+
+            # the annotation doesn't concern us => use base type
+            return to_dsl_type(typing.get_args(python_type)[0], location, resolver)
+
         if origin is not None:
             out = _convert_origin_to_dsl_type(python_type, origin, location, resolver)
             if out is not None:
@@ -456,20 +471,6 @@ def to_dsl_type(python_type: type[object], location: Range, resolver: Namespace)
                 out = _convert_to_reference(base, origin, location, resolver)
                 if out is not None:
                     return out
-
-        # Annotated
-        if origin is typing.Annotated:
-            for meta in reversed(python_type.__metadata__):  # type: ignore
-                if isinstance(meta, ModelType):
-                    dsl_type = parse_dsl_type(meta.model_type, location, resolver)
-                    # override for specific case of a dataclass: we don't want to convert
-                    # correct typing is difficult due to import loop, see dsl_type.is_entity()
-                    if typing.get_args(python_type)[0] is DynamicProxy and dsl_type.is_entity():
-                        return UnConvertibleEntity(dsl_type)
-                    return dsl_type
-
-            # the annotation doesn't concern us => use base type
-            return to_dsl_type(typing.get_args(python_type)[0], location, resolver)
 
     if python_type in python_to_model:
         return python_to_model[python_type]
@@ -1010,47 +1011,58 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 " To allow references, use `| Reference[...]` in your type annotation."
             )
 
-        # Validate all positional arguments
-        for position, value in enumerate(args):
-            # (1) Get the corresponding argument, fails if we don't have one
-            arg: PluginArgument = self.get_arg(position)
-            result: object
-            if isinstance(value, Unknown):
-                result = value
-                is_unknown = True
-            else:
-                try:
-                    # (4) Validate the input value
-                    result = validate_and_convert_to_python_domain(
-                        name=arg.arg_name,
-                        expected_type=arg.resolved_type,
-                        value=value,
-                    )
-                except (UnsetException, MultiUnsetException):
-                    raise
-                except UnexpectedReference as e:
+        def convert_and_validate(value: object, arg: PluginArgument) -> object:
+            """
+            Convert a single argument value to the Python domain, with appropriate exception wrapping in case
+            of validation errors.
+
+            :raises UnsetException, MultiUnsetException: The value is not yet set and the plugin should be rescheduled at a
+                later time.
+            :raises PluginTypeException: The value doesn't have the expected type.
+            """
+            try:
+                return validate_and_convert_to_python_domain(
+                    name=arg.arg_name,
+                    expected_type=arg.resolved_type,
+                    value=value,
+                )
+            except (UnsetException, MultiUnsetException):
+                raise
+            except UnexpectedReference as e:
+                raise PluginTypeException(
+                    stmt=None,
+                    msg=reference_exception_msg(value, arg),
+                    cause=e,
+                )
+            except RuntimeException as e:
+                # some validators do not recognize references specially. Best-effort to raise tailored error message.
+                if isinstance(value, Reference) and not arg.resolved_type.supports_references():
                     raise PluginTypeException(
                         stmt=None,
                         msg=reference_exception_msg(value, arg),
                         cause=e,
                     )
-                except RuntimeException as e:
-                    # some validators do not recognize references specially. Best-effort to raise tailored error message.
-                    if isinstance(value, Reference) and not arg.resolved_type.supports_references():
-                        raise PluginTypeException(
-                            stmt=None,
-                            msg=reference_exception_msg(value, arg),
-                            cause=e,
-                        )
-                    raise PluginTypeException(
-                        stmt=None,
-                        msg=(
-                            f"Value {value!r} for argument {arg.arg_name} of plugin "
-                            f"{self.get_full_name()} has incompatible type."
-                            f" Expected type: {arg.resolved_type.type_string_internal()}"
-                        ),
-                        cause=e,
-                    )
+                raise PluginTypeException(
+                    stmt=None,
+                    msg=(
+                        f"Value {value!r} for argument {arg.arg_name} of plugin "
+                        f"{self.get_full_name()} has incompatible type."
+                        f" Expected type: {arg.resolved_type.type_string_internal()}"
+                    ),
+                    cause=e,
+                )
+
+        # Validate all positional arguments
+        for position, value in enumerate(args):
+            # (1) Get the corresponding argument, fails if we don't have one
+            arg: PluginArgument = self.get_arg(position)
+            result: object
+            # (4) Validate the input value
+            if isinstance(value, Unknown):
+                result = value
+                is_unknown = True
+            else:
+                result = convert_and_validate(value, arg)
             converted_args.append(result)
 
         converted_kwargs = {}
@@ -1070,24 +1082,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 result = value
                 is_unknown = True
             else:
-                try:
-                    result = validate_and_convert_to_python_domain(
-                        name=kwarg.arg_name,
-                        expected_type=kwarg.resolved_type,
-                        value=value,
-                    )
-                except (UnsetException, MultiUnsetException):
-                    raise
-                except RuntimeException as e:
-                    raise PluginTypeException(
-                        stmt=None,
-                        msg=(
-                            f"Value {value} for argument {kwarg.arg_name} of plugin"
-                            f" {self.get_full_name()} has incompatible type."
-                            f" Expected type: {kwarg.resolved_type.type_string_internal()}"
-                        ),
-                        cause=e,
-                    )
+                result = convert_and_validate(value, kwarg)
             converted_kwargs[name] = result
 
         return CheckedArgs(args=converted_args, kwargs=converted_kwargs, unknowns=is_unknown)
