@@ -4,6 +4,7 @@ src/inmanta/agent/forking_executor.py:0: error: Argument 1 of "connection_made" 
 src/inmanta/agent/forking_executor.py:0: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#incompatible-overrides
 src/inmanta/agent/forking_executor.py:0: note: This violates the Liskov substitution principle
 src/inmanta/agent/handler.py:0: error: Argument 3 to "log" of "LogLine" has incompatible type "**dict[str, object]"; expected "datetime | None"  [arg-type]
+src/inmanta/agent/handler.py:0: error: Incompatible return value type (got "ClientCall[BaseModel | UUID | bool | int | float | <6 more items> | None]", expected "Awaitable[Result[bool]]")  [return-value]
 src/inmanta/agent/handler.py:0: error: Returning Any from function declared to return "bool"  [no-any-return]
 src/inmanta/agent/reporting.py:0: error: Incompatible types in assignment (expression has type "None", variable has type Module)  [assignment]
 src/inmanta/agent/resourcepool.py:0: error: Argument 1 to "append" of "list" has incompatible type "Callable[[TPoolMember], Coroutine[Any, Any, bool]]"; expected "Callable[[PoolMember[TPoolID]], Coroutine[Any, Any, Any]]"  [arg-type]
@@ -1047,6 +1048,8 @@ src/inmanta/server/protocol.py:0: error: Argument 1 to "RESTServer" has incompat
 src/inmanta/server/protocol.py:0: error: Argument 1 to "append" of "list" has incompatible type "tuple[str, type[RedirectHandler], dict[str, str]]"; expected "Rule"  [arg-type]
 src/inmanta/server/protocol.py:0: error: Argument 1 to "start" of "RESTServer" has incompatible type "dict_values[str, ServerSlice]"; expected "Sequence[CallTarget]"  [arg-type]
 src/inmanta/server/protocol.py:0: error: Argument 2 to "_execute_call" of "RESTBase" has incompatible type "dict[str, Any] | None"; expected "dict[str, object]"  [arg-type]
+src/inmanta/server/protocol.py:0: error: Cannot determine type of "heartbeat"  [has-type]
+src/inmanta/server/protocol.py:0: error: Cannot determine type of "heartbeat_reply"  [has-type]
 src/inmanta/server/protocol.py:0: error: Dict entry 0 has incompatible type "str": "list[Request]"; expected "str": "str"  [dict-item]
 src/inmanta/server/protocol.py:0: error: Item "None" of "HTTPServer | None" has no attribute "_sockets"  [union-attr]
 src/inmanta/server/protocol.py:0: error: Item "None" of "HTTPServer | None" has no attribute "_sockets"  [union-attr]
