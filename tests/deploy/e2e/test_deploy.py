@@ -147,8 +147,8 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
                     {
                         "key": "key1",
                         "value": "value",
-                        "id": "test::Resourcex[%s,key=key1],v=%d" % (agent, version),
-                        "requires": ["test::Resourcex[%s,key=key3],v=%d" % (agent, version)],
+                        "id": "test::Resourcex[%s,key=key1]" % agent,
+                        "requires": ["test::Resourcex[%s,key=key3]" % agent],
                         "purged": False,
                         "send_event": False,
                         "attributes": {"A": "B"},
@@ -156,8 +156,8 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
                     {
                         "key": "key2",
                         "value": "value",
-                        "id": "test::Resourcex[%s,key=key2],v=%d" % (agent, version),
-                        "requires": ["test::Resourcex[%s,key=key1],v=%d" % (agent, version)],
+                        "id": "test::Resourcex[%s,key=key2]" % agent,
+                        "requires": ["test::Resourcex[%s,key=key1]" % agent],
                         "purged": not is_different,
                         "send_event": False,
                         "attributes": {"A": "B"},
@@ -165,7 +165,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
                     {
                         "key": "key3",
                         "value": "value",
-                        "id": "test::Resourcex[%s,key=key3],v=%d" % (agent, version),
+                        "id": "test::Resourcex[%s,key=key3]" % agent,
                         "requires": [],
                         "purged": False,
                         "send_event": False,
@@ -174,8 +174,8 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
                     {
                         "key": "key4",
                         "value": "value",
-                        "id": "test::Resourcex[%s,key=key4],v=%d" % (agent, version),
-                        "requires": ["test::Resourcex[%s,key=key3],v=%d" % (agent, version)],
+                        "id": "test::Resourcex[%s,key=key4]" % agent,
+                        "requires": ["test::Resourcex[%s,key=key3]" % agent],
                         "purged": False,
                         "send_event": False,
                         "attributes": {"A": "B"},
@@ -183,10 +183,10 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
                     {
                         "key": "key5",
                         "value": "value",
-                        "id": "test::Resourcex[%s,key=key5],v=%d" % (agent, version),
+                        "id": "test::Resourcex[%s,key=key5]" % agent,
                         "requires": [
-                            "test::Resourcex[%s,key=key4],v=%d" % (agent, version),
-                            "test::Resourcex[%s,key=key1],v=%d" % (agent, version),
+                            "test::Resourcex[%s,key=key4]" % agent,
+                            "test::Resourcex[%s,key=key1]" % agent,
                         ],
                         "purged": False,
                         "send_event": False,
@@ -202,7 +202,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
             {
                 "key": "key",
                 "value": "value",
-                "id": "test::Resourcex[agentx,key=key],v=%d" % version,
+                "id": "test::Resourcex[agentx,key=key]",
                 "requires": [],
                 "purged": False,
                 "send_event": False,
@@ -519,7 +519,7 @@ async def test_deploy_to_empty(server, client, clienthelper, environment, agent,
             {
                 "key": "key1",
                 "value": "value",
-                "id": "test::Resourcex[%s,key=key1],v=%d" % (agent, version),
+                "id": "test::Resourcex[%s,key=key1]" % agent,
                 "requires": [],
                 "purged": False,
                 "send_event": False,
@@ -2165,7 +2165,7 @@ async def test_redeploy_after_dependency_recovered(resource_container, server, c
         {
             "key": "key",
             "value": "value",
-            "id": f"{rid1},v={version}",
+            "id": f"{rid1}",
             "requires": [],
             "purged": False,
             "send_event": False,
@@ -2174,7 +2174,7 @@ async def test_redeploy_after_dependency_recovered(resource_container, server, c
         {
             "key": "key2",
             "value": "value",
-            "id": f"{rid2},v={version}",
+            "id": f"{rid2}",
             "requires": [rid1],
             "purged": False,
             "send_event": False,

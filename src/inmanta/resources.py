@@ -711,7 +711,6 @@ class Resource(metaclass=ResourceMeta):
             dictionary[field] = getattr(self, field)
 
         dictionary["requires"] = [str(x) for x in self.requires]
-        dictionary["version"] = self.version
         dictionary["id"] = self.id.resource_version_str()
 
         return dictionary

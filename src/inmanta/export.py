@@ -293,10 +293,6 @@ class Exporter:
 
             if isinstance(requires, str):
                 myid = Id.parse_id(requires)
-                if myid.version == 0:
-                    raise Exception(
-                        f"A dependency manager inserted a resource id without version this is not allowed {requires}"
-                    )
                 return myid
             if isinstance(requires, Resource):
                 return requires.id
