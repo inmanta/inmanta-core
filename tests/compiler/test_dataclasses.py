@@ -17,6 +17,8 @@ Contact: code@inmanta.com
 """
 
 import os.path
+import re
+import textwrap
 
 import pytest
 
@@ -310,3 +312,95 @@ dataclasses::takes_collection_dc(z)
     )
 
     compiler.do_compile()
+
+
+def test_dataclass_plugin_boundary_unknown(snippetcompiler):
+    """
+    Verify that unknowns are rejected in dataclass fields on the plugin boundary.
+    """
+
+    e: PluginTypeException
+
+    # - unknown nested in list
+    snippetcompiler.setup_for_snippet(
+        """\
+import dataclasses
+import tests
+
+x = dataclasses::NullableDC(n=tests::unknown())
+
+dataclasses::takes_nullable_dc(x)
+        """,
+        ministd=True,
+    )
+    with pytest.raises(PluginTypeException) as exc_info:
+        compiler.do_compile()
+    e = exc_info.value
+    msg: str = e.format_trace()
+    match = re.fullmatch(
+        textwrap.dedent(
+            """\
+            Value dataclasses::NullableDC [0-9a-f]* for argument v of plugin dataclasses::takes_nullable_dc has incompatible type. Expected type: dataclasses::NullableDC \\(reported in dataclasses::takes_nullable_dc\\(x\\) \\([\\w/]*/main.cf:6:1\\)\\)
+            caused by:
+            Encountered unknown in field 'n'. Unknowns are not currently supported in dataclass instances in the Python domain. \\(reported in dataclasses::takes_nullable_dc\\(x\\) \\([\\w/]*/main.cf:6:1\\)\\)
+            """  # noqa: E501
+        ).rstrip(),
+        msg,
+    )
+    assert match is not None, msg
+
+    # same with unknown in list
+    snippetcompiler.setup_for_snippet(
+        """\
+import dataclasses
+import tests
+
+x = dataclasses::CollectionDC(l=[tests::unknown()], d={})
+
+dataclasses::takes_collection_dc(x)
+        """,
+        ministd=True,
+    )
+    with pytest.raises(PluginTypeException) as exc_info:
+        compiler.do_compile()
+    e = exc_info.value
+    msg: str = e.format_trace()
+    match = re.fullmatch(
+        textwrap.dedent(
+            """\
+            Value dataclasses::CollectionDC [0-9a-f]* for argument v of plugin dataclasses::takes_collection_dc has incompatible type. Expected type: dataclasses::CollectionDC \\(reported in dataclasses::takes_collection_dc\\(x\\) \\([\\w/]*/main.cf:6:1\\)\\)
+            caused by:
+            Encountered unknown in field 'l'. Unknowns are not currently supported in dataclass instances in the Python domain. \\(reported in dataclasses::takes_collection_dc\\(x\\) \\([\\w/]*/main.cf:6:1\\)\\)
+            """  # noqa: E501
+        ).rstrip(),
+        msg,
+    )
+    assert match is not None, msg
+
+    # same with unknown in dict
+    snippetcompiler.setup_for_snippet(
+        """\
+import dataclasses
+import tests
+
+x = dataclasses::CollectionDC(l=[], d={"hello": tests::unknown()})
+
+dataclasses::takes_collection_dc(x)
+        """,
+        ministd=True,
+    )
+    with pytest.raises(PluginTypeException) as exc_info:
+        compiler.do_compile()
+    e = exc_info.value
+    msg: str = e.format_trace()
+    match = re.fullmatch(
+        textwrap.dedent(
+            """\
+            Value dataclasses::CollectionDC [0-9a-f]* for argument v of plugin dataclasses::takes_collection_dc has incompatible type. Expected type: dataclasses::CollectionDC \\(reported in dataclasses::takes_collection_dc\\(x\\) \\([\\w/]*/main.cf:6:1\\)\\)
+            caused by:
+            Encountered unknown in field 'd'. Unknowns are not currently supported in dataclass instances in the Python domain. \\(reported in dataclasses::takes_collection_dc\\(x\\) \\([\\w/]*/main.cf:6:1\\)\\)
+            """  # noqa: E501
+        ).rstrip(),
+        msg,
+    )
+    assert match is not None, msg
