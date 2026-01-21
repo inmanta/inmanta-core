@@ -507,6 +507,7 @@ class CoreAuthorizationLabel(AuthorizationLabel):
     PROJECT_CREATE = "project.create"
     PROJECT_MODIFY = "project.modify"
     PROJECT_DELETE = "project.delete"
+    REPORT_READ = "report.read"
     RESOURCE_READ = "resource.read"
     STATUS_READ = "status.read"
     TOKEN = "token"
