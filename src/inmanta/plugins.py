@@ -1021,7 +1021,6 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             :raises PluginTypeException: The value doesn't have the expected type.
             """
             try:
-                # (4) Validate the input value
                 return validate_and_convert_to_python_domain(
                     name=arg.arg_name,
                     expected_type=arg.resolved_type,
@@ -1058,6 +1057,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             # (1) Get the corresponding argument, fails if we don't have one
             arg: PluginArgument = self.get_arg(position)
             result: object
+            # (4) Validate the input value
             if isinstance(value, Unknown):
                 result = value
                 is_unknown = True
