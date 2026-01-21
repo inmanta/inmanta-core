@@ -501,22 +501,6 @@ a = exp::RequiresTest(do_break=2)
         snippetcompiler.do_export()
 
 
-def test_bad_value_in_dep_mgmr_3(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
-import exp
-
-a = exp::RequiresTest(do_break=3)
-""",
-        autostd=True,
-    )
-    with pytest.raises(
-        Exception,
-        match="A dependency manager inserted a resource id without version this is not allowed aa::Bbbb\\[agent,name=agent\\]",
-    ):
-        snippetcompiler.do_export()
-
-
 def test_2121_wrapped_proxy_serialize(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """

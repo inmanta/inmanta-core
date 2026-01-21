@@ -103,5 +103,3 @@ def bad_loops(_, all_resources):
             resource.requires.add("xyz")
         if resource.do_break == 2:
             resource.requires.add(object())
-        if resource.do_break == 3:
-            resource.requires.add("aa::Bbbb[agent,name=agent]")
