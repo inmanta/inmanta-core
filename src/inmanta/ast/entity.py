@@ -758,7 +758,7 @@ class Entity(NamedType, WithComment):
             if isinstance(value, NoneValue):
                 return None
             if isinstance(value, list):
-                return [domain_conversion(v) for v in value]
+                return [domain_conversion(v, field_name=field_name) for v in value]
             if isinstance(value, dict):
                 return {k: domain_conversion(v, field_name=field_name) for k, v in value.items()}
             return value
