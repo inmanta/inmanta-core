@@ -742,20 +742,25 @@ class Entity(NamedType, WithComment):
             # allow inheritance: delegate to child type
             return instance.type.to_python(instance, path=path)
 
-        def domain_conversion(value: object) -> object:
+        def domain_conversion(value: object, *, field_name: str) -> object:
             if isinstance(value, Unknown):
                 # For now, we simply reject unknowns. Eventually, we want to support `| Unknown` declaration, similar to what
                 # we allow for references. When we do, it will have to be integrated into `Type.validate()` rather than here
                 # during conversion. One of the blockers is consistency with unknowns in plugin arguments, and how to gradually
                 # migrate from the old `allow_unknowns: bool` to the new, more fine-grained unknown declaration.
-                # TODO: proper exception type + check if the wrapping exception provides sufficient context
-                raise Exception("Unknowns are not (yet) supported in dataclass instances in the Python domain.")
+                raise TypingException(
+                    None,
+                    (
+                        f"Encountered unknown in field {field_name!r}."
+                        " Unknowns are not currently supported in dataclass instances in the Python domain."
+                    )
+                )
             if isinstance(value, NoneValue):
                 return None
             if isinstance(value, list):
                 return [domain_conversion(v) for v in value]
             if isinstance(value, dict):
-                return {k: domain_conversion(v) for k, v in value.items()}
+                return {k: domain_conversion(v, field_name=field_name) for k, v in value.items()}
             return value
 
         def create() -> object:
@@ -766,10 +771,9 @@ class Entity(NamedType, WithComment):
                 assert k in self._paired_dataclass_field_types
                 # dynamic validation, mostly in case of references, because they are allowed in the model while they have to be
                 # declared (potentially nested) in the Python domain.
-                # TODO: validate is here, but domain_conversion() may be an easier place to hook in?
                 self._paired_dataclass_field_types[k].validate(v)
             assert self._paired_dataclass is not None
-            return self._paired_dataclass(**{k: domain_conversion(v) for k, v in kwargs.items()})
+            return self._paired_dataclass(**{k: domain_conversion(v, field_name=k) for k, v in kwargs.items()})
 
         if instance.dataclass_self is None:
             # Handle unsets
