@@ -753,7 +753,7 @@ class Entity(NamedType, WithComment):
                     (
                         f"Encountered unknown in field {field_name!r}."
                         " Unknowns are not currently supported in dataclass instances in the Python domain."
-                    )
+                    ),
                 )
             if isinstance(value, NoneValue):
                 return None
