@@ -588,7 +588,7 @@ end
             "annotated_arg_literal",
             "'maybe'",
             (
-                f"Value maybe for argument value of plugin {ns}::annotated_arg_literal has incompatible type. "
+                f"Value 'maybe' for argument value of plugin {ns}::annotated_arg_literal has incompatible type. "
                 f"Expected type: {ns}::response (reported in plugin_native_types::annotated_arg_literal(value='maybe')"
             ),
         ),
