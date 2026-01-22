@@ -1284,7 +1284,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         :return: A string that contains the config file content.
         """
         environment_id = str(env.id)
-        port: int = opt.server_bind_port.get()
+        port: int = opt.get_internal_bind_port()
 
         privatestatedir: str = self._get_state_dir_for_agent_in_env(env.id)
 

@@ -341,7 +341,7 @@ class CompileRun:
 
             # Load configuration
             server_address = opt.internal_server_address.get()
-            server_port = opt.server_bind_port.get()
+            server_port = opt.get_internal_bind_port()
 
             app_cli_args = ["-vvv"]
 

@@ -21,7 +21,7 @@ import logging
 import warnings
 from typing import Optional
 
-from inmanta.config import Config, Option, is_bool, is_float, is_int, is_list, is_map, is_str, is_str_opt, is_time
+from inmanta.config import Config, Option, is_bool, is_float, is_int, is_list, is_map, is_str, is_str_opt, is_time, is_int_opt
 
 LOGGER = logging.getLogger(__name__)
 
@@ -133,8 +133,16 @@ server_bind_port = Option(
     "server",
     "bind-port",
     8888,
-    "The port on which the server will listen for connections.",
+    "The port on the public interface (e.g. reverse-proxy) on which the server will listen for connections.",
     is_int,
+)
+server_internal_bind_port = Option(
+    "server",
+    "internal-bind-port",
+    None,
+    "The port on which the orchestrator server will listen for connections. If left unset,"
+    " the value from the :inmanta.config:option:`server.bind-port` config option will be used.",
+    is_int_opt,
 )
 
 server_tz_aware_timestamps = Option(
@@ -178,6 +186,18 @@ server_compatibility_file = Option(
     """,
     is_str_opt,
 )
+
+def get_internal_bind_port() -> int:
+    """
+    Helper method to retrieve the internal bind port for the server.
+    It handles the fallback to the `server.bind-port` option if
+    the `server.internal-bind-port` config option is unset.
+    """
+    port: int | None = server_internal_bind_port.get()
+    if port is not None:
+        return port
+    else:
+        return server_bind_port.get()
 
 
 class AuthorizationProviderName(enum.Enum):
