@@ -374,7 +374,7 @@ def is_uuid_opt(value: Optional[str | uuid.UUID]) -> Optional[uuid.UUID]:
     return uuid.UUID(value)
 
 
-def is_int_opt(value: Optional[str]) -> Optional[int]:
+def is_int_opt(value: Optional[str | int]) -> Optional[int]:
     """optional int"""
     if value is None:
         return None

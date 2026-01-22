@@ -136,7 +136,7 @@ server_bind_port = Option(
     "The port on the public interface (e.g. reverse-proxy) on which the server will listen for connections.",
     is_int,
 )
-server_internal_bind_port = Option(
+server_internal_bind_port: Option[int | None] = Option(
     "server",
     "internal-bind-port",
     None,
