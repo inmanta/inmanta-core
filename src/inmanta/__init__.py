@@ -21,6 +21,8 @@ OPA_VERSION = "1.3.0"
 # (See the bumpversion.cfg file for relevant locations).
 __version__ = "18.0.0"
 
+COMPILER_VERSION = "2026.1"
+
 RUNNING_TESTS = False
 """
     This is enabled/disabled by the test suite when tests are run.

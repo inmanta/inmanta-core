@@ -56,7 +56,7 @@ import packaging.requirements
 import packaging.utils
 import pydantic_core
 from crontab import CronTab
-from inmanta import const, types
+from inmanta import COMPILER_VERSION, const, types
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ReturnTypes
 from packaging.utils import NormalizedName
