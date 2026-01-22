@@ -21,7 +21,7 @@ import logging
 import warnings
 from typing import Optional
 
-from inmanta.config import Config, Option, is_bool, is_float, is_int, is_list, is_map, is_str, is_str_opt, is_time, is_int_opt
+from inmanta.config import Config, Option, is_bool, is_float, is_int, is_int_opt, is_list, is_map, is_str, is_str_opt, is_time
 
 LOGGER = logging.getLogger(__name__)
 
@@ -186,6 +186,7 @@ server_compatibility_file = Option(
     """,
     is_str_opt,
 )
+
 
 def get_internal_bind_port() -> int:
     """
