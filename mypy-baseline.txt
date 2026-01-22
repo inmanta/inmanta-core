@@ -222,7 +222,6 @@ src/inmanta/compiler/help/explainer.py:0: error: Item "None" of "RelationAttribu
 src/inmanta/compiler/help/explainer.py:0: error: Missing return statement  [return]
 src/inmanta/config.py:0: error: "_validate_value_types" undefined in superclass  [misc]
 src/inmanta/config.py:0: error: Argument 1 to "CronTab" has incompatible type "str | int"; expected "str"  [arg-type]
-src/inmanta/config.py:0: error: Cannot infer value of type parameter "T" of "Option"  [misc]
 src/inmanta/config.py:0: error: Incompatible default for argument "validator" (default has type "Callable[[str], str]", argument has type "Callable[[str | T], T]")  [assignment]
 src/inmanta/config.py:0: error: Missing type parameters for generic type "Option"  [type-arg]
 src/inmanta/config.py:0: error: Missing type parameters for generic type "Option"  [type-arg]
