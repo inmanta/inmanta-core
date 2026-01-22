@@ -20,11 +20,11 @@ import logging
 import os
 from typing import Optional
 
+from inmanta import __version__ as inmanta_version
 from inmanta.ast import Namespace
 from inmanta.ast.statements import Statement
 from inmanta.const import CF_CACHE_DIR, LogLevel
 from inmanta.parser.pickle import ASTPickler, ASTUnpickler
-from inmanta.util import get_compiler_version
 
 LOGGER = logging.getLogger(__name__)
 
@@ -68,8 +68,9 @@ class CacheManager:
 
         # get file name without extension
         filepart = os.path.basename(filename).rsplit(".", maxsplit=1)[0]
-        # make filename with compiler version specific extension
-        filename = f"{filepart}.{get_compiler_version().replace('.', '_')}.cfc"
+
+        # make filename with inmanta version specific extension
+        filename = f"{filepart}.{inmanta_version.replace('.', '_')}.cfc"
 
         # construct final path
         return os.path.join(cache_folder, filename)

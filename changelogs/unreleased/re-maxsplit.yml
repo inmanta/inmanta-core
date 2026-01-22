@@ -1,0 +1,5 @@
+description: "Addressed re.split deprecation warning"
+change-type: patch
+destination-branches:
+  - master
+  - iso8

@@ -34,7 +34,6 @@ from inmanta.protocol.exceptions import NotFound
 from inmanta.resources import Id
 from inmanta.server import SLICE_PARAM, SLICE_SERVER
 from inmanta.types import ResourceIdStr
-from inmanta.util import get_compiler_version
 from utils import (
     assert_resource_persistent_state,
     log_contains,
@@ -485,7 +484,6 @@ async def test_deploy_empty(server, client, clienthelper, environment, agent):
         resource_state={},
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert result.code == 200
@@ -557,7 +555,6 @@ async def test_deploy_to_empty(server, client, clienthelper, environment, agent,
         resource_state={},
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert result.code == 200
@@ -639,7 +636,6 @@ async def test_deploy_with_undefined(server, client, resource_container, agent, 
         resource_state=status,
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert result.code == 200
@@ -719,7 +715,6 @@ async def test_failing_deploy_no_handler(resource_container, agent, environment,
         resources=resources,
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert result.code == 200
@@ -796,7 +791,6 @@ async def test_unknown_parameters(
         resources=resources,
         unknowns=unknowns,
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert result.code == 200
@@ -1047,7 +1041,6 @@ async def test_deploy_and_events(
         resource_state=status,
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert result.code == 200
@@ -1106,7 +1099,6 @@ async def test_reload(server, client, clienthelper, environment, resource_contai
         resource_state=status,
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert result.code == 200
@@ -1258,7 +1250,6 @@ async def test_resource_status(resource_container, server, client, clienthelper,
             resource_state=resource_state,
             unknowns=[],
             version_info={},
-            compiler_version=get_compiler_version(),
             module_version_info={},
         )
         assert result.code == 200, result.result

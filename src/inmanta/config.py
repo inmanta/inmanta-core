@@ -339,7 +339,7 @@ def is_map(map_in: str | typing.Mapping[str, str]) -> typing.Mapping[str, str]:
         mappings = map_in.split(",")
 
         for mapping in mappings:
-            parts = re.split("=", mapping.strip(), 1)
+            parts = re.split("=", mapping.strip(), maxsplit=1)
             if len(parts) == 2:
                 key = parts[0].strip()
                 value = parts[1].strip()

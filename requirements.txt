@@ -1,7 +1,7 @@
 # Version pins for all project dependencies, both runtime and dev dependencies.
 # To be used as constraints file (-c), not requirements file (-r).
 asyncpg==0.31.0
-build==1.3.0
+build==1.4.0
 bumpversion==0.6.0
 click==8.3.1
 click-plugins==1.1.1.2
@@ -18,9 +18,9 @@ inmanta-dev-dependencies==2.188.0
 inmanta-module-std
 inmanta-sphinx==2.3.0
 jinja2==3.1.6
-logfire==4.16.0
+logfire==4.19.0
 more-itertools==10.8.0
-myst-parser==4.0.1
+myst-parser==5.0.0
 openapi_spec_validator==0.7.2
 opentelemetry-instrumentation-asyncpg==0.60b1
 packaging==25.0
@@ -37,7 +37,7 @@ rpdb==0.2.0
 ruamel.yaml==0.19.1
 setproctitle==1.3.7
 setuptools==80.9.0
-sphinx==8.2.3
+sphinx==9.1.0
 sphinx-argparse==0.5.2
 sphinx-autodoc-annotation==1.0-1
 sphinx-click==6.2.0
@@ -45,8 +45,8 @@ sphinxcontrib-contentui==0.2.5
 sphinxcontrib.datatemplates==0.11.0
 sphinxcontrib-redoc==1.6.0
 sphinxcontrib-serializinghtml==2.0.0
-sphinx-design==0.6.1
-Sphinx-Substitution-Extensions==2025.12.15
+sphinx-design==0.7.0
+Sphinx-Substitution-Extensions==2026.1.12
 SQLAlchemy==2.0.45
 strawberry-sqlalchemy-mapper==0.8.0
 texttable==1.7.0
