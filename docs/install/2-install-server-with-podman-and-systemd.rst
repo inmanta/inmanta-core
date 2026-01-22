@@ -1,235 +1,173 @@
-.. _install-server-with-podman:
+Container-based installation
+****************************
 
-Install Inmanta with Podman and Systemd
-***************************************
-
-This page explains how to setup an Inmanta orchestration server using Podman and Systemd.
-This guide assumes you already have `Podman <http://podman.io/>`_ installed on your machine and that you are running a Linux distribution using Systemd.
-
-.. note::
-    The instructions below will show you how to install the orchestrator, and make the orchestrator run as a non-root user on the host.  To achieve this
-    you can either follow the rootless instructions (``User setup``), running them as a simple user without elevated privileged, or as root (``Root setup``).
-    If you follow the latter, make sure to create a system user that we will use to run the orchestrator process.  We will assume in the next steps that such
-    system user is named ``inmanta``.
-
-.. warning::
-    The following instructions make some assumptions on the system used, you may have to adapt the examples depending on your environment.
-    For example the uids and gids may already be in use, selinux may be configured differently, ...
+This page describes how to install the Inmanta orchestrator using Podman and Systemd.
 
 
-System configuration
-####################
-
-1.  Make sure the user running the orchestrator is allowed to linger.  This is required to let the orchestrator run even when no active session is active for the user.
-    You can check whether lingering is enabled for the user running the orchestrator this way:
-
-    .. tab-set::
-
-        .. tab-item:: User setup
-            :sync: rootless-setup
-
-            .. code-block:: console
-
-                $ ls /var/lib/systemd/linger | grep $USER
-                inmanta
-
-        .. tab-item:: Root setup
-            :sync: rootful-setup
-
-            .. code-block:: console
-
-                # ls /var/lib/systemd/linger | grep inmanta
-                inmanta
-
-    If the name of the user used to run the orchestrator doesn't show in the output, then you need to enable lingering for that user, which can be done this way:
-
-    .. tab-set::
-
-        .. tab-item:: User setup
-            :sync: rootless-setup
-
-            .. code-block:: console
-
-                $ loginctl enable-linger
-
-        .. tab-item:: Root setup
-            :sync: rootful-setup
-
-            .. code-block:: console
-
-                # loginctl enable-linger inmanta
-
-
-Podman configuration
-####################
-
-Follow the `Podman documentation <https://github.com/containers/podman/blob/2ba36051082d7ba6ba387f4151e1cfcf338bbc4d/docs/tutorials/rootless_tutorial.md>`_ to make sure that:
-
-1.  The user that will run the orchestrator (your unprivileged user, or the ``inmanta`` system user) has a range of ``subuids`` and ``subgids`` available to use.
-    You can check it is the case running those commands:
-
-    .. tab-set::
-
-        .. tab-item:: User setup
-            :sync: rootless-setup
-
-            .. code-block:: console
-
-                $ podman unshare cat /proc/self/uid_map
-                        0       1000          1
-                        1     524288      65536
-                $ podman unshare cat /proc/self/gid_map
-                        0       1000          1
-                        1     524288      65536
-
-        .. tab-item:: Root setup
-            :sync: rootful-setup
-
-            .. code-block:: console
-
-                # sudo -i -u inmanta -- podman unshare cat /proc/self/uid_map
-                        0        976          1
-                        1    1000000      65536
-                # sudo -i -u inmanta -- podman unshare cat /proc/self/gid_map
-                        0        975          1
-                        1    1000000      65536
-
-    If it is not the case, you can set these up following the podman documentation referred above.
-
-Pull the image
-##############
+The Inmanta docker image
+########################
 
 .. only:: oss
 
-    Use ``podman pull`` to get the desired image:
-
-    .. tab-set::
-
-        .. tab-item:: User setup
-            :sync: rootless-setup
-
-            .. code-block:: console
-
-                $ podman pull ghcr.io/inmanta/orchestrator:latest
-
-        .. tab-item:: Root setup
-            :sync: rootful-setup
-
-            .. code-block:: console
-
-                # sudo -i -u inmanta -- podman pull ghcr.io/inmanta/orchestrator:latest
-
-    This command will pull the latest version of the Inmanta OSS Orchestrator image.
+   The Inmanta docker image can be found at: ``ghcr.io/inmanta/orchestrator:<version_tag>``. Replace ``<version_tag>`` with the specific version you want to run.
 
 .. only:: iso
 
-    Step 1: Log in to container registry
-    -------------------------------------
-
-    Connect to the container registry using your entitlement token.
-
-    .. tab-set::
-
-        .. tab-item:: User setup
-            :sync: rootless-setup
-
-            .. code-block:: console
-
-                $ podman login containers.inmanta.com
-                Username: containers
-                Password: <your-entitlement-token>
-
-                Login Succeeded
-
-        .. tab-item:: Root setup
-            :sync: rootful-setup
-
-            .. code-block:: console
-
-                # sudo -i -u inmanta -- podman login containers.inmanta.com
-                Username: containers
-                Password: <your-entitlement-token>
-
-                Login Succeeded
-
-    Replace ``<your-entitlement-token>`` with the entitlement token provided with your license.
+   The Inmanta docker image can be found at: ``containers.inmanta.com/containers/service-orchestrator:<version_tag>``. Replace ``<version_tag>`` with the specific version you want to run.
 
 
-    Step 2: Pull the image
-    ----------------------
+The details about the Inmanta container image can be found below:
 
-    Use ``podman pull`` to get the desired image:
+* **uid:** 997
+* **gid:** 995
+* **Default port:** 8888
+* **Main directories:**
+   * Configuration directory: ``/etc/inmanta``
+   * Log directory: ``/var/log/inmanta``
+   * State/Home directory: ``/var/lib/inmanta``
+* **Environment variables:** Each config option of the Inmanta server can also be set using an environment variable. The names of these environment variables can be found on :ref:`this page<config_reference>`.
 
-    .. tab-set::
 
-        .. tab-item:: User setup
-            :sync: rootless-setup
+.. _install-server-with-podman:
 
-            .. code-block:: console
-                :substitutions:
+Install Inmanta using Podman and Systemd
+########################################
 
-                $ podman pull containers.inmanta.com/containers/service-orchestrator:|version_major|
+This section provides an opinionated way of installing the Inmanta orchestrator using Podman and Systemd on RedHat Enterprise Linux and derivatives.
 
-        .. tab-item:: Root setup
-            :sync: rootful-setup
 
-            .. code-block:: console
-                :substitutions:
+Install Podman
+==============
 
-                # sudo -i -u inmanta -- podman pull containers.inmanta.com/containers/service-orchestrator:|version_major|
+Run the following command to install Podman:
 
-    This command will pull the latest release of the Inmanta Service Orchestrator image within this major version.
+.. code-block:: console
+
+   $ sudo dnf -y install podman
+
+
+Create a system user
+====================
+
+Create a system user that will be used to run the Inmanta container.
+
+.. code-block:: console
+
+   $ sudo useradd -r -m inmanta
+
+Enable lingering
+================
+
+Make sure the inmanta user is allowed to linger. This is required to let the orchestrator run even when no active session exists for the user.
+You can check whether lingering is enabled for the inmanta user by verifying whether there is a file named inmanta in the ``/var/lib/systemd/linger`` directory.
+
+.. code-block:: console
+
+   $ ls /var/lib/systemd/linger | grep inmanta
+   inmanta
+
+If the inmanta user doesn't show in the output, then you need to enable lingering for that user, which can be done this way:
+
+.. code-block:: console
+
+   $ sudo loginctl enable-linger inmanta
+
+
+Add subordinate ids
+===================
+
+Make sure that the Inmanta user has subordinate uids (subuids) and gids (subgids) assigned. Those are required to map the inmanta user from the host to the uids and gids used inside the container, allowing the container to run rootless. Verify the subuid and subgid assignment by inspecting the content of the ``/etc/subuid`` and ``/etc/subgid`` files:
+
+.. code-block:: console
+
+   $ cat /etc/subuid
+   rocky:100000:65536
+
+   $ cat /etc/subgid
+   rocky:100000:65536
+
+These files represent a colon-separated list of subuid and subgid assignments. The first element is the username, the second element is the first subuid/subgid in the range assigned to that user and the last element in the length of the range. If required, add a range of subuids and subgids to the inmanta user. Make sure that it has at least 65535 subuids and subgids and make sure that the new range doesn't overlap with existing ranges. Assigning subuids/subgids be done by executing the following command:
+
+.. code-block:: console
+
+   $ sudo usermod --add-subuids <first-uid-in-range>-<last-uid-in-range> --add-subgids <first-gid-in-range>-<last-gid-in-range> inmanta
+
+For the above-mentioned example we can add the range 200000-265535 for both the subuids and subgids:
+
+.. code-block:: console
+
+   $ sudo usermod --add-subuids 200000-265535 --add-subgids 200000-265535 inmanta
+
+The ``/etc/subuid`` and ``/etc/subgid`` files will now look as follows:
+
+.. code-block:: console
+
+   $ cat /etc/subuid
+   rocky:100000:65536
+   inmanta:200000:65536
+
+   $ cat /etc/subgid
+   rocky:100000:65536
+   inmanta:200000:65536
+
+Finally, you need to execute the following command to make Podman aware about the above-mentioned changes:
+
+.. code-block:: console
+
+   $ podman system migrate
+
+For more information about rootless Podman and subordinate ids consult the `Podman documentation <https://github.com/containers/podman/blob/2ba36051082d7ba6ba387f4151e1cfcf338bbc4d/docs/tutorials/rootless_tutorial.md>`_.
+
+The next steps in this procedure should be executed as the ``inmanta`` user.
+You have to login as the ``inmanta`` user directly. Logging is as a different user
+and changing to the ``inmanta`` user using the su command will make the systemctl commands
+fail.
+
+Prepare directories for bind mounts
+===================================
+
+The Inmanta orchestrator and its PostgreSQL database will rely on bind mounts for their persistent storage.
+Here we will create those directories:
+
+.. code-block:: console
+
+   $ mkdir -p /home/inmanta/mount/{db,orchestrator}
+   $ mkdir -p /home/inmanta/mount/orchestrator/{log,state,config}
 
 .. only:: iso
 
     Get the orchestrator license
-    ############################
+    ============================
 
     Together with the access to the inmanta container repo, you should also have received a license and an entitlement file.
     The orchestrator will need them in order to run properly.  We will assume that these files are named ``license.key`` and
-    ``entitlement.jwe`` and are located in the folder ``/etc/inmanta`` on the host where the containers will be deployed and
-    owned by the user that will be running the orchestrator container.
+    ``entitlement.jwe``. Put these files in the ``/home/inmanta/mount/orchestrator/config`` directory on the host.
 
 Start the server with systemd
-#############################
+=============================
 
-With the quadlet project, we can write simplified unit files for pod and containers and let podman generate the corresponding systemd services.
-To learn more about quadlet and how podman integrates nicely with systemd, please refer to `podman's documentation <https://docs.podman.io/en/latest/markdown/podman-systemd.unit.5.html>`_.
+The following steps rely on the quadlet project to generate systemd unit files from simplified, systemd-like unit files that are Podman specific. To learn more about quadlet and how podman integrates nicely with systemd, please refer to `podman's documentation <https://docs.podman.io/en/latest/markdown/podman-systemd.unit.5.html>`_.
 
 Step 1: Install the required files
 ----------------------------------
 
-We need to create three files: two containers and one network.
-The two container files are for the orchestrator an its database.
+We need to create four files: two containers, one network and one image.
+The two container files are for the orchestrator and its database.
 The network file is to setup a bridge that both containers can use to communicate with each other.
+Finally, the image file is used to store the credentials of the container registry.
 
-.. tab-set::
+Create the files in the ``/home/inmanta/.config/containers/systemd/`` folder:
 
-    .. tab-item:: User setup
-        :sync: rootless-setup
+.. code-block::
 
-        Create the files in the ``~/.config/containers/systemd/`` folder in your unprivileged user's home folder.
+    /home/inmanta/.config/containers/systemd/
+    ├── inmanta.network
+    ├── inmanta-server.image
+    ├── inmanta-db.container
+    └── inmanta-server.container
 
-        .. code-block::
 
-            .config/containers/systemd/
-            ├── inmanta-orchestrator-db.container
-            ├── inmanta-orchestrator-net.network
-            └── inmanta-orchestrator-server.container
-
-    .. tab-item:: Root setup
-        :sync: rootful-setup
-
-        Create the files in the shared ``/etc/containers/systemd/users/`` systemd folder.
-
-        .. code-block::
-
-            /etc/containers/systemd/users/
-            ├── inmanta-orchestrator-db.container
-            ├── inmanta-orchestrator-net.network
-            └── inmanta-orchestrator-server.container
-
-The file ``inmanta-orchestrator-net.network`` defines the bridge.  We keep all the defaults provided by podman and pick an explicit name for the network.
+The file ``inmanta.network`` defines the bridge.  We keep all the defaults provided by podman and pick an explicit name for the network.
 
 .. code-block:: systemd
 
@@ -238,9 +176,45 @@ The file ``inmanta-orchestrator-net.network`` defines the bridge.  We keep all t
     Documentation=https://docs.inmanta.com
 
     [Network]
-    NetworkName=inmanta-orchestrator-net
+    NetworkName=inmanta
 
-The file ``inmanta-orchestrator-db.container`` defines the database container, its storage is persisted in a volume named ``inmanta-db-data``.
+
+The file ``inmanta-server.image`` defines the details of how/when to pull the docker image for the Inmanta orchestrator.
+
+.. only:: oss
+
+    .. code-block:: systemd
+
+       [Unit]
+       Description=The Inmanta orchestrator image.
+       Documentation=https://docs.inmanta.com
+
+       [Image]
+       AllTags=false
+       Image=ghcr.io/inmanta/orchestrator:<version_tag>
+       TLSVerify=true
+       Policy=missing
+
+    Replace ``<version_tag>`` with the specific version your want to run. It's recommended to use a specific version instead of using "latest" to prevent unexpected upgrades to a newer version.
+
+.. only:: iso
+
+    .. code-block:: systemd
+
+       [Unit]
+       Description=The Inmanta orchestrator image.
+       Documentation=https://docs.inmanta.com
+
+       [Image]
+       AllTags=false
+       Creds=containers:<your-entitlement-token>
+       Image=containers.inmanta.com/containers/service-orchestrator:<version_tag>
+       TLSVerify=true
+       Policy=missing
+
+    Replace ``<your-entitlement-token>`` with the entitlement token provided with your license. Replace ``<version_tag>`` with the specific version your want to run. It's recommended to use a specific version instead of using "latest" or just the major version number to prevent unexpected upgrades to a newer version.
+
+The file ``inmanta-db.container`` defines the database container. The data is stored in the ``/home/inmanta/mount/db`` directory on the host.
 
 .. code-block:: systemd
 
@@ -251,20 +225,19 @@ The file ``inmanta-orchestrator-db.container`` defines the database container, i
     [Container]
     ContainerName=inmanta-db
     Image=docker.io/library/postgres:16
-    Network=inmanta-orchestrator-net.network
-    Environment=POSTGRES_USER=inmanta
-    Environment=POSTGRES_PASSWORD=inmanta
-    # The following mappings allow you to use bind mounts instead of volumes
-    # for persisting the storage of the orchestrator, while making sure that
-    # all the files on the host file system will be owned by the user running
-    # the container.  When using volumes it is optional.
-    # UIDMap=+999:0:1
-    # GIDMap=+999:0:1
-    Volume=inmanta-db-data:/var/lib/postgresql/data:z
+    Network=inmanta.network
+    Environment=POSTGRES_USER=<db_username>
+    Environment=POSTGRES_PASSWORD=<db_password>
+    UIDMap=+999:0:1
+    GIDMap=+999:0:1
+    Volume=/home/inmanta/mount/db:/var/lib/postgresql/data:z
     Exec=postgres -c jit=off
 
-The file ``inmanta-orchestrator-server.container`` defines the orchestrator containers, its storage is persisted in a volume named ``inmanta-server-data``
-and its logs in a volume named ``inmanta-server-logs``.
+
+Replace ``<db_username>`` and ``<db_password>`` with respectively the username and password you want to use to authenticate to the database server.
+
+The file ``inmanta-server.container`` defines the orchestrator container. Its state, log and config are persisted in
+their respective directories in ``/home/inmanta/mount/orchestrator``.
 
 .. only:: oss
 
@@ -273,28 +246,25 @@ and its logs in a volume named ``inmanta-server-logs``.
         [Unit]
         Description=Inmanta orchestrator server
         Documentation=https://docs.inmanta.com
+        After=network.target
+        Wants=inmanta-db.container
+        After=inmanta-db.container
 
         [Container]
-        ContainerName=inmanta-orchestrator
-        Image=ghcr.io/inmanta/orchestrator:latest
+        ContainerName=inmanta-server
+        Image=inmanta-server.image
         PublishPort=127.0.0.1:8888:8888
-        Network=inmanta-orchestrator-net.network
+        Network=inmanta.network
         Environment=INMANTA_DATABASE_HOST=inmanta-db
-        Environment=INMANTA_DATABASE_USERNAME=inmanta
-        Environment=INMANTA_DATABASE_PASSWORD=inmanta
-        # The following mappings allow you to use bind mounts instead of volumes
-        # for persisting the storage of the orchestrator, while making sure that
-        # all the files on the host file system will be owned by the user running
-        # the container.  When using volumes it is optional.
-        # UIDMap=+997:0:1
-        # GIDMap=+995:0:1
-        Volume=inmanta-server-data:/var/lib/inmanta:z
-        Volume=inmanta-server-logs:/var/log/inmanta:z
+        Environment=INMANTA_DATABASE_USERNAME=<db_username>
+        Environment=INMANTA_DATABASE_PASSWORD=<db_password>
+        UIDMap=+997:0:1
+        GIDMap=+995:0:1
+        Volume=/home/inmanta/mount/orchestrator/state:/var/lib/inmanta:z
+        Volume=/home/inmanta/mount/orchestrator/log:/var/log/inmanta:z
+        Volume=/home/inmanta/mount/orchestrator/config:/etc/inmanta:z
 
 .. only:: iso
-
-    This container also needs to load the license files of the orchestrator.  In this example, these are stored on the host in the ``/etc/inmanta``.
-    You can of course update these paths to match your current configuration.
 
     .. code-block:: systemd
         :substitutions:
@@ -302,73 +272,53 @@ and its logs in a volume named ``inmanta-server-logs``.
         [Unit]
         Description=Inmanta service orchestrator server
         Documentation=https://docs.inmanta.com
+        After=network.target
+        Wants=inmanta-db.container
+        After=inmanta-db.container
 
         [Container]
-        ContainerName=inmanta-orchestrator
-        Image=containers.inmanta.com/containers/service-orchestrator:|version_major|
+        ContainerName=inmanta-server
+        Image=inmanta-server.image
         PublishPort=127.0.0.1:8888:8888
-        Network=inmanta-orchestrator-net.network
+        Network=inmanta.network
         Environment=INMANTA_DATABASE_HOST=inmanta-db
-        Environment=INMANTA_DATABASE_USERNAME=inmanta
-        Environment=INMANTA_DATABASE_PASSWORD=inmanta
-        # The following mappings allow you to use bind mounts instead of volumes
-        # for persisting the storage of the orchestrator, while making sure that
-        # all the files on the host file system will be owned by the user running
-        # the container.  When using volumes it is optional.
-        # UIDMap=+997:0:1
-        # GIDMap=+995:0:1
-        Volume=inmanta-server-data:/var/lib/inmanta:z
-        Volume=inmanta-server-logs:/var/log/inmanta:z
-        Volume=/etc/inmanta/license.key:/etc/inmanta/license.key:z
-        Volume=/etc/inmanta/entitlement.jwe:/etc/inmanta/entitlement.jwe:z
+        Environment=INMANTA_DATABASE_USERNAME=<db_username>
+        Environment=INMANTA_DATABASE_PASSWORD=<db_password>
+        UIDMap=+997:0:1
+        GIDMap=+995:0:1
+        Volume=/home/inmanta/mount/orchestrator/state:/var/lib/inmanta:z
+        Volume=/home/inmanta/mount/orchestrator/log:/var/log/inmanta:z
+        Volume=/home/inmanta/mount/orchestrator/config:/etc/inmanta:z
+
+Replace ``<db_username>`` and ``<db_password>`` with the username and password chosen in the ``inmanta-db.container`` file.
+
 
 Step 2: Generate the systemd services
 -------------------------------------
 
 Once the quadlet files are in place, let podman generate the corresponding systemd unit files by calling ``daemon-reload``.
 
-.. tab-set::
+.. code-block:: console
 
-    .. tab-item:: User setup
-        :sync: rootless-setup
+    $ systemctl --user daemon-reload
 
-        .. code-block:: console
+The generated systemd files can be found in the ``/var/run/user/$(id -u)/systemd/generator`` directory.
 
-            $ systemctl --user daemon-reload
-
-    .. tab-item:: Root setup
-        :sync: rootful-setup
-
-        .. code-block:: console
-
-            # sudo -i -u inmanta -- systemctl --user daemon-reload
 
 Step 3: Start the orchestrator
 ------------------------------
 
-Then start the orchestrator database and server by running the following commands:
+Then start the orchestrator database and server by running the following command. This command will also start the database,
+because the ``inmanta-server.service`` unit defines a dependency on ``inmanta-db.service`` unit. Executing this command might
+take a while because Podman needs to download the container images from the container registry.
 
-.. tab-set::
+.. code-block:: console
 
-    .. tab-item:: User setup
-        :sync: rootless-setup
-
-        .. code-block:: console
-
-            $ systemctl --user start inmanta-orchestrator-db.service
-            $ systemctl --user start inmanta-orchestrator-server.service
-
-    .. tab-item:: Root setup
-        :sync: rootful-setup
-
-        .. code-block:: console
-
-            # sudo -i -u inmanta -- systemctl --user start inmanta-orchestrator-db.service
-            # sudo -i -u inmanta -- systemctl --user start inmanta-orchestrator-server.service
+    $ systemctl --user start inmanta-server.service
 
 You should be able to reach the orchestrator at this address: `http://127.0.0.1:8888 <http://127.0.0.1:8888>`_ on the host.
 
-(Optional) To make sure the orchestrator is started when the host is booted, add the following install section to the `.container` file:
+(Optional) To make sure the orchestrator is started when the host is booted, add the following install section to the `inmanta-server.container` file:
 
 .. code-block:: systemd
 
@@ -377,81 +327,48 @@ You should be able to reach the orchestrator at this address: `http://127.0.0.1:
 
 Then regenerate the unit files:
 
-.. tab-set::
+.. code-block:: console
 
-    .. tab-item:: User setup
-        :sync: rootless-setup
-
-        .. code-block:: console
-
-            $ systemctl --user daemon-reload
-
-    .. tab-item:: Root setup
-        :sync: rootful-setup
-
-        .. code-block:: console
-
-            # sudo -i -u inmanta -- systemctl --user daemon-reload
+    $ systemctl --user daemon-reload
 
 
 Troubleshooting
 ###############
 
-If the orchestrator doesn't seem to come up, the first thing to check are its logs.
+If the orchestrator doesn't come up, the source of the problem can be situated at the Podman level (e.g. Podman cannot pull a container image) or at the application level (e.g. the orchestrator or database application fails to start). Problems within the Podman runtime will be shown in the output of the ``systemctl --user status <unit>`` command. Execute the following command and inspect the output:
 
-In this setup, the container is managed by systemd, and the logs of the container process are saved in the journal.  To access them, simply use ``journalctl``:
+.. code-block:: console
 
-.. tab-set::
+    $ systemctl --user status inmanta-server.service
 
-    .. tab-item:: User setup
-        :sync: rootless-setup
+If the above-mentioned command doens't provide any insight into the source of the problem, consult the logs of the Inmanta server. These logs can be found in the ``/home/inmanta/mount/orchestrator/log`` directory on the host.
 
-        .. code-block:: console
 
-            $ journalctl --user-unit inmanta-orchestrator-server.service
+Listen on non-loopback interface
+################################
 
-    .. tab-item:: Root setup
-        :sync: rootful-setup
+The above-mentioned configuration exposes the orchestrator port on the loopback interface of the host machine using
+the ``PublishPort=127.0.0.1:8888:8888`` config option in the ``inmanta-server.container`` file.
+Change the ``127.0.0.1`` value of that option to a different interface if the orchestrator should be exposed
+on a different interface than the loopback interface.
 
-        .. code-block:: console
-
-            # sudo -i -u inmanta -- journalctl --user-unit inmanta-orchestrator-server.service
-
-If the user running the container can not access the journal, because it is not part of any of the authorized groups, the alternative is to check the logs directly using ``podman logs``:
-
-.. tab-set::
-
-    .. tab-item:: User setup
-        :sync: rootless-setup
-
-        .. code-block:: console
-
-            $ systemctl --user start inmanta-orchestrator-server.service; podman logs -f inmanta-orchestrator
-
-    .. tab-item:: Root setup
-        :sync: rootful-setup
-
-        .. code-block:: console
-
-            # sudo -i -u inmanta
-            $ systemctl --user start inmanta-orchestrator-server.service; podman logs -f inmanta-orchestrator
 
 Overwrite default server configuration
 ######################################
 
-If you want to change the default server configuration, the recommended way is to provide the server
-config options via environment variables as done in the above example.
-All the different options and associated environment variables are described :ref:`here<config_reference>`.
-It is also possible to provide a configuration file. Make sure to mount it in ``/etc/inmanta/inmanta.cfg``.
+If you want to change the default server configuration, you can do that either by adding a ``.cfg`` file to
+``/home/inmanta/mount/orchestrator/config/inmanta.d/`` on the host or by settings the corresponding environment variables.
+All the different configuration options and associated environment variables are described :ref:`here<config_reference>`.
 Be aware that values provided in the configuration file are overwritten by values provided in environment variables, and that
 the orchestrator image contains some `default environment variable values <https://raw.githubusercontent.com/inmanta/inmanta/refs/heads/master/docker/native_image/Dockerfile#:~:text=ENV>`_.
+
 
 Setting environment variables
 #############################
 
 The inmanta server will share any environment variable it received from podman with all its compiler and agent sub processes.  So if you need
 to make some environment variables available to the compiler or agent, you can simply tell podman to pass them on to the orchestrator container.
-In the example shown above, this can be done by using either of the ``Environment`` or ``EnvironmentFile`` options in the orchestrator container unit (``inmanta-orchestrator-server.container``).
+In the example shown above, this can be done by using either of the ``Environment`` or ``EnvironmentFile`` options in the orchestrator container unit (``inmanta-server.container``).
 More details about these options can be found in `podman's documentation <https://docs.podman.io/en/latest/markdown/podman-systemd.unit.5.html#environment>`_.
 
 .. warning::
@@ -466,31 +383,12 @@ More details about these options can be found in `podman's documentation <https:
 Accessing the orchestrator file system
 ######################################
 
-If you want to have a look inside the running orchestrator container, it contains a traditional file system, you can enter it using ``podman exec`` on the host where the container is running:
+If you want to have a look inside the running orchestrator container, it contains a traditional file system. You can enter it using ``podman exec`` on the host where the container is running:
 
-.. tab-set::
+.. code-block:: console
 
-    .. tab-item:: User setup
-        :sync: rootless-setup
+    $ podman exec -ti inmanta-server bash
 
-        .. code-block:: console
-
-            $ podman exec -ti inmanta-orchestrator bash
-
-    .. tab-item:: Root setup
-        :sync: rootful-setup
-
-        .. code-block:: console
-
-            # sudo -i -u inmanta -- podman exec -ti inmanta-orchestrator bash
-
-Mounting files/directories
-##########################
-
-The recommended way to persist the orchestrator data is to use podman volumes, as shown in the example above.
-However if you really need to mount a file or directory from the host, you can use bind mounts.
-You just need to make sure to configure podman to map your user on the host to the inmanta user inside the container.
-This can be done easily using the ``UIDMap`` and ``GIDMap`` options as shown in the example above.
 
 Log rotation
 ############

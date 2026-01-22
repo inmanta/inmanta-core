@@ -1,0 +1,8 @@
+---
+description: Improved the container-based installation documentation.
+issue-nr: 9729
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso8]
+sections:
+  minor-improvement: "{{description}}"
