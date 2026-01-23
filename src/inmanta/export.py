@@ -470,10 +470,6 @@ class Exporter:
         A resource is a map of attributes. This method validates the id
         of the resource and will add a version (if it is not set already)
         """
-        if resource.version > 0:
-            raise Exception("Versions should not be added to resources during model compilation.")
-
-        resource.set_version(self._version)
 
         if resource.id in self._resources:
             raise CompilerException("Resource %s exists more than once in the configuration model" % resource.id)

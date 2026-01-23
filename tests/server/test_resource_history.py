@@ -77,7 +77,7 @@ class ResourceFactory:
             environment=environment,
             resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),
             resource_set=self.resource_set_per_version[(environment, version)],
-            attributes={**attributes, **{"name": name}, "version": version},
+            attributes={**attributes, **{"name": name}},
             is_undefined=status is ResourceState.undefined,
         )
         count = next(self.resource_counter)

@@ -1317,7 +1317,7 @@ async def test_model_get_resources_for_version_optional_args(init_dataclasses_an
             environment=env_id,
             resource_version_id=resource_version_id,
             resource_set=resource_set,
-            attributes={"name": name, "version": version},
+            attributes={"name": name},
             is_undefined=is_undefined,
         )
         await resource.insert()

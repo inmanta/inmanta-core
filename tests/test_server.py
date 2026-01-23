@@ -309,7 +309,6 @@ async def test_resource_update(postgresql_client, client, clienthelper, server, 
                 "purged": False,
                 "reload": False,
                 "requires": [],
-                "version": version,
             }
         )
 
@@ -737,7 +736,6 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
                 "purged": False,
                 "reload": False,
                 "requires": [],
-                "version": version,
             }
         )
 
@@ -756,7 +754,6 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
             "purged": False,
             "reload": False,
             "requires": [],
-            "version": version,
         }
     )
 
@@ -1131,7 +1128,6 @@ async def test_send_deploy_done(server, client, environment, null_agent, caplog,
     attributes_r1 = {
         "name": "file1",
         "id": f"std::testing::NullResource[agent1,name=file1],v={model_version}",
-        "version": model_version,
         "purge_on_delete": False,
         "purged": True,
         "requires": [],
@@ -1485,7 +1481,6 @@ async def test_put_stale_version(client, server, environment, clienthelper, capl
             {
                 "id": f"{resource_id},v={version}",
                 "att": "val",
-                "version": version,
                 "send_event": False,
                 "purged": False,
                 "requires": [],

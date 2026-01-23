@@ -199,7 +199,6 @@ async def test_dump_db(
     resources_partial = [
         {
             "key": "key2",
-            "version": 0,
             "id": f"{rid2},v=0",
             "send_event": False,
             "purged": False,
@@ -207,7 +206,6 @@ async def test_dump_db(
         },
         {
             "key": "key2",
-            "version": 0,
             "id": f"{rid3},v=0",
             "send_event": False,
             "purged": False,
@@ -236,7 +234,6 @@ async def test_dump_db(
     resources_partial = [
         {
             "key": "key2",
-            "version": 0,
             "id": f"{rid2},v=0",
             "send_event": False,
             "purged": False,
@@ -278,7 +275,6 @@ async def test_dump_db(
             {
                 "key": "key1",
                 "value": "val1",
-                "version": version,
                 "id": f"test::Resource[agent1,key=key1],v={version}",
                 "send_event": True,
                 "purged": False,
@@ -287,7 +283,6 @@ async def test_dump_db(
             {
                 "key": "key2",
                 "value": "val2",
-                "version": version,
                 "id": f"test::Fail[agent1,key=key2],v={version}",
                 "send_event": True,
                 "purged": False,
@@ -296,7 +291,6 @@ async def test_dump_db(
             {
                 "key": "key3",
                 "value": "val3",
-                "version": version,
                 "id": f"test::Resource[agent1,key=key3],v={version}",
                 "send_event": True,
                 "purged": False,
@@ -305,7 +299,6 @@ async def test_dump_db(
             {
                 "key": "key4",
                 "value": "val4",
-                "version": version,
                 "id": f"test::Resource[agent1,key=key4],v={version}",
                 "send_event": True,
                 "purged": False,
@@ -314,7 +307,6 @@ async def test_dump_db(
             {
                 "key": "key5",
                 "value": "val5",
-                "version": version,
                 "id": f"test::Resource[agent1,key=key5],v={version}",
                 "send_event": True,
                 "purged": False,
@@ -323,7 +315,6 @@ async def test_dump_db(
             {
                 "key": "key6",
                 "value": "val6",
-                "version": version,
                 "id": f"test::Resource[agent1,key=key6],v={version}",
                 "send_event": True,
                 "purged": False,
@@ -367,7 +358,6 @@ async def test_dump_db(
             {
                 "key": "key7",
                 "value": "val7",
-                "version": version,
                 "id": f"test::Resource[agent1,key=key7],v={version}",
                 "send_event": True,
                 "purged": False,
@@ -376,7 +366,6 @@ async def test_dump_db(
             {
                 "key": "key9",
                 "value": "val9",
-                "version": version,
                 "id": f"{res_id_to_delete},v={version}",
                 "send_event": True,
                 "purged": False,
@@ -386,7 +375,6 @@ async def test_dump_db(
             {
                 "key": "key10",
                 "value": "val10",
-                "version": version,
                 "id": f"test::Resource[agent1,key=key10],v={version}",
                 "send_event": True,
                 "purged": False,
@@ -396,7 +384,6 @@ async def test_dump_db(
             {
                 "key": "key11",
                 "value": "val11",
-                "version": version,
                 "id": f"test::Resource[agent1,key=key11],v={version}",
                 "send_event": True,
                 "purged": False,
@@ -436,7 +423,6 @@ async def test_dump_db(
             {
                 "key": "key7",
                 "value": "val7",
-                "version": version,
                 "id": f"test::Resource[agent1,key=key7],v={version}",
                 "send_event": True,
                 "purged": False,
@@ -445,7 +431,6 @@ async def test_dump_db(
             {
                 "key": "key8",
                 "value": "val8",
-                "version": version,
                 "id": f"test::Resource[agent1,key=key8],v={version}",
                 "send_event": True,
                 "purged": False,

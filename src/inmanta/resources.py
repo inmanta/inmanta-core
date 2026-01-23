@@ -191,6 +191,7 @@ class ResourceMeta(type):
         return type.__new__(cls, class_name, bases, dct)
 
 
+# "version" is no longer used, but remains here for validation
 RESERVED_FOR_RESOURCE = {"id", "version", "model", "requires", "unknowns", "set_version", "clone", "is_type", "serialize"}
 
 
@@ -559,6 +560,10 @@ class Resource(metaclass=ResourceMeta):
         if extra:
             obj_map = {**obj_map, **extra}
 
+        # Does this make sense as a way to cleanup "version" from the Resource attributes?
+        if "version" in obj_map:
+            del obj_map["version"]
+
         obj = cls_resource(obj_id)
         obj.populate(obj_map, force_fields)
         return obj
@@ -584,8 +589,6 @@ class Resource(metaclass=ResourceMeta):
 
         for field in self.__class__.fields:
             setattr(self, field, None)
-
-        self.version = _id.version
 
         self._references_model: dict[uuid.UUID, references.ReferenceModel] = {}
         self._references: dict[uuid.UUID, references.Reference[references.RefValue]] = {}
@@ -665,11 +668,6 @@ class Resource(metaclass=ResourceMeta):
             # parse requires into ID's
             for require in fields["requires"]:  # type: ignore
                 self.requires.add(Id.parse_id(require))
-
-    def set_version(self, version: int) -> None:
-        """Set the version of this resource"""
-        self.version = version
-        self.id.version = version
 
     def __setattr__(self, name: str, value: Any) -> None:
         if isinstance(value, util.Unknown):
