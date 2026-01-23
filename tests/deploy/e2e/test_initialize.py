@@ -29,7 +29,6 @@ import utils
 from inmanta import config, const, data
 from inmanta.agent.agent_new import Agent
 from inmanta.deploy.state import Blocked, Compliance, DeployResult, ResourceState
-from inmanta.util import get_compiler_version
 
 
 @pytest.fixture
@@ -146,7 +145,6 @@ async def test_scheduler_initialization(
         resource_state={"test::Resource[agent1,key=key5]": const.ResourceState.undefined},
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert res.code == 200, res.result
@@ -412,7 +410,6 @@ async def test_scheduler_initialize_multiple_versions(
         resource_state={},
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert res.code == 200, res.result
@@ -438,7 +435,6 @@ async def test_scheduler_initialize_multiple_versions(
         resource_state={},
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert res.code == 200, res.result

@@ -67,7 +67,6 @@ from inmanta.parser import plyInmantaParser
 from inmanta.parser.plyInmantaParser import cache_manager
 from inmanta.server import config
 from inmanta.stable_api import stable_api
-from inmanta.util import get_compiler_version
 from inmanta.warnings import InmantaWarning
 from packaging.specifiers import SpecifierSet
 from packaging.version import Version
@@ -2885,8 +2884,8 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
         for r in requirements:
             versions = [x for x in r.specifier.filter(iterable=versions, prereleases=not release_only)]
 
-        comp_version_raw = get_compiler_version()
-        comp_version = Version(version=comp_version_raw)
+        # Compiler version was dropped so we just hardcoded the latest known compiler version
+        comp_version = Version(version="2026.1")
         return cls.__best_for_compiler_version(modulename, versions, path, comp_version)
 
     @classmethod

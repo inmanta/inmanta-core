@@ -522,7 +522,6 @@ src/inmanta/execute/dataflow/graphic.py:0: error: Missing type parameters for ge
 src/inmanta/execute/dataflow/graphic.py:0: error: Missing type parameters for generic type "ResultVariable"  [type-arg]
 src/inmanta/execute/proxy.py:0: error: "Instance" not callable  [operator]
 src/inmanta/execute/proxy.py:0: error: "Type" has no attribute "from_python"; maybe "to_python"?  [attr-defined]
-src/inmanta/execute/proxy.py:0: error: Argument 1 to "AttributeNotFound" has incompatible type "Locatable | None"; expected "Statement | None"  [arg-type]
 src/inmanta/execute/proxy.py:0: error: Argument 1 to "DynamicProxy" has incompatible type "object"; expected "Instance"  [arg-type]
 src/inmanta/execute/proxy.py:0: error: Argument 1 to "RuntimeException" has incompatible type "DictProxy"; expected "Locatable | None"  [arg-type]
 src/inmanta/execute/proxy.py:0: error: Argument 1 to "SequenceProxy" has incompatible type "object"; expected "Sequence[object]"  [arg-type]
@@ -618,7 +617,7 @@ src/inmanta/execute/scheduler.py:0: error: Module "inmanta.ast" has no attribute
 src/inmanta/export.py:0: error: Argument 1 to "parse_id" of "Id" has incompatible type "str"; expected "ResourceVersionIdStr | ResourceIdStr"  [arg-type]
 src/inmanta/export.py:0: error: Argument 1 to "set_version" of "Resource" has incompatible type "int | None"; expected "int"  [arg-type]
 src/inmanta/export.py:0: error: Argument 10 to "put_partial" has incompatible type "**dict[str, object]"; expected "PipConfig | None"  [arg-type]
-src/inmanta/export.py:0: error: Argument 11 to "put_version" has incompatible type "**dict[str, object]"; expected "PipConfig | None"  [arg-type]
+src/inmanta/export.py:0: error: Argument 10 to "put_version" has incompatible type "**dict[str, object]"; expected "PipConfig | None"  [arg-type]
 src/inmanta/export.py:0: error: Argument 2 to "add" of "Exporter" has incompatible type "tuple[str, ...]"; expected "list[str]"  [arg-type]
 src/inmanta/export.py:0: error: Argument 3 to "create_from_model" of "Resource" has incompatible type "str | tuple[object, ...] | int | float | DynamicProxy | Reference[str | float | int | bool | DataclassInstance | None] | None"; expected "DynamicProxy"  [arg-type]
 src/inmanta/export.py:0: error: Cannot infer value of type parameter "T" of "Option"  [misc]
@@ -642,13 +641,6 @@ src/inmanta/graphql/schema.py:0: error: Returning Any from function declared to 
 src/inmanta/graphql/schema.py:0: error: Type argument "Environment" of "ListConnection" must be a subtype of "Node"  [type-var]
 src/inmanta/graphql/schema.py:0: error: Type argument "Notification" of "ListConnection" must be a subtype of "Node"  [type-var]
 src/inmanta/graphql/schema.py:0: error: Type argument "Resource" of "ListConnection" must be a subtype of "Node"  [type-var]
-src/inmanta/graphql/schema.py:0: error: Value of type scalars.JSON? is not indexable  [index]
-src/inmanta/graphql/schema.py:0: error: Value of type scalars.JSON? is not indexable  [index]
-src/inmanta/graphql/schema.py:0: error: Value of type scalars.JSON? is not indexable  [index]
-src/inmanta/graphql/schema.py:0: error: Variable "strawberry.scalars.JSON" is not valid as a type  [valid-type]
-src/inmanta/graphql/schema.py:0: error: Variable "strawberry.scalars.JSON" is not valid as a type  [valid-type]
-src/inmanta/graphql/schema.py:0: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#variables-vs-type-aliases
-src/inmanta/graphql/schema.py:0: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#variables-vs-type-aliases
 src/inmanta/loader.py:0: error: Argument 1 to "getsourcefile" has incompatible type "object"; expected Module | type[Any] | MethodType | FunctionType | TracebackType | FrameType | CodeType | Callable[..., Any]  [arg-type]
 src/inmanta/loader.py:0: error: Incompatible types in assignment (expression has type "None", variable has type "PluginModuleFinder")  [assignment]
 src/inmanta/loader.py:0: error: Incompatible types in assignment (expression has type "None", variable has type "PluginModuleFinder")  [assignment]
@@ -781,7 +773,7 @@ src/inmanta/protocol/common.py:0: error: Need type annotation for "params_to_add
 src/inmanta/protocol/common.py:0: error: No overload variant of "create_model" matches argument types "str", "dict[str, tuple[object, object | None]]", "type[DateTimeNormalizerModel]"  [call-overload]
 src/inmanta/protocol/common.py:0: error: Returning Any from function declared to return "int"  [no-any-return]
 src/inmanta/protocol/common.py:0: error: Returning Any from function declared to return "type[BaseModel]"  [no-any-return]
-src/inmanta/protocol/common.py:0: error: Untyped decorator makes function "set_result" untyped  [misc]
+src/inmanta/protocol/common.py:0: error: Untyped decorator makes function "set_result" untyped  [untyped-decorator]
 src/inmanta/protocol/common.py:0: note: Possible overload variants:
 src/inmanta/protocol/common.py:0: note: def [ModelT: BaseModel] create_model(str, /, *, __config__: ConfigDict | None = ..., __doc__: str | None = ..., __base__: type[ModelT] | tuple[type[ModelT], ...], __module__: str = ..., __validators__: dict[str, Callable[..., Any]] | None = ..., __cls_kwargs__: dict[str, Any] | None = ..., __qualname__: str | None = ..., **field_definitions: Any | tuple[str, Any]) -> type[ModelT]
 src/inmanta/protocol/common.py:0: note: def create_model(str, /, *, __config__: ConfigDict | None = ..., __doc__: str | None = ..., __base__: None = ..., __module__: str = ..., __validators__: dict[str, Callable[..., Any]] | None = ..., __cls_kwargs__: dict[str, Any] | None = ..., __qualname__: str | None = ..., **field_definitions: Any | tuple[str, Any]) -> type[BaseModel]
@@ -807,7 +799,7 @@ src/inmanta/protocol/endpoints.py:0: error: Invalid index type "str" for "Mappin
 src/inmanta/protocol/endpoints.py:0: error: Missing type parameters for generic type "Callable"  [type-arg]
 src/inmanta/protocol/endpoints.py:0: error: Missing type parameters for generic type "Callable"  [type-arg]
 src/inmanta/protocol/endpoints.py:0: error: No overload variant of "__getitem__" of "Sequence" matches argument type "str"  [call-overload]
-src/inmanta/protocol/endpoints.py:0: error: Return type "Callable[..., Awaitable[ReturnTypes]]" of "__getattr__" incompatible with return type "Callable[..., ClientCall[BaseModel | UUID | bool | int | float | <6 more items> | None]]" in supertype "Client"  [override]
+src/inmanta/protocol/endpoints.py:0: error: Return type "Callable[..., Awaitable[SinglePageTypes | Sequence[BaseModel | UUID | bool | int | float | datetime | str | None]]]" of "__getattr__" incompatible with return type "Callable[..., ClientCall[BaseModel | UUID | bool | int | float | <6 more items> | None]]" in supertype "Client"  [override]
 src/inmanta/protocol/endpoints.py:0: error: Unpacking a string is disallowed  [misc]
 src/inmanta/protocol/endpoints.py:0: error: Unsupported right operand type for in ("BaseModel | UUID | int | float | datetime | Mapping[str, ArgumentTypes] | Mapping[ResourceIdStr, ArgumentTypes] | Mapping[ResourceVersionIdStr, ArgumentTypes] | Sequence[BaseModel | UUID | bool | int | float | datetime | str | None]")  [operator]
 src/inmanta/protocol/endpoints.py:0: error: Value of type "BaseModel | UUID | int | float | datetime | Mapping[str, ArgumentTypes] | Mapping[ResourceIdStr, ArgumentTypes] | Mapping[ResourceVersionIdStr, ArgumentTypes] | Sequence[BaseModel | UUID | bool | int | float | datetime | str | None]" is not indexable  [index]
@@ -897,6 +889,7 @@ src/inmanta/protocol/methods.py:0: error: Missing type parameters for generic ty
 src/inmanta/protocol/methods.py:0: note: Use "-> None" if function does not return a value
 src/inmanta/protocol/methods.py:0: note: Use "-> None" if function does not return a value
 src/inmanta/protocol/methods.py:0: note: Use "-> None" if function does not return a value
+src/inmanta/protocol/methods_v2.py:0: error: Missing return statement  [empty-body]
 src/inmanta/protocol/methods_v2.py:0: error: Missing return statement  [empty-body]
 src/inmanta/protocol/methods_v2.py:0: error: Missing return statement  [empty-body]
 src/inmanta/protocol/methods_v2.py:0: error: Missing return statement  [empty-body]

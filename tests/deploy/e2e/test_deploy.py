@@ -27,13 +27,13 @@ import pytest
 from inmanta import config, const, data, execute
 from inmanta.config import Config
 from inmanta.data import SERVER_COMPILE
-from inmanta.data.model import ReleasedResourceState, SchedulerStatusReport
+from inmanta.data.model import AttributeStateChange, ReleasedResourceState, ResourceComplianceDiff, SchedulerStatusReport
 from inmanta.deploy.state import Blocked, Compliance, DeployResult, ResourceState
 from inmanta.deploy.work import TaskPriority
+from inmanta.protocol.exceptions import NotFound
 from inmanta.resources import Id
 from inmanta.server import SLICE_PARAM, SLICE_SERVER
 from inmanta.types import ResourceIdStr
-from inmanta.util import get_compiler_version
 from utils import (
     assert_resource_persistent_state,
     log_contains,
@@ -484,7 +484,6 @@ async def test_deploy_empty(server, client, clienthelper, environment, agent):
         resource_state={},
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert result.code == 200
@@ -556,7 +555,6 @@ async def test_deploy_to_empty(server, client, clienthelper, environment, agent,
         resource_state={},
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert result.code == 200
@@ -638,7 +636,6 @@ async def test_deploy_with_undefined(server, client, resource_container, agent, 
         resource_state=status,
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert result.code == 200
@@ -718,7 +715,6 @@ async def test_failing_deploy_no_handler(resource_container, agent, environment,
         resources=resources,
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert result.code == 200
@@ -795,7 +791,6 @@ async def test_unknown_parameters(
         resources=resources,
         unknowns=unknowns,
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert result.code == 200
@@ -1046,7 +1041,6 @@ async def test_deploy_and_events(
         resource_state=status,
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert result.code == 200
@@ -1105,7 +1099,6 @@ async def test_reload(server, client, clienthelper, environment, resource_contai
         resource_state=status,
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert result.code == 200
@@ -1257,7 +1250,6 @@ async def test_resource_status(resource_container, server, client, clienthelper,
             resource_state=resource_state,
             unknowns=[],
             version_info={},
-            compiler_version=get_compiler_version(),
             module_version_info={},
         )
         assert result.code == 200, result.result
@@ -1861,6 +1853,171 @@ async def test_resource_action_of_non_compliant_resource(resource_container, ser
     # Start, Reported non-compliant, End
     assert len(log["messages"]) == 3
     assert log["messages"][1]["msg"] == "Resource test::Resource[agent1,key=key] was marked as non-compliant."
+
+
+async def test_non_compliant_diff(resource_container, server, client, clienthelper, environment, agent):
+    """
+    Asserts that the diff for a resource is correctly updated when we reach the non-compliant state
+    """
+
+    version = await clienthelper.get_version()
+
+    rid1 = ResourceIdStr("test::Resource[agent1,key=key]")
+    rid2 = ResourceIdStr("test::Resource[agent1,key=key2]")
+    env_id = uuid.UUID(environment)
+
+    # Set rid1 to "actual_value"
+    resources = [
+        {
+            "key": "key",
+            "value": "actual_value",
+            "id": f"{rid1},v={version}",
+            "requires": [],
+            "purged": False,
+            "send_event": False,
+            "receive_events": False,
+        },
+        {
+            "key": "key2",
+            "value": "actual_value",
+            "id": f"{rid2},v={version}",
+            "requires": [],
+            "purged": False,
+            "send_event": False,
+            "receive_events": False,
+        },
+    ]
+    await clienthelper.set_auto_deploy(True)
+    await clienthelper.put_version_simple(resources, version, wait_for_released=True)
+    await clienthelper.wait_for_deployed(version=version)
+
+    rps = await data.ResourcePersistentState.get_one(environment=environment, resource_id=rid1)
+    assert rps.non_compliant_diff is None
+    assert rps.last_non_deploying_status == const.NonDeployingResourceState.deployed
+
+    rps2 = await data.ResourcePersistentState.get_one(environment=environment, resource_id=rid2)
+    assert rps.non_compliant_diff is None
+    assert rps.last_non_deploying_status == const.NonDeployingResourceState.deployed
+
+    report = await data.ResourcePersistentState.get_compliance_report(env=env_id, resource_ids=[rid1, rid2])
+    assert report[rid1] == ResourceComplianceDiff(
+        report_only=False,
+        attribute_diff=None,
+        compliance=Compliance.COMPLIANT,
+        last_execution_result=DeployResult.DEPLOYED,
+        last_executed_at=rps.last_deploy,
+    )
+
+    assert report[rid2] == ResourceComplianceDiff(
+        report_only=False,
+        attribute_diff=None,
+        compliance=Compliance.COMPLIANT,
+        last_execution_result=DeployResult.DEPLOYED,
+        last_executed_at=rps2.last_deploy,
+    )
+
+    # Make rid1 reporting and change the desired state
+    version = await clienthelper.get_version()
+    resources = [
+        {
+            "key": "key",
+            "value": "diff_value",
+            "id": f"{rid1},v={version}",
+            "requires": [],
+            "purged": False,
+            "send_event": False,
+            "receive_events": False,
+            "report_only": True,
+        },
+    ]
+    await clienthelper.put_version_simple(resources, version, wait_for_released=True)
+    await clienthelper.wait_for_deployed(version=version)
+
+    # non_compliant diff got populated in the rps table
+    rps = await data.ResourcePersistentState.get_one(environment=environment, resource_id=rid1)
+    assert rps.non_compliant_diff is not None
+    assert rps.last_non_deploying_status == const.NonDeployingResourceState.non_compliant
+
+    non_compliant_diff_id = rps.non_compliant_diff
+
+    # Assert that we return a not found if provided a rid that is not present on the latest processed version
+    expected_exception_output = "Unable to find the following resource ids in the active version: {'%s'}" % rid2
+    with pytest.raises(NotFound) as exc_info:
+        await data.ResourcePersistentState.get_compliance_report(env=env_id, resource_ids=[rid2])
+    assert expected_exception_output in exc_info.value.log_message
+    with pytest.raises(NotFound):
+        await data.ResourcePersistentState.get_compliance_report(env=env_id, resource_ids=[rid1, rid2])
+    assert expected_exception_output in exc_info.value.log_message
+
+    report = await data.ResourcePersistentState.get_compliance_report(env=env_id, resource_ids=[rid1])
+    assert report[rid1] == ResourceComplianceDiff(
+        report_only=True,
+        attribute_diff={"value": AttributeStateChange(current="actual_value", desired="diff_value")},
+        compliance=Compliance.NON_COMPLIANT,
+        last_execution_result=DeployResult.DEPLOYED,
+        last_executed_at=rps.last_deploy,
+    )
+
+    # Make report succeed again
+    version = await clienthelper.get_version()
+    resources = [
+        {
+            "key": "key",
+            "value": "actual_value",
+            "id": f"{rid1},v={version}",
+            "requires": [],
+            "purged": False,
+            "send_event": False,
+            "receive_events": False,
+            "report_only": True,
+        }
+    ]
+    await clienthelper.put_version_simple(resources, version, wait_for_released=True)
+    await clienthelper.wait_for_deployed(version=version)
+
+    rps = await data.ResourcePersistentState.get_one(environment=environment, resource_id=rid1)
+    assert rps.non_compliant_diff is None
+    assert rps.last_non_deploying_status == const.NonDeployingResourceState.deployed
+
+    report = await data.ResourcePersistentState.get_compliance_report(env=env_id, resource_ids=[rid1])
+    assert report[rid1] == ResourceComplianceDiff(
+        report_only=True,
+        attribute_diff=None,
+        compliance=Compliance.COMPLIANT,
+        last_execution_result=DeployResult.DEPLOYED,
+        last_executed_at=rps.last_deploy,
+    )
+
+    # Make report fail again
+    version = await clienthelper.get_version()
+    resources = [
+        {
+            "key": "key",
+            "value": "another_diff_value",
+            "id": f"{rid1},v={version}",
+            "requires": [],
+            "purged": False,
+            "send_event": False,
+            "receive_events": False,
+            "report_only": True,
+        }
+    ]
+    await clienthelper.put_version_simple(resources, version, wait_for_released=True)
+    await clienthelper.wait_for_deployed(version=version)
+
+    rps = await data.ResourcePersistentState.get_one(environment=environment, resource_id=rid1)
+    assert rps.non_compliant_diff is not None
+    assert rps.last_non_deploying_status == const.NonDeployingResourceState.non_compliant
+    assert rps.non_compliant_diff != non_compliant_diff_id
+
+    report = await data.ResourcePersistentState.get_compliance_report(env=env_id, resource_ids=[rid1])
+    assert report[rid1] == ResourceComplianceDiff(
+        report_only=True,
+        attribute_diff={"value": AttributeStateChange(current="actual_value", desired="another_diff_value")},
+        compliance=Compliance.NON_COMPLIANT,
+        last_execution_result=DeployResult.DEPLOYED,
+        last_executed_at=rps.last_deploy,
+    )
 
 
 async def test_event_recovery_reporting(resource_container, server, client, clienthelper, environment, agent):

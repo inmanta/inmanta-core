@@ -43,6 +43,7 @@ from inmanta.data.model import (
     ReleasedResourceDetails,
     Resource,
     ResourceAction,
+    ResourceComplianceDiff,
     ResourceHistory,
     ResourceLog,
     VersionedResource,
@@ -147,6 +148,11 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
     async def start(self) -> None:
         self.schedule(
             data.ResourceAction.purge_logs, opt.server_purge_resource_action_logs_interval.get(), cancel_on_stop=False
+        )
+        self.schedule(
+            data.ResourcePersistentState.purge_old_diffs,
+            opt.server_purge_resource_action_logs_interval.get(),
+            cancel_on_stop=False,
         )
         await super().start()
 
@@ -551,3 +557,12 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
                 AND dr.discovered_resource_id=ANY($2)
             """
             await connection.execute(query, env.id, discovered_resource_ids)
+
+    @handle(methods_v2.get_compliance_report, env="tid")
+    async def get_compliance_report(
+        self, env: data.Environment, resource_ids: typing.Sequence[ResourceIdStr]
+    ) -> dict[ResourceIdStr, ResourceComplianceDiff]:
+        """
+        Get the compliance status report for a list of resources.
+        """
+        return await data.ResourcePersistentState.get_compliance_report(env.id, resource_ids)

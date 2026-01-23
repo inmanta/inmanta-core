@@ -16,8 +16,9 @@ updates:
         - "opentelemetry*"
     sphinx:
       patterns:
-        - "sphinx"
         - "furo"
+        - "myst-parser"
+        - "sphinx"
   cooldown:
     include:
       # these two packages are tied together very strongly, but there is an occasional small delay between their releases,
@@ -53,8 +54,9 @@ updates:
         - "opentelemetry*"
     sphinx:
       patterns:
-        - "sphinx"
         - "furo"
+        - "myst-parser"
+        - "sphinx"
   cooldown:
     include:
       # these two packages are tied together very strongly, but there is an occasional small delay between their releases,

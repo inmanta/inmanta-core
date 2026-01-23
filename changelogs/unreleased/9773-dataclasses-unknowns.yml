@@ -1,0 +1,8 @@
+description: "Reject Unknown values in Python dataclasses on the plugin boundary"
+issue-nr: 9773
+sections:
+  bugfix: "Compiler: {{description}}"
+  upgrade-note: "Compiler: Unknown values are no longer allowed in Python dataclasses. This is unlikely to affect existing models."
+change-type: major
+destination-branches:
+  - master

@@ -68,7 +68,7 @@ from inmanta.server.config import AuthorizationProviderName, server_auth_method
 from inmanta.server.extensions import ProductMetadata
 from inmanta.server.services.compilerservice import CompilerService
 from inmanta.types import Apireturn, ResourceIdStr
-from inmanta.util import get_compiler_version, hash_file
+from inmanta.util import hash_file
 from libpip2pi.commands import dir2pi
 
 T = TypeVar("T")
@@ -542,7 +542,6 @@ class ClientHelper:
             resources=resources,
             unknowns=[],
             version_info={},
-            compiler_version=get_compiler_version(),
             module_version_info={},
         )
         assert res.code == 200, res.result
@@ -988,7 +987,6 @@ async def _deploy_resources(client, environment, resources, version: int, push, 
         resources=resources,
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert result.code == 200

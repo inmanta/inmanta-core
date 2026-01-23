@@ -96,19 +96,47 @@ The service inventory provides an inventory with all service instances per servi
 provides operations to create and delete the service instance and to update the attributes of the service instance.
 Additionally, it governs the lifecycle of the instance as defined in the lifecycle registered in the service catalog.
 
+The full swagger api for all available services is served at ``http://<host>:<port>/lsm/v1/service_catalog_docs?environment=<env_id>``.
+The following operations are available for each service:
+
+
 CRUD operations
 ===============
 
 The service inventory exposes CRUD operations on service instances in the inventory through a RESTful API:
 
-- ``GET /lsm/v1/service_inventory/<service_entity>``: List all instances of a service entity
-- ``POST /lsm/v1/service_inventory/<service_entity>``: Create a new service entity
-- ``GET /lsm/v1/service_inventory/<service_entity>/<service_id>``: Get the current state of the service instance with id ``service_id``
-- ``PATCH /lsm/v1/service_inventory/<service_entity>/<service_id>``: Update the attributes of the service instance with id ``service_id``
-- ``DELETE /lsm/v1/service_inventory/<service_entity>/<service_id>``: Delete the service instance with id ``service_id``
-- ``POST /lsm/v1/services/<service_type>/<service_id>/state``: Request a state transfer for the service instance with id ``service_id``
+- ``POST /lsm/v1/service_inventory/<service_entity>``: Create a new service instance of type <service_entity>.
+- ``GET /lsm/v1/service_inventory/<service_entity>``: List all instances of a service entity.
+- ``GET /lsm/v1/service_inventory/<service_entity>/<service_id>``: Get the service instance with id ``service_id``.
+- ``PATCH /lsm/v1/service_inventory/<service_entity>/<service_id>``: Update the attributes of the service instance with id ``service_id`` (v1 endpoint, requires providing the full tree of attributes (i.e. including those that didn't change)).
+- ``PATCH /lsm/v2/service_inventory/<service_entity>/<service_id>``: Update the attributes of the service instance with id ``service_id`` (v2 endpoint with finer control (i.e. allows updating subtrees of attributes at the given :ref:`dictpath expressions<dict_path>`)).
+- ``POST /lsm/v1/service_inventory/<service_type>/<service_id>/state``: Request a state transfer for the service instance with id ``service_id``.
+- ``DELETE /lsm/v1/service_inventory/<service_entity>/<service_id>``: Delete the service instance with id ``service_id``.
 
 The state machine attached to the lifecycle will determine whether the API call is successful or not.
+
+
+Configuration operations
+========================
+
+The following endpoints set or retrieve the config of a given service instance:
+
+
+- ``POST /lsm/v1/service_inventory/<service_entity>/<service_id>/config``: Set the config of the service instance with id ``service_id``.
+- ``GET /lsm/v1/service_inventory/<service_entity>/<service_id>/config``: Get the config of the service instance with id ``service_id``.
+
+
+Status operations
+=================
+
+The following endpoints give information about the status of a given service instance:
+
+
+- ``GET /lsm/v1/service_inventory/<service_entity>/<service_id>/log``: Get a list of all log records for a certain service instance.
+- ``GET /lsm/v1/service_inventory/<service_entity>/<service_id>/events``: Get a list of all events for a certain service instance.
+- ``GET /lsm/v1/service_inventory/<service_entity>/<service_id>/resources``: Get the list of resources that determine the state of the service.
+- ``GET /lsm/v1/service_inventory/<service_entity>/<service_id>/diagnose``: Diagnose rejection or failure of a service entity.
+
 
 ..
     TODO: Three set of attributes

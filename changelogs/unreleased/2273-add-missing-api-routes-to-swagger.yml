@@ -1,0 +1,8 @@
+description: >
+    Add `document_in_service_swagger` parameter to the `typedmethod` decorator. This allows the
+    lsm extension to register the method and document it in the service swagger served by the service_catalog_docs
+    endpoint.
+issue-nr: 2273
+issue-repo: inmanta-lsm
+change-type: patch
+destination-branches: [master, iso8]

@@ -39,12 +39,12 @@ import warnings
 from abc import ABC, abstractmethod
 from asyncio import AbstractEventLoop, CancelledError, Lock, Task, ensure_future, gather
 from collections import abc, defaultdict
-from collections.abc import Awaitable, Coroutine, Iterable, Iterator
+from collections.abc import Awaitable, Callable, Collection, Coroutine, Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from logging import Logger
 from types import TracebackType
-from typing import TYPE_CHECKING, BinaryIO, Callable, Generic, Mapping, Optional, Sequence, TypeVar, Union
+from typing import TYPE_CHECKING, BinaryIO, Generic, Optional, TypeVar, Union
 
 import asyncpg
 import click
@@ -56,7 +56,7 @@ import packaging.requirements
 import packaging.utils
 import pydantic_core
 from crontab import CronTab
-from inmanta import COMPILER_VERSION, const, types
+from inmanta import const, types
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ReturnTypes
 from packaging.utils import NormalizedName
@@ -70,10 +70,6 @@ HASH_ROUNDS = 100000
 
 T = TypeVar("T")
 S = TypeVar("S")
-
-
-def get_compiler_version() -> str:
-    return COMPILER_VERSION
 
 
 def groupby(mylist: list[T], f: Callable[[T], S]) -> Iterator[tuple[S, Iterator[T]]]:
@@ -703,7 +699,7 @@ class CycleException(Exception):
                 self.done = True
 
 
-def stable_depth_first(nodes: list[str], edges: dict[str, list[str]]) -> list[str]:
+def stable_depth_first(nodes: Collection[str], edges: Mapping[str, Collection[str]]) -> list[str]:
     """Creates a linear sequence based on a set of "comes after" edges, same graph yields the same solution,
     independent of order given to this function"""
     nodes = sorted(nodes)

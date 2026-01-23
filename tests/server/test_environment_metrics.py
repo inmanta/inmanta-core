@@ -45,7 +45,7 @@ from inmanta.server.services.environment_metrics_service import (
     ResourceCountMetricsCollector,
 )
 from inmanta.types import ResourceIdStr
-from inmanta.util import get_compiler_version, make_attribute_hash, parse_timestamp
+from inmanta.util import make_attribute_hash, parse_timestamp
 from utils import ClientHelper, wait_until_version_is_released
 
 env_uuid = uuid.uuid4()
@@ -392,7 +392,6 @@ async def test_resource_count_metric(clienthelper, client, agent):
         resources=resources_env1_v1,
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert result.code == 200
@@ -430,7 +429,6 @@ async def test_resource_count_metric(clienthelper, client, agent):
         resources=resources_env1_v2,
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert result.code == 200
@@ -458,7 +456,6 @@ async def test_resource_count_metric(clienthelper, client, agent):
         resources=resources_env2,
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert result.code == 200
@@ -582,7 +579,6 @@ async def test_resource_count_metric(clienthelper, client, agent):
         resources=resources_env1_v3,
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert result.code == 200
@@ -650,7 +646,6 @@ async def test_resource_count_metric_released(client, server, agent, clienthelpe
         resources=resources_env1_v1,
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert result.code == 200
@@ -672,7 +667,6 @@ async def test_resource_count_metric_released(client, server, agent, clienthelpe
         resources=resources_env1_v2,
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert result.code == 200

@@ -21,6 +21,7 @@ import dataclasses
 import datetime
 import enum
 import itertools
+import typing
 import uuid
 from collections import defaultdict
 from collections.abc import Mapping, Set
@@ -117,6 +118,36 @@ class DeployResult(StrEnum):
                 return DeployResult.FAILED
             case _ as resource_state:
                 raise Exception(f"Unexpected handler_resource_state {resource_state.name}")
+
+
+@typing.overload
+def get_compliance_status(
+    is_orphan: typing.Literal[False],
+    is_undefined: bool,
+    last_deployed_attribute_hash: str | None,
+    current_intent_attribute_hash: str | None,
+    last_deploy_compliant: bool | None,
+) -> Compliance: ...
+
+
+@typing.overload
+def get_compliance_status(
+    is_orphan: typing.Literal[True],
+    is_undefined: bool,
+    last_deployed_attribute_hash: str | None,
+    current_intent_attribute_hash: str | None,
+    last_deploy_compliant: bool | None,
+) -> None: ...
+
+
+@typing.overload
+def get_compliance_status(
+    is_orphan: bool,
+    is_undefined: bool,
+    last_deployed_attribute_hash: str | None,
+    current_intent_attribute_hash: str | None,
+    last_deploy_compliant: bool | None,
+) -> Compliance | None: ...
 
 
 def get_compliance_status(

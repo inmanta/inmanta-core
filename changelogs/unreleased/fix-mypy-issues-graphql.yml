@@ -1,0 +1,4 @@
+---
+description: "Fix mypy issues on graphql"
+change-type: patch
+destination-branches: [master]
