@@ -1,0 +1,5 @@
+description: Fixed issue with mypy plugin
+change-type: patch
+destination-branches:
+  - master
+  - iso8
