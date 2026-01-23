@@ -1,0 +1,8 @@
+---
+description: "Remove version and set_version() from inmanta.resources.Resource"
+issue-nr: 9588
+issue-repo: inmanta-core
+change-type: major
+destination-branches: [master]
+sections:
+  deprecation-note: "{{description}}"
