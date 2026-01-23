@@ -1782,7 +1782,6 @@ async def test_put_partial_with_resource_state_set(server, client, environment, 
         {
             "key": "key5",
             "value": "200",
-            "version": 0,
             "id": "test::Resource[agent1,key=key5],v=0",
             "send_event": False,
             "purged": False,
@@ -1791,7 +1790,6 @@ async def test_put_partial_with_resource_state_set(server, client, environment, 
         {
             "key": "key6",
             "value": "200",
-            "version": 0,
             "id": "test::Resource[agent1,key=key6],v=0",
             "send_event": False,
             "purged": False,
@@ -1800,7 +1798,6 @@ async def test_put_partial_with_resource_state_set(server, client, environment, 
         {
             "key": "key7",
             "value": "200",
-            "version": 0,
             "id": "test::Resource[agent1,key=key7],v=0",
             "send_event": False,
             "purged": False,
@@ -1859,7 +1856,6 @@ async def test_put_partial_with_undeployable_resources(server, client, environme
     resources = [
         {
             "key": "key1",
-            "version": version,
             "id": f"test::Resource[agent1,key=key1],v={version}",
             "send_event": False,
             "purged": False,
@@ -1867,7 +1863,6 @@ async def test_put_partial_with_undeployable_resources(server, client, environme
         },
         {
             "key": "key2",
-            "version": version,
             "id": f"test::Resource[agent1,key=key2],v={version}",
             "send_event": False,
             "purged": False,
@@ -1875,7 +1870,6 @@ async def test_put_partial_with_undeployable_resources(server, client, environme
         },
         {
             "key": "key3",
-            "version": version,
             "id": f"test::Resource[agent1,key=key3],v={version}",
             "send_event": False,
             "purged": False,
@@ -1883,7 +1877,6 @@ async def test_put_partial_with_undeployable_resources(server, client, environme
         },
         {
             "key": "key4",
-            "version": version,
             "id": f"test::Resource[agent1,key=key4],v={version}",
             "send_event": False,
             "purged": False,
@@ -1891,7 +1884,6 @@ async def test_put_partial_with_undeployable_resources(server, client, environme
         },
         {
             "key": "key91",
-            "version": version,
             "id": f"test::Resource[agent1,key=key91],v={version}",
             "send_event": False,
             "purged": False,
@@ -1899,7 +1891,6 @@ async def test_put_partial_with_undeployable_resources(server, client, environme
         },
         {
             "key": "key92",
-            "version": version,
             "id": f"test::Resource[agent1,key=key92],v={version}",
             "send_event": False,
             "purged": False,
@@ -1945,7 +1936,6 @@ async def test_put_partial_with_undeployable_resources(server, client, environme
     resources_partial = [
         {
             "key": "key1",
-            "version": 0,
             "id": "test::Resource[agent1,key=key1],v=0",
             "send_event": False,
             "purged": False,
@@ -1953,7 +1943,6 @@ async def test_put_partial_with_undeployable_resources(server, client, environme
         },
         {
             "key": "key2",
-            "version": 0,
             "id": "test::Resource[agent1,key=key2],v=0",
             "send_event": False,
             "purged": False,
@@ -1961,7 +1950,6 @@ async def test_put_partial_with_undeployable_resources(server, client, environme
         },
         {
             "key": "key5",
-            "version": 0,
             "id": "test::Resource[agent1,key=key5],v=0",
             "send_event": False,
             "purged": False,
@@ -1969,7 +1957,6 @@ async def test_put_partial_with_undeployable_resources(server, client, environme
         },
         {
             "key": "key6",
-            "version": 0,
             "id": "test::Resource[agent1,key=key6],v=0",
             "send_event": False,
             "purged": False,
@@ -1977,7 +1964,6 @@ async def test_put_partial_with_undeployable_resources(server, client, environme
         },
         {
             "key": "key91",
-            "version": 0,
             "id": "test::Resource[agent1,key=key91],v=0",
             "send_event": False,
             "purged": False,
@@ -2031,7 +2017,6 @@ async def test_put_partial_with_unknowns(server, client, environment, clienthelp
     resources = [
         {
             "key": f"key{i}",
-            "version": version,
             "id": f"test::Resource[agent1,key=key{i}],v={version}",
             "send_event": False,
             "purged": False,
@@ -2078,7 +2063,6 @@ async def test_put_partial_with_unknowns(server, client, environment, clienthelp
     resources_partial = [
         {
             "key": "key6",
-            "version": 0,
             "id": "test::Resource[agent1,key=key6],v=0",
             "send_event": False,
             "purged": False,
@@ -2136,7 +2120,6 @@ async def test_put_partial_dep_on_specific_set_removed(server, client, environme
     resources = [
         {
             "key": "key1",
-            "version": version,
             "id": f"{rid1},v={version}",
             "send_event": False,
             "purged": False,
@@ -2144,7 +2127,6 @@ async def test_put_partial_dep_on_specific_set_removed(server, client, environme
         },
         {
             "key": "key2",
-            "version": version,
             "id": f"{rid2},v={version}",
             "send_event": False,
             "purged": False,
@@ -2152,7 +2134,6 @@ async def test_put_partial_dep_on_specific_set_removed(server, client, environme
         },
         {
             "key": "key3",
-            "version": version,
             "id": f"{rid3},v={version}",
             "send_event": False,
             "purged": False,
@@ -2181,7 +2162,6 @@ async def test_put_partial_dep_on_specific_set_removed(server, client, environme
     resources_partial = [
         {
             "key": "key2",
-            "version": 0,
             "id": f"{rid2},v=0",
             "send_event": False,
             "purged": False,
@@ -2224,7 +2204,6 @@ async def test_put_partial_dep_on_non_existing_resource(server, client, environm
     resources = [
         {
             "key": "key1",
-            "version": version,
             "id": f"{rid1},v={version}",
             "send_event": False,
             "purged": False,
@@ -2232,7 +2211,6 @@ async def test_put_partial_dep_on_non_existing_resource(server, client, environm
         },
         {
             "key": "key2",
-            "version": version,
             "id": f"{rid2},v={version}",
             "send_event": False,
             "purged": False,
@@ -2261,7 +2239,6 @@ async def test_put_partial_dep_on_non_existing_resource(server, client, environm
     resources_partial = [
         {
             "key": "key1",
-            "version": 0,
             "id": f"{rid1},v=0",
             "send_event": False,
             "purged": False,
@@ -2269,7 +2246,6 @@ async def test_put_partial_dep_on_non_existing_resource(server, client, environm
         },
         {
             "key": "key2",
-            "version": 0,
             "id": f"{rid2},v=0",
             "send_event": False,
             "purged": False,
@@ -2277,7 +2253,6 @@ async def test_put_partial_dep_on_non_existing_resource(server, client, environm
         },
         {
             "key": "key3",
-            "version": 0,
             "id": f"{rid3},v=0",
             "send_event": False,
             "purged": False,
@@ -2314,7 +2289,6 @@ async def test_put_partial_inter_set_dependency(server, client, environment, cli
     resources = [
         {
             "key": "key1",
-            "version": version,
             "id": f"{rid1},v={version}",
             "send_event": False,
             "purged": False,
@@ -2322,7 +2296,6 @@ async def test_put_partial_inter_set_dependency(server, client, environment, cli
         },
         {
             "key": "key2",
-            "version": version,
             "id": f"{rid2},v={version}",
             "send_event": False,
             "purged": False,
@@ -2350,7 +2323,6 @@ async def test_put_partial_inter_set_dependency(server, client, environment, cli
     resources_partial = [
         {
             "key": "key2",
-            "version": 0,
             "id": f"{rid2},v=0",
             "send_event": False,
             "purged": False,
@@ -2395,7 +2367,6 @@ async def test_is_suitable_for_partial_compiles(server, client, environment, cli
         resources = [
             {
                 "key": "shared_resource",
-                "version": version,
                 "id": f"{rid_shared},v={version}",
                 "send_event": False,
                 "purged": False,
@@ -2404,7 +2375,6 @@ async def test_is_suitable_for_partial_compiles(server, client, environment, cli
             },
             {
                 "key": "resource_in_set1",
-                "version": version,
                 "id": f"{rid_set1},v={version}",
                 "send_event": False,
                 "purged": False,
@@ -2413,7 +2383,6 @@ async def test_is_suitable_for_partial_compiles(server, client, environment, cli
             },
             {
                 "key": "resource_in_set2",
-                "version": version,
                 "id": f"{rid_set2},v={version}",
                 "send_event": False,
                 "purged": False,
@@ -2452,7 +2421,6 @@ async def test_is_suitable_for_partial_compiles(server, client, environment, cli
         resources_partial = [
             {
                 "key": "updated_resource_in_set2",
-                "version": 0,
                 "id": f"{rid_set1},v=0",
                 "send_event": False,
                 "purged": False,

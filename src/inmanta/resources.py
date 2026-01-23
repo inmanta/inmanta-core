@@ -560,7 +560,6 @@ class Resource(metaclass=ResourceMeta):
         if extra:
             obj_map = {**obj_map, **extra}
 
-        # Does this make sense as a way to cleanup "version" from the Resource attributes?
         if "version" in obj_map:
             del obj_map["version"]
 

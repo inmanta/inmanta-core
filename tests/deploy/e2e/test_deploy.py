@@ -141,6 +141,8 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
         """
         version = await clienthelper.get_version()
         resources = []
+        # Asserts that id works with and without version information
+        # Even if a dependent resource uses rvid in its requires
         for agent in ["agent1", "agent2", "agent3"]:
             resources.extend(
                 [
@@ -156,8 +158,8 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
                     {
                         "key": "key2",
                         "value": "value",
-                        "id": "test::Resourcex[%s,key=key2]" % agent,
-                        "requires": ["test::Resourcex[%s,key=key1]" % agent],
+                        "id": "test::Resourcex[%s,key=key2],v=%d" % (agent, version),
+                        "requires": ["test::Resourcex[%s,key=key1],v=%d" % (agent, version)],
                         "purged": not is_different,
                         "send_event": False,
                         "attributes": {"A": "B"},
