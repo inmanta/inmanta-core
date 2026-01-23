@@ -191,7 +191,7 @@ class ResourceMeta(type):
         return type.__new__(cls, class_name, bases, dct)
 
 
-# "version" is no longer used, but remains here for validation
+# "version" is no longer used, but remains here because older clients might still set the version field.
 RESERVED_FOR_RESOURCE = {"id", "version", "model", "requires", "unknowns", "set_version", "clone", "is_type", "serialize"}
 
 
