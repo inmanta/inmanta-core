@@ -525,4 +525,4 @@ async def test_history_not_continuous_versions(server, client, environment):
     result = await client.resource_history(environment, "std::testing::NullResource[internal,name=file1]")
     assert result.code == 200
     assert len(result.result["data"]) == 1
-    assert result.result["data"][0]["attributes"] == {"key1": "val1", "name": "file1", "version": 1}
+    assert result.result["data"][0]["attributes"] == {"key1": "val1", "name": "file1"}
