@@ -1130,6 +1130,8 @@ async def test_put_partial_mixed_scenario(server, client, environment, clienthel
             "key": "key1",
             "value": "1",
             "id": f"test::Resource[agent1,key=key1],v={version}",
+            # Make sure we still support having version on the attributes
+            "version": version,
             "send_event": False,
             "purged": False,
             "requires": [],
@@ -1138,6 +1140,8 @@ async def test_put_partial_mixed_scenario(server, client, environment, clienthel
             "key": "key2",
             "value": "2",
             "id": f"test::Resource[agent1,key=key2],v={version}",
+            # Make sure we ignore the check on version on a put_version
+            "version": version + 123,
             "send_event": False,
             "purged": False,
             "requires": [f"test::Resource[agent1,key=key1],v={version}"],
@@ -1226,6 +1230,8 @@ async def test_put_partial_mixed_scenario(server, client, environment, clienthel
             "key": "key1",
             "value": "100",
             "id": "test::Resource[agent1,key=key1],v=0",
+            # Make sure we still support having version=0 on the attributes
+            "version": 0,
             "send_event": False,
             "purged": False,
             "requires": [],
@@ -1234,6 +1240,8 @@ async def test_put_partial_mixed_scenario(server, client, environment, clienthel
             "key": "key2",
             "value": "200",
             "id": "test::Resource[agent1,key=key2],v=0",
+            # Make sure we ignore the check on version on a put_partial
+            "version": 123,
             "send_event": False,
             "purged": False,
             "requires": [],
