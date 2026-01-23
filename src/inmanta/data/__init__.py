@@ -5026,7 +5026,7 @@ class ResourcePersistentState(BaseDocument):
                 rps.is_undefined,
                 rps.last_deployed_attribute_hash,
                 rps.current_intent_attribute_hash,
-                rps.last_deploy_result,
+                rps.last_execution_result,
                 rps.blocked,
                 rps.last_deploy_compliant
             FROM {Scheduler.table_name()} AS s
@@ -5068,7 +5068,7 @@ class ResourcePersistentState(BaseDocument):
                         else None
                     ),
                     compliance=compliance_status,
-                    last_execution_result=state.DeployResult(str(record["last_deploy_result"]).lower()),
+                    last_execution_result=state.DeployResult(str(record["last_execution_result"]).lower()),
                     last_executed_at=cast(datetime.datetime | None, record["last_executed_at"]),
                 )
             return diff
