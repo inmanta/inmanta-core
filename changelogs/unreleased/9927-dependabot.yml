@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump sqlalchemy from 2.0.45 to 2.0.46
+destination-branches:
+- master
+sections: {}
