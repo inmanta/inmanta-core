@@ -555,7 +555,7 @@ end
                 f"Value [1, 2, 3] for argument value of plugin {ns}::union_multiple_types has incompatible type."
                 " Expected type: Union[int,string]"
                 f" (reported in plugin_native_types::union_multiple_types(value=[1, 2, 3]) ({cf_file}:3:13))"
-            )
+            ),
         ),
         (
             "union_optional_1",

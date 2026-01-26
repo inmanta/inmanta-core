@@ -433,10 +433,7 @@ dct = null
 hi_world = std::replace(hello_world, **dct)
 std::print(hi_world)
 """,
-        (
-            "The ** operator can only be applied to dictionaries (reported in "
-            "**dct ({dir}/main.cf:4))"
-        ),
+        "The ** operator can only be applied to dictionaries (reported in " "**dct ({dir}/main.cf:4))",
         autostd=True,
     )
 
