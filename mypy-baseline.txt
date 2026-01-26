@@ -25,7 +25,6 @@ src/inmanta/app.py:0: note: Possible overload variants:
 src/inmanta/app.py:0: note: def print(*values: object, sep: str | None = ..., end: str | None = ..., file: SupportsWrite[str] | None = ..., flush: Literal[False] = ...) -> None
 src/inmanta/app.py:0: note: def print(*values: object, sep: str | None = ..., end: str | None = ..., file: _SupportsWriteAndFlush[str] | None = ..., flush: bool) -> None
 src/inmanta/ast/__init__.py:0: error: Argument 1 to "set_location" of "CompilerException" has incompatible type "Location | None"; expected "Location"  [arg-type]
-src/inmanta/ast/__init__.py:0: error: Argument 1 to "set_location" of "CompilerException" has incompatible type "Location | None"; expected "Location"  [arg-type]
 src/inmanta/ast/__init__.py:0: error: Argument 2 to "__init__" of "RuntimeException" has incompatible type "LocatableString"; expected "Locatable | None"  [arg-type]
 src/inmanta/ast/__init__.py:0: error: Definition of "name" in base class "NotFoundException" is incompatible with definition in base class "AttributeError"  [misc]
 src/inmanta/ast/__init__.py:0: error: Function is missing a return type annotation  [no-untyped-def]
