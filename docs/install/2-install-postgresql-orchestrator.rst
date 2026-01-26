@@ -26,13 +26,6 @@ Step 1: Install PostgreSQL 16
 
     .. tab-set::
 
-        .. tab-item:: RHEL 8
-
-            .. code-block:: sh
-
-                sudo dnf module install postgresql:16/server
-                sudo systemctl enable postgresql
-
         .. tab-item:: RHEL 9
 
             .. code-block:: sh
@@ -50,6 +43,13 @@ Step 1: Install PostgreSQL 16
 
                 .. note::
                     If your system uses a different locale, please install the corresponding langpack.
+
+        .. tab-item:: RHEL 8
+
+            .. code-block:: sh
+
+                sudo dnf module install postgresql:16/server
+                sudo systemctl enable postgresql
 
 
 Step 2: Setup a PostgreSQL database for the Inmanta server
