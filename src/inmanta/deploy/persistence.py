@@ -284,7 +284,7 @@ class ToDbUpdateManager(StateUpdateManager):
                     last_deployed_version=resource_id_parsed.version,
                     last_deployed_attribute_hash=attribute_hash,
                     last_non_deploying_status=const.NonDeployingResourceState(status),
-                    last_execution_result=state.last_execution_result if state is not None else None,
+                    last_handler_run=state.last_handler_run if state is not None else None,
                     last_deploy_compliant=state.last_deploy_compliant if state is not None else None,
                     non_compliant_diff=diff_id,
                     cleanup_non_compliant_diff=diff_id is None,

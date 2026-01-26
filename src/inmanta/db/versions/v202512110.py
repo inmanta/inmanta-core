@@ -21,9 +21,9 @@ from asyncpg import Connection
 
 async def update(connection: Connection) -> None:
     """
-    Rename last_deploy_result to last_execution_result
+    Rename last_deploy_result to last_handler_run
     """
     schema = """
-    ALTER TABLE public.resource_persistent_state RENAME COLUMN last_deploy_result TO last_execution_result;
+    ALTER TABLE public.resource_persistent_state RENAME COLUMN last_deploy_result TO last_handler_run;
     """
     await connection.execute(schema)

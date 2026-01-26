@@ -398,7 +398,7 @@ async def test_list_actionlog(server, environment, client, cli, null_agent, clie
         ),
         state=state.ResourceState(
             compliance=state.Compliance.NON_COMPLIANT,
-            last_execution_result=state.DeployResult.FAILED,
+            last_handler_run=state.HandlerResult.FAILED,
             blocked=state.Blocked.NOT_BLOCKED,
             last_deployed=now,
             last_deploy_compliant=False,
@@ -425,7 +425,7 @@ async def test_list_actionlog(server, environment, client, cli, null_agent, clie
         ),
         state=state.ResourceState(
             compliance=state.Compliance.COMPLIANT,
-            last_execution_result=state.DeployResult.DEPLOYED,
+            last_handler_run=state.HandlerResult.SUCCESSFUL,
             blocked=state.Blocked.NOT_BLOCKED,
             last_deployed=now,
             last_deploy_compliant=True,
@@ -491,7 +491,7 @@ async def test_show_messages_actionlog(server, environment, client, cli, null_ag
         ),
         state=state.ResourceState(
             compliance=state.Compliance.COMPLIANT,
-            last_execution_result=state.DeployResult.DEPLOYED,
+            last_handler_run=state.HandlerResult.SUCCESSFUL,
             blocked=state.Blocked.NOT_BLOCKED,
             last_deployed=now,
             last_deploy_compliant=True,

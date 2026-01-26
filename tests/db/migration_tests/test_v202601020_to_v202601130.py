@@ -24,7 +24,7 @@ import asyncpg
 import pytest
 
 from inmanta import const, data
-from inmanta.deploy.state import Compliance, DeployResult
+from inmanta.deploy.state import Compliance, HandlerResult
 from inmanta.types import ResourceIdStr
 
 file_name_regex = re.compile("test_v([0-9]{9})_to_v[0-9]{9}")
@@ -62,6 +62,6 @@ async def test_fix_diff_layout(
         report = result[ResourceIdStr(f"test::Resource[agent1,key=key1{i}]")]
         assert report.report_only
         assert report.compliance is Compliance.NON_COMPLIANT
-        assert report.last_execution_result is DeployResult.DEPLOYED
+        assert report.last_handler_run is HandlerResult.SUCCESSFUL
         assert report.attribute_diff["value"].current is None
         assert report.attribute_diff["value"].desired == f"val1{i}"

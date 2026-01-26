@@ -217,14 +217,14 @@ class DummyManager(executor.ExecutorManager[executor.Executor]):
         pass
 
 
-state_translation_table: dict[const.ResourceState, tuple[state.DeployResult, state.Blocked, state.Compliance]] = {
+state_translation_table: dict[const.ResourceState, tuple[state.HandlerResult, state.Blocked, state.Compliance]] = {
     # A table to translate the old states into the new states
     # None means don't care, mostly used for values we can't derive from the old state
     const.ResourceState.unavailable: (None, state.Blocked.NOT_BLOCKED, state.Compliance.NON_COMPLIANT),
-    const.ResourceState.skipped: (state.DeployResult.SKIPPED, None, None),
+    const.ResourceState.skipped: (state.HandlerResult.SKIPPED, None, None),
     const.ResourceState.dry: (None, None, None),  # don't care
-    const.ResourceState.deployed: (state.DeployResult.DEPLOYED, state.Blocked.NOT_BLOCKED, None),
-    const.ResourceState.failed: (state.DeployResult.FAILED, state.Blocked.NOT_BLOCKED, None),
+    const.ResourceState.deployed: (state.HandlerResult.SUCCESSFUL, state.Blocked.NOT_BLOCKED, None),
+    const.ResourceState.failed: (state.HandlerResult.FAILED, state.Blocked.NOT_BLOCKED, None),
     const.ResourceState.deploying: (None, state.Blocked.NOT_BLOCKED, None),
     const.ResourceState.available: (None, state.Blocked.NOT_BLOCKED, state.Compliance.HAS_UPDATE),
     const.ResourceState.undefined: (None, state.Blocked.BLOCKED, state.Compliance.UNDEFINED),
@@ -279,7 +279,7 @@ class DummyStateManager(StateUpdateManager):
         for resource, cstate in self.state.items():
             deploy_result, blocked, status = state_translation_table[cstate]
             if deploy_result:
-                assert scheduler._state.resource_state[resource].last_execution_result == deploy_result
+                assert scheduler._state.resource_state[resource].last_handler_run == deploy_result
             if blocked:
                 assert scheduler._state.resource_state[resource].blocked == blocked
             if status:

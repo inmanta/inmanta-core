@@ -1105,7 +1105,7 @@ def assert_resource_persistent_state(
     resource_persistent_state: data.ResourcePersistentState,
     is_undefined: bool,
     is_orphan: bool,
-    last_execution_result: state.DeployResult,
+    last_handler_run: state.HandlerResult,
     blocked: state.Blocked,
     expected_compliance: Optional[state.Compliance],
     last_deploy_compliant: Optional[bool],
@@ -1120,8 +1120,8 @@ def assert_resource_persistent_state(
         resource_persistent_state.is_orphan == is_orphan
     ), f"{resource_persistent_state.resource_id} ({resource_persistent_state.is_orphan} != {is_orphan})"
     assert (
-        resource_persistent_state.last_execution_result is last_execution_result
-    ), f"{resource_persistent_state.resource_id} ({resource_persistent_state.last_execution_result} != {last_execution_result})"
+        resource_persistent_state.last_handler_run is last_handler_run
+    ), f"{resource_persistent_state.resource_id} ({resource_persistent_state.last_handler_run} != {last_handler_run})"
     assert (
         resource_persistent_state.blocked is blocked
     ), f"{resource_persistent_state.resource_id} ({resource_persistent_state.blocked} != {blocked})"

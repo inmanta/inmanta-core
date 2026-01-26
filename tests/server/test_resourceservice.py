@@ -48,7 +48,7 @@ async def resource_deployer(client, environment, null_agent):
             attribute_hash: str,
             change: const.Change = const.Change.created,
             status: const.HandlerResourceState = const.HandlerResourceState.deployed,
-            deployment_result: state.DeployResult = state.DeployResult.DEPLOYED,
+            deployment_result: state.HandlerResult = state.HandlerResult.SUCCESSFUL,
         ) -> None:
             await update_manager.send_deploy_done(
                 attribute_hash=attribute_hash,
@@ -62,7 +62,7 @@ async def resource_deployer(client, environment, null_agent):
                 ),
                 state=state.ResourceState(
                     compliance=state.Compliance.COMPLIANT,
-                    last_execution_result=deployment_result,
+                    last_handler_run=deployment_result,
                     blocked=state.Blocked.NOT_BLOCKED,
                     last_deployed=datetime.datetime.now().astimezone(),
                     last_deploy_compliant=True,
@@ -80,7 +80,7 @@ async def resource_deployer(client, environment, null_agent):
             attribute_hash: str,
             change: const.Change = const.Change.created,
             status: const.HandlerResourceState = const.HandlerResourceState.deployed,
-            deployment_result: state.DeployResult = state.DeployResult.DEPLOYED,
+            deployment_result: state.HandlerResult = state.HandlerResult.SUCCESSFUL,
         ) -> None:
             action_id = await cls.start_deployment(rvid)
             await cls.deployment_finished(rvid, action_id, attribute_hash, change, status, deployment_result)
@@ -516,7 +516,7 @@ async def test_last_non_deploying_status_field_on_resource(
         action_id=action_id_r1,
         status=const.HandlerResourceState.deployed,
         attribute_hash=util.make_attribute_hash(resource_id=rid_r1, attributes=resources[0]),
-        deployment_result=state.DeployResult.DEPLOYED,
+        deployment_result=state.HandlerResult.SUCCESSFUL,
     )
     action_id_r2 = await resource_deployer.start_deployment(rvid=rvid_r2_v1)
     await assert_status_fields(
@@ -533,7 +533,7 @@ async def test_last_non_deploying_status_field_on_resource(
         action_id=action_id_r2,
         attribute_hash=util.make_attribute_hash(resource_id=rid_r2, attributes=resources[1]),
         status=const.HandlerResourceState.skipped,
-        deployment_result=state.DeployResult.SKIPPED,
+        deployment_result=state.HandlerResult.SKIPPED,
     )
     await assert_status_fields(
         r1_status=const.ResourceState.deploying,
@@ -548,7 +548,7 @@ async def test_last_non_deploying_status_field_on_resource(
         action_id=action_id_r1,
         status=const.HandlerResourceState.failed,
         attribute_hash=util.make_attribute_hash(resource_id=rid_r1, attributes=resources[0]),
-        deployment_result=state.DeployResult.FAILED,
+        deployment_result=state.HandlerResult.FAILED,
     )
     await resource_deployer.start_deployment(rvid=rvid_r2_v1)
     await assert_status_fields(

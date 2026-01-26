@@ -24,7 +24,7 @@ import asyncpg
 import pytest
 
 from inmanta import data
-from inmanta.deploy.state import DeployResult
+from inmanta.deploy.state import HandlerResult
 
 file_name_regex = re.compile("test_v([0-9]{9})_to_v[0-9]{9}")
 part = file_name_regex.match(__name__)[1]
@@ -39,8 +39,8 @@ async def test_add_last_deploy_compliant_to_rps_table(
     """
     await migrate_db_from()
     all_rps = await data.ResourcePersistentState.get_list()
-    deployed_rps = {rps for rps in all_rps if rps.last_execution_result is DeployResult.DEPLOYED}
-    failed_skipped_rps = {rps for rps in all_rps if rps.last_execution_result in (DeployResult.FAILED, DeployResult.SKIPPED)}
+    deployed_rps = {rps for rps in all_rps if rps.last_handler_run is HandlerResult.SUCCESSFUL}
+    failed_skipped_rps = {rps for rps in all_rps if rps.last_handler_run in (HandlerResult.FAILED, HandlerResult.SKIPPED)}
     remaining_rps = set(all_rps) - deployed_rps - failed_skipped_rps
     assert all([rps.last_deploy_compliant for rps in deployed_rps])
     assert all([not rps.last_deploy_compliant for rps in failed_skipped_rps])

@@ -4740,7 +4740,7 @@ class ResourcePersistentState(BaseDocument):
     # Set to true when a version starts its deployment, set to false when it finishes
     is_deploying: bool
     # Written at deploy time (except for NEW -> no race condition possible with deploy path)
-    last_execution_result: state.DeployResult
+    last_handler_run: state.HandlerResult
     # Was the last deploy compliant, used for recovering scheduler state
     last_deploy_compliant: Optional[bool] = None
     # Written both when processing a new version and at deploy time. As such, this should be updated
@@ -4852,7 +4852,7 @@ class ResourcePersistentState(BaseDocument):
                 is_undefined,
                 is_orphan,
                 is_deploying,
-                last_execution_result,
+                last_handler_run,
                 blocked,
                 created
             )
@@ -4967,7 +4967,7 @@ class ResourcePersistentState(BaseDocument):
         cleanup_non_compliant_diff: Optional[bool] = False,
         connection: Optional[asyncpg.connection.Connection] = None,
         # TODO[#8541]: accept state.ResourceState and write blocked status as well
-        last_execution_result: Optional[state.DeployResult] = None,
+        last_handler_run: Optional[state.HandlerResult] = None,
     ) -> None:
         """Update the data in the resource_persistent_state table"""
         args = ArgumentCollector(2)
@@ -4984,8 +4984,8 @@ class ResourcePersistentState(BaseDocument):
             "non_compliant_diff": non_compliant_diff,
         }
         query_parts = [f"{k}={args(v)}" for k, v in invalues.items() if v is not None]
-        if last_execution_result:
-            query_parts.append(f"last_execution_result={args(last_execution_result.name)}")
+        if last_handler_run:
+            query_parts.append(f"last_handler_run={args(last_handler_run.name)}")
         if not query_parts:
             return
         if cleanup_non_compliant_diff:
@@ -5026,7 +5026,7 @@ class ResourcePersistentState(BaseDocument):
                 rps.is_undefined,
                 rps.last_deployed_attribute_hash,
                 rps.current_intent_attribute_hash,
-                rps.last_execution_result,
+                rps.last_handler_run,
                 rps.blocked,
                 rps.last_deploy_compliant
             FROM {Scheduler.table_name()} AS s
@@ -5068,7 +5068,7 @@ class ResourcePersistentState(BaseDocument):
                         else None
                     ),
                     compliance=compliance_status,
-                    last_execution_result=state.DeployResult(str(record["last_execution_result"]).lower()),
+                    last_handler_run=state.HandlerResult(str(record["last_handler_run"]).lower()),
                     last_executed_at=cast(datetime.datetime | None, record["last_executed_at"]),
                 )
             return diff

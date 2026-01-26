@@ -174,7 +174,7 @@ async def setup_database(project_default, server, client):
     "input, output",
     [
         ("isDeploying", "is_deploying"),
-        ("lastExecutionResult", "last_execution_result"),
+        ("lastHandlerRun", "last_handler_run"),
         ("resourceIdValue", "resource_id_value"),
         ("blocked", "blocked"),
     ],
@@ -676,7 +676,7 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
     # Quick way of simulating a non-compliant report
     # It has to be non-orphan otherwise the complianceState returned will be None
     rps = await data.ResourcePersistentState.get_one(
-        environment=environment, last_execution_result=state.DeployResult.DEPLOYED, is_orphan=False
+        environment=environment, last_handler_run=state.HandlerResult.SUCCESSFUL, is_orphan=False
     )
     assert rps
     await rps.update_fields(last_deploy_compliant=False)
@@ -731,9 +731,9 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
         },
         # 1 undefined, 1 skipped for undefined, 1 still deploying
         {
-            "query": "lastExecutionResult: {eq: NEW}",
+            "query": "lastHandlerRun: {eq: NEW}",
             "result": 3 * instances,
-            "assertion": {"state": {"lastExecutionResult": state.DeployResult.NEW.name}},
+            "assertion": {"state": {"lastHandlerRun": state.HandlerResult.NEW.name}},
         },
         {"query": "isDeploying: true", "result": instances, "assertion": {"state": {"isDeploying": True}}},
         {
@@ -743,17 +743,17 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
         },
         # 1 undefined, 1 skipped for undefined
         {
-            "query": "lastExecutionResult: {eq: NEW} isDeploying: false",
+            "query": "lastHandlerRun: {eq: NEW} isDeploying: false",
             "result": 2 * instances,
-            "assertion": {"state": {"lastExecutionResult": state.DeployResult.NEW.name, "isDeploying": False}},
+            "assertion": {"state": {"lastHandlerRun": state.HandlerResult.NEW.name, "isDeploying": False}},
         },
         #  1 skipped for undefined
         {
-            "query": "lastExecutionResult: {eq: NEW} isDeploying: false complianceState: {neq: UNDEFINED}",
+            "query": "lastHandlerRun: {eq: NEW} isDeploying: false complianceState: {neq: UNDEFINED}",
             "result": instances,
             "assertion": {
                 "state": {
-                    "lastExecutionResult": state.DeployResult.NEW.name,
+                    "lastHandlerRun": state.HandlerResult.NEW.name,
                     "isDeploying": False,
                     "complianceState": state.Compliance.HAS_UPDATE.name,
                 }
@@ -761,11 +761,11 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
         },
         # Non-compliant report
         {
-            "query": "lastExecutionResult: {eq: DEPLOYED} isDeploying: false complianceState: {eq: NON_COMPLIANT}",
+            "query": "lastHandlerRun: {eq: DEPLOYED} isDeploying: false complianceState: {eq: NON_COMPLIANT}",
             "result": 1,
             "assertion": {
                 "state": {
-                    "lastExecutionResult": state.DeployResult.DEPLOYED.name,
+                    "lastHandlerRun": state.HandlerResult.SUCCESSFUL.name,
                     "isDeploying": False,
                     "complianceState": state.Compliance.NON_COMPLIANT.name,
                 }
@@ -789,7 +789,7 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
                         isUndefined
                         blocked
                         isDeploying
-                        lastExecutionResult
+                        lastHandlerRun
                         lastDeploy
                         complianceState
                         currentIntentAttributeHash
@@ -815,7 +815,7 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
     query = (
         """
     {
-        resources ( filter: {environment: "%s" lastExecutionResult: {eq: NEW}}
+        resources ( filter: {environment: "%s" lastHandlerRun: {eq: NEW}}
             orderBy: [{key: "complianceState" order: "asc"}]) {
             edges {
                 node {
@@ -844,7 +844,7 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
     query = (
         """
     {
-        resources (filter: {environment: "%s" lastExecutionResult: {eq: NEW}}
+        resources (filter: {environment: "%s" lastHandlerRun: {eq: NEW}}
             orderBy: [{key: "complianceState" order: "desc"}, {key: "isDeploying" order: "asc"}]) {
             edges {
                 node {
@@ -876,7 +876,7 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
     query = (
         """
        {
-           resources (filter: {environment: "%s" lastExecutionResult: {eq: NEW}}
+           resources (filter: {environment: "%s" lastHandlerRun: {eq: NEW}}
                     orderBy: [{key: "complianceState" order: "desc"}, {key: "isDeploying" order: "desc"}]) {
                edges {
                    node {

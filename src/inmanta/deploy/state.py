@@ -91,31 +91,31 @@ class ResourceIntent:
         object.__setattr__(self, "id", resources.Id.parse_id(self.resource_id))
 
 
-class DeployResult(StrEnum):
+class HandlerResult(StrEnum):
     """
-    The result of a resource's last (finished) deploy. This result may be for an older version than the latest desired state.
+    The result of a resource's last (finished) execution. This result may be for an older version than the latest desired state.
     See Compliance for a resource's operational status with respect to its latest desired state.
 
     NEW: Resource has never been deployed before.
-    DEPLOYED: Last resource deployment was successful.
+    SUCCESSFUL: Last resource deployment was successful.
     FAILED: Last resource deployment was unsuccessful.
     SKIPPED: Resource skipped deployment.
     """
 
     NEW = enum.auto()
-    DEPLOYED = enum.auto()
+    SUCCESSFUL = enum.auto()
     FAILED = enum.auto()
     SKIPPED = enum.auto()
 
     @classmethod
-    def from_handler_resource_state(cls, handler_resource_state: const.HandlerResourceState) -> "DeployResult":
+    def from_handler_resource_state(cls, handler_resource_state: const.HandlerResourceState) -> "HandlerResult":
         match handler_resource_state:
             case const.HandlerResourceState.deployed | const.HandlerResourceState.non_compliant:
-                return DeployResult.DEPLOYED
+                return HandlerResult.SUCCESSFUL
             case const.HandlerResourceState.skipped | const.HandlerResourceState.skipped_for_dependency:
-                return DeployResult.SKIPPED
+                return HandlerResult.SKIPPED
             case const.HandlerResourceState.failed | const.HandlerResourceState.unavailable:
-                return DeployResult.FAILED
+                return HandlerResult.FAILED
             case _ as resource_state:
                 raise Exception(f"Unexpected handler_resource_state {resource_state.name}")
 
@@ -218,7 +218,7 @@ class ResourceState:
     """
 
     compliance: Compliance
-    last_execution_result: DeployResult
+    last_handler_run: HandlerResult
     blocked: Blocked
     last_deployed: datetime.datetime | None
     last_deploy_compliant: bool | None
@@ -243,13 +243,13 @@ class ResourceState:
                 return const.ResourceState.skipped_for_undefined
             case ResourceState(compliance=Compliance.HAS_UPDATE):
                 return const.ResourceState.available
-            case ResourceState(last_execution_result=DeployResult.SKIPPED):
+            case ResourceState(last_handler_run=HandlerResult.SKIPPED):
                 return const.ResourceState.skipped
-            case ResourceState(last_execution_result=DeployResult.FAILED):
+            case ResourceState(last_handler_run=HandlerResult.FAILED):
                 return const.ResourceState.failed
             case ResourceState(compliance=Compliance.NON_COMPLIANT):
                 return const.ResourceState.non_compliant
-            case ResourceState(last_execution_result=DeployResult.DEPLOYED):
+            case ResourceState(last_handler_run=HandlerResult.SUCCESSFUL):
                 return const.ResourceState.deployed
             case _:
                 raise Exception(f"Unable to deduce handler state: {self}")
@@ -304,7 +304,7 @@ class ModelState:
                     "is_undefined",
                     "current_intent_attribute_hash",
                     "last_deployed_attribute_hash",
-                    "last_execution_result",
+                    "last_handler_run",
                     "last_deploy_compliant",
                     "blocked",
                     "last_success",
@@ -345,7 +345,7 @@ class ModelState:
                 # (scheduler is only writer)
                 compliance_status = Compliance.UNDEFINED
             elif (
-                DeployResult[res["last_execution_result"]] is DeployResult.NEW
+                HandlerResult[res["last_handler_run"]] is HandlerResult.NEW
                 or res["last_deployed_attribute_hash"] is None
                 or res["current_intent_attribute_hash"] != res["last_deployed_attribute_hash"]
             ):
@@ -357,7 +357,7 @@ class ModelState:
 
             resource_state = ResourceState(
                 compliance=compliance_status,
-                last_execution_result=DeployResult[res["last_execution_result"]],
+                last_handler_run=HandlerResult[res["last_handler_run"]],
                 blocked=Blocked[res["blocked"]],
                 last_deployed=last_deployed,
                 last_deploy_compliant=res["last_deploy_compliant"],
@@ -455,7 +455,7 @@ class ModelState:
             # we don't know the resource yet (/ anymore) => create it
             self.resource_state[resource] = ResourceState(
                 compliance=compliance_status,
-                last_execution_result=DeployResult.DEPLOYED if known_compliant else DeployResult.NEW,
+                last_handler_run=HandlerResult.SUCCESSFUL if known_compliant else HandlerResult.NEW,
                 blocked=blocked,
                 last_deployed=last_deployed,
                 last_deploy_compliant=True if compliance_status == Compliance.COMPLIANT else None,
@@ -468,7 +468,7 @@ class ModelState:
             self.resource_state[resource].compliance = compliance_status
             # update deployment result only if we know it's compliant. Otherwise it is kept, representing latest result
             if known_compliant:
-                self.resource_state[resource].last_execution_result = DeployResult.DEPLOYED
+                self.resource_state[resource].last_handler_run = HandlerResult.SUCCESSFUL
             # Override blocked status except if it was marked as blocked before. We can't unset it yet because a resource might
             # still be transitively blocked, which we'll deal with later, see note in docstring.
             # We do however override TEMPORARILY_BLOCKED because we want to give it another chance when it gets an update

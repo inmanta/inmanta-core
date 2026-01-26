@@ -123,7 +123,7 @@ async def test_db_schema_enum_consistency(init_dataclasses_and_load_schema) -> N
     all_db_document_classes: abc.Set[type[data.BaseDocument]] = utils.get_all_subclasses(data.BaseDocument) - {
         data.BaseDocument
     }
-    exclude_enums = [state.DeployResult, state.Blocked]  # These enums are modelled in the db using a varchar
+    exclude_enums = [state.HandlerResult, state.Blocked]  # These enums are modelled in the db using a varchar
     for cls in all_db_document_classes:
         enums: abc.Mapping[str, data.Field] = {
             name: field
