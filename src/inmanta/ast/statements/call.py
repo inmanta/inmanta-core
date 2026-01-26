@@ -333,7 +333,7 @@ class FunctionUnit(Waiter):
             try:
                 self.args, self.kwargs = self.function.execute_args(requires, self.resolver, self.queue)
             except RuntimeException as e:
-                e.set_statement(self.function)
+                e.set_statement(self.function, replace=False)
                 raise e
 
         try:

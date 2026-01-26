@@ -642,7 +642,11 @@ class RuntimeException(CompilerException):
                 cause.set_statement(stmt, replace)
 
         if replace or self.stmt is None:
-            self.set_location(stmt.get_location())
+            # override location unless it was explicitly set to something other than statement's location
+            cur_location = self.get_location()
+            if cur_location is None or (self.stmt is not None and cur_location == self.stmt.get_location()):
+                self.location = stmt.get_location()
+            # override statement
             self.stmt = stmt
 
     def format(self) -> str:
