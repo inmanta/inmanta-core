@@ -3,7 +3,7 @@
 Install PostgreSQL
 ##################
 
-This page describes how to install PostgreSQL on RedHat Enterprise Linux or derivates.
+This page describes how to install PostgreSQL on RedHat Enterprise Linux or derivatives.
 
 Step 1: Install PostgreSQL 16
 -----------------------------
