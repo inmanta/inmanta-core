@@ -333,6 +333,7 @@ class FunctionUnit(Waiter):
             try:
                 self.args, self.kwargs = self.function.execute_args(requires, self.resolver, self.queue)
             except RuntimeException as e:
+                # for arg expression execution failures, report the sub-expression rather than the plugin call => replace=False
                 e.set_statement(self.function, replace=False)
                 raise e
 
