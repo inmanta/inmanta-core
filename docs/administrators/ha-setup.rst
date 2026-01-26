@@ -37,7 +37,7 @@ There are three types of availability possible:
 * None: in case of failure the entire intent can be lost. It can only be restored by giving the orchestrator the same intent and
   let it step through the lifeycle of each service in its service inventory. The deployment consists of a single orchestrator
   instance and a single database. These can run on the same or different machines.
-* Durable: in case of failure the orchestrator no data is lost, however the API of the orchestrator is not available. The
+* Durable: in case of failure of the orchestrator no data is lost, however the API of the orchestrator is not available. The
   deployment consists of a single orchestrator instance that connects to a primary PostgreSQL database. This primary streams all
   changes to a standby PostgreSQL server. Database transactions only return when both databases have stored the changes durable.
   Depending on the deployment the failover can be done manually or fully automated.
@@ -71,10 +71,8 @@ node by performing a manual action.
 Prerequisites
 -------------
 
-* **Master node:** The master node has been setup according to :ref:`step 2<install-step-2>` and :ref:`step 3<install-step-3>`
-  of the Inmanta installation documentation.
-* **Standby node:** The standby node should only have a PostgreSQL installation, so only :ref:`step 2<install-step-2>` of the
-  Inmanta installation documentation should be executed.
+* **Master node:** The master node has been setup according to the :ref:`Inmanta installation documentation<install-server>` and a PostgreSQL database according to the :ref:`PostgreSQL installation documentation<postgresql-install-doc>`.
+* **Standby node:** The standby node should only have a PostgreSQL installation, so only the :ref:`PostgreSQL installation documentation<postgresql-install-doc>` should be executed.
 
 Configure the master node
 -------------------------
