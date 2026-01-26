@@ -325,10 +325,11 @@ async def test_dump_db(
     res = await client.reserve_version(env_id_3)
     assert res.code == 200
     version = res.result["data"]
+    resources = get_resources(version)
     res = await client.put_version(
         tid=env_id_3,
         version=version,
-        resources=get_resources(version),
+        resources=resources,
         resource_state={
             "test::Resource[agent1,key=key1]": const.ResourceState.available,
             "test::Resource[agent1,key=key2]": const.ResourceState.available,
@@ -343,6 +344,11 @@ async def test_dump_db(
     res = await client.release_version(env_id_3, id=1)
     assert res.code == 200
     await wait_until_deployment_finishes(client, env_id_3)
+
+    result = await client.dryrun_request(env_id_3, version)
+    assert result.code == 200
+    assert result.result["dryrun"]["total"] == len(resources)
+    assert result.result["dryrun"]["todo"] == len(resources)
 
     # Create a second version in environment dev3 that doesn't have resource key6, but has a new resource key7
     res = await client.reserve_version(env_id_3)
