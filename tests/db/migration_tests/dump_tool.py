@@ -382,12 +382,22 @@ async def test_dump_db(
                 "purged": False,
                 "requires": [],
             },
-            # non_compliant resource
+            # non_compliant resources
             {
                 "key": "key10",
                 "value": "val10",
                 "version": version,
                 "id": f"test::Resource[agent1,key=key10],v={version}",
+                "send_event": True,
+                "purged": False,
+                "requires": [],
+                "report_only": True,
+            },
+            {
+                "key": "key11",
+                "value": "val11",
+                "version": version,
+                "id": f"test::Resource[agent1,key=key11],v={version}",
                 "send_event": True,
                 "purged": False,
                 "requires": [],
@@ -402,6 +412,7 @@ async def test_dump_db(
             "test::Resource[agent1,key=key5]": const.ResourceState.available,
             "test::Resource[agent1,key=key7]": const.ResourceState.available,
             "test::Resource[agent1,key=key10]": const.ResourceState.available,
+            "test::Resource[agent1,key=key11]": const.ResourceState.available,
             res_id_to_delete: const.ResourceState.available,
         },
         module_version_info={},

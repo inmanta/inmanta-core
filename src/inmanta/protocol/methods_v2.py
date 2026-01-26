@@ -27,7 +27,7 @@ import inmanta.types
 from inmanta import const
 from inmanta.const import AgentAction, AllAgentAction, ApiDocsFormat, Change, ClientType, ParameterSource, ResourceState
 from inmanta.data import model
-from inmanta.data.model import DataBaseReport, PipConfig
+from inmanta.data.model import DataBaseReport, PipConfig, ResourceComplianceDiff
 from inmanta.protocol import methods
 from inmanta.protocol.auth.decorators import auth
 from inmanta.protocol.common import ReturnValue
@@ -1887,5 +1887,26 @@ def health() -> ReturnValue[None]:
     or a 500 if the server is not healthy.
 
     In contrast to the 'GET /api/v1/serverstatus' endpoint, this endpoint does not require authentication.
+    """
+    pass
+
+
+@auth(auth_label=const.CoreAuthorizationLabel.REPORT_READ, read_only=True, environment_param="tid")
+@typedmethod(
+    path="/compliance_report",
+    operation="POST",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def get_compliance_report(tid: uuid.UUID, resource_ids: Sequence[ResourceIdStr]) -> dict[ResourceIdStr, ResourceComplianceDiff]:
+    """
+    Get the compliance report for the following resource_ids
+
+    :param tid: The id of the environment these resources belong to.
+    :param resource_ids: A list of resource ids to retrieve the compliance status for.
+
+    :return: A dict of ResourceComplianceDiff objects representing the current state of each requested resource.
+    :raises NotFound: When one or more resource_ids do not exist in the latest scheduled version for the environment.
     """
     pass

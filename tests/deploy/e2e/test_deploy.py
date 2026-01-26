@@ -27,9 +27,10 @@ import pytest
 from inmanta import config, const, data, execute
 from inmanta.config import Config
 from inmanta.data import SERVER_COMPILE
-from inmanta.data.model import ReleasedResourceState, SchedulerStatusReport
+from inmanta.data.model import AttributeStateChange, ReleasedResourceState, ResourceComplianceDiff, SchedulerStatusReport
 from inmanta.deploy.state import Blocked, Compliance, DeployResult, ResourceState
 from inmanta.deploy.work import TaskPriority
+from inmanta.protocol.exceptions import NotFound
 from inmanta.resources import Id
 from inmanta.server import SLICE_PARAM, SLICE_SERVER
 from inmanta.types import ResourceIdStr
@@ -1857,12 +1858,13 @@ async def test_resource_action_of_non_compliant_resource(resource_container, ser
 async def test_non_compliant_diff(resource_container, server, client, clienthelper, environment, agent):
     """
     Asserts that the diff for a resource is correctly updated when we reach the non-compliant state
-    TODO: Flesh out this test when we implement the endpoint to fetch the diff
     """
 
     version = await clienthelper.get_version()
 
-    rid1 = "test::Resource[agent1,key=key]"
+    rid1 = ResourceIdStr("test::Resource[agent1,key=key]")
+    rid2 = ResourceIdStr("test::Resource[agent1,key=key2]")
+    env_id = uuid.UUID(environment)
 
     # Set rid1 to "actual_value"
     resources = [
@@ -1870,6 +1872,15 @@ async def test_non_compliant_diff(resource_container, server, client, clienthelp
             "key": "key",
             "value": "actual_value",
             "id": f"{rid1},v={version}",
+            "requires": [],
+            "purged": False,
+            "send_event": False,
+            "receive_events": False,
+        },
+        {
+            "key": "key2",
+            "value": "actual_value",
+            "id": f"{rid2},v={version}",
             "requires": [],
             "purged": False,
             "send_event": False,
@@ -1883,6 +1894,27 @@ async def test_non_compliant_diff(resource_container, server, client, clienthelp
     rps = await data.ResourcePersistentState.get_one(environment=environment, resource_id=rid1)
     assert rps.non_compliant_diff is None
     assert rps.last_non_deploying_status == const.NonDeployingResourceState.deployed
+
+    rps2 = await data.ResourcePersistentState.get_one(environment=environment, resource_id=rid2)
+    assert rps.non_compliant_diff is None
+    assert rps.last_non_deploying_status == const.NonDeployingResourceState.deployed
+
+    report = await data.ResourcePersistentState.get_compliance_report(env=env_id, resource_ids=[rid1, rid2])
+    assert report[rid1] == ResourceComplianceDiff(
+        report_only=False,
+        attribute_diff=None,
+        compliance=Compliance.COMPLIANT,
+        last_execution_result=DeployResult.DEPLOYED,
+        last_executed_at=rps.last_deploy,
+    )
+
+    assert report[rid2] == ResourceComplianceDiff(
+        report_only=False,
+        attribute_diff=None,
+        compliance=Compliance.COMPLIANT,
+        last_execution_result=DeployResult.DEPLOYED,
+        last_executed_at=rps2.last_deploy,
+    )
 
     # Make rid1 reporting and change the desired state
     version = await clienthelper.get_version()
@@ -1908,6 +1940,24 @@ async def test_non_compliant_diff(resource_container, server, client, clienthelp
 
     non_compliant_diff_id = rps.non_compliant_diff
 
+    # Assert that we return a not found if provided a rid that is not present on the latest processed version
+    expected_exception_output = "Unable to find the following resource ids in the active version: {'%s'}" % rid2
+    with pytest.raises(NotFound) as exc_info:
+        await data.ResourcePersistentState.get_compliance_report(env=env_id, resource_ids=[rid2])
+    assert expected_exception_output in exc_info.value.log_message
+    with pytest.raises(NotFound):
+        await data.ResourcePersistentState.get_compliance_report(env=env_id, resource_ids=[rid1, rid2])
+    assert expected_exception_output in exc_info.value.log_message
+
+    report = await data.ResourcePersistentState.get_compliance_report(env=env_id, resource_ids=[rid1])
+    assert report[rid1] == ResourceComplianceDiff(
+        report_only=True,
+        attribute_diff={"value": AttributeStateChange(current="actual_value", desired="diff_value")},
+        compliance=Compliance.NON_COMPLIANT,
+        last_execution_result=DeployResult.DEPLOYED,
+        last_executed_at=rps.last_deploy,
+    )
+
     # Make report succeed again
     version = await clienthelper.get_version()
     resources = [
@@ -1928,6 +1978,15 @@ async def test_non_compliant_diff(resource_container, server, client, clienthelp
     rps = await data.ResourcePersistentState.get_one(environment=environment, resource_id=rid1)
     assert rps.non_compliant_diff is None
     assert rps.last_non_deploying_status == const.NonDeployingResourceState.deployed
+
+    report = await data.ResourcePersistentState.get_compliance_report(env=env_id, resource_ids=[rid1])
+    assert report[rid1] == ResourceComplianceDiff(
+        report_only=True,
+        attribute_diff=None,
+        compliance=Compliance.COMPLIANT,
+        last_execution_result=DeployResult.DEPLOYED,
+        last_executed_at=rps.last_deploy,
+    )
 
     # Make report fail again
     version = await clienthelper.get_version()
@@ -1950,6 +2009,15 @@ async def test_non_compliant_diff(resource_container, server, client, clienthelp
     assert rps.non_compliant_diff is not None
     assert rps.last_non_deploying_status == const.NonDeployingResourceState.non_compliant
     assert rps.non_compliant_diff != non_compliant_diff_id
+
+    report = await data.ResourcePersistentState.get_compliance_report(env=env_id, resource_ids=[rid1])
+    assert report[rid1] == ResourceComplianceDiff(
+        report_only=True,
+        attribute_diff={"value": AttributeStateChange(current="actual_value", desired="another_diff_value")},
+        compliance=Compliance.NON_COMPLIANT,
+        last_execution_result=DeployResult.DEPLOYED,
+        last_executed_at=rps.last_deploy,
+    )
 
 
 async def test_event_recovery_reporting(resource_container, server, client, clienthelper, environment, agent):
