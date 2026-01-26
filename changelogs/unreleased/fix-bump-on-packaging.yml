@@ -1,0 +1,5 @@
+description: fix bump on the packaging requirement
+change-type: patch
+destination-branches:
+  - master
+  - iso8
