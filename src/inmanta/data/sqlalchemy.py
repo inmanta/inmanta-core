@@ -754,7 +754,7 @@ class ResourcePersistentState(Base):
     last_handler_run: Mapped[str] = mapped_column(String, nullable=False)
     blocked: Mapped[str] = mapped_column(String, nullable=False)
     created: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False)
-    last_deploy: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
+    last_handler_run_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     last_success: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     last_produced_events: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     last_deployed_attribute_hash: Mapped[Optional[str]] = mapped_column(String)

@@ -309,7 +309,7 @@ class ModelState:
                     "last_handler_run_compliant",
                     "blocked",
                     "last_success",
-                    "last_deploy",
+                    "last_handler_run_at",
                     "last_produced_events",
                 ),
                 project_attributes=(
@@ -336,7 +336,7 @@ class ModelState:
             # Populate state
 
             compliance_status: Compliance
-            last_deployed = cast(datetime.datetime, res["last_deploy"])
+            last_deployed = cast(datetime.datetime, res["last_handler_run_at"])
             if res["is_orphan"]:
                 # it was marked as an orphan by the scheduler when (or sometime before) it read the version we're currently
                 # processing => exclude it from the model

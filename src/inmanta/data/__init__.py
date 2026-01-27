@@ -4717,16 +4717,16 @@ class ResourcePersistentState(BaseDocument):
     # When this resource was first created
     created: datetime.datetime
     # Field based on content from the resource actions
-    last_deploy: Optional[datetime.datetime] = None
+    last_handler_run_at: Optional[datetime.datetime] = None
     # When a resource is updated in a new model version, it might take some time until this update reaches the scheduler.
     # This is the attribute hash that the scheduler considers the last released attribute hash for the given resource.
     current_intent_attribute_hash: Optional[str] = None
     # Last deployment completed of any kind, including marking-deployed-for-know-good-state for increments
     # i.e. the end time of the last deploy
     last_deployed_attribute_hash: Optional[str] = None
-    # Hash used in last_deploy
+    # Hash used in last_handler_run_at
     last_deployed_version: Optional[int] = None
-    # Model version of last_deploy
+    # Model version of last_handler_run_at
     last_success: Optional[datetime.datetime] = None
     # last actual deployment completed without failure. i.e start time of the last deploy where status == ResourceState.deployed
     last_produced_events: Optional[datetime.datetime] = None
@@ -4956,7 +4956,7 @@ class ResourcePersistentState(BaseDocument):
         environment: uuid.UUID,
         resource_id: ResourceIdStr,
         is_deploying: bool | None = None,
-        last_deploy: datetime.datetime | None = None,
+        last_handler_run_at: datetime.datetime | None = None,
         last_deployed_version: int | None = None,
         last_non_deploying_status: Optional[const.NonDeployingResourceState] = None,
         last_success: Optional[datetime.datetime] = None,
@@ -4974,7 +4974,7 @@ class ResourcePersistentState(BaseDocument):
 
         invalues = {
             "is_deploying": is_deploying,
-            "last_deploy": last_deploy,
+            "last_handler_run_at": last_handler_run_at,
             "last_non_deploying_status": last_non_deploying_status,
             "last_success": last_success,
             "last_produced_events": last_produced_events,
@@ -5022,7 +5022,7 @@ class ResourcePersistentState(BaseDocument):
             SELECT r.resource_id,
                 COALESCE((r.attributes->>'report_only')::boolean, false) AS report_only,
                 rd.diff,
-                rps.last_deploy AS last_handler_run_at,
+                rps.last_handler_run_at AS last_handler_run_at,
                 rps.is_undefined,
                 rps.last_deployed_attribute_hash,
                 rps.current_intent_attribute_hash,
@@ -6063,7 +6063,7 @@ class Resource(BaseDocument):
             r.agent,
             r.resource_id_value,
             rps.created as first_generated_time,
-            rps.last_deploy as latest_deploy,
+            rps.last_handler_run_at as latest_deploy,
             r.attributes,
             {const.SQL_RESOURCE_STATUS_SELECTOR} AS status
         FROM resource AS r

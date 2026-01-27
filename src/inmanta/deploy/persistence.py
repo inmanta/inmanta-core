@@ -280,7 +280,7 @@ class ToDbUpdateManager(StateUpdateManager):
                     resource_id=resource_id_parsed.resource_str(),
                     environment=self.environment,
                     is_deploying=False,
-                    last_deploy=finished,
+                    last_handler_run_at=finished,
                     last_deployed_version=resource_id_parsed.version,
                     last_deployed_attribute_hash=attribute_hash,
                     last_non_deploying_status=const.NonDeployingResourceState(status),

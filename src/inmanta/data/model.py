@@ -611,7 +611,7 @@ class VersionedResourceDetails(ResourceDetails):
 
 class ReleasedResourceDetails(ResourceDetails):
     """The details of a released resource
-    :param last_deploy: The value of the last_deploy on the latest released version of the resource
+    :param last_deploy: The value of the last_handler_run_at on the latest released version of the resource
     :param first_generated_time: The first time this resource was generated
     :param status: The current status of the resource
     :param requires_status: The id and status of the resources this resource requires
