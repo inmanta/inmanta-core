@@ -467,7 +467,7 @@ async def test_resource_details(server, client, env_with_resources):
     result = await client.resource_details(env.id, multiple_requires)
     assert result.code == 200
     generated_time = parse_timestamp(result.result["data"]["first_generated_time"])
-    deploy_time = parse_timestamp(result.result["data"]["last_handler_run_at"])
+    deploy_time = parse_timestamp(result.result["data"]["last_deploy"])
     assert deploy_time == deploy_times[env.id][multiple_requires][3]
     await assert_matching_attributes(
         result.result["data"], resources[env.id][multiple_requires][3], generated_time=generated_time
@@ -482,7 +482,7 @@ async def test_resource_details(server, client, env_with_resources):
     result = await client.resource_details(env.id, no_requires)
     assert result.code == 200
     generated_time = parse_timestamp(result.result["data"]["first_generated_time"])
-    deploy_time = parse_timestamp(result.result["data"]["last_handler_run_at"])
+    deploy_time = parse_timestamp(result.result["data"]["last_deploy"])
     assert deploy_time == deploy_times[env.id][no_requires][3]
     await assert_matching_attributes(result.result["data"], resources[env.id][no_requires][3], generated_time=generated_time)
     assert result.result["data"]["requires_status"] == {}
@@ -492,7 +492,7 @@ async def test_resource_details(server, client, env_with_resources):
     result = await client.resource_details(env.id, single_requires)
     assert result.code == 200
     generated_time = parse_timestamp(result.result["data"]["first_generated_time"])
-    deploy_time = parse_timestamp(result.result["data"]["last_handler_run_at"])
+    deploy_time = parse_timestamp(result.result["data"]["last_deploy"])
     assert deploy_time == deploy_times[env.id][single_requires][2]
     await assert_matching_attributes(
         result.result["data"], resources[env.id][single_requires][3], generated_time=generated_time
