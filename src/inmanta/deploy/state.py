@@ -93,13 +93,14 @@ class ResourceIntent:
 
 class HandlerResult(StrEnum):
     """
-    The result of a resource's last (finished) execution. This result may be for an older version than the latest desired state.
+    The result that the handler reported when processing a given resource.
+    This result may be for an older version than the latest desired state.
     See Compliance for a resource's operational status with respect to its latest desired state.
 
-    NEW: Resource has never been deployed before.
-    SUCCESSFUL: Last resource deployment was successful.
-    FAILED: Last resource deployment was unsuccessful.
-    SKIPPED: Resource skipped deployment.
+    NEW: Resource has never been processed by the handler before.
+    SUCCESSFUL: Handler processed the resource successfully.
+    FAILED: Handler failed when processing the resource.
+    SKIPPED: Handler skipped processing this resource.
     """
 
     NEW = enum.auto()

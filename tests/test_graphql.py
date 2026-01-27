@@ -761,7 +761,7 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
         },
         # Non-compliant report
         {
-            "query": "lastHandlerRun: {eq: DEPLOYED} isDeploying: false complianceState: {eq: NON_COMPLIANT}",
+            "query": "lastHandlerRun: {eq: SUCCESSFUL} isDeploying: false complianceState: {eq: NON_COMPLIANT}",
             "result": 1,
             "assertion": {
                 "state": {
