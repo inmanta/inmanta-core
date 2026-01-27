@@ -54,5 +54,6 @@ async def test_remove_version_from_resource_and_dryrun(
         assert "version" not in res["id_fields"]
 
     resources = await data.Resource.get_list()
+    assert resources
     for resource in resources:
         assert "version" not in resource.attributes
