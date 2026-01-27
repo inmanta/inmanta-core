@@ -340,7 +340,7 @@ class Namespace(Namespaced):
         else:
             self.visible_namespaces = {name: MockImport(self)}
         self.primitives = None  # type: Optional[Dict[str,Type]]
-        self.scope = None  # type:  Optional[ExecutionContext]
+        self.scope = None  # type: Optional[ExecutionContext]
         self.__path: list[str]
 
         if self.__parent is None or self.__parent.get_name() == "__root__":

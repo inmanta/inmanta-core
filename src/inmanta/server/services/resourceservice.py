@@ -356,7 +356,7 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
             if cache_entry is None:
                 # No cache entry found
                 return None
-            (version_cache_entry, incr, neg_incr, neg_incr_per_agent, cached_run_ahead_lock) = cache_entry
+            version_cache_entry, incr, neg_incr, neg_incr_per_agent, cached_run_ahead_lock = cache_entry
             if version_cache_entry >= version:
                 assert not run_ahead_lock  # We only expect a lock if WE are ahead
                 # Cache is ahead or equal

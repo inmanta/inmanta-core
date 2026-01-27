@@ -25,8 +25,7 @@ from inmanta.module import RelationPrecedenceRule
 
 
 def test_issue_139_scheduler(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 import std
 import std::testing
 
@@ -62,15 +61,13 @@ host = Host(name="vm1", os=std::linux)
 f = std::testing::NullResource(name=host.name)
 Service(host=host, name="svc", state="running", onboot=true, requires=[f])
 ref = Service[host=host, name="svc"]
-"""
-    )
+""")
     with pytest.raises(MultiException):
         compiler.do_compile()
 
 
 def test_issue_201_double_set(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity Test1:
 
 end
@@ -90,44 +87,38 @@ b.test1 = a
 
 implementation none for std::Entity:
 end
-"""
-    )
+""")
 
-    (types, _) = compiler.do_compile()
+    types, _ = compiler.do_compile()
     a = types["__config__::Test1"].get_all_instances()[0]
     assert len(a.get_attribute("test2").value)
 
 
 def test_issue_170_attribute_exception(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity Test1:
     string a
 end
 
 Test1(a=3)
-"""
-    )
+""")
     with pytest.raises(AttributeException):
         compiler.do_compile()
 
 
 def test_execute_twice(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 import mod4::other
 import mod4
-    """
-    )
+    """)
 
-    (_, scopes) = compiler.do_compile()
+    _, scopes = compiler.do_compile()
     assert scopes.get_child("mod4").lookup("main").get_value() == 0
     assert scopes.get_child("mod4").get_child("other").lookup("other").get_value() == 0
 
 
 def test_643_cycle_empty(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity Alpha:
 end
 
@@ -139,9 +130,8 @@ implement Alpha using none
 a = Alpha()
 
 a.requires = a.provides
-"""
-    )
-    (_, scopes) = compiler.do_compile()
+""")
+    _, scopes = compiler.do_compile()
 
     root = scopes.get_child("__config__")
     a = root.lookup("a").get_value()
@@ -151,8 +141,7 @@ a.requires = a.provides
 
 
 def test_643_cycle(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity Alpha:
     string name
 end
@@ -167,9 +156,8 @@ b = Alpha(name="b")
 
 a.requires = b
 a.requires = b.provides
-"""
-    )
-    (_, scopes) = compiler.do_compile()
+""")
+    _, scopes = compiler.do_compile()
 
     root = scopes.get_child("__config__")
     a = root.lookup("a").get_value()
@@ -221,7 +209,7 @@ b.alink = a
 """,
         autostd=False,
     )
-    (_, scopes) = compiler.do_compile()
+    _, scopes = compiler.do_compile()
 
     root = scopes.get_child("__config__")
     a = root.lookup("a").get_value()
@@ -271,7 +259,7 @@ b.alink = a
 """,
         autostd=False,
     )
-    (_, scopes) = compiler.do_compile()
+    _, scopes = compiler.do_compile()
 
     root = scopes.get_child("__config__")
     a = root.lookup("a").get_value()
@@ -294,8 +282,7 @@ b.alink = a
 
 
 def test_lazy_attibutes(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity  Thing:
    int id
    string value = ""
@@ -309,18 +296,16 @@ index Thing(id)
 
 a = Thing(id=5, value="{{a.id}}")
 
-"""
-    )
+""")
 
-    (_, scopes) = compiler.do_compile()
+    _, scopes = compiler.do_compile()
     root = scopes.get_child("__config__")
 
     assert "5" == root.lookup("a").get_value().lookup("value").get_value()
 
 
 def test_lazy_attibutes2(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity  Thing:
    int id
    string value
@@ -335,18 +320,16 @@ a.value="{{a.id}}"
 
 implementation none for std::Entity:
 end
-"""
-    )
+""")
 
-    (_, scopes) = compiler.do_compile()
+    _, scopes = compiler.do_compile()
 
     root = scopes.get_child("__config__")
     assert "5" == root.lookup("a").get_value().lookup("value").get_value()
 
 
 def test_lazy_attibutes3(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity  Thing:
    int id
 end
@@ -367,9 +350,8 @@ index Thing(id)
 
 a = Thing(id=5, value=StringWrapper(value="{{a.id}}"))
 
-"""
-    )
-    (_, scopes) = compiler.do_compile()
+""")
+    _, scopes = compiler.do_compile()
     root = scopes.get_child("__config__")
 
     assert "5" == root.lookup("a").get_value().lookup("value").get_value().lookup("value").get_value()

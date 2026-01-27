@@ -25,14 +25,12 @@ from inmanta.ast import CompilerException, DuplicateException, HyphenException
 
 
 def test_2386_duplicate_attribute_error_message(snippetcompiler) -> None:
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity Test:
     string test
     bool test
 end
-        """
-    )
+        """)
     dir: str = snippetcompiler.project_dir
     with pytest.raises(
         DuplicateException,
@@ -46,12 +44,10 @@ end
 
 def test_deprecation_minus_in_entity_name(snippetcompiler):
     with pytest.raises(HyphenException) as e:
-        snippetcompiler.setup_for_snippet(
-            """
+        snippetcompiler.setup_for_snippet("""
     entity Entity-a:
     end
-            """
-        )
+            """)
         compiler.do_compile()
 
     message: str = (
@@ -63,13 +59,11 @@ def test_deprecation_minus_in_entity_name(snippetcompiler):
 
 def test_deprecation_minus_in_attribute_name(snippetcompiler):
     with pytest.raises(HyphenException) as e:
-        snippetcompiler.setup_for_snippet(
-            """
+        snippetcompiler.setup_for_snippet("""
     entity Entity:
         string attribute-a
     end
-            """
-        )
+            """)
 
         compiler.do_compile()
 
@@ -82,8 +76,7 @@ def test_deprecation_minus_in_attribute_name(snippetcompiler):
 
 def test_deprecation_minus_in_implementation_name(snippetcompiler):
     with pytest.raises(HyphenException) as e:
-        snippetcompiler.setup_for_snippet(
-            """
+        snippetcompiler.setup_for_snippet("""
 entity Car:
    string brand
 end
@@ -91,8 +84,7 @@ end
 implementation vw-polo for Car:
     brand = "vw"
 end
-            """
-        )
+            """)
         compiler.do_compile()
 
     message: str = (
@@ -104,11 +96,9 @@ end
 
 def test_deprecation_minus_in_typedef_name(snippetcompiler):
     with pytest.raises(HyphenException) as e:
-        snippetcompiler.setup_for_snippet(
-            """
+        snippetcompiler.setup_for_snippet("""
 typedef tcp-port as int matching self > 0 and self < 65535
-            """
-        )
+            """)
         compiler.do_compile()
 
     message: str = (
@@ -120,11 +110,9 @@ typedef tcp-port as int matching self > 0 and self < 65535
 
 def test_deprecation_minus_in_assign_variable_name(snippetcompiler):
     with pytest.raises(HyphenException) as e:
-        snippetcompiler.setup_for_snippet(
-            """
+        snippetcompiler.setup_for_snippet("""
 var-hello = "hello"
-            """
-        )
+            """)
         compiler.do_compile()
 
     message: str = (
@@ -136,11 +124,9 @@ var-hello = "hello"
 
 def test_deprecation_minus_import_as(snippetcompiler):
     with pytest.raises(HyphenException) as e:
-        snippetcompiler.setup_for_snippet(
-            """
+        snippetcompiler.setup_for_snippet("""
 import std as std-std
-            """
-        )
+            """)
         compiler.do_compile()
 
     message: str = (
@@ -169,8 +155,7 @@ import std as std-std
 )
 def test_deprecation_minus_relation(snippetcompiler, left, right, msg, location):
     with pytest.raises(HyphenException) as e:
-        snippetcompiler.setup_for_snippet(
-            f"""
+        snippetcompiler.setup_for_snippet(f"""
 entity Host:
     string  name
 end
@@ -180,19 +165,16 @@ entity File:
 end
 
 {left} [0:] -- {right} [1]
-            """
-        )
+            """)
     message: str = f"{msg} ({snippetcompiler.project_dir}/{location}))"
     assert str(e.value) == message
 
 
 def test_import_hypen_in_name(snippetcompiler):
     with pytest.raises(CompilerException) as e:
-        snippetcompiler.setup_for_snippet(
-            """
+        snippetcompiler.setup_for_snippet("""
 import st-d
-            """
-        )
+            """)
         compiler.do_compile()
 
     assert "st-d is not a valid module name: hyphens are not allowed, please use underscores instead." == e.value.msg

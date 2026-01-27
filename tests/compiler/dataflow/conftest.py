@@ -103,7 +103,7 @@ class DataflowTestHelper:
         def compile():
             self.snippetcompiler.setup_for_snippet(snippet, autostd=autostd)
             Config.set("compiler", "datatrace_enable", "true")
-            (self._types, root_ns) = compiler.do_compile()
+            self._types, root_ns = compiler.do_compile()
             self._namespace = root_ns.get_child("__config__")
 
         if expected_error_type is None:
@@ -215,7 +215,7 @@ class DataflowTestHelper:
         instance_bind: Optional[str] = None
 
         def consume_node(instance_bind: Optional[str] = None) -> Optional[str]:
-            (node, instance_id) = self._consume_token_rhs_element()
+            node, instance_id = self._consume_token_rhs_element()
             if instance_id is not None:
                 if instance_bind is not None:
                     raise Exception("Parse error: this simple language only allows a single instance binding in the rhs.")

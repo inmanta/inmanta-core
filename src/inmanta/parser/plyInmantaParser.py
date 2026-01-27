@@ -462,7 +462,7 @@ def p_implement_ns_list_collect(p: YaccProduction) -> None:
 def p_implement(p: YaccProduction) -> None:
     """implement_def : IMPLEMENT class_ref USING implement_ns_list empty
     | IMPLEMENT class_ref USING implement_ns_list MLS"""
-    (inherit, implementations) = p[4]
+    inherit, implementations = p[4]
     when: Literal = Literal(True)
     p[0] = DefineImplement(p[2], implementations, when, inherit=inherit, comment=p[5])
     attach_lnr(p)
@@ -472,7 +472,7 @@ def p_implement(p: YaccProduction) -> None:
 def p_implement_when(p: YaccProduction) -> None:
     """implement_def : IMPLEMENT class_ref USING implement_ns_list WHEN expression empty
     | IMPLEMENT class_ref USING implement_ns_list WHEN expression MLS"""
-    (inherit, implementations) = p[4]
+    inherit, implementations = p[4]
     p[0] = DefineImplement(p[2], implementations, p[6], inherit=inherit, comment=p[7])
     attach_lnr(p)
 
@@ -730,7 +730,7 @@ def p_constructor(p: YaccProduction) -> None:
 def p_function_call(p: YaccProduction) -> None:
     "function_call : ns_ref '(' function_param_list ')'"
     assert namespace
-    (args, kwargs, wrapped_kwargs) = p[3]
+    args, kwargs, wrapped_kwargs = p[3]
     p[0] = FunctionCall(p[1], args, kwargs, wrapped_kwargs, namespace)
 
 
@@ -1161,7 +1161,7 @@ def p_param_list_nonempty(p: YaccProduction) -> None:
     #   "key = value" -> p_param_list_element_explicit
     #   "**dict_of_name_value_pairs" -> p_param_list_element_kwargs
     # param_list: Tuple[List[Tuple[ID, operand]], List[wrapped_kwargs]]
-    (pair, kwargs) = p[1]
+    pair, kwargs = p[1]
     if pair is not None:
         p[3][0].insert(0, pair)
     if kwargs is not None:
@@ -1172,7 +1172,7 @@ def p_param_list_nonempty(p: YaccProduction) -> None:
 def p_function_param_list_element(p: YaccProduction) -> None:
     # function_param_list_element: Tuple[Optional[argument], Optional[Tuple[ID, operand]], Optional[wrapped_kwargs]]
     """function_param_list_element : param_list_element"""
-    (kwargs, wrapped_kwargs) = p[1]
+    kwargs, wrapped_kwargs = p[1]
     p[0] = (None, kwargs, wrapped_kwargs)
 
 
@@ -1198,7 +1198,7 @@ def p_function_param_list_nonempty(p: YaccProduction) -> None:
     #   "key = value" -> p_function_param_list_element
     #   "**dict_of_name_value_pairs" -> p_function_param_list_element
     # function_param_list: Tuple[List[argument], List[Tuple[ID, operand]], List[wrapped_kwargs]]
-    (args, kwargs, wrapped_kwargs) = p[1]
+    args, kwargs, wrapped_kwargs = p[1]
     if args is not None:
         p[3][0].insert(0, args)
     if kwargs is not None:

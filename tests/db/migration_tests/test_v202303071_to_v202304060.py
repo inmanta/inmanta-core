@@ -28,13 +28,11 @@ async def has_purge_on_delete_key_in_settings_dct(postgresql_client) -> bool:
     """
     Return True iff any of the records in the Environment table has the purge_on_delete key in the settings dictionary.
     """
-    result = await postgresql_client.fetch(
-        f"""
+    result = await postgresql_client.fetch(f"""
             SELECT 1
             FROM {data.Environment.table_name()}
             WHERE settings ? 'purge_on_delete'
-            """
-    )
+            """)
     return len(result) > 0
 
 

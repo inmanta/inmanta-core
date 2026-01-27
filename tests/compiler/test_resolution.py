@@ -23,12 +23,10 @@ from inmanta.ast import DuplicateException, NotFoundException, TypeNotFoundExcep
 
 
 def test_issue_92(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
     entity Host extends std::NotThere:
     end
-"""
-    )
+""")
     try:
         compiler.do_compile()
         raise AssertionError("Should get exception")
@@ -37,18 +35,15 @@ def test_issue_92(snippetcompiler):
 
 
 def test_issue_73(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 vm1 = std::floob()
-"""
-    )
+""")
     with pytest.raises(TypeNotFoundException):
         compiler.do_compile()
 
 
 def test_issue_110_resolution(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity Test1:
 
 end
@@ -60,20 +55,17 @@ implementation test1i for Test1:
 end
 
 t = Test1()
-"""
-    )
+""")
     with pytest.raises(NotFoundException):
         compiler.do_compile()
 
 
 def test_issue_134_colliding_umplementations(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 implementation test for std::Entity:
 end
 implementation test for std::Entity:
-end"""
-    )
+end""")
     with pytest.raises(DuplicateException):
         compiler.do_compile()
 
@@ -94,20 +86,17 @@ std::Host(name="vm1", os=std::linux)
 
 
 def test_400_typeloops(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
     entity Test extends Test:
 
     end
-    """
-    )
+    """)
     with pytest.raises(TypingException):
         compiler.do_compile()
 
 
 def test_400_typeloops_2(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
     entity Test extends Test2:
 
     end
@@ -115,8 +104,7 @@ def test_400_typeloops_2(snippetcompiler):
     entity Test2 extends Test:
 
     end
-    """
-    )
+    """)
     with pytest.raises(TypingException):
         compiler.do_compile()
 

@@ -184,8 +184,7 @@ import dataclasses::bad_sub_fields
 
     # explainer
     explanation = DataclassExplainer().explain(e.value)[0]
-    assert (
-        """To update the python class, add the following code to inmanta_plugins.dataclasses.bad_sub_fields.Virtualmachine:
+    assert """To update the python class, add the following code to inmanta_plugins.dataclasses.bad_sub_fields.Virtualmachine:
 
 import dataclasses
 
@@ -199,12 +198,9 @@ class Virtualmachine:
    ot: list[str]
    other: dict[str, object]
    ram: int
-"""
-        in explanation
-    )
+""" in explanation
 
-    assert (
-        """entity Virtualmachine extends std::Dataclass:
+    assert """entity Virtualmachine extends std::Dataclass:
    \"""Python comment\"""
    int cpus
    ERROR disk
@@ -213,9 +209,7 @@ class Virtualmachine:
    string[] os
    int ot
    dict other
-end"""
-        in explanation
-    )
+end""" in explanation
 
 
 def test_dataclass_type_check(snippetcompiler):

@@ -869,25 +869,20 @@ When a development release is done using the \--dev option, this command:
 
         os.mkdir(mod_path)
         with open(os.path.join(mod_path, "module.yml"), "w+", encoding="utf-8") as fd:
-            fd.write(
-                """name: %(name)s
+            fd.write("""name: %(name)s
 license: ASL 2.0
-version: 0.0.1dev0"""
-                % {"name": name}
-            )
+version: 0.0.1dev0""" % {"name": name})
 
         os.mkdir(os.path.join(mod_path, "model"))
         with open(os.path.join(mod_path, "model", "_init.cf"), "w+", encoding="utf-8") as fd:
             fd.write("\n")
 
         with open(os.path.join(mod_path, ".gitignore"), "w+", encoding="utf-8") as fd:
-            fd.write(
-                """*.swp
+            fd.write("""*.swp
 *.pyc
 *~
 .cache
-            """
-            )
+            """)
 
         subprocess.check_output(["git", "init"], cwd=mod_path)
         subprocess.check_output(["git", "add", ".gitignore", "module.yml", "model/_init.cf"], cwd=mod_path)
@@ -1271,15 +1266,13 @@ class Changelog:
         if os.path.exists(path):
             raise Exception(f"File {path} already exists.")
         with open(path, "w", encoding="utf-8") as fh:
-            fh.write(
-                f"""
+            fh.write(f"""
 {cls._get_top_level_header()}
 
 {cls._get_header_for_version(version)}
 
 - {changelog_message}
-            """.strip()
-            )
+            """.strip())
         return cls(path)
 
     def get_path(self) -> str:
@@ -1467,13 +1460,11 @@ class DefaultIsolatedEnvCached(DefaultIsolatedEnv):
             # So we can safely use the pyproject.toml file below.
             pyproject_toml_path = os.path.join(tmp_python_project_dir, "pyproject.toml")
             with open(pyproject_toml_path, "w", encoding="utf-8") as fh:
-                fh.write(
-                    """
+                fh.write("""
 [build-system]
 requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
-                """
-                )
+                """)
             builder = build.ProjectBuilder(
                 source_dir=tmp_python_project_dir,
                 python_executable=self._isolated_env.python_executable,
@@ -1591,16 +1582,14 @@ class V2ModuleBuilder:
             LOGGER.warning("This command will overwrite setup.py to make sure a correct wheel is generated.")
 
         with open(os.path.join(build_path, "setup.py"), "w") as fd:
-            fd.write(
-                f"""
+            fd.write(f"""
 from distutils.core import setup
 from Cython.Build import cythonize
 setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
     version="{self._module.version}",
     ext_modules=cythonize("inmanta_plugins/{self._module.name}/_cdummy.c"),
 )
-            """
-            )
+            """)
 
         # make sure cython is in the pyproject.toml
         pyproject = ModuleConverter.get_pyproject(build_path, build_requires=["wheel", "setuptools", "cython"])
@@ -1807,16 +1796,13 @@ class ModuleConverter:
             setup_cfg.write(fh)
         # write out MANIFEST.in
         with open(os.path.join(output_directory, "MANIFEST.in"), "w", encoding="utf-8") as fh:
-            fh.write(
-                f"""
+            fh.write(f"""
 include inmanta_plugins/{self._module.name}/setup.cfg
 include inmanta_plugins/{self._module.name}/py.typed
 recursive-include inmanta_plugins/{self._module.name}/model *.cf
 graft inmanta_plugins/{self._module.name}/files
 graft inmanta_plugins/{self._module.name}/templates
-                """.strip()
-                + "\n"
-            )
+                """.strip() + "\n")
 
     @classmethod
     def get_pyproject(cls, in_folder: str, warn_on_merge: bool = False, build_requires: Optional[list[str]] = None) -> str:

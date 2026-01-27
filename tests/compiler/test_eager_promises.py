@@ -38,12 +38,10 @@ def test_eager_promises_if(snippetcompiler, swap_order: bool, nested: bool) -> N
     This model compiles or fails without eager promising depending on the declaration order of the two relations (without
     promises, neither is preferred over the other and they are frozen in lexical order.
     """
-    relations_raw: str = (
-        """
+    relations_raw: str = ("""
             A.optional [0:1] -- A
             A.list [0:] -- A
-        """
-    ).strip()
+        """).strip()
     relations: str = relations_raw if not swap_order else "\n".join(reversed(relations_raw.splitlines()))
 
     body: str
@@ -139,12 +137,10 @@ def test_eager_promises_implementation(snippetcompiler, swap_order: bool, when: 
         pytest.xfail(
             "Limitation of the current eager promising implementation: implementations can only acquire promises when emitted"
         )
-    relations_raw: str = (
-        """
+    relations_raw: str = ("""
             A.optional [0:1] -- A
             A.list [0:] -- A
-        """
-    ).strip()
+        """).strip()
     relations: str = relations_raw if not swap_order else "\n".join(reversed(relations_raw.splitlines()))
 
     implement: str = "implement A using a when std::count(self.list) > 0" if when else "implement A using a"
@@ -180,12 +176,10 @@ def test_eager_promises_implementation_implicit_self(snippetcompiler, swap_order
     Verify that assignment to a relation's subattribute in an implementation works as expected when the self keyword is not
     used for the reference.
     """
-    relations_raw: str = (
-        """
+    relations_raw: str = ("""
             A.optional [0:1] -- A
             A.list [0:] -- A
-        """
-    ).strip()
+        """).strip()
     relations: str = relations_raw if not swap_order else "\n".join(reversed(relations_raw.splitlines()))
 
     snippetcompiler.setup_for_snippet(
@@ -351,8 +345,7 @@ def test_4498_eager_promises_nested_unset(snippetcompiler) -> None:
     Verify that acquiring an eager promise on an unset (even nested) value (in a block that never gets executed) does not raise
     an exception.
     """
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity A:
 end
 A.other [0:1] -- A
@@ -367,8 +360,7 @@ implementation a for A:
         self.other.deeply.nested.attribute.name = "b"
     end
 end
-        """
-    )
+        """)
     compiler.do_compile()
 
 
