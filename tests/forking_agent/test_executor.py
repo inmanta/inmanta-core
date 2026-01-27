@@ -108,9 +108,7 @@ async def test_executor_server(set_custom_executor_policy, mpmanager: MPManager,
     direct_content = """
 def test():
    return "DIRECT"
-    """.encode(
-        "utf-8"
-    )
+    """.encode("utf-8")
     direct = inmanta.loader.ModuleSource(
         "inmanta_plugins.test.testA", inmanta.util.hash_file(direct_content), False, direct_content
     )
@@ -118,9 +116,7 @@ def test():
     server_content = """
 def test():
    return "server"
-""".encode(
-        "utf-8"
-    )
+""".encode("utf-8")
     server_content_hash = inmanta.util.hash_file(server_content)
     via_server = inmanta.loader.ModuleSource("inmanta_plugins.test.testB", server_content_hash, False)
     # Upload

@@ -33,20 +33,16 @@ async def update(connection: Connection) -> None:
     # Create column
     await connection.execute("ALTER TABLE public.configurationmodel ADD COLUMN is_suitable_for_partial_compiles boolean")
     # Populate column
-    await connection.execute(
-        f"""
+    await connection.execute(f"""
             UPDATE {data.ConfigurationModel.table_name()}
             SET is_suitable_for_partial_compiles=FALSE
-        """
-    )
+        """)
     # Add non null constraint
     await connection.execute("ALTER TABLE public.configurationmodel ALTER COLUMN is_suitable_for_partial_compiles SET NOT NULL")
 
     # Remove the version field from the attributes of a resource
-    await connection.execute(
-        f"""
+    await connection.execute(f"""
             UPDATE {data.Resource.table_name()}
             SET attributes = attributes - 'version'
             WHERE attributes ? 'version'
-        """
-    )
+        """)

@@ -23,8 +23,7 @@ from inmanta import compiler
 
 def test_plus(snippetcompiler) -> None:
     snippetcompiler.setup_for_snippet(
-        textwrap.dedent(
-            """\
+        textwrap.dedent("""\
             #####################
             # Untyped variables #
             #####################
@@ -116,8 +115,7 @@ def test_plus(snippetcompiler) -> None:
             filtered = [elem + 10 for elem in seq if elem + 1 < 2]
             std::assert(10 in filtered)
             std::assert(11 not in filtered)
-            """
-        ),
+            """),
         autostd=True,
     )
     compiler.do_compile()
@@ -125,8 +123,7 @@ def test_plus(snippetcompiler) -> None:
 
 def test_min(snippetcompiler) -> None:
     snippetcompiler.setup_for_snippet(
-        textwrap.dedent(
-            """\
+        textwrap.dedent("""\
             #####################
             # Untyped variables #
             #####################
@@ -215,8 +212,7 @@ def test_min(snippetcompiler) -> None:
             filtered = [elem - 10 for elem in seq if elem - 10 < 1]
             std::assert(0 in filtered)
             std::assert(1 not in filtered)
-            """
-        ),
+            """),
         autostd=True,
     )
     compiler.do_compile()
@@ -224,8 +220,7 @@ def test_min(snippetcompiler) -> None:
 
 def test_multiplication(snippetcompiler) -> None:
     snippetcompiler.setup_for_snippet(
-        textwrap.dedent(
-            """\
+        textwrap.dedent("""\
             #####################
             # Untyped variables #
             #####################
@@ -314,8 +309,7 @@ def test_multiplication(snippetcompiler) -> None:
             filtered = [elem * 10 for elem in seq if elem * 10 < 20]
             std::assert(10 in filtered)
             std::assert(20 not in filtered)
-            """
-        ),
+            """),
         autostd=True,
     )
     compiler.do_compile()
@@ -323,8 +317,7 @@ def test_multiplication(snippetcompiler) -> None:
 
 def test_division(snippetcompiler) -> None:
     snippetcompiler.setup_for_snippet(
-        textwrap.dedent(
-            """\
+        textwrap.dedent("""\
             #####################
             # Untyped variables #
             #####################
@@ -415,8 +408,7 @@ def test_division(snippetcompiler) -> None:
             filtered = [elem / 2 for elem in seq if elem / 2 < 2]
             std::assert(1 in filtered)
             std::assert(2 not in filtered)
-            """
-        ),
+            """),
         autostd=True,
     )
     compiler.do_compile()
@@ -424,8 +416,7 @@ def test_division(snippetcompiler) -> None:
 
 def test_modulo(snippetcompiler) -> None:
     snippetcompiler.setup_for_snippet(
-        textwrap.dedent(
-            """\
+        textwrap.dedent("""\
             #####################
             # Untyped variables #
             #####################
@@ -478,8 +469,7 @@ def test_modulo(snippetcompiler) -> None:
             filtered = [elem % 2 for elem in seq if elem % 2 > 0]
             std::assert(1 in filtered)
             std::assert(0 not in filtered)
-            """
-        ),
+            """),
         autostd=True,
     )
     compiler.do_compile()
@@ -487,8 +477,7 @@ def test_modulo(snippetcompiler) -> None:
 
 def test_exponentiation(snippetcompiler) -> None:
     snippetcompiler.setup_for_snippet(
-        textwrap.dedent(
-            """\
+        textwrap.dedent("""\
             #####################
             # Untyped variables #
             #####################
@@ -577,8 +566,7 @@ def test_exponentiation(snippetcompiler) -> None:
             filtered = [elem ** 2 for elem in seq if elem ** 2 < 5]
             std::assert(4 in filtered)
             std::assert(9 not in filtered)
-            """
-        ),
+            """),
         autostd=True,
     )
     compiler.do_compile()
@@ -588,9 +576,7 @@ def test_precedence_rules(snippetcompiler) -> None:
     """
     Verify the precedence rules for the arithmetic operations.
     """
-    snippetcompiler.setup_for_snippet(
-        textwrap.dedent(
-            """\
+    snippetcompiler.setup_for_snippet(textwrap.dedent("""\
             result1 = 34/2**2+2*3
             result1 = 14.5
 
@@ -599,9 +585,7 @@ def test_precedence_rules(snippetcompiler) -> None:
 
             result3 = (6/2)**((2+2)*2)
             result3 = 6561
-            """
-        )
-    )
+            """))
     compiler.do_compile()
 
 

@@ -206,7 +206,7 @@ class DynamicProxy:
         if isinstance(item, dict):
 
             def recurse_dict_item(key_value: tuple[object, object]) -> tuple[object, object]:
-                (key, value) = key_value
+                key, value = key_value
                 if not isinstance(key, str):
                     raise RuntimeException(
                         None, f"dict keys should be strings, got {key!r} of type {type(key)} with dict value {value!r}"

@@ -35,11 +35,9 @@ async def test_add_reinstall_project_and_venv_column(
 ) -> None:
     await migrate_db_from()
 
-    result = await postgresql_client.fetch(
-        f"""
+    result = await postgresql_client.fetch(f"""
         SELECT reinstall_project_and_venv
         FROM {data.Compile.table_name()}
-        """
-    )
+        """)
     assert len(result) > 0
     assert all(r["reinstall_project_and_venv"] is False for r in result)

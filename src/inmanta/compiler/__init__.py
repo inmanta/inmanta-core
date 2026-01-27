@@ -70,7 +70,7 @@ def do_compile(refs: Optional[abc.Mapping[object, object]] = None) -> tuple[dict
 
     project = module.Project.get()
     try:
-        (statements, blocks) = compiler.compile()
+        statements, blocks = compiler.compile()
     except ParserException as e:
         compiler.handle_exception(e)
     sched = scheduler.Scheduler(compiler_config.track_dataflow(), project.get_relation_precedence_policy())
@@ -125,7 +125,7 @@ def anchormap(refs: Optional[abc.Mapping[object, object]] = None) -> Sequence[tu
 
     LOGGER.debug("Starting compile")
 
-    (statements, blocks) = compiler.compile()
+    statements, blocks = compiler.compile()
     sched = scheduler.Scheduler()
     return sched.get_anchormap(compiler, statements, blocks)
 
@@ -135,7 +135,7 @@ def get_types_and_scopes() -> tuple[dict[str, inmanta_type.Type], Namespace]:
     Only run the compilation steps required to extract the different types and scopes.
     """
     compiler = Compiler()
-    (statements, blocks) = compiler.compile()
+    statements, blocks = compiler.compile()
     sched = scheduler.Scheduler(compiler_config.track_dataflow())
     sched.define_types(compiler, statements, blocks)
     return sched.get_types(), compiler.get_ns()

@@ -77,10 +77,10 @@ async def install_project(python_env: env.PythonEnvironment, project_dir: py.pat
         *args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=str(project_dir)
     )
     try:
-        (stdout, stderr) = await asyncio.wait_for(process.communicate(), timeout=30)
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=30)
     except asyncio.TimeoutError as e:
         process.kill()
-        (stdout, stderr) = await process.communicate()
+        stdout, stderr = await process.communicate()
         print(stdout.decode())
         print(stderr.decode())
         raise e
@@ -190,8 +190,7 @@ async def test_export(
     path_config_file = workspace.join(".inmanta")
     libs_dir = workspace.join("libs")
 
-    path_project_yml_file.write(
-        f"""
+    path_project_yml_file.write(f"""
 name: testproject
 modulepath: {libs_dir}
 downloadpath: {libs_dir}
@@ -199,22 +198,18 @@ repo: https://github.com/inmanta/
 environment_settings:
     {ENVIRONMENT_METRICS_RETENTION}: 100
     {NOTIFICATION_RETENTION}: 200
-"""
-    )
+""")
 
     # Use non-default agent to make sure the resource can be checked in the 'deploying' state.
     # Using the internal default agent might trigger a race condition where the 'success' state
     # is reached because the resource actually gets deployed.
 
-    path_main_file.write(
-        """
+    path_main_file.write("""
 import std::testing
 std::testing::NullResource(name="test", agentname="non_existing_agent")
-"""
-    )
+""")
 
-    path_config_file.write(
-        f"""
+    path_config_file.write(f"""
 [compiler_rest_transport]
 {'host=' + server_host if not set_server else ''}
 {'port=' + str(server_port) if not set_port else ''}
@@ -222,8 +217,7 @@ std::testing::NullResource(name="test", agentname="non_existing_agent")
 [cmdline_rest_transport]
 {'host=' + server_host if not set_server else ''}
 {'port=' + str(server_port) if not set_port else ''}
-"""
-    )
+""")
 
     await install_project(tmpvenv_active_inherit, workspace)
 
@@ -298,14 +292,12 @@ async def test_export_with_specific_export_plugin(tmpvenv_active_inherit: env.Vi
 
     # project.yml
     path_project_yml_file = workspace.join("project.yml")
-    path_project_yml_file.write(
-        f"""
+    path_project_yml_file.write(f"""
 name: testproject
 modulepath: {libs_dir}
 downloadpath: {libs_dir}
 repo: https://github.com/inmanta/
-"""
-    )
+""")
 
     # main.cf
     path_main_file = workspace.join("main.cf")
@@ -317,29 +309,24 @@ repo: https://github.com/inmanta/
 
     # Module.yml
     module_yml_file = module_dir.join("module.yml")
-    module_yml_file.write(
-        """
+    module_yml_file.write("""
 name: test
 license: test
 version: 1.0.0
-    """
-    )
+    """)
 
     # .inmanta
     dot_inmanta_cfg_file = workspace.join(".inmanta")
-    dot_inmanta_cfg_file.write(
-        """
+    dot_inmanta_cfg_file.write("""
 [config]
 export=other_exporter
-    """
-    )
+    """)
 
     # plugin/__init__.py
     plugins_dir = module_dir.join("plugins")
     os.makedirs(plugins_dir)
     init_file = plugins_dir.join("__init__.py")
-    init_file.write(
-        """
+    init_file.write("""
 from inmanta.export import export, Exporter
 
 @export("test_exporter")
@@ -349,8 +336,7 @@ def test_exporter(exporter: Exporter) -> None:
 @export("other_exporter")
 def other_exporter(exporter: Exporter) -> None:
     print("other_exporter ran")
-    """
-    )
+    """)
 
     # model/_init.cf
     model_dir = module_dir.join("model")
@@ -379,7 +365,7 @@ def other_exporter(exporter: Exporter) -> None:
 
     process = await subprocess.create_subprocess_exec(*args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     try:
-        (stdout, stderr) = await asyncio.wait_for(process.communicate(), timeout=30)
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=30)
     except asyncio.TimeoutError as e:
         process.kill()
         await process.communicate()
@@ -393,18 +379,16 @@ def other_exporter(exporter: Exporter) -> None:
 
     # ## Failure
 
-    path_main_file.write(
-        """import test
+    path_main_file.write("""import test
 
 vm1=std::Host(name="non-existing-machine", os=std::linux)
 
 vm1.name = "other"
-"""
-    )
+""")
 
     process = await subprocess.create_subprocess_exec(*args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     try:
-        (stdout, stderr) = await asyncio.wait_for(process.communicate(), timeout=30)
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=30)
     except asyncio.TimeoutError as e:
         process.kill()
         await process.communicate()
@@ -436,22 +420,18 @@ async def test_export_without_environment(tmpdir, server, client, push_method):
     path_project_yml_file = workspace.join("project.yml")
     libs_dir = workspace.join("libs")
 
-    path_project_yml_file.write(
-        f"""
+    path_project_yml_file.write(f"""
 name: testproject
 modulepath: {libs_dir}
 downloadpath: {libs_dir}
 repo: https://github.com/inmanta/
-"""
-    )
+""")
 
-    path_main_file.write(
-        """
+    path_main_file.write("""
 import std::testing
 
 std::testing::NullResource(name="test")
-"""
-    )
+""")
 
     os.chdir(workspace)
 
@@ -492,7 +472,7 @@ async def test_export_invalid_argument_combination() -> None:
     args = [sys.executable, "-m", "inmanta.app", "export", "--delete-resource-set", "test"]
     process = await subprocess.create_subprocess_exec(*args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     try:
-        (stdout, stderr) = await asyncio.wait_for(process.communicate(), timeout=5)
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=5)
     except asyncio.TimeoutError as e:
         process.kill()
         await process.communicate()
@@ -511,7 +491,7 @@ async def test_export_invalid_argument_combination() -> None:
     env = {INMANTA_REMOVED_SET_ID: "a b c"}
     process = await subprocess.create_subprocess_exec(*args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
     try:
-        (stdout, stderr) = await asyncio.wait_for(process.communicate(), timeout=5)
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=5)
     except asyncio.TimeoutError as e:
         process.kill()
         await process.communicate()
@@ -561,26 +541,18 @@ async def test_logger_name_in_compiler_exporter_output(
     )
 
     path_project_yml_file = tmpdir.join("project.yml")
-    path_project_yml_file.write(
-        textwrap.dedent(
-            f"""
+    path_project_yml_file.write(textwrap.dedent(f"""
                 name: testproject
                 modulepath: {libs_dir}
                 downloadpath: {libs_dir}
                 repo: https://github.com/inmanta/
-            """
-        )
-    )
+            """))
 
     path_main_cf = tmpdir.join("main.cf")
-    path_main_cf.write(
-        textwrap.dedent(
-            """
+    path_main_cf.write(textwrap.dedent("""
                 import mymod
                 mymod::test_plugin()
-            """
-        )
-    )
+            """))
 
     await install_project(python_env=tmpvenv_active_inherit, project_dir=tmpdir)
 
@@ -597,7 +569,7 @@ async def test_logger_name_in_compiler_exporter_output(
         *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT, cwd=tmpdir
     )
     try:
-        (stdout, _) = await asyncio.wait_for(process.communicate(), timeout=30)
+        stdout, _ = await asyncio.wait_for(process.communicate(), timeout=30)
     except asyncio.TimeoutError as e:
         process.kill()
         await process.communicate()
@@ -631,7 +603,7 @@ async def test_logger_name_in_compiler_exporter_output(
         *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT, cwd=tmpdir
     )
     try:
-        (stdout, _) = await asyncio.wait_for(process.communicate(), timeout=30)
+        stdout, _ = await asyncio.wait_for(process.communicate(), timeout=30)
     except asyncio.TimeoutError as e:
         process.kill()
         await process.communicate()

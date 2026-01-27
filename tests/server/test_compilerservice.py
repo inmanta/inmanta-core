@@ -572,8 +572,7 @@ std::testing::NullResource(name="test")
     # Add .inmanta file with inverse SSL config as the server itself.
     config_file = os.path.join(tmpdir, "auth.cfg")
     with open(config_file, "w+", encoding="utf-8") as fd:
-        fd.write(
-            """
+        fd.write("""
 [server]
 auth=true
 auth_additional_header=Jwt-Assertion
@@ -587,8 +586,7 @@ expire=0
 issuer=https://localhost:8888/
 audience=https://localhost:8888/
 
-            """
-        )
+            """)
 
     config.Config.load_config(config_file)
     env = await environment_factory.create_environment(main=main_cf)
@@ -841,15 +839,13 @@ async def test_server_recompile(server, client, environment, monkeypatch):
 
     # add main.cf
     with open(os.path.join(project_dir, "main.cf"), "w", encoding="utf-8") as fd:
-        fd.write(
-            f"""
+        fd.write(f"""
         import std::testing
 
         host = std::Host(name="test", os=std::linux)
         std::testing::NullResource(name=host.name)
         std::print(std::get_env("{key_env_var}"))
-"""
-        )
+""")
 
     logger.info("request a compile")
     result = await client.notify_change(environment)
@@ -991,12 +987,10 @@ async def test_server_recompile_param_fact_v2(server, client, environment):
 
     # add main.cf
     with open(os.path.join(project_dir, "main.cf"), "w", encoding="utf-8") as fd:
-        fd.write(
-            """
+        fd.write("""
 import std::testing
 std::testing::NullResource(name='test')
-"""
-        )
+""")
 
     logger.info("request a compile")
     result = await client.notify_change(environment)

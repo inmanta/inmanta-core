@@ -412,27 +412,23 @@ def test_stable_dfs():
             edges[f] = ts
         return list(nodes), edges
 
-    graph = expand_graph(
-        """
+    graph = expand_graph("""
     e: f
     ab: b c
     b: c d
     h: i
     0:
-    """
-    )
+    """)
     seq = stable_depth_first(*graph)
     assert seq == ["0", "c", "d", "b", "ab", "f", "e", "i", "h"]
 
-    graph = expand_graph(
-        """
+    graph = expand_graph("""
         e: f
         b: c d
         ab: c b
         h: i
         0:
-        """
-    )
+        """)
     seq = stable_depth_first(*graph)
     assert seq == ["0", "c", "d", "b", "ab", "f", "e", "i", "h"]
 
@@ -442,12 +438,8 @@ def test_stable_dfs():
     assert e.value.nodes == ["ab"]
 
     with pytest.raises(CycleException) as e:
-        stable_depth_first(
-            *expand_graph(
-                """ab: b
-        b: ab"""
-            )
-        )
+        stable_depth_first(*expand_graph("""ab: b
+        b: ab"""))
 
     assert e.value.nodes == ["b", "ab"]
 

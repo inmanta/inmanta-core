@@ -20,8 +20,7 @@ import inmanta.compiler as compiler
 
 
 def test_doc_string_on_relation_unidir(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity File:
 end
 
@@ -32,15 +31,13 @@ File.host [1] -- Host
 \"""
 Each file needs to be associated with a host
 \"""
-"""
-    )
-    (types, _) = compiler.do_compile()
+""")
+    types, _ = compiler.do_compile()
     assert types["__config__::File"].get_attribute("host").comment.strip() == "Each file needs to be associated with a host"
 
 
 def test_doc_string_on_relation(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity File:
 end
 entity Host:
@@ -49,16 +46,14 @@ File.host [0:] -- Host.file [1]
 \"""
 Each file needs to be associated with a host
 \"""
-"""
-    )
-    (types, _) = compiler.do_compile()
+""")
+    types, _ = compiler.do_compile()
     assert types["__config__::File"].get_attribute("host").comment.strip() == "Each file needs to be associated with a host"
     assert types["__config__::Host"].get_attribute("file").comment.strip() == "Each file needs to be associated with a host"
 
 
 def test_function_in_typedef(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 import tests
 typedef notempty as string matching tests::length(self) > 0
 typedef uniquechars as string matching tests::empty(self)
@@ -73,27 +68,23 @@ A(ne="aa", uc="")
 implement A using none
 implementation none for std::Entity:
 end
-"""
-    )
-    (types, _) = compiler.do_compile()
+""")
+    types, _ = compiler.do_compile()
 
 
 def test_doc_string_on_typedef(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 typedef foo as string matching /^a+$/
 \"""
     Foo is a stringtype that only allows "a"
 \"""
-"""
-    )
-    (types, _) = compiler.do_compile()
+""")
+    types, _ = compiler.do_compile()
     assert types["__config__::foo"].comment.strip() == 'Foo is a stringtype that only allows "a"'
 
 
 def test_doc_string_on_impl(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity Host:
 end
 
@@ -102,16 +93,14 @@ implementation test for Host:
         Bla bla
     \"""
 end
-"""
-    )
+""")
 
-    (types, _) = compiler.do_compile()
+    types, _ = compiler.do_compile()
     assert types["__config__::Host"].implementations[0].comment.strip() == "Bla bla"
 
 
 def test_doc_string_on_implements(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity Host:
 end
 
@@ -122,8 +111,7 @@ implement Host using test
 \"""
     Always use test!
 \"""
-"""
-    )
-    (types, _) = compiler.do_compile()
+""")
+    types, _ = compiler.do_compile()
 
     assert types["__config__::Host"].implements[0].comment.strip() == "Always use test!"
