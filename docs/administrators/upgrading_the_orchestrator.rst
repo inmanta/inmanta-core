@@ -5,7 +5,7 @@ Upgrading the orchestrator
 
 Upgrading the orchestrator can be done either in-place or by setting up a new orchestrator next to the old one
 and migrating the state from the old to the new instance. The sections below describe the upgrade procedure
-for each of both situations. These procedures can be used for major and non-major version upgrades. Note that
+for both situations. These procedures can be used for major and non-major version upgrades. Note that
 the in-place upgrade procedure cannot be used to migrate from an RPM to a container-based installation.
 
 .. note::
