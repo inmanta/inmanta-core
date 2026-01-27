@@ -91,7 +91,8 @@ def test_cache(snippetcompiler):
         """
         + """
         Tester(testfield="A", testfield3="http://example.com/x")
-        """ * 20
+        """
+        * 20
     )
 
     compiler.do_compile()

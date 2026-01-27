@@ -25,5 +25,9 @@ async def update(connection: Connection) -> None:
     """
     schema = """
     ALTER TABLE public.resource_persistent_state RENAME COLUMN last_deploy_result TO last_handler_run;
+
+    UPDATE public.resource_persistent_state
+    SET last_handler_run='SUCCESSFUL'
+    WHERE last_handler_run='DEPLOYED';
     """
     await connection.execute(schema)

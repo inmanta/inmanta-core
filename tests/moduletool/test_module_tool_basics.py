@@ -51,12 +51,14 @@ def tmp_working_dir(tmpdir: py.path.local) -> Iterator[py.path.local]:
 
 def test_get_module_v1(tmp_working_dir: py.path.local):
     metadata_file: str = tmp_working_dir.join("module.yml")
-    metadata_file.write("""
+    metadata_file.write(
+        """
 name: mod
 license: ASL
 version: 1.2.3
 compiler_version: 2017.2
-        """.strip())
+        """.strip()
+    )
 
     mt = ModuleTool()
     mod: module.Module = mt.get_module()
@@ -65,7 +67,8 @@ compiler_version: 2017.2
 
 def test_get_module_v2(tmp_working_dir: py.path.local):
     metadata_file: str = tmp_working_dir.join("setup.cfg")
-    metadata_file.write("""
+    metadata_file.write(
+        """
 [metadata]
 name = inmanta-module-mod
 version = 1.2.3
@@ -78,7 +81,8 @@ install_requires =
 
   cookiecutter~=1.7.0
   cryptography>1.0,<3.5
-        """.strip())
+        """.strip()
+    )
     model_dir: py.path.local = tmp_working_dir.join("model")
     os.makedirs(str(model_dir))
     open(str(model_dir.join("_init.cf")), "w").close()
@@ -272,12 +276,14 @@ def inmanta_module_v2(tmpdir):
 
 
 def test_module_version_non_pep440_complient(inmanta_module_v1):
-    inmanta_module_v1.write_metadata_file("""
+    inmanta_module_v1.write_metadata_file(
+        """
 name: mod
 license: ASL
 version: non_pep440_value
 compiler_version: 2017.2
-    """)
+    """
+    )
     with pytest.raises(InvalidModuleException) as e:
         module.ModuleV1(None, inmanta_module_v1.get_root_dir_of_module())
 
@@ -287,11 +293,13 @@ compiler_version: 2017.2
 
 
 def test_invalid_yaml_syntax_in_module_yml(inmanta_module_v1):
-    inmanta_module_v1.write_metadata_file("""
+    inmanta_module_v1.write_metadata_file(
+        """
 test:
  - first
  second
-""")
+"""
+    )
     with pytest.raises(InvalidModuleException) as e:
         module.ModuleV1(None, inmanta_module_v1.get_root_dir_of_module())
 
@@ -301,26 +309,30 @@ test:
 
 
 def test_module_requires(inmanta_module_v1):
-    inmanta_module_v1.write_metadata_file("""
+    inmanta_module_v1.write_metadata_file(
+        """
 name: mod
 license: ASL
 version: 1.0.0
 requires:
     - std
     - ip > 1.0.0
-        """)
+        """
+    )
     mod: module.Module = module.ModuleV1(None, inmanta_module_v1.get_root_dir_of_module())
     assert mod.requires() == [InmantaModuleRequirement.parse("std"), InmantaModuleRequirement.parse("ip > 1.0.0")]
 
 
 @pytest.mark.parametrize("deprecated", ["", "deprecated: true", "deprecated: false"])
 def test_module_v1_deprecation(inmanta_module_v1, deprecated):
-    inmanta_module_v1.write_metadata_file(f"""
+    inmanta_module_v1.write_metadata_file(
+        f"""
 name: mod
 license: ASL
 version: 1.0.0
 {deprecated}
-        """)
+        """
+    )
     with warnings.catch_warnings(record=True) as w:
         module.ModuleV1(None, inmanta_module_v1.get_root_dir_of_module())
         assert len(w) == 1 if deprecated == "deprecated: true" else len(w) == 0
@@ -331,12 +343,14 @@ version: 1.0.0
 
 
 def test_module_requires_single(inmanta_module_v1):
-    inmanta_module_v1.write_metadata_file("""
+    inmanta_module_v1.write_metadata_file(
+        """
 name: mod
 license: ASL
 version: 1.0.0
 requires: std > 1.0.0
-        """)
+        """
+    )
     mod: module.Module = module.ModuleV1(None, inmanta_module_v1.get_root_dir_of_module())
     assert mod.requires() == [InmantaModuleRequirement.parse("std > 1.0.0")]
 
@@ -346,13 +360,15 @@ def test_module_requires_contains_dictionary(inmanta_module_v1):
     Verify that providing a dictionary to the 'requires' field of a V1 module results in an error.
     This is a legacy format that is no longer supported.
     """
-    inmanta_module_v1.write_metadata_file("""
+    inmanta_module_v1.write_metadata_file(
+        """
 name: mod
 license: ASL
 version: 1.0.0
 requires:
     std: std > 1.0.0
-        """)
+        """
+    )
     with pytest.raises(InvalidModuleException) as e:
         module.ModuleV1(None, inmanta_module_v1.get_root_dir_of_module())
 
@@ -368,7 +384,8 @@ requires:
 
 
 def test_module_v2_metadata(inmanta_module_v2: InmantaModule) -> None:
-    inmanta_module_v2.write_metadata_file("""
+    inmanta_module_v2.write_metadata_file(
+        """
 [metadata]
 name = inmanta-module-mod1
 version = 1.2.3
@@ -381,7 +398,8 @@ install_requires =
 
   cookiecutter~=1.7.0
   cryptography>1.0,<3.5
-        """)
+        """
+    )
     mod: module.ModuleV2 = module.ModuleV2(None, inmanta_module_v2.get_root_dir_of_module())
     assert mod.metadata.name == "inmanta-module-mod1"
     assert mod.metadata.version == "1.2.3"
@@ -390,13 +408,15 @@ install_requires =
 
 @pytest.mark.parametrize("deprecated", ["", "deprecated: true", "deprecated: false"])
 def test_module_v2_deprecation(inmanta_module_v2: InmantaModule, deprecated):
-    inmanta_module_v2.write_metadata_file(f"""
+    inmanta_module_v2.write_metadata_file(
+        f"""
 [metadata]
 name = inmanta-module-mod1
 version = 1.2.3
 license = Apache 2.0
 {deprecated}
-        """)
+        """
+    )
     with warnings.catch_warnings(record=True) as w:
         module.ModuleV2(None, inmanta_module_v2.get_root_dir_of_module())
         assert len(w) == 1 if deprecated == "deprecated: true" else len(w) == 0
@@ -412,7 +432,8 @@ def test_module_v2_name_underscore(inmanta_module_v2: InmantaModule, underscore:
     Test module v2 metadata parsing with respect to module naming rules about dashes and underscores.
     """
     separator: str = "_" if underscore else "-"
-    inmanta_module_v2.write_metadata_file(f"""
+    inmanta_module_v2.write_metadata_file(
+        f"""
 [metadata]
 name = inmanta-module-my{separator}mod
 version = 1.2.3
@@ -426,7 +447,8 @@ install_requires =
   cookiecutter~=1.7.0
   cryptography>1.0,<3.5
 packages = find_namespace:
-        """)
+        """
+    )
     if underscore:
         with pytest.raises(InvalidMetadata):
             module.ModuleV2(None, inmanta_module_v2.get_root_dir_of_module())
@@ -445,7 +467,8 @@ def test_module_v2_invalid_version(inmanta_module_v2: InmantaModule, version: st
     """
     Test module v2 metadata parsing with respect to module naming rules about dashes and underscores.
     """
-    inmanta_module_v2.write_metadata_file(f"""
+    inmanta_module_v2.write_metadata_file(
+        f"""
 [metadata]
 name = inmanta-module-mymod
 version = {version}
@@ -459,7 +482,8 @@ install_requires =
   cookiecutter~=1.7.0
   cryptography>1.0,<3.5
 packages = find_namespace:
-        """)
+        """
+    )
     with pytest.raises(InvalidMetadata) as e:
         module.ModuleV2(None, inmanta_module_v2.get_root_dir_of_module())
     assert (

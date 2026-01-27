@@ -523,103 +523,127 @@ def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", module
         "refs::plugins::read_entity_list_head(refs::ListContainer(value=['Hello', refs::create_string_reference('hello')]))"
     )
     run_snippet("refs::plugins::read_entity_dict_value(refs::DictContainer(value={'Hello': 'World!', 'mykey': '42'}))")
-    run_snippet("""
+    run_snippet(
+        """
         refs::plugins::read_entity_dict_mykey(
             refs::DictContainer(value={'Hello': refs::create_string_reference('hello'), 'mykey': '42'})
         )
-        """)
+        """
+    )
     ## reference
     ### in attribute
     with raises_wrapped(
         UnexpectedReference, match="Encountered unexpected reference .* Encountered at instance.maybe_ref_value"
     ):
-        run_snippet("""\
+        run_snippet(
+            """\
             refs::plugins::read_entity_value(
                 refs::dc::AllRefsDataclass(maybe_ref_value=refs::create_string_reference('hello'))
             )
-            """)
+            """
+        )
     ### inside list attribute
     with raises_wrapped(UnexpectedReference, match=r"Encountered unexpected reference .* Encountered at instance\.value\[1\]"):
-        run_snippet("""\
+        run_snippet(
+            """\
             refs::plugins::read_entity_list_value(refs::ListContainer(value=['Hello', refs::create_string_reference('hello')]))
-            """)
+            """
+        )
     with raises_wrapped(UnexpectedReference, match=r"Encountered unexpected reference .* Encountered at instance\.value\[0\]"):
         run_snippet(
             "refs::plugins::read_entity_list_head(refs::ListContainer(value=[refs::create_string_reference('hello'), 'Hello']))"
         )
     ## inside list attribute but allowed
-    run_snippet("""\
+    run_snippet(
+        """\
         refs::plugins::read_entity_list_value_or_ref(
             refs::ListContainer(value=['Hello', refs::create_string_reference('hello')])
         )
-        """)
+        """
+    )
     ## inside list attribute: allowed on instance level but not on nested list level
     with raises_wrapped(UnexpectedReference, match=r"Encountered unexpected reference .* Encountered at instance\.value\[1\]"):
-        run_snippet("""\
+        run_snippet(
+            """\
             refs::plugins::read_entity_list_value_allow_references_single_level(
                 refs::ListContainer(value=['Hello', refs::create_string_reference('hello')])
             )
-            """)
+            """
+        )
     ### inside dict attribute
     with raises_wrapped(
         UnexpectedReference, match=r"Encountered unexpected reference .* Encountered at instance\.value\['mykey'\]"
     ):
-        run_snippet("""\
+        run_snippet(
+            """\
             refs::plugins::read_entity_dict_value(
                 refs::DictContainer(value={'Hello': 'World!', 'mykey': refs::create_string_reference('hello')})
             )
-            """)
+            """
+        )
     with raises_wrapped(
         UnexpectedReference, match=r"Encountered unexpected reference .* Encountered at instance\.value\['mykey'\]"
     ):
-        run_snippet("""\
+        run_snippet(
+            """\
             refs::plugins::read_entity_dict_mykey(
                 refs::DictContainer(value={'Hello': 'World!', 'mykey': refs::create_string_reference('hello')})
             )
-            """)
+            """
+        )
     ## inside dict attribute but allowed
-    run_snippet("""\
+    run_snippet(
+        """\
         refs::plugins::read_entity_dict_value_or_ref(
             refs::DictContainer(value={'Hello': 'World!', 'mykey': refs::create_string_reference('hello')})
         )
-        """)
+        """
+    )
     ## reference, plugin explicitly allows it
-    run_snippet("""\
+    run_snippet(
+        """\
         refs::plugins::read_entity_ref_value(
             refs::dc::AllRefsDataclass(maybe_ref_value=refs::create_string_reference('hello'))
         )
-        """)
+        """
+    )
     ## reference access for list of entities
     ### no reference
-    run_snippet("""\
+    run_snippet(
+        """\
         refs::plugins::read_list_entity_value(
             [
                 refs::dc::AllRefsDataclass(maybe_ref_value='Hello'),
                 refs::dc::AllRefsDataclass(maybe_ref_value='World!'),
             ]
         )
-        """)
+        """
+    )
     ### reference
     with raises_wrapped(
         UnexpectedReference, match=r"Encountered unexpected reference .* Encountered at instances\[1\]\.maybe_ref_value"
     ):
-        run_snippet("""\
+        run_snippet(
+            """\
             refs::plugins::read_list_entity_value(
                 [
                     refs::dc::AllRefsDataclass(maybe_ref_value='Hello'),
                     refs::dc::AllRefsDataclass(maybe_ref_value=refs::create_string_reference('hello')),
                 ]
             )
-            """)
+            """
+        )
     ### reference, plugin explicitly allows it
-    run_snippet("""\
+    run_snippet(
+        """\
         refs::plugins::read_list_entity_ref_value(
             [
                 refs::dc::AllRefsDataclass(maybe_ref_value='Hello'),
                 refs::dc::AllRefsDataclass(maybe_ref_value=refs::create_string_reference('hello')),
             ]
         )
-        """)
+        """
+    )
 
     ## plugin argument annotated with Entity | DC => custom to_python
     #  -> verify that resulting dynamic proxy has appropriate path context
@@ -642,17 +666,21 @@ def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", module
     ## dataclass type that does not support reference attrs
     ### plain dataclass
     run_snippet("refs::plugins::takes_no_refs_dataclass(refs::dc::NoRefsDataclass())")
-    run_snippet("""\
+    run_snippet(
+        """\
         refs::plugins::takes_mixed_refs_dataclass(
             refs::dc::MixedRefsDataclass(maybe_ref_value=refs::create_string_reference('hello'))
         )
-        """)
+        """
+    )
     ### basic inheritance
-    run_snippet("""\
+    run_snippet(
+        """\
         refs::plugins::takes_no_refs_dataclass(
             refs::dc::MixedRefsDataclass(maybe_ref_value=refs::create_string_reference('hello'))
         )
-        """)
+        """
+    )
     ### basic inheritance the wrong direction
     with pytest.raises(PluginTypeException, match=re.escape("Expected type: refs::dc::MixedRefsDataclass")):
         run_snippet("refs::plugins::takes_mixed_refs_dataclass(refs::dc::NoRefsDataclass())")
@@ -664,11 +692,13 @@ def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", module
         run_snippet("refs::plugins::takes_mixed_refs_dataclass(refs::dc::create_mixed_refs_dataclass_reference('hello'))")
     #### dataclass containing undeclared reference
     with pytest.raises(PluginTypeException, match="contains a reference"):
-        run_snippet("""\
+        run_snippet(
+            """\
             refs::plugins::takes_no_refs_dataclass(
                 refs::dc::NoRefsDataclass(non_ref_value=refs::create_string_reference('hello'))
             )
-            """)
+            """
+        )
     ## dataclass type that supports reference attrs -> references are coerced
     ### references are coerced to dataclass of references
     run_snippet("refs::plugins::takes_all_refs_dataclass(refs::dc::create_all_refs_dataclass_reference('hello'))")

@@ -463,19 +463,23 @@ def create_install_package(
     )
     with tempfile.TemporaryDirectory() as tmpdir:
         with open(os.path.join(tmpdir, "setup.cfg"), "w") as fd:
-            fd.write(f"""
+            fd.write(
+                f"""
 [metadata]
 name = {name}
 version = {version}
 
 {req_string}
-                """.strip())
+                """.strip()
+            )
         with open(os.path.join(tmpdir, "pyproject.toml"), "w") as fd:
-            fd.write("""
+            fd.write(
+                """
 [build-system]
 requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
-                """.strip())
+                """.strip()
+            )
         env.process_env.install_for_config(
             requirements=[],
             paths=[env.LocalPackagePath(path=str(tmpdir), editable=False)],
@@ -623,28 +627,36 @@ def test_pip_logs(caplog, tmpvenv_active_inherit: str) -> None:
         constraint1 = os.path.join(tmpdir, "constraint1.txt")
         constraint2 = os.path.join(tmpdir, "constraint2.txt")
         with open(requirement1, "w") as fd:
-            fd.write("""
+            fd.write(
+                """
 inmanta-module-std
 
-                """)
+                """
+            )
         with open(requirement2, "w") as fd:
-            fd.write("""
+            fd.write(
+                """
 inmanta-module-net
 
 inmanta-module-ip
-                """)
+                """
+            )
         with open(constraint1, "w") as fd:
-            fd.write("""
+            fd.write(
+                """
 inmanta-module-std
-                """)
+                """
+            )
         with open(constraint2, "w") as fd:
-            fd.write("""
+            fd.write(
+                """
 
 inmanta-module-ip
 inmanta-module-net
 
 
-                """)
+                """
+            )
         caplog.clear()
         Pip.run_pip_install_command_from_config(
             python_path=env.process_env.python_path,
@@ -655,7 +667,8 @@ inmanta-module-net
 
         assert all(record.name == "inmanta.pip" for record in caplog.records)
         python_path: str = tmpvenv_active_inherit.python_path
-        assert f"""
+        assert (
+            f"""
 Content of requirements files:
     {requirement1}:
         inmanta-module-std
@@ -669,4 +682,6 @@ Content of constraints files:
         inmanta-module-ip
         inmanta-module-net
 Pip command: {python_path} -m pip install -c {constraint1} -c {constraint2} -r {requirement1} -r {requirement2}
-""".strip() in caplog.messages
+""".strip()
+            in caplog.messages
+        )

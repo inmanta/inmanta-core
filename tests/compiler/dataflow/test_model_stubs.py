@@ -72,7 +72,8 @@ def test_dataflow_nodestub(dataflow_test_helper: DataflowTestHelper, value_strin
         """
 x = %s
 %s
-        """ % (value_string, "\n".join(other_stmts)),
+        """
+        % (value_string, "\n".join(other_stmts)),
         autostd=True,
     )
     graph: DataflowGraph = dataflow_test_helper.get_graph()

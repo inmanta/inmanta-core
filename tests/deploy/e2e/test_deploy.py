@@ -237,7 +237,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
 
     deployed_resource_expected_status = {
         "blocked": "not_blocked",
-        "last_handler_run": "deployed",
+        "last_handler_run": "successful",
         "compliance": "compliant",
         "last_deploy_compliant": True,
     }

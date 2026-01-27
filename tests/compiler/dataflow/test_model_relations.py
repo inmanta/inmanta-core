@@ -28,7 +28,8 @@ def test_dataflow_model_relation(
     dataflow_test_helper: DataflowTestHelper, bidirectional: bool, inherit_relation: bool, assign_first: bool
 ) -> None:
     relation_stmt: str = "{}.b [1] -- B{}".format("AParent" if inherit_relation else "A", ".a [1]" if bidirectional else "")
-    dataflow_test_helper.compile("""
+    dataflow_test_helper.compile(
+        """
 entity AParent:
 end
 implement AParent using none
@@ -52,7 +53,9 @@ a.b = b
 
 implementation none for std::Entity:
 end
-        """ % ("" if assign_first else relation_stmt, relation_stmt if assign_first else ""))
+        """
+        % ("" if assign_first else relation_stmt, relation_stmt if assign_first else "")
+    )
     bidirectional_rule: str = "<instance> b . a -> <instance> a"
     dataflow_test_helper.verify_graphstring(
         """
@@ -61,7 +64,8 @@ b -> <instance> b
 
 <instance> a . b -> b
 %s
-        """ % (bidirectional_rule if bidirectional else ""),
+        """
+        % (bidirectional_rule if bidirectional else ""),
     )
     if not bidirectional:
         with pytest.raises(AssertionError):
@@ -233,14 +237,16 @@ implement A using i
 
 nn = 42
 x = A()
-        """ % ("nn" if refer_out else 42),
+        """
+        % ("nn" if refer_out else 42),
     )
     dataflow_test_helper.verify_graphstring(
         """
 nn -> 42
 x -> <instance> x
 <instance> x . n -> %s
-        """ % ("nn" if refer_out else 42),
+        """
+        % ("nn" if refer_out else 42),
     )
 
 

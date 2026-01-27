@@ -22,7 +22,8 @@ from inmanta.execute.util import NoneValue
 
 
 def test_null(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
         entity A:
             string? a = null
         end
@@ -31,7 +32,8 @@ def test_null(snippetcompiler):
 
         implementation none for std::Entity:
 end
-    """)
+    """
+    )
 
     _, scopes = compiler.do_compile()
     root = scopes.get_child("__config__")
@@ -40,7 +42,8 @@ end
 
 
 def test_null_on_list(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
         entity A:
             string[]? a = null
         end
@@ -49,7 +52,8 @@ def test_null_on_list(snippetcompiler):
 
         implementation none for std::Entity:
 end
-    """)
+    """
+    )
 
     _, scopes = compiler.do_compile()
     root = scopes.get_child("__config__")
@@ -58,7 +62,8 @@ end
 
 
 def test_null_on_dict(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
         entity A:
             dict? a = null
         end
@@ -67,7 +72,8 @@ def test_null_on_dict(snippetcompiler):
 
         implementation none for std::Entity:
         end
-    """)
+    """
+    )
 
     _, scopes = compiler.do_compile()
     root = scopes.get_child("__config__")
@@ -121,7 +127,8 @@ end
 
 
 def test_exception_nullable(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity A:
     int? n
 end
@@ -133,7 +140,8 @@ A(n = null)
 
 implementation none for std::Entity:
 end
-        """)
+        """
+    )
     try:
         compiler.do_compile()
     except UnsetException as e:

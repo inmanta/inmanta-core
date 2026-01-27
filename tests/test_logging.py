@@ -376,7 +376,8 @@ def test_logging_config_content_environment_variables(monkeypatch, capsys, tmpdi
     """
     logging_config_file = os.path.join(tmpdir, "config.yml")
     with open(logging_config_file, "w") as fh:
-        fh.write("""
+        fh.write(
+            """
                 disable_existing_loggers: false
                 formatters:
                   console_formatter:
@@ -392,7 +393,8 @@ def test_logging_config_content_environment_variables(monkeypatch, capsys, tmpdi
                   - console_handler
                   level: INFO
                 version: 1
-            """)
+            """
+        )
     logging_config.set(logging_config_file)
 
     # Set the INMANTA_CONFIG_LOGGING_CONFIG_TMPL environment variable and verify that it overrides
@@ -488,7 +490,8 @@ def test_logging_config_content_environment_variables(monkeypatch, capsys, tmpdi
     # Verify that the --logging-config CLI option still overrides all other config.
     other_logging_config_file = os.path.join(tmpdir, "cli.yml")
     with open(other_logging_config_file, "w") as fh:
-        fh.write("""
+        fh.write(
+            """
                 disable_existing_loggers: false
                 formatters:
                   console_formatter:
@@ -504,7 +507,8 @@ def test_logging_config_content_environment_variables(monkeypatch, capsys, tmpdi
                   - console_handler
                   level: INFO
                 version: 1
-            """)
+            """
+        )
     inmanta_logging_config.clean_instance()
     inmanta_logging_config = InmantaLoggerConfig.get_instance(stream=sys.stdout)
     inmanta_logging_config.apply_options(

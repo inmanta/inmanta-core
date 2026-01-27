@@ -175,11 +175,13 @@ implement Test using a
 
 
 def test_anchors_plugin(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 import tests
 
 l = tests::length("Hello World!")
-        """)
+        """
+    )
     anchormap = compiler.anchormap()
     location: Range
     resolves_to: Range
@@ -200,7 +202,8 @@ def test_get_types_and_scopes(snippetcompiler):
     """
     Test the get_types_and_scopes() entrypoint of the compiler.
     """
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
     entity Test:
         string a = "a"
         string b
@@ -224,7 +227,8 @@ def test_get_types_and_scopes(snippetcompiler):
 
     implement Test using a
 
-    """)
+    """
+    )
 
     types, scopes = compiler.get_types_and_scopes()
 
@@ -385,7 +389,8 @@ def test_project_loader_dynamic_modules(snippetcompiler):
     """
     Verify that the ProjectLoader class handles dynamic modules correctly.
     """
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
         import successhandlermodule
 
         ref = successhandlermodule::create_my_ref("base_str")
@@ -395,7 +400,8 @@ def test_project_loader_dynamic_modules(snippetcompiler):
             agent="agent_1",
             my_attr=ref
         )
-        """)
+        """
+    )
 
     compiler_obj = Compiler()
     compiler_obj.compile()
@@ -494,7 +500,8 @@ def test_project_loader_dynamic_modules(snippetcompiler):
 
 def test_project_loader(snippetcompiler):
     """ """
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
         import successhandlermodule
 
         ref = successhandlermodule::create_my_ref("base_str")
@@ -504,7 +511,8 @@ def test_project_loader(snippetcompiler):
             agent="agent_1",
             my_attr=ref
         )
-        """)
+        """
+    )
 
     compiler_obj = Compiler()
     compiler_obj.compile()
@@ -528,11 +536,13 @@ def test_project_loader(snippetcompiler):
     # Update the model as such that it no longer uses the successhandlermodule module,
     # but it does use the tests module now.
     with open(snippetcompiler.main, "w", encoding="utf-8") as fh:
-        fh.write("""
+        fh.write(
+            """
             import tests
 
             tests::length("test")
-            """)
+            """
+        )
 
     # Clear the ast cache
     snippetcompiler.project.invalidate_state()

@@ -38,24 +38,28 @@ async def test_postgres_cascade_locking_order(postgresql_pool, run_without_keepi
     docstrings in `inmanta.data`.
     """
     async with postgresql_pool.acquire() as connection:
-        await connection.execute("""
+        await connection.execute(
+            """
             CREATE TABLE IF NOT EXISTS root (name varchar PRIMARY KEY);
             CREATE TABLE IF NOT EXISTS leaf (
                 name varchar PRIMARY KEY,
                 myroot varchar REFERENCES root(name) ON DELETE CASCADE
             );
-            """)
+            """
+        )
 
     async def insert():
         async with postgresql_pool.acquire() as connection:
-            await connection.execute("""
+            await connection.execute(
+                """
                 INSERT INTO root VALUES
                     ('root1');
 
                 INSERT INTO leaf VALUES
                     ('leaf1', 'root1'),
                     ('leaf2', 'root1');
-                """)
+                """
+            )
 
     async def lock_top_down():
         async with postgresql_pool.acquire() as connection:
@@ -105,15 +109,19 @@ async def test_postgres_cascade_locking_order_siblings(
         for name in ("leafone", "leaftwo")
     )
     async with postgresql_pool.acquire() as connection:
-        await connection.execute("""
+        await connection.execute(
+            """
             CREATE TABLE IF NOT EXISTS root (name varchar PRIMARY KEY);
             %s
             %s
-            """ % (leaf_definitions if definition_order_one_two else tuple(reversed(leaf_definitions))))
+            """
+            % (leaf_definitions if definition_order_one_two else tuple(reversed(leaf_definitions)))
+        )
 
     async def insert():
         async with postgresql_pool.acquire() as connection:
-            await connection.execute("""
+            await connection.execute(
+                """
                 INSERT INTO root VALUES
                     ('root1');
 
@@ -124,7 +132,8 @@ async def test_postgres_cascade_locking_order_siblings(
                 INSERT INTO leaftwo VALUES
                     ('leaftwo1', 'root1'),
                     ('leaftwo2', 'root1');
-                """)
+                """
+            )
 
     async def lock_one_two():
         async with postgresql_pool.acquire() as connection:
@@ -175,11 +184,13 @@ async def test_postgres_transaction_re_entry(postgresql_pool) -> None:
     # Make a table
     async with postgresql_pool.acquire() as connection:
         await connection.execute("CREATE TABLE IF NOT EXISTS root (name varchar PRIMARY KEY, released BOOL);")
-        await connection.execute("""
+        await connection.execute(
+            """
             INSERT INTO root VALUES
                 ('root1', False),
                 ('root2', False);
-            """)
+            """
+        )
 
     async def update_root(name: str, lock: Event):
         # Main routine: lock table and update if required
@@ -230,12 +241,15 @@ async def test_postgres_index_join_where(postgresql_pool) -> None:
     """
 
     async with postgresql_pool.acquire() as connection:
-        await connection.execute("""\
+        await connection.execute(
+            """\
             CREATE TABLE IF NOT EXISTS mytable (x int PRIMARY key, y int, z int);
             CREATE INDEX mytable_x_y_z_index ON mytable (x, y, z);
             INSERT INTO mytable (x, y, z) VALUES (1, 2, 3), (3, 2, 5);
-            """)
-        result = await connection.fetch("""\
+            """
+        )
+        result = await connection.fetch(
+            """\
             EXPLAIN ANALYZE
             SELECT mytable.*
             FROM mytable
@@ -244,5 +258,6 @@ async def test_postgres_index_join_where(postgresql_pool) -> None:
             ON mytable.x = v.x AND mytable.z = v.z
             -- where condition on y => index constraints are complete now
             WHERE mytable.y = 2
-            """)
+            """
+        )
         assert "Index Only Scan using mytable_x_y_z_index on mytable" in result[0][0]

@@ -23,7 +23,8 @@ def test_2787_function_rescheduling(snippetcompiler):
     """
     Particular case where a bug in handling of plugin calls causes cycle breaking to fail
     """
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 
    import tests
 
@@ -62,7 +63,8 @@ def test_2787_function_rescheduling(snippetcompiler):
 
   implement Rule using rq
   implement Service using effective_members
-    """)
+    """
+    )
 
     compiler.do_compile()
 

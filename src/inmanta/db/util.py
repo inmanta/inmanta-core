@@ -252,10 +252,13 @@ async def replace_enum_type(new_type: EnumUpdateDefinition, *, connection: Conne
                      injections via this object's attributes.
     """
     temp_name: str = f"_old_{new_type.name}"
-    await connection.execute(f"""
+    await connection.execute(
+        f"""
         ALTER TYPE {new_type.name} RENAME TO {temp_name};
         CREATE TYPE {new_type.name} AS ENUM(%s);
-        """ % (", ".join(f"'{v}'" for v in new_type.values)))
+        """
+        % (", ".join(f"'{v}'" for v in new_type.values))
+    )
     for table, columns in new_type.columns.items():
         for column, is_list, default in columns:
             for old_value, new_value in new_type.deleted_values.items():

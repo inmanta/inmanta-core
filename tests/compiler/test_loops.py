@@ -92,7 +92,9 @@ def test_for_loop_on_list_attribute(snippetcompiler) -> None:
     """
     Verify the basic workings of the for loop statement when applied to a plain list attribute.
     """
-    snippetcompiler.setup_for_snippet(textwrap.dedent("""\
+    snippetcompiler.setup_for_snippet(
+        textwrap.dedent(
+            """\
             entity A:
                 list l
             end
@@ -117,7 +119,9 @@ def test_for_loop_on_list_attribute(snippetcompiler) -> None:
 
             implementation none for std::Entity:
             end
-            """))
+            """
+        )
+    )
     compiler.do_compile()
 
 
@@ -126,7 +130,8 @@ def test_for_loop_unknown(snippetcompiler) -> None:
     Verify the behavior of the for loop regarding unknowns.
     """
     snippetcompiler.setup_for_snippet(
-        textwrap.dedent("""\
+        textwrap.dedent(
+            """\
             import tests
 
             entity Assert:
@@ -149,7 +154,8 @@ def test_for_loop_unknown(snippetcompiler) -> None:
                     assert.success = false
                 end
             end
-            """),
+            """
+        ),
         autostd=True,
     )
     compiler.do_compile()
@@ -159,7 +165,9 @@ def test_resultcollector_receive_result_flatten(snippetcompiler) -> None:
     """
     Verify the flattening behavior of ResultCollector.receive_result_flatten.
     """
-    snippetcompiler.setup_for_snippet(textwrap.dedent("""\
+    snippetcompiler.setup_for_snippet(
+        textwrap.dedent(
+            """\
             entity Assert:
                 bool success = true
             end
@@ -185,7 +193,9 @@ def test_resultcollector_receive_result_flatten(snippetcompiler) -> None:
 
             implementation none for std::Entity:
             end
-            """))
+            """
+        )
+    )
     compiler.do_compile()
 
 
@@ -195,7 +205,8 @@ def test_for_loop_fully_gradual(snippetcompiler):
     eagerly.
     """
     snippetcompiler.setup_for_snippet(
-        textwrap.dedent("""\
+        textwrap.dedent(
+            """\
             entity A: end
             A.x [0:] -- A
             A.y [0:] -- A
@@ -218,7 +229,8 @@ def test_for_loop_fully_gradual(snippetcompiler):
             for y in a.y:
                 std::print(y)
             end
-            """),
+            """
+        ),
         ministd=True,
     )
     compiler.do_compile()

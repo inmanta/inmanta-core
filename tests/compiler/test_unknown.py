@@ -23,12 +23,14 @@ from inmanta.execute.util import Unknown
 
 
 def test_issue_219_unknows_in_template(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 import tests
 
 a = tests::unknown()
 b = "abc{{a}}"
-""")
+"""
+    )
     _, root = compiler.do_compile()
     scope = root.get_child("__config__").scope
 
@@ -37,7 +39,8 @@ b = "abc{{a}}"
 
 
 def test_749_is_unknown(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
         import tests
 
         a="a"
@@ -48,7 +51,8 @@ def test_749_is_unknown(snippetcompiler):
 
         ax = tests::do_uknown(a)
         bx = tests::do_uknown(b)
-    """)
+    """
+    )
 
     _, scopes = compiler.do_compile()
     root = scopes.get_child("__config__")
@@ -168,7 +172,8 @@ def test_unknown_type_in_dicts(snippetcompiler):
     """This test checks that accessing an unknown map, or a known map with an unknown key
     rightfully propagates the unknown value.
     """
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
         import tests
 
         unk = tests::unknown()
@@ -180,7 +185,8 @@ def test_unknown_type_in_dicts(snippetcompiler):
         unknown_map_lookup = tests::is_uknown(map_lookup)
         unknown_key_fetch = tests::is_uknown(key_fetch)
 
-        """)
+        """
+    )
 
     _, scopes = compiler.do_compile()
     root = scopes.get_child("__config__")
@@ -194,7 +200,8 @@ def test_unknown_equals(snippetcompiler) -> None:
     Verify unknown behavior in the equals statement.
     """
     snippetcompiler.setup_for_snippet(
-        textwrap.dedent("""\
+        textwrap.dedent(
+            """\
             import tests
 
             assert = true
@@ -210,7 +217,8 @@ def test_unknown_equals(snippetcompiler) -> None:
             assert = std::is_unknown(tests::unknown() != true)
             assert = std::is_unknown(tests::unknown() != false)
             assert = std::is_unknown(tests::unknown() != tests::unknown())
-            """),
+            """
+        ),
         autostd=True,
     )
     compiler.do_compile()
@@ -221,7 +229,8 @@ def test_unknown_boolean_operators(snippetcompiler) -> None:
     Verify unknown behavior with boolean operators
     """
     snippetcompiler.setup_for_snippet(
-        textwrap.dedent("""\
+        textwrap.dedent(
+            """\
             import tests
 
             assert = true
@@ -236,7 +245,8 @@ def test_unknown_boolean_operators(snippetcompiler) -> None:
             # for these two the result is trivially known
             assert = true or tests::unknown()
             assert = not (false and tests::unknown())
-            """),
+            """
+        ),
         autostd=True,
     )
     compiler.do_compile()
@@ -247,7 +257,8 @@ def test_unknown_in(snippetcompiler) -> None:
     Verify unknown behavior with the `in` statement
     """
     snippetcompiler.setup_for_snippet(
-        textwrap.dedent("""\
+        textwrap.dedent(
+            """\
             import tests
 
             assert = true
@@ -259,7 +270,8 @@ def test_unknown_in(snippetcompiler) -> None:
             # for these two the result is trivially known
             assert = 1 in [1, 2, tests::unknown()]
             assert = 3 in [tests::unknown(), 2, 3]
-            """),
+            """
+        ),
         autostd=True,
     )
     compiler.do_compile()

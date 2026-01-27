@@ -95,7 +95,8 @@ async def test_validate_rs256(jwks, tmp_path):
     port = str(list(jwks._sockets.values())[0].getsockname()[1])
     config_file = os.path.join(tmp_path, "auth.cfg")
     with open(config_file, "w+", encoding="utf-8") as fd:
-        fd.write("""
+        fd.write(
+            """
 [auth_jwt_default]
 algorithm=HS256
 sign=true
@@ -113,7 +114,10 @@ issuer=https://localhost:{0}/auth/realms/inmanta
 audience=sodev
 jwks_uri=http://localhost:{0}/auth/realms/inmanta/protocol/openid-connect/certs
 validate_cert=false
-""".format(port))
+""".format(
+                port
+            )
+        )
 
     config.Config.load_config(config_file)
 
@@ -146,7 +150,8 @@ async def test_rs256_invalid_config_timeout(tmp_path, slow_jwks):
     port = str(list(slow_jwks._sockets.values())[0].getsockname()[1])
     config_file = os.path.join(tmp_path, "auth.cfg")
     with open(config_file, "w+", encoding="utf-8") as fd:
-        fd.write("""
+        fd.write(
+            """
 [auth_jwt_keycloak]
 algorithm=RS256
 sign=false
@@ -156,7 +161,10 @@ audience=sodev
 jwks_uri=http://localhost:{0}/auth/realms/inmanta/protocol/openid-connect/certs
 jwks_request_timeout=0.1
 validate_cert=false
-""".format(port))
+""".format(
+                port
+            )
+        )
 
     config.Config.load_config(config_file)
     with pytest.raises(ValueError):
@@ -169,7 +177,8 @@ async def test_customer_header_user(tmp_path: pathlib.Path, server: Server) -> N
     port = config.Config.get("client_rest_transport", "port")
     config_file = tmp_path / "auth.cfg"
     with open(config_file, "w+", encoding="utf-8") as fd:
-        fd.write("""
+        fd.write(
+            """
 [server]
 auth=true
 auth_additional_header=Jwt-Assertion
@@ -191,7 +200,8 @@ expire=0
 issuer=https://example.com:8888/
 audience=abcdef
 jwt_username_claim=name
-""")
+"""
+        )
 
     # Make sure the config starts from a clean slate
     config.Config.load_config(str(config_file))

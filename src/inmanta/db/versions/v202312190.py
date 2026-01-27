@@ -20,7 +20,8 @@ from asyncpg import Connection
 
 
 async def update(connection: Connection) -> None:
-    await connection.execute("""
+    await connection.execute(
+        """
 CREATE TABLE IF NOT EXISTS public.resource_persistent_state (
     environment uuid NOT NULL REFERENCES public.environment(id) ON DELETE CASCADE,
     resource_id character varying NOT NULL,
@@ -84,4 +85,5 @@ ALTER TABLE public.resource DROP COLUMN last_non_deploying_status;
 ALTER TABLE public.resource DROP COLUMN last_produced_events;
 ALTER TABLE public.resource DROP COLUMN last_deploy;
 
-""")
+"""
+    )

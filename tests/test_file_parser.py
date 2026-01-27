@@ -66,7 +66,9 @@ dep
     with pytest.raises(Exception) as e:
         inmanta.util.parse_requirements(problematic_requirements)
     assert """Expected comma (within version specifier), semicolon (after version specifier) or end
-    third-dep<5.0.0 # another comment\n""" in str(e.value)
+    third-dep<5.0.0 # another comment\n""" in str(
+        e.value
+    )
 
     new_content = RequirementsTxtParser.get_content_with_dep_removed(requirements_txt_file, remove_dep_on_pkg="test")
     expected_content = """
@@ -79,7 +81,9 @@ dep
     """
     assert new_content == expected_content
     new_content = RequirementsTxtParser.get_content_with_dep_removed(requirements_txt_file, remove_dep_on_pkg="third-dep")
-    assert new_content == """
+    assert (
+        new_content
+        == """
         test==1.2.3
 
         # A comment
@@ -87,8 +91,11 @@ dep
         splitteddep
         Capital
     """
+    )
     new_content = RequirementsTxtParser.get_content_with_dep_removed(requirements_txt_file, remove_dep_on_pkg="splitteddep")
-    assert new_content == """
+    assert (
+        new_content
+        == """
         test==1.2.3
 
         # A comment
@@ -96,8 +103,11 @@ dep
         third-dep<5.0.0 # another comment
         Capital
     """
+    )
     new_content = RequirementsTxtParser.get_content_with_dep_removed(requirements_txt_file, remove_dep_on_pkg="Capital")
-    assert new_content == """
+    assert (
+        new_content
+        == """
         test==1.2.3
 
         # A comment
@@ -105,6 +115,7 @@ dep
         third-dep<5.0.0 # another comment
         splitteddep
     """
+    )
 
 
 @pytest.mark.parametrize(

@@ -35,11 +35,13 @@ async def test_replace_index(
     migrate_db_from: Callable[[], Awaitable[None]],
 ) -> None:
     # Assert invariant of the migration: (resource_type, agent, resource_id_value) is uniquely derived from the table identity
-    records = await postgresql_client.fetch("""
+    records = await postgresql_client.fetch(
+        """
         SELECT COUNT(DISTINCT resource_id)
         FROM public.resource
         GROUP BY (environment, resource_type, agent, resource_id_value)
-        """)
+        """
+    )
     # there should be no duplicates
     assert all(record["count"] == 1 for record in records)
 

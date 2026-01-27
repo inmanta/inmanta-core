@@ -198,7 +198,9 @@ def ps_diff_inmanta_agent_processes(original: list[psutil.Process], current_proc
         current = [c for c in current if not is_terminated(c)]
         original = [c for c in original if not is_terminated(c)]
 
-    assert len(original) + diff == len(current), """procs found:
+    assert len(original) + diff == len(
+        current
+    ), """procs found:
         pre:{}
         post:{}""".format(
         original,

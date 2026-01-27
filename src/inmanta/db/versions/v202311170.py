@@ -20,7 +20,9 @@ from asyncpg import Connection
 
 
 async def update(connection: Connection) -> None:
-    await connection.execute("""
+    await connection.execute(
+        """
     ALTER TABLE public.configurationmodel
-      ADD COLUMN pip_config jsonb;""")
+      ADD COLUMN pip_config jsonb;"""
+    )
     # No upgrade of data needed: read path supports None values.

@@ -47,7 +47,8 @@ async def test_docs_snippets_language_unknowns(snippetcompiler, capsys) -> None:
         list_model: str = fh.read()
 
     # TODO: convert_unknowns typing port
-    model = textwrap.dedent(f"""\
+    model = textwrap.dedent(
+        f"""\
         {simple_model}
 
         import tests
@@ -62,17 +63,21 @@ async def test_docs_snippets_language_unknowns(snippetcompiler, capsys) -> None:
         assert = std::is_unknown(g)
         assert = [1, 2, "?"] == [x == "?" ? x : x.n for x in tests::convert_unknowns(h, "?")]
         assert = [1, 2] == [x.n for x in i]
-        """)
+        """
+    )
     snippetcompiler.setup_for_snippet(model, ministd=True)
     compiler.do_compile()
 
     out, _ = capsys.readouterr()
-    assert out == textwrap.dedent("""\
+    assert out == textwrap.dedent(
+        """\
         This message is printed twice! x=1
         This message is printed twice! x=2
-        """)
+        """
+    )
 
-    model = textwrap.dedent(f"""\
+    model = textwrap.dedent(
+        f"""\
         {list_model}
 
         import tests
@@ -82,7 +87,8 @@ async def test_docs_snippets_language_unknowns(snippetcompiler, capsys) -> None:
         assert = std::is_unknown(b)
         assert = ["?", "?"] == tests::convert_unknowns(c, "?")
         assert = std::is_unknown(d)
-        """)
+        """
+    )
     snippetcompiler.setup_for_snippet(model, ministd=True)
     compiler.do_compile()
 
@@ -103,7 +109,8 @@ async def test_docs_snippet_partial_compile(
         os.path.join(modules_dir, "minimalv1module"),
         str(tmpdir.join(handler_module_name)),
         new_name=handler_module_name,
-        new_content_init_py=textwrap.dedent("""
+        new_content_init_py=textwrap.dedent(
+            """
             from inmanta.execute.proxy import DynamicProxy
             from inmanta.export import Exporter
             from inmanta.resources import Resource, resource
@@ -120,14 +127,18 @@ async def test_docs_snippet_partial_compile(
 
                 def get_full_id(exporter: Exporter, obj: DynamicProxy) -> tuple[int, str]:
                     return (Host.get_network_id(exporter, obj), Host.get_host_id(exporter, obj))
-            """.strip("\n")),
+            """.strip(
+                "\n"
+            )
+        ),
     )
 
     def setup_model(base: str) -> None:
         """
         Add handlers for the base model and set up the snippetcompiler.
         """
-        handlers_addition: str = f"""
+        handlers_addition: str = (
+            f"""
             import {handler_module_name} as handler
 
             # add dummy agent attribute for the handler
@@ -137,6 +148,7 @@ async def test_docs_snippet_partial_compile(
             end
             implement Host using bind_agent
         """.strip()
+        )
         full_model: str = "\n".join((base, handlers_addition))
         snippetcompiler.setup_for_snippet(full_model, add_to_module_path=[str(tmpdir)], autostd=True)
 
@@ -205,12 +217,14 @@ async def test_docs_snippets_unmanaged_resources_basic(
         new_content_init_py=init_py_content,
     )
 
-    model = textwrap.dedent("""
+    model = textwrap.dedent(
+        """
         import my_module
 
         host = std::Host(ip="127.0.0.1", name="agent1", os=std::linux)
         my_module::InterfaceDiscovery(host=host)
-        """)
+        """
+    )
     snippetcompiler.setup_for_snippet(model, add_to_module_path=[str(tmpdir)], use_pip_config_file=True, autostd=True)
     version, _ = await snippetcompiler.do_export_and_deploy()
 
@@ -261,13 +275,15 @@ async def test_docs_snippets_unmanaged_resources_shared_attributes(
         new_content_init_py=init_py_content,
     )
 
-    model = textwrap.dedent("""
+    model = textwrap.dedent(
+        """
         import my_module
 
         host = std::Host(ip="127.0.0.1", name="agent1", os=std::linux)
         credentials = my_module::Credentials(username="test", password="test")
         my_module::InterfaceDiscovery(name_filter="eth[1-9]", host=host, credentials=credentials)
-        """)
+        """
+    )
     snippetcompiler.setup_for_snippet(model, add_to_module_path=[str(tmpdir)], use_pip_config_file=True, autostd=True)
     version, _ = await snippetcompiler.do_export_and_deploy()
 

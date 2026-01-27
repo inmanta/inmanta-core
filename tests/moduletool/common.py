@@ -58,11 +58,14 @@ def makemodule(
         projectfile.write(f"\nversion: '{version}'")
 
         if project:
-            projectfile.write("""
+            projectfile.write(
+                """
 modulepath: libs
 downloadpath: libs
 repo: %s
-""" % reporoot)
+"""
+                % reporoot
+            )
 
         if install_mode is not None:
             projectfile.write("\ninstall_mode: %s" % install_mode.value)

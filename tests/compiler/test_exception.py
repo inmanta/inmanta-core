@@ -127,7 +127,8 @@ x = 1
     try:
         compiler.do_compile()
     except DoubleSetException as e:
-        assert e.msg.strip() == ("""
+        assert e.msg.strip() == (
+            """
 value set twice:
 	old value: 0
 		set at {dir}/main.cf:2
@@ -142,7 +143,10 @@ x
 └── 1
     SET BY `x = 1`
     AT {dir}/main.cf:3
-            """.strip().format(dir=snippetcompiler.project_dir))  # noqa: W191, E101
+            """.strip().format(
+                dir=snippetcompiler.project_dir
+            )
+        )  # noqa: W191, E101
 
 
 def test_dataflow_multi_exception(snippetcompiler):
@@ -171,7 +175,8 @@ end
     try:
         compiler.do_compile()
     except MultiException as e:
-        assert e.format_trace(indent="  ").strip() == ("""
+        assert e.format_trace(indent="  ").strip() == (
+            """
 Reported 1 errors
 error 0:
   The object __config__::A (instantiated at {dir}/main.cf:9) is not complete: attribute n ({dir}/main.cf:3:9) is not set
@@ -186,7 +191,10 @@ SUBTREE for __config__::A instance:
     EQUIVALENT TO {{mm, nn}} DUE TO STATEMENTS:
         `nn = mm` AT {dir}/main.cf:14
         `mm = nn` AT {dir}/main.cf:15
-            """.strip().format(dir=snippetcompiler.project_dir))
+            """.strip().format(
+                dir=snippetcompiler.project_dir
+            )
+        )
 
 
 def test_assignment_failed_on_gradual(snippetcompiler):
@@ -317,11 +325,15 @@ def test_reference_nonexisting_namespace(snippetcompiler, namespace: str) -> Non
     """
     # AST loading should succeed
     snippetcompiler.setup_for_snippet(
-        textwrap.dedent(f"""
+        textwrap.dedent(
+            f"""
             import std as alias
 
             {namespace}::x
-            """.strip("\n")),
+            """.strip(
+                "\n"
+            )
+        ),
         install_project=True,
     )
     with pytest.raises(

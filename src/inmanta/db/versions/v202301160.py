@@ -20,7 +20,9 @@ from asyncpg import Connection
 
 
 async def update(connection: Connection) -> None:
-    await connection.execute("""
+    await connection.execute(
+        """
 ALTER TABLE public.environmentmetricsgauge RENAME COLUMN grouped_by TO category;
 ALTER TABLE public.environmentmetricstimer RENAME COLUMN grouped_by TO category;
-    """)
+    """
+    )

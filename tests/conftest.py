@@ -1549,14 +1549,16 @@ class SnippetCompilationTest(KeepOnFail):
         if ministd:
             add_to_module_path += ministd_path
         with open(os.path.join(self.project_dir, "project.yml"), "w", encoding="utf-8") as cfg:
-            cfg.write(f"""
+            cfg.write(
+                f"""
             name: snippet test
             modulepath: {self._get_modulepath_for_project_yml_file(add_to_module_path)}
             downloadpath: {self.libs}
             version: 1.0
             repo:
                 - {{type: git, url: {self.repo} }}
-            """.rstrip())
+            """.rstrip()
+            )
 
             if relation_precedence_rules:
                 cfg.write("\n            relation_precedence_policy:\n")
@@ -1567,19 +1569,27 @@ class SnippetCompilationTest(KeepOnFail):
             if install_mode:
                 cfg.write(f"\n            install_mode: {install_mode.value}")
 
-            cfg.write(f"""
+            cfg.write(
+                f"""
             pip:
                 use_system_config: {use_pip_config_file}
-""")
+"""
+            )
             if index_url:
-                cfg.write(f"""                index_url: {index_url}
-""")
+                cfg.write(
+                    f"""                index_url: {index_url}
+"""
+                )
             if extra_index_url:
-                cfg.write(f"""                extra_index_url: [{", ".join(url for url in extra_index_url)}]
-""")
+                cfg.write(
+                    f"""                extra_index_url: [{", ".join(url for url in extra_index_url)}]
+"""
+                )
             if pre is not None:
-                cfg.write(f"""                pre: {str(pre).lower()}
-""")
+                cfg.write(
+                    f"""                pre: {str(pre).lower()}
+"""
+                )
             if environment_settings:
                 cfg.write("\n            environment_settings:\n")
                 cfg.write("\n".join(f"                {name}: {value}" for name, value in environment_settings.items()))
@@ -1743,10 +1753,12 @@ class SnippetCompilationTest(KeepOnFail):
             fd.write(initpy)
 
         with open(os.path.join(module_dir, "module.yml"), "w+") as fd:
-            fd.write(f"""name: {name}
+            fd.write(
+                f"""name: {name}
 version: 0.1
 license: Test License
-                """)
+                """
+            )
 
 
 @pytest.fixture(scope="session")

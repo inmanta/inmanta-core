@@ -32,7 +32,8 @@ def assert_graph(graph, expected):
 
 
 def test_abstract_requires(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 import std::testing
 
 host = std::Host(name="host", os=std::unix)
@@ -54,14 +55,16 @@ pre = std::testing::NullResource(name="host0")
 post = std::testing::NullResource(name="hosts4")
 
 inter = A(name = "inter")
-""")
+"""
+    )
 
     v, resources = snippetcompiler.do_export()
     assert_graph(resources, """inter2: inter1""")
 
 
 def test_abstract_requires_3(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 import std::testing
 
 entity A:
@@ -84,7 +87,8 @@ post = std::testing::NullResource(name="post")
 inter = A(name = "inter")
 inter.requires = pre
 post.requires = inter
-""")
+"""
+    )
 
     v, resources = snippetcompiler.do_export()
     assert_graph(
@@ -96,7 +100,8 @@ post.requires = inter
 
 
 def test_abstract_requires_2(snippetcompiler, caplog):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 import std::testing
 
 entity A:
@@ -117,7 +122,8 @@ post = std::testing::NullResource(name="host4")
 inter = A(name = "inter")
 inter.requires = pre
 post.requires = inter
-""")
+"""
+    )
 
     snippetcompiler.do_export()
     warning = [
@@ -130,7 +136,8 @@ post.requires = inter
 
 
 def test_issue_220_dep_loops(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 import std::testing
 
 f1 = std::testing::NullResource(name="f1")
@@ -141,7 +148,8 @@ f1.requires = f2
 f2.requires = f3
 f3.requires = f1
 f4.requires = f1
-""")
+"""
+    )
     with pytest.raises(DependencyCycleException) as e:
         snippetcompiler.do_export()
 

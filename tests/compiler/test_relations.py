@@ -58,7 +58,8 @@ std::print(t.test2.attribute)
 
 
 def test_issue_135_duplo_relations_2(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity Test1:
 
 end
@@ -70,13 +71,15 @@ implement Test2 using std::none
 
 Test1.test2 [0:] -- Test2.test1 [1]
 Test1.floem [0:] -- Test2.test1 [1]
-""")
+"""
+    )
     with pytest.raises(DuplicateException):
         compiler.do_compile()
 
 
 def test_issue_135_duplo_relations_3(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity Test1:
 
 end
@@ -88,13 +91,15 @@ implement Test2 using std::none
 
 Test1.test2 [0:] -- Test2.test1 [1]
 Test1.test2 [0:] -- Test1.test1 [1]
-""")
+"""
+    )
     with pytest.raises(DuplicateException):
         compiler.do_compile()
 
 
 def test_issue_135_duplo_relations_4(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity Stdhost:
 
 end
@@ -111,13 +116,15 @@ end
 
 Agent.os_host [1] -- Oshost.inmanta_agent [1]
 Stdhost.inmanta_agent [0:1] -- Agent.deploy_host [1]
-""")
+"""
+    )
     with pytest.raises(DuplicateException):
         compiler.do_compile()
 
 
 def test_issue_135_duplo_relations_5(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity Stdhost:
 
 end
@@ -135,7 +142,8 @@ end
 Oshost.inmanta_agent [1] -- Agent.os_host [1]
 
 Stdhost.inmanta_agent [0:1] -- Agent.deploy_host [1]
-""")
+"""
+    )
     with pytest.raises(DuplicateException):
         compiler.do_compile()
 
@@ -164,7 +172,8 @@ std::Host.services_list [0:] -- B.host [1]""",
 
 
 def test_m_to_n(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity LogFile:
   string name
   int members
@@ -197,7 +206,8 @@ c3 = LogCollector(name="c3", logfiles=[lf4, lf7, lf1])
 
 implementation none for std::Entity:
 end
-""")
+"""
+    )
 
     types, _ = compiler.do_compile()
     for lf in types["__config__::LogFile"].get_all_instances():
@@ -205,7 +215,8 @@ end
 
 
 def test_relation_syntax(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity Test1:
 
 end
@@ -224,7 +235,8 @@ end
 
 implement Test1 using none
 implement Test2 using none
-""")
+"""
+    )
     types, root = compiler.do_compile()
 
     scope = root.get_child("__config__").scope
@@ -234,7 +246,8 @@ implement Test2 using none
 
 
 def test_relation_with_annotation_syntax(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity Test1:
 
 end
@@ -255,7 +268,8 @@ end
 
 implement Test1 using none
 implement Test2 using none
-""")
+"""
+    )
     types, root = compiler.do_compile()
 
     scope = root.get_child("__config__").scope
@@ -265,7 +279,8 @@ implement Test2 using none
 
 
 def test_relation_uni_dir(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity Test1:
 
 end
@@ -282,7 +297,8 @@ end
 
 implement Test1 using none
 implement Test2 using none
-""")
+"""
+    )
     types, root = compiler.do_compile()
 
     scope = root.get_child("__config__").scope
@@ -291,7 +307,8 @@ implement Test2 using none
 
 
 def test_relation_uni_dir_double_define(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity Test1:
 
 end
@@ -308,13 +325,15 @@ implement Test2 using none
 Test1.tests [0:] -- Test2
 
 Test2.xx [1] -- Test1.tests [0:]
-""")
+"""
+    )
     with pytest.raises(DuplicateException):
         compiler.do_compile()
 
 
 def test_relation_attributes(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity Test:
 end
 
@@ -332,7 +351,8 @@ end
 
 implement Test using none
 implement Foo using none
-""")
+"""
+    )
     _, scopes = compiler.do_compile()
 
     root = scopes.get_child("__config__")
@@ -344,7 +364,8 @@ implement Foo using none
 
 
 def test_relation_attributes_unresolved(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity Test:
 end
 
@@ -360,13 +381,15 @@ implement Test using none
 implement Foo using none
 
 Test.bar [1] foo,bar Foo
-""")
+"""
+    )
     with pytest.raises(NotFoundException):
         compiler.do_compile()
 
 
 def test_relation_attributes_unknown(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity Test:
 end
 
@@ -385,7 +408,8 @@ implement Test using none
 implement Foo using none
 
 Test.bar [1] foo,bar Foo
-""")
+"""
+    )
     with pytest.raises(TypingException):
         compiler.do_compile()
 
@@ -419,7 +443,8 @@ implement Foo using none
 
 
 def test_587_assign_extend_correct(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
     entity A:
     end
     implement A using none
@@ -437,7 +462,8 @@ def test_587_assign_extend_correct(snippetcompiler):
 
     implementation none for std::Entity:
     end
-    """)
+    """
+    )
 
     _, scopes = compiler.do_compile()
 
@@ -448,7 +474,8 @@ def test_587_assign_extend_correct(snippetcompiler):
 
 
 def test_587_assign_extend_incorrect(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
     entity A:
     end
     implement A using none
@@ -465,7 +492,8 @@ def test_587_assign_extend_incorrect(snippetcompiler):
 
     implementation none for std::Entity:
 end
-    """)
+    """
+    )
 
     with pytest.raises(TypingException):
         _, scopes = compiler.do_compile()
@@ -567,7 +595,8 @@ host.files.name = "foo"
 
 
 def test_reflexive(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity Test1:
 
 end
@@ -577,7 +606,8 @@ Test1.peer [1] -- Test1.peer [1]
 
 implementation none for std::Entity:
 end
-""")
+"""
+    )
     compiler.do_compile()
 
 
@@ -612,7 +642,8 @@ end
 
 @pytest.mark.parametrize("multi", (True, False))
 def test_relation_null(snippetcompiler, multi: bool) -> None:
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity A:
 end
 
@@ -624,7 +655,9 @@ end
 
 a = A()
 a.other = null
-        """ % ("" if multi else "1"))
+        """
+        % ("" if multi else "1")
+    )
     root_ns: Namespace
     _, root_ns = compiler.do_compile()
     config_ns: Optional[Namespace] = root_ns.get_child("__config__")
@@ -678,7 +711,8 @@ end
     ],
 )
 def test_relation_null_multiple_assignments(snippetcompiler, statements: tuple[str, str], valid: bool) -> None:
-    snippetcompiler.setup_for_snippet(f"""
+    snippetcompiler.setup_for_snippet(
+        f"""
 entity A:
 end
 
@@ -692,7 +726,8 @@ end
 a = A()
 {statements[0]}
 {statements[1]}
-        """)
+        """
+    )
     if valid:
         compiler.do_compile()
     else:
@@ -701,7 +736,8 @@ a = A()
 
 
 def test_2689_relation_unset_lower(snippetcompiler) -> None:
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity A:
 end
 
@@ -715,7 +751,8 @@ implement B using none
 
 implementation none for std::Entity:
 end
-        """)
+        """
+    )
     compiler.do_compile()
 
 

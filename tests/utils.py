@@ -660,19 +660,26 @@ def create_python_package(
         os.makedirs(path)
 
     with open(os.path.join(path, "pyproject.toml"), "w") as fd:
-        fd.write("""
+        fd.write(
+            """
 [build-system]
 build-backend = "setuptools.build_meta"
 requires = ["setuptools"]
-            """.strip())
+            """.strip()
+        )
 
     install_requires_content = "".join(f"\n  {req}" for req in (requirements if requirements is not None else []))
     with open(os.path.join(path, "setup.cfg"), "w") as fd:
-        egg_info: str = f"""
+        egg_info: str = (
+            f"""
 [egg_info]
 tag_build = .dev{pkg_version.dev}
-            """.strip() if pkg_version.is_devrelease else ""
-        fd.write(f"""
+            """.strip()
+            if pkg_version.is_devrelease
+            else ""
+        )
+        fd.write(
+            f"""
 [metadata]
 name = {name}
 version = {pkg_version.base_version}
@@ -682,7 +689,8 @@ author = Inmanta <code@inmanta.com>
 
 {egg_info}
 
-""".strip())
+""".strip()
+        )
 
         fd.write("\n[options]")
         fd.write(f"\ninstall_requires ={install_requires_content}")
@@ -897,7 +905,8 @@ async def resource_action_consistency_check():
     """
 
     async def get_data(postgresql_client):
-        post_ra_one = await postgresql_client.fetch("""SELECT
+        post_ra_one = await postgresql_client.fetch(
+            """SELECT
                 ra.action_id,
                 r.environment,
                 r.resource_id,
@@ -909,10 +918,12 @@ async def resource_action_consistency_check():
                 INNER JOIN resourceaction as ra
                     ON r.resource_id || ',v=' || rscm.model = ANY(ra.resource_version_ids)
                     AND r.environment = ra.environment
-            """)
+            """
+        )
         post_ra_one_set = {(r[0], r[1], r[2], r[3]) for r in post_ra_one}
 
-        post_ra_two = await postgresql_client.fetch("""SELECT
+        post_ra_two = await postgresql_client.fetch(
+            """SELECT
                 ra.action_id,
                 r.environment,
                 r.resource_id,
@@ -927,7 +938,8 @@ async def resource_action_consistency_check():
                 AND rscm.model = jt.resource_version
             INNER JOIN public.resourceaction as ra
                 ON ra.action_id = jt.resource_action_id
-            """)
+            """
+        )
         post_ra_two_set = {(r[0], r[1], r[2], r[3]) for r in post_ra_two}
         return post_ra_one_set, post_ra_two_set
 

@@ -26,7 +26,8 @@ async def update(connection: Connection) -> None:
     change for the lifetime of a resource (with a given resource id).
     """
 
-    await connection.execute("""
+    await connection.execute(
+        """
         ALTER TABLE public.resource_persistent_state
             ADD COLUMN resource_type varchar,
             ADD COLUMN agent varchar,
@@ -61,4 +62,5 @@ async def update(connection: Connection) -> None:
 
         -- force Postgres to analyze resource table to allow it to pick efficient query plans
         ANALYZE public.resource;
-        """)
+        """
+    )

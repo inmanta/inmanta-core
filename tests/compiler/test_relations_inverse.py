@@ -30,7 +30,8 @@ def test_relations_implicit_inverse_simple(snippetcompiler) -> None:
     Verify that the basics of implicit inverse relations on index attributes work: if an index attribute is missing in a
     constructor call attempt to derive it from the left hand side.
     """
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
         entity A: end
         entity B: end
         implement A using none
@@ -51,7 +52,8 @@ def test_relations_implicit_inverse_simple(snippetcompiler) -> None:
         assert = a2.b.a == a2
 
         implementation none for std::Entity: end
-        """)
+        """
+    )
     compiler.do_compile()
 
 
@@ -59,7 +61,8 @@ def test_relations_implicit_inverse_composite_index(snippetcompiler) -> None:
     """
     Verify that implicit inverse relations on index attributes work for an index consisting of multiple fields.
     """
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
         entity A: end
         entity B:
             int id
@@ -82,7 +85,8 @@ def test_relations_implicit_inverse_composite_index(snippetcompiler) -> None:
         assert = a2.b.a == a2
 
         implementation none for std::Entity: end
-        """)
+        """
+    )
     compiler.do_compile()
 
 
@@ -91,7 +95,8 @@ def test_relations_implicit_inverse_composite_rhs(snippetcompiler) -> None:
     Verify that implicit inverse relations on index attributes work if the constructor appears as an element in a composite
     statement, e.g. a list or a conditional expression.
     """
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
         entity A: end
         entity B:
             int id = 0
@@ -115,7 +120,8 @@ def test_relations_implicit_inverse_composite_rhs(snippetcompiler) -> None:
         assert = a2.b == [B[id=30, a=a2], B[id=40, a=a2], B[id=50, a=a2]]
 
         implementation none for std::Entity: end
-        """)
+        """
+    )
     compiler.do_compile()
 
 
@@ -128,7 +134,8 @@ def test_relations_implicit_inverse_left_index(snippetcompiler, double_index: bo
     :param double_index: Iff True, include an index on the right side as well. This is expected to fail with a meaningful error
         message.
     """
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
         entity A: end
         entity B: end
         implement A using none
@@ -142,7 +149,9 @@ def test_relations_implicit_inverse_left_index(snippetcompiler, double_index: bo
         A(b=B())
 
         implementation none for std::Entity: end
-        """ % ("index B(a)" if double_index else ""))
+        """
+        % ("index B(a)" if double_index else "")
+    )
     with (
         pytest.raises(
             IndexAttributeMissingInConstructorException,
@@ -158,7 +167,8 @@ def test_relation_implicit_inverse_deeply_nested_constructors(snippetcompiler) -
     """
     Verify that implicit inverse relations on index attributes for deeply nested constructors work as expected.
     """
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
         entity A: end
         entity B: end
         entity C: end
@@ -184,7 +194,8 @@ def test_relation_implicit_inverse_deeply_nested_constructors(snippetcompiler) -
         assert = a.b.c.d.c == a.b.c
 
         implementation none for std::Entity: end
-        """)
+        """
+    )
     compiler.do_compile()
 
 
@@ -193,7 +204,8 @@ def test_relation_implicit_inverse_nested_constructors_same_entity(snippetcompil
     Verify that implicit inverse relations on index attributes for deeply nested constructors for the same entity type work as
     expected and that inverse relations are set to the immediate parent in the constructor tree.
     """
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
         entity LHS:
         end
         entity RHS extends LHS:
@@ -221,7 +233,8 @@ def test_relation_implicit_inverse_nested_constructors_same_entity(snippetcompil
         assert = x1.right != x1.right.right
 
         implementation none for std::Entity: end
-        """)
+        """
+    )
     compiler.do_compile()
 
 
@@ -250,7 +263,8 @@ def test_relation_implicit_inverse_kwargs_conflict(snippetcompiler) -> None:
         implementation none for std::Entity:
         end
         """,
-        textwrap.dedent("""
+        textwrap.dedent(
+            """
             Could not set attribute `a` on instance `__config__::B (instantiated at {dir}/main.cf:13)` (reported in __config__::B (instantiated at {dir}/main.cf:13) ({dir}/main.cf:13))
             caused by:
               value set twice:
@@ -259,7 +273,10 @@ def test_relation_implicit_inverse_kwargs_conflict(snippetcompiler) -> None:
             \tnew value: __config__::A (instantiated at {dir}/main.cf:13)
             \t\tset at {dir}/main.cf:13
              (reported in Construct(A) ({dir}/main.cf:13))
-            """.lstrip("\n").rstrip()),  # noqa: E501
+            """.lstrip(
+                "\n"
+            ).rstrip()
+        ),  # noqa: E501
     )
 
 
@@ -321,7 +338,8 @@ def test_relation_implicit_inverse_inheritance(snippetcompiler) -> None:
     Verify that implicit inverse relations on index attributes work as expected when combined with inheritance: relations and
     indexes defined on parent entities should allow implicit inverses on their children.
     """
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
         entity AABC: end
         entity BABC: end
         entity ChildA extends AABC: end
@@ -346,5 +364,6 @@ def test_relation_implicit_inverse_inheritance(snippetcompiler) -> None:
 
         implementation none for std::Entity:
         end
-        """)
+        """
+    )
     compiler.do_compile()

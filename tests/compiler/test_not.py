@@ -25,12 +25,18 @@ def test_list_not_in(snippetcompiler, capsys) -> None:
     """
     Verify the basic workings of the 'not ( value in expression)' and the 'value not in expression' syntax
     """
-    snippetcompiler.setup_for_snippet(textwrap.dedent("""
+    snippetcompiler.setup_for_snippet(
+        textwrap.dedent(
+            """
             test_list = [1, 2, 3, 4, 5]
             assert = true
             assert = not (6 in test_list)
             assert = 6 not in test_list
             assert = 5 in test_list
             assert = not (5 not in test_list)
-            """.strip("\n")))
+            """.strip(
+                "\n"
+            )
+        )
+    )
     compiler.do_compile()

@@ -57,10 +57,12 @@ def compiler_logging_config(tmpdir, monkeypatch):
         fh.write(compiler_logging_config)
     config = os.path.join(tmpdir, "logging_config.yml")
     with open(config, "w") as fh:
-        fh.write(f"""
+        fh.write(
+            f"""
 [logging]
 compiler = {os.path.abspath(compiler_logging_config_file)}
-        """)
+        """
+        )
     return config
 
 
@@ -83,12 +85,14 @@ async def test_server_passing_compiler_logging_config(server, client, environmen
 
     # add main.cf
     with open(os.path.join(project_dir, "main.cf"), "w", encoding="utf-8") as fd:
-        fd.write("""
+        fd.write(
+            """
         import std::testing
 
         host = std::Host(name="test", os=std::linux)
         std::testing::NullResource(name=host.name)
-    """)
+    """
+        )
 
     result = await client.notify_change(environment)
     assert result.code == 200
