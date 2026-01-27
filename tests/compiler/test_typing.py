@@ -30,8 +30,7 @@ from inmanta.execute.util import Unknown
 
 
 def test_lnr_on_double_is_defined(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity Test:
     string? two
 end
@@ -45,28 +44,24 @@ a.one = a
 
 implementation none for Test:
 end
-"""
-    )
+""")
     compiler.do_compile()
 
 
 def test_double_define(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity Test:
     string test
     string? test
     bool test
 end
-"""
-    )
+""")
     with pytest.raises(TypingException):
         compiler.do_compile()
 
 
 def test_536_number_cast(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity Network:
     number segmentation_id
 end
@@ -75,8 +70,7 @@ net1 = Network(segmentation_id="10")
 
 implementation none for Network:
 end
-"""
-    )
+""")
     with pytest.raises(AttributeException):
         compiler.do_compile()
 
@@ -581,13 +575,11 @@ std::print(number(1.234))
 
 
 def test_float_type_argument_plugin(snippetcompiler, caplog):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 import test_674
 
 test = test_674::test_float_to_int(1.234)
-        """
-    )
+        """)
     _, scopes = compiler.do_compile()
     root: Namespace = scopes.get_child("__config__")
     x = root.lookup("test").get_value()
@@ -614,13 +606,11 @@ def test_float_type_argument_plugin_error(snippetcompiler, val):
 
 
 def test_float_type_return_type_plugin(snippetcompiler, caplog):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 import test_674
 
 test = test_674::test_int_to_float(1)
-        """
-    )
+        """)
     _, scopes = compiler.do_compile()
     root: Namespace = scopes.get_child("__config__")
     x = root.lookup("test").get_value()

@@ -24,8 +24,7 @@ from inmanta.compiler.help.explainer import ExplainerFactory
 
 
 def test_optional_loop_forward(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity Thing:
     string name
 end
@@ -44,14 +43,11 @@ Thing(name="a")
 
 implementation none for Thing:
 end
-"""
-    )
+""")
     with pytest.raises(AttributeException) as e:
         compiler.do_compile()
 
-    assert (
-        ExplainerFactory().explain_and_format(e.value)
-        == """
+    assert ExplainerFactory().explain_and_format(e.value) == """
 Exception explanation
 =====================
 The compiler could not figure out how to execute this model.
@@ -79,14 +75,11 @@ The procedure to solve this is the following:
 3. Report a bug to the inmanta issue tracker at https://github.com/inmanta/inmanta/issues or directly contact inmanta. This is a priority issue to us, so you will be helped rapidly and by reporting the problem, we can fix it properly.
 4. [does not apply here] If the exception is on the reverse relation, try to give a hint by explicitly using the problematic relation.
 5. Simplify the model by relying less on `is defined` but use a boolean instead.
-"""
-        % {"dir": snippetcompiler.project_dir}
-    )  # noqa: E501
+""" % {"dir": snippetcompiler.project_dir}  # noqa: E501
 
 
 def test_optional_loop_forward_tty(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity Thing:
     string name
 end
@@ -105,16 +98,13 @@ Thing(name="a")
 
 implementation none for Thing:
 end
-"""
-    )
+""")
     with pytest.raises(AttributeException) as e:
         compiler.do_compile()
 
     value = ExplainerFactory().explain_and_format(e.value, plain=False)
 
-    assert (
-        value
-        == """
+    assert value == """
 \033[1mException explanation
 =====================\033[0m
 The compiler could not figure out how to execute this model.
@@ -142,14 +132,11 @@ The procedure to solve this is the following:
 3. Report a bug to the inmanta issue tracker at https://github.com/inmanta/inmanta/issues or directly contact inmanta. This is a priority issue to us, so you will be helped rapidly and by reporting the problem, we can fix it properly.
 4. [does not apply here] If the exception is on the reverse relation, try to give a hint by explicitly using the problematic relation.
 5. Simplify the model by relying less on `is defined` but use a boolean instead.
-"""
-        % {"dir": snippetcompiler.project_dir}
-    )  # noqa: E501
+""" % {"dir": snippetcompiler.project_dir}  # noqa: E501
 
 
 def test_optional_loop_reverse(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity Thing:
     string name
 end
@@ -169,14 +156,11 @@ Thing(name="a")
 
 implementation none for Thing:
 end
-"""
-    )
+""")
     with pytest.raises(AttributeException) as e:
         compiler.do_compile()
 
-    assert (
-        ExplainerFactory().explain_and_format(e.value)
-        == """
+    assert ExplainerFactory().explain_and_format(e.value) == """
 Exception explanation
 =====================
 The compiler could not figure out how to execute this model.
@@ -204,9 +188,7 @@ The procedure to solve this is the following:
 3. Report a bug to the inmanta issue tracker at https://github.com/inmanta/inmanta/issues or directly contact inmanta. This is a priority issue to us, so you will be helped rapidly and by reporting the problem, we can fix it properly.
 4. [applies] If the exception is on the reverse relation, try to give a hint by explicitly using the problematic relation: self.other = t.
 5. Simplify the model by relying less on `is defined` but use a boolean instead.
-"""
-        % {"dir": snippetcompiler.project_dir}
-    )  # noqa: E501
+""" % {"dir": snippetcompiler.project_dir}  # noqa: E501
 
 
 def test_optional_loop_list(snippetcompiler):
@@ -236,9 +218,7 @@ t.other = Thing(name="b")
         compiler.do_compile()
 
     print(ExplainerFactory().explain_and_format(e.value))
-    assert (
-        ExplainerFactory().explain_and_format(e.value)
-        == """
+    assert ExplainerFactory().explain_and_format(e.value) == """
 Exception explanation
 =====================
 The compiler could not figure out how to execute this model.
@@ -269,6 +249,4 @@ The procedure to solve this is the following
 4. [applies] If the exception is on the reverse relation, try to give a hint by explicitly using the problematic relation: self.other = t
 5. Simplify the model by reducing the number of implements calls that pass a list into a plugin function in their when clause.
 
-"""
-        % {"dir": snippetcompiler.project_dir}
-    )  # noqa: E501
+""" % {"dir": snippetcompiler.project_dir}  # noqa: E501

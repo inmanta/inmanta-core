@@ -758,16 +758,14 @@ import custom_mod_two
         output: str, line_custom_mod_one: str, line_custom_mod_two: str, std_version: str
     ) -> None:
         table_lines = [line.strip() for line in output.strip().split("\n")]
-        assert "\n".join(table_lines[0:6]) == (
-            f"""
+        assert "\n".join(table_lines[0:6]) == (f"""
 +----------------+------+----------+----------------+----------------+---------+
 |      Name      | Type | Editable |   Installed    |  Expected in   | Matches |
 |                |      |          |    version     |    project     |         |
 +================+======+==========+================+================+=========+
 {line_custom_mod_one}
 {line_custom_mod_two}
-""".strip()
-        )
+""".strip())
         rows_std_pkg = table_lines[6:-1]
         regex = (
             r"\|(?P<name>[^|]+)\|(?P<type>[^|]+)\|(?P<editable>[^|]+)"
@@ -1088,12 +1086,10 @@ def test_version_snapshot(local_module_package_index: str, snippetcompiler_clean
         caplog,
         "inmanta.module",
         logging.DEBUG,
-        (
-            """\
+        ("""\
 Successfully installed modules for project
 + module_a: 5.0.0
-+ module_b: 1.2.3"""
-        ),
++ module_b: 1.2.3"""),
     )
 
     # Scenario 2
@@ -1118,13 +1114,11 @@ Successfully installed modules for project
         caplog,
         "inmanta.module",
         logging.DEBUG,
-        (
-            """\
+        ("""\
 Successfully installed modules for project
 + module_a: 1.0.0
 - module_a: 5.0.0
-+ module_c: 8.8.8"""
-        ),
++ module_c: 8.8.8"""),
     )
 
 

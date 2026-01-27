@@ -29,22 +29,18 @@ from inmanta import data
 async def test_type_change(
     postgresql_client: asyncpg.Connection, migrate_db_from: abc.Callable[[], abc.Awaitable[None]]
 ) -> None:
-    result = await postgresql_client.fetch(
-        """
+    result = await postgresql_client.fetch("""
             SELECT * FROM public.environment WHERE name='dev-1';
-        """
-    )
+        """)
     settings = result[0]["settings"]
     assert isinstance(settings[data.AUTOSTART_AGENT_DEPLOY_INTERVAL], int)
     assert isinstance(settings[data.AUTOSTART_AGENT_REPAIR_INTERVAL], int)
 
     await migrate_db_from()
 
-    result = await postgresql_client.fetch(
-        """
+    result = await postgresql_client.fetch("""
             SELECT * FROM public.environment WHERE name='dev-1';
-        """
-    )
+        """)
     settings = result[0]["settings"]
     assert isinstance(settings["settings"][data.AUTOSTART_AGENT_DEPLOY_INTERVAL]["value"], str)
     assert isinstance(settings["settings"][data.AUTOSTART_AGENT_REPAIR_INTERVAL]["value"], str)

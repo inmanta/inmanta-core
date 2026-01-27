@@ -478,15 +478,13 @@ def test_plugin_loading_on_project_load(tmpdir, capsys, deactive_venv):
     main_cf.write("import submodule")
 
     project_yml = tmpdir.join("project.yml")
-    project_yml.write(
-        """
+    project_yml.write("""
 name: test
 modulepath: libs
 downloadpath: libs
 repo: https://github.com/inmanta/inmanta.git
 install_mode: master
-    """
-    )
+    """)
 
     tmpdir.mkdir("libs")
     origin_mod_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules", "submodule")
@@ -547,12 +545,10 @@ def test_plugin_loading_old_format(tmpdir, capsys):
     new_format_plugins_dir = new_format_mod_dir.join("plugins")
     new_format_plugins_dir.mkdir()
     new_format_source_file = new_format_plugins_dir.join("__init__.py")
-    new_format_source_file.write(
-        """
+    new_format_source_file.write("""
 def test():
     return 10
-    """
-    )
+    """)
 
     # Assert newly formatted code is loaded and code using the pre inmanta 2020.4 format is ignored
     loader.CodeLoader(code_dir)

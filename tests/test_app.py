@@ -590,8 +590,7 @@ def test_validate_logging_config(tmpdir, monkeypatch):
     logging_config_file = os.path.join(tmpdir, "logging_config.yml")
     # Write logging config that contains a syntax error
     with open(logging_config_file, "w") as fh:
-        fh.write(
-            """
+        fh.write("""
         formatters:
           server_log_formatter:
             format: '%(levelname)-8s %(name)-10s %(message)s'
@@ -607,8 +606,7 @@ def test_validate_logging_config(tmpdir, monkeypatch):
           level: DEBUG
         version: 1
         disable_existing_loggers: false
-        """
-        )
+        """)
     _, stderr, returncode = run_without_tty(
         args=[sys.executable, "-m", "inmanta.app", "--logging-config", logging_config_file, "validate-logging-config"],
     )
@@ -617,8 +615,7 @@ def test_validate_logging_config(tmpdir, monkeypatch):
 
     # Simple logging config that writes all logs to stdout
     with open(logging_config_file, "w") as fh:
-        fh.write(
-            """
+        fh.write("""
         formatters:
           server_log_formatter:
             format: '%(levelname)-8s %(name)-10s %(message)s'
@@ -634,8 +631,7 @@ def test_validate_logging_config(tmpdir, monkeypatch):
           level: DEBUG
         version: 1
         disable_existing_loggers: false
-        """
-        )
+        """)
     stdout, stderr, returncode = run_without_tty(
         args=[sys.executable, "-m", "inmanta.app", "--logging-config", logging_config_file, "validate-logging-config"],
     )
@@ -658,8 +654,7 @@ def test_validate_logging_config(tmpdir, monkeypatch):
     assert not os.listdir(log_dir)
     logging_config_file = os.path.join(tmpdir, "logging_config.yml.tmpl")
     with open(logging_config_file, "w") as fh:
-        fh.write(
-            f"""
+        fh.write(f"""
         formatters:
           server_log_formatter:
             format: '%(levelname)-8s %(name)-10s %(message)s'
@@ -689,8 +684,7 @@ def test_validate_logging_config(tmpdir, monkeypatch):
           level: DEBUG
         version: 1
         disable_existing_loggers: false
-        """
-        )
+        """)
     env_id = uuid.uuid4()
     stdout, stderr, returncode = run_without_tty(
         args=[
@@ -738,8 +732,7 @@ def test_validate_logging_config(tmpdir, monkeypatch):
     dot_inmanta_file = os.path.join(tmpdir, ".inmanta")
     for component_name in ["server", "scheduler", "compiler"]:
         with open(logging_config_file, "w") as fh:
-            fh.write(
-                f"""
+            fh.write(f"""
                     formatters:
                       server_log_formatter:
                         format: '{component_name} -- %(message)s'
@@ -755,15 +748,12 @@ def test_validate_logging_config(tmpdir, monkeypatch):
                       level: DEBUG
                     version: 1
                     disable_existing_loggers: false
-                """
-            )
+                """)
         with open(dot_inmanta_file, "w") as fh:
-            fh.write(
-                f"""
+            fh.write(f"""
                     [logging]
                     {component_name} = {logging_config_file}
-                """
-            )
+                """)
         stdout, stderr, returncode = run_without_tty(
             args=[sys.executable, "-m", "inmanta.app", "validate-logging-config", component_name],
         )

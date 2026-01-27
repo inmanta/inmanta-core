@@ -36,12 +36,10 @@ async def test_remove_version_from_resource_and_dryrun(
     """
     This migration removes version from the attributes of a resource in the resource and dryrun tables
     """
-    result = await postgresql_client.fetch(
-        f"""
+    result = await postgresql_client.fetch(f"""
         SELECT *
         FROM {data.DryRun.table_name()}
-        """
-    )
+        """)
     assert len(result) == 1
     for resource in result[0]["resources"].values():
         assert "version" in resource["id_fields"]

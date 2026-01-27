@@ -49,17 +49,14 @@ async def update(connection: Connection) -> None:
 
     await connection.execute(schema)
 
-    result = await connection.fetchval(
-        """
+    result = await connection.fetchval("""
         SELECT 1
         FROM public.resource_persistent_state AS rps
         WHERE rps.last_non_deploying_status::text='non_compliant'
         LIMIT 1;
-    """
-    )
+    """)
     if result:
-        await connection.execute(
-            """
+        await connection.execute("""
     -- populate resource_diff table --
             WITH non_compliant_resources AS (
                 SELECT rps.environment, rps.resource_id
@@ -99,5 +96,4 @@ async def update(connection: Connection) -> None:
             FROM new_diff AS nd
             WHERE rps.environment=nd.environment
               AND rps.resource_id=nd.resource_id;
-    """
-        )
+    """)

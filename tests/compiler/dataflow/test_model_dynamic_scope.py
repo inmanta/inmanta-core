@@ -53,8 +53,7 @@ b = x.b
 
 implementation none for std::Entity:
 end
-        """
-        % ("self.n" if explicit else "n"),
+        """ % ("self.n" if explicit else "n"),
     )
     dataflow_test_helper.verify_graphstring(
         """

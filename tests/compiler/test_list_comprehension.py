@@ -27,9 +27,7 @@ def test_list_comprehension_basic(snippetcompiler) -> None:
     """
     Verify the basic workings of the list comprehension expression.
     """
-    snippetcompiler.setup_for_snippet(
-        textwrap.dedent(
-            """
+    snippetcompiler.setup_for_snippet(textwrap.dedent("""
             base = [1, 2, 3, 4, 5]
 
             l1 = [x for x in base]
@@ -42,11 +40,7 @@ def test_list_comprehension_basic(snippetcompiler) -> None:
             l2 = ["x=1", "x=2", "x=3", "x=4", "x=5"]
             l3 = [0, 0, 3, 4, 5]
             l4 = [1, 1, 1, 1, 1]
-            """.strip(
-                "\n"
-            )
-        )
-    )
+            """.strip("\n")))
     compiler.do_compile()
 
 
@@ -54,9 +48,7 @@ def test_list_comprehension_double_for(snippetcompiler) -> None:
     """
     Verify correct behavior of list comprehension expressions with more than one for.
     """
-    snippetcompiler.setup_for_snippet(
-        textwrap.dedent(
-            """
+    snippetcompiler.setup_for_snippet(textwrap.dedent("""
             base1 = [1, 2]
             base2 = [10, 20]
 
@@ -94,11 +86,7 @@ def test_list_comprehension_double_for(snippetcompiler) -> None:
 
             implementation none for std::Entity:
             end
-            """.strip(
-                "\n"
-            )
-        )
-    )
+            """.strip("\n")))
     compiler.do_compile()
 
 
@@ -106,9 +94,7 @@ def test_list_comprehension_guards(snippetcompiler) -> None:
     """
     Verify the functionality of guards within a list comprehension.
     """
-    snippetcompiler.setup_for_snippet(
-        textwrap.dedent(
-            """
+    snippetcompiler.setup_for_snippet(textwrap.dedent("""
             base = [1, 2, 3, 4, 5]
 
             # shadow loop variable to verify that neither the value expression nor the guard see it
@@ -143,11 +129,7 @@ def test_list_comprehension_guards(snippetcompiler) -> None:
             l3 = [3, 4]
             l4 = ["3=5"]
             l5 = [4, 5, 4, 5, 4, 5, 4, 5, 4, 5]
-            """.strip(
-                "\n"
-            )
-        )
-    )
+            """.strip("\n")))
     compiler.do_compile()
 
 
@@ -156,8 +138,7 @@ def test_list_comprehension_order(snippetcompiler) -> None:
     Verify that the list comprehension expression preserves order on primitive lists.
     """
     snippetcompiler.setup_for_snippet(
-        textwrap.dedent(
-            """
+        textwrap.dedent("""
             entity A: end
             A.others [0:] -- A
             implement A using std::none
@@ -180,10 +161,7 @@ def test_list_comprehension_order(snippetcompiler) -> None:
             # with a guard
             l1 = [chained for chained in [x > 2 ? x : default for x in iterable2 if x > default]]
             l1 = [chained for chained in [x > 2 ? x : default for x in [-1, 0, 1, 2, 3, 4, 5] if x > default]]
-            """.strip(
-                "\n"
-            )
-        ),
+            """.strip("\n")),
         autostd=True,
     )
     compiler.do_compile()
@@ -196,8 +174,7 @@ def test_list_comprehension_constructor_trees(snippetcompiler) -> None:
     with an index on rhs.lhs.
     """
     snippetcompiler.setup_for_snippet(
-        textwrap.dedent(
-            """
+        textwrap.dedent("""
             entity Trunk:
                 int height
             end
@@ -260,10 +237,7 @@ def test_list_comprehension_constructor_trees(snippetcompiler) -> None:
                     Twig[branch=branch, length=raw_twig]
                 end
             end
-            """.strip(
-                "\n"
-            )
-        ),
+            """.strip("\n")),
         autostd=True,
     )
     compiler.do_compile()
@@ -273,9 +247,7 @@ def test_list_comprehension_nested_tail(snippetcompiler) -> None:
     """
     Verify correct behavior of list comprehensions where the iterable is a list comprehension itself.
     """
-    snippetcompiler.setup_for_snippet(
-        textwrap.dedent(
-            """
+    snippetcompiler.setup_for_snippet(textwrap.dedent("""
             x = 0
             l = [
                 # shadow outer variable to verify the nested list comprehension doesn't see the shadow
@@ -288,11 +260,7 @@ def test_list_comprehension_nested_tail(snippetcompiler) -> None:
 
             # assert
             l = ["0101", "0202"]
-            """.strip(
-                "\n"
-            )
-        )
-    )
+            """.strip("\n")))
     compiler.do_compile()
 
 
@@ -301,8 +269,7 @@ def test_list_comprehension_gradual(snippetcompiler) -> None:
     Verify that list comprehensions are executed gradually.
     """
     snippetcompiler.setup_for_snippet(
-        textwrap.dedent(
-            """
+        textwrap.dedent("""
             entity A:
                 string? name = null
             end
@@ -426,10 +393,7 @@ def test_list_comprehension_gradual(snippetcompiler) -> None:
             h_count = 3  # initial value + ha + ia
             h_count = std::count(h.others)
             h_count = std::count(i.others)
-            """.strip(
-                "\n"
-            )
-        ),
+            """.strip("\n")),
         autostd=True,
     )
     compiler.do_compile()
@@ -440,8 +404,7 @@ def test_list_comprehension_gradual_consistency(snippetcompiler, monkeypatch) ->
     Verify that gradual execution produces results consistent with non-gradual execution.
     """
     snippetcompiler.setup_for_snippet(
-        textwrap.dedent(
-            """
+        textwrap.dedent("""
             entity A: end
             A.others [0:] -- A
             A.self [1] -- A
@@ -462,10 +425,7 @@ def test_list_comprehension_gradual_consistency(snippetcompiler, monkeypatch) ->
 
             assert = true
             assert = b.others == c.others
-            """.strip(
-                "\n"
-            )
-        ),
+            """.strip("\n")),
         autostd=True,
     )
     compiler.do_compile()
@@ -477,8 +437,7 @@ def test_list_comprehension_gradual_mixed(snippetcompiler) -> None:
     versa, when the iterable contains both a gradual and a non-gradual component.
     """
     snippetcompiler.setup_for_snippet(
-        textwrap.dedent(
-            """
+        textwrap.dedent("""
             entity A: end
             A.others [0:] -- A
             implement A using std::none
@@ -526,10 +485,7 @@ def test_list_comprehension_gradual_mixed(snippetcompiler) -> None:
             sum_count = 3
             sum_count = std::count(c.others)
             sum_count = std::count(w)
-            """.strip(
-                "\n"
-            )
-        ),
+            """.strip("\n")),
         autostd=True,
     )
     compiler.do_compile()
@@ -540,8 +496,7 @@ def test_list_comprehension_duplicate_values(snippetcompiler) -> None:
     Verify behavior of list comprehensions when the iterable contains duplicate values.
     """
     snippetcompiler.setup_for_snippet(
-        textwrap.dedent(
-            """
+        textwrap.dedent("""
             l = [1, 2, 3]
 
             twice = [l, l]
@@ -555,10 +510,7 @@ def test_list_comprehension_duplicate_values(snippetcompiler) -> None:
 
             nested_count = 36
             nested_count = std::count(nested)
-            """.strip(
-                "\n"
-            )
-        ),
+            """.strip("\n")),
         autostd=True,
     )
     compiler.do_compile()
@@ -570,8 +522,7 @@ def test_list_comprehension_empty_items(snippetcompiler, monkeypatch) -> None:
     non-gradual execution.
     """
     snippetcompiler.setup_for_snippet(
-        textwrap.dedent(
-            """
+        textwrap.dedent("""
             entity A: end
             A.others [0:] -- A
             A.self [1] -- A
@@ -593,10 +544,7 @@ def test_list_comprehension_empty_items(snippetcompiler, monkeypatch) -> None:
             assert = true
             assert = a.others == b.others
             assert = b.others == c.others
-            """.strip(
-                "\n"
-            )
-        ),
+            """.strip("\n")),
         autostd=True,
     )
     compiler.do_compile()
@@ -607,8 +555,7 @@ def test_list_comprehension_unknown(snippetcompiler) -> None:
     Verify that list comprehensions propagate Unknowns appropriately.
     """
     snippetcompiler.setup_for_snippet(
-        textwrap.dedent(
-            """
+        textwrap.dedent("""
             import tests
 
             unknown = tests::unknown()
@@ -796,10 +743,7 @@ def test_list_comprehension_unknown(snippetcompiler) -> None:
             l13 = [-1]
 
             l14 = []
-            """.strip(
-                "\n"
-            )
-        ),
+            """.strip("\n")),
         autostd=True,
     )
     compiler.do_compile()
@@ -809,8 +753,7 @@ def test_list_comprehension_direct(snippetcompiler) -> None:
     """
     Verify that list comprehensions work in a direct execute context.
     """
-    model_def: str = textwrap.dedent(
-        """
+    model_def: str = textwrap.dedent("""
         import tests
 
         typedef nineties as int matching self in [i == 2 ? 42 : tests::sum(i, 90) for i in std::sequence(10) if i != 5]
@@ -819,23 +762,16 @@ def test_list_comprehension_direct(snippetcompiler) -> None:
             nineties n
         end
         implement A using std::none
-        """.strip(
-            "\n"
-        )
-    )
+        """.strip("\n"))
 
-    valid: str = textwrap.dedent(
-        """
+    valid: str = textwrap.dedent("""
             for i in std::sequence(10, start=90):
                 if i != 92 and i != 95:
                     A(n=i)
                 end
             end
             A(n=42)
-        """.strip(
-            "\n"
-        )
-    )
+        """.strip("\n"))
 
     # verify some invalid values
     for i in [92, 95, 100, 89, 0, -1, 43]:
@@ -866,16 +802,12 @@ def test_list_comprehension_type_error_direct_execute(snippetcompiler) -> None:
     Verify that a list comprehension in a direct execute context applied to something other than a list raises a clear exception
     """
     snippetcompiler.setup_for_error(
-        textwrap.dedent(
-            """
+        textwrap.dedent("""
             typedef mytype as int matching self in [x for x in 'Hello World']
             entity A:
                 mytype n = 0
             end
-            """.strip(
-                "\n"
-            )
-        ),
+            """.strip("\n")),
         (
             "A list comprehension in a direct execute context can only be applied to lists, got str"
             " (reported in [x for x in 'Hello World'] ({dir}/main.cf:1))"
@@ -888,16 +820,12 @@ def test_list_comprehension_type_error_direct_execute_guard(snippetcompiler) -> 
     Verify that a list comprehension in a direct execute context applied with a non-boolean guard raises a clear exception
     """
     snippetcompiler.setup_for_error(
-        textwrap.dedent(
-            """
+        textwrap.dedent("""
             typedef mytype as int matching self in [x for x in [1,2] if 42]
             entity A:
                 mytype n = 0
             end
-            """.strip(
-                "\n"
-            )
-        ),
+            """.strip("\n")),
         (
             "Invalid value `42`: the guard condition for a list comprehension must be a boolean expression"
             " (reported in [x for x in [1, 2] if 42] ({dir}/main.cf:1))"
@@ -909,8 +837,7 @@ def test_list_comprehension_direct_error(snippetcompiler) -> None:
     """
     Verify that an incorrect conditional expression in execute context raises the right error.
     """
-    model_def: str = textwrap.dedent(
-        """
+    model_def: str = textwrap.dedent("""
         import tests
 
         typedef testdef as int matching self in ["test" ? 42 : 43]
@@ -921,10 +848,7 @@ def test_list_comprehension_direct_error(snippetcompiler) -> None:
         implement A using none
         implementation none for std::Entity:
         end
-        """.strip(
-            "\n"
-        )
-    )
+        """.strip("\n"))
     snippetcompiler.setup_for_error(
         textwrap.dedent(f"{model_def}\nA(n={1})"),
         (

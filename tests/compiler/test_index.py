@@ -42,8 +42,7 @@ def test_issue_121_non_matching_index(snippetcompiler):
 
 
 def test_issue_122_index_inheritance(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity TopResource:
     string name
 end
@@ -61,8 +60,7 @@ end
 implement TestResource using testRes
 
 TestResource()
-        """
-    )
+        """)
 
     with pytest.raises(IndexAttributeMissingInConstructorException) as e:
         compiler.do_compile()
@@ -94,8 +92,7 @@ def test_issue_140_index_error(snippetcompiler):
 @pytest.mark.parametrize("explicit", [True, False])
 def test_issue_745_2689_index_on_optional(snippetcompiler, explicit: bool):
     with pytest.raises(IndexException):
-        snippetcompiler.setup_for_snippet(
-            """
+        snippetcompiler.setup_for_snippet("""
 entity A:
     string name
 end
@@ -103,16 +100,13 @@ end
 A.opt [%s:1] -- A
 
 index A(name,opt)
-"""
-            % ("0" if explicit else "")
-        )
+""" % ("0" if explicit else ""))
         compiler.do_compile()
 
 
 def test_issue_745_index_on_multi(snippetcompiler):
     with pytest.raises(IndexException):
-        snippetcompiler.setup_for_snippet(
-            """
+        snippetcompiler.setup_for_snippet("""
 entity A:
     string name
 end
@@ -120,30 +114,25 @@ end
 A.opt [1:] -- A
 
 index A(name,opt)
-"""
-        )
+""")
         compiler.do_compile()
 
 
 def test_issue_index_on_not_existing(snippetcompiler):
     with pytest.raises(TypeNotFoundException):
-        snippetcompiler.setup_for_snippet(
-            """
+        snippetcompiler.setup_for_snippet("""
 index A(name)
-"""
-        )
+""")
         compiler.do_compile()
 
 
 def test_issue_212_bad_index_defintion(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity Test1:
     string x
 end
 index Test1(x,y)
-"""
-    )
+""")
     with pytest.raises(RuntimeException):
         compiler.do_compile()
 
@@ -182,8 +171,7 @@ def test_index_on_subtype(snippetcompiler):
 
 
 def test_index_on_subtype2(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
         import std::testing
 
         entity NullResourceBis extends std::testing::NullResource:
@@ -191,8 +179,7 @@ def test_index_on_subtype2(snippetcompiler):
 
         a=std::testing::NullResource(name="test", agentname="agent1", fail=false)
         b=NullResourceBis(name="test", agentname="agent1")
-    """
-    )
+    """)
     with pytest.raises(DuplicateException):
         compiler.do_compile()
 
@@ -219,69 +206,56 @@ end
 
 
 def test_index_on_subtype_diamond(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        diamond
-        + """
+    snippetcompiler.setup_for_snippet(diamond + """
     index A(at)
     index B(at)
 
     a = A(at="a")
     b = C(at="a")
-    """
-    )
+    """)
 
     with pytest.raises(DuplicateException):
         compiler.do_compile()
 
 
 def test_index_on_subtype_diamond_2(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        diamond
-        + """
+    snippetcompiler.setup_for_snippet(diamond + """
     index A(at)
     index B(at)
 
     a = A(at="a")
     b = B(at="a")
-    """
-    )
+    """)
     compiler.do_compile()
 
 
 def test_index_on_subtype_diamond_3(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        diamond
-        + """
+    snippetcompiler.setup_for_snippet(diamond + """
     index A(at)
     index B(at)
 
     a = A(at="a")
     b = B(at="ab")
-    """
-    )
+    """)
     compiler.do_compile()
 
 
 def test_index_on_subtype_diamond_4(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        diamond
-        + """
+    snippetcompiler.setup_for_snippet(diamond + """
     index A(at)
     index B(at)
 
     a = C(at="a")
     b = C(at="a")
     a=b
-    """
-    )
+    """)
     types, _ = compiler.do_compile()
     c = types["__config__::C"]
     assert len(c.get_indices()) == 1
 
 
 def test_394_short_index(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """implementation none for std::Entity:
+    snippetcompiler.setup_for_snippet("""implementation none for std::Entity:
 
 end
 
@@ -307,8 +281,7 @@ f1h1=File(host=h1,name="f1")
 f2h1=File(host=h1,name="f2")
 
 z = h1.files[name="f1"]
-"""
-    )
+""")
     _, scopes = compiler.do_compile()
     root = scopes.get_child("__config__")
     z = root.lookup("z").get_value()
@@ -356,8 +329,7 @@ z = h1.files[name="f1"]
 
 
 def test_511_index_on_default(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity Test:
     string a="a"
     string b
@@ -371,8 +343,7 @@ Test(b="b")
 
 implementation none for std::Entity:
 end
-"""
-    )
+""")
     compiler.do_compile()
 
 
@@ -487,8 +458,7 @@ caused by:
 
 
 def test_index_lookup(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity Test:
     string a
 end
@@ -504,8 +474,7 @@ ar = Test[a="a"]
 
 implementation none for std::Entity:
 end
-        """
-    )
+        """)
     _, scopes = compiler.do_compile()
     root = scopes.get_child("__config__")
     a = root.lookup("a").get_value()
@@ -584,8 +553,7 @@ def test_index_collision_exception(snippetcompiler) -> None:
     Test that an IndexCollisionException is raised when an index collision is detected and that the correct
     explanation is displayed.
     """
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity A:
     int id
     string left
@@ -606,23 +574,19 @@ A(id=1, left="LL", right="RR", other_id=3)
 
 implementation none for std::Entity:
 end
-"""
-    )
+""")
     with pytest.raises(IndexCollisionException) as e:
         compiler.do_compile()
 
     print(ExplainerFactory().explain_and_format(e.value))
-    assert (
-        ExplainerFactory().explain_and_format(e.value)
-        == f"""
+    assert ExplainerFactory().explain_and_format(e.value) == f"""
 Exception explanation
 =====================
 The constructor `A(id=1,left='LL',right='RR',other_id=3)` ({snippetcompiler.project_dir}/main.cf:18) matches different instances in different indexes:
 - index A(id) matches __config__::A (instantiated at {snippetcompiler.project_dir}/main.cf:15)
 - index A(left,right) matches __config__::A (instantiated at {snippetcompiler.project_dir}/main.cf:16)
 - index A(other_id) matches __config__::A (instantiated at {snippetcompiler.project_dir}/main.cf:17)
-"""
-    )  # noqa: E501
+"""  # noqa: E501
 
 
 def test_index_on_nullable(snippetcompiler) -> None:
@@ -631,8 +595,7 @@ def test_index_on_nullable(snippetcompiler) -> None:
 
     Indexes on optional relations are not supported and are tested in test_issue_745_2689_index_on_optional.
     """
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
         entity A:
             int? n = null
         end
@@ -709,8 +672,7 @@ def test_index_on_nullable(snippetcompiler) -> None:
         assert = (d_null != d_one)
         assert = (d_null == D[l=null])
         assert = (d_empty == D[l=[]])
-        """
-    )
+        """)
     compiler.do_compile()
 
 

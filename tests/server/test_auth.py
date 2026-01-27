@@ -172,8 +172,7 @@ async def create_client_for_user(client, username: str, password: str) -> protoc
 
 @pytest.mark.parametrize(
     "access_policy",
-    [
-        """
+    ["""
         package policy
 
         default allow := false
@@ -211,8 +210,7 @@ async def create_client_for_user(client, username: str, password: str) -> protoc
         allow if {
             input.token["urn:inmanta:is_admin"]
         }
-        """.strip()
-    ],
+        """.strip()],
 )
 async def test_policy_evaluation(server_with_test_slice: protocol.Server) -> None:
     """
@@ -269,13 +267,11 @@ async def test_policy_evaluation(server_with_test_slice: protocol.Server) -> Non
 
 @pytest.mark.parametrize(
     "access_policy",
-    [
-        """
+    ["""
         package policy
 
         default allow := false
-        """
-    ],
+        """],
 )
 async def test_fallback_to_legacy_provider(server_with_test_slice: protocol.Server) -> None:
     """
@@ -318,13 +314,11 @@ async def test_enforce_auth_method_property(
 
 @pytest.mark.parametrize(
     "access_policy",
-    [
-        """
+    ["""
         package policy
 
         default allow := false
-        """
-    ],
+        """],
 )
 @pytest.mark.parametrize(
     "authorization_provider",
@@ -631,8 +625,7 @@ async def test_get_input_for_policy_engine(capture_input_for_policy_engine: Capt
 
 @pytest.mark.parametrize(
     "access_policy",
-    [
-        """
+    ["""
         package policy
 
         # Write the information about the endpoint into a variable
@@ -655,8 +648,7 @@ async def test_get_input_for_policy_engine(capture_input_for_policy_engine: Capt
         allow if {
             input.token["urn:inmanta:is_admin"]
         }
-        """
-    ],
+        """],
 )
 @pytest.mark.parametrize("authentication_method", [AuthMethod.database])
 @pytest.mark.parametrize("enable_auth", [True])
@@ -920,15 +912,13 @@ async def test_roles_failure_scenarios(server: protocol.Server, client, environm
 
 @pytest.mark.parametrize(
     "access_policy",
-    [
-        """
+    ["""
         package policy
 
         roles := ["role_a", "role_b"]
 
         default allow := true
-        """
-    ],
+        """],
 )
 @pytest.mark.parametrize("authentication_method", [AuthMethod.database])
 @pytest.mark.parametrize("enable_auth", [True])
@@ -944,15 +934,13 @@ async def test_synchronization_roles_with_db(server: protocol.Server, client, as
     await server.stop()
     policy_file = policy_engine.policy_file.get()
     with open(policy_file, "w") as fh:
-        fh.write(
-            """
+        fh.write("""
         package policy
 
         roles := ["role_a", "role_c"]
 
         default allow := true
-        """
-        )
+        """)
     ibl = InmantaBootloader(configure_logging=False)
     async_finalizer.add(partial(ibl.stop, timeout=20))
     await ibl.start()
@@ -964,13 +952,11 @@ async def test_synchronization_roles_with_db(server: protocol.Server, client, as
     # Ensure that the absence of the roles list doesn't update anything in the database.
     await ibl.stop()
     with open(policy_file, "w") as fh:
-        fh.write(
-            """
+        fh.write("""
         package policy
 
         default allow := true
-        """
-        )
+        """)
     ibl = InmantaBootloader(configure_logging=False)
     async_finalizer.add(partial(ibl.stop, timeout=20))
     await ibl.start()
@@ -982,8 +968,7 @@ async def test_synchronization_roles_with_db(server: protocol.Server, client, as
 
 @pytest.mark.parametrize(
     "access_policy",
-    [
-        """
+    ["""
         package policy
 
         default allow := false
@@ -992,8 +977,7 @@ async def test_synchronization_roles_with_db(server: protocol.Server, client, as
         allow if {
             input.token["urn:inmanta:is_admin"]
         }
-        """.strip()
-    ],
+        """.strip()],
 )
 @pytest.mark.parametrize("authentication_method", [AuthMethod.database])
 @pytest.mark.parametrize("enable_auth", [True])

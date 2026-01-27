@@ -24,12 +24,10 @@ from inmanta.execute.runtime import Instance
 
 
 def test_dict(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 a = "a"
 b = { "a" : a, "b" : "b", "c" : 3}
-"""
-    )
+""")
 
     _, root = compiler.do_compile()
 
@@ -42,17 +40,14 @@ b = { "a" : a, "b" : "b", "c" : 3}
 
 def test_dict_collide(snippetcompiler):
     with pytest.raises(DuplicateException):
-        snippetcompiler.setup_for_snippet(
-            """
+        snippetcompiler.setup_for_snippet("""
 a = "a"
 b = { "a" : a, "a" : "b", "c" : 3}
-            """
-        )
+            """)
 
 
 def test_dict_attr(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity Foo:
   dict bar
   dict foo = {}
@@ -68,8 +63,7 @@ z=5
 
 implementation none for Foo:
 end
-"""
-    )
+""")
 
     _, root = compiler.do_compile()
 
@@ -93,8 +87,7 @@ end
 
 
 def test_dict_attr_type_error(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity Foo:
   dict bar
   dict foo = {}
@@ -105,21 +98,18 @@ implement Foo using std::none
 
 a=Foo(bar=b)
 b=Foo(bar={"a":"A"})
-"""
-    )
+""")
     with pytest.raises(RuntimeException):
         compiler.do_compile()
 
 
 def test_611_dict_access(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 a = "a"
 b = { "a" : a, "b" : "b", "c" : 3}
 c=b[a]
 d=b["c"]
-"""
-    )
+""")
 
     _, root = compiler.do_compile()
 
@@ -129,12 +119,10 @@ d=b["c"]
 
 
 def test_632_dict_access_2(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 b = { "a" : {"b":"c"}}
 c=b["a"]["b"]
-"""
-    )
+""")
 
     _, root = compiler.do_compile()
 
@@ -143,20 +131,17 @@ c=b["a"]["b"]
 
 
 def test_632_dict_access_3(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 b = { "a" : "b"}
 c=b["a"]["b"]
-"""
-    )
+""")
 
     with pytest.raises(TypingException):
         compiler.do_compile()
 
 
 def test_673_in_dict(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity Test:
     dict attributes
 end
@@ -168,8 +153,7 @@ end
 implement Test using test when "foo" in self.attributes
 
 Test(attributes={"foo": 42})
-"""
-    )
+""")
     compiler.do_compile()
 
 
@@ -222,8 +206,7 @@ caused by:
 
 
 def test_constructor_kwargs(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity Test:
     int n
     int m
@@ -238,8 +221,7 @@ x = Test(**dct["config"], str = "Hello World!")
 
 implementation none for Test:
 end
-"""
-    )
+""")
     _, root = compiler.do_compile()
     scope = root.get_child("__config__").scope
 
@@ -266,8 +248,7 @@ t = Test(
 
 implementation none for Test:
 end
-        """
-        % ("'v': 10" if override else ""),
+        """ % ("'v': 10" if override else ""),
     )
     _, root = compiler.do_compile()
     scope = root.get_child("__config__").scope
@@ -291,8 +272,7 @@ A(a = 3, **v)
 
 
 def test_constructor_kwargs_index_match(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity Test:
     int n
     int m
@@ -310,8 +290,7 @@ y = Test(**dct["config"], str = "Hello World!")
 
 implementation none for Test:
 end
-"""
-    )
+""")
     _, root = compiler.do_compile()
     scope = root.get_child("__config__").scope
 
@@ -321,8 +300,7 @@ end
 
 
 def test_indexlookup_kwargs(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity Test:
     int n
     int m
@@ -340,8 +318,7 @@ y = Test[n = 42, **dct]
 
 implementation none for Test:
 end
-    """
-    )
+    """)
     _, root = compiler.do_compile()
     scope = root.get_child("__config__").scope
 
@@ -351,8 +328,7 @@ end
 
 
 def test_short_indexlookup_kwargs(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity Collection:
 end
 
@@ -382,8 +358,7 @@ end
 
 implementation cnone for Collection:
 end
-    """
-    )
+    """)
     _, root = compiler.do_compile()
     scope = root.get_child("__config__").scope
 
@@ -403,8 +378,7 @@ dict_1 = {'{{v}}':0}
 
 
 def test_interpolation_in_dict_keys(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 dict_0 = {'itpl':'0'}
 dict_1 = {'{itpl}}':"1"}
 dict_2 = {'{{itpl}':2}
@@ -418,8 +392,7 @@ dict_4_bis = {"\\u0259":41}
 value = "itp"
 dict_5 = {"\\{\\{not interpolation\\}\\}": "interpolation {{value}}"}
 dict_6 = {r'{{value}}': "not interpolation"}
-    """
-    )  # NOQA W605
+    """)  # NOQA W605
 
     _, root = compiler.do_compile()
     scope = root.get_child("__config__").scope

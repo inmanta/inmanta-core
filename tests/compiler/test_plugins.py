@@ -273,8 +273,7 @@ def test_explicit_plugin_exception(snippetcompiler):
 import tests
 
 tests::raise_exception("%s")
-        """
-        % msg,
+        """ % msg,
     )
     try:
         compiler.do_compile()
@@ -374,13 +373,11 @@ def test_signature(snippetcompiler: "SnippetCompilationTest") -> None:
     """
     Test that the get_signature method of the plugins work as expected.
     """
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 # Import some modules which define plugins
 import catch_all_arguments
 import keyword_only_arguments
-        """
-    )
+        """)
     statements, _ = compiler.do_compile()
 
     # Get all plugins objects, we get them from the statements, and recognize them
@@ -407,8 +404,7 @@ def test_returned_types(snippetcompiler: "SnippetCompilationTest") -> None:
     """
     Test that the value returned from a plugin are validated correctly.
     """
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 import plugin_returned_type_validation
 
 plugin_returned_type_validation::as_any_explicit({"a": "a"})
@@ -416,8 +412,7 @@ plugin_returned_type_validation::as_any_implicit({"a": "a"})
 plugin_returned_type_validation::as_none(null)
 plugin_returned_type_validation::as_null(null)
 plugin_returned_type_validation::as_string("a")
-        """
-    )
+        """)
     compiler.do_compile()
 
 
@@ -426,13 +421,11 @@ def test_context_and_defaults(snippetcompiler: "SnippetCompilationTest") -> None
     Test that the usage of the context argument together with default
     values doesn't cause any issue
     """
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 import plugin_context_and_defaults
 
 plugin_context_and_defaults::func()
-        """
-    )
+        """)
     compiler.do_compile()
 
 

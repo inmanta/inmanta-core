@@ -345,8 +345,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
             raise BadRequest(f"The following metrics given in the metrics parameter are unknown: {unknown_metric_names}")
 
         def _get_sub_query(metric: str, group_by: str, table_name: str, aggregation_function: str, metrics_list: str) -> str:
-            return textwrap.dedent(
-                f"""
+            return textwrap.dedent(f"""
                 SELECT
                     {metric},
                     {group_by},
@@ -364,8 +363,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
                     AND timestamp < $3::timestamp with time zone
                     AND metric_name=ANY({metrics_list}::varchar[])
                 GROUP BY metric_name, category, bucket_nr
-            """
-            ).strip()
+            """).strip()
 
         query_on_gauge_table = _get_sub_query(
             metric="metric_name",

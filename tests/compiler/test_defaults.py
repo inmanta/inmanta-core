@@ -23,8 +23,7 @@ from inmanta.ast import DuplicateException, TypingException, UnsetException
 
 
 def test_issue_127_default_overrides(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 import std::testing
 
 entity NullResourceBis extends std::testing::NullResource:
@@ -37,16 +36,14 @@ end
 implement NullResourceBis using a
 
 f1=NullResourceBis(name="test", agentname="agent")
-        """
-    )
+        """)
     types, _ = compiler.do_compile()
     instances = types["__config__::NullResourceBis"].get_all_instances()
     assert instances[0].get_attribute("agentname").get_value() == "agent"
 
 
 def test_issue_135_duplo_relations(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity Test1:
 
 end
@@ -58,15 +55,13 @@ implement Test2 using std::none
 
 Test1.test2 [0:] -- Test2.test1 [1]
 Test1.test2 [0:] -- Test2.test1 [0:1]
-"""
-    )
+""")
     with pytest.raises(DuplicateException):
         compiler.do_compile()
 
 
 def test_issue_224_default_over_inheritance(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity Test1:
     string a = "a"
 end
@@ -80,8 +75,7 @@ Test3()
 
 implementation none for std::Entity:
 end
-"""
-    )
+""")
     types, _ = compiler.do_compile()
     instances = types["__config__::Test3"].get_all_instances()
     assert len(instances) == 1
@@ -90,8 +84,7 @@ end
 
 
 def test_275_default_override(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
     entity A:
         bool at = true
     end
@@ -107,8 +100,7 @@ def test_275_default_override(snippetcompiler):
 
     implementation none for std::Entity:
     end
-    """
-    )
+    """)
 
     _, scopes = compiler.do_compile()
 
@@ -120,8 +112,7 @@ def test_275_default_override(snippetcompiler):
 
 
 def test_275_default_diamond(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
     entity A:
         bool at = true
     end
@@ -147,8 +138,7 @@ def test_275_default_diamond(snippetcompiler):
 
     implementation none for std::Entity:
     end
-    """
-    )
+    """)
 
     _, scopes = compiler.do_compile()
 
@@ -164,8 +154,7 @@ def test_275_default_diamond(snippetcompiler):
 
 
 def test_275_duplicate_parent(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
     entity A:
         bool at = true
     end
@@ -175,15 +164,13 @@ def test_275_duplicate_parent(snippetcompiler):
         bool at = false
     end
     implement B using std::none
-    """
-    )
+    """)
     with pytest.raises(TypingException):
         compiler.do_compile()
 
 
 def test_default_remove(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
     entity A:
         bool at = true
     end
@@ -199,8 +186,7 @@ def test_default_remove(snippetcompiler):
 
     implementation none for std::Entity:
     end
-    """
-    )
+    """)
     with pytest.raises(UnsetException):
         compiler.do_compile()
 

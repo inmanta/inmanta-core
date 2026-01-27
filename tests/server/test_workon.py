@@ -82,19 +82,13 @@ def workon_workdir(server: Server, tmpdir: py.path.local) -> abc.Iterator[py.pat
     port = config.Config.get("server", "bind-port")
     state_dir = config.Config.get("config", "state-dir")
     workdir: py.path.local = tmpdir.mkdir("workon_bash_workdir")
-    workdir.join(".inmanta.cfg").write(
-        textwrap.dedent(
-            f"""
+    workdir.join(".inmanta.cfg").write(textwrap.dedent(f"""
             [config]
             state-dir = {state_dir}
 
             [server]
             bind-port = {port}
-            """.strip(
-                "\n"
-            )
-        )
-    )
+            """.strip("\n")))
     yield workdir
 
 
@@ -371,9 +365,7 @@ async def test_workon_help(workon_bash: Bash, option: Optional[str]) -> None:
         -l, --list      list the inmanta environments on this server
 
         The ENVIRONMENT argument may be the name or the id of an inmanta environment.
-        """.strip(
-            "\n"
-        ),
+        """.strip("\n"),
     )
 
 
@@ -542,8 +534,7 @@ async def assert_workon_state(
     :param invert_ps1_assert: If true, assert that PS1 has received the environment as a prefix.
     """
     result: CliResult = await workon_bash(
-        textwrap.dedent(
-            f"""
+        textwrap.dedent(f"""
             # mock PS1 to mimic terminal behavior
             test_workon_ps1_pre=myps1
             export PS1="$test_workon_ps1_pre"
@@ -564,10 +555,7 @@ async def assert_workon_state(
 
             # exit with result code
             [ "$pre_activate_result" -eq 0 ] && [ "$activate_result" -eq 0 ] && [ "$post_activate_result" -eq 0 ]
-            """.strip(
-                "\n"
-            )
-        )
+            """.strip("\n"))
         % (pre_activate if pre_activate is not None else "", post_activate if post_activate is not None else "")
     )
     assert (result.exit_code == 0) != invert_success_assert
@@ -811,8 +799,7 @@ async def test_workon_compile(
         # call inmanta before activation to guard against command caching errors (see `man hash`)
         pre_activate="inmanta --help > /dev/null 2>&1",
         # Add a requirement and install it.
-        post_activate=textwrap.dedent(
-            """
+        post_activate=textwrap.dedent("""
             declare -F inmanta > /dev/null 2>&1 || exit 1  # check that inmanta is a shell function
             (pip --disable-pip-version-check list | grep lorem > /dev/null 2>&1) \
                 && exit 1  # check that lorem is not installed yet
@@ -824,10 +811,7 @@ async def test_workon_compile(
             deactivate
             declare -F inmanta > /dev/null 2>&1
             [ "$?" -eq 1 ] # check that inmanta is no longer a shell function
-            """.strip(
-                "\n"
-            )
-        ),
+            """.strip("\n")),
         expected_dir=workon_environments_dir.join(str(compiled_environments[0].id), "compiler"),
         invert_python_assert=True,
         invert_ps1_assert=True,
@@ -891,16 +875,12 @@ async def test_workon_deactivate(
         str(env_id),
         # then activate env 1 and env 2 without explicit deactivate
         # do it twice to verify that the deactivate function is kept / registered correctly the second time around.
-        post_activate=textwrap.dedent(
-            f"""
+        post_activate=textwrap.dedent(f"""
             cd '{workon_workdir}' && inmanta-workon {compiled_environments[1].id}
             cd '{workon_workdir}' && inmanta-workon {compiled_environments[2].id}
             # verify PS1 correctness, then reset it to what assert_workon_state expects
             [ "${{PS1%$test_workon_ps1_pre}}" = '({compiled_environments[2].id}) ' ] && export PS1="$test_workon_ps1_pre"
-            """.strip(
-                "\n"
-            )
-        ),
+            """.strip("\n")),
         # declare root owner of the inmanta state directory to trigger the ownership warning (files are owned by active user)
         inmanta_user="root",
         # env 2 should be activated in the end
@@ -943,16 +923,11 @@ async def test_workon_sets_inmanta_config_environment(
     await assert_workon_state(
         workon_bash,
         str(inner_env_id),
-        pre_activate=textwrap.dedent(
-            f"""
+        pre_activate=textwrap.dedent(f"""
             # Set INMANTA_CONFIG_ENVIRONMENT to the outer env's id
             export INMANTA_CONFIG_ENVIRONMENT={outer_env_id}
-            """.strip(
-                "\n"
-            )
-        ),
-        post_activate=textwrap.dedent(
-            f"""
+            """.strip("\n")),
+        post_activate=textwrap.dedent(f"""
             # After activation, verify INMANTA_CONFIG_ENVIRONMENT is set to the inner env's id
             if [ ! "${{INMANTA_CONFIG_ENVIRONMENT}}" = "{inner_env_id}" ] ; then
                 exit 1
@@ -962,10 +937,7 @@ async def test_workon_sets_inmanta_config_environment(
             if [ ! "${{INMANTA_CONFIG_ENVIRONMENT}}" = "{outer_env_id}" ] ; then
                 exit 1
             fi
-            """.strip(
-                "\n"
-            )
-        ),
+            """.strip("\n")),
         expected_dir=env_dir,
         invert_python_assert=True,
         invert_ps1_assert=True,
@@ -992,16 +964,11 @@ async def test_workon_sets_inmanta_config_environment_empty_outer(
     await assert_workon_state(
         workon_bash,
         str(inner_env_id),
-        pre_activate=textwrap.dedent(
-            """
+        pre_activate=textwrap.dedent("""
             # Make sure INMANTA_CONFIG_ENVIRONMENT is not set
             unset INMANTA_CONFIG_ENVIRONMENT
-            """.strip(
-                "\n"
-            )
-        ),
-        post_activate=textwrap.dedent(
-            f"""
+            """.strip("\n")),
+        post_activate=textwrap.dedent(f"""
             # After activation, verify INMANTA_CONFIG_ENVIRONMENT is set to the inner env's id
             if [ ! "${{INMANTA_CONFIG_ENVIRONMENT}}" = "{inner_env_id}" ] ; then
                 exit 1
@@ -1011,10 +978,7 @@ async def test_workon_sets_inmanta_config_environment_empty_outer(
             if [ -n "${{INMANTA_CONFIG_ENVIRONMENT:-}}" ] ; then
                 exit 1
             fi
-            """.strip(
-                "\n"
-            )
-        ),
+            """.strip("\n")),
         expected_dir=env_dir,
         invert_python_assert=True,
         invert_ps1_assert=True,
@@ -1042,23 +1006,19 @@ def add_check(var_name: str, expected_value: str, extra_debug_info: Optional[str
     It checks that a given variable has the expected value
     """
     if expected_value:
-        return textwrap.dedent(
-            f"""
+        return textwrap.dedent(f"""
                 if [ ! "${{{var_name}}}" = "{expected_value}" ] ; then
                     echo $"{extra_debug_info} '{var_name}' expected '{expected_value}' got '${{{var_name}}}'"
                     exit 1
                 fi
-            """
-        )
+            """)
     # Check for unset var:
-    return textwrap.dedent(
-        f"""
+    return textwrap.dedent(f"""
             if [ -n "${{{var_name}}}" ] ; then
                 echo $"{extra_debug_info} '{var_name}' expected empty str got '${{{var_name}}}'"
                 exit 1
             fi
-        """
-    )
+        """)
 
 
 @dataclass
@@ -1092,17 +1052,13 @@ def scenarios() -> dict[str, TestScenario]:
     scenario_1 = TestScenario(
         pip_config=pip_config,
         expected_warning="",
-        pre_activate_script=create_script(
-            [
-                """
+        pre_activate_script=create_script(["""
                 # Set some pip env var with dummy values:
                 export PIP_INDEX_URL="initial_dummy_value"
                 export PIP_EXTRA_INDEX_URL="initial_dummy_value"
                 export PIP_PRE="initial_dummy_value"
                 export PIP_CONFIG_FILE="initial_dummy_value"
-                """
-            ]
-        ),
+                """]),
         pre_deactivate_script=create_script(
             [
                 # Check we extend extra index value
@@ -1154,16 +1110,12 @@ def scenarios() -> dict[str, TestScenario]:
     # - Check PIP_PRE is unset
 
     scenario_3 = copy.deepcopy(scenario_1)
-    scenario_3.pre_activate_script = create_script(
-        [
-            """
+    scenario_3.pre_activate_script = create_script(["""
             # Set some pip env var with dummy values:
             export PIP_INDEX_URL="initial_dummy_value"
             export PIP_EXTRA_INDEX_URL="initial_dummy_value"
             export PIP_CONFIG_FILE="initial_dummy_value"
-            """
-        ]
-    )
+            """])
     scenario_3.pip_config["use-system-config"] = False
     scenario_3.pre_deactivate_script = create_script(
         [
@@ -1196,17 +1148,13 @@ def scenarios() -> dict[str, TestScenario]:
             "WARNING: Cannot use project.yml pip configuration: pip.use-system-config is False, but no index is defined "
             "in the pip.index-url section of the project.yml\n"
         ),
-        pre_activate_script=create_script(
-            [
-                """
+        pre_activate_script=create_script(["""
                 # Set some pip env var with dummy values:
                 export PIP_INDEX_URL="initial_dummy_value"
                 export PIP_EXTRA_INDEX_URL="initial_dummy_value"
                 export PIP_PRE="False"
                 export PIP_CONFIG_FILE="initial_dummy_value"
-                """
-            ]
-        ),
+                """]),
         pre_deactivate_script=create_script(
             [
                 # Make sure config is left untouched:

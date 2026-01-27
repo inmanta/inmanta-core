@@ -223,8 +223,7 @@ def test_bump_dev_version(
     if changelog_file_exists:
         path_changelog_file = os.path.join(path_module, const.MODULE_CHANGELOG_FILE)
         with open(path_changelog_file, "w", encoding="utf-8") as fh:
-            fh.write(
-                """
+            fh.write("""
 # Changelog
 
 ## v1.1.2
@@ -242,8 +241,7 @@ def test_bump_dev_version(
 ## v1.0.0
 
 - Release
-            """.strip()
-            )
+            """.strip())
 
     gitprovider.git_init(repo=path_module)
     gitprovider.commit(repo=path_module, message="Initial commit", add=["*"], commit_all=True)
@@ -494,16 +492,13 @@ def test_populate_changelog(tmpdir, modules_dir: str, monkeypatch, top_level_hea
     module_tool.release(dev=False, message="Commit changes")
 
     with open(path_changelog_file, encoding="utf-8") as fh:
-        assert (
-            fh.read()
-            == """
+        assert fh.read() == """
 # Changelog
 
 ## v1.0.2 - ?
 
 
 """.lstrip()
-        )
 
 
 def test_too_many_version_bump_arguments() -> None:
@@ -593,15 +588,13 @@ def test_failed_to_set_release_date(tmpdir, modules_dir: str, monkeypatch, caplo
     )
     path_changelog_file = os.path.join(path_module, const.MODULE_CHANGELOG_FILE)
     with open(path_changelog_file, "w", encoding="utf-8") as fh:
-        fh.write(
-            """
+        fh.write("""
 # Changelog
 
 ## v1.0.1
 
 - Change
-    """.strip()
-        )
+    """.strip())
     gitprovider.git_init(repo=path_module)
     gitprovider.commit(repo=path_module, message="Initial commit", add=["*"], commit_all=True)
     gitprovider.tag(repo=path_module, tag="1.0.0")
@@ -615,9 +608,7 @@ def test_failed_to_set_release_date(tmpdir, modules_dir: str, monkeypatch, caplo
     assert "Failed to set the release date in the changelog for version 1.1.0." in caplog.text
 
     with open(path_changelog_file, encoding="utf-8") as fh:
-        assert (
-            fh.read().strip()
-            == """
+        assert fh.read().strip() == """
 # Changelog
 
 ## v1.1.1 - ?
@@ -627,4 +618,3 @@ def test_failed_to_set_release_date(tmpdir, modules_dir: str, monkeypatch, caplo
 
 - Change
     """.strip()
-        )

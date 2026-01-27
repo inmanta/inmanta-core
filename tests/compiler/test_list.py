@@ -64,43 +64,37 @@ d = Jos(bar = [], floom=["test","test2"])
 
 
 def test_list_attribute_type_violation_1(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity Jos:
   bool[] bar = true
 end
 implement Jos using std::none
 c = Jos()
-"""
-    )
+""")
     with pytest.raises(RuntimeException):
         compiler.do_compile()
 
 
 def test_list_attribute_type_violation_2(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity Jos:
   bool[] bar = ["x"]
 end
 implement Jos using std::none
 c = Jos()
-"""
-    )
+""")
     with pytest.raises(RuntimeException):
         compiler.do_compile()
 
 
 def test_list_attribute_type_violation_3(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity Jos:
   bool[] bar
 end
 implement Jos using std::none
 c = Jos(bar = ["X"])
-"""
-    )
+""")
     with pytest.raises(RuntimeException):
         compiler.do_compile()
 
@@ -131,8 +125,7 @@ std::print(t1.tests)
 
 
 def test_608_list_to_list(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 implementation none for std::Entity:
 end
 
@@ -165,14 +158,12 @@ c1 = C(name="c1")
 
 b1.a = a1
 b1.a = c1.a
-"""
-    )
+""")
     _, scopes = compiler.do_compile()
 
 
 def test_608_list_to_single(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 implementation none for std::Entity:
 end
 
@@ -204,15 +195,13 @@ b1 = B(name="b1")
 c1 = C(name="c1")
 
 b1.a = c1.a
-"""
-    )
+""")
     with pytest.raises(AttributeException):
         _, scopes = compiler.do_compile()
 
 
 def test_608_opt_to_list(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 implementation none for std::Entity:
 end
 
@@ -245,16 +234,14 @@ c1 = C(name="c1")
 
 b1.a = a1
 b1.a = c1.a
-"""
-    )
+""")
     with pytest.raises(AttributeException) as exc_info:
         _, scopes = compiler.do_compile()
     assert any(isinstance(cause, OptionalValueException) for cause in exc_info.value.get_causes())
 
 
 def test_608_opt_to_single(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 implementation none for std::Entity:
 end
 
@@ -286,16 +273,14 @@ c1 = C(name="c1")
 
 b1.a = a1
 b1.a = c1.a
-"""
-    )
+""")
     with pytest.raises(AttributeException) as exc_info:
         _, scopes = compiler.do_compile()
     assert any(isinstance(cause, OptionalValueException) for cause in exc_info.value.get_causes())
 
 
 def test_608_opt_to_single_2(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 implementation none for std::Entity:
 end
 
@@ -329,14 +314,12 @@ b1.a = a1
 b1.a = c1.a
 
 c1.a = a1
-"""
-    )
+""")
     _, scopes = compiler.do_compile()
 
 
 def test_633_default_on_list(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity Foo:
    list first=[]
    list second=["a", "b"]
@@ -349,8 +332,7 @@ end
 implement Foo using none
 
 foo = Foo()
-"""
-    )
+""")
     _, scopes = compiler.do_compile()
 
     root = scopes.get_child("__config__")
@@ -367,8 +349,7 @@ foo = Foo()
 
 
 def test_673_in_list(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity Test:
     string[] attributes
 end
@@ -380,14 +361,12 @@ end
 implement Test using test when "foo" in self.attributes
 
 Test(attributes=["blah", "foo"])
-"""
-    )
+""")
     compiler.do_compile()
 
 
 def test_552_string_rendering_for_lists(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity Network:
     string[] tags=[]
 end
@@ -399,8 +378,7 @@ a="Net has tags {{ net1.tags }}"
 
 implementation none for std::Entity:
 end
-"""
-    )
+""")
 
     _, scopes = compiler.do_compile()
 
@@ -411,8 +389,7 @@ end
 
 
 def test_emptylists(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
     implement std::Entity using none
 
     implementation none for std::Entity:
@@ -424,8 +401,7 @@ def test_emptylists(snippetcompiler):
 
     a.provides = b.provides
     b.provides = c.provides
-    """
-    )
+    """)
     compiler.do_compile()
 
 
@@ -555,9 +531,7 @@ def test_relation_list_duplicate_assignment(snippetcompiler):
 
     This test was included because naive implementations of ResultVariable listener tracking would break this.
     """
-    snippetcompiler.setup_for_snippet(
-        textwrap.dedent(
-            """
+    snippetcompiler.setup_for_snippet(textwrap.dedent("""
             entity A: end
             A.others [0:] -- A
             implement A using none
@@ -569,11 +543,7 @@ def test_relation_list_duplicate_assignment(snippetcompiler):
 
             implementation none for std::Entity:
             end
-            """.strip(
-                "\n"
-            )
-        )
-    )
+            """.strip("\n")))
     compiler.do_compile()
 
 
@@ -620,8 +590,7 @@ def test_list_duplicates(snippetcompiler):
 
 def test_nested_list_on_as_constant(snippetcompiler):
     """Constant lists are flattened in typedefs"""
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
         typedef thestring as string matching self in [["a","b"],"c", ["d"]]
 
         entity It:
@@ -634,15 +603,13 @@ def test_nested_list_on_as_constant(snippetcompiler):
 
         implementation none for std::Entity:
         end
-        """
-    )
+        """)
     compiler.do_compile()
 
 
 def test_nested_list_on_execute_direct(snippetcompiler):
     """Conditional lists are flattened in typedefs"""
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
         typedef thestring as string matching self in [1==1?["a","b"]:[],"c", ["d"]]
 
         entity It:
@@ -654,6 +621,5 @@ def test_nested_list_on_execute_direct(snippetcompiler):
         implement It using none
         implementation none for std::Entity:
         end
-        """
-    )
+        """)
     compiler.do_compile()

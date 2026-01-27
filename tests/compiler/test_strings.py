@@ -319,15 +319,13 @@ def test_fstring_numbering_logic():
     """
     Check that variable ranges in f-strings are correctly computed
     """
-    statements = parse_code(
-        """
+    statements = parse_code("""
 #        10        20        30        40        50        60        70        80
 #        |         |         |         |         |         |         |         |
 std::print(f"---{s}{mm} - {sub.attr} - {  padded  } - {  \tpadded.sub.attr   }")
 #                |   |           |           |                          |
 #               [-][--]       [----]     [------]                    [----]    <--- expected ranges
-        """
-    )
+        """)
 
     # Ranges are 1-indexed [start:end[
     ranges = [
@@ -350,13 +348,11 @@ def test_fstring_numbering_logic_multiple_refs():
     """
     Check that variable ranges in f-strings are correctly computed
     """
-    statements = parse_code(
-        """
+    statements = parse_code("""
 std::print(f"---{s}----{s}")
 #                |      |
 #               [-]    [-] <--- expected ranges
-        """
-    )
+        """)
 
     # Ranges are 1-indexed [start:end[
     ranges = [
@@ -402,11 +398,9 @@ std::print(z)
 
 
 def test_fstring_numbering_logic_complex():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 std::print(f"-{arg:{width}.{precision}}{other}-text-{a:{w}.{p}}-----{w}")
-        """
-    )
+        """)
 
     # Ranges are 1-indexed [start:end[
     ranges = [
