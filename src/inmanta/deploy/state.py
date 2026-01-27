@@ -127,7 +127,7 @@ def get_compliance_status(
     is_undefined: bool,
     last_deployed_attribute_hash: str | None,
     current_intent_attribute_hash: str | None,
-    last_deploy_compliant: bool | None,
+    last_handler_run_compliant: bool | None,
 ) -> Compliance: ...
 
 
@@ -137,7 +137,7 @@ def get_compliance_status(
     is_undefined: bool,
     last_deployed_attribute_hash: str | None,
     current_intent_attribute_hash: str | None,
-    last_deploy_compliant: bool | None,
+    last_handler_run_compliant: bool | None,
 ) -> None: ...
 
 
@@ -147,7 +147,7 @@ def get_compliance_status(
     is_undefined: bool,
     last_deployed_attribute_hash: str | None,
     current_intent_attribute_hash: str | None,
-    last_deploy_compliant: bool | None,
+    last_handler_run_compliant: bool | None,
 ) -> Compliance | None: ...
 
 
@@ -156,7 +156,7 @@ def get_compliance_status(
     is_undefined: bool,
     last_deployed_attribute_hash: str | None,
     current_intent_attribute_hash: str | None,
-    last_deploy_compliant: bool | None,
+    last_handler_run_compliant: bool | None,
 ) -> Compliance | None:
     if is_orphan:
         return None
@@ -164,7 +164,7 @@ def get_compliance_status(
         return Compliance.UNDEFINED
     elif last_deployed_attribute_hash is None or current_intent_attribute_hash != last_deployed_attribute_hash:
         return Compliance.HAS_UPDATE
-    elif last_deploy_compliant:
+    elif last_handler_run_compliant:
         return Compliance.COMPLIANT
     return Compliance.NON_COMPLIANT
 
@@ -214,7 +214,7 @@ class ResourceState:
     State of a resource. Consists of multiple independent (mostly) state vectors that make up the final state.
 
     :param last_deployed: when was this resource last deployed
-    :param last_deploy_compliant: Was the last deploy for this resource compliant.
+    :param last_handler_run_compliant: Was the last deploy for this resource compliant.
         None for resources that have yet to be deployed
     """
 
@@ -222,7 +222,7 @@ class ResourceState:
     last_handler_run: HandlerResult
     blocked: Blocked
     last_deployed: datetime.datetime | None
-    last_deploy_compliant: bool | None
+    last_handler_run_compliant: bool | None
 
     def is_dirty(self) -> bool:
         """
@@ -306,7 +306,7 @@ class ModelState:
                     "current_intent_attribute_hash",
                     "last_deployed_attribute_hash",
                     "last_handler_run",
-                    "last_deploy_compliant",
+                    "last_handler_run_compliant",
                     "blocked",
                     "last_success",
                     "last_deploy",
@@ -351,7 +351,7 @@ class ModelState:
                 or res["current_intent_attribute_hash"] != res["last_deployed_attribute_hash"]
             ):
                 compliance_status = Compliance.HAS_UPDATE
-            elif res["last_deploy_compliant"]:
+            elif res["last_handler_run_compliant"]:
                 compliance_status = Compliance.COMPLIANT
             else:
                 compliance_status = Compliance.NON_COMPLIANT
@@ -361,7 +361,7 @@ class ModelState:
                 last_handler_run=HandlerResult[res["last_handler_run"]],
                 blocked=Blocked[res["blocked"]],
                 last_deployed=last_deployed,
-                last_deploy_compliant=res["last_deploy_compliant"],
+                last_handler_run_compliant=res["last_handler_run_compliant"],
             )
             result.resource_state[resource_id] = resource_state
 
@@ -459,7 +459,7 @@ class ModelState:
                 last_handler_run=HandlerResult.SUCCESSFUL if known_compliant else HandlerResult.NEW,
                 blocked=blocked,
                 last_deployed=last_deployed,
-                last_deploy_compliant=True if compliance_status == Compliance.COMPLIANT else None,
+                last_handler_run_compliant=True if compliance_status == Compliance.COMPLIANT else None,
             )
             if resource not in self.requires:
                 self.requires[resource] = set()
@@ -526,7 +526,7 @@ class ModelState:
         :param resource: The id of the resource to find the dependencies for
         """
         dependencies: Set[ResourceIdStr] = self.requires.get(resource, set())
-        return any(self.resource_state[dep_id].last_deploy_compliant is False for dep_id in dependencies)
+        return any(self.resource_state[dep_id].last_handler_run_compliant is False for dep_id in dependencies)
 
     def update_transitive_state(
         self,

@@ -761,7 +761,7 @@ class ResourcePersistentState(Base):
     last_deployed_version: Mapped[Optional[int]] = mapped_column(Integer)
     current_intent_attribute_hash: Mapped[Optional[str]] = mapped_column(String)
     is_deploying: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text("false"))
-    last_deploy_compliant: Mapped[Optional[bool]] = mapped_column(Boolean)
+    last_handler_run_compliant: Mapped[Optional[bool]] = mapped_column(Boolean)
 
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="resource_persistent_state")
 
@@ -772,7 +772,7 @@ class ResourcePersistentState(Base):
             self.is_undefined,
             self.last_deployed_attribute_hash,
             self.current_intent_attribute_hash,
-            self.last_deploy_compliant,
+            self.last_handler_run_compliant,
         )
 
     @compliance_state.inplace.expression
@@ -788,7 +788,7 @@ class ResourcePersistentState(Base):
                 ),
                 state.Compliance.HAS_UPDATE.name,
             ),
-            (cls.last_deploy_compliant.is_(True), state.Compliance.COMPLIANT.name),
+            (cls.last_handler_run_compliant.is_(True), state.Compliance.COMPLIANT.name),
             else_=state.Compliance.NON_COMPLIANT.name,
         )
 

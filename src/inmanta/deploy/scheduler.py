@@ -1371,7 +1371,7 @@ class ResourceScheduler(TaskManager):
             state: ResourceState = self._state.resource_state[resource]
 
             result_compliant = result.resource_state is HandlerResourceState.deployed
-            recovered_from_failure: bool = state.last_deploy_compliant is False and result_compliant
+            recovered_from_failure: bool = state.last_handler_run_compliant is False and result_compliant
 
             # The second part of the or would not be required because is implied by the first,
             # except that we don't enforce the hash diff.
@@ -1401,7 +1401,7 @@ class ResourceScheduler(TaskManager):
             self._deploying_latest.remove(resource)
             state.last_handler_run = deploy_result
             state.last_deployed = finished
-            state.last_deploy_compliant = state.compliance is Compliance.COMPLIANT
+            state.last_handler_run_compliant = state.compliance is Compliance.COMPLIANT
 
             # Check if we need to mark a resource as temporarily blocked
             # We only do that if it is not already blocked (Blocked.BLOCKED)

@@ -4741,8 +4741,8 @@ class ResourcePersistentState(BaseDocument):
     is_deploying: bool
     # Written at deploy time (except for NEW -> no race condition possible with deploy path)
     last_handler_run: state.HandlerResult
-    # Was the last deploy compliant, used for recovering scheduler state
-    last_deploy_compliant: Optional[bool] = None
+    # Was the last run compliant, used for recovering scheduler state
+    last_handler_run_compliant: Optional[bool] = None
     # Written both when processing a new version and at deploy time. As such, this should be updated
     # under the scheduler lock to prevent race conditions with the deploy time updates.
     blocked: state.Blocked
@@ -4962,7 +4962,7 @@ class ResourcePersistentState(BaseDocument):
         last_success: Optional[datetime.datetime] = None,
         last_produced_events: Optional[datetime.datetime] = None,
         last_deployed_attribute_hash: Optional[str] = None,
-        last_deploy_compliant: Optional[bool] = None,
+        last_handler_run_compliant: Optional[bool] = None,
         non_compliant_diff: Optional[uuid.UUID] = None,
         cleanup_non_compliant_diff: Optional[bool] = False,
         connection: Optional[asyncpg.connection.Connection] = None,
@@ -4980,7 +4980,7 @@ class ResourcePersistentState(BaseDocument):
             "last_produced_events": last_produced_events,
             "last_deployed_attribute_hash": last_deployed_attribute_hash,
             "last_deployed_version": last_deployed_version,
-            "last_deploy_compliant": last_deploy_compliant,
+            "last_handler_run_compliant": last_handler_run_compliant,
             "non_compliant_diff": non_compliant_diff,
         }
         query_parts = [f"{k}={args(v)}" for k, v in invalues.items() if v is not None]
@@ -5010,7 +5010,7 @@ class ResourcePersistentState(BaseDocument):
             self.is_undefined,
             self.last_deployed_attribute_hash,
             self.current_intent_attribute_hash,
-            self.last_deploy_compliant,
+            self.last_handler_run_compliant,
         )
 
     @classmethod
@@ -5022,13 +5022,13 @@ class ResourcePersistentState(BaseDocument):
             SELECT r.resource_id,
                 COALESCE((r.attributes->>'report_only')::boolean, false) AS report_only,
                 rd.diff,
-                rps.last_deploy AS last_executed_at,
+                rps.last_deploy AS last_handler_run_at,
                 rps.is_undefined,
                 rps.last_deployed_attribute_hash,
                 rps.current_intent_attribute_hash,
                 rps.last_handler_run,
                 rps.blocked,
-                rps.last_deploy_compliant
+                rps.last_handler_run_compliant
             FROM {Scheduler.table_name()} AS s
             INNER JOIN public.resource_set_configuration_model AS rscm
                 ON s.environment=rscm.environment
@@ -5058,7 +5058,7 @@ class ResourcePersistentState(BaseDocument):
                     is_undefined=cast(bool, record["is_undefined"]),
                     last_deployed_attribute_hash=cast(str | None, record["last_deployed_attribute_hash"]),
                     current_intent_attribute_hash=cast(str | None, record["current_intent_attribute_hash"]),
-                    last_deploy_compliant=cast(bool, record["last_deploy_compliant"]),
+                    last_handler_run_compliant=cast(bool, record["last_handler_run_compliant"]),
                 )
                 diff[ResourceIdStr(str(record["resource_id"]))] = m.ResourceComplianceDiff(
                     report_only=cast(bool, record["report_only"]),
@@ -5069,7 +5069,7 @@ class ResourcePersistentState(BaseDocument):
                     ),
                     compliance=compliance_status,
                     last_handler_run=state.HandlerResult(str(record["last_handler_run"]).lower()),
-                    last_executed_at=cast(datetime.datetime | None, record["last_executed_at"]),
+                    last_handler_run_at=cast(datetime.datetime | None, record["last_handler_run_at"]),
                 )
             return diff
 
