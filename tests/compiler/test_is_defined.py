@@ -400,8 +400,7 @@ y = A()
 
 
 def test_3026_is_defined_gradual(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity A:
 end
 
@@ -420,8 +419,7 @@ test = a.optional
 
 implementation none for std::Entity:
 end
-"""
-    )
+""")
     # assert this does not fail:
     # A.list's upper arity is unbounded, therefore without gradual execution it needs to be frozen.
     # A.optional is a candidate for freezing as well. It has the same potential to be selected as A.list
@@ -435,9 +433,7 @@ def test_5458_is_defined_progress_potential(snippetcompiler) -> None:
     Verify that, even though `is defined` is gradual, the compiler considers its variable to have progress potential as long
     as its empty, to recognize that the statement can be resolved either when it receives at least one value, or none at all.
     """
-    snippetcompiler.setup_for_snippet(
-        textwrap.dedent(
-            """
+    snippetcompiler.setup_for_snippet(textwrap.dedent("""
             entity A: end
             A.x [0:] -- A
             A.y [0:] -- A
@@ -450,11 +446,7 @@ def test_5458_is_defined_progress_potential(snippetcompiler) -> None:
             if not a.x is defined:
                 a.y += A()
             end
-            """.strip(
-                "\n"
-            )
-        )
-    )
+            """.strip("\n")))
     compiler.do_compile()
 
 
@@ -484,9 +476,7 @@ end
 
 
 def test_is_defined(snippetcompiler) -> None:
-    snippetcompiler.setup_for_snippet(
-        textwrap.dedent(
-            """\
+    snippetcompiler.setup_for_snippet(textwrap.dedent("""\
             entity A: end
             A.x [0:] -- A
             A.y [0:] -- A
@@ -500,9 +490,7 @@ def test_is_defined(snippetcompiler) -> None:
             if not a.x is defined:
                 a.y += A()
             end
-            """
-        )
-    )
+            """))
     compiler.do_compile()
 
 
@@ -511,8 +499,7 @@ def test_is_defined_unknown(snippetcompiler) -> None:
     Verify is defined behavior with regards to unknowns
     """
     snippetcompiler.setup_for_snippet(
-        textwrap.dedent(
-            """\
+        textwrap.dedent("""\
             import tests
 
             assert = true
@@ -553,8 +540,7 @@ def test_is_defined_unknown(snippetcompiler) -> None:
             assert = std::is_unknown(rel_unknown.others is defined)
             assert = std::is_unknown(rel_unknown_list.others is defined)
             assert = rel_partially_known_list.others is defined
-            """
-        ),
+            """),
         autostd=True,
     )
     compiler.do_compile()

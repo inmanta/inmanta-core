@@ -99,7 +99,7 @@ def t_REGEX(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
     except RegexError as error:
         t.value = regex_with_slashes_as_str
         end = t.lexer.lexpos - t.lexer.linestart + 1
-        (s, e) = t.lexer.lexmatch.span()
+        s, e = t.lexer.lexmatch.span()
         start = end - (e - s) + index_first_slash_char
 
         line_nr_regex = t.lexer.lineno + part_before_regex.count("\n")
@@ -113,7 +113,7 @@ def t_FSTRING(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
     lexer = t.lexer
 
     end = lexer.lexpos - lexer.linestart + 1
-    (s, e) = lexer.lexmatch.span()
+    s, e = lexer.lexmatch.span()
     start = end - (e - s)
 
     t.value = LocatableString(
@@ -129,7 +129,7 @@ def t_RSTRING(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
     lexer = t.lexer
 
     end = lexer.lexpos - lexer.linestart + 1
-    (s, e) = lexer.lexmatch.span()
+    s, e = lexer.lexmatch.span()
     start = end - (e - s)
 
     t.value = LocatableString(
@@ -147,7 +147,7 @@ def t_ID(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
     lexer = t.lexer
 
     end = lexer.lexpos - lexer.linestart + 1
-    (s, e) = lexer.lexmatch.span()
+    s, e = lexer.lexmatch.span()
     start = end - (e - s)
 
     t.value = LocatableString(
@@ -193,7 +193,7 @@ def t_MLS(t: lex.LexToken) -> lex.LexToken:
     start_line = lexer.lineno
     end_line = lexer.lineno + len(lines) - 1
     t.lexer.lineno = end_line
-    (s, e) = lexer.lexmatch.span()
+    s, e = lexer.lexmatch.span()
     start = lexer.lexpos - lexer.linestart - (e - s) + 1
     end = len(lines[-1]) + 1
 
@@ -222,7 +222,7 @@ def t_STRING(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
     lexer = t.lexer
 
     end = lexer.lexpos - lexer.linestart + 1
-    (s, e) = lexer.lexmatch.span()
+    s, e = lexer.lexmatch.span()
     start = end - (e - s)
 
     t.value = LocatableString(

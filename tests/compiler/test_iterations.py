@@ -26,8 +26,7 @@ def test_max_iterations(snippetcompiler, monkeypatch):
     monkeypatch.setenv("INMANTA_MAX_ITERATIONS", "1")
 
     with pytest.raises(CompilerException) as e:
-        snippetcompiler.setup_for_snippet(
-            """
+        snippetcompiler.setup_for_snippet("""
     import std
     import std::testing
 
@@ -50,9 +49,8 @@ def test_max_iterations(snippetcompiler, monkeypatch):
         std::testing::NullResource(name=i.name)
 
     end
-    """
-        )
+    """)
 
-        (types, _) = compiler.do_compile()
+        types, _ = compiler.do_compile()
 
     assert "Could not complete model, max_iterations 1 reached." in str(e.value)

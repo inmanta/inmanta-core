@@ -186,8 +186,7 @@ import dataclasses::bad_sub_fields
 
     # explainer
     explanation = DataclassExplainer().explain(e.value)[0]
-    assert (
-        """To update the python class, add the following code to inmanta_plugins.dataclasses.bad_sub_fields.Virtualmachine:
+    assert """To update the python class, add the following code to inmanta_plugins.dataclasses.bad_sub_fields.Virtualmachine:
 
 import dataclasses
 
@@ -201,12 +200,9 @@ class Virtualmachine:
    ot: list[str]
    other: dict[str, object]
    ram: int
-"""
-        in explanation
-    )
+""" in explanation
 
-    assert (
-        """entity Virtualmachine extends std::Dataclass:
+    assert """entity Virtualmachine extends std::Dataclass:
    \"""Python comment\"""
    int cpus
    ERROR disk
@@ -215,9 +211,7 @@ class Virtualmachine:
    string[] os
    int ot
    dict other
-end"""
-        in explanation
-    )
+end""" in explanation
 
 
 def test_dataclass_type_check(snippetcompiler):
@@ -338,13 +332,11 @@ dataclasses::takes_nullable_dc(x)
     e = exc_info.value
     msg: str = e.format_trace()
     match = re.fullmatch(
-        textwrap.dedent(
-            """\
+        textwrap.dedent("""\
             Value dataclasses::NullableDC [0-9a-f]* for argument v of plugin dataclasses::takes_nullable_dc has incompatible type. Expected type: dataclasses::NullableDC \\(reported in dataclasses::takes_nullable_dc\\(x\\) \\([\\w/]*/main.cf:6:1\\)\\)
             caused by:
             Encountered unknown in field 'n'. Unknowns are not currently supported in dataclass instances in the Python domain. \\(reported in dataclasses::takes_nullable_dc\\(x\\) \\([\\w/]*/main.cf:6:1\\)\\)
-            """  # noqa: E501
-        ).rstrip(),
+            """).rstrip(),  # noqa: E501
         msg,
     )
     assert match is not None, msg
@@ -366,13 +358,11 @@ dataclasses::takes_collection_dc(x)
     e = exc_info.value
     msg: str = e.format_trace()
     match = re.fullmatch(
-        textwrap.dedent(
-            """\
+        textwrap.dedent("""\
             Value dataclasses::CollectionDC [0-9a-f]* for argument v of plugin dataclasses::takes_collection_dc has incompatible type. Expected type: dataclasses::CollectionDC \\(reported in dataclasses::takes_collection_dc\\(x\\) \\([\\w/]*/main.cf:6:1\\)\\)
             caused by:
             Encountered unknown in field 'l'. Unknowns are not currently supported in dataclass instances in the Python domain. \\(reported in dataclasses::takes_collection_dc\\(x\\) \\([\\w/]*/main.cf:6:1\\)\\)
-            """  # noqa: E501
-        ).rstrip(),
+            """).rstrip(),  # noqa: E501
         msg,
     )
     assert match is not None, msg
@@ -394,13 +384,11 @@ dataclasses::takes_collection_dc(x)
     e = exc_info.value
     msg: str = e.format_trace()
     match = re.fullmatch(
-        textwrap.dedent(
-            """\
+        textwrap.dedent("""\
             Value dataclasses::CollectionDC [0-9a-f]* for argument v of plugin dataclasses::takes_collection_dc has incompatible type. Expected type: dataclasses::CollectionDC \\(reported in dataclasses::takes_collection_dc\\(x\\) \\([\\w/]*/main.cf:6:1\\)\\)
             caused by:
             Encountered unknown in field 'd'. Unknowns are not currently supported in dataclass instances in the Python domain. \\(reported in dataclasses::takes_collection_dc\\(x\\) \\([\\w/]*/main.cf:6:1\\)\\)
-            """  # noqa: E501
-        ).rstrip(),
+            """).rstrip(),  # noqa: E501
         msg,
     )
     assert match is not None, msg

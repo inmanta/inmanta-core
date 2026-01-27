@@ -29,7 +29,7 @@ def proxy_object(snippetcompiler, snippet, var):
     implementation none for std::Entity: end
     """
     snippetcompiler.setup_for_snippet(snippet + own_none)
-    (_, root) = compiler.do_compile()
+    _, root = compiler.do_compile()
 
     scope = root.get_child("__config__").scope
 

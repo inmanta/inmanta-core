@@ -36,7 +36,7 @@ implement elaboratev1module::A using std::none
 implement One using std::none
         """,
     )
-    (_, scopes) = compiler.do_compile()
+    _, scopes = compiler.do_compile()
 
 
 def test_inheriting_type_hint(snippetcompiler):
@@ -59,7 +59,7 @@ implement elaboratev1module::submod::B using std::none
 implement One using std::none
         """,
     )
-    (_, scopes) = compiler.do_compile()
+    _, scopes = compiler.do_compile()
 
 
 def test_basic_type_hint_name_collision(snippetcompiler):
@@ -148,7 +148,7 @@ implementation none for std::Entity:
 end
         """,
     )
-    (_, scopes) = compiler.do_compile()
+    _, scopes = compiler.do_compile()
     root = scopes.get_child("__config__")
     assert 1 == root.lookup("n").get_value()
 
