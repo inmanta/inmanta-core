@@ -397,10 +397,12 @@ def test_resource_deserialize_backward_compatibility() -> None:
         "send_event": True,
         # no receive_events, while new Resource class does have it
         "requires": [],
+        # version, while new Resource class does not have it
         "version": 1,
         "id": "test::Resource[agent,k=v]",
     }
     # register base Resource as a resource
     resources.resource(name="test::Resource", id_attribute="send_event", agent="agent")(resources.Resource)
     # verify that this does not raise an exception
-    resources.Resource.deserialize(old_resource)
+    res = resources.Resource.deserialize(old_resource)
+    assert not hasattr(res, "version")

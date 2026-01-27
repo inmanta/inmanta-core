@@ -221,7 +221,7 @@ async def env_with_resources(server, client):
                 environment=environment,
                 resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),
                 resource_set=resource_set,
-                attributes={"path": path, "version": version},
+                attributes={"path": path},
                 is_undefined=status is ResourceState.undefined,
             )
             await res.insert()
