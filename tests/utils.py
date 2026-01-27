@@ -1119,7 +1119,9 @@ def assert_resource_persistent_state(
     )
     assert (
         resource_persistent_state.last_handler_run_compliant is last_handler_run_compliant
-    ), f"{resource_persistent_state.resource_id} ({resource_persistent_state.last_handler_run_compliant} != {last_handler_run_compliant})"
+    ), f"""
+{resource_persistent_state.resource_id} ({resource_persistent_state.last_handler_run_compliant} != {last_handler_run_compliant})
+"""
 
 
 async def run_compile_and_wait_until_compile_is_done(

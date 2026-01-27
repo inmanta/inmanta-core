@@ -26,6 +26,7 @@ async def update(connection: Connection) -> None:
     schema = """
     ALTER TABLE public.resource_persistent_state RENAME COLUMN last_deploy_result TO last_handler_run;
     ALTER TABLE public.resource_persistent_state RENAME COLUMN last_deploy_compliant TO last_handler_run_compliant;
+    ALTER TABLE public.resource_persistent_state RENAME COLUMN last_deploy TO last_handler_run_at;
 
     UPDATE public.resource_persistent_state
     SET last_handler_run='SUCCESSFUL'
