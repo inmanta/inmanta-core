@@ -515,7 +515,7 @@ async def test_resource_count_metric(clienthelper, client, agent):
             last_handler_run=state.HandlerResult.SUCCESSFUL,
             blocked=state.Blocked.NOT_BLOCKED,
             last_deployed=now,
-            last_deploy_compliant=True,
+            last_handler_run_compliant=True,
         ),
         started=now,
         finished=now,

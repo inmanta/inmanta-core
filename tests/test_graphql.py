@@ -667,7 +667,7 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
         environment=environment, last_handler_run=state.HandlerResult.SUCCESSFUL, is_orphan=False
     )
     assert rps
-    await rps.update_fields(last_deploy_compliant=False)
+    await rps.update_fields(last_handler_run_compliant=False)
 
     filters = [
         # (1 undefined, 1 skipped for undefined) * <instances>

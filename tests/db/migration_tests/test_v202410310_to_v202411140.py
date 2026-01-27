@@ -58,7 +58,7 @@ async def test_add_new_resource_status_column(
         last_handler_run=state.HandlerResult.SUCCESSFUL,
         blocked=state.Blocked.NOT_BLOCKED,
         expected_compliance=Compliance.COMPLIANT,
-        last_deploy_compliant=True,
+        last_handler_run_compliant=True,
     )
     assert_resource_persistent_state(
         resource_state_by_resource_id[inmanta.types.ResourceIdStr("test::Fail[agent1,key=key2]")],
@@ -67,7 +67,7 @@ async def test_add_new_resource_status_column(
         last_handler_run=state.HandlerResult.FAILED,
         blocked=state.Blocked.NOT_BLOCKED,
         expected_compliance=Compliance.NON_COMPLIANT,
-        last_deploy_compliant=False,
+        last_handler_run_compliant=False,
     )
     assert_resource_persistent_state(
         resource_state_by_resource_id[inmanta.types.ResourceIdStr("test::Resource[agent1,key=key3]")],
@@ -76,7 +76,7 @@ async def test_add_new_resource_status_column(
         last_handler_run=state.HandlerResult.SKIPPED,
         blocked=state.Blocked.NOT_BLOCKED,
         expected_compliance=Compliance.NON_COMPLIANT,
-        last_deploy_compliant=False,
+        last_handler_run_compliant=False,
     )
     assert_resource_persistent_state(
         resource_state_by_resource_id[inmanta.types.ResourceIdStr("test::Resource[agent1,key=key4]")],
@@ -85,7 +85,7 @@ async def test_add_new_resource_status_column(
         last_handler_run=state.HandlerResult.NEW,
         blocked=state.Blocked.BLOCKED,
         expected_compliance=Compliance.UNDEFINED,
-        last_deploy_compliant=None,
+        last_handler_run_compliant=None,
     )
     assert_resource_persistent_state(
         resource_state_by_resource_id[inmanta.types.ResourceIdStr("test::Resource[agent1,key=key5]")],
@@ -94,7 +94,7 @@ async def test_add_new_resource_status_column(
         last_handler_run=state.HandlerResult.NEW,
         blocked=state.Blocked.BLOCKED,
         expected_compliance=Compliance.NON_COMPLIANT,
-        last_deploy_compliant=None,
+        last_handler_run_compliant=None,
     )
     assert_resource_persistent_state(
         resource_state_by_resource_id[inmanta.types.ResourceIdStr("test::Resource[agent1,key=key6]")],
@@ -105,7 +105,7 @@ async def test_add_new_resource_status_column(
         last_handler_run=state.HandlerResult.NEW,
         blocked=state.Blocked.NOT_BLOCKED,
         expected_compliance=None,
-        last_deploy_compliant=None,
+        last_handler_run_compliant=None,
     )
     assert_resource_persistent_state(
         resource_state_by_resource_id[inmanta.types.ResourceIdStr("test::Resource[agent1,key=key7]")],
@@ -114,7 +114,7 @@ async def test_add_new_resource_status_column(
         last_handler_run=state.HandlerResult.SUCCESSFUL,
         blocked=state.Blocked.NOT_BLOCKED,
         expected_compliance=Compliance.COMPLIANT,
-        last_deploy_compliant=True,
+        last_handler_run_compliant=True,
     )
     assert_resource_persistent_state(
         resource_state_by_resource_id[inmanta.types.ResourceIdStr("test::Resource[agent1,key=key8]")],
@@ -123,5 +123,5 @@ async def test_add_new_resource_status_column(
         last_handler_run=state.HandlerResult.NEW,
         blocked=state.Blocked.NOT_BLOCKED,
         expected_compliance=Compliance.HAS_UPDATE,
-        last_deploy_compliant=None,
+        last_handler_run_compliant=None,
     )

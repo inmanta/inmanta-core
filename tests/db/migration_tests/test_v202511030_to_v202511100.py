@@ -35,13 +35,13 @@ async def test_add_last_deploy_compliant_to_rps_table(
     postgresql_client: asyncpg.Connection, migrate_db_from: abc.Callable[[], abc.Awaitable[None]]
 ) -> None:
     """
-    This adds the last_deploy_compliant column to the rps table
+    This adds the last_handler_run_compliant column to the rps table
     """
     await migrate_db_from()
     all_rps = await data.ResourcePersistentState.get_list()
     deployed_rps = {rps for rps in all_rps if rps.last_handler_run is HandlerResult.SUCCESSFUL}
     failed_skipped_rps = {rps for rps in all_rps if rps.last_handler_run in (HandlerResult.FAILED, HandlerResult.SKIPPED)}
     remaining_rps = set(all_rps) - deployed_rps - failed_skipped_rps
-    assert all([rps.last_deploy_compliant for rps in deployed_rps])
-    assert all([not rps.last_deploy_compliant for rps in failed_skipped_rps])
-    assert all([rps.last_deploy_compliant is None for rps in remaining_rps])
+    assert all([rps.last_handler_run_compliant for rps in deployed_rps])
+    assert all([not rps.last_handler_run_compliant for rps in failed_skipped_rps])
+    assert all([rps.last_handler_run_compliant is None for rps in remaining_rps])

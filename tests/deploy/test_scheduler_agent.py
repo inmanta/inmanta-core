@@ -597,7 +597,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
         last_handler_run=state.HandlerResult.SUCCESSFUL,
         blocked=Blocked.NOT_BLOCKED,
         last_deployed=agent.scheduler._state.resource_state[rid1].last_deployed,  # ignore
-        last_deploy_compliant=True,
+        last_handler_run_compliant=True,
     )
     assert rid1 not in agent.scheduler._state.dirty
     # set up initial state: release two changes for r1 -> the second makes the first stale
@@ -613,7 +613,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
         last_handler_run=state.HandlerResult.SUCCESSFUL,
         blocked=Blocked.NOT_BLOCKED,
         last_deployed=agent.scheduler._state.resource_state[rid1].last_deployed,  # ignore
-        last_deploy_compliant=True,
+        last_handler_run_compliant=True,
     )
     assert rid1 in agent.scheduler._state.dirty
 
@@ -627,7 +627,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
         last_handler_run=state.HandlerResult.SUCCESSFUL,
         blocked=Blocked.NOT_BLOCKED,
         last_deployed=agent.scheduler._state.resource_state[rid1].last_deployed,  # ignore
-        last_deploy_compliant=True,
+        last_handler_run_compliant=True,
     )
     assert rid1 in agent.scheduler._state.dirty
     # verify that r2 is still blocked on r1
@@ -655,7 +655,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
         last_handler_run=state.HandlerResult.SUCCESSFUL,
         blocked=Blocked.NOT_BLOCKED,
         last_deployed=agent.scheduler._state.resource_state[rid1].last_deployed,  # ignore
-        last_deploy_compliant=True,
+        last_handler_run_compliant=True,
     )
     assert rid1 not in agent.scheduler._state.dirty
     state_manager_check(agent)
@@ -1166,7 +1166,7 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
         last_handler_run=state.HandlerResult.SUCCESSFUL,
         blocked=state.Blocked.NOT_BLOCKED,
         last_deployed=agent.scheduler._state.resource_state[rid2].last_deployed,  # ignore
-        last_deploy_compliant=True,
+        last_handler_run_compliant=True,
     )
     assert len(agent.scheduler._state.dirty) == 0
 
@@ -1181,7 +1181,7 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
         last_handler_run=state.HandlerResult.SUCCESSFUL,
         blocked=state.Blocked.NOT_BLOCKED,
         last_deployed=agent.scheduler._state.resource_state[rid2].last_deployed,  # ignore
-        last_deploy_compliant=True,
+        last_handler_run_compliant=True,
     )
     assert len(agent.scheduler._state.dirty) == 0
 
@@ -1200,7 +1200,7 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
         last_handler_run=state.HandlerResult.SKIPPED,
         blocked=state.Blocked.NOT_BLOCKED,
         last_deployed=agent.scheduler._state.resource_state[rid2].last_deployed,  # ignore
-        last_deploy_compliant=False,
+        last_handler_run_compliant=False,
     )
     assert agent.scheduler._state.dirty == {rid2}
 
@@ -1352,7 +1352,7 @@ async def test_skipped_for_dependencies_with_normal_event_propagation_disabled(a
         last_handler_run=state.HandlerResult.FAILED,
         blocked=state.Blocked.NOT_BLOCKED,
         last_deployed=agent.scheduler._state.resource_state[rid1].last_deployed,  # ignore this one
-        last_deploy_compliant=False,
+        last_handler_run_compliant=False,
     )
 
     assert agent.scheduler._state.resource_state[rid2] == state.ResourceState(
@@ -1361,7 +1361,7 @@ async def test_skipped_for_dependencies_with_normal_event_propagation_disabled(a
         last_handler_run=state.HandlerResult.SKIPPED,
         blocked=state.Blocked.TEMPORARILY_BLOCKED,
         last_deployed=agent.scheduler._state.resource_state[rid2].last_deployed,  # ignore this one
-        last_deploy_compliant=False,
+        last_handler_run_compliant=False,
     )
 
     # Recover rid1 and verify that rid2 also gets scheduled
@@ -1381,7 +1381,7 @@ async def test_skipped_for_dependencies_with_normal_event_propagation_disabled(a
         last_handler_run=state.HandlerResult.SUCCESSFUL,
         blocked=state.Blocked.NOT_BLOCKED,
         last_deployed=agent.scheduler._state.resource_state[rid1].last_deployed,  # ignore this one
-        last_deploy_compliant=True,
+        last_handler_run_compliant=True,
     )
 
     assert agent.scheduler._state.resource_state[rid2] == state.ResourceState(
@@ -1389,7 +1389,7 @@ async def test_skipped_for_dependencies_with_normal_event_propagation_disabled(a
         last_handler_run=state.HandlerResult.SUCCESSFUL,
         blocked=state.Blocked.NOT_BLOCKED,
         last_deployed=agent.scheduler._state.resource_state[rid2].last_deployed,  # ignore this one
-        last_deploy_compliant=True,
+        last_handler_run_compliant=True,
     )
 
 
@@ -2460,7 +2460,7 @@ async def test_state_of_skipped_resources_for_dependencies(agent: TestAgent, mak
         last_handler_run=state.HandlerResult.SKIPPED,
         blocked=state.Blocked.TEMPORARILY_BLOCKED,
         last_deployed=agent.scheduler._state.resource_state[rid2].last_deployed,  # ignore
-        last_deploy_compliant=False,
+        last_handler_run_compliant=False,
     )
 
 
@@ -2854,7 +2854,7 @@ async def test_deploy_orphaned(agent: TestAgent, make_resource_minimal) -> None:
         last_handler_run=state.HandlerResult.NEW,
         blocked=state.Blocked.NOT_BLOCKED,
         last_deployed=None,
-        last_deploy_compliant=None,
+        last_handler_run_compliant=None,
     )
 
     # wait for and finish the second deploy
@@ -2866,7 +2866,7 @@ async def test_deploy_orphaned(agent: TestAgent, make_resource_minimal) -> None:
         last_handler_run=state.HandlerResult.SUCCESSFUL,
         blocked=state.Blocked.NOT_BLOCKED,
         last_deployed=agent.scheduler._state.resource_state[rid1].last_deployed,  # ignore
-        last_deploy_compliant=True,
+        last_handler_run_compliant=True,
     )
 
 

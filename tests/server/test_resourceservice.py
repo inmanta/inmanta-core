@@ -65,7 +65,7 @@ async def resource_deployer(client, environment, null_agent):
                     last_handler_run=deployment_result,
                     blocked=state.Blocked.NOT_BLOCKED,
                     last_deployed=datetime.datetime.now().astimezone(),
-                    last_deploy_compliant=True,
+                    last_handler_run_compliant=True,
                 ),
                 # not completely accurate but the exact time only really matters for some specifics of event propagation
                 # so we keep the interface simple

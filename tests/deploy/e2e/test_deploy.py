@@ -239,19 +239,19 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
         "blocked": "not_blocked",
         "last_handler_run": "successful",
         "compliance": "compliant",
-        "last_deploy_compliant": True,
+        "last_handler_run_compliant": True,
     }
     failed_resource_expected_status = {
         "blocked": "not_blocked",
         "last_handler_run": "failed",
         "compliance": "non_compliant",
-        "last_deploy_compliant": False,
+        "last_handler_run_compliant": False,
     }
     skipped_resource_expected_status = {
         "blocked": "temporarily_blocked",
         "last_handler_run": "skipped",
         "compliance": "non_compliant",
-        "last_deploy_compliant": False,
+        "last_handler_run_compliant": False,
     }
 
     class ExpectedResourceStatus(NamedTuple):
@@ -331,17 +331,17 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
                     last_handler_run = HandlerResult.FAILED
                     compliance = Compliance.NON_COMPLIANT
                     blocked = Blocked.NOT_BLOCKED
-                    last_deploy_compliant = False
+                    last_handler_run_compliant = False
                 case ("agent1", _):
                     last_handler_run = HandlerResult.SKIPPED
                     compliance = Compliance.NON_COMPLIANT
                     blocked = Blocked.TEMPORARILY_BLOCKED
-                    last_deploy_compliant = False
+                    last_handler_run_compliant = False
                 case _:
                     last_handler_run = HandlerResult.SUCCESSFUL
                     compliance = Compliance.COMPLIANT
                     blocked = Blocked.NOT_BLOCKED
-                    last_deploy_compliant = True
+                    last_handler_run_compliant = True
             assert_resource_persistent_state(
                 resource_persistent_state=rid_to_rps[ResourceIdStr(f"test::Resourcex[{agent},key={key}]")],
                 is_undefined=False,
@@ -349,7 +349,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
                 last_handler_run=last_handler_run,
                 blocked=blocked.db_value(),
                 expected_compliance=compliance,
-                last_deploy_compliant=last_deploy_compliant,
+                last_handler_run_compliant=last_handler_run_compliant,
             )
 
     version1, resources = await make_version(True)
@@ -381,17 +381,17 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
                     last_handler_run = HandlerResult.FAILED
                     compliance = Compliance.NON_COMPLIANT
                     blocked = Blocked.NOT_BLOCKED
-                    last_deploy_compliant = False
+                    last_handler_run_compliant = False
                 case ("agent1", _):
                     last_handler_run = HandlerResult.SKIPPED
                     compliance = Compliance.NON_COMPLIANT
                     blocked = Blocked.TEMPORARILY_BLOCKED
-                    last_deploy_compliant = False
+                    last_handler_run_compliant = False
                 case _:
                     last_handler_run = HandlerResult.SUCCESSFUL
                     compliance = Compliance.COMPLIANT
                     blocked = Blocked.NOT_BLOCKED
-                    last_deploy_compliant = True
+                    last_handler_run_compliant = True
             assert_resource_persistent_state(
                 resource_persistent_state=rid_to_rps[ResourceIdStr(f"test::Resourcex[{agent},key={key}]")],
                 is_undefined=False,
@@ -399,7 +399,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
                 last_handler_run=last_handler_run,
                 blocked=blocked.db_value(),
                 expected_compliance=compliance,
-                last_deploy_compliant=last_deploy_compliant,
+                last_handler_run_compliant=last_handler_run_compliant,
             )
     # Unreleased resources are not present in the resource_persistent_state table.
     assert ResourceIdStr("test::Resourcex[agentx,key=key]") not in rid_to_rps
@@ -421,7 +421,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
                 last_handler_run=HandlerResult.SUCCESSFUL,
                 blocked=Blocked.NOT_BLOCKED,
                 expected_compliance=Compliance.COMPLIANT,
-                last_deploy_compliant=True,
+                last_handler_run_compliant=True,
             )
     # Unreleased resources are not present in the resource_persistent_state table.
     assert ResourceIdStr("test::Resourcex[agentx,key=key]") not in rid_to_rps
@@ -746,7 +746,7 @@ async def test_failing_deploy_no_handler(resource_container, agent, environment,
         last_handler_run=HandlerResult.FAILED,
         blocked=Blocked.NOT_BLOCKED,
         expected_compliance=Compliance.NON_COMPLIANT,
-        last_deploy_compliant=False,
+        last_handler_run_compliant=False,
     )
 
 
@@ -913,7 +913,7 @@ async def test_fail(resource_container, client, agent, environment, clienthelper
             last_handler_run=HandlerResult.FAILED if status == "failed" else HandlerResult.SKIPPED,
             blocked=Blocked.NOT_BLOCKED if status == "failed" else Blocked.TEMPORARILY_BLOCKED.db_value(),
             expected_compliance=Compliance.NON_COMPLIANT,
-            last_deploy_compliant=False,
+            last_handler_run_compliant=False,
         )
 
 
@@ -1126,7 +1126,7 @@ async def test_reload(server, client, clienthelper, environment, resource_contai
         last_handler_run=HandlerResult.SKIPPED if dep_state.name in {"skip", "fail"} else HandlerResult.SUCCESSFUL,
         blocked=Blocked.TEMPORARILY_BLOCKED.db_value() if dep_state.name in {"skip", "fail"} else Blocked.NOT_BLOCKED,
         expected_compliance=(Compliance.NON_COMPLIANT if dep_state.name in {"skip", "fail"} else Compliance.COMPLIANT),
-        last_deploy_compliant=False if dep_state.name in {"skip", "fail"} else True,
+        last_handler_run_compliant=False if dep_state.name in {"skip", "fail"} else True,
     )
 
 
@@ -1173,7 +1173,7 @@ async def test_inprogress(resource_container, server, client, clienthelper, envi
         last_handler_run=HandlerResult.NEW,
         blocked=Blocked.NOT_BLOCKED,
         expected_compliance=Compliance.HAS_UPDATE,
-        last_deploy_compliant=None,
+        last_handler_run_compliant=None,
     )
 
     await resource_container.wait_for_done_with_waiters(client, environment, version)
@@ -1322,7 +1322,7 @@ async def test_resource_status(resource_container, server, client, clienthelper,
         last_handler_run=HandlerResult.SUCCESSFUL,
         blocked=Blocked.NOT_BLOCKED,
         expected_compliance=Compliance.COMPLIANT,
-        last_deploy_compliant=True,
+        last_handler_run_compliant=True,
     )
     assert_resource_persistent_state(
         resource_persistent_state=result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key2]")],
@@ -1331,7 +1331,7 @@ async def test_resource_status(resource_container, server, client, clienthelper,
         last_handler_run=HandlerResult.FAILED,
         blocked=Blocked.NOT_BLOCKED,
         expected_compliance=Compliance.NON_COMPLIANT,
-        last_deploy_compliant=False,
+        last_handler_run_compliant=False,
     )
     assert_resource_persistent_state(
         resource_persistent_state=result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key3]")],
@@ -1340,7 +1340,7 @@ async def test_resource_status(resource_container, server, client, clienthelper,
         last_handler_run=HandlerResult.SKIPPED,
         blocked=Blocked.TEMPORARILY_BLOCKED.db_value(),
         expected_compliance=Compliance.NON_COMPLIANT,
-        last_deploy_compliant=False,
+        last_handler_run_compliant=False,
     )
     assert_resource_persistent_state(
         resource_persistent_state=result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key4]")],
@@ -1349,7 +1349,7 @@ async def test_resource_status(resource_container, server, client, clienthelper,
         last_handler_run=HandlerResult.NEW,
         blocked=Blocked.BLOCKED,
         expected_compliance=Compliance.UNDEFINED,
-        last_deploy_compliant=None,
+        last_handler_run_compliant=None,
     )
     assert_resource_persistent_state(
         resource_persistent_state=result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key5]")],
@@ -1358,7 +1358,7 @@ async def test_resource_status(resource_container, server, client, clienthelper,
         last_handler_run=HandlerResult.NEW,
         blocked=Blocked.BLOCKED,
         expected_compliance=Compliance.HAS_UPDATE,
-        last_deploy_compliant=None,
+        last_handler_run_compliant=None,
     )
 
     # * Remove key1, so that it becomes orphan
@@ -1394,7 +1394,7 @@ async def test_resource_status(resource_container, server, client, clienthelper,
             last_handler_run=HandlerResult.SUCCESSFUL,
             blocked=Blocked.NOT_BLOCKED,
             expected_compliance=None if i == 1 else Compliance.COMPLIANT,
-            last_deploy_compliant=True,
+            last_handler_run_compliant=True,
         )
 
     # Make key4 undefined again
@@ -1432,7 +1432,7 @@ async def test_resource_status(resource_container, server, client, clienthelper,
             last_handler_run=HandlerResult.SUCCESSFUL,
             blocked=Blocked.NOT_BLOCKED,
             expected_compliance=Compliance.COMPLIANT,
-            last_deploy_compliant=True,
+            last_handler_run_compliant=True,
         )
     assert_resource_persistent_state(
         resource_persistent_state=result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key4]")],
@@ -1441,7 +1441,7 @@ async def test_resource_status(resource_container, server, client, clienthelper,
         last_handler_run=HandlerResult.SUCCESSFUL,
         blocked=Blocked.BLOCKED,
         expected_compliance=Compliance.UNDEFINED,
-        last_deploy_compliant=True,
+        last_handler_run_compliant=True,
     )
     assert_resource_persistent_state(
         resource_persistent_state=result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key5]")],
@@ -1450,7 +1450,7 @@ async def test_resource_status(resource_container, server, client, clienthelper,
         last_handler_run=HandlerResult.SUCCESSFUL,
         blocked=Blocked.BLOCKED,
         expected_compliance=Compliance.COMPLIANT,
-        last_deploy_compliant=True,
+        last_handler_run_compliant=True,
     )
 
     # Drop resource 5
@@ -1657,7 +1657,7 @@ async def test_skipped_for_dependency(resource_container, server, client, client
         last_handler_run=HandlerResult.SKIPPED,
         blocked=Blocked.TEMPORARILY_BLOCKED,
         last_deployed=scheduler._state.resource_state[rid2].last_deployed,  # ignore
-        last_deploy_compliant=False,
+        last_handler_run_compliant=False,
     )
     # Report-only resource gets executed even though dependency failed
     # But non-compliant because resource does not exist
@@ -1666,14 +1666,14 @@ async def test_skipped_for_dependency(resource_container, server, client, client
         last_handler_run=HandlerResult.SUCCESSFUL,
         blocked=Blocked.NOT_BLOCKED,
         last_deployed=scheduler._state.resource_state[rid3].last_deployed,  # ignore
-        last_deploy_compliant=False,
+        last_handler_run_compliant=False,
     )
     assert scheduler._state.resource_state[rid1] == ResourceState(
         compliance=Compliance.NON_COMPLIANT,
         last_handler_run=HandlerResult.SKIPPED,
         blocked=Blocked.NOT_BLOCKED,
         last_deployed=scheduler._state.resource_state[rid1].last_deployed,  # ignore
-        last_deploy_compliant=False,
+        last_handler_run_compliant=False,
     )
 
     version = await clienthelper.get_version()
@@ -1706,7 +1706,7 @@ async def test_skipped_for_dependency(resource_container, server, client, client
             last_handler_run=HandlerResult.SKIPPED,
             blocked=Blocked.NOT_BLOCKED,
             last_deployed=scheduler._state.resource_state[rid1].last_deployed,  # ignore
-            last_deploy_compliant=False,
+            last_handler_run_compliant=False,
         ):
             return False
         if scheduler._state.resource_state[rid2] != ResourceState(
@@ -1714,7 +1714,7 @@ async def test_skipped_for_dependency(resource_container, server, client, client
             last_handler_run=HandlerResult.SUCCESSFUL,
             blocked=Blocked.NOT_BLOCKED,
             last_deployed=scheduler._state.resource_state[rid2].last_deployed,  # ignore
-            last_deploy_compliant=True,
+            last_handler_run_compliant=True,
         ):
             return False
         return True
@@ -1778,7 +1778,7 @@ async def test_skipped_for_dependency(resource_container, server, client, client
             last_handler_run=HandlerResult.SUCCESSFUL,
             blocked=Blocked.NOT_BLOCKED,
             last_deployed=scheduler._state.resource_state[rid1].last_deployed,  # ignore
-            last_deploy_compliant=False,
+            last_handler_run_compliant=False,
         ):
             return False
         if scheduler._state.resource_state[rid2] != ResourceState(
@@ -1786,7 +1786,7 @@ async def test_skipped_for_dependency(resource_container, server, client, client
             last_handler_run=HandlerResult.SUCCESSFUL,
             blocked=Blocked.NOT_BLOCKED,
             last_deployed=scheduler._state.resource_state[rid2].last_deployed,  # ignore
-            last_deploy_compliant=True,
+            last_handler_run_compliant=True,
         ):
             return False
 
@@ -1795,7 +1795,7 @@ async def test_skipped_for_dependency(resource_container, server, client, client
             last_handler_run=HandlerResult.SKIPPED,
             blocked=Blocked.TEMPORARILY_BLOCKED,
             last_deployed=scheduler._state.resource_state[rid3].last_deployed,  # ignore
-            last_deploy_compliant=False,
+            last_handler_run_compliant=False,
         ):
             return False
         if scheduler._state.resource_state[rid4] != ResourceState(
@@ -1803,7 +1803,7 @@ async def test_skipped_for_dependency(resource_container, server, client, client
             last_handler_run=HandlerResult.FAILED,
             blocked=Blocked.NOT_BLOCKED,
             last_deployed=scheduler._state.resource_state[rid4].last_deployed,  # ignore
-            last_deploy_compliant=False,
+            last_handler_run_compliant=False,
         ):
             return False
         return True
@@ -1843,7 +1843,7 @@ async def test_resource_action_of_non_compliant_resource(resource_container, ser
         last_handler_run=HandlerResult.SUCCESSFUL,
         blocked=Blocked.NOT_BLOCKED,
         last_deployed=scheduler._state.resource_state[rid1].last_deployed,  # ignore
-        last_deploy_compliant=False,
+        last_handler_run_compliant=False,
     )
 
     result = await client.get_resource(tid=environment, id=rvid, logs=True, log_action=const.ResourceAction.deploy)
@@ -2054,7 +2054,7 @@ async def test_event_recovery_reporting(resource_container, server, client, clie
         last_handler_run=HandlerResult.SUCCESSFUL,
         blocked=Blocked.NOT_BLOCKED,
         last_deployed=scheduler._state.resource_state[rid1].last_deployed,  # ignore
-        last_deploy_compliant=True,
+        last_handler_run_compliant=True,
     )
 
     # Make rid1 reporting and change the desired state
@@ -2089,14 +2089,14 @@ async def test_event_recovery_reporting(resource_container, server, client, clie
         last_handler_run=HandlerResult.SUCCESSFUL,
         blocked=Blocked.NOT_BLOCKED,
         last_deployed=scheduler._state.resource_state[rid1].last_deployed,  # ignore
-        last_deploy_compliant=False,
+        last_handler_run_compliant=False,
     )
     assert scheduler._state.resource_state[rid2] == ResourceState(
         compliance=Compliance.NON_COMPLIANT,
         last_handler_run=HandlerResult.SKIPPED,
         blocked=Blocked.TEMPORARILY_BLOCKED,
         last_deployed=scheduler._state.resource_state[rid2].last_deployed,  # ignore
-        last_deploy_compliant=False,
+        last_handler_run_compliant=False,
     )
 
     # Make report succeed again
@@ -2131,7 +2131,7 @@ async def test_event_recovery_reporting(resource_container, server, client, clie
         last_handler_run=HandlerResult.SUCCESSFUL,
         blocked=Blocked.NOT_BLOCKED,
         last_deployed=scheduler._state.resource_state[rid1].last_deployed,  # ignore
-        last_deploy_compliant=True,
+        last_handler_run_compliant=True,
     )
 
     def resource_state_rid2_converged() -> bool:
@@ -2140,7 +2140,7 @@ async def test_event_recovery_reporting(resource_container, server, client, clie
             last_handler_run=HandlerResult.SUCCESSFUL,
             blocked=Blocked.NOT_BLOCKED,
             last_deployed=scheduler._state.resource_state[rid2].last_deployed,  # ignore
-            last_deploy_compliant=True,
+            last_handler_run_compliant=True,
         )
 
     # Run this check as retry_limited, because wait_for_deployed() only tracks
@@ -2193,14 +2193,14 @@ async def test_redeploy_after_dependency_recovered(resource_container, server, c
         last_handler_run=HandlerResult.SKIPPED,
         blocked=Blocked.TEMPORARILY_BLOCKED,
         last_deployed=scheduler._state.resource_state[rid2].last_deployed,  # ignore
-        last_deploy_compliant=False,
+        last_handler_run_compliant=False,
     )
     assert scheduler._state.resource_state[rid1] == ResourceState(
         compliance=Compliance.NON_COMPLIANT,
         last_handler_run=HandlerResult.FAILED,
         blocked=Blocked.NOT_BLOCKED,
         last_deployed=scheduler._state.resource_state[rid1].last_deployed,  # ignore
-        last_deploy_compliant=False,
+        last_handler_run_compliant=False,
     )
 
     # Trigger deploy without incrementing version
@@ -2212,7 +2212,7 @@ async def test_redeploy_after_dependency_recovered(resource_container, server, c
             last_handler_run=HandlerResult.SUCCESSFUL,
             blocked=Blocked.NOT_BLOCKED,
             last_deployed=scheduler._state.resource_state[rid1].last_deployed,  # ignore
-            last_deploy_compliant=True,
+            last_handler_run_compliant=True,
         ):
             return False
         if scheduler._state.resource_state[rid2] != ResourceState(
@@ -2220,7 +2220,7 @@ async def test_redeploy_after_dependency_recovered(resource_container, server, c
             last_handler_run=HandlerResult.SUCCESSFUL,
             blocked=Blocked.NOT_BLOCKED,
             last_deployed=scheduler._state.resource_state[rid2].last_deployed,  # ignore
-            last_deploy_compliant=True,
+            last_handler_run_compliant=True,
         ):
             return False
         return True
