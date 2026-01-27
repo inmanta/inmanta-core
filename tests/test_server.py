@@ -1019,7 +1019,7 @@ async def test_send_in_progress(server, client, environment, agent):
         await data.ResourcePersistentState.update_persistent_state(
             environment=uuid.UUID(environment),
             resource_id=r1.resource_id,
-            last_deploy=datetime.now(tz=UTC),
+            last_handler_run_at=datetime.now(tz=UTC),
             last_non_deploying_status=last_non_deploying_status,
         )
 

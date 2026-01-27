@@ -1034,7 +1034,7 @@ async def agent_factory(
             all_environments = {agent.environment for agent in agents}
             for environment in all_environments:
                 # Make sure that the scheduler doesn't deploy anything anymore, because this would alter
-                # the last_deploy timestamp in the resource_state.
+                # the last_handler_run_at timestamp in the resource_state.
                 await client.all_agents_action(tid=environment, action=const.AgentAction.pause.value).value()
                 # Set data.RESET_DEPLOY_PROGRESS_ON_START back to False in all of the environments of the created agents
                 # Because this teardown asserts that the state is correct on restart and this setting breaks that assertion

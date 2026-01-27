@@ -1117,9 +1117,7 @@ def assert_resource_persistent_state(
         f"{resource_persistent_state.resource_id}"
         f" ({resource_persistent_state.get_compliance_status()} != {expected_compliance})"
     )
-    assert (
-        resource_persistent_state.last_handler_run_compliant is last_handler_run_compliant
-    ), f"""
+    assert resource_persistent_state.last_handler_run_compliant is last_handler_run_compliant, f"""
 {resource_persistent_state.resource_id} ({resource_persistent_state.last_handler_run_compliant} != {last_handler_run_compliant})
 """
 

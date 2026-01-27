@@ -183,7 +183,7 @@ async def test_scheduler_initialization(
             rid = f"test::Resource[agent1,key=key{i}]"
             rps = await data.ResourcePersistentState.get_one(environment=environment, resource_id=rid)
             assert rps is not None
-            result[i] = rps.last_deploy
+            result[i] = rps.last_handler_run_at
         return result
 
     last_deployed: Mapping[str, datetime.datetime] = await get_last_deployed()

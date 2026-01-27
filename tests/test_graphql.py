@@ -778,7 +778,7 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
                         blocked
                         isDeploying
                         lastHandlerRun
-                        lastDeploy
+                        lastHandlerRunAt
                         complianceState
                         currentIntentAttributeHash
                       }

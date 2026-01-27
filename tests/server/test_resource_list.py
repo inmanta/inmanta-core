@@ -235,7 +235,7 @@ async def env_with_resources(server, client):
         await data.ResourcePersistentState.update_persistent_state(
             environment=environment,
             resource_id=ResourceIdStr(key),
-            last_deploy=datetime.now(tz=UTC),
+            last_handler_run_at=datetime.now(tz=UTC),
             last_non_deploying_status=(
                 status
                 if status
