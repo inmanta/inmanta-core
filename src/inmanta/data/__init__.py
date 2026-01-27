@@ -1504,7 +1504,7 @@ class BaseDocument(metaclass=DocumentMeta):
         """
         Insert a new document based on the instance passed. Validation is done based on the defined fields.
         """
-        (column_names, values) = self._get_column_names_and_values()
+        column_names, values = self._get_column_names_and_values()
         column_names_as_sql_string = ",".join(column_names)
         values_as_parameterized_sql_string = ",".join(["$" + str(i) for i in range(1, len(values) + 1)])
         query = (
@@ -1660,9 +1660,9 @@ class BaseDocument(metaclass=DocumentMeta):
         kwargs = self._convert_field_names_to_db_column_names(kwargs)
         for name, value in kwargs.items():
             setattr(self, name, value)
-        (column_names, values) = self._get_column_names_and_values()
+        column_names, values = self._get_column_names_and_values()
         values_as_parameterized_sql_string = ",".join([column_names[i - 1] + "=$" + str(i) for i in range(1, len(values) + 1)])
-        (filter_statement, values_for_filter) = self._get_filter_on_primary_key_fields(offset=len(column_names) + 1)
+        filter_statement, values_for_filter = self._get_filter_on_primary_key_fields(offset=len(column_names) + 1)
         values = values + values_for_filter
         query = "UPDATE " + self.table_name() + " SET " + values_as_parameterized_sql_string + " WHERE " + filter_statement
         await self._execute_query(query, *values, connection=connection)
@@ -1689,8 +1689,8 @@ class BaseDocument(metaclass=DocumentMeta):
         kwargs = self._convert_field_names_to_db_column_names(kwargs)
         for name, value in kwargs.items():
             setattr(self, name, value)
-        (set_statement, values_set_statement) = self._get_set_statement(**kwargs)
-        (filter_statement, values_for_filter) = self._get_filter_on_primary_key_fields(offset=len(kwargs) + 1)
+        set_statement, values_set_statement = self._get_set_statement(**kwargs)
+        filter_statement, values_for_filter = self._get_filter_on_primary_key_fields(offset=len(kwargs) + 1)
         values = values_set_statement + values_for_filter
         query = "UPDATE " + self.table_name() + " SET " + set_statement + " WHERE " + filter_statement
         await self._execute_query(query, *values, connection=connection)
@@ -1819,7 +1819,7 @@ class BaseDocument(metaclass=DocumentMeta):
             no_obj = False
 
         query = cls._convert_field_names_to_db_column_names(query)
-        (filter_statement, values) = cls._get_composed_filter(**query)
+        filter_statement, values = cls._get_composed_filter(**query)
         selected_columns = " * "
         if columns:
             selected_columns = ",".join([cls.validate_field_name(column) for column in columns])
@@ -1876,7 +1876,7 @@ class BaseDocument(metaclass=DocumentMeta):
             no_obj = False
 
         query = cls._convert_field_names_to_db_column_names(query)
-        (filter_statement, values) = cls._get_composed_filter(**query)
+        filter_statement, values = cls._get_composed_filter(**query)
         filter_statements = filter_statement.split(" AND ") if filter_statement != "" else []
         if start is not None:
             filter_statements.append(f"{page_by_column} > $" + str(len(values) + 1))
@@ -1904,7 +1904,7 @@ class BaseDocument(metaclass=DocumentMeta):
         Delete all documents that match the given query
         """
         query = cls._convert_field_names_to_db_column_names(query)
-        (filter_statement, values) = cls._get_composed_filter(**query)
+        filter_statement, values = cls._get_composed_filter(**query)
         query = "DELETE FROM " + cls.table_name()
         if filter_statement:
             query += " WHERE " + filter_statement
@@ -1922,7 +1922,7 @@ class BaseDocument(metaclass=DocumentMeta):
         for key, value in query.items():
             cls.validate_field_name(key)
             name = cls._add_column_name_prefix_if_needed(key, col_name_prefix)
-            (filter_statement, value) = cls._get_filter(name, value, index_count)
+            filter_statement, value = cls._get_filter(name, value, index_count)
             filter_statements.append(filter_statement)
             values.extend(value)
             index_count += len(value)
@@ -1981,19 +1981,19 @@ class BaseDocument(metaclass=DocumentMeta):
     ) -> tuple[str, list[object]]:
         match query_type:
             case QueryType.EQUALS:
-                (filter_statement, filter_values) = cls._get_filter(key, value, index_count)
+                filter_statement, filter_values = cls._get_filter(key, value, index_count)
             case QueryType.IS_NOT_NULL:
-                (filter_statement, filter_values) = cls.get_is_not_null_filter(key)
+                filter_statement, filter_values = cls.get_is_not_null_filter(key)
             case QueryType.CONTAINS:
-                (filter_statement, filter_values) = cls.get_contains_filter(key, value, index_count)
+                filter_statement, filter_values = cls.get_contains_filter(key, value, index_count)
             case QueryType.CONTAINS_PARTIAL:
-                (filter_statement, filter_values) = cls.get_contains_partial_filter(key, value, index_count)
+                filter_statement, filter_values = cls.get_contains_partial_filter(key, value, index_count)
             case QueryType.RANGE:
-                (filter_statement, filter_values) = cls.get_range_filter(key, value, index_count)
+                filter_statement, filter_values = cls.get_range_filter(key, value, index_count)
             case QueryType.NOT_CONTAINS:
-                (filter_statement, filter_values) = cls.get_not_contains_filter(key, value, index_count)
+                filter_statement, filter_values = cls.get_not_contains_filter(key, value, index_count)
             case QueryType.COMBINED:
-                (filter_statement, filter_values) = cls.get_filter_for_combined_query_type(
+                filter_statement, filter_values = cls.get_filter_for_combined_query_type(
                     key, cast(dict[QueryType, object], value), index_count
                 )
             case _ as _never:
@@ -2044,7 +2044,7 @@ class BaseDocument(metaclass=DocumentMeta):
             filter_statement, filter_values = cls.get_filter_for_query_type(query_type, name, value, index)
             filters.append((filter_statement, filter_values))
             index += len(filter_values)
-        (filter_statement, values) = cls._combine_filter_statements(filters)
+        filter_statement, values = cls._combine_filter_statements(filters)
 
         return (filter_statement, values)
 
@@ -2080,7 +2080,7 @@ class BaseDocument(metaclass=DocumentMeta):
         """
         filter_statement: str
         values: list[object]
-        (filter_statement, values) = cls._combine_filter_statements(
+        filter_statement, values = cls._combine_filter_statements(
             (
                 f"{name} {operator.pg_value} ${str(index + i)}",
                 [cls._get_value(bound)],
@@ -2149,7 +2149,7 @@ class BaseDocument(metaclass=DocumentMeta):
         """
         Delete this document
         """
-        (filter_as_string, values) = self._get_filter_on_primary_key_fields()
+        filter_as_string, values = self._get_filter_on_primary_key_fields()
         query = "DELETE FROM " + self.table_name() + " WHERE " + filter_as_string
         await self._execute_query(query, *values, connection=connection)
 
@@ -2821,7 +2821,7 @@ class Environment(BaseDocument):
             value = self._settings[key].validator(value)
 
         type = translate_to_postgres_type(self._settings[key].typ)
-        (filter_statement, values) = self._get_composed_filter(name=self.name, project=self.project, offset=5)
+        filter_statement, values = self._get_composed_filter(name=self.name, project=self.project, offset=5)
         query = f"""
                 UPDATE {self.table_name()}
                 SET settings=(
@@ -2865,7 +2865,7 @@ class Environment(BaseDocument):
             raise KeyError()
 
         if self._settings[key].default is None:
-            (filter_statement, values) = self._get_composed_filter(name=self.name, project=self.project, offset=2)
+            filter_statement, values = self._get_composed_filter(name=self.name, project=self.project, offset=2)
             query = f"""
                 UPDATE {self.table_name()}
                 SET settings->'settings'=(settings->'settings') - $1
@@ -6458,7 +6458,7 @@ class ConfigurationModel(BaseDocument):
         if offset is not None:
             offset = int(offset)
 
-        (filterstr, values) = cls._get_composed_filter(col_name_prefix="c", offset=1, **query)
+        filterstr, values = cls._get_composed_filter(col_name_prefix="c", offset=1, **query)
         values = values
         where_statement = f"WHERE {filterstr} " if filterstr else ""
         order_by_statement = f"ORDER BY {order_by_column} {order} " if order_by_column else ""

@@ -364,14 +364,12 @@ async def test_agent_code_loading_with_failure(
                     "id": "test::Test[agent1,name=test],v=%d" % version,
                     "purged": False,
                     "requires": [],
-                    "version": version,
                     "name": "test",
                 },
                 {
                     "id": "test::Test2[agent1,name=test],v=%d" % version,
                     "purged": False,
                     "requires": [],
-                    "version": version,
                     "name": "test",
                 },
             ],
@@ -430,7 +428,6 @@ async def test_logging_on_code_loading_failure_missing_code(server, client, envi
                 "id": "test::Test[agent,name=test],v=%d" % version,
                 "purged": False,
                 "requires": [],
-                "version": version,
             }
         ],
         module_version_info={},

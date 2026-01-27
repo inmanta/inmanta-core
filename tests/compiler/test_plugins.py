@@ -70,7 +70,7 @@ str = std::replace("Hello World!", new = "You", old = "World")
         """,
         autostd=True,
     )
-    (_, scopes) = compiler.do_compile()
+    _, scopes = compiler.do_compile()
     root: Namespace = scopes.get_child("__config__")
     assert root.lookup("str").get_value() == "Hello You!"
 
@@ -86,7 +86,7 @@ str = std::replace("Hello World!", **dct)
         """,
         autostd=True,
     )
-    (_, scopes) = compiler.do_compile()
+    _, scopes = compiler.do_compile()
     root: Namespace = scopes.get_child("__config__")
     assert root.lookup("str").get_value() == "Hello You!"
 
@@ -273,8 +273,7 @@ def test_explicit_plugin_exception(snippetcompiler):
 import tests
 
 tests::raise_exception("%s")
-        """
-        % msg,
+        """ % msg,
     )
     try:
         compiler.do_compile()
@@ -374,13 +373,11 @@ def test_signature(snippetcompiler: "SnippetCompilationTest") -> None:
     """
     Test that the get_signature method of the plugins work as expected.
     """
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 # Import some modules which define plugins
 import catch_all_arguments
 import keyword_only_arguments
-        """
-    )
+        """)
     statements, _ = compiler.do_compile()
 
     # Get all plugins objects, we get them from the statements, and recognize them
@@ -407,8 +404,7 @@ def test_returned_types(snippetcompiler: "SnippetCompilationTest") -> None:
     """
     Test that the value returned from a plugin are validated correctly.
     """
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 import plugin_returned_type_validation
 
 plugin_returned_type_validation::as_any_explicit({"a": "a"})
@@ -416,8 +412,7 @@ plugin_returned_type_validation::as_any_implicit({"a": "a"})
 plugin_returned_type_validation::as_none(null)
 plugin_returned_type_validation::as_null(null)
 plugin_returned_type_validation::as_string("a")
-        """
-    )
+        """)
     compiler.do_compile()
 
 
@@ -426,13 +421,11 @@ def test_context_and_defaults(snippetcompiler: "SnippetCompilationTest") -> None
     Test that the usage of the context argument together with default
     values doesn't cause any issue
     """
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 import plugin_context_and_defaults
 
 plugin_context_and_defaults::func()
-        """
-    )
+        """)
     compiler.do_compile()
 
 
@@ -536,60 +529,81 @@ end
         )
     compiler.do_compile()
 
-    main_dir = snippetcompiler.main
+    cf_file = snippetcompiler.main
     # Parameter to plugin has incompatible type
     ns = "plugin_native_types"
-    for plugin_name, plugin_value, error_message in [
+    for plugin_name, plugin_value, error_message_re in [
         (
             "union_single_type",
             123,
-            f"Value 123 for argument value of plugin {ns}::union_single_type has incompatible type. Expected type: string",
+            re.escape(
+                f"Value 123 for argument value of plugin {ns}::union_single_type has incompatible type. Expected type: string"
+                f" (reported in plugin_native_types::union_single_type(value=123) ({cf_file}:3:13))"
+            ),
         ),
         (
             "union_multiple_types",
             "[1, 2, 3]",
-            f"Value [1, 2, 3] for argument value of plugin {ns}::union_multiple_types has incompatible type."
-            " Expected type: Union[int,string]",
+            re.escape(
+                f"Value [1, 2, 3] for argument value of plugin {ns}::union_multiple_types has incompatible type."
+                " Expected type: Union[int,string]"
+                f" (reported in plugin_native_types::union_multiple_types(value=[1, 2, 3]) ({cf_file}:3:13))"
+            ),
         ),
         (
             "union_optional_1",
             1.2,
-            f"Value 1.2 for argument value of plugin {ns}::union_optional_1 has incompatible type."
-            f" Expected type: Union[int,string,std::Entity]?",
+            re.escape(
+                f"Value 1.2 for argument value of plugin {ns}::union_optional_1 has incompatible type."
+                f" Expected type: Union[int,string,std::Entity]?"
+                f" (reported in plugin_native_types::union_optional_1(value=1.2) ({cf_file}:3:13))"
+            ),
         ),
         (
             "union_optional_2",
             1.2,
-            f"Value 1.2 for argument value of plugin {ns}::union_optional_2 has incompatible type."
-            f" Expected type: Union[int,string,std::Entity]?",
+            re.escape(
+                f"Value 1.2 for argument value of plugin {ns}::union_optional_2 has incompatible type."
+                f" Expected type: Union[int,string,std::Entity]?"
+                f" (reported in plugin_native_types::union_optional_2(value=1.2) ({cf_file}:3:13))"
+            ),
         ),
         (
             "union_optional_3",
             1.2,
-            f"Value 1.2 for argument value of plugin {ns}::union_optional_3 has incompatible type."
-            f" Expected type: Union[int,string,std::Entity]?",
+            re.escape(
+                f"Value 1.2 for argument value of plugin {ns}::union_optional_3 has incompatible type."
+                f" Expected type: Union[int,string,std::Entity]?"
+                f" (reported in plugin_native_types::union_optional_3(value=1.2) ({cf_file}:3:13))"
+            ),
         ),
         (
             "union_optional_4",
             1.2,
-            f"Value 1.2 for argument value of plugin {ns}::union_optional_4 has incompatible type."
-            f" Expected type: Union[int,string,std::Entity]?",
+            re.escape(
+                f"Value 1.2 for argument value of plugin {ns}::union_optional_4 has incompatible type."
+                f" Expected type: Union[int,string,std::Entity]?"
+                f" (reported in plugin_native_types::union_optional_4(value=1.2) ({cf_file}:3:13))"
+            ),
         ),
         (
             "annotated_arg_entity",
             "plugin_native_types::AnotherEntity(another_value=1)",
             (
-                f"Value {ns}::AnotherEntity (instantiated at {main_dir}:3) for argument value of plugin "
-                f"{ns}::annotated_arg_entity has incompatible type. Expected type: {ns}::TestEntity "
-                f"(reported in {ns}::annotated_arg_entity(value=Construct({ns}::AnotherEntity)) ({main_dir}:3:13))"
+                rf"Value {ns}::AnotherEntity [0-9a-f]+ for argument value of plugin "
+                + re.escape(
+                    f"{ns}::annotated_arg_entity has incompatible type. Expected type: {ns}::TestEntity "
+                    f"(reported in {ns}::annotated_arg_entity(value=Construct({ns}::AnotherEntity)) ({cf_file}:3:13))"
+                )
             ),
         ),
         (
             "annotated_arg_literal",
             "'maybe'",
-            (
-                f"Value maybe for argument value of plugin {ns}::annotated_arg_literal has incompatible type. "
+            re.escape(
+                f"Value 'maybe' for argument value of plugin {ns}::annotated_arg_literal has incompatible type. "
                 f"Expected type: {ns}::response (reported in plugin_native_types::annotated_arg_literal(value='maybe')"
+                f" ({cf_file}:3:13))"
             ),
         ),
     ]:
@@ -602,7 +616,8 @@ end
         )
         with pytest.raises(RuntimeException) as exc_info:
             compiler.do_compile()
-        assert error_message in str(exc_info.value)
+        message = str(exc_info.value)
+        assert re.fullmatch(error_message_re, message), message
 
     # Return value of plugin has incompatible type
     for plugin_name, plugin_value, error_message in [
@@ -653,7 +668,7 @@ end
             "annotated_return_entity",
             "plugin_native_types::AnotherEntity(another_value=1)",
             (
-                f"Return value {ns}::AnotherEntity (instantiated at {main_dir}:3) of plugin {ns}::annotated_return_entity "
+                f"Return value {ns}::AnotherEntity (instantiated at {cf_file}:3) of plugin {ns}::annotated_return_entity "
                 f"has incompatible type. Expected type: {ns}::TestEntity"
             ),
         ),

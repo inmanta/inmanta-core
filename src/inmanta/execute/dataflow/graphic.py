@@ -171,7 +171,7 @@ class GraphicGraph:
             elif isinstance(assignment.rhs, AttributeNodeReference):
                 label = ""
                 instance_var_ref: AssignableNodeReference
-                (label, instance_var_ref) = reduce(
+                label, instance_var_ref = reduce(
                     lambda acc, x: (f".{x.attribute}{acc[0]}", x.instance_var_ref),
                     unroll_attribute_reference(assignment.rhs),
                     ("", cast(AssignableNodeReference, assignment.rhs)),

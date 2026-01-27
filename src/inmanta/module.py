@@ -2090,7 +2090,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         return self._ast_cache
 
     def get_imports(self) -> list[DefineImport]:
-        (statements, _) = self.get_ast()
+        statements, _ = self.get_ast()
         imports = [x for x in statements if isinstance(x, DefineImport)]
         if self.autostd:
             std_locatable = LocatableString("std", Range("__internal__", 1, 1, 1, 1), -1, self.root_ns)
@@ -2104,7 +2104,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             return self._complete_ast
         start = time()
         # load ast
-        (statements, block) = self.get_ast()
+        statements, block = self.get_ast()
         blocks = [block]
         statements = [x for x in statements]
 
@@ -2199,7 +2199,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
                 subs = "::".join(parts[0:i])
                 if subs in done[module.name]:
                     continue
-                (nstmt, nb) = module.get_ast(subs)
+                nstmt, nb = module.get_ast(subs)
 
                 done[module.name][subs] = imp
                 ast_by_top_level_mod[module.name].append((subs, nstmt, nb))
@@ -2588,7 +2588,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         if self._project is None:
             raise ValueError("Can only get module's imports in the context of a project.")
 
-        (statements, block) = self.get_ast(name)
+        statements, block = self.get_ast(name)
         imports = [x for x in statements if isinstance(x, DefineImport)]
         if self.name != "std" and self._project.autostd:
             std_locatable = LocatableString("std", Range("__internal__", 1, 1, 1, 1), -1, block.namespace)

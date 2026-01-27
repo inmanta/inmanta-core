@@ -30,8 +30,7 @@ x = y
 y = z
 z = x
 %s
-        """
-        % ("y = 42" if assign else ""),
+        """ % ("y = 42" if assign else ""),
         None if assign else RuntimeException,
     )
     dataflow_test_helper.verify_graphstring(
@@ -39,8 +38,7 @@ z = x
 x -> y
 y -> [ z %s ]
 z -> x
-        """
-        % ("42" if assign else ""),
+        """ % ("42" if assign else ""),
     )
     all_vars: str = "xyz"
     leaves: set[str] = {"y"} if assign else set(iter(all_vars))
@@ -116,8 +114,7 @@ y = v
 
 u = 42
 %s
-        """
-        % ("z = 42" if assign_loop0 else ""),
+        """ % ("z = 42" if assign_loop0 else ""),
     )
     dataflow_test_helper.verify_graphstring(
         """
@@ -128,8 +125,7 @@ z -> [ x %s ]
 u -> [ v 42 ]
 v -> w
 w -> u
-        """
-        % ("42" if assign_loop0 else ""),
+        """ % ("42" if assign_loop0 else ""),
     )
     loop0_vars: str = "xyz"
     loop1_vars: str = "uvw"

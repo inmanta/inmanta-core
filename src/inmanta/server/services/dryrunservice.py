@@ -146,7 +146,6 @@ class DyrunService(protocol.ServerSlice):
                     "agent_name": res.agent,
                     "attribute": parsed_id.attribute,
                     "attribute_value": parsed_id.attribute_value,
-                    "version": version,
                 },
                 "id": parsed_id.resource_version_str(),
             }

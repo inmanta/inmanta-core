@@ -37,7 +37,7 @@ def setup_project_for(snippetcompiler):
 
 def test_compile_test_1(setup_project_for):
     setup_project_for("compile_test_1")
-    (types, _) = compiler.do_compile()
+    types, _ = compiler.do_compile()
     instances = types["__config__::Host"].get_all_instances()
     assert len(instances) == 1
     i = instances[0]
@@ -47,7 +47,7 @@ def test_compile_test_1(setup_project_for):
 
 def test_compile_test_2(setup_project_for):
     setup_project_for("compile_test_2")
-    (types, _) = compiler.do_compile()
+    types, _ = compiler.do_compile()
     instances = types["__config__::ManagedDevice"].get_all_instances()
     assert sorted([i.get_attribute("name").get_value() for i in instances]) == [1, 2, 3, 4, 5]
 
@@ -60,7 +60,7 @@ def test_compile_test_index_collission(setup_project_for):
 
 def test_compile_test_index(setup_project_for):
     setup_project_for("compile_test_index")
-    (_, scopes) = compiler.do_compile()
+    _, scopes = compiler.do_compile()
     variables = {k: x.get_value() for k, x in scopes.get_child("__config__").scope.slots.items()}
 
     p = re.compile(r"(f\d+h\d+)(a\d+)?")
@@ -96,7 +96,7 @@ def test_compile_test_double_assign(setup_project_for):
 
 def test_compile_138(setup_project_for):
     setup_project_for("compile_138")
-    (types, _) = compiler.do_compile()
+    types, _ = compiler.do_compile()
     assert (
         types["std::Host"].get_all_instances()[0].get_attribute("agent").get_value().get_attribute("names").get_value()
         is not None
@@ -105,7 +105,7 @@ def test_compile_138(setup_project_for):
 
 def test_compile_plugin_typing(setup_project_for):
     setup_project_for("compile_plugin_typing")
-    (_, scopes) = compiler.do_compile()
+    _, scopes = compiler.do_compile()
     root = scopes.get_child("__config__")
 
     def verify(name):

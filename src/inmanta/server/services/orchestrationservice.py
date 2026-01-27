@@ -545,7 +545,6 @@ class OrchestrationService(protocol.ServerSlice):
         resources: list[JsonType],
         resource_state: dict[ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]],
         resource_sets: dict[ResourceIdStr, Optional[str]],
-        check_version: int | None = None,
     ) -> dict[ResourceIdStr, ResourceDTO]:
         """
         This method converts the resources sent to the put_version or put_partial endpoint to DTO Resource objects.
@@ -553,7 +552,6 @@ class OrchestrationService(protocol.ServerSlice):
         An exception will be raised when one of the following constraints is not satisfied:
             * A resource present in the resource_sets parameter is not present in the resources dictionary.
             * The dependency graph of the provided resources is not closed.
-            * In a full compile, the version of a resource does not match the version we are creating
         """
         rid_to_resource = {}
         # The content of the requires attribute for all the resources
@@ -561,18 +559,8 @@ class OrchestrationService(protocol.ServerSlice):
         for res_dict in resources:
             # Verify that the version field and the version in the resource version id field match
             resource_version_id = Id.parse_id(res_dict["id"])
-            version_part_of_resource_id = resource_version_id.version
             resource_id = resource_version_id.resource_str()
-            if "version" in res_dict and res_dict["version"] != version_part_of_resource_id:
-                raise BadRequest(
-                    f"Invalid resource: The version in the id field ({res_dict['id']}) doesn't match the version in the"
-                    f" version field ({res_dict['version']})."
-                )
-            if check_version is not None and version_part_of_resource_id != check_version:
-                raise BadRequest(
-                    f"The resource version of resource {resource_version_id} does not match the version argument "
-                    f"(version: {check_version})"
-                )
+
             res_set_name = resource_sets.get(resource_id, None)
 
             # Populate is_undefined field
@@ -1025,7 +1013,6 @@ class OrchestrationService(protocol.ServerSlice):
             resources=resources,
             resource_state=resource_state,
             resource_sets=resource_sets,
-            check_version=version,
         )
 
         async with data.Resource.get_connection() as con:

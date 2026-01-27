@@ -103,8 +103,7 @@ def test_warning_format(caplog, warning: Union[str, Warning], category: type[War
 
 
 def test_shadow_warning(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 x = 0
 if true:
     x = 1
@@ -114,8 +113,7 @@ if true:
         end
     end
 end
-        """
-    )
+        """)
     message: str = "Variable `x` shadowed: originally declared at {dir}/main.cf:%d, shadowed at {dir}/main.cf:%d"
     message = message.format(dir=snippetcompiler.project_dir)
     with warnings.catch_warnings(record=True) as caught_warnings:
@@ -137,8 +135,7 @@ end
 
 
 def test_shadow_warning_implementation(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 x = 0
 
 entity A:
@@ -151,8 +148,7 @@ end
 implement A using none
 implementation none for A:
 end
-        """
-    )
+        """)
     message: str = "Variable `x` shadowed: originally declared at {dir}/main.cf:%d, shadowed at {dir}/main.cf:%d"
     message = message.format(dir=snippetcompiler.project_dir)
     with warnings.catch_warnings(record=True) as caught_warnings:

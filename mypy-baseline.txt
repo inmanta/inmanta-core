@@ -25,7 +25,6 @@ src/inmanta/app.py:0: note: Possible overload variants:
 src/inmanta/app.py:0: note: def print(*values: object, sep: str | None = ..., end: str | None = ..., file: SupportsWrite[str] | None = ..., flush: Literal[False] = ...) -> None
 src/inmanta/app.py:0: note: def print(*values: object, sep: str | None = ..., end: str | None = ..., file: _SupportsWriteAndFlush[str] | None = ..., flush: bool) -> None
 src/inmanta/ast/__init__.py:0: error: Argument 1 to "set_location" of "CompilerException" has incompatible type "Location | None"; expected "Location"  [arg-type]
-src/inmanta/ast/__init__.py:0: error: Argument 1 to "set_location" of "CompilerException" has incompatible type "Location | None"; expected "Location"  [arg-type]
 src/inmanta/ast/__init__.py:0: error: Argument 2 to "__init__" of "RuntimeException" has incompatible type "LocatableString"; expected "Locatable | None"  [arg-type]
 src/inmanta/ast/__init__.py:0: error: Function is missing a return type annotation  [no-untyped-def]
 src/inmanta/ast/__init__.py:0: error: Missing type parameters for generic type "DelayedResultVariable"  [type-arg]
@@ -615,7 +614,6 @@ src/inmanta/execute/scheduler.py:0: error: Module "inmanta.ast" does not explici
 src/inmanta/execute/scheduler.py:0: error: Module "inmanta.ast" does not explicitly export attribute "Statement"  [attr-defined]
 src/inmanta/execute/scheduler.py:0: error: Module "inmanta.ast" has no attribute "BasicBlock"  [attr-defined]
 src/inmanta/export.py:0: error: Argument 1 to "parse_id" of "Id" has incompatible type "str"; expected "ResourceVersionIdStr | ResourceIdStr"  [arg-type]
-src/inmanta/export.py:0: error: Argument 1 to "set_version" of "Resource" has incompatible type "int | None"; expected "int"  [arg-type]
 src/inmanta/export.py:0: error: Argument 10 to "put_partial" has incompatible type "**dict[str, object]"; expected "PipConfig | None"  [arg-type]
 src/inmanta/export.py:0: error: Argument 10 to "put_version" has incompatible type "**dict[str, object]"; expected "PipConfig | None"  [arg-type]
 src/inmanta/export.py:0: error: Argument 2 to "add" of "Exporter" has incompatible type "tuple[str, ...]"; expected "list[str]"  [arg-type]

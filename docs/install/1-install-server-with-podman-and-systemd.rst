@@ -1,5 +1,7 @@
-Container-based installation
-****************************
+.. _install-server:
+
+Install Inmanta
+***************
 
 This page describes how to install the Inmanta orchestrator using Podman and Systemd.
 

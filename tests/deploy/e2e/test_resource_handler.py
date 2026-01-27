@@ -55,7 +55,7 @@ class MockGetFileResourceHandler(ResourceHandler):
 
 
 def test_get_file_corrupted():
-    (hash, content, body) = make_random_file()
+    hash, content, body = make_random_file()
     client = MockSessionClient(200, b"corrupted_file")
     resource_handler = MockGetFileResourceHandler(client)
 
@@ -64,7 +64,7 @@ def test_get_file_corrupted():
 
 
 def test_get_file_success():
-    (hash, content, body) = make_random_file()
+    hash, content, body = make_random_file()
     client = MockSessionClient(200, content)
     resource_handler = MockGetFileResourceHandler(client)
 
