@@ -1,0 +1,6 @@
+---
+description: Remove the documentation for RPM-based installs.
+issue-nr: 9818
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master]
