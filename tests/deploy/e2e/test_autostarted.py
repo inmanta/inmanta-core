@@ -198,9 +198,7 @@ def ps_diff_inmanta_agent_processes(original: list[psutil.Process], current_proc
         current = [c for c in current if not is_terminated(c)]
         original = [c for c in original if not is_terminated(c)]
 
-    assert len(original) + diff == len(
-        current
-    ), """procs found:
+    assert len(original) + diff == len(current), """procs found:
         pre:{}
         post:{}""".format(
         original,
@@ -321,7 +319,7 @@ async def test_deploy_no_code(resource_container, client, clienthelper, environm
 async def test_stop_autostarted_agents_on_environment_removal(server, client):
     current_process = psutil.Process()
     inmanta_agent_child_processes: list[psutil.Process] = _get_inmanta_scheduler_child_processes(current_process)
-    (project_id, env_id) = await setup_environment_with_agent(client, "proj")
+    project_id, env_id = await setup_environment_with_agent(client, "proj")
 
     # One autostarted agent should running as a subprocess
     ps_diff_inmanta_agent_processes(original=inmanta_agent_child_processes, current_process=current_process, diff=1)

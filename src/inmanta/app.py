@@ -579,7 +579,7 @@ def export(options: argparse.Namespace) -> None:
         t1 = time.time()
         with summary_reporter.compiler_exception.capture():
             try:
-                (types, scopes) = do_compile()
+                types, scopes = do_compile()
             except Exception:
                 types, scopes = (None, None)
                 raise

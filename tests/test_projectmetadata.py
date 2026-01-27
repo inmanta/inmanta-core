@@ -88,14 +88,12 @@ def test_relation_precedence_policy_parsing(
 def test_no_module_path(tmp_path, caplog):
     with caplog.at_level(logging.WARNING):
         with (tmp_path / "project.yml").open("w") as fh:
-            fh.write(
-                """
+            fh.write("""
     name: testproject
     downloadpath: libs
     pip:
         index_url: https://pypi.org/simple
-    """
-            )
+    """)
 
         Project(tmp_path, autostd=False)
     assert_no_warning(caplog)
@@ -111,8 +109,7 @@ def test_deprecation_warning_repo_of_type_package(tmp_path):
         ),
     ):
         with (tmp_path / "project.yml").open("w") as fh:
-            fh.write(
-                """
+            fh.write("""
     name: testproject
     downloadpath: libs
     repo:
@@ -120,8 +117,7 @@ def test_deprecation_warning_repo_of_type_package(tmp_path):
          type: package
     pip:
         index_url: https://pypi.org/simple
-    """
-            )
+    """)
 
         Project(tmp_path, autostd=False)
 
@@ -146,13 +142,11 @@ def test_pip_config(tmp_path, caplog, use_system_config, value):
     )
     with caplog.at_level(logging.WARNING):
         with (tmp_path / "project.yml").open("w") as fh:
-            fh.write(
-                f"""
+            fh.write(f"""
     name: testproject
     downloadpath: libs
     {pip_config_file}
-    """
-            )
+    """)
     project = Project(tmp_path, autostd=False)
     assert_no_warning(caplog)
     assert project.metadata.pip.use_system_config == value
@@ -169,13 +163,11 @@ def test_pip_config_warnings(tmp_path):
     """
 
     with (tmp_path / "project.yml").open("w") as fh:
-        fh.write(
-            f"""
+        fh.write(f"""
     name: testproject
     downloadpath: libs
     {pip_config_file}
-    """
-        )
+    """)
     with pytest.warns(
         ProjectConfigurationWarning, match=re.escape("Found unexpected configuration value 'pip.index_ur' in 'project.yml'")
     ):

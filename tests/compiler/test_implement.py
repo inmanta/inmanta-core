@@ -53,10 +53,9 @@ end
 
 
 x = Child()
-        """
-        % ("parents" if parents else "c"),
+        """ % ("parents" if parents else "c"),
     )
-    (_, scopes) = compiler.do_compile()
+    _, scopes = compiler.do_compile()
     root: Namespace = scopes.get_child("__config__")
     x: Typeorvalue = root.lookup("x")
     assert isinstance(x, ResultVariable)
@@ -91,8 +90,7 @@ x = Child()
 
 
 def test_implement_unknown_condition(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """\
+    snippetcompiler.setup_for_snippet("""\
         import std
         import tests
 
@@ -106,7 +104,6 @@ def test_implement_unknown_condition(snippetcompiler):
         end
 
         A()
-        """
-    )
+        """)
 
     compiler.do_compile()

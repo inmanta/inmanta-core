@@ -22,8 +22,7 @@ from inmanta.execute.util import NoneValue
 
 
 def test_null(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
         entity A:
             string? a = null
         end
@@ -32,18 +31,16 @@ def test_null(snippetcompiler):
 
         implementation none for std::Entity:
 end
-    """
-    )
+    """)
 
-    (_, scopes) = compiler.do_compile()
+    _, scopes = compiler.do_compile()
     root = scopes.get_child("__config__")
     a = root.lookup("a").get_value().get_attribute("a").get_value()
     assert isinstance(a, NoneValue)
 
 
 def test_null_on_list(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
         entity A:
             string[]? a = null
         end
@@ -52,18 +49,16 @@ def test_null_on_list(snippetcompiler):
 
         implementation none for std::Entity:
 end
-    """
-    )
+    """)
 
-    (_, scopes) = compiler.do_compile()
+    _, scopes = compiler.do_compile()
     root = scopes.get_child("__config__")
     a = root.lookup("a").get_value().get_attribute("a").get_value()
     assert isinstance(a, NoneValue)
 
 
 def test_null_on_dict(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
         entity A:
             dict? a = null
         end
@@ -72,10 +67,9 @@ def test_null_on_dict(snippetcompiler):
 
         implementation none for std::Entity:
         end
-    """
-    )
+    """)
 
-    (_, scopes) = compiler.do_compile()
+    _, scopes = compiler.do_compile()
     root = scopes.get_child("__config__")
     a = root.lookup("a").get_value().get_attribute("a").get_value()
     assert isinstance(a, NoneValue)
@@ -127,8 +121,7 @@ end
 
 
 def test_exception_nullable(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity A:
     int? n
 end
@@ -140,8 +133,7 @@ A(n = null)
 
 implementation none for std::Entity:
 end
-        """
-    )
+        """)
     try:
         compiler.do_compile()
     except UnsetException as e:
