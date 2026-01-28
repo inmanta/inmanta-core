@@ -1,0 +1,4 @@
+---
+description: Fix black issue caused by merging a PR with an old version of black
+change-type: patch
+destination-branches: [master]
