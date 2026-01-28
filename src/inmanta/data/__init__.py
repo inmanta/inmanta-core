@@ -4717,16 +4717,16 @@ class ResourcePersistentState(BaseDocument):
     # When this resource was first created
     created: datetime.datetime
     # Field based on content from the resource actions
-    last_deploy: Optional[datetime.datetime] = None
+    last_handler_run_at: Optional[datetime.datetime] = None
     # When a resource is updated in a new model version, it might take some time until this update reaches the scheduler.
     # This is the attribute hash that the scheduler considers the last released attribute hash for the given resource.
     current_intent_attribute_hash: Optional[str] = None
     # Last deployment completed of any kind, including marking-deployed-for-know-good-state for increments
     # i.e. the end time of the last deploy
     last_deployed_attribute_hash: Optional[str] = None
-    # Hash used in last_deploy
+    # Hash used in last_handler_run_at
     last_deployed_version: Optional[int] = None
-    # Model version of last_deploy
+    # Model version of last_handler_run_at
     last_success: Optional[datetime.datetime] = None
     # last actual deployment completed without failure. i.e start time of the last deploy where status == ResourceState.deployed
     last_produced_events: Optional[datetime.datetime] = None
@@ -4740,9 +4740,9 @@ class ResourcePersistentState(BaseDocument):
     # Set to true when a version starts its deployment, set to false when it finishes
     is_deploying: bool
     # Written at deploy time (except for NEW -> no race condition possible with deploy path)
-    last_deploy_result: state.DeployResult
-    # Was the last deploy compliant, used for recovering scheduler state
-    last_deploy_compliant: Optional[bool] = None
+    last_handler_run: state.HandlerResult
+    # Was the last run compliant, used for recovering scheduler state
+    last_handler_run_compliant: Optional[bool] = None
     # Written both when processing a new version and at deploy time. As such, this should be updated
     # under the scheduler lock to prevent race conditions with the deploy time updates.
     blocked: state.Blocked
@@ -4852,7 +4852,7 @@ class ResourcePersistentState(BaseDocument):
                 is_undefined,
                 is_orphan,
                 is_deploying,
-                last_deploy_result,
+                last_handler_run,
                 blocked,
                 created
             )
@@ -4956,37 +4956,36 @@ class ResourcePersistentState(BaseDocument):
         environment: uuid.UUID,
         resource_id: ResourceIdStr,
         is_deploying: bool | None = None,
-        last_deploy: datetime.datetime | None = None,
+        last_handler_run_at: datetime.datetime | None = None,
         last_deployed_version: int | None = None,
         last_non_deploying_status: Optional[const.NonDeployingResourceState] = None,
         last_success: Optional[datetime.datetime] = None,
         last_produced_events: Optional[datetime.datetime] = None,
         last_deployed_attribute_hash: Optional[str] = None,
-        last_deploy_compliant: Optional[bool] = None,
+        last_handler_run_compliant: Optional[bool] = None,
         non_compliant_diff: Optional[uuid.UUID] = None,
         cleanup_non_compliant_diff: Optional[bool] = False,
         connection: Optional[asyncpg.connection.Connection] = None,
         # TODO[#8541]: accept state.ResourceState and write blocked status as well
-        last_deploy_result: Optional[state.DeployResult] = None,
+        last_handler_run: Optional[state.HandlerResult] = None,
     ) -> None:
         """Update the data in the resource_persistent_state table"""
         args = ArgumentCollector(2)
 
         invalues = {
             "is_deploying": is_deploying,
-            "last_deploy": last_deploy,
+            "last_handler_run_at": last_handler_run_at,
             "last_non_deploying_status": last_non_deploying_status,
             "last_success": last_success,
             "last_produced_events": last_produced_events,
             "last_deployed_attribute_hash": last_deployed_attribute_hash,
             "last_deployed_version": last_deployed_version,
-            "last_deploy_compliant": last_deploy_compliant,
+            "last_handler_run_compliant": last_handler_run_compliant,
             "non_compliant_diff": non_compliant_diff,
         }
         query_parts = [f"{k}={args(v)}" for k, v in invalues.items() if v is not None]
-
-        if last_deploy_result:
-            query_parts.append(f"last_deploy_result={args(last_deploy_result.name)}")
+        if last_handler_run:
+            query_parts.append(f"last_handler_run={args(last_handler_run.name)}")
         if not query_parts:
             return
         if cleanup_non_compliant_diff:
@@ -5011,7 +5010,7 @@ class ResourcePersistentState(BaseDocument):
             self.is_undefined,
             self.last_deployed_attribute_hash,
             self.current_intent_attribute_hash,
-            self.last_deploy_compliant,
+            self.last_handler_run_compliant,
         )
 
     @classmethod
@@ -5023,13 +5022,13 @@ class ResourcePersistentState(BaseDocument):
             SELECT r.resource_id,
                 COALESCE((r.attributes->>'report_only')::boolean, false) AS report_only,
                 rd.diff,
-                rps.last_deploy AS last_executed_at,
+                rps.last_handler_run_at AS last_handler_run_at,
                 rps.is_undefined,
                 rps.last_deployed_attribute_hash,
                 rps.current_intent_attribute_hash,
-                rps.last_deploy_result,
+                rps.last_handler_run,
                 rps.blocked,
-                rps.last_deploy_compliant
+                rps.last_handler_run_compliant
             FROM {Scheduler.table_name()} AS s
             INNER JOIN public.resource_set_configuration_model AS rscm
                 ON s.environment=rscm.environment
@@ -5059,7 +5058,7 @@ class ResourcePersistentState(BaseDocument):
                     is_undefined=cast(bool, record["is_undefined"]),
                     last_deployed_attribute_hash=cast(str | None, record["last_deployed_attribute_hash"]),
                     current_intent_attribute_hash=cast(str | None, record["current_intent_attribute_hash"]),
-                    last_deploy_compliant=cast(bool, record["last_deploy_compliant"]),
+                    last_handler_run_compliant=cast(bool, record["last_handler_run_compliant"]),
                 )
                 diff[ResourceIdStr(str(record["resource_id"]))] = m.ResourceComplianceDiff(
                     report_only=cast(bool, record["report_only"]),
@@ -5069,8 +5068,8 @@ class ResourcePersistentState(BaseDocument):
                         else None
                     ),
                     compliance=compliance_status,
-                    last_execution_result=state.DeployResult(str(record["last_deploy_result"]).lower()),
-                    last_executed_at=cast(datetime.datetime | None, record["last_executed_at"]),
+                    last_handler_run=state.HandlerResult(str(record["last_handler_run"]).lower()),
+                    last_handler_run_at=cast(datetime.datetime | None, record["last_handler_run_at"]),
                 )
             return diff
 
@@ -6064,7 +6063,7 @@ class Resource(BaseDocument):
             r.agent,
             r.resource_id_value,
             rps.created as first_generated_time,
-            rps.last_deploy as latest_deploy,
+            rps.last_handler_run_at as latest_deploy,
             r.attributes,
             {const.SQL_RESOURCE_STATUS_SELECTOR} AS status
         FROM resource AS r

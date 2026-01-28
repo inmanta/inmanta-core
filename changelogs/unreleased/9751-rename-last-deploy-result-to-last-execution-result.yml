@@ -1,0 +1,6 @@
+---
+description: "Rename last_deploy_result to last_execution_result"
+issue-nr: 9751
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master]

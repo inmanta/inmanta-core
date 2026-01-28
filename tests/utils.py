@@ -1093,10 +1093,10 @@ def assert_resource_persistent_state(
     resource_persistent_state: data.ResourcePersistentState,
     is_undefined: bool,
     is_orphan: bool,
-    last_deploy_result: state.DeployResult,
+    last_handler_run: state.HandlerResult,
     blocked: state.Blocked,
     expected_compliance: Optional[state.Compliance],
-    last_deploy_compliant: Optional[bool],
+    last_handler_run_compliant: Optional[bool],
 ) -> None:
     """
     Assert that the given ResourcePersistentState record has the given content.
@@ -1108,8 +1108,8 @@ def assert_resource_persistent_state(
         resource_persistent_state.is_orphan == is_orphan
     ), f"{resource_persistent_state.resource_id} ({resource_persistent_state.is_orphan} != {is_orphan})"
     assert (
-        resource_persistent_state.last_deploy_result is last_deploy_result
-    ), f"{resource_persistent_state.resource_id} ({resource_persistent_state.last_deploy_result} != {last_deploy_result})"
+        resource_persistent_state.last_handler_run is last_handler_run
+    ), f"{resource_persistent_state.resource_id} ({resource_persistent_state.last_handler_run} != {last_handler_run})"
     assert (
         resource_persistent_state.blocked is blocked
     ), f"{resource_persistent_state.resource_id} ({resource_persistent_state.blocked} != {blocked})"
@@ -1117,9 +1117,9 @@ def assert_resource_persistent_state(
         f"{resource_persistent_state.resource_id}"
         f" ({resource_persistent_state.get_compliance_status()} != {expected_compliance})"
     )
-    assert (
-        resource_persistent_state.last_deploy_compliant is last_deploy_compliant
-    ), f"{resource_persistent_state.resource_id} ({resource_persistent_state.last_deploy_compliant} != {last_deploy_compliant})"
+    assert resource_persistent_state.last_handler_run_compliant is last_handler_run_compliant, f"""
+{resource_persistent_state.resource_id} ({resource_persistent_state.last_handler_run_compliant} != {last_handler_run_compliant})
+"""
 
 
 async def run_compile_and_wait_until_compile_is_done(

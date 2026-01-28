@@ -44,11 +44,11 @@ async def test_resource_state_table(postgres_db, database_name, migrate_db_from:
     actions = await ResourceAction.query_resource_actions(
         environment=env.id, resource_id="std::AgentConfig[internal,agentname=localhost]", action=const.ResourceAction.deploy
     )
-    last_deploy = actions[0]  # increment
+    last_handler_run_at = actions[0]  # increment
     last_success = actions[1]  # deploy, no_change
     last_produced_events = None  # never did changes
 
-    assert rps.last_deploy == last_deploy.finished
+    assert rps.last_handler_run_at == last_handler_run_at.finished
     assert rps.last_success == last_success.started
     assert rps.last_produced_events == last_produced_events
 

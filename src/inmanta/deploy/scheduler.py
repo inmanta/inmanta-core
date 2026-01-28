@@ -41,7 +41,7 @@ from inmanta.data import Environment
 from inmanta.data.model import Discrepancy, SchedulerStatusReport
 from inmanta.deploy import timers, work
 from inmanta.deploy.persistence import ToDbUpdateManager
-from inmanta.deploy.state import AgentStatus, Blocked, Compliance, DeployResult, ModelState, ResourceIntent, ResourceState
+from inmanta.deploy.state import AgentStatus, Blocked, Compliance, HandlerResult, ModelState, ResourceIntent, ResourceState
 from inmanta.deploy.tasks import Deploy, DryRun, RefreshFact, Task
 from inmanta.deploy.work import TaskPriority
 from inmanta.protocol import Client
@@ -1348,7 +1348,7 @@ class ResourceScheduler(TaskManager):
         self, deploy_intent: DeployIntent, result: executor.DeployReport, finished: datetime.datetime
     ) -> ResourceState:
         """
-        Update the state of the scheduler based on the DeployResult of the given resource.
+        Update the state of the scheduler based on the HandlerResult of the given resource.
 
         May add log messages to the given deploy result object.
 
@@ -1357,7 +1357,7 @@ class ResourceScheduler(TaskManager):
             represents the state at the end of the deploy, and can therefore safely be returned out of the scheduler lock.
         """
         resource: ResourceIdStr = result.resource_id
-        deploy_result: DeployResult = DeployResult.from_handler_resource_state(result.resource_state)
+        deploy_result: HandlerResult = HandlerResult.from_handler_resource_state(result.resource_state)
 
         async with self._scheduler_lock:
             # refresh resource intent for latest model state
@@ -1371,7 +1371,7 @@ class ResourceScheduler(TaskManager):
             state: ResourceState = self._state.resource_state[resource]
 
             result_compliant = result.resource_state is HandlerResourceState.deployed
-            recovered_from_failure: bool = state.last_deploy_compliant is False and result_compliant
+            recovered_from_failure: bool = state.last_handler_run_compliant is False and result_compliant
 
             # The second part of the or would not be required because is implied by the first,
             # except that we don't enforce the hash diff.
@@ -1382,14 +1382,14 @@ class ResourceScheduler(TaskManager):
                 or state.compliance is Compliance.UNDEFINED
             ):
                 # We are stale but still the last deploy
-                # We can update the last_deploy_result (which is about last deploy)
+                # We can update the last_handler_run (which is about last deploy)
                 # We can't update compliance (which is about active state only)
                 # None of the event propagation or other update happen either for the same reason
                 # except for the event to notify dependents of failure recovery (to unblock skipped for dependencies)
                 # because we might otherwise miss the recovery (in the sense that the next deploy wouldn't be a transition
                 # from a bad to a good state, since we're transitioning to that good state now).
 
-                state.last_deploy_result = deploy_result
+                state.last_handler_run = deploy_result
                 state.last_deployed = finished
                 if recovered_from_failure:
                     self._send_events(resource_intent, stale_deploy=True, recovered_from_failure=True)
@@ -1399,9 +1399,9 @@ class ResourceScheduler(TaskManager):
             # We are not stale
             # first update state, then send out events
             self._deploying_latest.remove(resource)
-            state.last_deploy_result = deploy_result
+            state.last_handler_run = deploy_result
             state.last_deployed = finished
-            state.last_deploy_compliant = state.compliance is Compliance.COMPLIANT
+            state.last_handler_run_compliant = state.compliance is Compliance.COMPLIANT
 
             # Check if we need to mark a resource as temporarily blocked
             # We only do that if it is not already blocked (Blocked.BLOCKED)
@@ -1417,7 +1417,7 @@ class ResourceScheduler(TaskManager):
                 state.blocked = Blocked.TEMPORARILY_BLOCKED
                 # Remove this resource from the dirty set when we block it
                 self._state.dirty.discard(resource)
-            elif deploy_result is DeployResult.DEPLOYED:
+            elif deploy_result is HandlerResult.SUCCESSFUL:
                 # Remove this resource from the dirty set if it is successfully deployed (even if it is non-compliant)
                 self._state.dirty.discard(resource)
                 if state.blocked is Blocked.TEMPORARILY_BLOCKED:
@@ -1610,15 +1610,15 @@ class ResourceScheduler(TaskManager):
             :return: A dict mapping each resource to the discrepancies related to it (if any)
             """
             state_translation_table: dict[
-                const.ResourceState, tuple[DeployResult | None, Blocked | None, Compliance | None]
+                const.ResourceState, tuple[HandlerResult | None, Blocked | None, Compliance | None]
             ] = {
                 # A table to translate the old states into the new states
                 # None means don't care, mostly used for values we can't derive from the old state
                 const.ResourceState.unavailable: (None, Blocked.NOT_BLOCKED, Compliance.NON_COMPLIANT),
-                const.ResourceState.skipped: (DeployResult.SKIPPED, None, None),
+                const.ResourceState.skipped: (HandlerResult.SKIPPED, None, None),
                 const.ResourceState.dry: (None, None, None),  # don't care
-                const.ResourceState.deployed: (DeployResult.DEPLOYED, Blocked.NOT_BLOCKED, None),
-                const.ResourceState.failed: (DeployResult.FAILED, Blocked.NOT_BLOCKED, None),
+                const.ResourceState.deployed: (HandlerResult.SUCCESSFUL, Blocked.NOT_BLOCKED, None),
+                const.ResourceState.failed: (HandlerResult.FAILED, Blocked.NOT_BLOCKED, None),
                 const.ResourceState.deploying: (None, Blocked.NOT_BLOCKED, None),
                 const.ResourceState.available: (None, Blocked.NOT_BLOCKED, Compliance.HAS_UPDATE),
                 const.ResourceState.undefined: (None, Blocked.BLOCKED, Compliance.UNDEFINED),
@@ -1668,13 +1668,13 @@ class ResourceScheduler(TaskManager):
 
                 scheduler_resource_state: ResourceState = self._state.resource_state[rid]
                 if db_deploy_result:
-                    if scheduler_resource_state.last_deploy_result != db_deploy_result:
+                    if scheduler_resource_state.last_handler_run != db_deploy_result:
                         resource_discrepancies.append(
                             Discrepancy(
                                 rid=rid,
-                                field="last_deploy_result",
+                                field="last_handler_run",
                                 expected=db_deploy_result,
-                                actual=scheduler_resource_state.last_deploy_result,
+                                actual=scheduler_resource_state.last_handler_run,
                             )
                         )
                 if db_blocked_status:

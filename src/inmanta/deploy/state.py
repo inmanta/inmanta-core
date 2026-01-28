@@ -91,31 +91,32 @@ class ResourceIntent:
         object.__setattr__(self, "id", resources.Id.parse_id(self.resource_id))
 
 
-class DeployResult(StrEnum):
+class HandlerResult(StrEnum):
     """
-    The result of a resource's last (finished) deploy. This result may be for an older version than the latest desired state.
+    The result that the handler reported when processing a given resource.
+    This result may be for an older version than the latest desired state.
     See Compliance for a resource's operational status with respect to its latest desired state.
 
-    NEW: Resource has never been deployed before.
-    DEPLOYED: Last resource deployment was successful.
-    FAILED: Last resource deployment was unsuccessful.
-    SKIPPED: Resource skipped deployment.
+    NEW: Resource has never been processed by the handler before.
+    SUCCESSFUL: Handler processed the resource successfully.
+    FAILED: Handler failed when processing the resource.
+    SKIPPED: Handler skipped processing this resource.
     """
 
     NEW = enum.auto()
-    DEPLOYED = enum.auto()
+    SUCCESSFUL = enum.auto()
     FAILED = enum.auto()
     SKIPPED = enum.auto()
 
     @classmethod
-    def from_handler_resource_state(cls, handler_resource_state: const.HandlerResourceState) -> "DeployResult":
+    def from_handler_resource_state(cls, handler_resource_state: const.HandlerResourceState) -> "HandlerResult":
         match handler_resource_state:
             case const.HandlerResourceState.deployed | const.HandlerResourceState.non_compliant:
-                return DeployResult.DEPLOYED
+                return HandlerResult.SUCCESSFUL
             case const.HandlerResourceState.skipped | const.HandlerResourceState.skipped_for_dependency:
-                return DeployResult.SKIPPED
+                return HandlerResult.SKIPPED
             case const.HandlerResourceState.failed | const.HandlerResourceState.unavailable:
-                return DeployResult.FAILED
+                return HandlerResult.FAILED
             case _ as resource_state:
                 raise Exception(f"Unexpected handler_resource_state {resource_state.name}")
 
@@ -126,7 +127,7 @@ def get_compliance_status(
     is_undefined: bool,
     last_deployed_attribute_hash: str | None,
     current_intent_attribute_hash: str | None,
-    last_deploy_compliant: bool | None,
+    last_handler_run_compliant: bool | None,
 ) -> Compliance: ...
 
 
@@ -136,7 +137,7 @@ def get_compliance_status(
     is_undefined: bool,
     last_deployed_attribute_hash: str | None,
     current_intent_attribute_hash: str | None,
-    last_deploy_compliant: bool | None,
+    last_handler_run_compliant: bool | None,
 ) -> None: ...
 
 
@@ -146,7 +147,7 @@ def get_compliance_status(
     is_undefined: bool,
     last_deployed_attribute_hash: str | None,
     current_intent_attribute_hash: str | None,
-    last_deploy_compliant: bool | None,
+    last_handler_run_compliant: bool | None,
 ) -> Compliance | None: ...
 
 
@@ -155,7 +156,7 @@ def get_compliance_status(
     is_undefined: bool,
     last_deployed_attribute_hash: str | None,
     current_intent_attribute_hash: str | None,
-    last_deploy_compliant: bool | None,
+    last_handler_run_compliant: bool | None,
 ) -> Compliance | None:
     if is_orphan:
         return None
@@ -163,7 +164,7 @@ def get_compliance_status(
         return Compliance.UNDEFINED
     elif last_deployed_attribute_hash is None or current_intent_attribute_hash != last_deployed_attribute_hash:
         return Compliance.HAS_UPDATE
-    elif last_deploy_compliant:
+    elif last_handler_run_compliant:
         return Compliance.COMPLIANT
     return Compliance.NON_COMPLIANT
 
@@ -213,15 +214,15 @@ class ResourceState:
     State of a resource. Consists of multiple independent (mostly) state vectors that make up the final state.
 
     :param last_deployed: when was this resource last deployed
-    :param last_deploy_compliant: Was the last deploy for this resource compliant.
+    :param last_handler_run_compliant: Was the last deploy for this resource compliant.
         None for resources that have yet to be deployed
     """
 
     compliance: Compliance
-    last_deploy_result: DeployResult
+    last_handler_run: HandlerResult
     blocked: Blocked
     last_deployed: datetime.datetime | None
-    last_deploy_compliant: bool | None
+    last_handler_run_compliant: bool | None
 
     def is_dirty(self) -> bool:
         """
@@ -243,13 +244,13 @@ class ResourceState:
                 return const.ResourceState.skipped_for_undefined
             case ResourceState(compliance=Compliance.HAS_UPDATE):
                 return const.ResourceState.available
-            case ResourceState(last_deploy_result=DeployResult.SKIPPED):
+            case ResourceState(last_handler_run=HandlerResult.SKIPPED):
                 return const.ResourceState.skipped
-            case ResourceState(last_deploy_result=DeployResult.FAILED):
+            case ResourceState(last_handler_run=HandlerResult.FAILED):
                 return const.ResourceState.failed
             case ResourceState(compliance=Compliance.NON_COMPLIANT):
                 return const.ResourceState.non_compliant
-            case ResourceState(last_deploy_result=DeployResult.DEPLOYED):
+            case ResourceState(last_handler_run=HandlerResult.SUCCESSFUL):
                 return const.ResourceState.deployed
             case _:
                 raise Exception(f"Unable to deduce handler state: {self}")
@@ -304,11 +305,11 @@ class ModelState:
                     "is_undefined",
                     "current_intent_attribute_hash",
                     "last_deployed_attribute_hash",
-                    "last_deploy_result",
-                    "last_deploy_compliant",
+                    "last_handler_run",
+                    "last_handler_run_compliant",
                     "blocked",
                     "last_success",
-                    "last_deploy",
+                    "last_handler_run_at",
                     "last_produced_events",
                 ),
                 project_attributes=(
@@ -335,7 +336,7 @@ class ModelState:
             # Populate state
 
             compliance_status: Compliance
-            last_deployed = cast(datetime.datetime, res["last_deploy"])
+            last_deployed = cast(datetime.datetime, res["last_handler_run_at"])
             if res["is_orphan"]:
                 # it was marked as an orphan by the scheduler when (or sometime before) it read the version we're currently
                 # processing => exclude it from the model
@@ -345,22 +346,22 @@ class ModelState:
                 # (scheduler is only writer)
                 compliance_status = Compliance.UNDEFINED
             elif (
-                DeployResult[res["last_deploy_result"]] is DeployResult.NEW
+                HandlerResult[res["last_handler_run"]] is HandlerResult.NEW
                 or res["last_deployed_attribute_hash"] is None
                 or res["current_intent_attribute_hash"] != res["last_deployed_attribute_hash"]
             ):
                 compliance_status = Compliance.HAS_UPDATE
-            elif res["last_deploy_compliant"]:
+            elif res["last_handler_run_compliant"]:
                 compliance_status = Compliance.COMPLIANT
             else:
                 compliance_status = Compliance.NON_COMPLIANT
 
             resource_state = ResourceState(
                 compliance=compliance_status,
-                last_deploy_result=DeployResult[res["last_deploy_result"]],
+                last_handler_run=HandlerResult[res["last_handler_run"]],
                 blocked=Blocked[res["blocked"]],
                 last_deployed=last_deployed,
-                last_deploy_compliant=res["last_deploy_compliant"],
+                last_handler_run_compliant=res["last_handler_run_compliant"],
             )
             result.resource_state[resource_id] = resource_state
 
@@ -455,10 +456,10 @@ class ModelState:
             # we don't know the resource yet (/ anymore) => create it
             self.resource_state[resource] = ResourceState(
                 compliance=compliance_status,
-                last_deploy_result=DeployResult.DEPLOYED if known_compliant else DeployResult.NEW,
+                last_handler_run=HandlerResult.SUCCESSFUL if known_compliant else HandlerResult.NEW,
                 blocked=blocked,
                 last_deployed=last_deployed,
-                last_deploy_compliant=True if compliance_status == Compliance.COMPLIANT else None,
+                last_handler_run_compliant=True if compliance_status == Compliance.COMPLIANT else None,
             )
             if resource not in self.requires:
                 self.requires[resource] = set()
@@ -468,7 +469,7 @@ class ModelState:
             self.resource_state[resource].compliance = compliance_status
             # update deployment result only if we know it's compliant. Otherwise it is kept, representing latest result
             if known_compliant:
-                self.resource_state[resource].last_deploy_result = DeployResult.DEPLOYED
+                self.resource_state[resource].last_handler_run = HandlerResult.SUCCESSFUL
             # Override blocked status except if it was marked as blocked before. We can't unset it yet because a resource might
             # still be transitively blocked, which we'll deal with later, see note in docstring.
             # We do however override TEMPORARILY_BLOCKED because we want to give it another chance when it gets an update
@@ -525,7 +526,7 @@ class ModelState:
         :param resource: The id of the resource to find the dependencies for
         """
         dependencies: Set[ResourceIdStr] = self.requires.get(resource, set())
-        return any(self.resource_state[dep_id].last_deploy_compliant is False for dep_id in dependencies)
+        return any(self.resource_state[dep_id].last_handler_run_compliant is False for dep_id in dependencies)
 
     def update_transitive_state(
         self,

@@ -37,7 +37,7 @@ import inmanta
 import inmanta.ast.export as ast_export
 import pydantic_core.core_schema
 from inmanta import const, data, protocol, resources
-from inmanta.deploy.state import Compliance, DeployResult
+from inmanta.deploy.state import Compliance, HandlerResult
 from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes
 from inmanta.types import BaseModel as BaseModel  # Keep in place for backwards compat with <=ISO8
@@ -611,7 +611,7 @@ class VersionedResourceDetails(ResourceDetails):
 
 class ReleasedResourceDetails(ResourceDetails):
     """The details of a released resource
-    :param last_deploy: The value of the last_deploy on the latest released version of the resource
+    :param last_deploy: The value of the last_handler_run_at on the latest released version of the resource
     :param first_generated_time: The first time this resource was generated
     :param status: The current status of the resource
     :param requires_status: The id and status of the resources this resource requires
@@ -676,15 +676,15 @@ class ResourceComplianceDiff(BaseModel):
     """
     :param report_only: Is this resource in report only mode.
     :param compliance: The current compliance of this resource.
-    :param last_execution_result: The result of the last execution of this resource.
-    :param last_executed_at: The timestamp of the last execution of this resource.
+    :param last_handler_run: The handler result of the last run of this resource.
+    :param last_handler_run_at: The timestamp of the last run of this resource.
     :param attribute_diff: The diff between the attributes of the current and desired state of a non_compliant resource.
     """
 
     report_only: bool
     compliance: Compliance
-    last_execution_result: DeployResult
-    last_executed_at: datetime.datetime | None
+    last_handler_run: HandlerResult
+    last_handler_run_at: datetime.datetime | None
     attribute_diff: dict[str, AttributeStateChange] | None
 
 

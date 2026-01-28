@@ -28,7 +28,7 @@ import inmanta.server
 import utils
 from inmanta import config, const, data
 from inmanta.agent.agent_new import Agent
-from inmanta.deploy.state import Blocked, Compliance, DeployResult, ResourceState
+from inmanta.deploy.state import Blocked, Compliance, HandlerResult, ResourceState
 
 
 @pytest.fixture
@@ -183,7 +183,7 @@ async def test_scheduler_initialization(
             rid = f"test::Resource[agent1,key=key{i}]"
             rps = await data.ResourcePersistentState.get_one(environment=environment, resource_id=rid)
             assert rps is not None
-            result[i] = rps.last_deploy
+            result[i] = rps.last_handler_run_at
         return result
 
     last_deployed: Mapping[str, datetime.datetime] = await get_last_deployed()
@@ -211,46 +211,46 @@ async def test_scheduler_initialization(
     assert agent.scheduler._state.resource_state == {
         "test::Resource[agent1,key=key1]": ResourceState(
             compliance=Compliance.HAS_UPDATE if reset_state else Compliance.COMPLIANT,
-            last_deploy_result=DeployResult.NEW if reset_state else DeployResult.DEPLOYED,
+            last_handler_run=HandlerResult.NEW if reset_state else HandlerResult.SUCCESSFUL,
             blocked=Blocked.NOT_BLOCKED,
             last_deployed=None if reset_state else last_deployed[1],
-            last_deploy_compliant=None if reset_state else True,
+            last_handler_run_compliant=None if reset_state else True,
         ),
         "test::Resource[agent1,key=key2]": ResourceState(
             compliance=Compliance.HAS_UPDATE if reset_state else Compliance.NON_COMPLIANT,
-            last_deploy_result=DeployResult.NEW if reset_state else DeployResult.FAILED,
+            last_handler_run=HandlerResult.NEW if reset_state else HandlerResult.FAILED,
             blocked=Blocked.NOT_BLOCKED,
             last_deployed=None if reset_state else last_deployed[2],
-            last_deploy_compliant=None if reset_state else False,
+            last_handler_run_compliant=None if reset_state else False,
         ),
         "test::Resource[agent1,key=key3]": ResourceState(
             compliance=Compliance.HAS_UPDATE if reset_state else Compliance.NON_COMPLIANT,
-            last_deploy_result=DeployResult.NEW if reset_state else DeployResult.SKIPPED,
+            last_handler_run=HandlerResult.NEW if reset_state else HandlerResult.SKIPPED,
             blocked=Blocked.NOT_BLOCKED,  # we don't restore TRANSIENT status atm
             last_deployed=None if reset_state else last_deployed[3],
-            last_deploy_compliant=None if reset_state else False,
+            last_handler_run_compliant=None if reset_state else False,
         ),
         "test::Resource[agent1,key=key4]": ResourceState(
             compliance=Compliance.HAS_UPDATE if reset_state else Compliance.COMPLIANT,
-            last_deploy_result=DeployResult.NEW if reset_state else DeployResult.DEPLOYED,
+            last_handler_run=HandlerResult.NEW if reset_state else HandlerResult.SUCCESSFUL,
             blocked=Blocked.NOT_BLOCKED if reset_state else Blocked.BLOCKED,
             last_deployed=None if reset_state else last_deployed[4],
-            last_deploy_compliant=None if reset_state else True,
+            last_handler_run_compliant=None if reset_state else True,
         ),
         # If reset_state=True we will reset the blocked status to NOT_BLOCKED
         "test::Resource[agent1,key=key5]": ResourceState(
             compliance=Compliance.UNDEFINED,
-            last_deploy_result=DeployResult.NEW,
+            last_handler_run=HandlerResult.NEW,
             blocked=Blocked.BLOCKED,
             last_deployed=last_deployed[5],
-            last_deploy_compliant=None,
+            last_handler_run_compliant=None,
         ),
         "test::Resource[agent1,key=key6]": ResourceState(
             compliance=Compliance.HAS_UPDATE,
-            last_deploy_result=DeployResult.NEW,
+            last_handler_run=HandlerResult.NEW,
             blocked=Blocked.BLOCKED,
             last_deployed=last_deployed[6],
-            last_deploy_compliant=None,
+            last_handler_run_compliant=None,
         ),
     }
 
@@ -313,45 +313,45 @@ async def test_scheduler_initialization(
     assert agent.scheduler._state.resource_state == {
         "test::Resource[agent1,key=key1]": ResourceState(
             compliance=Compliance.COMPLIANT,
-            last_deploy_result=DeployResult.DEPLOYED,
+            last_handler_run=HandlerResult.SUCCESSFUL,
             blocked=Blocked.NOT_BLOCKED,
             last_deployed=last_deployed_after[1],
-            last_deploy_compliant=True,
+            last_handler_run_compliant=True,
         ),
         "test::Resource[agent1,key=key2]": ResourceState(
             compliance=Compliance.COMPLIANT,
-            last_deploy_result=DeployResult.DEPLOYED,
+            last_handler_run=HandlerResult.SUCCESSFUL,
             blocked=Blocked.NOT_BLOCKED,
             last_deployed=last_deployed_after[2],
-            last_deploy_compliant=True,
+            last_handler_run_compliant=True,
         ),
         "test::Resource[agent1,key=key3]": ResourceState(
             compliance=Compliance.COMPLIANT,
-            last_deploy_result=DeployResult.DEPLOYED,
+            last_handler_run=HandlerResult.SUCCESSFUL,
             blocked=Blocked.NOT_BLOCKED,  # we don't restore TRANSIENT status atm
             last_deployed=last_deployed_after[3],
-            last_deploy_compliant=True,
+            last_handler_run_compliant=True,
         ),
         "test::Resource[agent1,key=key4]": ResourceState(
             compliance=Compliance.COMPLIANT,
-            last_deploy_result=DeployResult.DEPLOYED,
+            last_handler_run=HandlerResult.SUCCESSFUL,
             blocked=Blocked.NOT_BLOCKED if reset_state else Blocked.BLOCKED,
             last_deployed=last_deployed_after[4],
-            last_deploy_compliant=True,
+            last_handler_run_compliant=True,
         ),
         "test::Resource[agent1,key=key5]": ResourceState(
             compliance=Compliance.UNDEFINED,
-            last_deploy_result=DeployResult.NEW,
+            last_handler_run=HandlerResult.NEW,
             blocked=Blocked.BLOCKED,
             last_deployed=last_deployed_after[5],
-            last_deploy_compliant=None,
+            last_handler_run_compliant=None,
         ),
         "test::Resource[agent1,key=key6]": ResourceState(
             compliance=Compliance.HAS_UPDATE,
-            last_deploy_result=DeployResult.NEW,
+            last_handler_run=HandlerResult.NEW,
             blocked=Blocked.BLOCKED,
             last_deployed=last_deployed_after[6],
-            last_deploy_compliant=None,
+            last_handler_run_compliant=None,
         ),
     }
 

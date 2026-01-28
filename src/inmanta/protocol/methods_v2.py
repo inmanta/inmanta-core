@@ -1854,7 +1854,7 @@ def discovered_resource_delete_batch(tid: uuid.UUID, discovered_resource_ids: Se
     api_version=2,
     strict_typing=False,
 )
-def graphql(query: str) -> Any:  # Actual return type: strawberry.types.execution.ExecutionResult
+def graphql(query: str) -> Any:  # Actual return type: strawberry.types.execution.HandlerResult
     """
     GraphQL endpoint for Inmanta.
     Supports paging, filtering and sorting on certain attributes.
