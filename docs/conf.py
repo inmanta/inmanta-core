@@ -139,6 +139,7 @@ rst_prolog = f"""\
 .. |iso_gpg_key| replace:: {iso_gpg_key}
 .. |oss_gpg_key| replace:: {oss_gpg_key}
 .. |release| replace:: {release}
+.. |python_version| replace:: {sys.version_info.major}.{sys.version_info.minor}
 """
 
 
