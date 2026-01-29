@@ -21,7 +21,7 @@ In this guide we start simple and manage a 3-node CLOS network with a spine and 
 Prerequisites
 _________________________
 
-**Python version 3.12**, ``Docker``, ``Containerlab`` and ``Inmanta`` need to be installed on your machine and our ``SR Linux`` repository has to be cloned in order to proceed. Please make sure to follow the links below to that end.
+Python version |python_version|, ``Docker``, ``Containerlab`` and ``Inmanta`` need to be installed on your machine and our ``SR Linux`` repository has to be cloned in order to proceed. Please make sure to follow the links below to that end.
 
 1. `Install Docker <https://docs.docker.com/install/>`_.
 2. `Install Containerlab <https://containerlab.dev/install/>`_.

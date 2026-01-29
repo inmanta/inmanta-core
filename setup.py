@@ -17,7 +17,7 @@ requires = [
     "jinja2~=3.0",
     "more-itertools>=8,<11",
     # upper bound on packaging because we use a non-public API that might change in any (non-SemVer) version
-    "packaging>=21.3,<25.1",
+    "packaging>=21.3,<26.1",
     # pip>=21.3 required for editable pyproject.toml + setup.cfg based install support
     "pip>=21.3",
     "ply~=3.0",
@@ -46,7 +46,7 @@ with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
 
 # This version is managed by bumpversion. Should you ever update it manually, make sure to consistently update it everywhere
 # (See the bumpversion.cfg file for relevant locations).
-version = "15.4.0"
+version = "15.5.0"
 
 setup(
     version=version,

@@ -91,39 +91,28 @@ class MetricValueTimer(MetricValue):
         self.value = value
 
 
-LATEST_RELEASED_MODELS_SUBQUERY: str = textwrap.dedent(
-    f"""
+LATEST_RELEASED_MODELS_SUBQUERY: str = textwrap.dedent(f"""
     latest_released_models AS (
         SELECT cm.environment, MAX(cm.version) AS version
         FROM {ConfigurationModel.table_name()} AS cm
         WHERE cm.released = TRUE
         GROUP BY cm.environment
     )
-    """.strip(
-        "\n"
-    )
-).strip()
+    """.strip("\n")).strip()
 """
 Subquery to get the latest released version for each environment. Environments with no released versions are absent.
 To be used like f"WITH {LATEST_RELEASED_MODELS_SUBQUERY} <main_query>". The main query can use the name 'latest_released_models'
 to refer to this table.
 """
 
-LATEST_RELEASED_RESOURCES_SUBQUERY: str = (
-    LATEST_RELEASED_MODELS_SUBQUERY
-    + textwrap.dedent(
-        f"""
+LATEST_RELEASED_RESOURCES_SUBQUERY: str = LATEST_RELEASED_MODELS_SUBQUERY + textwrap.dedent(f"""
         , latest_released_resources AS (
             SELECT r.*
             FROM {Resource.table_name()} AS r
             INNER JOIN latest_released_models as cm
                 ON r.environment = cm.environment AND r.model = cm.version
         )
-        """.strip(
-            "\n"
-        )
-    ).strip()
-)
+        """.strip("\n")).strip()
 """
 Subquery to get the resources for latest released version for each environment. Environments with no released versions are
 absent. Includes LATEST_RELEASED_MODELS_SUBQUERY.
@@ -388,8 +377,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
             raise BadRequest(f"The following metrics given in the metrics parameter are unknown: {unknown_metric_names}")
 
         def _get_sub_query(metric: str, group_by: str, table_name: str, aggregation_function: str, metrics_list: str) -> str:
-            return textwrap.dedent(
-                f"""
+            return textwrap.dedent(f"""
                 SELECT
                     {metric},
                     {group_by},
@@ -407,8 +395,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
                     AND timestamp < $3::timestamp with time zone
                     AND metric_name=ANY({metrics_list}::varchar[])
                 GROUP BY metric_name, category, bucket_nr
-            """
-            ).strip()
+            """).strip()
 
         query_on_gauge_table = _get_sub_query(
             metric="metric_name",

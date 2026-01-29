@@ -632,12 +632,10 @@ async def test_batched_code_upload(
     server_multi, client_multi, sync_client_multi, environment_multi, agent_multi, snippetcompiler
 ):
     """Test uploading all code definitions at once"""
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
     import std::testing
     f = std::testing::NullResource(name="test")
-    """
-    )
+    """)
     version, _ = await snippetcompiler.do_export_and_deploy(do_raise=False)
 
     code_manager = loader.CodeManager()

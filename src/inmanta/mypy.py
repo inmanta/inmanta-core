@@ -36,7 +36,13 @@ class ClientMethodsPlugin(Plugin):
         """
         if file.fullname != "inmanta.protocol.endpoints":
             return []
-        return [(10, namespace, -1) for namespace in method_namespaces]
+        # See priorities in mypy.build.
+        # 5 = top-level "from X import blah" => highest priority.
+        # We use this priority because we really need the methods to be loaded at this point.
+        # This is especially important due to the highly coupled nature of `inmanta.protocol`, which pulls in many other
+        # modules, some of which with import loops involved. Without this priority, methods's signatures might not be known
+        # yet at the point where we try to resolve `Client...` method accesss.
+        return [(5, namespace, -1) for namespace in method_namespaces]
 
     def get_attribute_hook(self, fullname: str) -> Optional[Callable[[AttributeContext], types.CallableType]]:
         """

@@ -95,7 +95,7 @@ class DotSource:
 
     @classmethod
     def parse(cls, source: str) -> "DotSource":
-        (lines, subgraphs, rest) = cls._get_lines_and_subgraphs(source.split("\n"))
+        lines, subgraphs, rest = cls._get_lines_and_subgraphs(source.split("\n"))
         assert len(rest) == 0
         return DotSource(lines, subgraphs)
 
@@ -103,14 +103,14 @@ class DotSource:
     def _get_lines_and_subgraphs(cls, lines: list[str]) -> tuple[list[str], list[tuple[str, "DotSource"]], list[str]]:
         if len(lines) == 0:
             return ([], [], [])
-        (head, tail) = (lines[0], lines[1:])
+        head, tail = (lines[0], lines[1:])
         if head.endswith("{"):
-            (sublines, subsubs, rest) = cls._get_lines_and_subgraphs(tail)
-            (rlines, rsubs, rrest) = cls._get_lines_and_subgraphs(rest)
+            sublines, subsubs, rest = cls._get_lines_and_subgraphs(tail)
+            rlines, rsubs, rrest = cls._get_lines_and_subgraphs(rest)
             return (rlines, [(head, DotSource(sublines, subsubs)), *rsubs], rrest)
         if head.endswith("}"):
             return ([head], [], tail)
-        (tail_lines, tail_subs, tail_rest) = cls._get_lines_and_subgraphs(tail)
+        tail_lines, tail_subs, tail_rest = cls._get_lines_and_subgraphs(tail)
         return ([head, *tail_lines], tail_subs, tail_rest)
 
     def __eq__(self, other: object) -> bool:

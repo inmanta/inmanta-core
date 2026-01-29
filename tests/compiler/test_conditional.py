@@ -25,8 +25,7 @@ from inmanta.ast import Namespace, NotFoundException
 
 
 def test_if_true(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity Test:
     string field
 end
@@ -38,9 +37,8 @@ end
 
 implementation none for std::Entity:
 end
-        """
-    )
-    (_, scopes) = compiler.do_compile()
+        """)
+    _, scopes = compiler.do_compile()
     root = scopes.get_child("__config__")
     assert "substitute" == root.lookup("test").get_value().lookup("field").get_value()
 
@@ -66,8 +64,7 @@ end
 
 
 def test_if_else_true(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity Test:
     string field
 end
@@ -81,16 +78,14 @@ end
 
 implementation none for std::Entity:
 end
-        """
-    )
-    (_, scopes) = compiler.do_compile()
+        """)
+    _, scopes = compiler.do_compile()
     root = scopes.get_child("__config__")
     assert "substitute" == root.lookup("test").get_value().lookup("field").get_value()
 
 
 def test_if_else_false(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity Test:
     string field
 end
@@ -104,16 +99,14 @@ end
 
 implementation none for std::Entity:
 end
-        """
-    )
-    (_, scopes) = compiler.do_compile()
+        """)
+    _, scopes = compiler.do_compile()
     root = scopes.get_child("__config__")
     assert "alt" == root.lookup("test").get_value().lookup("field").get_value()
 
 
 def test_if_else_extended(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity Test:
     string field
     string field2
@@ -138,9 +131,8 @@ end
 
 implementation none for std::Entity:
 end
-        """
-    )
-    (_, scopes) = compiler.do_compile()
+        """)
+    _, scopes = compiler.do_compile()
     root = scopes.get_child("__config__")
     test = root.lookup("test").get_value()
     assert "alt" == test.lookup("field").get_value()
@@ -185,7 +177,7 @@ end
         elif2_value,
     )
     snippetcompiler.setup_for_snippet(snippet)
-    (_, scopes) = compiler.do_compile()
+    _, scopes = compiler.do_compile()
     root = scopes.get_child("__config__")
     assert result == root.lookup("test").get_value().lookup("field").get_value()
 
@@ -208,7 +200,7 @@ implementation none for std::Entity:
 end
             """
     snippetcompiler.setup_for_snippet(snippet)
-    (_, scopes) = compiler.do_compile()
+    _, scopes = compiler.do_compile()
     root = scopes.get_child("__config__")
     assert "elif1_branche" == root.lookup("test").get_value().lookup("field").get_value()
 
@@ -238,14 +230,12 @@ end
 
 
 def test_if_scope_new(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 a = 1
 if 1 == 1:
     a = 2
 end
-        """
-    )
+        """)
     compiler.do_compile()
 
 
@@ -270,8 +260,7 @@ end
 
 
 def test_if_scope_capture(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity Test:
     string field
 end
@@ -289,9 +278,8 @@ end
 
 implementation none for std::Entity:
 end
-        """
-    )
-    (types, scopes) = compiler.do_compile()
+        """)
+    types, scopes = compiler.do_compile()
     root: Namespace = scopes.get_child("__config__")
     assert 1 == root.lookup("b").get_value()
     with pytest.raises(NotFoundException):
@@ -327,7 +315,7 @@ r2.test = t
         """,
         autostd=True,
     )
-    (_, scopes) = compiler.do_compile()
+    _, scopes = compiler.do_compile()
     root: Namespace = scopes.get_child("__config__")
     assert root.lookup("t").get_value().lookup("multiple").get_value()
 
@@ -357,7 +345,7 @@ t = Test()
         """,
         autostd=True,
     )
-    (_, scopes) = compiler.do_compile()
+    _, scopes = compiler.do_compile()
     root: Namespace = scopes.get_child("__config__")
     assert not root.lookup("t").get_value().lookup("multiple").get_value()
 
@@ -391,7 +379,7 @@ implementation none for std::Entity:
 end
         """,
     )
-    (_, scopes) = compiler.do_compile()
+    _, scopes = compiler.do_compile()
     root: Namespace = scopes.get_child("__config__")
     assert root.lookup("x").get_value().lookup("t_success").get_value() is True
     assert root.lookup("x").get_value().lookup("f_success").get_value() is True
@@ -420,7 +408,7 @@ implement Test using i_f when dct["f"]
 x = Test()
         """,
     )
-    (_, scopes) = compiler.do_compile()
+    _, scopes = compiler.do_compile()
     root: Namespace = scopes.get_child("__config__")
     assert root.lookup("x").get_value().lookup("success").get_value() is True
 
@@ -568,7 +556,7 @@ z = A(n = 0)
         """,
         ministd=True,
     )
-    (_, scopes) = compiler.do_compile()
+    _, scopes = compiler.do_compile()
     root: Namespace = scopes.get_child("__config__")
     assert root.lookup("x").get_value().lookup("sign").get_value() == 1
     assert root.lookup("y").get_value().lookup("sign").get_value() == -1
@@ -576,8 +564,7 @@ z = A(n = 0)
 
 
 def test_conditional_expression_when(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity A:
     int? primary = null
     int secondary
@@ -598,9 +585,8 @@ x = A(primary = 1, secondary = -1)
 y = A(primary = -1, secondary = 1)
 z = A(primary = null, secondary = 1)
 u = A(primary = null, secondary = -1)
-        """
-    )
-    (_, scopes) = compiler.do_compile()
+        """)
+    _, scopes = compiler.do_compile()
     root: Namespace = scopes.get_child("__config__")
     assert len(root.lookup("x").get_value().lookup("others").get_value()) == 1
     assert len(root.lookup("y").get_value().lookup("others").get_value()) == 0
@@ -654,9 +640,7 @@ def test_conditional_expression_gradual(snippetcompiler) -> None:
     """
     Verify that conditional expressions are executed gradually.
     """
-    snippetcompiler.setup_for_snippet(
-        textwrap.dedent(
-            """
+    snippetcompiler.setup_for_snippet(textwrap.dedent("""
             entity A: end
             A.others [0:] -- A
             implement A using none
@@ -672,11 +656,7 @@ def test_conditional_expression_gradual(snippetcompiler) -> None:
 
             implementation none for std::Entity:
 end
-            """.strip(
-                "\n"
-            )
-        )
-    )
+            """.strip("\n")))
     compiler.do_compile()
 
 
@@ -685,8 +665,7 @@ def test_if_statement_unknown(snippetcompiler) -> None:
     Verify behavior of the if statement with regards to unknown values.
     """
     snippetcompiler.setup_for_snippet(
-        textwrap.dedent(
-            """\
+        textwrap.dedent("""\
             import tests
 
             entity Assert:
@@ -712,8 +691,7 @@ def test_if_statement_unknown(snippetcompiler) -> None:
             else:
                 assert.success = false
             end
-            """
-        ),
+            """),
         autostd=True,
     )
     compiler.do_compile()
@@ -724,8 +702,7 @@ def test_conditional_expression_unknown(snippetcompiler) -> None:
     Verify behavior of the conditional expression with regards to unknown values.
     """
     snippetcompiler.setup_for_snippet(
-        textwrap.dedent(
-            """\
+        textwrap.dedent("""\
             import tests
 
             assert = true
@@ -741,8 +718,7 @@ def test_conditional_expression_unknown(snippetcompiler) -> None:
             implement Contradiction using contradict
 
             assert = std::is_unknown(tests::unknown() ? Contradiction() : Contradiction())
-            """
-        ),
+            """),
         autostd=True,
     )
     compiler.do_compile()
