@@ -51,8 +51,7 @@ def setup_config(tmpdir, postgres_db, database_name):
     """
     dot_inmanta_cfg_file = os.path.join(tmpdir, ".inmanta.cfg")
     with open(dot_inmanta_cfg_file, "w", encoding="utf-8") as f:
-        f.write(
-            f"""
+        f.write(f"""
     [server]
     auth=true
     auth_method=database
@@ -73,8 +72,7 @@ def setup_config(tmpdir, postgres_db, database_name):
     username={postgres_db.user}
     password={postgres_db.password}
     connection_timeout=3
-            """
-        )
+            """)
     os.chdir(tmpdir)
 
 

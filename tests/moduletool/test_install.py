@@ -757,9 +757,7 @@ import custom_mod_two
     ModuleTool().list()
     std_version = distribution("inmanta_module_std").version
     out, err = capsys.readouterr()
-    assert (
-        out.strip()
-        == f"""
+    assert out.strip() == f"""
 +----------------+------+----------+----------------+----------------+---------+
 |      Name      | Type | Editable |   Installed    |  Expected in   | Matches |
 |                |      |          |    version     |    project     |         |
@@ -769,7 +767,6 @@ import custom_mod_two
 | std            | v2   | no       | {std_version:<7}        | *              | yes     |
 +----------------+------+----------+----------------+----------------+---------+
     """.strip()
-    )
 
     # install incompatible version for custom_mod_one
     module_from_template(
@@ -783,9 +780,7 @@ import custom_mod_two
     capsys.readouterr()
     ModuleTool().list()
     out, err = capsys.readouterr()
-    assert (
-        out.strip()
-        == f"""
+    assert out.strip() == f"""
 +----------------+------+----------+----------------+----------------+---------+
 |      Name      | Type | Editable |   Installed    |  Expected in   | Matches |
 |                |      |          |    version     |    project     |         |
@@ -795,7 +790,6 @@ import custom_mod_two
 | std            | v2   | no       | {std_version:<7}        | *              | yes     |
 +----------------+------+----------+----------------+----------------+---------+
     """.strip()
-    )
 
 
 @pytest.mark.slowtest
@@ -1062,12 +1056,10 @@ def test_version_snapshot(local_module_package_index: str, snippetcompiler_clean
         caplog,
         "inmanta.module",
         logging.DEBUG,
-        (
-            """\
+        ("""\
 Successfully installed modules for project
 + module_a: 5.0.0
-+ module_b: 1.2.3"""
-        ),
++ module_b: 1.2.3"""),
     )
 
     # Scenario 2
@@ -1092,13 +1084,11 @@ Successfully installed modules for project
         caplog,
         "inmanta.module",
         logging.DEBUG,
-        (
-            """\
+        ("""\
 Successfully installed modules for project
 + module_a: 1.0.0
 - module_a: 5.0.0
-+ module_c: 8.8.8"""
-        ),
++ module_c: 8.8.8"""),
     )
 
 

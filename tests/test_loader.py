@@ -404,7 +404,7 @@ def test_module_loader(module_path: str, capsys, modules_dir: str):
     from inmanta_plugins.submodule import test
 
     assert test() == "test"
-    (stdout, stderr) = capsys.readouterr()
+    stdout, stderr = capsys.readouterr()
     assert stdout.count("#loading inmanta_plugins.submodule#") == 1
     assert stdout.count("#loading inmanta_plugins.submodule.submod#") == 0
     assert stdout.count("#loading inmanta_plugins.submodule.pkg#") == 0
@@ -413,7 +413,7 @@ def test_module_loader(module_path: str, capsys, modules_dir: str):
     from inmanta_plugins.submodule.submod import test_submod
 
     assert test_submod() == "test_submod"
-    (stdout, stderr) = capsys.readouterr()
+    stdout, stderr = capsys.readouterr()
     assert stdout.count("#loading inmanta_plugins.submodule#") == 0
     assert stdout.count("#loading inmanta_plugins.submodule.submod#") == 1
     assert stdout.count("#loading inmanta_plugins.submodule.pkg#") == 0
@@ -422,7 +422,7 @@ def test_module_loader(module_path: str, capsys, modules_dir: str):
     from inmanta_plugins.submodule.pkg import test_pkg
 
     assert test_pkg() == "test_pkg -- test_submod2"
-    (stdout, stderr) = capsys.readouterr()
+    stdout, stderr = capsys.readouterr()
     assert stdout.count("#loading inmanta_plugins.submodule#") == 0
     assert stdout.count("#loading inmanta_plugins.submodule.submod#") == 0
     assert stdout.count("#loading inmanta_plugins.submodule.pkg#") == 1
@@ -478,15 +478,13 @@ def test_plugin_loading_on_project_load(tmpdir, capsys, deactive_venv):
     main_cf.write("import submodule")
 
     project_yml = tmpdir.join("project.yml")
-    project_yml.write(
-        """
+    project_yml.write("""
 name: test
 modulepath: libs
 downloadpath: libs
 repo: https://github.com/inmanta/inmanta.git
 install_mode: master
-    """
-    )
+    """)
 
     tmpdir.mkdir("libs")
     origin_mod_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules", "submodule")
@@ -497,7 +495,7 @@ install_mode: master
     Project.set(project)
     project.load()
 
-    (stdout, stderr) = capsys.readouterr()
+    stdout, stderr = capsys.readouterr()
     assert stdout.count("#loading inmanta_plugins.submodule#") == 1
     assert stdout.count("#loading inmanta_plugins.submodule.submod#") == 1
     assert stdout.count("#loading inmanta_plugins.submodule.pkg#") == 1
@@ -506,19 +504,19 @@ install_mode: master
     from inmanta_plugins.submodule import test
 
     assert test() == "test"
-    (stdout, stderr) = capsys.readouterr()
+    stdout, stderr = capsys.readouterr()
     assert "#loading" not in stdout
 
     from inmanta_plugins.submodule.submod import test_submod
 
     assert test_submod() == "test_submod"
-    (stdout, stderr) = capsys.readouterr()
+    stdout, stderr = capsys.readouterr()
     assert "#loading" not in stdout
 
     from inmanta_plugins.submodule.pkg import test_pkg
 
     assert test_pkg() == "test_pkg -- test_submod2"
-    (stdout, stderr) = capsys.readouterr()
+    stdout, stderr = capsys.readouterr()
     assert "#loading" not in stdout
 
 
@@ -547,12 +545,10 @@ def test_plugin_loading_old_format(tmpdir, capsys):
     new_format_plugins_dir = new_format_mod_dir.join("plugins")
     new_format_plugins_dir.mkdir()
     new_format_source_file = new_format_plugins_dir.join("__init__.py")
-    new_format_source_file.write(
-        """
+    new_format_source_file.write("""
 def test():
     return 10
-    """
-    )
+    """)
 
     # Assert newly formatted code is loaded and code using the pre inmanta 2020.4 format is ignored
     loader.CodeLoader(code_dir)

@@ -982,8 +982,8 @@ async def test_deploy_and_events(
 
     version = await clienthelper.get_version()
 
-    (dep, dep_status) = dep_state.get_resource(resource_container, "agent1", "key2", version, [])
-    (own, own_status) = self_state.get_resource(
+    dep, dep_status = dep_state.get_resource(resource_container, "agent1", "key2", version, [])
+    own, own_status = self_state.get_resource(
         resource_container,
         "agent1",
         "key3",
@@ -1048,7 +1048,7 @@ async def test_reload(server, client, clienthelper, environment, resource_contai
 
     version = await clienthelper.get_version()
 
-    (dep, dep_status) = dep_state.get_resource(resource_container, "agent1", "key1", version, [])
+    dep, dep_status = dep_state.get_resource(resource_container, "agent1", "key1", version, [])
 
     resources = [
         {

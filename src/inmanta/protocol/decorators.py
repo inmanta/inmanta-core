@@ -149,6 +149,7 @@ def typedmethod[C: Callable](
     enforce_auth: bool = True,
     varkw: bool = False,
     token_param: str | None = None,
+    document_in_service_swagger: bool = False,
 ) -> Callable[[C], C]:
     """
     Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
@@ -207,6 +208,7 @@ def typedmethod[C: Callable](
                 enforce_auth=enforce_auth,
                 varkw=varkw,
                 token_param=token_param,
+                document_in_service_swagger=document_in_service_swagger,
             )
             common.MethodProperties.register_method(properties)
         return func

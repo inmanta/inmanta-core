@@ -66,7 +66,7 @@ from utils import make_random_file
 
 
 async def test_client_files(client):
-    (hash, content, body) = make_random_file()
+    hash, content, body = make_random_file()
 
     # Check if the file exists
     result = await client.stat_file(id=hash)
@@ -84,7 +84,7 @@ async def test_client_files(client):
 
 
 async def test_client_files_lost(client):
-    (hash, content, body) = make_random_file()
+    hash, content, body = make_random_file()
 
     # Get the file
     result = await client.get_file(id=hash)
@@ -97,7 +97,7 @@ async def test_sync_client_files(client):
     def do_test():
         sync_client = protocol.SyncClient("client")
 
-        (hash, content, body) = make_random_file()
+        hash, content, body = make_random_file()
 
         # Check if the file exists
         result = sync_client.stat_file(id=hash)
@@ -123,7 +123,7 @@ async def test_client_files_stat(client):
     file_names = []
     i = 0
     while i < 10:
-        (hash, content, body) = make_random_file()
+        hash, content, body = make_random_file()
         if hash not in file_names:
             file_names.append(hash)
             result = await client.upload_file(id=hash, content=body)
@@ -150,7 +150,7 @@ async def test_upload_file_twice(client):
         assert result.code == 200
         assert len(result.result["files"]) == 0
 
-    (hash, content, body) = make_random_file()
+    hash, content, body = make_random_file()
 
     result = await client.stat_files(files=[hash])
     assert result.code == 200
@@ -184,7 +184,7 @@ async def test_diff(client):
 
 
 async def test_client_files_bad(server, client):
-    (hash, content, body) = make_random_file()
+    hash, content, body = make_random_file()
     # Create the file
     result = await client.upload_file(id=hash + "a", content=body)
     assert result.code == 400
@@ -194,7 +194,7 @@ async def test_gzip_encoding(server):
     """
     Test if the server accepts gzipped encoding and returns gzipped encoding.
     """
-    (hash, content, body) = make_random_file(size=1024)
+    hash, content, body = make_random_file(size=1024)
 
     port = opt.server_bind_port.get()
     url = f"http://localhost:{port}/api/v1/file/{hash}"

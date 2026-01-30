@@ -602,26 +602,19 @@ def create_python_package(
         os.makedirs(path)
 
     with open(os.path.join(path, "pyproject.toml"), "w") as fd:
-        fd.write(
-            """
+        fd.write("""
 [build-system]
 build-backend = "setuptools.build_meta"
 requires = ["setuptools"]
-            """.strip()
-        )
+            """.strip())
 
     install_requires_content = "".join(f"\n  {req}" for req in (requirements if requirements is not None else []))
     with open(os.path.join(path, "setup.cfg"), "w") as fd:
-        egg_info: str = (
-            f"""
+        egg_info: str = f"""
 [egg_info]
 tag_build = .dev{pkg_version.dev}
-            """.strip()
-            if pkg_version.is_devrelease
-            else ""
-        )
-        fd.write(
-            f"""
+            """.strip() if pkg_version.is_devrelease else ""
+        fd.write(f"""
 [metadata]
 name = {name}
 version = {pkg_version.base_version}
@@ -631,8 +624,7 @@ author = Inmanta <code@inmanta.com>
 
 {egg_info}
 
-""".strip()
-        )
+""".strip())
 
         fd.write("\n[options]")
         fd.write(f"\ninstall_requires ={install_requires_content}")
@@ -871,7 +863,7 @@ async def resource_action_consistency_check():
 
     # The above-mentioned queries have to be executed with at least the repeatable_read isolation level.
     # Otherwise it might happen that a repair run adds more resource actions between the execution of both queries.
-    (post_ra_one_set, post_ra_two_set) = await data.ResourceAction.execute_in_retryable_transaction(
+    post_ra_one_set, post_ra_two_set = await data.ResourceAction.execute_in_retryable_transaction(
         get_data, tx_isolation_level="repeatable_read"
     )
     assert post_ra_one_set == post_ra_two_set

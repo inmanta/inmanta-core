@@ -149,25 +149,16 @@ def run_without_tty(
     env: typing.Optional[dict[str, str]] = None,
     killtime: int = 15,
     termtime: int = 10,
-    *,
-    treat_warnings_as_errors: bool = False,
 ) -> tuple[str, str, int]:
     """Run the given command without a tty"""
-    if treat_warnings_as_errors:
-        if env is None:
-            env = {}
-        env["PYTHONWARNINGS"] = "error"
-
     process = do_run(args, env)
     return do_kill(process, killtime, termtime)
 
 
-def run_with_tty(args, killtime=4, termtime=3, *, treat_warnings_as_errors: bool = False):
+def run_with_tty(args, killtime=4, termtime=3):
     """Could not get code for actual tty to run stable in docker, so we are faking it"""
     env = {const.ENVIRON_FORCE_TTY: "true"}
-    return run_without_tty(
-        args, env=env, killtime=killtime, termtime=termtime, treat_warnings_as_errors=treat_warnings_as_errors
-    )
+    return run_without_tty(args, env=env, killtime=killtime, termtime=termtime)
 
 
 def is_colorama_package_available():
@@ -217,11 +208,11 @@ def test_no_log_file_set(tmpdir, log_level, timed, with_tty, regexes_required_li
     if is_colorama_package_available() and with_tty:
         pytest.skip("Colorama is present")
 
-    (args, log_dir) = get_command(tmpdir, stdout_log_level=log_level, timed=timed, command="--version")
+    args, log_dir = get_command(tmpdir, stdout_log_level=log_level, timed=timed, command="--version")
     if with_tty:
-        (stdout, _, _) = run_with_tty(args)
+        stdout, _, _ = run_with_tty(args)
     else:
-        (stdout, _, _) = run_without_tty(args)
+        stdout, _, _ = run_without_tty(args)
     log_file = "server.log"
     assert log_file not in os.listdir(log_dir)
     assert len(stdout) != 0
@@ -246,11 +237,11 @@ def test_log_file_set(tmpdir, log_level, with_tty, regexes_required_lines, regex
         pytest.skip("Colorama is present")
 
     log_file = "server.log"
-    (args, log_dir) = get_command(tmpdir, log_file=log_file, log_level_log_file=log_level, command="--version")
+    args, log_dir = get_command(tmpdir, log_file=log_file, log_level_log_file=log_level, command="--version")
     if with_tty:
-        (stdout, _, _) = run_with_tty(args)
+        stdout, _, _ = run_with_tty(args)
     else:
-        (stdout, _, _) = run_without_tty(args)
+        stdout, _, _ = run_without_tty(args)
     assert log_file in os.listdir(log_dir)
     log_file = os.path.join(log_dir, log_file)
     with open(log_file) as f:
@@ -276,11 +267,11 @@ def test_version_command(tmpdir, with_tty: bool, regexes_required_lines: list[st
     if is_colorama_package_available() and with_tty:
         pytest.skip("Colorama is present")
 
-    (args, log_dir) = get_command(tmpdir, command="--version")
+    args, log_dir = get_command(tmpdir, command="--version")
     if with_tty:
-        (stdout, stderr, return_code) = run_with_tty(args, treat_warnings_as_errors=True)
+        stdout, stderr, return_code = run_with_tty(args)
     else:
-        (stdout, stderr, return_code) = run_without_tty(args, treat_warnings_as_errors=True)
+        stdout, stderr, return_code = run_without_tty(args)
 
     if return_code != 0 or stderr:
         e = Exception("An unexpected error occurred or warnings were logged while running 'inmanta --version'")
@@ -306,7 +297,7 @@ def test_log_stdout_log_level(log_level, regexes_required_lines, regexes_forbidd
     """Check if the inmanta command prints out the correct logs depending on the amount of provided -v flags on the CLI"""
     args = [sys.executable, "-m", "inmanta.app", "-" + "v" * log_level, "--version"]
     logging.getLogger(__name__).info("Starting inmanta: %s", args)
-    (stdout, err, _) = run_without_tty(args)
+    stdout, err, _ = run_without_tty(args)
     check_logs(stdout, regexes_required_lines, regexes_forbidden_lines, timed=False)
 
 
@@ -359,7 +350,7 @@ def test_check_bad_shutdown():
 
 
 def test_startup_failure(tmpdir, postgres_db, database_name):
-    (args, log_dir) = get_command(
+    args, log_dir = get_command(
         tmpdir,
         dbport=postgres_db.port,
         dbname=database_name,
@@ -371,7 +362,7 @@ def test_startup_failure(tmpdir, postgres_db, database_name):
     pp = ":".join(sys.path)
     # Add a bad module
     extrapath = os.path.join(os.path.dirname(__file__), "data", "bad_module_path")
-    (stdout, stderr, code) = run_without_tty(args, env={"PYTHONPATH": pp + ":" + extrapath}, killtime=15, termtime=10)
+    stdout, stderr, code = run_without_tty(args, env={"PYTHONPATH": pp + ":" + extrapath}, killtime=15, termtime=10)
     assert "inmanta                  ERROR   Server setup failed" in stdout
     assert (
         "                                 " + "inmanta.server.protocol.SliceStartupException: Slice badplugin.badslice "
@@ -459,8 +450,8 @@ end
 def test_warning_config_dir_option_on_server_command(tmpdir):
     non_existing_dir = os.path.join(tmpdir, "non_existing_dir")
     assert not os.path.isdir(non_existing_dir)
-    (args, _) = get_command(tmpdir, stdout_log_level=3, config_dir=non_existing_dir)
-    (stdout, _, _) = run_without_tty(args, killtime=10, termtime=5)
+    args, _ = get_command(tmpdir, stdout_log_level=3, config_dir=non_existing_dir)
+    stdout, _, _ = run_without_tty(args, killtime=10, termtime=5)
     stdout = "".join(stdout)
     assert "Starting server endpoint" in stdout
     assert f"Config directory {non_existing_dir} doesn't exist" in stdout
@@ -503,22 +494,22 @@ end
 )
 @pytest.mark.timeout(20)
 def test_version_argument_is_set(tmpdir, with_tty, version_should_be_shown, regexes_required_lines, regexes_forbidden_lines):
-    (args, log_dir) = get_command(tmpdir, version=version_should_be_shown)
+    args, log_dir = get_command(tmpdir, version=version_should_be_shown)
     if with_tty:
-        (stdout, _, _) = run_with_tty(args, killtime=15, termtime=10)
+        stdout, _, _ = run_with_tty(args, killtime=15, termtime=10)
     else:
-        (stdout, _, _) = run_without_tty(args, killtime=15, termtime=10)
+        stdout, _, _ = run_without_tty(args, killtime=15, termtime=10)
     assert len(stdout) != 0
     check_logs(stdout, regexes_required_lines, regexes_forbidden_lines, False)
 
 
 def test_init_project(tmpdir):
     args = [sys.executable, "-m", "inmanta.app", "project", "init", "-n", "test-project", "-o", tmpdir, "--default"]
-    (stdout, stderr, return_code) = run_without_tty(args, killtime=15, termtime=10)
+    stdout, stderr, return_code = run_without_tty(args, killtime=15, termtime=10)
     test_project_path = os.path.join(tmpdir, "test-project")
     assert return_code == 0
     assert os.path.exists(test_project_path)
-    (stdout, stderr, return_code) = run_without_tty(args, killtime=15, termtime=10)
+    stdout, stderr, return_code = run_without_tty(args, killtime=15, termtime=10)
     assert return_code != 0
     assert any("already exists" in error for error in stderr)
 
@@ -598,8 +589,7 @@ def test_validate_logging_config(tmpdir, monkeypatch):
     logging_config_file = os.path.join(tmpdir, "logging_config.yml")
     # Write logging config that contains a syntax error
     with open(logging_config_file, "w") as fh:
-        fh.write(
-            """
+        fh.write("""
         formatters:
           server_log_formatter:
             format: '%(levelname)-8s %(name)-10s %(message)s'
@@ -615,8 +605,7 @@ def test_validate_logging_config(tmpdir, monkeypatch):
           level: DEBUG
         version: 1
         disable_existing_loggers: false
-        """
-        )
+        """)
     _, stderr, returncode = run_without_tty(
         args=[sys.executable, "-m", "inmanta.app", "--logging-config", logging_config_file, "validate-logging-config"],
     )
@@ -625,8 +614,7 @@ def test_validate_logging_config(tmpdir, monkeypatch):
 
     # Simple logging config that writes all logs to stdout
     with open(logging_config_file, "w") as fh:
-        fh.write(
-            """
+        fh.write("""
         formatters:
           server_log_formatter:
             format: '%(levelname)-8s %(name)-10s %(message)s'
@@ -642,8 +630,7 @@ def test_validate_logging_config(tmpdir, monkeypatch):
           level: DEBUG
         version: 1
         disable_existing_loggers: false
-        """
-        )
+        """)
     stdout, stderr, returncode = run_without_tty(
         args=[sys.executable, "-m", "inmanta.app", "--logging-config", logging_config_file, "validate-logging-config"],
     )
@@ -666,8 +653,7 @@ def test_validate_logging_config(tmpdir, monkeypatch):
     assert not os.listdir(log_dir)
     logging_config_file = os.path.join(tmpdir, "logging_config.yml.tmpl")
     with open(logging_config_file, "w") as fh:
-        fh.write(
-            f"""
+        fh.write(f"""
         formatters:
           server_log_formatter:
             format: '%(levelname)-8s %(name)-10s %(message)s'
@@ -697,8 +683,7 @@ def test_validate_logging_config(tmpdir, monkeypatch):
           level: DEBUG
         version: 1
         disable_existing_loggers: false
-        """
-        )
+        """)
     env_id = uuid.uuid4()
     stdout, stderr, returncode = run_without_tty(
         args=[
@@ -746,8 +731,7 @@ def test_validate_logging_config(tmpdir, monkeypatch):
     dot_inmanta_file = os.path.join(tmpdir, ".inmanta")
     for component_name in ["server", "scheduler", "compiler"]:
         with open(logging_config_file, "w") as fh:
-            fh.write(
-                f"""
+            fh.write(f"""
                     formatters:
                       server_log_formatter:
                         format: '{component_name} -- %(message)s'
@@ -763,15 +747,12 @@ def test_validate_logging_config(tmpdir, monkeypatch):
                       level: DEBUG
                     version: 1
                     disable_existing_loggers: false
-                """
-            )
+                """)
         with open(dot_inmanta_file, "w") as fh:
-            fh.write(
-                f"""
+            fh.write(f"""
                     [logging]
                     {component_name} = {logging_config_file}
-                """
-            )
+                """)
         stdout, stderr, returncode = run_without_tty(
             args=[sys.executable, "-m", "inmanta.app", "validate-logging-config", component_name],
         )

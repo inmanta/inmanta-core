@@ -394,6 +394,7 @@ class MethodProperties(Generic[R]):
         enforce_auth: bool = True,
         varkw: bool = False,
         token_param: str | None = None,
+        document_in_service_swagger: bool = False,
     ) -> None:
         """
         Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
@@ -422,6 +423,9 @@ class MethodProperties(Generic[R]):
         :param reply: If False, this is a fire-and-forget query: we will not wait for any result, just deliver the call
         :param token_param: The parameter that contains the authorization token or None if the authorization token
                             should be retrieved from the Authorization header.
+        :param document_in_service_swagger: (LSM extension only, ignored otherwise) This parameter controls whether this
+            endpoint should be documented in the swagger served by the `lsm_services_openapi_docs` endpoint for each service
+            of the catalog.
         """
         if api is None:
             api = not server_agent and not agent_server
@@ -453,6 +457,7 @@ class MethodProperties(Generic[R]):
         self._varkw_name: Optional[str] = None
         self._return_type: Optional[type[R]] = None
         self.token_param = token_param
+        self.document_in_service_swagger = document_in_service_swagger
 
         self._parsed_docstring = docstring_parser.parse(text=function.__doc__, style=docstring_parser.DocstringStyle.REST)
         self._docstring_parameter_map = {p.arg_name: p.description for p in self._parsed_docstring.params}
@@ -913,7 +918,7 @@ class MethodProperties(Generic[R]):
     def _encode_dict_for_get(
         self, query_param_name: str, query_param_value: dict[str, Union[Any, list[Any]]]
     ) -> dict[str, str]:
-        """Dicts are encoded in the following manner: param = {'ab': 1, 'cd': 2} to param.abc=1&param.cd=2"""
+        """Dicts are encoded in the following manner: param = {'ab': 1, 'cd': 2} to param.ab=1&param.cd=2"""
         sub_dict = {f"{query_param_name}.{key}": value for key, value in query_param_value.items()}
         return sub_dict
 

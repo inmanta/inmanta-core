@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump furo from 2025.9.25 to 2025.12.19 in the sphinx group
+destination-branches:
+- iso8
+sections: {}

@@ -162,28 +162,22 @@ def assert_v2_module(module_name, tmpdir, minimal=False):
         # Don't emit None values
         assert "None" not in content
         if not minimal:
-            assert (
-                raw_content["options"]["install_requires"].strip()
-                == """inmanta-module-mod1==1.0
+            assert raw_content["options"]["install_requires"].strip() == """inmanta-module-mod1==1.0
 inmanta-module-mod2
 inmanta-module-std
 jinja2"""
-            )
             assert raw_content["isort"]["multi_line_output"].strip() == "3"
         else:
             assert raw_content["options"]["install_requires"].strip() == """inmanta-module-std"""
 
     with open(os.path.join(tmpdir, "MANIFEST.in")) as fh:
-        assert (
-            fh.read().strip()
-            == f"""
+        assert fh.read().strip() == f"""
 include inmanta_plugins/{module_name}/setup.cfg
 include inmanta_plugins/{module_name}/py.typed
 recursive-include inmanta_plugins/{module_name}/model *.cf
 graft inmanta_plugins/{module_name}/files
 graft inmanta_plugins/{module_name}/templates
         """.strip()
-        )
 
 
 def test_module_conversion_in_place_bad_pyproject_toml(tmpdir, caplog):
@@ -194,12 +188,10 @@ def test_module_conversion_in_place_bad_pyproject_toml(tmpdir, caplog):
     shutil.copytree(path, tmpdir)
 
     with open(os.path.join(tmpdir, "pyproject.toml"), "w") as fh:
-        fh.write(
-            """
+        fh.write("""
 [build-system]
     requires = {}
-        """
-        )
+        """)
 
     dummyproject = DummyProject()
     module_in = ModuleV1(dummyproject, tmpdir)

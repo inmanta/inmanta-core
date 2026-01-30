@@ -53,10 +53,9 @@ end
 
 
 x = Child()
-        """
-        % ("parents" if parents else "c"),
+        """ % ("parents" if parents else "c"),
     )
-    (_, scopes) = compiler.do_compile()
+    _, scopes = compiler.do_compile()
     root: Namespace = scopes.get_child("__config__")
     x: Typeorvalue = root.lookup("x")
     assert isinstance(x, ResultVariable)

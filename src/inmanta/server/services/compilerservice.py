@@ -25,6 +25,7 @@ import logging
 import os
 import platform
 import re
+import shutil
 import subprocess
 import traceback
 import uuid
@@ -326,6 +327,10 @@ class CompileRun:
                 await self._end_stage(-1)
                 return False, None
 
+            if self.request.reinstall_project_and_venv and os.path.exists(project_dir):
+                await self._info(f"Removing project and venv directory for environment {environment_id} at {project_dir}")
+                shutil.rmtree(project_dir)
+
             if not os.path.exists(project_dir):
                 await self._info(f"Creating project directory for environment {environment_id} at {project_dir}")
                 os.makedirs(project_dir)
@@ -333,6 +338,78 @@ class CompileRun:
             # Use a separate venv to compile the project to prevent that packages are installed in the
             # venv of the Inmanta server.
             venv_dir = os.path.join(project_dir, ".env")
+
+            # Load configuration
+            server_address = opt.internal_server_address.get()
+            server_port = opt.server_bind_port.get()
+
+            app_cli_args = ["-vvv"]
+
+            if Config._min_c_config_file is not None:
+                app_cli_args.append("-c")
+                app_cli_args.append(Config._min_c_config_file)
+
+            if Config._config_dir is not None:
+                app_cli_args.append("--config-dir")
+                app_cli_args.append(Config._config_dir)
+
+            export_command = [
+                "export",
+                "-X",
+                "-e",
+                str(environment_id),
+                "--server_address",
+                server_address,
+                "--server_port",
+                str(server_port),
+                "--metadata",
+                json.dumps(self.request.metadata),
+                "--export-compile-data",
+                "--export-compile-data-file",
+                compile_data_json_file.name,
+            ]
+
+            if self.request.exporter_plugin:
+                export_command.append("--export-plugin")
+                export_command.append(self.request.exporter_plugin)
+
+            if self.request.partial:
+                export_command.append("--partial")
+
+            if self.request.removed_resource_sets is not None:
+                for resource_set in self.request.removed_resource_sets:
+                    export_command.append("--delete-resource-set")
+                    export_command.append(resource_set)
+
+            if self.request.soft_delete:
+                export_command.append("--soft-delete")
+
+            if not self.request.do_export:
+                f = NamedTemporaryFile()
+                export_command.append("-j")
+                export_command.append(f.name)
+
+            if config.Config.get("server", "auth", False):
+                token = encode_token(["compiler", "api"], str(environment_id))
+                export_command.append("--token")
+                export_command.append(token)
+
+            if opt.server_ssl_cert.get() is not None:
+                export_command.append("--ssl")
+            else:
+                export_command.append("--no-ssl")
+
+            ssl_ca_cert = opt.server_ssl_ca_cert.get()
+            if ssl_ca_cert is not None:
+                export_command.append("--ssl-ca-cert")
+                export_command.append(ssl_ca_cert)
+
+            # Make mypy happy
+            assert self.request.used_environment_variables is not None
+            env_vars_compile: dict[str, str] = os.environ.copy()
+            env_vars_compile.update(self.request.used_environment_variables)
+
+            cmd = app_cli_args + export_command
 
             async def ensure_venv() -> Optional[data.Report]:
                 """
@@ -447,79 +524,7 @@ class CompileRun:
                 if stage_result and (stage_result.returncode is None or stage_result.returncode > 0):
                     return False, None
 
-            server_address = opt.internal_server_address.get()
-            server_port = opt.server_bind_port.get()
-
-            app_cli_args = ["-vvv"]
-
-            if Config._min_c_config_file is not None:
-                app_cli_args.append("-c")
-                app_cli_args.append(Config._min_c_config_file)
-
-            if Config._config_dir is not None:
-                app_cli_args.append("--config-dir")
-                app_cli_args.append(Config._config_dir)
-
-            export_command = [
-                "export",
-                "-X",
-                "-e",
-                str(environment_id),
-                "--server_address",
-                server_address,
-                "--server_port",
-                str(server_port),
-                "--metadata",
-                json.dumps(self.request.metadata),
-                "--export-compile-data",
-                "--export-compile-data-file",
-                compile_data_json_file.name,
-            ]
-
-            if self.request.exporter_plugin:
-                export_command.append("--export-plugin")
-                export_command.append(self.request.exporter_plugin)
-
-            if self.request.partial:
-                export_command.append("--partial")
-
-            if self.request.removed_resource_sets is not None:
-                for resource_set in self.request.removed_resource_sets:
-                    export_command.append("--delete-resource-set")
-                    export_command.append(resource_set)
-
-            if self.request.soft_delete:
-                export_command.append("--soft-delete")
-
-            if not self.request.do_export:
-                f = NamedTemporaryFile()
-                export_command.append("-j")
-                export_command.append(f.name)
-
-            if config.Config.get("server", "auth", False):
-                token = encode_token(["compiler", "api"], str(environment_id))
-                export_command.append("--token")
-                export_command.append(token)
-
-            if opt.server_ssl_cert.get() is not None:
-                export_command.append("--ssl")
-            else:
-                export_command.append("--no-ssl")
-
-            ssl_ca_cert = opt.server_ssl_ca_cert.get()
-            if ssl_ca_cert is not None:
-                export_command.append("--ssl-ca-cert")
-                export_command.append(ssl_ca_cert)
-
             self.tail_stdout = ""
-
-            # Make mypy happy
-            assert self.request.used_environment_variables is not None
-            env_vars_compile: dict[str, str] = os.environ.copy()
-            env_vars_compile.update(self.request.used_environment_variables)
-
-            cmd = app_cli_args + export_command
-
             result: data.Report = await run_compile_stage_in_venv(
                 "Recompiling configuration model", cmd, cwd=project_dir, env=env_vars_compile
             )
@@ -539,9 +544,12 @@ class CompileRun:
             # unhandled exception in a backgrounded coroutine.
             pass
 
-        except Exception:
-            LOGGER.exception("An error occurred while recompiling")
-
+        except Exception as e:
+            if self.stage is not None:
+                await self._error(message=str(e))
+                await self._end_stage(1)
+            else:
+                LOGGER.exception("An error occurred while recompiling")
         finally:
 
             async def warn(message: str) -> None:
@@ -712,6 +720,7 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
         soft_delete: bool = False,
         mergeable_env_vars: Optional[Mapping[str, str]] = None,
         links: Optional[dict[str, list[str]]] = None,
+        reinstall_project_and_venv: bool = False,
     ) -> tuple[Optional[uuid.UUID], Warnings]:
         """
         Recompile an environment in a different thread and taking wait time into account.
@@ -733,6 +742,7 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
         :param links: An object that contains relevant links to this compile.
             It is a dictionary where the key is something that identifies one or more links
             and the value is a list of urls. i.e. {"instances": ["link-1',"link-2"], "compiles": ["link-3"]}
+        :param reinstall_project_and_venv: True iff perform a clean checkout of the project and re-create the compiler venv.
         :return: the compile id of the requested compile and any warnings produced during the request
         """
         if in_db_transaction and not connection:
@@ -782,6 +792,7 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
             failed_compile_message=failed_compile_message,
             soft_delete=soft_delete,
             links=links,
+            reinstall_project_and_venv=reinstall_project_and_venv,
         )
         if not in_db_transaction:
             async with self._queue_count_cache_lock:

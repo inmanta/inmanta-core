@@ -1,0 +1,3 @@
+description: This dummy change entry fixes semantic versioning for issue 2273 that was incorrectly labeled as `patch`
+change-type: minor
+destination-branches: [master, iso8]
