@@ -89,6 +89,70 @@ class CreateList(ReferenceStatement):
             item.normalize(lhs_attribute=lhs_attribute)
             self.anchors.extend(item.get_anchors())
 
+    # TODO: old branch issue/5720-for-loop-skip-values-test may contain something else useful
+    # TODO: uncomment & implement
+    #       STARTING POINT:
+    #       - define very clear semantics for normal mode and gradual mode and what it means for ordering
+    #           -> mention consumers, producers and things like list comprehension that are just a link in the chain.
+    #               lists can also be just a link in the chain. Main takeaway is that list comprehension is not a consumer, it's
+    #               lhs (or wrapping expression) *is*
+    #       - define very clear semantics for lists vs relations and what it means for duplicates
+    #       => relations are set-like with respect to uniqueness *and* ordering
+    #       => lists are sequences
+    #
+    #       => gradual execution retains all values, including duplicates, but loses ordering
+    #       => list comprehensions and other linking constructs propagate the lhs' execution mode and ordering semantics
+    #       => relations deduplicate. Like piping to `uniq`, this only deduplicates at this final stage
+    #
+    #       => ALL expressions satisfy sorted(execute()) == sorted(sent_to_resultcollector)
+    #
+    #       Open question: do gradually executed lists need to execute? Perhaps we can simply never freeze them and leave it up
+    #       to the consumer to freeze if appropriate (e.g. relation freezes, for loop doesn't)
+    #       -> leave out of scope for now. Probably brings no value
+    #
+    #       GOOD CONCLUSION? gradual execution is a mechanism (internal) to optimize code flows where list results may be
+    #           processed as they come in and in any order. It must only be applied in those contexts. Concretely, this means
+    #           relations + control flow + constructs like `in`, `is defined`, ...
+
+    #def requires_emit(
+    #    self, resolver: Resolver, queue: QueueScheduler, *, lhs: Optional[ResultCollector[object]] = None
+    #) -> dict[object, VariableABC[object]]:
+    #    # TODO: docstring
+    #    base_requires: dict[object, VariableABC[object]] = super().requires_emit(resolver, queue)
+
+    #    # TODO: below this line
+    #    if lhs is not None:
+    #    for item in self.items:
+    #        item.requires_emit_gradual(resolver, queue, resultcollector=self.lhs)
+
+    #    # set up gradual execution
+    #    collector_helper: ListComprehensionCollector = ListComprehensionCollector(
+    #        statement=self,
+    #        resolver=resolver,
+    #        queue=queue,
+    #        lhs=lhs,
+    #    )
+    #    self.copy_location(collector_helper)
+
+    #    iterable_requires: dict[object, VariableABC[object]] = (
+    #        # use helper strictly non-gradually when in a non-gradual context
+    #        # => propagates progress potential to iterable expression's requires
+    #        self.iterable.requires_emit(resolver, queue)
+    #        if lhs is None
+    #        else self.iterable.requires_emit_gradual(resolver, queue, collector_helper)
+    #    )
+
+    #    # non-gradual mode / finishing up: resume as soon as the iterable can be executed
+    #    # pass helper to the resumer via the requires object
+    #    wrapped_helper: VariableABC[ListComprehensionCollector] = WrappedValueVariable(collector_helper)
+    #    requires: dict[object, VariableABC[object]] = base_requires | iterable_requires | {self: wrapped_helper}
+    #    RawUnit(queue, resolver, requires, resumer=self)
+
+    #    # Wait for resumer and helper to populate result.
+    #    # No need to wait for iterable requires explicitly because resumer already does
+    #    return base_requires | {self: collector_helper.final_result}
+
+    # TODO: delegate instead
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: Optional[ResultCollector]
     ) -> dict[object, VariableABC]:
