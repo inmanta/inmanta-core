@@ -68,7 +68,7 @@ from inmanta.server.config import AuthorizationProviderName, server_auth_method
 from inmanta.server.extensions import ProductMetadata
 from inmanta.server.services.compilerservice import CompilerService
 from inmanta.types import Apireturn, ResourceIdStr
-from inmanta.util import get_compiler_version, hash_file
+from inmanta.util import hash_file
 from libpip2pi.commands import dir2pi
 
 T = TypeVar("T")
@@ -488,6 +488,7 @@ async def wait_until_deployment_finishes(
             + summary["by_state"]["skipped_for_undefined"]
             + summary["by_state"]["unavailable"]
             + summary["by_state"]["undefined"]
+            + summary["by_state"]["non_compliant"]
             >= total
         )
 
@@ -541,7 +542,6 @@ class ClientHelper:
             resources=resources,
             unknowns=[],
             version_info={},
-            compiler_version=get_compiler_version(),
             module_version_info={},
         )
         assert res.code == 200, res.result
@@ -660,26 +660,19 @@ def create_python_package(
         os.makedirs(path)
 
     with open(os.path.join(path, "pyproject.toml"), "w") as fd:
-        fd.write(
-            """
+        fd.write("""
 [build-system]
 build-backend = "setuptools.build_meta"
 requires = ["setuptools"]
-            """.strip()
-        )
+            """.strip())
 
     install_requires_content = "".join(f"\n  {req}" for req in (requirements if requirements is not None else []))
     with open(os.path.join(path, "setup.cfg"), "w") as fd:
-        egg_info: str = (
-            f"""
+        egg_info: str = f"""
 [egg_info]
 tag_build = .dev{pkg_version.dev}
-            """.strip()
-            if pkg_version.is_devrelease
-            else ""
-        )
-        fd.write(
-            f"""
+            """.strip() if pkg_version.is_devrelease else ""
+        fd.write(f"""
 [metadata]
 name = {name}
 version = {pkg_version.base_version}
@@ -689,8 +682,7 @@ author = Inmanta <code@inmanta.com>
 
 {egg_info}
 
-""".strip()
-        )
+""".strip())
 
         fd.write("\n[options]")
         fd.write(f"\ninstall_requires ={install_requires_content}")
@@ -905,8 +897,7 @@ async def resource_action_consistency_check():
     """
 
     async def get_data(postgresql_client):
-        post_ra_one = await postgresql_client.fetch(
-            """SELECT
+        post_ra_one = await postgresql_client.fetch("""SELECT
                 ra.action_id,
                 r.environment,
                 r.resource_id,
@@ -918,12 +909,10 @@ async def resource_action_consistency_check():
                 INNER JOIN resourceaction as ra
                     ON r.resource_id || ',v=' || rscm.model = ANY(ra.resource_version_ids)
                     AND r.environment = ra.environment
-            """
-        )
+            """)
         post_ra_one_set = {(r[0], r[1], r[2], r[3]) for r in post_ra_one}
 
-        post_ra_two = await postgresql_client.fetch(
-            """SELECT
+        post_ra_two = await postgresql_client.fetch("""SELECT
                 ra.action_id,
                 r.environment,
                 r.resource_id,
@@ -938,14 +927,13 @@ async def resource_action_consistency_check():
                 AND rscm.model = jt.resource_version
             INNER JOIN public.resourceaction as ra
                 ON ra.action_id = jt.resource_action_id
-            """
-        )
+            """)
         post_ra_two_set = {(r[0], r[1], r[2], r[3]) for r in post_ra_two}
         return post_ra_one_set, post_ra_two_set
 
     # The above-mentioned queries have to be executed with at least the repeatable_read isolation level.
     # Otherwise it might happen that a repair run adds more resource actions between the execution of both queries.
-    (post_ra_one_set, post_ra_two_set) = await data.ResourceAction.execute_in_retryable_transaction(
+    post_ra_one_set, post_ra_two_set = await data.ResourceAction.execute_in_retryable_transaction(
         get_data, tx_isolation_level="repeatable_read"
     )
     assert post_ra_one_set == post_ra_two_set
@@ -987,7 +975,6 @@ async def _deploy_resources(client, environment, resources, version: int, push, 
         resources=resources,
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert result.code == 200
@@ -1106,9 +1093,10 @@ def assert_resource_persistent_state(
     resource_persistent_state: data.ResourcePersistentState,
     is_undefined: bool,
     is_orphan: bool,
-    last_deploy_result: state.DeployResult,
+    last_handler_run: state.HandlerResult,
     blocked: state.Blocked,
     expected_compliance: Optional[state.Compliance],
+    last_handler_run_compliant: Optional[bool],
 ) -> None:
     """
     Assert that the given ResourcePersistentState record has the given content.
@@ -1120,8 +1108,8 @@ def assert_resource_persistent_state(
         resource_persistent_state.is_orphan == is_orphan
     ), f"{resource_persistent_state.resource_id} ({resource_persistent_state.is_orphan} != {is_orphan})"
     assert (
-        resource_persistent_state.last_deploy_result is last_deploy_result
-    ), f"{resource_persistent_state.resource_id} ({resource_persistent_state.last_deploy_result} != {last_deploy_result})"
+        resource_persistent_state.last_handler_run is last_handler_run
+    ), f"{resource_persistent_state.resource_id} ({resource_persistent_state.last_handler_run} != {last_handler_run})"
     assert (
         resource_persistent_state.blocked is blocked
     ), f"{resource_persistent_state.resource_id} ({resource_persistent_state.blocked} != {blocked})"
@@ -1129,6 +1117,9 @@ def assert_resource_persistent_state(
         f"{resource_persistent_state.resource_id}"
         f" ({resource_persistent_state.get_compliance_status()} != {expected_compliance})"
     )
+    assert resource_persistent_state.last_handler_run_compliant is last_handler_run_compliant, f"""
+{resource_persistent_state.resource_id} ({resource_persistent_state.last_handler_run_compliant} != {last_handler_run_compliant})
+"""
 
 
 async def run_compile_and_wait_until_compile_is_done(

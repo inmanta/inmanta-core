@@ -103,8 +103,7 @@ def test_configfile_hierarchy(monkeypatch, tmpdir):
     monkeypatch.setenv("INMANTA_SERVER_AGENT_TIMEOUT", "60")
 
     with open(main_inmanta_cfg_file, "w", encoding="utf-8") as f:
-        f.write(
-            """
+        f.write("""
 [server]
 auth=false
 db-connection-pool-max-size=2
@@ -119,67 +118,54 @@ username=non-default-name-0
 host=host1
 interval=10
 tags=tag1=value1
-        """
-        )
+        """)
 
     with open(inmanta_d_cfg_file01, "w", encoding="utf-8") as f:
-        f.write(
-            """
+        f.write("""
 [database]
 host=host2
 name=db2
 [influxdb]
 host=host2
-        """
-        )
+        """)
 
     with open(inmanta_d_cfg_file02, "w", encoding="utf-8") as f:
-        f.write(
-            """
+        f.write("""
 [database]
 port=5678
 [influxdb]
 host=host3
 interval=20
-        """
-        )
+        """)
 
     with open(inmanta_d_cfg_file_no_cfg_extension, "w", encoding="utf-8") as f:
-        f.write(
-            """
+        f.write("""
 [database]
 port=9999
-        """
-        )
+        """)
 
     with open(dot_inmanta_file, "w", encoding="utf-8") as f:
-        f.write(
-            """
+        f.write("""
 [database]
 host=host3
 username=non-default-name-1
 [influxdb]
 tags=tag2=value2
-        """
-        )
+        """)
 
     with open(dot_inmanta_cfg_file, "w", encoding="utf-8") as f:
-        f.write(
-            """
+        f.write("""
 [database]
 username=non-default-name-2
 [server]
 db-connection-pool-max-size=3
-        """
-        )
+        """)
 
     with open(min_c_file, "w", encoding="utf-8") as f:
-        f.write(
-            """
+        f.write("""
 [server]
 db-connection-pool-max-size=5
-        """
-        )
+        """)
 
     os.chdir(tmpdir)
     Config.load_config(min_c_config_file=min_c_file, config_dir=inmanta_d_dir, main_cfg_file=main_inmanta_cfg_file)
@@ -265,7 +251,7 @@ async def test_bind_address_ipv6(async_finalizer) -> None:
 
     # Get free port on all interfaces
     sock = netutil.bind_sockets(0, "::", family=socket.AF_INET6)[0]
-    (_addr, free_port, _flowinfo, _scopeid) = sock.getsockname()
+    _addr, free_port, _flowinfo, _scopeid = sock.getsockname()
     sock.close()
 
     # Configure server

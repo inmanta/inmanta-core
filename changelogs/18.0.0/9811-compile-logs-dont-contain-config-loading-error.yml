@@ -1,0 +1,6 @@
+---
+description: "Save config loading errors during compile to compile logs"
+issue-nr: 9811
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso8]

@@ -412,51 +412,43 @@ def test_stable_dfs():
             edges[f] = ts
         return list(nodes), edges
 
-    graph = expand_graph(
-        """
+    graph = expand_graph("""
     e: f
-    a: b c
+    ab: b c
     b: c d
     h: i
     0:
-    """
-    )
+    """)
     seq = stable_depth_first(*graph)
-    assert seq == ["0", "c", "d", "b", "a", "f", "e", "i", "h"]
+    assert seq == ["0", "c", "d", "b", "ab", "f", "e", "i", "h"]
 
-    graph = expand_graph(
-        """
+    graph = expand_graph("""
         e: f
         b: c d
-        a: c b
+        ab: c b
         h: i
         0:
-        """
-    )
+        """)
     seq = stable_depth_first(*graph)
-    assert seq == ["0", "c", "d", "b", "a", "f", "e", "i", "h"]
+    assert seq == ["0", "c", "d", "b", "ab", "f", "e", "i", "h"]
 
     with pytest.raises(CycleException) as e:
-        stable_depth_first(*expand_graph("a: a"))
+        stable_depth_first(*expand_graph("ab: ab"))
 
-    assert e.value.nodes == ["a"]
+    assert e.value.nodes == ["ab"]
 
     with pytest.raises(CycleException) as e:
-        stable_depth_first(
-            *expand_graph(
-                """a: b
-        b: a"""
-            )
-        )
+        stable_depth_first(*expand_graph("""ab: b
+        b: ab"""))
 
-    assert e.value.nodes == ["b", "a"]
+    assert e.value.nodes == ["b", "ab"]
 
     # missing nodes
-    graph, edges = expand_graph("""a: b""")
+    graph, edges = expand_graph("""ab: b""")
     graph.remove("b")
 
     seq = stable_depth_first(graph, edges)
-    assert seq == ["b", "a"]
+    assert seq == ["b", "ab"]
 
 
 def test_is_sub_dict():

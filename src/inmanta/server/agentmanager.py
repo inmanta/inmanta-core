@@ -1301,7 +1301,7 @@ executor-retention-time={agent_cfg.agent_executor_retention_time.get()}
 
 [agent_rest_transport]
 port=%(port)s
-host=localhost
+host={opt.internal_server_address.get()}
 """ % {
             "env_id": environment_id,
             "port": port,
@@ -1312,9 +1312,7 @@ host=localhost
             token = encode_token(["agent"], environment_id)
             config += """
 token=%s
-    """ % (
-                token
-            )
+    """ % (token)
 
         ssl_cert: Optional[str] = server_config.server_ssl_key.get()
         ssl_ca: Optional[str] = server_config.server_ssl_ca_cert.get()
@@ -1324,9 +1322,7 @@ token=%s
             config += """
 ssl=True
 ssl_ca_cert_file=%s
-    """ % (
-                ssl_ca
-            )
+    """ % (ssl_ca)
         elif ssl_cert is not None:
             # system CA
             config += """

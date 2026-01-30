@@ -35,7 +35,7 @@ import inmanta
 from inmanta import const, data, protocol, resources, tracing
 from inmanta.agent.cache import AgentCache
 from inmanta.const import ParameterSource, ResourceState
-from inmanta.data.model import AttributeStateChange, BaseModel, LinkedDiscoveredResource
+from inmanta.data.model import AttributeStateChange, BaseModel, DiscoveredResourceInput
 from inmanta.protocol import Result, json_encode
 from inmanta.stable_api import stable_api
 from inmanta.types import ResourceIdStr, SimpleTypes
@@ -347,10 +347,15 @@ class HandlerContext(LoggerABC):
 
     def set_resource_state(self, new_state: const.HandlerResourceState) -> None:
         """
-        Set the state of the resource
+        Set the state of the resource.
+        If setting the state to non_compliant, requires that the changes are registered first.
+        It is not possible to set the state to non_compliant and not register changes.
         """
+        if new_state is const.HandlerResourceState.non_compliant and len(self._changes) == 0:
+            raise InvalidOperation("Unable to set state to non_compliant before changes are set.")
+
         self._resource_state = new_state
-        if new_state == const.HandlerResourceState.skipped_for_dependency:
+        if new_state is const.HandlerResourceState.skipped_for_dependency:
             # This is the only state that is not present in const.ResourceState
             self._status = const.ResourceState.skipped
         else:
@@ -592,6 +597,15 @@ class HandlerAPI(ABC, Generic[TResource]):
 
             return {rid: state for rid, state in reqs.items() if state in states}
 
+        def execute_and_reload() -> None:
+            self.execute(ctx, resource)
+            if _should_reload():
+                self.do_reload(ctx, resource)
+
+        # report-only resources don't care about dependencies
+        if resource.report_only:
+            execute_and_reload()
+            return
         # Check if any dependencies got into any unexpected state
         dependencies_in_unexpected_state = filter_resources_by_state(
             requires,
@@ -627,9 +641,7 @@ class HandlerAPI(ABC, Generic[TResource]):
 
         failed_dependencies = [req for req, status in requires.items() if status != ResourceState.deployed]
         if not any(failed_dependencies):
-            self.execute(ctx, resource)
-            if _should_reload():
-                self.do_reload(ctx, resource)
+            execute_and_reload()
         else:
             ctx.set_resource_state(const.HandlerResourceState.skipped_for_dependency)
             ctx.info(
@@ -879,7 +891,17 @@ class ResourceHandler(HandlerAPI[TResource]):
                 changes = self.list_changes(ctx, resource)
                 ctx.update_changes(changes)
 
-            if not dry_run:
+            if resource.report_only:
+                if changes:
+                    ctx.set_resource_state(const.HandlerResourceState.non_compliant)
+                    ctx.info(
+                        msg="Resource %(resource_id)s was marked as non-compliant.",
+                        resource_id=resource.id.resource_str(),
+                        changes=changes,
+                    )
+                else:
+                    ctx.set_resource_state(const.HandlerResourceState.deployed)
+            elif not dry_run:
                 with tracing.span("do_changes"):
                     self.do_changes(ctx, resource, changes)
                     ctx.set_resource_state(const.HandlerResourceState.deployed)
@@ -889,7 +911,7 @@ class ResourceHandler(HandlerAPI[TResource]):
             ctx.set_resource_state(const.HandlerResourceState.skipped_for_dependency)
             ctx.warning(
                 msg="Resource %(resource_id)s was skipped: %(reason)s",
-                resource_id=resource.id,
+                resource_id=resource.id.resource_str(),
                 reason=e.args,
             )
         except SkipResource as e:
@@ -901,7 +923,7 @@ class ResourceHandler(HandlerAPI[TResource]):
             ctx.set_resource_state(const.HandlerResourceState.failed)
             ctx.exception(
                 "An error occurred during deployment of %(resource_id)s (exception: %(exception)s)",
-                resource_id=resource.id,
+                resource_id=resource.id.resource_str(),
                 exception=f"{e.__class__.__name__}('{e}')",
             )
         finally:
@@ -1039,7 +1061,17 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
             for field, values in changes.items():
                 ctx.add_change(field, desired=values["desired"], current=values["current"])
 
-            if not dry_run:
+            if resource.report_only:
+                if changes:
+                    ctx.set_resource_state(const.HandlerResourceState.non_compliant)
+                    ctx.info(
+                        msg="Resource %(resource_id)s was marked as non-compliant.",
+                        resource_id=resource.id.resource_str(),
+                        changes=changes,
+                    )
+                else:
+                    ctx.set_resource_state(const.HandlerResourceState.deployed)
+            elif not dry_run:
                 if "purged" in changes:
                     if not changes["purged"]["desired"]:
                         ctx.debug("Calling create_resource")
@@ -1063,7 +1095,7 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
             ctx.set_resource_state(const.HandlerResourceState.skipped_for_dependency)
             ctx.warning(
                 msg="Resource %(resource_id)s was skipped: %(reason)s",
-                resource_id=resource.id,
+                resource_id=resource.id.resource_str(),
                 reason=e.args,
             )
         except SkipResource as e:
@@ -1129,7 +1161,7 @@ class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered])
             self.pre(ctx, resource)
 
             def _call_discovered_resource_create_batch(
-                discovered_resources: Sequence[LinkedDiscoveredResource],
+                discovered_resources: Sequence[DiscoveredResourceInput],
             ) -> Awaitable[Result]:
                 return self.get_client().discovered_resource_create_batch(
                     tid=self._agent.environment,
@@ -1137,8 +1169,8 @@ class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered])
                 )
 
             discovered_resources_raw: Mapping[ResourceIdStr, TDiscovered] = self.discover_resources(ctx, resource)
-            discovered_resources: Sequence[LinkedDiscoveredResource] = [
-                LinkedDiscoveredResource(
+            discovered_resources: Sequence[DiscoveredResourceInput] = [
+                DiscoveredResourceInput(
                     discovered_resource_id=resource_id,
                     values=values.model_dump(),
                     discovery_resource_id=resource.id.resource_str(),

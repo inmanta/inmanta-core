@@ -1,0 +1,8 @@
+---
+description: "The `requires` field was removed from the project.yml file. Use the requirements.txt file of the project instead."
+issue-nr: 9720
+issue-repo: inmanta-core
+change-type: major
+destination-branches: [master]
+sections:
+  upgrade-note: "{{description}}"

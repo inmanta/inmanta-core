@@ -79,6 +79,10 @@ class resource:  # noqa: N801
         return cls
 
     @classmethod
+    def add_resource(cls, cls_name: str, resource_type: type["Resource"], options: dict[str, str]) -> None:
+        cls._resources[cls_name] = (resource_type, options)
+
+    @classmethod
     def validate(cls) -> None:
         fq_name_resource_decorator = f"{cls.__module__}.{cls.__name__}"
         fq_name_resource_class = f"{Resource.__module__}.{Resource.__name__}"
@@ -187,6 +191,7 @@ class ResourceMeta(type):
         return type.__new__(cls, class_name, bases, dct)
 
 
+# "version" is no longer used, but remains here because older clients might still set the version field.
 RESERVED_FOR_RESOURCE = {"id", "version", "model", "requires", "unknowns", "set_version", "clone", "is_type", "serialize"}
 
 
@@ -311,8 +316,10 @@ class Resource(metaclass=ResourceMeta):
         const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS,
         const.RESOURCE_ATTRIBUTE_REFERENCES,
         const.RESOURCE_ATTRIBUTE_MUTATORS,
+        const.RESOURCE_ATTRIBUTE_REPORT_ONLY,
     )
     send_event: bool  # Deprecated field
+    report_only: bool  # Used for typing
     model: "proxy.DynamicProxy"
     map: dict[str, Callable[[Optional["export.Exporter"], "proxy.DynamicProxy"], Any]]
 
@@ -340,6 +347,13 @@ class Resource(metaclass=ResourceMeta):
         except Exception:
             # default to True for backward compatibility (all resources used to receive events)
             return True
+
+    @staticmethod
+    def get_report_only(_exporter: "export.Exporter", obj: "Resource") -> bool:
+        try:
+            return obj.report_only
+        except Exception:
+            return False
 
     @classmethod
     def convert_requires(
@@ -528,10 +542,12 @@ class Resource(metaclass=ResourceMeta):
         # - receive_events
         # - references
         # - mutators
+        # - report_only
         extra: dict[str, object] = {}
         if const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS not in obj_map:
             extra[const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS] = True
-
+        if const.RESOURCE_ATTRIBUTE_REPORT_ONLY not in obj_map:
+            extra[const.RESOURCE_ATTRIBUTE_REPORT_ONLY] = False
         if (
             const.RESOURCE_ATTRIBUTE_MUTATORS not in obj_map
             or obj_map[const.RESOURCE_ATTRIBUTE_MUTATORS] is None
@@ -543,6 +559,9 @@ class Resource(metaclass=ResourceMeta):
 
         if extra:
             obj_map = {**obj_map, **extra}
+
+        if "version" in obj_map:
+            del obj_map["version"]
 
         obj = cls_resource(obj_id)
         obj.populate(obj_map, force_fields)
@@ -569,8 +588,6 @@ class Resource(metaclass=ResourceMeta):
 
         for field in self.__class__.fields:
             setattr(self, field, None)
-
-        self.version = _id.version
 
         self._references_model: dict[uuid.UUID, references.ReferenceModel] = {}
         self._references: dict[uuid.UUID, references.Reference[references.RefValue]] = {}
@@ -651,11 +668,6 @@ class Resource(metaclass=ResourceMeta):
             for require in fields["requires"]:  # type: ignore
                 self.requires.add(Id.parse_id(require))
 
-    def set_version(self, version: int) -> None:
-        """Set the version of this resource"""
-        self.version = version
-        self.id.version = version
-
     def __setattr__(self, name: str, value: Any) -> None:
         if isinstance(value, util.Unknown):
             self.unknowns.add(name)
@@ -696,7 +708,6 @@ class Resource(metaclass=ResourceMeta):
             dictionary[field] = getattr(self, field)
 
         dictionary["requires"] = [str(x) for x in self.requires]
-        dictionary["version"] = self.version
         dictionary["id"] = self.id.resource_version_str()
 
         return dictionary

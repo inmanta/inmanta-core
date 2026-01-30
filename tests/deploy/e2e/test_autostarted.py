@@ -38,7 +38,6 @@ from inmanta import config, const, data
 from inmanta.const import AgentAction
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER
 from inmanta.server.bootloader import InmantaBootloader
-from inmanta.util import get_compiler_version
 from typing_extensions import Optional
 from utils import ClientHelper, retry_limited, wait_until_deployment_finishes
 
@@ -144,7 +143,6 @@ async def setup_environment_with_agent(client, project_name):
         resources=resources,
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert result.code == 200
@@ -200,9 +198,7 @@ def ps_diff_inmanta_agent_processes(original: list[psutil.Process], current_proc
         current = [c for c in current if not is_terminated(c)]
         original = [c for c in original if not is_terminated(c)]
 
-    assert len(original) + diff == len(
-        current
-    ), """procs found:
+    assert len(original) + diff == len(current), """procs found:
         pre:{}
         post:{}""".format(
         original,
@@ -323,7 +319,7 @@ async def test_deploy_no_code(resource_container, client, clienthelper, environm
 async def test_stop_autostarted_agents_on_environment_removal(server, client):
     current_process = psutil.Process()
     inmanta_agent_child_processes: list[psutil.Process] = _get_inmanta_scheduler_child_processes(current_process)
-    (project_id, env_id) = await setup_environment_with_agent(client, "proj")
+    project_id, env_id = await setup_environment_with_agent(client, "proj")
 
     # One autostarted agent should running as a subprocess
     ps_diff_inmanta_agent_processes(original=inmanta_agent_child_processes, current_process=current_process, diff=1)

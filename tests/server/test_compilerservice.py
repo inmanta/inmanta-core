@@ -45,7 +45,7 @@ from inmanta.data import APILIMIT, Compile, Report
 from inmanta.data.model import PipConfig
 from inmanta.env import PythonEnvironment, VirtualEnv
 from inmanta.export import cfg_env
-from inmanta.protocol import Result
+from inmanta.protocol.common import Result
 from inmanta.server import SLICE_COMPILER, SLICE_SERVER, protocol
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.protocol import Server
@@ -91,6 +91,7 @@ async def compile_and_assert(
     env_vars={},
     update=False,
     exporter_plugin=None,
+    reinstall: bool = False,
 ) -> tuple[CompileRun, abc.Mapping[str, object]]:
     """
     Create a compile data object and run it. Returns the compile run itself and the reports for each stage.
@@ -104,6 +105,7 @@ async def compile_and_assert(
         used_environment_variables=env_vars,
         force_update=update,
         exporter_plugin=exporter_plugin,
+        reinstall_project_and_venv=reinstall,
     )
     await compile.insert()
 
@@ -556,6 +558,59 @@ ssl={str(not ssl_enabled_on_server).lower()}
 
 
 @pytest.mark.slowtest
+async def test_config_loading_errors_during_compile_are_saved(
+    tmpdir, request, environment_factory: EnvironmentFactory, server, client
+) -> None:
+    """
+    Test that config loading errors during a compile are saved, to the compile logs.
+    """
+
+    project_work_dir = os.path.join(tmpdir, "work")
+    ensure_directory_exist(project_work_dir)
+
+    main_cf = """
+import std::testing
+std::testing::NullResource(name="test")
+    """.strip()
+
+    # Add .inmanta file with inverse SSL config as the server itself.
+    config_file = os.path.join(tmpdir, "auth.cfg")
+    with open(config_file, "w+", encoding="utf-8") as fd:
+        fd.write("""
+[server]
+auth=true
+auth_additional_header=Jwt-Assertion
+
+[auth_jwt_test]
+algorithm=HS256
+sign=false
+client_types=agent,compiler
+key=eciwliGyqECVmXtIkNpfVrtBLutZiITZKSKYhogeHMM
+expire=0
+issuer=https://localhost:8888/
+audience=https://localhost:8888/
+
+            """)
+
+    config.Config.load_config(config_file)
+    env = await environment_factory.create_environment(main=main_cf)
+
+    compile = data.Compile(
+        remote_id=uuid.uuid4(),
+        environment=env.id,
+        force_update=False,
+    )
+    await compile.insert()
+
+    # compile with export
+    cr = CompileRun(compile, project_work_dir)
+    await cr.run()
+
+    c = await data.Compile.get_report(compile.id)
+    assert c["reports"][-1]["errstream"] == "One auth_jwt section should have sign set to true\n"
+
+
+@pytest.mark.slowtest
 async def test_compilerservice_compile_data(environment_factory: EnvironmentFactory, client, server) -> None:
     async def get_compile_data(main: str) -> model.CompileData:
         env: data.Environment = await environment_factory.create_environment(main)
@@ -788,15 +843,13 @@ async def test_server_recompile(server, client, environment, monkeypatch):
 
     # add main.cf
     with open(os.path.join(project_dir, "main.cf"), "w", encoding="utf-8") as fd:
-        fd.write(
-            f"""
+        fd.write(f"""
         import std::testing
 
         host = std::Host(name="test", os=std::linux)
         std::testing::NullResource(name=host.name)
         std::print(std::get_env("{key_env_var}"))
-"""
-        )
+""")
 
     logger.info("request a compile")
     result = await client.notify_change(environment)
@@ -938,12 +991,10 @@ async def test_server_recompile_param_fact_v2(server, client, environment):
 
     # add main.cf
     with open(os.path.join(project_dir, "main.cf"), "w", encoding="utf-8") as fd:
-        fd.write(
-            """
+        fd.write("""
 import std::testing
 std::testing::NullResource(name='test')
-"""
-        )
+""")
 
     logger.info("request a compile")
     result = await client.notify_change(environment)
@@ -2148,3 +2199,83 @@ async def test_venv_upgrade_version_mismatch(tmp_path, caplog):
     await run.ensure_compiler_venv()
     log_contains(caplog, "inmanta.server.services.compilerservice", logging.INFO, "Discarding existing venv from")
     assert (project / ".env").exists()
+
+
+@pytest.mark.parametrize("use_post_endpoint", [True, False])
+@pytest.mark.parametrize("no_agent", [True])
+async def test_reinstall_project_and_venv(
+    environment_factory: EnvironmentFactory, server, client, tmpdir, use_post_endpoint: bool
+):
+    """
+    Test the feature that allows a reinstall of the Inmanta project and its compiler venv.
+    """
+    env = await environment_factory.create_environment(main="")
+
+    state_dir = config.state_dir.get()
+    project_dir = os.path.join(state_dir, "server", str(env.id), "compiler")
+    python_version = ".".join(platform.python_version_tuple()[0:2])
+    venv_dir = os.path.join(project_dir, ".env")
+    versioned_venv_dir = os.path.join(project_dir, f".env-py{python_version}")
+    project_marker_file = os.path.join(project_dir, ".p")
+    venv_marker_file = os.path.join(versioned_venv_dir, ".v")
+
+    async def does_removing_project_log_msg_exist() -> bool:
+        """
+        Returns True iff the compile log for the latest compile contains the log message that indicates that
+        a clean checkout was done for the project and that the compiler venv was created.
+        """
+        expected_log_message = f"Removing project and venv directory for environment {env.id} at {project_dir}"
+        result = await client.get_compile_reports(tid=env.id, limit=1, sort="requested.desc")
+        compile_report = await anext(result.all())
+        compile_id = compile_report.id
+
+        compile_details: model.CompileDetails = await client.compile_details(tid=env.id, id=compile_id).value()
+        if compile_details.reports is None:
+            raise Exception("No run reports found")
+        compile_stage_to_stdout = {r.name: r.outstream for r in compile_details.reports}
+        return expected_log_message in compile_stage_to_stdout["Init"]
+
+    def write_marker_file(path: str) -> None:
+        with open(path, "w"):
+            pass
+        assert os.path.exists(path)
+
+    async def request_compile(reinstall: bool) -> Result:
+        if use_post_endpoint:
+            return await client.notify_change(id=env.id, update=False, reinstall=reinstall)
+        else:
+            return await client.notify_change_get(id=env.id, update=False, reinstall=reinstall)
+
+    # Perform a compile to create the project dir and venv dirs
+    result: Result = await request_compile(reinstall=False)
+    assert result.code == 200
+    await wait_for_version(client, env.id, cnt=1)
+    assert not os.path.exists(project_marker_file)
+    assert not os.path.exists(venv_marker_file)
+    assert os.readlink(venv_dir) == os.path.basename(versioned_venv_dir)
+    assert not await does_removing_project_log_msg_exist()
+
+    # Write a marker file to the project and the venv directory
+    # so that we can detect whether the directory was removed.
+    write_marker_file(project_marker_file)
+    write_marker_file(venv_marker_file)
+
+    # Perform another compile but don't do a reinstall.
+    result: Result = await request_compile(reinstall=False)
+    assert result.code == 200
+    await wait_for_version(client, env.id, cnt=2)
+    assert os.path.exists(project_marker_file)
+    assert os.path.exists(venv_marker_file)
+    assert os.readlink(venv_dir) == os.path.basename(versioned_venv_dir)
+    assert not await does_removing_project_log_msg_exist()
+
+    # A compile that reinstalls the project and the venv.
+    result: Result = await request_compile(reinstall=True)
+    assert result.code == 200
+    await wait_for_version(client, env.id, cnt=3)
+    assert not os.path.exists(project_marker_file)
+    assert not os.path.exists(venv_marker_file)
+    assert os.path.exists(venv_dir)
+    assert os.path.exists(versioned_venv_dir)
+    assert os.readlink(venv_dir) == os.path.basename(versioned_venv_dir)
+    assert await does_removing_project_log_msg_exist()

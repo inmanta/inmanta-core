@@ -1,0 +1,4 @@
+---
+description: "Remove references to V1 modules from the documentation."
+change-type: patch
+destination-branches: [master]

@@ -22,7 +22,7 @@ Install VS Code and Inmanta extension
 
 The developer setup is based on VSCode with the Inmanta extension.
 
-In order to install VS Code, you can refer to `this <https://code.visualstudio.com/learn/get-started/basics>`__ page.
+In order to install VS Code, you can refer to `this <https://code.visualstudio.com/docs/getstarted/getting-started>`__ page.
 
 Inmanta's extension in VS Code marketplace can be found `here <https://marketplace.visualstudio.com/items?itemName=inmanta.inmanta>`_.
 
@@ -93,8 +93,7 @@ Navigate into the project and install the module dependencies using the inmanta 
 
     inmanta project install
 
-V1 modules will be downloaded to the ``downloadpath`` configured in the ``project.yml`` file. V2 modules are installed in the
-active Python environment. For more details go :ref:`here <project-creation-guide>`. Once you are done with creating a project,
+Modules are installed in the active Python environment. For more details go :ref:`here <project-creation-guide>`. Once you are done with creating a project,
 you can open VS Code by running:
 
 .. code-block:: bash

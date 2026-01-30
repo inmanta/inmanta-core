@@ -70,7 +70,6 @@ from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.services.databaseservice import initialize_database_connection_pool
 from inmanta.server.services.metricservice import MetricsService
 from inmanta.signals import safe_shutdown, setup_signal_handlers
-from inmanta.util import get_compiler_version
 from inmanta.warnings import WarningsManager
 
 LOGGER = logging.getLogger("inmanta")
@@ -580,7 +579,7 @@ def export(options: argparse.Namespace) -> None:
         t1 = time.time()
         with summary_reporter.compiler_exception.capture():
             try:
-                (types, scopes) = do_compile()
+                types, scopes = do_compile()
             except Exception:
                 types, scopes = (None, None)
                 raise
@@ -1016,7 +1015,6 @@ def print_versions_installed_components_and_exit() -> None:
             print(f"{product_metadata.product} ({product_metadata.edition}): {product_metadata.version}")
         else:
             print(f"{product_metadata.product} ({product_metadata.edition}): version unknown")
-        print(f"Compiler version: {get_compiler_version()}")
         if extension_statuses:
             print("Extensions:")
             for ext_status in extension_statuses:

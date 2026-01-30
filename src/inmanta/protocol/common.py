@@ -404,6 +404,7 @@ class MethodProperties(Generic[R]):
         enforce_auth: bool = True,
         varkw: bool = False,
         token_param: str | None = None,
+        document_in_service_swagger: bool = False,
     ) -> None:
         """
         Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
@@ -432,6 +433,9 @@ class MethodProperties(Generic[R]):
         :param reply: If False, this is a fire-and-forget query: we will not wait for any result, just deliver the call
         :param token_param: The parameter that contains the authorization token or None if the authorization token
                             should be retrieved from the Authorization header.
+        :param document_in_service_swagger: (LSM extension only, ignored otherwise) This parameter controls whether this
+            endpoint should be documented in the swagger served by the `lsm_services_openapi_docs` endpoint for each service
+            of the catalog.
         """
         if api is None:
             api = not server_agent and not agent_server
@@ -464,6 +468,7 @@ class MethodProperties(Generic[R]):
         self._varkw_name: Optional[str] = None
         self._return_type: Optional[type[R]] = None
         self.token_param = token_param
+        self.document_in_service_swagger = document_in_service_swagger
 
         self._parsed_docstring = docstring_parser.parse(text=function.__doc__, style=docstring_parser.DocstringStyle.REST)
         self._docstring_parameter_map = {p.arg_name: p.description for p in self._parsed_docstring.params}
@@ -982,7 +987,7 @@ class MethodProperties(Generic[R]):
     def _encode_dict_for_get(
         self, query_param_name: str, query_param_value: dict[str, Union[Any, list[Any]]]
     ) -> dict[str, str]:
-        """Dicts are encoded in the following manner: param = {'ab': 1, 'cd': 2} to param.abc=1&param.cd=2"""
+        """Dicts are encoded in the following manner: param = {'ab': 1, 'cd': 2} to param.ab=1&param.cd=2"""
         sub_dict = {f"{query_param_name}.{key}": value for key, value in query_param_value.items()}
         return sub_dict
 
@@ -1201,7 +1206,8 @@ class Result(Generic[R]):
     def value(self) -> R:
         """
         Returns the value wrapped in this result, parsed as the method's return type. Only works for typed methods.
-        If paged, returns only the values for the page represented by this result. To get all results, see `all()`.
+        If paged, returns only the values for the page represented by this result. To get all results, see
+        :meth:`inmanta.protocol.common.PageableResult.all`.
 
         Converts return codes to http exceptions where applicable.
 
@@ -1275,6 +1281,7 @@ class Result(Generic[R]):
         )
 
 
+@stable_api
 class PageableResult(Result[list[V]], Generic[V]):
     """
     Result for a list value, that offers methods for paging.
@@ -1283,8 +1290,8 @@ class PageableResult(Result[list[V]], Generic[V]):
     async def all(self) -> AsyncIterator[V]:
         """
         Returns an async iterator over all values returned by this call. Follows paging links if there are any.
-        Values are processed and validated as in `value()`, i.e. iterates over the value as returned by the API method,
-        without wrapping in a `Result` object. If there are pages, simply chains results from multiple pages after each other.
+        Values are processed and validated as in ``value()``, i.e. iterates over the value as returned by the API method,
+        without wrapping in a ``Result`` object. If there are pages, simply chains results from multiple pages after each other.
         """
         page: "PageableResult[V]"
         async for page in self._pages():
@@ -1294,9 +1301,9 @@ class PageableResult(Result[list[V]], Generic[V]):
 
     def all_sync(self, *, timeout: int = 120, ioloop: Optional[asyncio.AbstractEventLoop] = None) -> Iterator[V]:
         """
-        Returns an iterator over all values returned by this call. For detailed behavior, see `all()`.
+        Returns an iterator over all values returned by this call. For detailed behavior, see ``all()``.
 
-        In an async context, call `all()` instead.
+        In an async context, call ``all()`` instead.
 
         :param timeout: The number of seconds to wait on each API call.
         """
@@ -1382,7 +1389,7 @@ class ClientCall(Awaitable[Result[R]]):
         Returns the value wrapped in this result, parsed as the method's return type. Only works for typed methods.
         If paged, returns only the values for the page represented by this result. To get all results, see `all()`.
 
-        Converts return codes to http exceptions where appliccable.
+        Converts return codes to http exceptions where applicable.
 
         :raises BaseHttpException: when return code is not 200
         """
@@ -1390,7 +1397,7 @@ class ClientCall(Awaitable[Result[R]]):
 
     def sync(self, *, timeout: int = 120, ioloop: Optional[asyncio.AbstractEventLoop] = None) -> Result[R]:
         """
-        Returns a result in a syncronous context. Must not be called from an async context.
+        Returns a result in a synchronous context. Must not be called from an async context.
         """
         try:
             return util.wait_sync(self, timeout=timeout, ioloop=ioloop)

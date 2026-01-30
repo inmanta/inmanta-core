@@ -64,8 +64,7 @@ The code snippet below provides an example of a complete ``project.yml`` file:
 Configure pip index
 -------------------
 
-This section explains how to configure a project-wide pip index. This index will be used to download v2 modules and v1
-modules' dependencies.
+This section explains how to configure a project-wide pip index. This index will be used to download module dependencies.
 By default, a project created using the :ref:`project-creation-guide` is configured to install packages from ``https://pypi.org/simple/``.
 The :class:`~inmanta.module.ProjectPipConfig` section of the project.yml file offers options to configure this behaviour.
 Some of these options are detailed below:
@@ -96,7 +95,7 @@ Setting this to ``true`` will have the following consequences:
   environment variables or pip config files, and passed to pip as extra indexes.
 
 - If ``pre`` is set, it will supersede pip's ``pre`` option set by the ``PIP_PRE`` environment variable or in pip
-  config file. When true, pre-release versions are allowed when installing v2 modules or v1 modules' dependencies.
+  config file. When true, pre-release versions are allowed when installing module dependencies.
 
 - :term:`Executors<executor>` live on the same host as the server, and so they will share the pip config at the system level.
 
@@ -202,8 +201,6 @@ Breaking changes:
 """""""""""""""""
 
     - Indexes defined through the ``repo`` option with type ``package`` will be ignored.
-    - Dependencies for v1 modules will now be installed according to the pip config in the project configuration file,
-      while they previously always used the system's pip config.
     - The agent will follow the pip configuration defined in the :ref:`project_yml`.
     - ``PIP_PRE`` is now ignored unless ``use-system-config`` is set.
     - Allowing the installation of pre-release versions for v2 modules through the :class:`~inmanta.module.InstallMode`
@@ -228,47 +225,10 @@ update environment settings or via the web-console. In other words, these enviro
 project.yml file only. To unprotect an environment setting, remove it from the project.yml file again and run the
 ``inmanta export`` command.
 
+.. _modules_setup_cfg:
 
-Module metadata files
-#####################
-
-The metadata of a V1 module is present in the module.yml file. V2 modules keep their metadata in the setup.cfg file. Below
-sections describe each of these metadata files.
-
-.. _module_yml:
-
-module.yml
-----------
-
-Inside any V1 module the compiler expects a ``module.yml`` file that defines metadata about the module.
-
-The ``module.yml`` file defines the following settings:
-
-.. autoclass:: inmanta.module.ModuleMetadata
-
-The code snippet below provides an example of a complete ``module.yml`` file:
-
-.. code-block:: yaml
-
-    name: openstack
-    description: A module to manage networks, routers, virtual machine, etc. on an Openstack cluster.
-    version: 3.7.1
-    license: Apache 2.0
-    compiler_version: 2020.2
-    requires:
-      - ip
-      - net
-      - platform
-      - ssh
-      - std
-    freeze_recursive: false
-    freeze_operator: ~=
-
-
-.. _modules_v2_setup_cfg:
-
-setup.cfg
----------
+Module metadata file
+####################
 
 Inside any V2 module the compiler expects a ``setup.cfg`` file that defines metadata about the module.
 

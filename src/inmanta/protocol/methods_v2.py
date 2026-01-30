@@ -27,7 +27,7 @@ import inmanta.types
 from inmanta import const
 from inmanta.const import AgentAction, AllAgentAction, ApiDocsFormat, Change, ClientType, ParameterSource, ResourceState
 from inmanta.data import model
-from inmanta.data.model import DataBaseReport, LinkedDiscoveredResource, PipConfig
+from inmanta.data.model import DataBaseReport, PipConfig, ResourceComplianceDiff
 from inmanta.protocol import methods
 from inmanta.protocol.auth.decorators import auth
 from inmanta.protocol.common import ReturnValue
@@ -548,19 +548,21 @@ def all_agents_action(tid: uuid.UUID, action: AllAgentAction) -> None:
 
     :param tid: The environment of the agents.
     :param action: The type of action that should be executed on the agents.
-                    Pause and unpause can only be used when the environment is not halted,
-                    while the on_resume actions can only be used when the environment is halted.
-                    * pause: A paused agent cannot execute any deploy operations.
-                    * unpause: A unpaused agent will be able to execute deploy operations.
-                    * keep_paused_on_resume: The agents will still be paused when the environment is resumed
-                    * unpause_on_resume: The agents will be unpaused when the environment is resumed
-                    * remove_all_agent_venvs: Remove all agent venvs in the given environment. During this
-                                              process the agent operations in that environment are temporarily
-                                              suspended. The removal of the agent venvs will happen asynchronously
-                                              with respect to this API call. It might take a long time until the
-                                              venvs are actually removed, because all executing agent operations
-                                              will be allowed to finish first. As such, a long deploy operation
-                                              might delay the removal of the venvs considerably.
+
+      Pause and unpause can only be used when the environment is not halted,
+      while the on_resume actions can only be used when the environment is halted.
+
+      * pause: A paused agent cannot execute any deploy operations.
+      * unpause: A unpaused agent will be able to execute deploy operations.
+      * keep_paused_on_resume: The agents will still be paused when the environment is resumed
+      * unpause_on_resume: The agents will be unpaused when the environment is resumed
+      * remove_all_agent_venvs: Remove all agent venvs in the given environment. During this
+         process the agent operations in that environment are temporarily
+         suspended. The removal of the agent venvs will happen asynchronously
+         with respect to this API call. It might take a long time until the
+         venvs are actually removed, because all executing agent operations
+         will be allowed to finish first. As such, a long deploy operation
+         might delay the removal of the venvs considerably.
 
     :raises Forbidden: The given environment has been halted and the action is pause/unpause,
                         or the environment is not halted and the action is related to the on_resume behavior
@@ -1725,9 +1727,9 @@ def discovered_resource_create(
     client_types=[ClientType.agent],
     api_version=2,
 )
-def discovered_resource_create_batch(tid: uuid.UUID, discovered_resources: Sequence[LinkedDiscoveredResource]) -> None:
+def discovered_resource_create_batch(tid: uuid.UUID, discovered_resources: Sequence[model.DiscoveredResourceInput]) -> None:
     """
-    create multiple discovered resource in the DB
+    create multiple discovered resources.
     :param tid: The id of the environment this resource belongs to
     :param discovered_resources: List of discovered_resources containing the discovered_resource_id and values for each resource
     """
@@ -1741,7 +1743,7 @@ def discovered_resource_create_batch(tid: uuid.UUID, discovered_resources: Seque
     client_types=[ClientType.api],
     api_version=2,
 )
-def discovered_resources_get(tid: uuid.UUID, discovered_resource_id: ResourceIdStr) -> model.DiscoveredResource:
+def discovered_resources_get(tid: uuid.UUID, discovered_resource_id: ResourceIdStr) -> model.DiscoveredResourceOutput:
     """
     Get a single discovered resource.
 
@@ -1765,7 +1767,7 @@ def discovered_resources_get_batch(
     end: Optional[str] = None,
     sort: str = "discovered_resource_id.asc",
     filter: Optional[Mapping[str, Sequence[str]]] = None,
-) -> list[model.DiscoveredResource]:
+) -> list[model.DiscoveredResourceOutput]:
     """
     Get a list of discovered resources.
 
@@ -1802,6 +1804,48 @@ def discovered_resources_get_batch(
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.DISCOVERED_RESOURCES_DELETE, read_only=False, environment_param="tid")
+@typedmethod(
+    path="/discovered/<discovered_resource_id>",
+    operation="DELETE",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def discovered_resource_delete(
+    tid: uuid.UUID,
+    discovered_resource_id: str,
+) -> None:
+    """
+    Delete a discovered resource.
+
+    :param tid: The id of the environment this resource belongs to
+    :param discovered_resource_id: The id of the discovered_resource
+
+    :raise NotFound: When the referenced discovered resource is not found on the environment
+    """
+
+
+@auth(auth_label=const.CoreAuthorizationLabel.DISCOVERED_RESOURCES_DELETE, read_only=False, environment_param="tid")
+@typedmethod(
+    path="/discovered/",
+    operation="DELETE",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def discovered_resource_delete_batch(tid: uuid.UUID, discovered_resource_ids: Sequence[str]) -> None:
+    """
+    Delete multiple discovered resources.
+    If one or more discovered resources are not found on the environment,
+    they will be ignored and the other discovered resources will be deleted.
+    A 200 will be returned even if any/all provided discovered resources are ignored.
+
+    :param tid: The id of the environment this resource belongs to
+    :param discovered_resource_ids: List of discovered resource ids to delete
+    """
+
+
 @auth(auth_label=const.CoreAuthorizationLabel.GRAPHQL_READ, read_only=True)
 @typedmethod(
     path="/graphql",
@@ -1810,7 +1854,7 @@ def discovered_resources_get_batch(
     api_version=2,
     strict_typing=False,
 )
-def graphql(query: str) -> Any:  # Actual return type: strawberry.types.execution.ExecutionResult
+def graphql(query: str) -> Any:  # Actual return type: strawberry.types.execution.HandlerResult
     """
     GraphQL endpoint for Inmanta.
     Supports paging, filtering and sorting on certain attributes.
@@ -1843,5 +1887,26 @@ def health() -> ReturnValue[None]:
     or a 500 if the server is not healthy.
 
     In contrast to the 'GET /api/v1/serverstatus' endpoint, this endpoint does not require authentication.
+    """
+    pass
+
+
+@auth(auth_label=const.CoreAuthorizationLabel.REPORT_READ, read_only=True, environment_param="tid")
+@typedmethod(
+    path="/compliance_report",
+    operation="POST",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def get_compliance_report(tid: uuid.UUID, resource_ids: Sequence[ResourceIdStr]) -> dict[ResourceIdStr, ResourceComplianceDiff]:
+    """
+    Get the compliance report for the following resource_ids
+
+    :param tid: The id of the environment these resources belong to.
+    :param resource_ids: A list of resource ids to retrieve the compliance status for.
+
+    :return: A dict of ResourceComplianceDiff objects representing the current state of each requested resource.
+    :raises NotFound: When one or more resource_ids do not exist in the latest scheduled version for the environment.
     """
     pass

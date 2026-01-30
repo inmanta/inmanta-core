@@ -28,7 +28,6 @@ from inmanta import const
 from inmanta.agent.handler import ResourceHandler
 from inmanta.data import model
 from inmanta.protocol import SessionClient, VersionMatch, common
-from inmanta.util import get_compiler_version
 from utils import _deploy_resources, log_contains, make_random_file, retry_limited, wait_until_deployment_finishes
 
 T = TypeVar("T")
@@ -56,7 +55,7 @@ class MockGetFileResourceHandler(ResourceHandler):
 
 
 def test_get_file_corrupted():
-    (hash, content, body) = make_random_file()
+    hash, content, body = make_random_file()
     client = MockSessionClient(200, b"corrupted_file")
     resource_handler = MockGetFileResourceHandler(client)
 
@@ -65,7 +64,7 @@ def test_get_file_corrupted():
 
 
 def test_get_file_success():
-    (hash, content, body) = make_random_file()
+    hash, content, body = make_random_file()
     client = MockSessionClient(200, content)
     resource_handler = MockGetFileResourceHandler(client)
 
@@ -183,7 +182,6 @@ async def test_format_token_in_logline(server, agent, client, environment, resou
         resources=[resource],
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
 

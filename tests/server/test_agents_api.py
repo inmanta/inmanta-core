@@ -32,7 +32,6 @@ from inmanta.util import parse_timestamp
 
 
 @pytest.fixture
-@pytest.mark.parametrize("no_agent", [True])
 async def env_with_agents(client, environment: str) -> None:
 
     env_uuid = uuid.UUID(environment)
@@ -72,6 +71,7 @@ async def env_with_agents(client, environment: str) -> None:
     await create_agent(name="failover2", last_failover=datetime.datetime.now())  # up
 
 
+@pytest.mark.parametrize("no_agent", [True])
 async def test_agent_list_filters(client, environment: str, env_with_agents: None) -> None:
     result = await client.get_agents(environment)
     assert result.code == 200
@@ -111,6 +111,7 @@ def agent_names(agents: list[dict[str, str]]) -> list[str]:
     return [agent["name"] for agent in agents]
 
 
+@pytest.mark.parametrize("no_agent", [True])
 @pytest.mark.parametrize("order_by_column", ["name", "status", "process_name", "last_failover", "paused"])
 @pytest.mark.parametrize("order", ["DESC", "ASC"])
 async def test_agents_paging(server, client, env_with_agents: None, environment: str, order_by_column: str, order: str) -> None:
@@ -243,6 +244,7 @@ async def test_agents_paging(server, client, env_with_agents: None, environment:
     assert idx == len(all_agents)
 
 
+@pytest.mark.parametrize("no_agent", [True])
 async def test_sorting_validation(client, environment: str, env_with_agents: None) -> None:
     sort_status_map = {
         "date.desc": 400,

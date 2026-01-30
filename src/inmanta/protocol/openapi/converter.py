@@ -17,18 +17,22 @@ Contact: code@inmanta.com
 """
 
 import inspect
+import itertools
 import json
 import logging
 import re
+from collections.abc import Sequence
 from typing import Callable, Optional, Union
 
 from pydantic import ConfigDict
 from typing_inspect import get_args, get_origin, is_generic_type
 
 from inmanta import util
+from inmanta.const import INMANTA_MT_HEADER
 from inmanta.data.model import BaseModel
 from inmanta.protocol.common import ArgOption, MethodProperties, ReturnValue, UrlMethod
 from inmanta.protocol.openapi.model import (
+    CodeSample,
     Components,
     Header,
     Info,
@@ -464,22 +468,55 @@ class OperationHandler:
         parameters = function_parameter_handler.get_parameters()
         responses = self._build_responses(url_method.properties)
 
+        request_body_parameters: list[str] = []
+
         if url_method.get_operation() in ["POST", "PUT", "PATCH"]:
             extra_params = {"requestBody": function_parameter_handler.convert_request_body()}
+            try:
+                request_body_parameters = list(
+                    extra_params["requestBody"].content["application/json"].schema_.properties.keys()
+                )
+            except (KeyError, AttributeError):
+                pass
         else:
             extra_params = {}
 
         tags = self._get_tags_of_operation(url_method)
-
+        code_samples = self._generate_code_sample(
+            method_name=url_method.method_name, parameters=parameters, request_body_parameters=request_body_parameters
+        )
         return Operation(
             responses=responses,
             operationId=url_method.method_name,
             parameters=(parameters if len(parameters) else None),
+            code_samples=code_samples,
             summary=url_method.short_method_description,
             description=url_method.long_method_description,
             tags=tags,
             **extra_params,
         )
+
+    def _generate_code_sample(
+        self, method_name: str, parameters: Sequence[Parameter], request_body_parameters: Sequence[str]
+    ) -> list[CodeSample]:
+        """
+        Generate a python code sample for the given method and parameters. The returned sample is wrapped in a list to match
+        the type expected by redoc
+        (see https://redocly.com/docs-legacy/api-reference-docs/specification-extensions/x-code-samples#usage)
+        """
+        tab_padding = " " * 4
+        all_parameters = list(
+            itertools.chain(
+                [param.name if param.name != INMANTA_MT_HEADER else "tid" for param in parameters], request_body_parameters
+            )
+        )
+        arguments = f"\n{',\n'.join(f"{tab_padding}{param}=..." for param in all_parameters)}\n" if all_parameters else ""
+        source = (
+            "client = inmanta.protocol.endpoints.Client(name='api', timeout=120)\n"
+            f"result = await client.{method_name}({arguments})"
+        )
+        code_samples = CodeSample(lang="Python", source=source)
+        return [code_samples]
 
     def _get_tags_of_operation(self, url_method: UrlMethod) -> Optional[list[str]]:
         if url_method.endpoint is not None:

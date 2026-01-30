@@ -1,0 +1,6 @@
+description: 'Compiler: fixed bug where implement conditions evaluated Unknown values as true, deviating from how they are evaluated in if statement conditions'
+change-type: patch
+sections:
+  bugfix: "{{description}}"
+destination-branches:
+  - master

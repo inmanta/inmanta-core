@@ -17,10 +17,12 @@ Contact: code@inmanta.com
 """
 
 import dataclasses
-from collections.abc import Sequence
+import itertools
+from collections.abc import Mapping, Sequence
 from typing import Annotated
 
 from inmanta.execute.proxy import DynamicProxy
+from inmanta.execute.util import NoneValue
 from inmanta.plugins import plugin, ModelType
 
 
@@ -31,6 +33,17 @@ class DataclassABC: ...
 @dataclasses.dataclass(frozen=True, kw_only=True)
 class SimpleDC(DataclassABC):
     n: int
+
+
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class NullableDC(DataclassABC):
+    n: int | None
+
+
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class CollectionDC(DataclassABC):
+    l: Sequence[object]
+    d: Mapping[str, object]
 
 
 @plugin
@@ -123,3 +136,13 @@ def dc_union(value: int | Virtualmachine) -> None:
     A plugin that takes a union with a dataclass. Could just as well (more realistic) be a union between two dataclasses.
     """
     ...
+
+
+@plugin
+def takes_nullable_dc(v: NullableDC) -> None:
+    assert v.n is None or isinstance(v.n, int), v.n
+
+
+@plugin
+def takes_collection_dc(v: CollectionDC) -> None:
+    assert not any(isinstance(x, NoneValue) for x in itertools.chain(v.l, v.d.values()))

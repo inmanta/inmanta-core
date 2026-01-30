@@ -101,8 +101,7 @@ y = 42
 
 
 def test_dataflow_model_attribute_assignment_responsible(dataflow_test_helper: DataflowTestHelper) -> None:
-    dataflow_test_helper.compile(
-        """
+    dataflow_test_helper.compile("""
 entity Test:
     int n
 end
@@ -113,8 +112,7 @@ x.n = 42
 
 implementation none for std::Entity:
 end
-        """
-    )
+        """)
     graph: DataflowGraph = dataflow_test_helper.get_graph()
     x: AssignableNodeReference = get_dataflow_node(graph, "x")
     assert isinstance(x, VariableNodeReference)
@@ -171,16 +169,14 @@ x = y
 x = y
 y = 42
 x = %d
-        """
-        % x_value,
+        """ % x_value,
         None if same_value else DoubleSetException,
     )
     dataflow_test_helper.verify_graphstring(
         """
 x -> [ y y %s ]
 y -> 42
-        """
-        % x_value,
+        """ % x_value,
     )
     dataflow_test_helper.verify_leaves({"x": {"x", "y"}, "y": {"y"}})
 
@@ -218,8 +214,7 @@ nn = x.n
 
 implementation none for std::Entity:
 end
-        """
-        % ("n = n" if attr_init else ""),
+        """ % ("n = n" if attr_init else ""),
         None if attr_init else RuntimeException,
     )
     dataflow_test_helper.verify_graphstring(
@@ -228,8 +223,7 @@ x -> <instance> 0
 n -> 42
 nn -> x . n
 %s
-        """
-        % ("<instance> 0 . n -> n" if attr_init else ""),
+        """ % ("<instance> 0 . n -> n" if attr_init else ""),
     )
     dataflow_test_helper.verify_leaves({"nn": {"n"}} if attr_init else {"nn": {"x.n"}})
 

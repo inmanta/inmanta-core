@@ -1,6 +1,12 @@
+Export formats
+==============
+
+This page describes the different export formats that are being used.
+
 .. _model_export_format:
+
 Model Export Format
-========================
+###################
 
 
 #. top level is a dict with one entry for each instance in the model
@@ -40,7 +46,7 @@ Basic structure as pseudo jinja template
 	}
 
 Type Export Format
-========================
+##################
 
 .. automodule:: inmanta.model
    :members:

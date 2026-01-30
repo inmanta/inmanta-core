@@ -69,4 +69,5 @@ async def test_drop_status_column(
         "skipped_for_undefined": 1,
         "unavailable": 0,
         "undefined": 1,
+        "non_compliant": 0,
     }

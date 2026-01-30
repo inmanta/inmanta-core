@@ -138,8 +138,8 @@ async def env_with_resources(server, client):
         await res.insert()
         await data.ResourcePersistentState.populate_for_version(environment=environment, model_version=version)
 
-        last_deploy = resource_deploy_times[next(counter)]
-        deploy_times[environment][key].append(last_deploy)
+        last_handler_run_at = resource_deploy_times[next(counter)]
+        deploy_times[environment][key].append(last_handler_run_at)
         is_deploying = status == ResourceState.deploying
         is_undefined = status == ResourceState.undefined
         blocked = (
@@ -147,13 +147,13 @@ async def env_with_resources(server, client):
             if status == ResourceState.undefined or status == ResourceState.skipped_for_undefined
             else Blocked.NOT_BLOCKED
         )
-        last_deploy = last_deploy if update_last_deployed else None
+        last_handler_run_at = last_handler_run_at if update_last_deployed else None
         last_non_deploying_status = status if is_version_released[version] and status != ResourceState.deploying else None
         is_orphan = version < latest_released_version[environment]
         await data.ResourcePersistentState.update_persistent_state(
             environment=environment,
             resource_id=res.resource_id,
-            last_deploy=last_deploy,
+            last_handler_run_at=last_handler_run_at,
             last_non_deploying_status=last_non_deploying_status,
             is_deploying=is_deploying,
         )

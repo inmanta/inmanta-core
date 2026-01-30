@@ -340,7 +340,7 @@ class Namespace(Namespaced):
         else:
             self.visible_namespaces = {name: MockImport(self)}
         self.primitives = None  # type: Optional[Dict[str,Type]]
-        self.scope = None  # type:  Optional[ExecutionContext]
+        self.scope = None  # type: Optional[ExecutionContext]
         self.__path: list[str]
 
         if self.__parent is None or self.__parent.get_name() == "__root__":
@@ -642,7 +642,11 @@ class RuntimeException(CompilerException):
                 cause.set_statement(stmt, replace)
 
         if replace or self.stmt is None:
-            self.set_location(stmt.get_location())
+            # override location unless it was explicitly set to something other than statement's location
+            cur_location = self.get_location()
+            if cur_location is None or (self.stmt is not None and cur_location == self.stmt.get_location()):
+                self.location = stmt.get_location()
+            # override statement
             self.stmt = stmt
 
     def format(self) -> str:
@@ -1083,14 +1087,6 @@ class UnknownException(Exception):
     def __init__(self, unknown: Unknown):
         super().__init__()
         self.unknown = unknown
-
-
-class AttributeNotFound(NotFoundException, AttributeError):
-    """
-    Exception used for backwards compatibility with try-except blocks around some_proxy.some_attr.
-    This previously raised `NotFoundException` which is currently deprecated in this context.
-    Its new behavior is to raise an AttributeError for compatibility with Python's builtin `hasattr`.
-    """
 
 
 # custom class to enable clean wrapping on the plugin boundary

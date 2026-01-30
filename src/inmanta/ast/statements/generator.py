@@ -142,7 +142,7 @@ class SubConstructor(RequiresEmitStatement):
                 % condition
             )
             raise e
-        if not condition:
+        if isinstance(condition, Unknown) or not condition:
             return None
 
         implementations = self.implements.implementations
@@ -1042,7 +1042,7 @@ class Constructor(ExpressionStatement):
     ) -> abc.Mapping[str, object]:
         """
         Part of the execute flow: returns values for kwargs and the inverse relation derived from the lhs for which this
-        constructor is the rhs, if appliccable.
+        constructor is the rhs, if applicable.
         """
         type_class = self.type
         assert type_class

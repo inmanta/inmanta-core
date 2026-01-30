@@ -1,0 +1,4 @@
+---
+description: "Update the RPM-based install documentation."
+change-type: patch
+destination-branches: [master]

@@ -1,0 +1,8 @@
+---
+description: "Discovered resources now require the discovery_resource_id to be set."
+issue-nr: 8004
+issue-repo: inmanta-core
+change-type: major
+destination-branches: [master]
+sections:
+  upgrade-note: "Discovered resources, for which the discovery_resource_id is not set, will get the value `core::UnknownDiscoveryResource[internal,key=unknown]` for the discovery_resource_id field. Renamed class `inmanta.data.model.DiscoveredResource` to `inmanta.data.model.DiscoveredResourceOutput` and `inmanta.data.model.LinkedDiscoveredResource` to `inmanta.data.model.DiscoveredResourceInput`."

@@ -55,7 +55,7 @@ from inmanta import const, resources, util
 from inmanta.const import NAME_RESOURCE_ACTION_LOGGER, AgentStatus, LogLevel, ResourceState
 from inmanta.data import model as m
 from inmanta.data import schema
-from inmanta.data.model import AuthMethod, BaseModel, PagingBoundaries, PipConfig, ReleasedResourceState
+from inmanta.data.model import AttributeStateChange, AuthMethod, BaseModel, PagingBoundaries, PipConfig, ReleasedResourceState
 from inmanta.data.sqlalchemy import AgentModules, InmantaModule, ModuleFiles
 from inmanta.deploy import state
 from inmanta.protocol.exceptions import BadRequest, NotFound
@@ -1504,7 +1504,7 @@ class BaseDocument(metaclass=DocumentMeta):
         """
         Insert a new document based on the instance passed. Validation is done based on the defined fields.
         """
-        (column_names, values) = self._get_column_names_and_values()
+        column_names, values = self._get_column_names_and_values()
         column_names_as_sql_string = ",".join(column_names)
         values_as_parameterized_sql_string = ",".join(["$" + str(i) for i in range(1, len(values) + 1)])
         query = (
@@ -1660,9 +1660,9 @@ class BaseDocument(metaclass=DocumentMeta):
         kwargs = self._convert_field_names_to_db_column_names(kwargs)
         for name, value in kwargs.items():
             setattr(self, name, value)
-        (column_names, values) = self._get_column_names_and_values()
+        column_names, values = self._get_column_names_and_values()
         values_as_parameterized_sql_string = ",".join([column_names[i - 1] + "=$" + str(i) for i in range(1, len(values) + 1)])
-        (filter_statement, values_for_filter) = self._get_filter_on_primary_key_fields(offset=len(column_names) + 1)
+        filter_statement, values_for_filter = self._get_filter_on_primary_key_fields(offset=len(column_names) + 1)
         values = values + values_for_filter
         query = "UPDATE " + self.table_name() + " SET " + values_as_parameterized_sql_string + " WHERE " + filter_statement
         await self._execute_query(query, *values, connection=connection)
@@ -1689,8 +1689,8 @@ class BaseDocument(metaclass=DocumentMeta):
         kwargs = self._convert_field_names_to_db_column_names(kwargs)
         for name, value in kwargs.items():
             setattr(self, name, value)
-        (set_statement, values_set_statement) = self._get_set_statement(**kwargs)
-        (filter_statement, values_for_filter) = self._get_filter_on_primary_key_fields(offset=len(kwargs) + 1)
+        set_statement, values_set_statement = self._get_set_statement(**kwargs)
+        filter_statement, values_for_filter = self._get_filter_on_primary_key_fields(offset=len(kwargs) + 1)
         values = values_set_statement + values_for_filter
         query = "UPDATE " + self.table_name() + " SET " + set_statement + " WHERE " + filter_statement
         await self._execute_query(query, *values, connection=connection)
@@ -1819,7 +1819,7 @@ class BaseDocument(metaclass=DocumentMeta):
             no_obj = False
 
         query = cls._convert_field_names_to_db_column_names(query)
-        (filter_statement, values) = cls._get_composed_filter(**query)
+        filter_statement, values = cls._get_composed_filter(**query)
         selected_columns = " * "
         if columns:
             selected_columns = ",".join([cls.validate_field_name(column) for column in columns])
@@ -1876,7 +1876,7 @@ class BaseDocument(metaclass=DocumentMeta):
             no_obj = False
 
         query = cls._convert_field_names_to_db_column_names(query)
-        (filter_statement, values) = cls._get_composed_filter(**query)
+        filter_statement, values = cls._get_composed_filter(**query)
         filter_statements = filter_statement.split(" AND ") if filter_statement != "" else []
         if start is not None:
             filter_statements.append(f"{page_by_column} > $" + str(len(values) + 1))
@@ -1904,7 +1904,7 @@ class BaseDocument(metaclass=DocumentMeta):
         Delete all documents that match the given query
         """
         query = cls._convert_field_names_to_db_column_names(query)
-        (filter_statement, values) = cls._get_composed_filter(**query)
+        filter_statement, values = cls._get_composed_filter(**query)
         query = "DELETE FROM " + cls.table_name()
         if filter_statement:
             query += " WHERE " + filter_statement
@@ -1922,7 +1922,7 @@ class BaseDocument(metaclass=DocumentMeta):
         for key, value in query.items():
             cls.validate_field_name(key)
             name = cls._add_column_name_prefix_if_needed(key, col_name_prefix)
-            (filter_statement, value) = cls._get_filter(name, value, index_count)
+            filter_statement, value = cls._get_filter(name, value, index_count)
             filter_statements.append(filter_statement)
             values.extend(value)
             index_count += len(value)
@@ -1981,19 +1981,19 @@ class BaseDocument(metaclass=DocumentMeta):
     ) -> tuple[str, list[object]]:
         match query_type:
             case QueryType.EQUALS:
-                (filter_statement, filter_values) = cls._get_filter(key, value, index_count)
+                filter_statement, filter_values = cls._get_filter(key, value, index_count)
             case QueryType.IS_NOT_NULL:
-                (filter_statement, filter_values) = cls.get_is_not_null_filter(key)
+                filter_statement, filter_values = cls.get_is_not_null_filter(key)
             case QueryType.CONTAINS:
-                (filter_statement, filter_values) = cls.get_contains_filter(key, value, index_count)
+                filter_statement, filter_values = cls.get_contains_filter(key, value, index_count)
             case QueryType.CONTAINS_PARTIAL:
-                (filter_statement, filter_values) = cls.get_contains_partial_filter(key, value, index_count)
+                filter_statement, filter_values = cls.get_contains_partial_filter(key, value, index_count)
             case QueryType.RANGE:
-                (filter_statement, filter_values) = cls.get_range_filter(key, value, index_count)
+                filter_statement, filter_values = cls.get_range_filter(key, value, index_count)
             case QueryType.NOT_CONTAINS:
-                (filter_statement, filter_values) = cls.get_not_contains_filter(key, value, index_count)
+                filter_statement, filter_values = cls.get_not_contains_filter(key, value, index_count)
             case QueryType.COMBINED:
-                (filter_statement, filter_values) = cls.get_filter_for_combined_query_type(
+                filter_statement, filter_values = cls.get_filter_for_combined_query_type(
                     key, cast(dict[QueryType, object], value), index_count
                 )
             case _ as _never:
@@ -2044,7 +2044,7 @@ class BaseDocument(metaclass=DocumentMeta):
             filter_statement, filter_values = cls.get_filter_for_query_type(query_type, name, value, index)
             filters.append((filter_statement, filter_values))
             index += len(filter_values)
-        (filter_statement, values) = cls._combine_filter_statements(filters)
+        filter_statement, values = cls._combine_filter_statements(filters)
 
         return (filter_statement, values)
 
@@ -2080,7 +2080,7 @@ class BaseDocument(metaclass=DocumentMeta):
         """
         filter_statement: str
         values: list[object]
-        (filter_statement, values) = cls._combine_filter_statements(
+        filter_statement, values = cls._combine_filter_statements(
             (
                 f"{name} {operator.pg_value} ${str(index + i)}",
                 [cls._get_value(bound)],
@@ -2149,7 +2149,7 @@ class BaseDocument(metaclass=DocumentMeta):
         """
         Delete this document
         """
-        (filter_as_string, values) = self._get_filter_on_primary_key_fields()
+        filter_as_string, values = self._get_filter_on_primary_key_fields()
         query = "DELETE FROM " + self.table_name() + " WHERE " + filter_as_string
         await self._execute_query(query, *values, connection=connection)
 
@@ -2821,7 +2821,7 @@ class Environment(BaseDocument):
             value = self._settings[key].validator(value)
 
         type = translate_to_postgres_type(self._settings[key].typ)
-        (filter_statement, values) = self._get_composed_filter(name=self.name, project=self.project, offset=5)
+        filter_statement, values = self._get_composed_filter(name=self.name, project=self.project, offset=5)
         query = f"""
                 UPDATE {self.table_name()}
                 SET settings=(
@@ -2865,7 +2865,7 @@ class Environment(BaseDocument):
             raise KeyError()
 
         if self._settings[key].default is None:
-            (filter_statement, values) = self._get_composed_filter(name=self.name, project=self.project, offset=2)
+            filter_statement, values = self._get_composed_filter(name=self.name, project=self.project, offset=2)
             query = f"""
                 UPDATE {self.table_name()}
                 SET settings->'settings'=(settings->'settings') - $1
@@ -3836,6 +3836,7 @@ class Compile(BaseDocument):
     :param links: An object that contains relevant links to this compile.
         It is a dictionary where the key is something that identifies one or more links
         and the value is a list of urls. i.e. {"instances": ["link-1',"link-2"], "compiles": ["link-3"]}
+    :param reinstall_project_and_venv: True iff perform a clean checkout of the project and re-create the compiler venv.
     """
 
     __primary_key__ = ("id",)
@@ -3874,6 +3875,7 @@ class Compile(BaseDocument):
 
     soft_delete: bool = False
     links: dict[str, list[str]] = {}
+    reinstall_project_and_venv: bool = False
 
     @classmethod
     async def get_substitute_by_id(cls, compile_id: uuid.UUID, connection: Optional[Connection] = None) -> Optional["Compile"]:
@@ -4715,16 +4717,16 @@ class ResourcePersistentState(BaseDocument):
     # When this resource was first created
     created: datetime.datetime
     # Field based on content from the resource actions
-    last_deploy: Optional[datetime.datetime] = None
+    last_handler_run_at: Optional[datetime.datetime] = None
     # When a resource is updated in a new model version, it might take some time until this update reaches the scheduler.
     # This is the attribute hash that the scheduler considers the last released attribute hash for the given resource.
     current_intent_attribute_hash: Optional[str] = None
     # Last deployment completed of any kind, including marking-deployed-for-know-good-state for increments
     # i.e. the end time of the last deploy
     last_deployed_attribute_hash: Optional[str] = None
-    # Hash used in last_deploy
+    # Hash used in last_handler_run_at
     last_deployed_version: Optional[int] = None
-    # Model version of last_deploy
+    # Model version of last_handler_run_at
     last_success: Optional[datetime.datetime] = None
     # last actual deployment completed without failure. i.e start time of the last deploy where status == ResourceState.deployed
     last_produced_events: Optional[datetime.datetime] = None
@@ -4738,13 +4740,21 @@ class ResourcePersistentState(BaseDocument):
     # Set to true when a version starts its deployment, set to false when it finishes
     is_deploying: bool
     # Written at deploy time (except for NEW -> no race condition possible with deploy path)
-    last_deploy_result: state.DeployResult
+    last_handler_run: state.HandlerResult
+    # Was the last run compliant, used for recovering scheduler state
+    last_handler_run_compliant: Optional[bool] = None
     # Written both when processing a new version and at deploy time. As such, this should be updated
     # under the scheduler lock to prevent race conditions with the deploy time updates.
     blocked: state.Blocked
 
     # Written at deploy time (Exception for initial record creation  -> no race condition possible with deploy path)
     last_non_deploying_status: const.NonDeployingResourceState = const.NonDeployingResourceState.available
+
+    # A foreign key to the resource_diff table.
+    # It is populated on `send_deploy_done` when the handler sets the resource state to `non_compliant`.
+    # It is cleaned up also on `send_deploy_done` when the handler reports any other resource state.
+    # This field is only meaningful when the Compliance of this resource is `NON_COMPLIANT` according to get_compliance_status()
+    non_compliant_diff: Optional[uuid.UUID] = None
 
     @classmethod
     async def mark_as_orphan(
@@ -4822,10 +4832,16 @@ class ResourcePersistentState(BaseDocument):
     ) -> None:
         """
         Make sure that the resource_persistent_state table has a record for each resource present in the
-        given model version. This method assumes that the given model_version is the latest released version.
+        given model version. This method assumes that the given model_version is the latest released version and that the table
+        has already been populated for the previously released version.
         """
         await cls._execute_query(
             f"""
+            WITH previous_released_version AS (
+                SELECT max(c.version) AS version
+                FROM {ConfigurationModel.table_name()} AS c
+                WHERE c.environment = $1 AND c.released AND c.version < $2
+            )
             INSERT INTO {cls.table_name()} (
                 environment,
                 resource_id,
@@ -4836,7 +4852,7 @@ class ResourcePersistentState(BaseDocument):
                 is_undefined,
                 is_orphan,
                 is_deploying,
-                last_deploy_result,
+                last_handler_run,
                 blocked,
                 created
             )
@@ -4863,6 +4879,14 @@ class ResourcePersistentState(BaseDocument):
                 ON rscm.environment=r.environment
                 AND rscm.resource_set=r.resource_set
             WHERE rscm.environment=$1 AND rscm.model=$2
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM resource_set_configuration_model AS prev_rscm
+                    INNER JOIN previous_released_version AS prev
+                        ON prev_rscm.model = prev.version
+                    WHERE prev_rscm.environment = rscm.environment
+                        AND prev_rscm.resource_set = rscm.resource_set
+                )
             ON CONFLICT DO NOTHING
             """,
             environment,
@@ -4871,38 +4895,103 @@ class ResourcePersistentState(BaseDocument):
         )
 
     @classmethod
+    async def persist_non_compliant_diff(
+        cls,
+        environment: uuid.UUID,
+        resource_id: ResourceIdStr,
+        created_at: datetime.datetime,
+        diff: abc.Mapping[str, object],
+        *,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> uuid.UUID:
+        """
+        Persist the non-compliant diff into the resource_diff table.
+
+        :returns: the id of the created diff
+        """
+        query = """
+            INSERT INTO resource_diff (id, environment, resource_id, created, diff)
+            VALUES (gen_random_uuid(), $1, $2, $3, $4)
+            RETURNING id
+        """
+        record = await cls._fetchrow(query, environment, resource_id, created_at, json.dumps(diff), connection=connection)
+        assert record  # make mypy happy
+        return uuid.UUID(str(record["id"]))
+
+    @classmethod
+    async def purge_old_diffs(cls) -> None:
+        """
+        Purge every diff that is older than RESOURCE_ACTION_LOGS_RETENTION
+        and not currently referenced by the rps table
+        """
+        default_retention_time = Environment._settings[RESOURCE_ACTION_LOGS_RETENTION].default
+
+        query = f"""
+            WITH non_halted_envs AS (
+                SELECT
+                    id,
+                    (
+                        COALESCE((settings->'settings'->'resource_action_logs_retention'->>'value')::int, $1)
+                    ) AS retention_days
+                FROM {Environment.table_name()}
+                WHERE NOT halted
+            )
+            DELETE FROM public.resource_diff AS rd
+            USING non_halted_envs
+            WHERE rd.environment=non_halted_envs.id
+                AND rd.created < now() AT TIME ZONE 'UTC' - make_interval(days => non_halted_envs.retention_days)
+                AND NOT EXISTS (
+                  SELECT 1
+                  FROM {cls.table_name()} AS rps
+                  WHERE rps.environment=rd.environment
+                    AND rps.resource_id=rd.resource_id
+                    AND rps.non_compliant_diff=rd.id
+              );
+        """
+        await cls._execute_query(query, default_retention_time)
+
+    @classmethod
     async def update_persistent_state(
         cls,
         environment: uuid.UUID,
         resource_id: ResourceIdStr,
         is_deploying: bool | None = None,
-        last_deploy: datetime.datetime | None = None,
+        last_handler_run_at: datetime.datetime | None = None,
         last_deployed_version: int | None = None,
         last_non_deploying_status: Optional[const.NonDeployingResourceState] = None,
         last_success: Optional[datetime.datetime] = None,
         last_produced_events: Optional[datetime.datetime] = None,
         last_deployed_attribute_hash: Optional[str] = None,
+        last_handler_run_compliant: Optional[bool] = None,
+        non_compliant_diff: Optional[uuid.UUID] = None,
+        cleanup_non_compliant_diff: Optional[bool] = False,
         connection: Optional[asyncpg.connection.Connection] = None,
         # TODO[#8541]: accept state.ResourceState and write blocked status as well
-        last_deploy_result: Optional[state.DeployResult] = None,
+        last_handler_run: Optional[state.HandlerResult] = None,
     ) -> None:
         """Update the data in the resource_persistent_state table"""
         args = ArgumentCollector(2)
 
         invalues = {
             "is_deploying": is_deploying,
-            "last_deploy": last_deploy,
+            "last_handler_run_at": last_handler_run_at,
             "last_non_deploying_status": last_non_deploying_status,
             "last_success": last_success,
             "last_produced_events": last_produced_events,
             "last_deployed_attribute_hash": last_deployed_attribute_hash,
             "last_deployed_version": last_deployed_version,
+            "last_handler_run_compliant": last_handler_run_compliant,
+            "non_compliant_diff": non_compliant_diff,
         }
         query_parts = [f"{k}={args(v)}" for k, v in invalues.items() if v is not None]
-        if last_deploy_result:
-            query_parts.append(f"last_deploy_result={args(last_deploy_result.name)}")
+        if last_handler_run:
+            query_parts.append(f"last_handler_run={args(last_handler_run.name)}")
         if not query_parts:
             return
+        if cleanup_non_compliant_diff:
+            if non_compliant_diff is not None:
+                raise Exception("Cannot provide both non_compliant_diff and cleanup_non_compliant_diff")
+            query_parts.append("non_compliant_diff=NULL")
         query = f"UPDATE public.resource_persistent_state SET {','.join(query_parts)} WHERE environment=$1 and resource_id=$2"
 
         result = await cls._execute_query(query, environment, resource_id, *args.args, connection=connection)
@@ -4921,8 +5010,68 @@ class ResourcePersistentState(BaseDocument):
             self.is_undefined,
             self.last_deployed_attribute_hash,
             self.current_intent_attribute_hash,
-            self.last_deploy_result,
+            self.last_handler_run_compliant,
         )
+
+    @classmethod
+    async def get_compliance_report(
+        cls, env: uuid.UUID, resource_ids: Sequence[ResourceIdStr]
+    ) -> dict[ResourceIdStr, m.ResourceComplianceDiff]:
+        async with cls.get_connection() as connection:
+            query = f"""
+            SELECT r.resource_id,
+                COALESCE((r.attributes->>'report_only')::boolean, false) AS report_only,
+                rd.diff,
+                rps.last_handler_run_at AS last_handler_run_at,
+                rps.is_undefined,
+                rps.last_deployed_attribute_hash,
+                rps.current_intent_attribute_hash,
+                rps.last_handler_run,
+                rps.blocked,
+                rps.last_handler_run_compliant
+            FROM {Scheduler.table_name()} AS s
+            INNER JOIN public.resource_set_configuration_model AS rscm
+                ON s.environment=rscm.environment
+                AND s.last_processed_model_version=rscm.model
+            INNER JOIN {Resource.table_name()} AS r
+                ON rscm.environment=r.environment
+                AND rscm.resource_set=r.resource_set
+            INNER JOIN UNNEST($2::text[]) AS requested_rids(resource_id)
+                ON requested_rids.resource_id=r.resource_id
+            INNER JOIN {cls.table_name()} AS rps
+                ON r.environment=rps.environment
+                AND r.resource_id=rps.resource_id
+            LEFT JOIN public.resource_diff AS rd
+                ON rps.non_compliant_diff=rd.id
+            WHERE
+                NOT rps.is_orphan
+                AND rps.environment=$1
+            """
+            result = await cls.select_query(query, [env, resource_ids], no_obj=True, connection=connection)
+            if len(result) != len(resource_ids):
+                missing_rids = set(resource_ids) - {ResourceIdStr(str(r["resource_id"])) for r in result}
+                raise NotFound(f"Unable to find the following resource ids in the active version: {missing_rids}")
+            diff: dict[ResourceIdStr, m.ResourceComplianceDiff] = {}
+            for record in result:
+                compliance_status = state.get_compliance_status(
+                    is_orphan=False,  # We filter out orphan resources in the query
+                    is_undefined=cast(bool, record["is_undefined"]),
+                    last_deployed_attribute_hash=cast(str | None, record["last_deployed_attribute_hash"]),
+                    current_intent_attribute_hash=cast(str | None, record["current_intent_attribute_hash"]),
+                    last_handler_run_compliant=cast(bool, record["last_handler_run_compliant"]),
+                )
+                diff[ResourceIdStr(str(record["resource_id"]))] = m.ResourceComplianceDiff(
+                    report_only=cast(bool, record["report_only"]),
+                    attribute_diff=(
+                        cast(dict[str, AttributeStateChange] | None, record["diff"])
+                        if compliance_status is state.Compliance.NON_COMPLIANT
+                        else None
+                    ),
+                    compliance=compliance_status,
+                    last_handler_run=state.HandlerResult(str(record["last_handler_run"]).lower()),
+                    last_handler_run_at=cast(datetime.datetime | None, record["last_handler_run_at"]),
+                )
+            return diff
 
 
 class InvalidResourceSetMigration(Exception):
@@ -5914,7 +6063,7 @@ class Resource(BaseDocument):
             r.agent,
             r.resource_id_value,
             rps.created as first_generated_time,
-            rps.last_deploy as latest_deploy,
+            rps.last_handler_run_at as latest_deploy,
             r.attributes,
             {const.SQL_RESOURCE_STATUS_SELECTOR} AS status
         FROM resource AS r
@@ -6309,7 +6458,7 @@ class ConfigurationModel(BaseDocument):
         if offset is not None:
             offset = int(offset)
 
-        (filterstr, values) = cls._get_composed_filter(col_name_prefix="c", offset=1, **query)
+        filterstr, values = cls._get_composed_filter(col_name_prefix="c", offset=1, **query)
         values = values
         where_statement = f"WHERE {filterstr} " if filterstr else ""
         order_by_statement = f"ORDER BY {order_by_column} {order} " if order_by_column else ""
@@ -6486,7 +6635,8 @@ class ConfigurationModel(BaseDocument):
                     NOT EXISTS(
                         SELECT 1
                         FROM {Resource.table_name()} r
-                        WHERE p.resource_id=r.resource_id
+                        WHERE p.environment=r.environment
+                        AND p.resource_id=r.resource_id
                     )
                 )
                 """,
@@ -6930,13 +7080,13 @@ class DiscoveredResource(BaseDocument):
     resource_type: ResourceType
     resource_id_value: str
 
-    discovery_resource_id: Optional[ResourceIdStr]
+    discovery_resource_id: ResourceIdStr
     values: dict[str, object]
 
     __primary_key__ = ("environment", "discovered_resource_id")
 
-    def to_dto(self) -> m.DiscoveredResource:
-        return m.DiscoveredResource(
+    def to_dto(self) -> m.DiscoveredResourceOutput:
+        return m.DiscoveredResourceOutput(
             discovered_resource_id=self.discovered_resource_id,
             resource_type=self.resource_type,
             agent=self.agent,

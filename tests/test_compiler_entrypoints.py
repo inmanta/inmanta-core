@@ -21,9 +21,10 @@ from collections import defaultdict
 
 import more_itertools
 
-from inmanta import compiler
+from inmanta import compiler, module, plugins, references, resources
+from inmanta.agent import handler
 from inmanta.ast import Range
-from inmanta.compiler import Compiler
+from inmanta.compiler import Compiler, ProjectLoader
 from inmanta.execute import scheduler
 
 
@@ -110,7 +111,7 @@ implement Test using a
         autostd=False,
     )
     compiler = Compiler()
-    (statements, blocks) = compiler.compile()
+    statements, blocks = compiler.compile()
     sched = scheduler.Scheduler()
     anchormap = sched.anchormap(compiler, statements, blocks)
 
@@ -174,13 +175,11 @@ implement Test using a
 
 
 def test_anchors_plugin(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 import tests
 
 l = tests::length("Hello World!")
-        """
-    )
+        """)
     anchormap = compiler.anchormap()
     location: Range
     resolves_to: Range
@@ -201,8 +200,7 @@ def test_get_types_and_scopes(snippetcompiler):
     """
     Test the get_types_and_scopes() entrypoint of the compiler.
     """
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
     entity Test:
         string a = "a"
         string b
@@ -226,10 +224,9 @@ def test_get_types_and_scopes(snippetcompiler):
 
     implement Test using a
 
-    """
-    )
+    """)
 
-    (types, scopes) = compiler.get_types_and_scopes()
+    types, scopes = compiler.get_types_and_scopes()
 
     # Verify types
     namespace_to_type_name = defaultdict(list)
@@ -339,7 +336,7 @@ def test_constructor_with_inferred_namespace(snippetcompiler):
     )
 
     compiler = Compiler()
-    (statements, blocks) = compiler.compile()
+    statements, blocks = compiler.compile()
     sched = scheduler.Scheduler()
 
     anchormap = sched.anchormap(compiler, statements, blocks)
@@ -373,7 +370,7 @@ def test_constructor_renamed_namespace(snippetcompiler):
     )
 
     compiler = Compiler()
-    (statements, blocks) = compiler.compile()
+    statements, blocks = compiler.compile()
     sched = scheduler.Scheduler()
 
     anchormap = sched.anchormap(compiler, statements, blocks)
@@ -382,3 +379,170 @@ def test_constructor_renamed_namespace(snippetcompiler):
     range_target = Range(target_path, 1, 8, 1, 12)
 
     assert (range_source, range_target) in anchormap
+
+
+def test_project_loader_dynamic_modules(snippetcompiler):
+    """
+    Verify that the ProjectLoader class handles dynamic modules correctly.
+    """
+    snippetcompiler.setup_for_snippet("""
+        import successhandlermodule
+
+        ref = successhandlermodule::create_my_ref("base_str")
+
+        successhandlermodule::SuccessResourceWithReference(
+            name="test_success_r_1",
+            agent="agent_1",
+            my_attr=ref
+        )
+        """)
+
+    compiler_obj = Compiler()
+    compiler_obj.compile()
+
+    # Helpers to mark specific instances
+    def mark(an_object: object) -> None:
+        setattr(an_object, "$$MARK$$", "mark")
+
+    def assert_marked(an_object: object) -> None:
+        assert hasattr(an_object, "$$MARK$$")
+
+    def assert_not_marked(an_object: object) -> None:
+        assert not hasattr(an_object, "$$MARK$$")
+
+    assert resources.resource.get_resources()
+    for k, resource in resources.resource.get_resources():
+        mark(resource)
+
+    assert handler.Commander.get_handlers().items()
+    for k, handl in handler.Commander.get_handlers().items():
+        mark(handl)
+
+    registered_references = [v for k, v in references.reference.get_references() if not k.startswith("core::")]
+    assert registered_references
+    for ref in registered_references:
+        mark(ref)
+
+    registered_mutators = [v for k, v in references.mutator.get_mutators() if not k.startswith("core::")]
+    assert registered_mutators
+    for mut in registered_mutators:
+        mark(mut)
+
+    registered_plugins = {v for k, v in plugins.PluginMeta.get_functions().items()}
+    for plugin in registered_plugins:
+        mark(plugin)
+
+    registered_modules = {v for k, v in module.Project.get().modules.items()}
+    assert registered_modules
+    for mod in registered_modules:
+        mark(mod)
+
+    ProjectLoader.load(snippetcompiler.project)
+    compiler_obj.compile()
+
+    # Verify that the identity of the compiler state objects didn't change
+
+    for k, resource in resources.resource.get_resources():
+        assert_marked(resource)
+
+    for k, handl in handler.Commander.get_handlers().items():
+        assert_marked(handl)
+
+    registered_references = [v for k, v in references.reference.get_references() if not k.startswith("core::")]
+    for ref in registered_references:
+        assert_marked(ref)
+
+    registered_mutators = [v for k, v in references.mutator.get_mutators() if not k.startswith("core::")]
+    for mut in registered_mutators:
+        assert_marked(mut)
+
+    registered_plugins = {v for k, v in plugins.PluginMeta.get_functions().items()}
+    for plugin in registered_plugins:
+        assert_marked(plugin)
+
+    registered_modules = {v for k, v in module.Project.get().modules.items()}
+    for mod in registered_modules:
+        assert_marked(mod)
+
+    ProjectLoader.register_dynamic_module("successhandlermodule")
+    ProjectLoader.load(snippetcompiler.project)
+    compiler_obj.compile()
+
+    # Verify that the identity of the compiler state objects did change
+    for k, resource in resources.resource.get_resources():
+        assert_not_marked(resource)
+
+    for k, handl in handler.Commander.get_handlers().items():
+        assert_not_marked(handl)
+
+    registered_references = [v for k, v in references.reference.get_references() if not k.startswith("core::")]
+    for ref in registered_references:
+        assert_not_marked(ref)
+
+    registered_mutators = [v for k, v in references.mutator.get_mutators() if not k.startswith("core::")]
+    for mut in registered_mutators:
+        assert_not_marked(mut)
+
+    registered_plugins = {v for k, v in plugins.PluginMeta.get_functions().items()}
+    for plugin in registered_plugins:
+        assert_not_marked(plugin)
+
+    registered_modules = {v for k, v in module.Project.get().modules.items()}
+    for mod in registered_modules:
+        assert_not_marked(mod)
+
+
+def test_project_loader(snippetcompiler):
+    """ """
+    snippetcompiler.setup_for_snippet("""
+        import successhandlermodule
+
+        ref = successhandlermodule::create_my_ref("base_str")
+
+        successhandlermodule::SuccessResourceWithReference(
+            name="test_success_r_1",
+            agent="agent_1",
+            my_attr=ref
+        )
+        """)
+
+    compiler_obj = Compiler()
+    compiler_obj.compile()
+
+    # Verify we have compiler state
+    registered_resources = {k: id(v) for k, v in resources.resource.get_resources()}
+    assert any(k.startswith("successhandlermodule::") for k in registered_resources.keys())
+    registered_providers = {k: id(v) for k, v in handler.Commander.get_handlers().items()}
+    assert any(k.startswith("successhandlermodule::") for k in registered_providers.keys())
+    registered_references = {k: id(v) for k, v in references.reference.get_references() if not k.startswith("core::")}
+    assert any(k.startswith("successhandlermodule::") for k in registered_references.keys())
+    registered_mutators = {k: id(v) for k, v in references.mutator.get_mutators() if not k.startswith("core::")}
+    assert "foo::Mutator" in registered_mutators.keys()
+    registered_plugins = {k: id(v) for k, v in plugins.PluginMeta.get_functions().items()}
+    assert any(k.startswith("successhandlermodule::") for k in registered_plugins.keys())
+    assert not any(k.startswith("tests::") for k in registered_plugins.keys())
+    registered_modules = {k: id(v) for k, v in module.Project.get().modules.items()}
+    assert "successhandlermodule" in registered_modules
+    assert "tests" not in registered_modules
+
+    # Update the model as such that it no longer uses the successhandlermodule module,
+    # but it does use the tests module now.
+    with open(snippetcompiler.main, "w", encoding="utf-8") as fh:
+        fh.write("""
+            import tests
+
+            tests::length("test")
+            """)
+
+    # Clear the ast cache
+    snippetcompiler.project.invalidate_state()
+    ProjectLoader.load(snippetcompiler.project)
+    compiler_obj.compile()
+    assert not any(resources.resource.get_resources())
+    assert not handler.Commander.get_handlers()
+    assert not {k: id(v) for k, v in references.reference.get_references() if not k.startswith("core::")}
+    assert not {k: id(v) for k, v in references.mutator.get_mutators() if not k.startswith("core::")}
+    registered_plugins = {k: id(v) for k, v in plugins.PluginMeta.get_functions().items()}
+    assert any(k.startswith("tests::") for k in registered_plugins.keys())
+    assert "successhandlermodule" not in module.Project.get().modules
+    assert "tests" in module.Project.get().modules

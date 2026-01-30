@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump the sphinx group with 2 updates
+destination-branches:
+- master
+sections: {}

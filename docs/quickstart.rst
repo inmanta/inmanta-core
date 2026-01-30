@@ -21,7 +21,7 @@ In this guide we start simple and manage a 3-node CLOS network with a spine and 
 Prerequisites
 _________________________
 
-**Python version 3.12**, ``Docker``, ``Containerlab`` and ``Inmanta`` need to be installed on your machine and our ``SR Linux`` repository has to be cloned in order to proceed. Please make sure to follow the links below to that end.
+Python version |python_version|, ``Docker``, ``Containerlab`` and ``Inmanta`` need to be installed on your machine and our ``SR Linux`` repository has to be cloned in order to proceed. Please make sure to follow the links below to that end.
 
 1. `Install Docker <https://docs.docker.com/install/>`_.
 2. `Install Containerlab <https://containerlab.dev/install/>`_.
@@ -499,10 +499,7 @@ ______________________________
 
 We host modules to set up and manage many systems on our Github. These are available under https://github.com/inmanta/.
 
-When you use an import statement in your model, Inmanta downloads these modules and their dependencies when you run ``inmanta project install``.
-V2 modules (See :ref:`moddev-module-v2`) need to be declared as Python dependencies in addition
-to using them in an import statement. Some of our public modules are hosted in the v2 format on https://pypi.org/.
-
+Modules need to be declared as Python dependencies in addition to using them in an import statement (See :ref:`moddev-module`). Inmanta downloads these modules and their dependencies when you run ``inmanta project install``.
 
 
 Update the configuration model

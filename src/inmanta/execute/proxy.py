@@ -25,10 +25,10 @@ from dataclasses import is_dataclass
 from types import TracebackType
 from typing import TYPE_CHECKING, Callable, ContextManager, Optional, Self, Union
 
-# Keep UnsetException, UnknownException and AttributeNotFound in place for backward compat with <iso8
+# Keep UnsetException and UnknownException in place for backward compat with <iso8
 from inmanta import references
 from inmanta.ast import UnsetException  # noqa F401
-from inmanta.ast import AttributeNotFound, Location, NotFoundException, RuntimeException, UnexpectedReference, UnknownException
+from inmanta.ast import Location, NotFoundException, RuntimeException, UnexpectedReference, UnknownException
 from inmanta.execute.util import NoneValue, Unknown
 from inmanta.stable_api import stable_api
 from inmanta.types import PrimitiveTypes
@@ -206,7 +206,7 @@ class DynamicProxy:
         if isinstance(item, dict):
 
             def recurse_dict_item(key_value: tuple[object, object]) -> tuple[object, object]:
-                (key, value) = key_value
+                key, value = key_value
                 if not isinstance(key, str):
                     raise RuntimeException(
                         None, f"dict keys should be strings, got {key!r} of type {type(key)} with dict value {value!r}"
@@ -360,7 +360,7 @@ class DynamicProxy:
             value = instance.get_attribute(attribute).get_value()
         except NotFoundException as e:
             # allow for hasattr(proxy, "some_attr")
-            raise AttributeNotFound(e.stmt, e.name)
+            raise AttributeError(e.stmt, e.name)
 
         return self._return_value(value, relative_path=f".{attribute}")
 

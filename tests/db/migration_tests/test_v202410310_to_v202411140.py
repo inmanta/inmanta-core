@@ -55,65 +55,73 @@ async def test_add_new_resource_status_column(
         resource_state_by_resource_id[inmanta.types.ResourceIdStr("test::Resource[agent1,key=key1]")],
         is_undefined=False,
         is_orphan=False,
-        last_deploy_result=state.DeployResult.DEPLOYED,
+        last_handler_run=state.HandlerResult.SUCCESSFUL,
         blocked=state.Blocked.NOT_BLOCKED,
         expected_compliance=Compliance.COMPLIANT,
+        last_handler_run_compliant=True,
     )
     assert_resource_persistent_state(
         resource_state_by_resource_id[inmanta.types.ResourceIdStr("test::Fail[agent1,key=key2]")],
         is_undefined=False,
         is_orphan=False,
-        last_deploy_result=state.DeployResult.FAILED,
+        last_handler_run=state.HandlerResult.FAILED,
         blocked=state.Blocked.NOT_BLOCKED,
         expected_compliance=Compliance.NON_COMPLIANT,
+        last_handler_run_compliant=False,
     )
     assert_resource_persistent_state(
         resource_state_by_resource_id[inmanta.types.ResourceIdStr("test::Resource[agent1,key=key3]")],
         is_undefined=False,
         is_orphan=False,
-        last_deploy_result=state.DeployResult.SKIPPED,
+        last_handler_run=state.HandlerResult.SKIPPED,
         blocked=state.Blocked.NOT_BLOCKED,
         expected_compliance=Compliance.NON_COMPLIANT,
+        last_handler_run_compliant=False,
     )
     assert_resource_persistent_state(
         resource_state_by_resource_id[inmanta.types.ResourceIdStr("test::Resource[agent1,key=key4]")],
         is_undefined=True,
         is_orphan=False,
-        last_deploy_result=state.DeployResult.NEW,
+        last_handler_run=state.HandlerResult.NEW,
         blocked=state.Blocked.BLOCKED,
         expected_compliance=Compliance.UNDEFINED,
+        last_handler_run_compliant=None,
     )
     assert_resource_persistent_state(
         resource_state_by_resource_id[inmanta.types.ResourceIdStr("test::Resource[agent1,key=key5]")],
         is_undefined=False,
         is_orphan=False,
-        last_deploy_result=state.DeployResult.NEW,
+        last_handler_run=state.HandlerResult.NEW,
         blocked=state.Blocked.BLOCKED,
         expected_compliance=Compliance.NON_COMPLIANT,
+        last_handler_run_compliant=None,
     )
     assert_resource_persistent_state(
         resource_state_by_resource_id[inmanta.types.ResourceIdStr("test::Resource[agent1,key=key6]")],
         is_undefined=False,
         is_orphan=True,
-        # The last_deploy_result field is not accurate, because it's an orphan. Tracking this accurately
+        # The last_handler_run field is not accurate, because it's an orphan. Tracking this accurately
         # would require an expensive query in the database migration script.
-        last_deploy_result=state.DeployResult.NEW,
+        last_handler_run=state.HandlerResult.NEW,
         blocked=state.Blocked.NOT_BLOCKED,
         expected_compliance=None,
+        last_handler_run_compliant=None,
     )
     assert_resource_persistent_state(
         resource_state_by_resource_id[inmanta.types.ResourceIdStr("test::Resource[agent1,key=key7]")],
         is_undefined=False,
         is_orphan=False,
-        last_deploy_result=state.DeployResult.DEPLOYED,
+        last_handler_run=state.HandlerResult.SUCCESSFUL,
         blocked=state.Blocked.NOT_BLOCKED,
         expected_compliance=Compliance.COMPLIANT,
+        last_handler_run_compliant=True,
     )
     assert_resource_persistent_state(
         resource_state_by_resource_id[inmanta.types.ResourceIdStr("test::Resource[agent1,key=key8]")],
         is_undefined=False,
         is_orphan=False,
-        last_deploy_result=state.DeployResult.NEW,
+        last_handler_run=state.HandlerResult.NEW,
         blocked=state.Blocked.NOT_BLOCKED,
         expected_compliance=Compliance.HAS_UPDATE,
+        last_handler_run_compliant=None,
     )

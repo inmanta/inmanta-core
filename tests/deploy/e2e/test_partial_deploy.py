@@ -23,7 +23,6 @@ from collections.abc import Callable
 import pytest
 
 from deploy.scheduler_mocks import DummyManager
-from inmanta.util import get_compiler_version
 from utils import ClientHelper
 
 
@@ -40,7 +39,6 @@ def make_shared_set(resource_version=0, size=2, revision=0):
             "key": "shared1",
             "value": f"{revision}",
             "id": f"test::Resource[agent1,key=shared1],v={resource_version}",
-            "version": resource_version,
             "send_event": True,
             "purged": False,
             "requires": [],
@@ -50,7 +48,6 @@ def make_shared_set(resource_version=0, size=2, revision=0):
             "key": f"shared{i}",
             "value": f"{i * revision}",
             "id": f"test::Resource[agent1,key=shared{i}],v={resource_version}",
-            "version": resource_version,
             "send_event": True,
             "purged": False,
             "requires": [f"test::Resource[agent1,key=shared{i - 1}],v={resource_version}"],
@@ -82,7 +79,6 @@ def make_set(
             "key": f"{set_id}-{i}",
             "value": f"{revision}",
             "id": f"test::Resource[agent1,key={set_id}-{i}],v={resource_version}",
-            "version": resource_version,
             "send_event": True,
             "purged": False,
             "requires": [f"test::Resource[agent1,key={set_id}-{i - 1}],v={resource_version}"] if i != 0 else [],
@@ -154,7 +150,6 @@ async def test_partial_compile_scenarios_end_to_end(
             resources=resources,
             unknowns=[],
             version_info={},
-            compiler_version=get_compiler_version(),
             module_version_info={},
             resource_sets=set_collector,
         )

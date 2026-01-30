@@ -7,7 +7,6 @@ from inmanta.plugins import plugin, ModelType
 from inmanta.references import Reference
 from inmanta_plugins.refs import dc
 
-
 type Entity = Annotated[Any, ModelType["std::Entity"]]
 
 
