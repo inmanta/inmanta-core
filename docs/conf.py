@@ -120,24 +120,10 @@ solution will set the version number to 1.0.0.
 
 # The full version, including alpha/beta/rc tags.
 release = version
-
-
-iso_gpg_key: str
-oss_gpg_key: str = "A34DD0A274F07713"
-
-try:
-    # if product's conf.py injected an iso_gpg_key, use that one
-    iso_gpg_key
-except NameError:
-    # else set a dummy value
-    iso_gpg_key = "<gpg_key>"
-
-
 version_major = int(version.split(".")[0])
+
 rst_prolog = f"""\
 .. |version_major| replace:: {version_major}
-.. |iso_gpg_key| replace:: {iso_gpg_key}
-.. |oss_gpg_key| replace:: {oss_gpg_key}
 .. |release| replace:: {release}
 .. |python_version| replace:: {sys.version_info.major}.{sys.version_info.minor}
 """
