@@ -23,8 +23,7 @@ from inmanta.ast import RuntimeException
 
 
 def test_option_values(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity Test1:
 
 end
@@ -44,15 +43,13 @@ end
 implement Test1 using tt when self.other.flag == false
 
 Test1()
-"""
-    )
+""")
     with pytest.raises(RuntimeException):
         compiler.do_compile()
 
 
 def test_isset(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    snippetcompiler.setup_for_snippet("""
 entity Test1:
 
 end
@@ -75,6 +72,5 @@ Test1(other=Test2())
 
 implementation none for std::Entity:
 end
-"""
-    )
+""")
     compiler.do_compile()

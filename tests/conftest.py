@@ -189,6 +189,7 @@ TABLES_TO_KEEP = [x.table_name() for x in data._classes] + [
     "agent_modules",
     "module_files",
     "role_assignment",
+    "resource_diff",
 ]  # Join table
 
 # Save the cwd as early as possible to prevent that it gets overridden by another fixture
@@ -1033,7 +1034,7 @@ async def agent_factory(
             all_environments = {agent.environment for agent in agents}
             for environment in all_environments:
                 # Make sure that the scheduler doesn't deploy anything anymore, because this would alter
-                # the last_deploy timestamp in the resource_state.
+                # the last_handler_run_at timestamp in the resource_state.
                 await client.all_agents_action(tid=environment, action=const.AgentAction.pause.value).value()
                 # Set data.RESET_DEPLOY_PROGRESS_ON_START back to False in all of the environments of the created agents
                 # Because this teardown asserts that the state is correct on restart and this setting breaks that assertion
@@ -1548,16 +1549,14 @@ class SnippetCompilationTest(KeepOnFail):
         if ministd:
             add_to_module_path += ministd_path
         with open(os.path.join(self.project_dir, "project.yml"), "w", encoding="utf-8") as cfg:
-            cfg.write(
-                f"""
+            cfg.write(f"""
             name: snippet test
             modulepath: {self._get_modulepath_for_project_yml_file(add_to_module_path)}
             downloadpath: {self.libs}
             version: 1.0
             repo:
                 - {{type: git, url: {self.repo} }}
-            """.rstrip()
-            )
+            """.rstrip())
 
             if relation_precedence_rules:
                 cfg.write("\n            relation_precedence_policy:\n")
@@ -1568,27 +1567,19 @@ class SnippetCompilationTest(KeepOnFail):
             if install_mode:
                 cfg.write(f"\n            install_mode: {install_mode.value}")
 
-            cfg.write(
-                f"""
+            cfg.write(f"""
             pip:
                 use_system_config: {use_pip_config_file}
-"""
-            )
+""")
             if index_url:
-                cfg.write(
-                    f"""                index_url: {index_url}
-"""
-                )
+                cfg.write(f"""                index_url: {index_url}
+""")
             if extra_index_url:
-                cfg.write(
-                    f"""                extra_index_url: [{", ".join(url for url in extra_index_url)}]
-"""
-                )
+                cfg.write(f"""                extra_index_url: [{", ".join(url for url in extra_index_url)}]
+""")
             if pre is not None:
-                cfg.write(
-                    f"""                pre: {str(pre).lower()}
-"""
-                )
+                cfg.write(f"""                pre: {str(pre).lower()}
+""")
             if environment_settings:
                 cfg.write("\n            environment_settings:\n")
                 cfg.write("\n".join(f"                {name}: {value}" for name, value in environment_settings.items()))
@@ -1654,7 +1645,7 @@ class SnippetCompilationTest(KeepOnFail):
         from inmanta.export import Exporter  # noqa: H307
 
         try:
-            (types, scopes) = compiler.do_compile()
+            types, scopes = compiler.do_compile()
         except Exception:
             types, scopes = (None, None)
             if do_raise:
@@ -1752,12 +1743,10 @@ class SnippetCompilationTest(KeepOnFail):
             fd.write(initpy)
 
         with open(os.path.join(module_dir, "module.yml"), "w+") as fd:
-            fd.write(
-                f"""name: {name}
+            fd.write(f"""name: {name}
 version: 0.1
 license: Test License
-                """
-            )
+                """)
 
 
 @pytest.fixture(scope="session")
@@ -2477,15 +2466,14 @@ def resource_container(clean_reset):
                 current.value = self.get(resource.id.get_agent_name(), resource.key)
             else:
                 current.value = None
-
+            # Fail in read stage to test reporting resources
+            if self.fail(resource.id.get_agent_name(), resource.key):
+                raise Exception("Failed")
             return current
 
         def do_changes(self, ctx, resource, changes):
             if self.skip(resource.id.get_agent_name(), resource.key):
                 raise SkipResource()
-
-            if self.fail(resource.id.get_agent_name(), resource.key):
-                raise Exception("Failed")
 
             if "purged" in changes:
                 self.touch(resource.id.get_agent_name(), resource.key)
@@ -2916,6 +2904,8 @@ async def mixed_resource_generator(
         <instances> skipped for undefined
         <instances> failed
         <instances> skipped
+        <instances> deploying
+        <instances> non-compliant
         min(<resources_per_version> / 2, 10) *<instances> orphans
         <resources_per_version> - 5 deployed
     """
@@ -2972,7 +2962,6 @@ async def mixed_resource_generator(
                     resource_state=resource_state,
                     unknowns=[],
                     version_info={},
-                    compiler_version=inmanta.util.get_compiler_version(),
                     resource_sets=resource_sets,
                 )
                 assert result.code == 200
@@ -3013,21 +3002,23 @@ async def mixed_resource_generator(
                 if "sub=4]" in rid:
                     # never finish deploying r4
                     return
+                reported_resource_state: const.HandlerResourceState
+                if "sub=2]" in rid:
+                    reported_resource_state = const.HandlerResourceState.failed
+                elif "sub=3]" in rid:
+                    reported_resource_state = const.HandlerResourceState.skipped
+                elif "sub=5]" in rid:
+                    reported_resource_state = const.HandlerResourceState.non_compliant
+                else:
+                    reported_resource_state = const.HandlerResourceState.deployed
+
                 if deploy_intent is not None:
                     await dummy_scheduler.deploy_done(
                         deploy_intent,
                         DeployReport(
                             rvid=ResourceVersionIdStr(f"{rid},v={version}"),
                             action_id=action_id,
-                            resource_state=(
-                                const.HandlerResourceState.failed
-                                if "sub=2]" in rid
-                                else (
-                                    const.HandlerResourceState.skipped
-                                    if "sub=3]" in rid
-                                    else const.HandlerResourceState.deployed
-                                )
-                            ),
+                            resource_state=reported_resource_state,
                             messages=[],
                             changes={},
                             change=None,

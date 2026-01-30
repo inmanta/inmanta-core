@@ -37,6 +37,7 @@ import inmanta
 import inmanta.ast.export as ast_export
 import pydantic_core.core_schema
 from inmanta import const, data, protocol, resources
+from inmanta.deploy.state import Compliance, HandlerResult
 from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes
 from inmanta.types import BaseModel as BaseModel  # Keep in place for backwards compat with <=ISO8
@@ -512,6 +513,7 @@ class ReleasedResourceState(StrEnum):
     undefined = "undefined"  # The state of this resource is unknown at this moment in the orchestration process
     skipped_for_undefined = "skipped_for_undefined"  # This resource depends on an undefined resource
     orphaned = "orphaned"
+    non_compliant = "non_compliant"
 
 
 class VersionedResource(BaseModel):
@@ -609,7 +611,7 @@ class VersionedResourceDetails(ResourceDetails):
 
 class ReleasedResourceDetails(ResourceDetails):
     """The details of a released resource
-    :param last_deploy: The value of the last_deploy on the latest released version of the resource
+    :param last_deploy: The value of the last_handler_run_at on the latest released version of the resource
     :param first_generated_time: The first time this resource was generated
     :param status: The current status of the resource
     :param requires_status: The id and status of the resources this resource requires
@@ -668,6 +670,22 @@ class ResourceDiff(BaseModel):
     resource_id: ResourceIdStr
     attributes: dict[str, AttributeDiff]
     status: ResourceDiffStatus
+
+
+class ResourceComplianceDiff(BaseModel):
+    """
+    :param report_only: Is this resource in report only mode.
+    :param compliance: The current compliance of this resource.
+    :param last_handler_run: The handler result of the last run of this resource.
+    :param last_handler_run_at: The timestamp of the last run of this resource.
+    :param attribute_diff: The diff between the attributes of the current and desired state of a non_compliant resource.
+    """
+
+    report_only: bool
+    compliance: Compliance
+    last_handler_run: HandlerResult
+    last_handler_run_at: datetime.datetime | None
+    attribute_diff: dict[str, AttributeStateChange] | None
 
 
 class Parameter(BaseModel):
@@ -897,17 +915,15 @@ class DiscoveredResourceABC(BaseModel):
     values: dict[str, object]
     managed_resource_uri: Optional[str] = None
 
-    discovery_resource_id: Optional[ResourceId]
+    discovery_resource_id: ResourceId
 
     @computed_field  # type: ignore[misc]
     @property
     def discovery_resource_uri(self) -> str | None:
-        if self.discovery_resource_id is None:
-            return None
         return f"/api/v2/resource/{urllib.parse.quote(self.discovery_resource_id, safe='')}"
 
 
-class DiscoveredResource(DiscoveredResourceABC):
+class DiscoveredResourceOutput(DiscoveredResourceABC):
     """
     Discovered resource for API returns. Contains additional (redundant) metadata to improve user experience.
     """
@@ -917,19 +933,10 @@ class DiscoveredResource(DiscoveredResourceABC):
     resource_id_value: str
 
 
-class LinkedDiscoveredResource(DiscoveredResourceABC):
+class DiscoveredResourceInput(DiscoveredResourceABC):
     """
-    DiscoveredResource linked to the discovery resource that discovered it.
-
-    :param discovery_resource_id: Resource id of the (managed) discovery resource that reported this
-           discovered resource.
+    A discovered resource that is sent to the API.
     """
-
-    # This class is used as API input. Its behaviour can be directly incorporated into the DiscoveredResourceABC parent class
-    # when providing the id of the discovery resource is mandatory for all discovered resource. Ticket link:
-    # https://github.com/inmanta/inmanta-core/issues/8004
-
-    discovery_resource_id: ResourceId
 
     def to_dao(self, env: uuid.UUID) -> "data.DiscoveredResource":
         parsed_id: resources.Id = resources.Id.parse_id(self.discovered_resource_id)

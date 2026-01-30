@@ -41,7 +41,7 @@ myst_enable_extensions = ["colon_fence"]
 def setup(app):
     # cut off license headers
     from sphinx.ext.autodoc import cut_lines
-    app.connect('autodoc-process-docstring', cut_lines(15, what=['module']))
+    app.connect('autodoc-process-docstring', cut_lines(17, what=['module']))
 def check_dot_command():
     if shutil.which("dot") is None:
         raise Exception("The 'dot' command is not available. Please install Graphviz (https://graphviz.org) "
@@ -120,25 +120,12 @@ solution will set the version number to 1.0.0.
 
 # The full version, including alpha/beta/rc tags.
 release = version
-
-
-iso_gpg_key: str
-oss_gpg_key: str = "A34DD0A274F07713"
-
-try:
-    # if product's conf.py injected an iso_gpg_key, use that one
-    iso_gpg_key
-except NameError:
-    # else set a dummy value
-    iso_gpg_key = "<gpg_key>"
-
-
 version_major = int(version.split(".")[0])
+
 rst_prolog = f"""\
 .. |version_major| replace:: {version_major}
-.. |iso_gpg_key| replace:: {iso_gpg_key}
-.. |oss_gpg_key| replace:: {oss_gpg_key}
 .. |release| replace:: {release}
+.. |python_version| replace:: {sys.version_info.major}.{sys.version_info.minor}
 """
 
 
@@ -162,13 +149,13 @@ rst_prolog = f"""\
 # the documents and not their structure.
 
 
-exclude_patterns = ['adr/*.md']
+exclude_patterns = ["adr/*.md", "install/compatibility_check.rst"]
 
 if not tags.has("iso"):
     exclude_patterns += [
         "lsm",
         "administrators/operational_procedures_with_lsm.rst",
-        "administrators/support.rst"
+        "administrators/support.rst",
     ]
 
 # The reST default role (used for this markup: `text`) to use for all documents.
@@ -287,6 +274,8 @@ html_show_copyright = True
 # base URL from which the finished HTML is served.
 # html_use_opensearch = ''
 
+html_search_scorer=os.path.join(os.path.dirname(os.path.abspath(__file__)), "scorer.js")
+
 # This is the file name suffix for HTML files (e.g. ".xhtml").
 # html_file_suffix = None
 
@@ -394,6 +383,7 @@ linkcheck_ignore = [
 linkcheck_anchors_ignore=[
     # Ignore Scroll To Text Fragment anchors, because they are not supposed to be present in the HTML body.
     f"{re.escape(':~:text=')}.*",
+    "issuecomment-[0-9]+",
 ]
 
 graphviz_output_format = "svg"

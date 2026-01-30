@@ -107,8 +107,8 @@ class RequestedPagingBoundaries:
 
     :param start: min boundary value (exclusive) for the requested page for the primary sort column.
     :param end: max boundary value (exclusive) for the requested page for the primary sort column.
-    :param first_id: min boundary value (exclusive) for requested the page for the secondary sort column, if there is one.
-    :param last_id: max boundary value (exclusive) for requested the page for the secondary sort column, if there is one.
+    :param first_id: min boundary value (exclusive) for the requested page for the secondary sort column, if there is one.
+    :param last_id: max boundary value (exclusive) for the requested page for the secondary sort column, if there is one.
     """
 
     def __init__(
@@ -1310,7 +1310,7 @@ class AgentView(DataView[AgentOrder, model.Agent]):
         ]
 
 
-class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredResource]):
+class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredResourceOutput]):
     def __init__(
         self,
         environment: data.Environment,
@@ -1359,17 +1359,13 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
                     dr.resource_id_value,
                     dr.values,
                     (rps_1.resource_id IS NOT NULL) AS managed,
-                    rps_2.resource_id AS discovery_resource_id
+                    dr.discovery_resource_id
 
                 FROM {data.DiscoveredResource.table_name()} as dr
 
                 -- Retrieve the corresponding managed resource id (if any)
                 LEFT JOIN {data.ResourcePersistentState.table_name()} rps_1
                 ON dr.environment=rps_1.environment AND dr.discovered_resource_id = rps_1.resource_id
-
-                -- Retrieve the id of the resource responsible for discovering this resource
-                LEFT JOIN {data.ResourcePersistentState.table_name()} rps_2
-                ON dr.environment=rps_2.environment AND dr.discovery_resource_id = rps_2.resource_id
 
                 WHERE dr.environment = $1
             )
@@ -1381,7 +1377,7 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
 
     def construct_dtos(self, records: Sequence[Record]) -> Sequence[dict[str, str]]:
         return [
-            model.DiscoveredResource(
+            model.DiscoveredResourceOutput(
                 discovered_resource_id=rid.resource_str(),
                 resource_type=rid.entity_type,
                 agent=rid.agent_name,
@@ -1392,7 +1388,7 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
                     if res["managed"]
                     else None
                 ),
-                discovery_resource_id=res["discovery_resource_id"] if res["discovery_resource_id"] else None,
+                discovery_resource_id=res["discovery_resource_id"],
             ).model_dump()
             for rid, res in ((Id.parse_id(res["discovered_resource_id"]), res) for res in records)
         ]

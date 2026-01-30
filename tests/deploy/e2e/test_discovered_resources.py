@@ -29,7 +29,7 @@ from inmanta.types import ResourceVersionIdStr
 
 async def test_discovery_resource_single(server, client, agent, environment):
     """
-    Test that a discovered resource can be created and retrieved successfully for a single resource.
+    Test that a discovered resource can be created/retrieved and deleted successfully for a single resource.
     """
     discovered_resource_id = "test::Resource[agent1,key=key]"
     discovery_resource_id = "test::DiscoveryResource[agent1,key=key]"
@@ -66,10 +66,20 @@ async def test_discovery_resource_single(server, client, agent, environment):
     assert result.result["data"]["discovery_resource_id"] == discovery_resource_id
     assert result.result["data"]["values"] == values
 
+    result = await client.discovered_resource_delete(environment, discovered_resource_id)
+    assert result.code == 200
 
-async def test_discovered_resource_create_batch(server, client, agent, environment):
+    result = await client.discovered_resources_get(environment, discovered_resource_id)
+    assert result.code == 404
+
+    result = await client.discovered_resource_delete(environment, discovered_resource_id)
+    assert result.code == 404
+    assert f"Discovered Resource with id {discovered_resource_id} not found in env {environment}" in result.result["message"]
+
+
+async def test_discovered_resource_batch(server, client, agent, environment):
     """
-    Test that a batch of discovered resources can be created
+    Test that a batch of discovered resources can be created and deleted
     """
 
     discovery_resource_id = "test::DiscoveryResource[agent1,key=key]"
@@ -93,6 +103,11 @@ async def test_discovered_resource_create_batch(server, client, agent, environme
     ]
     result = await agent._client.discovered_resource_create_batch(environment, resources)
     assert result.code == 200
+
+    # checks for a bug where this endpoint would crash if the discovery_resource_id was not managed (as is this case)
+    result = await client.discovered_resources_get_batch(environment)
+    assert result.code == 200
+    assert len(result.result["data"]) == 3
 
     for res in resources:
         result = await client.discovered_resources_get(environment, res["discovered_resource_id"])
@@ -128,6 +143,32 @@ async def test_discovered_resource_create_batch(server, client, agent, environme
         assert result.result["data"]["discovered_resource_id"] == res["discovered_resource_id"]
         assert result.result["data"]["values"] == res["values"]
         assert result.result["data"]["discovery_resource_id"] == discovery_resource_id
+
+    resources_to_delete = ["test::Resource[agent1,key1=key1]", "test::Resource[agent1,key2=key2]"]
+
+    result = await client.discovered_resource_delete_batch(environment, resources_to_delete)
+    assert result.code == 200
+
+    for res in resources_to_delete:
+        result = await client.discovered_resources_get(environment, res)
+        assert result.code == 404
+
+    # Assert that not all resources were deleted
+    result = await client.discovered_resources_get(environment, "test::Resource[agent1,key6=key6]")
+    assert result.code == 200
+
+    # Deleting non-existent resources will not cause an error
+    result = await client.discovered_resource_delete_batch(environment, resources_to_delete)
+    assert result.code == 200
+
+    resources_to_delete.append("test::Resource[agent1,key6=key6]")
+
+    # test::Resource[agent1,key6=key6] will still get deleted
+    result = await client.discovered_resource_delete_batch(environment, resources_to_delete)
+    assert result.code == 200
+
+    result = await client.discovered_resources_get(environment, "test::Resource[agent1,key6=key6]")
+    assert result.code == 404
 
 
 async def test_discovered_resource_get_paging(server, client, agent, environment, clienthelper):
@@ -346,7 +387,7 @@ async def test_discovery_resource_bad_res_id(server, client, agent, environment)
 
     expected_error_message = (
         "Invalid request: Failed to validate argument\n"
-        "1 validation error for LinkedDiscoveredResource\n"
+        "1 validation error for DiscoveredResourceInput\n"
         "discovered_resource_id\n"
         "  Value error, Invalid id for resource invalid_rid "
         "[type=value_error, input_value='invalid_rid', input_type=str]\n"
@@ -372,7 +413,7 @@ async def test_discovery_resource_bad_res_id(server, client, agent, environment)
     )
     expected_error_message = (
         "Invalid request: Failed to validate argument\n"
-        "1 validation error for LinkedDiscoveredResource\n"
+        "1 validation error for DiscoveredResourceInput\n"
         "discovery_resource_id\n"
         "  Value error, Invalid id for resource invalid_rid "
         "[type=value_error, input_value='invalid_rid', input_type=str]\n"

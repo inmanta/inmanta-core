@@ -14,12 +14,19 @@ updates:
       patterns:
         - "logfire"
         - "opentelemetry*"
+    sphinx:
+      patterns:
+        - "furo"
+        - "myst-parser"
+        - "sphinx"
   cooldown:
     include:
-      # these two packages are tied together very strongly, but there is an occasional small delay between there releases,
+      # these two packages are tied together very strongly, but there is an occasional small delay between their releases,
       # causing CI failures
       - "logfire"
       - "opentelemetry*"
+      # wait for furo to bump their upper bound on sphinx
+      - "sphinx"
     default-days: 1
   ignore:
     # #6668
@@ -45,12 +52,19 @@ updates:
       patterns:
         - "logfire"
         - "opentelemetry*"
+    sphinx:
+      patterns:
+        - "furo"
+        - "myst-parser"
+        - "sphinx"
   cooldown:
     include:
-      # these two packages are tied together very strongly, but there is an occasional small delay between there releases,
+      # these two packages are tied together very strongly, but there is an occasional small delay between their releases,
       # causing CI failures
       - "logfire"
       - "opentelemetry*"
+      # wait for furo to bump their upper bound on sphinx
+      - "sphinx"
     default-days: 1
   ignore:
     # #6668

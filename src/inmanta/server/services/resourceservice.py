@@ -19,6 +19,7 @@ Contact: code@inmanta.com
 import asyncio
 import datetime
 import logging
+import typing
 import uuid
 from collections import abc, defaultdict
 from collections.abc import Sequence
@@ -38,12 +39,11 @@ from inmanta.data.dataview import (
     ResourceView,
 )
 from inmanta.data.model import (
-    DiscoveredResourceABC,
     LatestReleasedResource,
-    LinkedDiscoveredResource,
     ReleasedResourceDetails,
     Resource,
     ResourceAction,
+    ResourceComplianceDiff,
     ResourceHistory,
     ResourceLog,
     VersionedResource,
@@ -148,6 +148,11 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
     async def start(self) -> None:
         self.schedule(
             data.ResourceAction.purge_logs, opt.server_purge_resource_action_logs_interval.get(), cancel_on_stop=False
+        )
+        self.schedule(
+            data.ResourcePersistentState.purge_old_diffs,
+            opt.server_purge_resource_action_logs_interval.get(),
+            cancel_on_stop=False,
         )
         await super().start()
 
@@ -469,7 +474,7 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
         discovery_resource_id: ResourceIdStr,
     ) -> None:
         try:
-            discovered_resource = LinkedDiscoveredResource(
+            discovered_resource = model.DiscoveredResourceInput(
                 discovered_resource_id=discovered_resource_id, values=values, discovery_resource_id=discovery_resource_id
             )
         except ValidationError as e:
@@ -483,7 +488,7 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
 
     @handle(methods_v2.discovered_resource_create_batch, env="tid")
     async def discovered_resources_create_batch(
-        self, env: data.Environment, discovered_resources: list[LinkedDiscoveredResource]
+        self, env: data.Environment, discovered_resources: list[model.DiscoveredResourceInput]
     ) -> None:
         dao_list = [res.to_dao(env.id) for res in discovered_resources]
         await data.DiscoveredResource.insert_many_with_overwrite(dao_list)
@@ -491,7 +496,7 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
     @handle(methods_v2.discovered_resources_get, env="tid")
     async def discovered_resources_get(
         self, env: data.Environment, discovered_resource_id: ResourceIdStr
-    ) -> DiscoveredResourceABC:
+    ) -> model.DiscoveredResourceOutput:
         if not self.feature_manager.enabled(resource_discovery):
             raise Forbidden(message="The resource discovery feature is not enabled.")
 
@@ -510,7 +515,7 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
         end: Optional[str] = None,
         sort: str = "discovered_resource_id.asc",
         filter: Optional[dict[str, list[str]]] = None,
-    ) -> ReturnValue[Sequence[DiscoveredResourceABC]]:
+    ) -> ReturnValue[Sequence[model.DiscoveredResourceOutput]]:
         if not self.feature_manager.enabled(resource_discovery):
             raise Forbidden(message="The resource discovery feature is not enabled.")
 
@@ -521,3 +526,43 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
             return out
         except (InvalidFilter, InvalidSort, data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
             raise BadRequest(e.message) from e
+
+    @handle(methods_v2.discovered_resource_delete, env="tid")
+    async def discovered_resource_delete(self, env: data.Environment, discovered_resource_id: ResourceIdStr) -> None:
+        """
+        Deletes a discovered resource based on id.
+
+        :raise NotFound: This exception is raised if the discovered resource is not found in the provided environment
+        """
+        async with data.Resource.get_connection() as connection:
+            result = await data.DiscoveredResource.get_one(
+                environment=env.id, discovered_resource_id=discovered_resource_id, connection=connection
+            )
+            if not result:
+                raise NotFound(f"Discovered Resource with id {discovered_resource_id} not found in env {env.id}")
+            await result.delete(connection=connection)
+
+    @handle(methods_v2.discovered_resource_delete_batch, env="tid")
+    async def discovered_resource_delete_batch(
+        self, env: data.Environment, discovered_resource_ids: typing.Sequence[str]
+    ) -> None:
+        """
+        Deletes one or more discovered resources based on id.
+        Does not raise an Exception if one or more of the discovered resources are not found.
+        """
+        async with data.Resource.get_connection() as connection:
+            query = f"""
+            DELETE FROM {data.DiscoveredResource.table_name()} as dr
+            WHERE dr.environment=$1
+                AND dr.discovered_resource_id=ANY($2)
+            """
+            await connection.execute(query, env.id, discovered_resource_ids)
+
+    @handle(methods_v2.get_compliance_report, env="tid")
+    async def get_compliance_report(
+        self, env: data.Environment, resource_ids: typing.Sequence[ResourceIdStr]
+    ) -> dict[ResourceIdStr, ResourceComplianceDiff]:
+        """
+        Get the compliance status report for a list of resources.
+        """
+        return await data.ResourcePersistentState.get_compliance_report(env.id, resource_ids)

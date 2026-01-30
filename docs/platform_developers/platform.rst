@@ -1,6 +1,8 @@
 Platform Developers Guide
 =========================
 
+This page provides information for developers of the ochestration platform.
+
 Dependencies
 ------------
 

@@ -264,15 +264,30 @@ class ToDbUpdateManager(StateUpdateManager):
                 # use finished time for last_produced_events because it is used for comparison with dependencies' start
                 extra_datetime_fields["last_produced_events"] = finished
 
+                diff_id: Optional[uuid.UUID] = (
+                    await data.ResourcePersistentState.persist_non_compliant_diff(
+                        environment=self.environment,
+                        resource_id=resource_id_parsed.resource_str(),
+                        created_at=finished,
+                        diff={attr_name: attr_change.model_dump() for attr_name, attr_change in result.changes.items()},
+                        connection=connection,
+                    )
+                    if status is const.ResourceState.non_compliant
+                    else None
+                )
+
                 await data.ResourcePersistentState.update_persistent_state(
                     resource_id=resource_id_parsed.resource_str(),
                     environment=self.environment,
                     is_deploying=False,
-                    last_deploy=finished,
+                    last_handler_run_at=finished,
                     last_deployed_version=resource_id_parsed.version,
                     last_deployed_attribute_hash=attribute_hash,
                     last_non_deploying_status=const.NonDeployingResourceState(status),
-                    last_deploy_result=state.last_deploy_result if state is not None else None,
+                    last_handler_run=state.last_handler_run if state is not None else None,
+                    last_handler_run_compliant=state.last_handler_run_compliant if state is not None else None,
+                    non_compliant_diff=diff_id,
+                    cleanup_non_compliant_diff=diff_id is None,
                     **extra_datetime_fields,
                     connection=connection,
                 )

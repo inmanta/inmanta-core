@@ -44,7 +44,7 @@ from inmanta.ast.statements.generator import SubConstructor
 from inmanta.ast.type import Any as inm_Any
 from inmanta.ast.type import Float, NamedType, NullableType, Type
 from inmanta.execute.runtime import Instance, QueueScheduler, Resolver, ResultVariable, dataflow
-from inmanta.execute.util import AnyType, NoneValue
+from inmanta.execute.util import AnyType, NoneValue, Unknown
 from inmanta.references import AttributeReference, PrimitiveTypes, Reference
 from inmanta.types import DataclassProtocol
 
@@ -338,12 +338,9 @@ class Entity(NamedType, WithComment):
         return (not strict and superclass_candidate == self) or self.is_parent(superclass_candidate)
 
     def issubtype(self, other: "Type") -> bool:
-        return isinstance(other, inm_Any) or isinstance(other, Entity) and self.is_subclass(other, strict=False)
-
-    def issupertype(self, other: "Type") -> bool:
-        if not isinstance(other, Entity):
-            raise NotImplementedError()
-        return other.is_subclass(self, strict=True)
+        if isinstance(other, Entity):
+            return self.is_subclass(other, strict=False)
+        return other.issupertype(self)
 
     def validate(self, value: object) -> bool:
         """
@@ -742,6 +739,27 @@ class Entity(NamedType, WithComment):
             # allow inheritance: delegate to child type
             return instance.type.to_python(instance, path=path)
 
+        def domain_conversion(value: object, *, field_name: str) -> object:
+            if isinstance(value, Unknown):
+                # For now, we simply reject unknowns. Eventually, we want to support `| Unknown` declaration, similar to what
+                # we allow for references. When we do, it will have to be integrated into `Type.validate()` rather than here
+                # during conversion. One of the blockers is consistency with unknowns in plugin arguments, and how to gradually
+                # migrate from the old `allow_unknowns: bool` to the new, more fine-grained unknown declaration.
+                raise TypingException(
+                    None,
+                    (
+                        f"Encountered unknown in field {field_name!r}."
+                        " Unknowns are not currently supported in dataclass instances in the Python domain."
+                    ),
+                )
+            if isinstance(value, NoneValue):
+                return None
+            if isinstance(value, list):
+                return [domain_conversion(v, field_name=field_name) for v in value]
+            if isinstance(value, dict):
+                return {k: domain_conversion(v, field_name=field_name) for k, v in value.items()}
+            return value
+
         def create() -> object:
             # Convert values
             # All values are primitive, so this is trivial
@@ -752,7 +770,7 @@ class Entity(NamedType, WithComment):
                 # declared (potentially nested) in the Python domain.
                 self._paired_dataclass_field_types[k].validate(v)
             assert self._paired_dataclass is not None
-            return self._paired_dataclass(**kwargs)
+            return self._paired_dataclass(**{k: domain_conversion(v, field_name=k) for k, v in kwargs.items()})
 
         if instance.dataclass_self is None:
             # Handle unsets

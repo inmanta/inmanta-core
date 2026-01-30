@@ -619,7 +619,7 @@ class Discoveredresource(Base):
     discovered_resource_id: Mapped[str] = mapped_column(String, primary_key=True)
     values: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     discovered_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False)
-    discovery_resource_id: Mapped[Optional[str]] = mapped_column(String)
+    discovery_resource_id: Mapped[Optional[str]] = mapped_column(String, nullable=False)
 
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="discoveredresource")
 
@@ -740,6 +740,7 @@ class ResourcePersistentState(Base):
             "cancelled",
             "undefined",
             "skipped_for_undefined",
+            "non_compliant",
             name="non_deploying_resource_state",
         ),
         nullable=False,
@@ -750,16 +751,17 @@ class ResourcePersistentState(Base):
     resource_id_value: Mapped[str] = mapped_column(String, nullable=False)
     is_undefined: Mapped[bool] = mapped_column(Boolean, nullable=False)
     is_orphan: Mapped[bool] = mapped_column(Boolean, nullable=False)
-    last_deploy_result: Mapped[str] = mapped_column(String, nullable=False)
+    last_handler_run: Mapped[str] = mapped_column(String, nullable=False)
     blocked: Mapped[str] = mapped_column(String, nullable=False)
     created: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False)
-    last_deploy: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
+    last_handler_run_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     last_success: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     last_produced_events: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     last_deployed_attribute_hash: Mapped[Optional[str]] = mapped_column(String)
     last_deployed_version: Mapped[Optional[int]] = mapped_column(Integer)
     current_intent_attribute_hash: Mapped[Optional[str]] = mapped_column(String)
     is_deploying: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text("false"))
+    last_handler_run_compliant: Mapped[Optional[bool]] = mapped_column(Boolean)
 
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="resource_persistent_state")
 
@@ -770,7 +772,7 @@ class ResourcePersistentState(Base):
             self.is_undefined,
             self.last_deployed_attribute_hash,
             self.current_intent_attribute_hash,
-            state.DeployResult(self.last_deploy_result.lower()),
+            self.last_handler_run_compliant,
         )
 
     @compliance_state.inplace.expression
@@ -786,7 +788,7 @@ class ResourcePersistentState(Base):
                 ),
                 state.Compliance.HAS_UPDATE.name,
             ),
-            (cls.last_deploy_result == state.DeployResult.DEPLOYED.name, state.Compliance.COMPLIANT.name),
+            (cls.last_handler_run_compliant.is_(True), state.Compliance.COMPLIANT.name),
             else_=state.Compliance.NON_COMPLIANT.name,
         )
 
@@ -1006,6 +1008,7 @@ class Resourceaction(Base):
             "cancelled",
             "undefined",
             "skipped_for_undefined",
+            "non_compliant",
             name="resourcestate",
         ),
         server_default=text("'available'::resourcestate"),

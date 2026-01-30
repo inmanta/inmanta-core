@@ -19,7 +19,7 @@ Contact: code@inmanta.com
 import pytest
 
 import inmanta.compiler as compiler
-from inmanta.ast import NotFoundException, OptionalValueException, RuntimeException
+from inmanta.ast import OptionalValueException, RuntimeException
 from inmanta.execute.proxy import DynamicProxy
 from inmanta.execute.util import NoneValue
 
@@ -29,7 +29,7 @@ def proxy_object(snippetcompiler, snippet, var):
     implementation none for std::Entity: end
     """
     snippetcompiler.setup_for_snippet(snippet + own_none)
-    (_, root) = compiler.do_compile()
+    _, root = compiler.do_compile()
 
     scope = root.get_child("__config__").scope
 
@@ -110,8 +110,6 @@ x = A()
 
     assert isinstance(proxy, DynamicProxy)
     with pytest.raises(AttributeError):
-        proxy.x
-    with pytest.raises(NotFoundException):
         proxy.x
 
 

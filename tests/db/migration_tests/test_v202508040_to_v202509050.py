@@ -47,15 +47,13 @@ async def test_add_resource_set_table_and_drop_model(
     assert None in resource_set_names
     assert "set-a" in resource_set_names
 
-    records = await postgresql_client.fetch(
-        """
+    records = await postgresql_client.fetch("""
         SELECT rs.name, rscm.*
         FROM public.resource_set_configuration_model AS rscm
         JOIN public.resource_set AS rs
             ON rs.environment=rscm.environment AND rs.id=rscm.resource_set
         ORDER BY rs.name
-        """
-    )
+        """)
     assert len(records) == 14
     env_1 = await data.Environment.get_one(name="dev-1")
     assert env_1

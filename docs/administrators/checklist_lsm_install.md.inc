@@ -27,9 +27,7 @@
 8. [ ] Monitor progress
 9. [ ] Verify that automation setting are on
 
-    * `agent_trigger_method_on_auto_deploy = push_incremental_deploy`
     * `auto_deploy = true`
-    * `push_on_auto_deploy = true`
     * `server_compile = true`
 
 

@@ -57,6 +57,8 @@ class ResourceState(str, Enum):
     cancelled = "cancelled"  # When a new version is pushed, in progress deploys are cancelled
     undefined = "undefined"  # The state of this resource is unknown at this moment in the orchestration process
     skipped_for_undefined = "skipped_for_undefined"  # This resource depends on an undefined resource
+    # Used to report non-compliance of reporting resource.
+    non_compliant = "non_compliant"
 
 
 class HandlerResourceState(str, Enum):
@@ -75,6 +77,8 @@ class HandlerResourceState(str, Enum):
     # HandlerResourceState will get the TEMPORARILY_BLOCKED blocked status.
     skipped_for_dependency = "skipped_for_dependency"
     unavailable = "unavailable"
+    # Used to report non-compliance of reporting resource.
+    non_compliant = "non_compliant"
 
 
 class NonDeployingResourceState(str, Enum):
@@ -87,6 +91,8 @@ class NonDeployingResourceState(str, Enum):
     cancelled = ResourceState.cancelled.value
     undefined = ResourceState.undefined.value
     skipped_for_undefined = ResourceState.skipped_for_undefined.value
+    # Used to report non-compliance of reporting resource.
+    non_compliant = ResourceState.non_compliant.value
 
 
 class DeprecatedResourceState(str, Enum):
@@ -120,6 +126,7 @@ DONE_STATES = [
     ResourceState.deployed,
     ResourceState.failed,
     ResourceState.cancelled,
+    ResourceState.non_compliant,
 ] + UNDEPLOYABLE_STATES
 
 # starting states
@@ -136,6 +143,7 @@ VALID_STATES_ON_STATE_UPDATE = [
     ResourceState.cancelled,
     ResourceState.undefined,
     ResourceState.skipped_for_undefined,
+    ResourceState.non_compliant,
 ]
 
 UNKNOWN_STRING = "<<undefined>>"
@@ -435,6 +443,9 @@ RESOURCE_ATTRIBUTE_RECEIVE_EVENTS: typing.Final[str] = "receive_events"
 RESOURCE_ATTRIBUTE_REFERENCES: typing.Final[str] = "references"
 RESOURCE_ATTRIBUTE_MUTATORS: typing.Final[str] = "mutators"
 
+# resource attribute for report-only mode
+RESOURCE_ATTRIBUTE_REPORT_ONLY: typing.Final[str] = "report_only"
+
 # Per component log variables
 LOG_CONTEXT_VAR_ENVIRONMENT = "environment"
 
@@ -468,6 +479,7 @@ class CoreAuthorizationLabel(AuthorizationLabel):
     DESIRED_STATE_READ = "desired-state.read"
     DESIRED_STATE_WRITE = "desired-state.write"
     DISCOVERED_RESOURCES_READ = "discovered-resources.read"
+    DISCOVERED_RESOURCES_DELETE = "discovered-resources.delete"
     DOCS_READ = "docs.read"
     DRYRUN_READ = "dryrun.read"
     DRYRUN_WRITE = "dryrun.write"
@@ -495,6 +507,7 @@ class CoreAuthorizationLabel(AuthorizationLabel):
     PROJECT_CREATE = "project.create"
     PROJECT_MODIFY = "project.modify"
     PROJECT_DELETE = "project.delete"
+    REPORT_READ = "report.read"
     RESOURCE_READ = "resource.read"
     STATUS_READ = "status.read"
     TOKEN = "token"

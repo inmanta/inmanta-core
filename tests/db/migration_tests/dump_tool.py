@@ -30,7 +30,7 @@ import pytest
 
 import inmanta.protocol
 import inmanta.types
-from inmanta import const, data, util
+from inmanta import const, data
 from inmanta.agent.agent_new import Agent
 from inmanta.data import CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES, model
 from inmanta.data.schema import DBSchema
@@ -199,7 +199,6 @@ async def test_dump_db(
     resources_partial = [
         {
             "key": "key2",
-            "version": 0,
             "id": f"{rid2},v=0",
             "send_event": False,
             "purged": False,
@@ -207,7 +206,6 @@ async def test_dump_db(
         },
         {
             "key": "key2",
-            "version": 0,
             "id": f"{rid3},v=0",
             "send_event": False,
             "purged": False,
@@ -236,7 +234,6 @@ async def test_dump_db(
     resources_partial = [
         {
             "key": "key2",
-            "version": 0,
             "id": f"{rid2},v=0",
             "send_event": False,
             "purged": False,
@@ -278,7 +275,6 @@ async def test_dump_db(
             {
                 "key": "key1",
                 "value": "val1",
-                "version": version,
                 "id": f"test::Resource[agent1,key=key1],v={version}",
                 "send_event": True,
                 "purged": False,
@@ -287,7 +283,6 @@ async def test_dump_db(
             {
                 "key": "key2",
                 "value": "val2",
-                "version": version,
                 "id": f"test::Fail[agent1,key=key2],v={version}",
                 "send_event": True,
                 "purged": False,
@@ -296,7 +291,6 @@ async def test_dump_db(
             {
                 "key": "key3",
                 "value": "val3",
-                "version": version,
                 "id": f"test::Resource[agent1,key=key3],v={version}",
                 "send_event": True,
                 "purged": False,
@@ -305,7 +299,6 @@ async def test_dump_db(
             {
                 "key": "key4",
                 "value": "val4",
-                "version": version,
                 "id": f"test::Resource[agent1,key=key4],v={version}",
                 "send_event": True,
                 "purged": False,
@@ -314,7 +307,6 @@ async def test_dump_db(
             {
                 "key": "key5",
                 "value": "val5",
-                "version": version,
                 "id": f"test::Resource[agent1,key=key5],v={version}",
                 "send_event": True,
                 "purged": False,
@@ -323,7 +315,6 @@ async def test_dump_db(
             {
                 "key": "key6",
                 "value": "val6",
-                "version": version,
                 "id": f"test::Resource[agent1,key=key6],v={version}",
                 "send_event": True,
                 "purged": False,
@@ -334,10 +325,11 @@ async def test_dump_db(
     res = await client.reserve_version(env_id_3)
     assert res.code == 200
     version = res.result["data"]
+    resources = get_resources(version)
     res = await client.put_version(
         tid=env_id_3,
         version=version,
-        resources=get_resources(version),
+        resources=resources,
         resource_state={
             "test::Resource[agent1,key=key1]": const.ResourceState.available,
             "test::Resource[agent1,key=key2]": const.ResourceState.available,
@@ -346,13 +338,17 @@ async def test_dump_db(
             "test::Resource[agent1,key=key5]": const.ResourceState.available,
             "test::Resource[agent1,key=key6]": const.ResourceState.available,
         },
-        compiler_version=util.get_compiler_version(),
         module_version_info={},
     )
     assert res.code == 200
     res = await client.release_version(env_id_3, id=1)
     assert res.code == 200
     await wait_until_deployment_finishes(client, env_id_3)
+
+    result = await client.dryrun_request(env_id_3, version)
+    assert result.code == 200
+    assert result.result["dryrun"]["total"] == len(resources)
+    assert result.result["dryrun"]["todo"] == len(resources)
 
     # Create a second version in environment dev3 that doesn't have resource key6, but has a new resource key7
     res = await client.reserve_version(env_id_3)
@@ -368,7 +364,6 @@ async def test_dump_db(
             {
                 "key": "key7",
                 "value": "val7",
-                "version": version,
                 "id": f"test::Resource[agent1,key=key7],v={version}",
                 "send_event": True,
                 "purged": False,
@@ -377,11 +372,29 @@ async def test_dump_db(
             {
                 "key": "key9",
                 "value": "val9",
-                "version": version,
                 "id": f"{res_id_to_delete},v={version}",
                 "send_event": True,
                 "purged": False,
                 "requires": [],
+            },
+            # non_compliant resources
+            {
+                "key": "key10",
+                "value": "val10",
+                "id": f"test::Resource[agent1,key=key10],v={version}",
+                "send_event": True,
+                "purged": False,
+                "requires": [],
+                "report_only": True,
+            },
+            {
+                "key": "key11",
+                "value": "val11",
+                "id": f"test::Resource[agent1,key=key11],v={version}",
+                "send_event": True,
+                "purged": False,
+                "requires": [],
+                "report_only": True,
             },
         ],
         resource_state={
@@ -391,9 +404,10 @@ async def test_dump_db(
             "test::Resource[agent1,key=key4]": const.ResourceState.undefined,
             "test::Resource[agent1,key=key5]": const.ResourceState.available,
             "test::Resource[agent1,key=key7]": const.ResourceState.available,
+            "test::Resource[agent1,key=key10]": const.ResourceState.available,
+            "test::Resource[agent1,key=key11]": const.ResourceState.available,
             res_id_to_delete: const.ResourceState.available,
         },
-        compiler_version=util.get_compiler_version(),
         module_version_info={},
     )
     assert res.code == 200
@@ -415,7 +429,6 @@ async def test_dump_db(
             {
                 "key": "key7",
                 "value": "val7",
-                "version": version,
                 "id": f"test::Resource[agent1,key=key7],v={version}",
                 "send_event": True,
                 "purged": False,
@@ -424,7 +437,6 @@ async def test_dump_db(
             {
                 "key": "key8",
                 "value": "val8",
-                "version": version,
                 "id": f"test::Resource[agent1,key=key8],v={version}",
                 "send_event": True,
                 "purged": False,
@@ -440,7 +452,6 @@ async def test_dump_db(
             "test::Resource[agent1,key=key7]": const.ResourceState.available,
             "test::Resource[agent1,key=key8]": const.ResourceState.available,
         },
-        compiler_version=util.get_compiler_version(),
         module_version_info={},
     )
     assert res.code == 200
@@ -456,7 +467,7 @@ async def test_dump_db(
     await server.get_slice(SLICE_RESOURCE).discovered_resources_create_batch(
         env=env1,
         discovered_resources=[
-            model.LinkedDiscoveredResource(
+            model.DiscoveredResourceInput(
                 discovered_resource_id=inmanta.types.ResourceIdStr(rid),
                 values={},
                 discovery_resource_id="discovery::Discovery[discovery,name=discoverer]",

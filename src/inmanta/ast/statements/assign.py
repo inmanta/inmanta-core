@@ -111,6 +111,9 @@ class CreateList(ReferenceStatement):
 
         # Assignments, wired for gradual
         for expr in self.items:
+            # artifact of the past. It should suffice now to discard the execution result, only relying on gradual execution,
+            # or to have a guard that both are identical. Reporting both, as we do here, only works because ListLiteral
+            # happens to trim duplicate values.
             ExecutionUnit(queue, resolver, temp, expr.requires_emit_gradual(resolver, queue, temp), expr, self)
 
         if not self.items:

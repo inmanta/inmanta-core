@@ -1,0 +1,4 @@
+---
+description: "Fix test case test_event_recovery_reporting"
+change-type: patch
+destination-branches: [master]

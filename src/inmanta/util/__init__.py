@@ -37,14 +37,14 @@ import typing
 import uuid
 import warnings
 from abc import ABC, abstractmethod
-from asyncio import CancelledError, Lock, Task, ensure_future, gather
+from asyncio import AbstractEventLoop, CancelledError, Lock, Task, ensure_future, gather
 from collections import abc, defaultdict
-from collections.abc import Awaitable, Coroutine, Iterable, Iterator
+from collections.abc import Awaitable, Callable, Collection, Coroutine, Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from logging import Logger
 from types import TracebackType
-from typing import TYPE_CHECKING, BinaryIO, Callable, Generic, Mapping, Optional, Sequence, TypeVar, Union
+from typing import TYPE_CHECKING, BinaryIO, Generic, Optional, TypeVar, Union
 
 import asyncpg
 import click
@@ -56,7 +56,7 @@ import packaging.requirements
 import packaging.utils
 import pydantic_core
 from crontab import CronTab
-from inmanta import COMPILER_VERSION, const, types
+from inmanta import const, types
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ReturnTypes
 from packaging.utils import NormalizedName
@@ -70,10 +70,6 @@ HASH_ROUNDS = 100000
 
 T = TypeVar("T")
 S = TypeVar("S")
-
-
-def get_compiler_version() -> str:
-    return COMPILER_VERSION
 
 
 def groupby(mylist: list[T], f: Callable[[T], S]) -> Iterator[tuple[S, Iterator[T]]]:
@@ -703,7 +699,7 @@ class CycleException(Exception):
                 self.done = True
 
 
-def stable_depth_first(nodes: list[str], edges: dict[str, list[str]]) -> list[str]:
+def stable_depth_first(nodes: Collection[str], edges: Mapping[str, Collection[str]]) -> list[str]:
     """Creates a linear sequence based on a set of "comes after" edges, same graph yields the same solution,
     independent of order given to this function"""
     nodes = sorted(nodes)
@@ -718,7 +714,7 @@ def stable_depth_first(nodes: list[str], edges: dict[str, list[str]]) -> list[st
         try:
             if node in edges:
                 for edge in edges[node]:
-                    dfs(edge, seen | set(node))
+                    dfs(edge, seen | {node})
             out.append(node)
         except CycleException as e:
             e.add(node)
@@ -860,9 +856,16 @@ def wait_sync[T](
 
     Must not be called from handlers, see Handler.run_sync for that.
 
-    :param ioloop: await on an existing io loop, on another thread. Otherwise an io loop is started on the current thread.
+    :param ioloop: await on an existing io loop, on another thread.
+    If not given, the default loop (see `get_default_event_loop()`) is used.
+    If it is not set an io loop is started on the current thread.
     """
     with_timeout: types.AsyncioCoroutine[T] = asyncio.wait_for(awaitable, timeout)
+
+    if ioloop is None:
+        # Fallback to ensure the agent doesn't leak ioloops via its threadpool
+        ioloop = get_default_event_loop()
+
     if ioloop is not None:
         # run it on the given loop
         return asyncio.run_coroutine_threadsafe(with_timeout, ioloop).result()
@@ -1060,3 +1063,28 @@ def get_module_name(path_distribution_pkg: str) -> str:
     filename = os.path.basename(path_distribution_pkg)
     pkg_name: str = filename.split("-", maxsplit=1)[0]
     return pkg_name.removeprefix("inmanta_module_")
+
+
+default_event_loop: AbstractEventLoop | None = None
+
+
+def set_default_event_loop(eventloop: AbstractEventLoop | None) -> None:
+    global default_event_loop
+    default_event_loop = eventloop
+
+
+@stable_api
+def get_default_event_loop() -> AbstractEventLoop | None:
+    """
+    Returns the default event loop.
+
+    This is intended to be used by other threads, that want to run code on the eventloop of the main thread.
+
+    It should be used to prevent leaking eventloops when using threadpools.
+    The main use case is the `Client` class
+
+    Only thread safe methods of the eventloop should be used.
+
+    If an event loop is returned it will be running.
+    """
+    return default_event_loop

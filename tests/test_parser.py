@@ -62,8 +62,7 @@ def test_define_empty():
 
 def test_define_entity():
     """Test the definition of entities"""
-    statements = parse_code(
-        """
+    statements = parse_code("""
 entity Test:
 end
 entity Other:
@@ -73,8 +72,7 @@ entity Other:
  \"\"\"XX
  \"\"\"
 end
-"""
-    )
+""")
 
     assert len(statements) == 3
 
@@ -88,13 +86,11 @@ end
 
 
 def test_undefine_default():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 entity Test extends Foo:
  string hello = undef
  string[] dinges = undef
-end"""
-    )
+end""")
     assert len(statements) == 1
 
     stmt = statements[0]
@@ -118,12 +114,10 @@ end"""
 
 def test_extend_entity():
     """Test extending entities"""
-    statements = parse_code(
-        """
+    statements = parse_code("""
 entity Test extends Foo:
 end
-"""
-    )
+""")
 
     assert len(statements) == 1
 
@@ -134,8 +128,7 @@ end
 def test_complex_entity():
     """Test definition of a complex entity"""
     documentation = "This entity has documentation"
-    statements = parse_code(
-        """
+    statements = parse_code("""
 entity Test extends Foo, foo::sub::Bar:
     \"\"\" %s
     \"\"\"
@@ -143,9 +136,7 @@ entity Test extends Foo, foo::sub::Bar:
     bool bar = true
     int? ten=5
 end
-"""
-        % documentation
-    )
+""" % documentation)
 
     assert len(statements) == 1
 
@@ -172,11 +163,9 @@ end
 
 def test_relation():
     """Test definition of relations"""
-    statements = parse_code(
-        """
+    statements = parse_code("""
 Test.bars [5:10] -- Foo.tests [0:]
-"""
-    )
+""")
 
     assert len(statements) == 1
     rel = statements[0]
@@ -196,11 +185,9 @@ Test.bars [5:10] -- Foo.tests [0:]
 
 def test_relation_2():
     """Test definition of relations"""
-    statements = parse_code(
-        """
+    statements = parse_code("""
 Test.bars [:10] -- Foo.tests [3]
-"""
-    )
+""")
 
     assert len(statements) == 1
     rel = statements[0]
@@ -220,11 +207,9 @@ Test.bars [:10] -- Foo.tests [3]
 
 def test_relation_3():
     """Test definition of relations"""
-    statements = parse_code(
-        """
+    statements = parse_code("""
 Test.bar [1] -- Foo.tests [5:10]
-"""
-    )
+""")
 
     assert len(statements) == 1, "Should return four statements"
     rel = statements[0]
@@ -244,11 +229,9 @@ Test.bar [1] -- Foo.tests [5:10]
 
 def test_relation_with_annotations():
     """Test definition of relations"""
-    statements = parse_code(
-        """
+    statements = parse_code("""
 Test.bar [1] foo,bar Foo.tests [5:10]
-"""
-    )
+""")
 
     assert len(statements) == 1, "Should return four statements"
     rel = statements[0]
@@ -276,11 +259,9 @@ Test.bar [1] foo,bar Foo.tests [5:10]
 
 def test_relation_unidir():
     """Test definition of relations"""
-    statements = parse_code(
-        """
+    statements = parse_code("""
 Test.bar [1] -- Foo
-"""
-    )
+""")
 
     assert len(statements) == 1, "Should return four statements"
     rel = statements[0]
@@ -300,11 +281,9 @@ Test.bar [1] -- Foo
 
 def test_relation_with_annotations_unidir():
     """Test definition of relations"""
-    statements = parse_code(
-        """
+    statements = parse_code("""
 Test.bar [1] foo,bar Foo
-"""
-    )
+""")
 
     assert len(statements) == 1, "Should return four statements"
     rel = statements[0]
@@ -331,26 +310,22 @@ Test.bar [1] foo,bar Foo
 
 def test_implementation():
     """Test the definition of implementations"""
-    statements = parse_code(
-        """
+    statements = parse_code("""
 implementation test for Test:
 end
-"""
-    )
+""")
 
     assert len(statements) == 1
     assert len(statements[0].block.get_stmts()) == 0
     assert statements[0].name == "test"
     assert isinstance(statements[0].entity, LocatableString)
 
-    statements = parse_code(
-        """
+    statements = parse_code("""
 implementation test for Test:
     std::testing::NullResource(attr="a")
     var = hello::func("world")
 end
-"""
-    )
+""")
 
     assert len(statements) == 1
     assert len(statements[0].block.get_stmts()) == 2
@@ -358,16 +333,14 @@ end
 
 def test_implementation_with_for():
     """Test the propagation of type requires when using a for"""
-    statements = parse_code(
-        """
+    statements = parse_code("""
 implementation test for Test:
     \"\"\" test \"\"\"
     for v in data:
         std::template("template")
     end
 end
-"""
-    )
+""")
 
     assert len(statements) == 1
     assert len(statements[0].block.get_stmts()) == 1
@@ -375,11 +348,9 @@ end
 
 def test_implements():
     """Test implements with no selector"""
-    statements = parse_code(
-        """
+    statements = parse_code("""
 implement Test using test
-"""
-    )
+""")
 
     assert len(statements) == 1
     stmt = statements[0]
@@ -391,11 +362,9 @@ implement Test using test
 
 def test_implements_2():
     """Test implements with selector"""
-    statements = parse_code(
-        """
+    statements = parse_code("""
 implement Test using test, blah when (self > 5)
-"""
-    )
+""")
 
     assert len(statements) == 1
     stmt = statements[0]
@@ -410,11 +379,9 @@ implement Test using test, blah when (self > 5)
 
 
 def test_implements_parent():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 implement Test using parents  \""" testc \"""
-"""
-    )
+""")
 
     assert len(statements) == 1
     stmt = statements[0]
@@ -428,12 +395,9 @@ implement Test using parents  \""" testc \"""
     [["parents", "std::none"], ["std::none", "parents"], ["i1", "parents", "i2"], ["std::none"], ["i1", "i2"]],
 )
 def test_implements_parent_in_list(implementations: list[str]):
-    statements = parse_code(
-        """
+    statements = parse_code("""
 implement Test using %s
-        """
-        % ", ".join(implementations)
-    )
+        """ % ", ".join(implementations))
 
     assert len(statements) == 1
     stmt = statements[0]
@@ -445,11 +409,9 @@ implement Test using %s
 
 def test_implements_selector():
     """Test implements with selector"""
-    statements = parse_code(
-        """
+    statements = parse_code("""
 implement Test using test when not (fg(self) and false)
-"""
-    )
+""")
 
     assert len(statements) == 1
     stmt = statements[0]
@@ -467,11 +429,9 @@ def test_regex(sep: str):
     """
     @param sep: The separator between the matching keyword and the actual regular expression.
     """
-    statements = parse_code(
-        f"""
+    statements = parse_code(f"""
 typedef test as string matching{sep}/[a-fA-F0-9]{{8}}-[a-fA-F0-9]{{4}}-[a-fA-F0-9]{{4}}-[a-fA-F0-9]{{4}}-[a-fA-F0-9]{{12}}/
-"""
-    )
+""")
 
     assert len(statements) == 1
     assert isinstance(statements[0], DefineTypeConstraint)
@@ -485,13 +445,11 @@ def test_matching_keyword_in_identifier():
     """
     Verify that 'matching' is allowed as part of an identifier even though it's a keyword.
     """
-    statements = parse_code(
-        """
+    statements = parse_code("""
 entity A:
     int matching_attribute
 end
-"""
-    )
+""")
 
     assert len(statements) == 1
     assert isinstance(statements[0], DefineEntity)
@@ -500,11 +458,9 @@ end
 
 
 def test_regex_backslash():
-    statements = parse_code(
-        r"""
+    statements = parse_code(r"""
 typedef test as string matching /\\/
-"""
-    )
+""")
 
     assert len(statements) == 1
     assert isinstance(statements[0], DefineTypeConstraint)
@@ -514,11 +470,9 @@ typedef test as string matching /\\/
 
 
 def test_regex_escape():
-    statements = parse_code(
-        r"""
+    statements = parse_code(r"""
 typedef test as string matching /\/1/
-"""
-    )
+""")
 
     assert len(statements) == 1
     regex_expr = statements[0].expression
@@ -527,13 +481,11 @@ typedef test as string matching /\/1/
 
 
 def test_regex_twice():
-    statements = parse_code(
-        r"""
+    statements = parse_code(r"""
 typedef regex1 as string matching /\/1/
 b = "v"
 typedef regex2 as string matching /\/1/
-"""
-    )
+""")
 
     assert len(statements) == 3
     regex_expr = statements[0].expression
@@ -543,11 +495,9 @@ typedef regex2 as string matching /\/1/
 
 def test_1584_regex_error():
     with pytest.raises(ParserException) as pytest_e:
-        parse_code(
-            """
+        parse_code("""
 typedef test as string matching /)/
-            """
-        )
+            """)
 
     exception: ParserException = pytest_e.value
     assert exception.location.file == "test"
@@ -567,11 +517,9 @@ def test_regex_newline_between_matching_keyword_and_regex(nr_of_newlines: int) -
     """
     newlines = "\n" * nr_of_newlines
     with pytest.raises(ParserException) as pytest_e:
-        parse_code(
-            f"""
+        parse_code(f"""
 typedef test as string matching{newlines}/)/
-            """
-        )
+            """)
 
     exception: ParserException = pytest_e.value
     assert exception.location.file == "test"
@@ -584,11 +532,9 @@ typedef test as string matching{newlines}/)/
 
 
 def test_typedef():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 typedef uuid as string matching /[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}/
-"""
-    )
+""")
 
     assert len(statements) == 1
     stmt = statements[0]
@@ -602,11 +548,9 @@ typedef uuid as string matching /[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a
 
 
 def test_typedef_in():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 typedef abc as string matching self in ["a","b","c"]
-"""
-    )
+""")
 
     assert len(statements) == 1
     stmt = statements[0]
@@ -618,11 +562,9 @@ typedef abc as string matching self in ["a","b","c"]
 
 
 def test_index():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 index File(host, path)
-"""
-    )
+""")
 
     assert len(statements) == 1
     stmt = statements[0]
@@ -632,11 +574,9 @@ index File(host, path)
 
 
 def test_ctr():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 File(host = 5, path = "Jos")
-"""
-    )
+""")
 
     assert len(statements) == 1
     stmt = statements[0]
@@ -646,12 +586,10 @@ File(host = 5, path = "Jos")
 
 
 def test_ctr_dict():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 dct = { "host": "myhost", "path": "/dir/file" }
 File(**dct)
-"""
-    )
+""")
 
     assert len(statements) == 2
     stmt = statements[1]
@@ -662,12 +600,10 @@ File(**dct)
 
 
 def test_ctr_dict_multi_param():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 dct = { "host": "myhost" }
 File(**dct, path = "/dir/file")
-"""
-    )
+""")
 
     assert len(statements) == 2
     stmt = statements[1]
@@ -678,12 +614,10 @@ File(**dct, path = "/dir/file")
 
 
 def test_ctr_dict_multi_param3():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 dct = { "host": "myhost" }
 File(path = "/dir/file", **dct)
-"""
-    )
+""")
 
     assert len(statements) == 2
     stmt = statements[1]
@@ -694,11 +628,9 @@ File(path = "/dir/file", **dct)
 
 
 def test_indexlookup():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 a=File[host = 5, path = "Jos"]
-"""
-    )
+""")
 
     assert len(statements) == 1
     stmt = statements[0].value
@@ -708,12 +640,10 @@ a=File[host = 5, path = "Jos"]
 
 
 def test_indexlookup_kwargs():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 dct = {"path": "/dir/file"}
 a=File[host = "myhost", **dct]
-"""
-    )
+""")
 
     assert len(statements) == 2
     stmt = statements[1].value
@@ -724,11 +654,9 @@ a=File[host = "myhost", **dct]
 
 
 def test_short_index_lookup():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 a = vm.files[path="/etc/motd"]
-"""
-    )
+""")
 
     assert len(statements) == 1
     stmt = statements[0].value
@@ -742,12 +670,10 @@ a = vm.files[path="/etc/motd"]
 
 
 def test_short_index_lookup_kwargs():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 dct = {"path": "/etc/motd"}
 a = vm.files[**dct]
-"""
-    )
+""")
 
     assert len(statements) == 2
     stmt = statements[1].value
@@ -762,11 +688,9 @@ a = vm.files[**dct]
 
 
 def test_ctr_2():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 File( )
-"""
-    )
+""")
 
     assert len(statements) == 1
     stmt = statements[0]
@@ -776,11 +700,9 @@ File( )
 
 
 def test_function():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 file( )
-"""
-    )
+""")
 
     assert len(statements) == 1
     stmt = statements[0]
@@ -789,11 +711,9 @@ file( )
 
 
 def test_function_2():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 file(b)
-"""
-    )
+""")
 
     assert len(statements) == 1
     stmt = statements[0]
@@ -802,11 +722,9 @@ file(b)
 
 
 def test_function_3():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 file(b,)
-"""
-    )
+""")
 
     assert len(statements) == 1
     stmt = statements[0]
@@ -815,11 +733,9 @@ file(b,)
 
 
 def test_list_def():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 a=["a]","b"]
-"""
-    )
+""")
 
     assert len(statements) == 1
     stmt = statements[0]
@@ -829,11 +745,9 @@ a=["a]","b"]
 
 
 def test_list_def_trailing_comma():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 a=["a]","b",]
-"""
-    )
+""")
 
     assert len(statements) == 1
     stmt = statements[0]
@@ -843,11 +757,9 @@ a=["a]","b",]
 
 
 def test_map_def():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 a={ "a":"b", "b":1}
-"""
-    )
+""")
 
     assert len(statements) == 1
     stmt = statements[0]
@@ -882,11 +794,9 @@ def test_map_def_map():
 
 
 def test_booleans():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 a=true b=false
-"""
-    )
+""")
 
     assert len(statements) == 2
     stmt = statements[0]
@@ -896,11 +806,9 @@ a=true b=false
 
 
 def test_none():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 a=null
-"""
-    )
+""")
 
     assert len(statements) == 1
     stmt = statements[0]
@@ -909,14 +817,12 @@ a=null
 
 
 def test_numbers():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 a=1
 b=2.0
 c=-5
 d=-0.256
-"""
-    )
+""")
 
     assert len(statements) == 4
     values = [1, 2.0, -5, -0.256]
@@ -927,11 +833,9 @@ d=-0.256
 
 
 def test_string():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 a="jos"
-"""
-    )
+""")
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, Assign)
@@ -940,11 +844,9 @@ a="jos"
 
 
 def test_string_2():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 a='jos'
-"""
-    )
+""")
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, Assign)
@@ -953,11 +855,9 @@ a='jos'
 
 
 def test_string_backslash():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 a="\\\\"
-"""
-    )
+""")
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, Assign)
@@ -966,11 +866,9 @@ a="\\\\"
 
 
 def test_string_backslash_2():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 a='\\\\'
-"""
-    )
+""")
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, Assign)
@@ -979,11 +877,9 @@ a='\\\\'
 
 
 def test_empty():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 a=""
-"""
-    )
+""")
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, Assign)
@@ -992,11 +888,9 @@ a=""
 
 
 def test_empty_2():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 a=''
-"""
-    )
+""")
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, Assign)
@@ -1005,11 +899,9 @@ a=''
 
 
 def test_string_format():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 a="j{{o}}s"
-"""
-    )
+""")
 
     assert len(statements) == 1
     stmt = statements[0]
@@ -1023,11 +915,9 @@ a="j{{o}}s"
 
 
 def test_string_format_2():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 a="j{{c.d}}s"
-"""
-    )
+""")
 
     assert len(statements) == 1
     stmt = statements[0]
@@ -1067,11 +957,9 @@ def test_string_format_v2():
 
 
 def test_attribute_reference():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 a=a::b::c.d
-"""
-    )
+""")
 
     assert len(statements) == 1
     stmt = statements[0]
@@ -1083,11 +971,9 @@ a=a::b::c.d
 
 
 def test_is_defined():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 implement Test1 using tt when self.other is defined
-"""
-    )
+""")
 
     assert len(statements) == 1
     stmt = statements[0]
@@ -1100,11 +986,9 @@ implement Test1 using tt when self.other is defined
 
 
 def test_is_defined_implicit_self():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 implement Test1 using tt when other is defined
-"""
-    )
+""")
 
     assert len(statements) == 1
     stmt = statements[0]
@@ -1115,11 +999,9 @@ implement Test1 using tt when other is defined
 
 
 def test_is_defined_short():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 implement Test1 using tt when a.other is defined
-"""
-    )
+""")
 
     assert len(statements) == 1
     stmt = statements[0]
@@ -1154,16 +1036,14 @@ def assert_equals(x, y):
 
 
 def test_define_list_attribute():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 entity Jos:
   bool[] bar
   ip::ip[] ips = ["a"]
   string[] floom = []
   string[] floomx = ["a", "b"]
   string[]? floomopt = null
-end"""
-    )
+end""")
 
     assert len(statements) == 1
     stmt = statements[0]
@@ -1188,16 +1068,14 @@ end"""
 
 
 def test_define_dict_attribute():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 entity Jos:
   dict bar
   dict foo = {}
   dict blah = {"a":"a"}
   dict? xxx = {"a":"a"}
   dict? xxxx = null
-end"""
-    )
+end""")
 
     assert len(statements) == 1
     stmt = statements[0]
@@ -1212,25 +1090,20 @@ end"""
 
 
 def test_lexer():
-    parse_code(
-        """
+    parse_code("""
 #test
 a=0.5
 b=""
-"""
-    )
+""")
 
 
 def test_eol_comment():
-    parse_code(
-        """a="a"
-    # valid_target_types: tosca.capabilities.network.Bindable"""
-    )
+    parse_code("""a="a"
+    # valid_target_types: tosca.capabilities.network.Bindable""")
 
 
 def test_mls():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 entity MANO:
     \"""
         This entity provides management, orchestration and monitoring
@@ -1238,8 +1111,7 @@ entity MANO:
         More test
     \"""
 end
-"""
-    )
+""")
     assert len(statements) == 1
     stmt = statements[0]
 
@@ -1247,36 +1119,28 @@ end
 
     mls = stmt.comment
 
-    assert (
-        str(mls)
-        == """
+    assert str(mls) == """
         This entity provides management, orchestration and monitoring
 
         More test
     """
-    )
 
-    assert (
-        str(stmt.type.comment)
-        == """
+    assert str(stmt.type.comment) == """
         This entity provides management, orchestration and monitoring
 
         More test
     """
-    )
 
 
 def test_mls_2():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 \"""
 This
 is
 a
 mls
 \"""
-"""
-    )
+""")
     assert len(statements) == 1
     mls = statements[0]
 
@@ -1286,23 +1150,18 @@ mls
     assert mls.elnr == 7
     assert mls.start == 1
     assert mls.end == 4
-    assert (
-        str(mls.value)
-        == """
+    assert str(mls.value) == """
 This
 is
 a
 mls
 """
-    )
 
 
 def test_mls_3():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 \"""This is a mls on one line\"""
-"""
-    )
+""")
     assert len(statements) == 1
     mls = statements[0]
 
@@ -1315,8 +1174,7 @@ def test_mls_3():
 
 
 def test_mls_4():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 \"""
 str1
 \"""
@@ -1334,8 +1192,7 @@ str1 with
 some other variations
 \"""
 
-"""
-    )
+""")
     assert len(statements) == 5
     mls1 = statements[0]
     mls2 = statements[2]
@@ -1348,12 +1205,9 @@ some other variations
     assert mls1.elnr == 4
     assert mls1.start == 1
     assert mls1.end == 4
-    assert (
-        str(mls1)
-        == """
+    assert str(mls1) == """
 str1
 """
-    )
 
     assert mls2.location.lnr == 8
     assert mls2.location.end_lnr == 10
@@ -1369,11 +1223,9 @@ str1
 
 
 def test_mls_5():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 \"""This is a mls on one "line"\"""
-"""
-    )
+""")
     assert len(statements) == 1
     mls = statements[0]
 
@@ -1386,11 +1238,9 @@ def test_mls_5():
 
 
 def test_mls_6():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 \"\"""This" is a mls on one line\"""
-"""
-    )
+""")
     assert len(statements) == 1
     mls = statements[0]
 
@@ -1403,11 +1253,9 @@ def test_mls_6():
 
 
 def test_mls_7():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 \"\"""This" is a "mls" on one "line"\"""
-"""
-    )
+""")
     assert len(statements) == 1
     mls = statements[0]
 
@@ -1420,11 +1268,9 @@ def test_mls_7():
 
 
 def test_mls_8():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 \"""String: ""\"""
-"""
-    )
+""")
     assert len(statements) == 1
     mls = statements[0]
 
@@ -1437,11 +1283,9 @@ def test_mls_8():
 
 
 def test_mls_9():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 \"""\"" is a string\"""
-"""
-    )
+""")
     assert len(statements) == 1
     mls = statements[0]
 
@@ -1454,11 +1298,9 @@ def test_mls_9():
 
 
 def test_mls_10():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 \"""\" start and end with "\"""
-"""
-    )
+""")
     assert len(statements) == 1
     mls = statements[0]
 
@@ -1471,12 +1313,10 @@ def test_mls_10():
 
 
 def test_mls_as_argument():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 std::print(\"""hello\""")
 
-"""
-    )
+""")
     assert len(statements) == 1
     function_call = statements[0]
 
@@ -1486,12 +1326,10 @@ std::print(\"""hello\""")
 
 
 def test_mls_as_argument_2():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 std::print("\""hello"hello"\""")
 
-"""
-    )
+""")
     assert len(statements) == 1
     function_call = statements[0]
 
@@ -1502,32 +1340,26 @@ std::print("\""hello"hello"\""")
 
 def test_bad():
     with pytest.raises(ParserException):
-        parse_code(
-            """
+        parse_code("""
 a = b.c
 a=a::b::c.
-"""
-        )
+""")
 
 
 def test_bad_2():
     with pytest.raises(ParserException):
-        parse_code(
-            """
+        parse_code("""
 a=|
-"""
-        )
+""")
 
 
 def test_doc_string_on_relation_unidir():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 File.host [1] -- Host
 \"""
 Each file needs to be associated with a host
 \"""
-"""
-    )
+""")
     assert len(statements) == 1
 
     stmt = statements[0]
@@ -1535,14 +1367,12 @@ Each file needs to be associated with a host
 
 
 def test_doc_string_on_relation():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 Host.file [1] -- File.host [0:]
 \"""
 Each file needs to be associated with a host
 \"""
-"""
-    )
+""")
     assert len(statements) == 1
 
     stmt = statements[0]
@@ -1550,14 +1380,12 @@ Each file needs to be associated with a host
 
 
 def test_doc_string_on_typedef():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 typedef foo as string matching /^a+$/
 \"""
     Foo is a stringtype that only allows "a"
 \"""
-"""
-    )
+""")
     assert len(statements) == 1
 
     stmt = statements[0]
@@ -1565,15 +1393,13 @@ typedef foo as string matching /^a+$/
 
 
 def test_doc_string_on_impl():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 implementation test for Host:
     \"""
         Bla bla
     \"""
 end
-"""
-    )
+""")
     assert len(statements) == 1
 
     stmt = statements[0]
@@ -1582,8 +1408,7 @@ end
 
 
 def test_doc_string_on_implements():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 implement Host using test
 \"""
     Always use test!
@@ -1592,8 +1417,7 @@ implement Host using test
     Not a comment
 \"""
 
-"""
-    )
+""")
     assert len(statements) == 2
 
     stmt = statements[0]
@@ -1601,11 +1425,9 @@ implement Host using test
 
 
 def test_precise_lexer_positions():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 implement Test1 using tt when self.other is defined
-"""
-    )
+""")
 
     assert len(statements) == 1
     stmt = statements[0]
@@ -1618,19 +1440,15 @@ implement Test1 using tt when self.other is defined
 
 def test_list_extend_bad():
     with pytest.raises(ParserException):
-        parse_code(
-            """
+        parse_code("""
     a+=b
-    """
-        )
+    """)
 
 
 def test_list_extend_good():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 z.a+=b
-"""
-    )
+""")
 
     assert len(statements) == 1
     stmt = statements[0]
@@ -1644,11 +1462,9 @@ z.a+=b
 
 def test_mapref():
     """Test extending entities"""
-    statements = parse_code(
-        """
+    statements = parse_code("""
 a = b.c["test"]
-"""
-    )
+""")
 
     assert len(statements) == 1
     stmt = statements[0]
@@ -1666,11 +1482,9 @@ a = b.c["test"]
 
 def test_mapref_2():
     """Test extending entities"""
-    statements = parse_code(
-        """
+    statements = parse_code("""
 a = c["test"]
-"""
-    )
+""")
 
     assert len(statements) == 1
     stmt = statements[0]
@@ -1686,11 +1500,9 @@ a = c["test"]
 
 def test_map_multi_ref():
     """Test extending entities"""
-    statements = parse_code(
-        """
+    statements = parse_code("""
 a = c["test"]["xx"]
-"""
-    )
+""")
 
     assert len(statements) == 1
     stmt = statements[0]
@@ -1710,14 +1522,11 @@ a = c["test"]["xx"]
 @pytest.mark.parametrize("empty", [True, False])
 def test_if_statement(empty):
     """Test for the if statement"""
-    statements = parse_code(
-        """
+    statements = parse_code("""
 if test.field == "value":
     %s
 end
-        """
-        % ("" if empty else 'test.other = "otherValue"')
-    )
+        """ % ("" if empty else 'test.other = "otherValue"'))
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, If)
@@ -1731,16 +1540,13 @@ end
 @pytest.mark.parametrize("empty", [True, False])
 def test_if_else(empty: bool):
     """Test for the if statement with an else clause, possibly empty (#2375)"""
-    statements = parse_code(
-        """
+    statements = parse_code("""
 if test.field == "value":
     %s
 else:
     %s
 end
-        """
-        % (("", "") if empty else ('test.other = "otherValue"', 'test.other = "altValue"'))
-    )
+        """ % (("", "") if empty else ('test.other = "otherValue"', 'test.other = "altValue"')))
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, If)
@@ -1754,16 +1560,13 @@ end
 @pytest.mark.parametrize("empty", [True, False])
 def test_if_elif(empty: bool):
     """Test for the if statement followed by an elif"""
-    statements = parse_code(
-        """
+    statements = parse_code("""
 if test.field == "value":
     %s
 elif test.field == "value2":
     %s
 end
-        """
-        % (("", "") if empty else ('test.other = "otherValue"', 'test.other = "altValue"'))
-    )
+        """ % (("", "") if empty else ('test.other = "otherValue"', 'test.other = "altValue"')))
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, If)
@@ -1783,8 +1586,7 @@ end
 @pytest.mark.parametrize("empty", [True, False])
 def test_if_elif_elif(empty: bool):
     """Test for the elif statement followed by an elif"""
-    statements = parse_code(
-        """
+    statements = parse_code("""
 if test.field == "value":
     %s
 elif test.field == "value2":
@@ -1792,9 +1594,7 @@ elif test.field == "value2":
 elif test.field == "value3":
     %s
 end
-        """
-        % (("", "", "") if empty else ('test.other = "otherValue"', 'test.other = "altValue"', 'test.other = "theValue"'))
-    )
+        """ % (("", "", "") if empty else ('test.other = "otherValue"', 'test.other = "altValue"', 'test.other = "theValue"')))
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, If)
@@ -1820,8 +1620,7 @@ end
 @pytest.mark.parametrize("empty", [True, False])
 def test_if_elif_else(empty: bool):
     """Test for the elif statement followed by an else"""
-    statements = parse_code(
-        """
+    statements = parse_code("""
 if test.field == "value":
     %s
 elif test.field == "value2":
@@ -1829,9 +1628,7 @@ elif test.field == "value2":
 else:
     %s
 end
-        """
-        % (("", "", "") if empty else ('test.other = "otherValue"', 'test.other = "altValue"', 'test.other = "theValue"'))
-    )
+        """ % (("", "", "") if empty else ('test.other = "otherValue"', 'test.other = "altValue"', 'test.other = "theValue"')))
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, If)
@@ -1850,12 +1647,10 @@ end
 
 def test_bool_str():
     """Test to string of bool literal renders inmanta true/false and not python"""
-    statements = parse_code(
-        """
+    statements = parse_code("""
 val1 = true
 val2 = false
-"""
-    )
+""")
     assert len(statements) == 2
     assert isinstance(statements[0], Assign)
     assert isinstance(statements[1], Assign)
@@ -1868,12 +1663,10 @@ def test_1341_syntax_error_output_1():
     Test the readability of a syntax error message.
     """
     with pytest.raises(ParserException) as pytest_e:
-        parse_code(
-            """
+        parse_code("""
 var=é,
 )
-            """
-        )
+            """)
     exc: ParserException = pytest_e.value
     assert exc.location.file == "test"
     assert exc.location.lnr == 2
@@ -1889,15 +1682,13 @@ def test_1341_syntax_error_output_2():
     Test the readability of a syntax error message.
     """
     with pytest.raises(ParserException) as pytest_e:
-        parse_code(
-            """
+        parse_code("""
 deployment2 = k8s::Deployment(
     name="hello-nginx2",
     var=🤔,
     cluster=cluster
 )
-            """
-        )
+            """)
     exc: ParserException = pytest_e.value
     assert exc.location.file == "test"
     assert exc.location.lnr == 4
@@ -1913,11 +1704,9 @@ def test_1341_syntax_error_output_3():
     Test the readability of a syntax error message.
     """
     with pytest.raises(ParserException) as pytest_e:
-        parse_code(
-            """
+        parse_code("""
 é
-            """
-        )
+            """)
     exc: ParserException = pytest_e.value
     assert exc.location.file == "test"
     assert exc.location.lnr == 2
@@ -1933,11 +1722,9 @@ def test_1341_syntax_error_output_4():
     Test the readability of a syntax error message.
     """
     with pytest.raises(ParserException) as pytest_e:
-        parse_code(
-            """
+        parse_code("""
 aé=66
-            """
-        )
+            """)
     exc: ParserException = pytest_e.value
     assert exc.location.file == "test"
     assert exc.location.lnr == 2
@@ -1953,11 +1740,9 @@ def test_1341_syntax_error_output_5():
     Test the readability of a syntax error message.
     """
     with pytest.raises(ParserException) as pytest_e:
-        parse_code(
-            """
+        parse_code("""
 K8éééYamlResource.cluster [1] -- Cluster
-            """
-        )
+            """)
     exc: ParserException = pytest_e.value
     assert exc.location.file == "test"
     assert exc.location.lnr == 2
@@ -1973,11 +1758,9 @@ def test_640_syntax_error_output_6():
     Test the readability of a syntax error message.
     """
     with pytest.raises(ParserException) as pytest_e:
-        parse_code(
-            """
+        parse_code("""
 typedef positive as number matching self >= 1&
-            """
-        )
+            """)
     exc: ParserException = pytest_e.value
     assert exc.location.file == "test"
     assert exc.location.lnr == 2
@@ -1989,21 +1772,17 @@ typedef positive as number matching self >= 1&
 
 
 def test_1766_empty_model_single_newline():
-    statements = parse_code(
-        """
-        """
-    )
+    statements = parse_code("""
+        """)
     assert len(statements) == 0
 
 
 def test_1766_empty_model_multiple_newline():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 
 
 
-        """
-    )
+        """)
     assert len(statements) == 0
 
 
@@ -2100,12 +1879,10 @@ __x__ = {expression}
 
 
 def test_conditional_expression():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 y = 42
 x = y > 0 ? y : y < 0 ? -1 : 0
-        """
-    )
+        """)
     assert len(statements) == 2
     assign_stmt = statements[1]
     assert isinstance(assign_stmt, Assign)
@@ -2129,12 +1906,10 @@ x = y > 0 ? y : y < 0 ? -1 : 0
 
 
 def test_rstring():
-    statements = parse_code(
-        r"""
+    statements = parse_code(r"""
 a="{{a}}"
 b=r"{{a}}\n"
-        """
-    )
+        """)
     assert len(statements) == 2
 
     assign_stmt = statements[0]
@@ -2153,11 +1928,9 @@ b=r"{{a}}\n"
 
 
 def test_string_attribute_reference_1():
-    statements = parse_code(
-        r"""
+    statements = parse_code(r"""
 a="test{{hello.world.bye}}test"
-"""
-    )
+""")
     assert len(statements) == 1
     assign_stmt = statements[0]
     assert isinstance(assign_stmt, Assign)
@@ -2177,11 +1950,9 @@ a="test{{hello.world.bye}}test"
 
 
 def test_string_attribute_reference_2():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 a=\"""test{{hello.world.bye}}test\"""
-    """
-    )
+    """)
     assert len(statements) == 1
     assign_stmt = statements[0]
     assert isinstance(assign_stmt, Assign)
@@ -2201,14 +1972,12 @@ a=\"""test{{hello.world.bye}}test\"""
 
 
 def test_string_attribute_reference_3():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 a=\"""test
    test{{hello.world.bye}}test
    test
 \"""
-    """
-    )
+    """)
     assert len(statements) == 1
     assign_stmt = statements[0]
     assert isinstance(assign_stmt, Assign)
@@ -2228,14 +1997,12 @@ a=\"""test
 
 
 def test_string_attribute_reference_4():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 a=\"""
 format string starts as first char on new line
 {{x.n}}
 \"""
-    """
-    )
+    """)
     assert len(statements) == 1
     assign_stmt = statements[0]
     assert isinstance(assign_stmt, Assign)
@@ -2252,16 +2019,14 @@ format string starts as first char on new line
 
 
 def test_string_attribute_reference_5():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 a=\"""
 format string starts as first char on new line
 {{
 x.n
 }}
 \"""
-    """
-    )
+    """)
     assert len(statements) == 1
     assign_stmt = statements[0]
     assert isinstance(assign_stmt, Assign)
@@ -2323,8 +2088,7 @@ def test_invalid_namespace_ref_full_msg(snippet: str, invalid: str, valid: str, 
 
 
 def test_expression_as_statements():
-    statements = parse_code(
-        """
+    statements = parse_code("""
 1 == 2
 "hello"
 file(b)
@@ -2333,8 +2097,7 @@ File(host = 5, path = "Jos")
 { "a":"b", "b":1, "c":b}
 File[host = 5, path = "Jos"]
 y > 0 ? y : y < 0 ? -1 : 0
-    """
-    )
+    """)
     assert len(statements) == 8
     boolean_expression = statements[0]
     constant = statements[1]

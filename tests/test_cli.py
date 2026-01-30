@@ -26,7 +26,7 @@ from inmanta import const, data
 from inmanta.agent import executor
 from inmanta.deploy import persistence, state
 from inmanta.resources import Id
-from inmanta.util import get_compiler_version, make_attribute_hash
+from inmanta.util import make_attribute_hash
 from utils import get_resource
 
 
@@ -211,7 +211,6 @@ async def test_version(server, client, clienthelper, environment, cli):
         resources=resources,
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert result.code == 200
@@ -399,9 +398,10 @@ async def test_list_actionlog(server, environment, client, cli, null_agent, clie
         ),
         state=state.ResourceState(
             compliance=state.Compliance.NON_COMPLIANT,
-            last_deploy_result=state.DeployResult.FAILED,
+            last_handler_run=state.HandlerResult.FAILED,
             blocked=state.Blocked.NOT_BLOCKED,
             last_deployed=now,
+            last_handler_run_compliant=False,
         ),
         started=now,
         finished=now,
@@ -425,9 +425,10 @@ async def test_list_actionlog(server, environment, client, cli, null_agent, clie
         ),
         state=state.ResourceState(
             compliance=state.Compliance.COMPLIANT,
-            last_deploy_result=state.DeployResult.DEPLOYED,
+            last_handler_run=state.HandlerResult.SUCCESSFUL,
             blocked=state.Blocked.NOT_BLOCKED,
             last_deployed=now,
+            last_handler_run_compliant=True,
         ),
         started=now,
         finished=now,
@@ -490,9 +491,10 @@ async def test_show_messages_actionlog(server, environment, client, cli, null_ag
         ),
         state=state.ResourceState(
             compliance=state.Compliance.COMPLIANT,
-            last_deploy_result=state.DeployResult.DEPLOYED,
+            last_handler_run=state.HandlerResult.SUCCESSFUL,
             blocked=state.Blocked.NOT_BLOCKED,
             last_deployed=now,
+            last_handler_run_compliant=True,
         ),
         started=now,
         finished=now,

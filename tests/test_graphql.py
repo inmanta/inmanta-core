@@ -20,6 +20,7 @@ import pytest
 
 import inmanta.data.sqlalchemy as models
 from inmanta import const, data
+from inmanta.data import model
 from inmanta.deploy import state
 from inmanta.graphql.schema import to_snake_case
 from inmanta.server import SLICE_COMPILER
@@ -173,7 +174,7 @@ async def setup_database(project_default, server, client):
     "input, output",
     [
         ("isDeploying", "is_deploying"),
-        ("lastDeployResult", "last_deploy_result"),
+        ("lastHandlerRun", "last_handler_run"),
         ("resourceIdValue", "resource_id_value"),
         ("blocked", "blocked"),
     ],
@@ -192,6 +193,52 @@ async def test_graphql_schema(server, client):
     result = await client.graphql_schema()
     assert result.code == 200
     assert result.result["data"]["__schema"]
+
+
+async def test_query_environment_settings(server, client, setup_database):
+    """
+    Assert that the settings returned are correct
+    """
+    env_id = "11111111-1234-5678-1234-000000000002"
+    modified_settings = {data.AUTO_DEPLOY: False, data.RESOURCE_ACTION_LOGS_RETENTION: 12}
+    result = await client.protected_environment_settings_set_batch(
+        tid=env_id,
+        settings=modified_settings,
+        protected_by=model.ProtectedBy.project_yml,
+    )
+    assert result.code == 200
+    query = """
+{
+    environments(filter:{id: "%s"}) {
+        edges {
+            node {
+              id
+              settings
+            }
+        }
+    }
+}
+
+""" % env_id
+
+    result = await client.graphql(query=query)
+    assert result.code == 200
+    # Result settings
+    settings = result.result["data"]["data"]["environments"]["edges"][0]["node"]["settings"]
+    # Expected settings
+    api_result = await client.list_settings(tid=env_id)
+    assert api_result.code == 200
+    assert settings["definition"] == api_result.result["metadata"]
+    for setting_name in data.Environment._settings.keys():
+        setting_value = settings["settings"][setting_name]
+        if setting_name in modified_settings:
+            assert setting_value["value"] == modified_settings[setting_name]
+            assert setting_value["protected"]
+            assert setting_value["protected_by"] == model.ProtectedBy.project_yml
+        else:
+            assert setting_value["value"] == api_result.result["metadata"][setting_name]["default"]
+            assert setting_value["protected"] is False
+            assert setting_value["protected_by"] is None
 
 
 async def test_query_environments_with_filtering(server, client, setup_database):
@@ -507,9 +554,7 @@ async def test_notifications(server, client, setup_database):
         == "Field 'notifications' argument 'filter' of type 'NotificationFilter!' is required, but it was not provided."
     )
     # Get list of notifications filtered by cleared
-    result = await client.graphql(
-        query=query
-        % """
+    result = await client.graphql(query=query % """
             (filter: {
               cleared: false
               environment: "11111111-1234-5678-1234-000000000001"
@@ -517,8 +562,7 @@ async def test_notifications(server, client, setup_database):
             orderBy: [
                 {key: "created" order: "desc"}
             ])
-    """
-    )
+    """)
     assert result.code == 200
     edges = result.result["data"]["data"]["notifications"]["edges"]
     # Environments 1 has 6 uncleared notifications
@@ -534,9 +578,7 @@ async def test_notifications(server, client, setup_database):
         previous_time = created
 
     # Get first page of notifications
-    result = await client.graphql(
-        query=query
-        % """
+    result = await client.graphql(query=query % """
             (filter: {
               cleared: false
               environment: "11111111-1234-5678-1234-000000000001"
@@ -545,8 +587,7 @@ async def test_notifications(server, client, setup_database):
                 {key: "created" order: "desc"}
             ],
             first: 3)
-    """
-    )
+    """)
     assert result.code == 200
     notifications = result.result["data"]["data"]["notifications"]
     pageInfo = notifications["pageInfo"]
@@ -567,8 +608,7 @@ async def test_notifications(server, client, setup_database):
         previous_time = created
 
     # Get first page of notifications
-    next_page_filter = (
-        """
+    next_page_filter = """
             (filter: {
               cleared: false
               environment: "11111111-1234-5678-1234-000000000001"
@@ -577,9 +617,7 @@ async def test_notifications(server, client, setup_database):
                 {key: "created" order: "desc"}
             ],
             first: 3, after: "%s")
-    """
-        % pageInfo["endCursor"]
-    )
+    """ % pageInfo["endCursor"]
     result = await client.graphql(query=query % next_page_filter)
     assert result.code == 200
     notifications = result.result["data"]["data"]["notifications"]
@@ -622,6 +660,15 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
     total_resources_in_latest_version = resources_per_version * instances
     total_resources = total_resources_in_latest_version + (orphans * instances)
     await mixed_resource_generator(environment, instances, resources_per_version)
+
+    # Quick way of simulating a non-compliant report
+    # It has to be non-orphan otherwise the complianceState returned will be None
+    rps = await data.ResourcePersistentState.get_one(
+        environment=environment, last_handler_run=state.HandlerResult.SUCCESSFUL, is_orphan=False
+    )
+    assert rps
+    await rps.update_fields(last_handler_run_compliant=False)
+
     filters = [
         # (1 undefined, 1 skipped for undefined) * <instances>
         {
@@ -672,9 +719,9 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
         },
         # 1 undefined, 1 skipped for undefined, 1 still deploying
         {
-            "query": "lastDeployResult: {eq: NEW}",
+            "query": "lastHandlerRun: {eq: NEW}",
             "result": 3 * instances,
-            "assertion": {"state": {"lastDeployResult": state.DeployResult.NEW.name}},
+            "assertion": {"state": {"lastHandlerRun": state.HandlerResult.NEW.name}},
         },
         {"query": "isDeploying: true", "result": instances, "assertion": {"state": {"isDeploying": True}}},
         {
@@ -684,19 +731,31 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
         },
         # 1 undefined, 1 skipped for undefined
         {
-            "query": "lastDeployResult: {eq: NEW} isDeploying: false",
+            "query": "lastHandlerRun: {eq: NEW} isDeploying: false",
             "result": 2 * instances,
-            "assertion": {"state": {"lastDeployResult": state.DeployResult.NEW.name, "isDeploying": False}},
+            "assertion": {"state": {"lastHandlerRun": state.HandlerResult.NEW.name, "isDeploying": False}},
         },
         #  1 skipped for undefined
         {
-            "query": "lastDeployResult: {eq: NEW} isDeploying: false complianceState: {neq: UNDEFINED}",
+            "query": "lastHandlerRun: {eq: NEW} isDeploying: false complianceState: {neq: UNDEFINED}",
             "result": instances,
             "assertion": {
                 "state": {
-                    "lastDeployResult": state.DeployResult.NEW.name,
+                    "lastHandlerRun": state.HandlerResult.NEW.name,
                     "isDeploying": False,
                     "complianceState": state.Compliance.HAS_UPDATE.name,
+                }
+            },
+        },
+        # Non-compliant report
+        {
+            "query": "lastHandlerRun: {eq: SUCCESSFUL} isDeploying: false complianceState: {eq: NON_COMPLIANT}",
+            "result": 1,
+            "assertion": {
+                "state": {
+                    "lastHandlerRun": state.HandlerResult.SUCCESSFUL.name,
+                    "isDeploying": False,
+                    "complianceState": state.Compliance.NON_COMPLIANT.name,
                 }
             },
         },
@@ -718,8 +777,8 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
                         isUndefined
                         blocked
                         isDeploying
-                        lastDeployResult
-                        lastDeploy
+                        lastHandlerRun
+                        lastHandlerRunAt
                         complianceState
                         currentIntentAttributeHash
                       }
@@ -741,10 +800,9 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
             for res in result.result["data"]["data"]["resources"]["edges"]:
                 assert is_subset_dict(assertion, res["node"])
 
-    query = (
-        """
+    query = """
     {
-        resources ( filter: {environment: "%s" lastDeployResult: {eq: NEW}}
+        resources ( filter: {environment: "%s" lastHandlerRun: {eq: NEW}}
             orderBy: [{key: "complianceState" order: "asc"}]) {
             edges {
                 node {
@@ -755,9 +813,7 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
             }
         }
     }
-    """
-        % environment
-    )
+    """ % environment
     result = await client.graphql(query=query)
     assert result.code == 200
     assert result.result["data"]["errors"] is None
@@ -770,10 +826,9 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
             else state.Compliance.UNDEFINED.name
         )
 
-    query = (
-        """
+    query = """
     {
-        resources (filter: {environment: "%s" lastDeployResult: {eq: NEW}}
+        resources (filter: {environment: "%s" lastHandlerRun: {eq: NEW}}
             orderBy: [{key: "complianceState" order: "desc"}, {key: "isDeploying" order: "asc"}]) {
             edges {
                 node {
@@ -785,9 +840,7 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
             }
         }
     }
-    """
-        % environment
-    )
+    """ % environment
     result = await client.graphql(query=query)
     assert result.code == 200
     assert result.result["data"]["errors"] is None
@@ -802,10 +855,9 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
         )
         assert result_resources[i]["node"]["state"]["isDeploying"] == (False if i < 2 * instances else True)
 
-    query = (
-        """
+    query = """
        {
-           resources (filter: {environment: "%s" lastDeployResult: {eq: NEW}}
+           resources (filter: {environment: "%s" lastHandlerRun: {eq: NEW}}
                     orderBy: [{key: "complianceState" order: "desc"}, {key: "isDeploying" order: "desc"}]) {
                edges {
                    node {
@@ -817,9 +869,7 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
                }
            }
        }
-       """
-        % environment
-    )
+       """ % environment
     result = await client.graphql(query=query)
     assert result.code == 200
     assert result.result["data"]["errors"] is None

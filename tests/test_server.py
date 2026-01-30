@@ -44,7 +44,6 @@ from inmanta.server import config as opt
 from inmanta.server.bootloader import InmantaBootloader, PostgreSQLVersion
 from inmanta.server.protocol import ServerStartFailure
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
-from inmanta.util import get_compiler_version
 from utils import insert_with_link_to_configuration_model, log_contains, log_doesnt_contain, retry_limited
 
 LOGGER = logging.getLogger(__name__)
@@ -119,7 +118,6 @@ async def test_create_too_many_versions(client, server, no_agent, n_versions_to_
             resources=resources,
             unknowns=[],
             version_info={},
-            compiler_version=get_compiler_version(),
             module_version_info={},
         )
         assert res.code == 200
@@ -181,7 +179,6 @@ async def test_purge_versions(server, client, environment, has_released_versions
             ],
             unknowns=[],
             version_info={},
-            compiler_version=get_compiler_version(),
             module_version_info={},
         )
         assert res.code == 200
@@ -260,7 +257,6 @@ async def test_n_versions_env_setting_scope(client, server):
             resources=[],
             unknowns=[],
             version_info={},
-            compiler_version=get_compiler_version(),
             module_version_info={},
         )
         assert res.code == 200
@@ -271,7 +267,6 @@ async def test_n_versions_env_setting_scope(client, server):
             resources=[],
             unknowns=[],
             version_info={},
-            compiler_version=get_compiler_version(),
             module_version_info={},
         )
         assert res.code == 200
@@ -314,7 +309,6 @@ async def test_resource_update(postgresql_client, client, clienthelper, server, 
                 "purged": False,
                 "reload": False,
                 "requires": [],
-                "version": version,
             }
         )
 
@@ -324,7 +318,6 @@ async def test_resource_update(postgresql_client, client, clienthelper, server, 
         resources=resources,
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert res.code == 200
@@ -370,9 +363,10 @@ async def test_resource_update(postgresql_client, client, clienthelper, server, 
             ),
             state=state.ResourceState(
                 compliance=state.Compliance.COMPLIANT,
-                last_deploy_result=state.DeployResult.DEPLOYED,
+                last_handler_run=state.HandlerResult.SUCCESSFUL,
                 blocked=state.Blocked.NOT_BLOCKED,
                 last_deployed=now,
+                last_handler_run_compliant=True,
             ),
             started=now,
             finished=now,
@@ -403,7 +397,6 @@ async def test_clear_environment(client, server, clienthelper, environment):
         resources=[],
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert result.code == 200
@@ -743,7 +736,6 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
                 "purged": False,
                 "reload": False,
                 "requires": [],
-                "version": version,
             }
         )
 
@@ -762,7 +754,6 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
             "purged": False,
             "reload": False,
             "requires": [],
-            "version": version,
         }
     )
 
@@ -772,7 +763,6 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
         resources=resources,
         unknowns=[],
         version_info={},
-        compiler_version=get_compiler_version(),
         module_version_info={},
     )
     assert res.code == 200
@@ -1029,7 +1019,7 @@ async def test_send_in_progress(server, client, environment, agent):
         await data.ResourcePersistentState.update_persistent_state(
             environment=uuid.UUID(environment),
             resource_id=r1.resource_id,
-            last_deploy=datetime.now(tz=UTC),
+            last_handler_run_at=datetime.now(tz=UTC),
             last_non_deploying_status=last_non_deploying_status,
         )
 
@@ -1138,7 +1128,6 @@ async def test_send_deploy_done(server, client, environment, null_agent, caplog,
     attributes_r1 = {
         "name": "file1",
         "id": f"std::testing::NullResource[agent1,name=file1],v={model_version}",
-        "version": model_version,
         "purge_on_delete": False,
         "purged": True,
         "requires": [],
@@ -1200,9 +1189,10 @@ async def test_send_deploy_done(server, client, environment, null_agent, caplog,
             ),
             state=state.ResourceState(
                 compliance=state.Compliance.COMPLIANT,
-                last_deploy_result=state.DeployResult.DEPLOYED,
+                last_handler_run=state.HandlerResult.SUCCESSFUL,
                 blocked=state.Blocked.NOT_BLOCKED,
                 last_deployed=now,
+                last_handler_run_compliant=True,
             ),
             started=now,
             finished=now,
@@ -1274,9 +1264,10 @@ async def test_send_deploy_done(server, client, environment, null_agent, caplog,
             ),
             state=state.ResourceState(
                 compliance=state.Compliance.COMPLIANT,
-                last_deploy_result=state.DeployResult.DEPLOYED,
+                last_handler_run=state.HandlerResult.SUCCESSFUL,
                 blocked=state.Blocked.NOT_BLOCKED,
                 last_deployed=datetime.now().astimezone(),
+                last_handler_run_compliant=True,
             ),
             started=datetime.now().astimezone(),
             finished=datetime.now().astimezone(),
@@ -1324,9 +1315,10 @@ async def test_send_deploy_done_error_handling(server, client, environment, agen
             ),
             state=state.ResourceState(
                 compliance=state.Compliance.COMPLIANT,
-                last_deploy_result=state.DeployResult.DEPLOYED,
+                last_handler_run=state.HandlerResult.SUCCESSFUL,
                 blocked=state.Blocked.NOT_BLOCKED,
                 last_deployed=datetime.now().astimezone(),
+                last_handler_run_compliant=True,
             ),
             started=datetime.now().astimezone(),
             finished=datetime.now().astimezone(),
@@ -1489,7 +1481,6 @@ async def test_put_stale_version(client, server, environment, clienthelper, capl
             {
                 "id": f"{resource_id},v={version}",
                 "att": "val",
-                "version": version,
                 "send_event": False,
                 "purged": False,
                 "requires": [],
@@ -1513,7 +1504,6 @@ async def test_put_stale_version(client, server, environment, clienthelper, capl
                 resources=resources,
                 unknowns=[],
                 version_info={},
-                compiler_version=get_compiler_version(),
                 module_version_info={},
             )
             assert result.code == 200
@@ -1560,7 +1550,6 @@ async def test_set_fact_v2(
         resources=resources,
         unknowns=[],
         version_info={},
-        compiler_version=util.get_compiler_version(),
         module_version_info={},
     )
     assert result.code == 200

@@ -23,7 +23,7 @@ from inmanta import resources, const
 from inmanta.agent.handler import provider, CRUDHandler, HandlerContext, LoggerABC
 
 from inmanta.plugins import plugin
-from inmanta.references import reference, Reference
+from inmanta.references import reference, Reference, mutator, Mutator
 
 
 @resources.resource("successhandlermodule::SuccessResource", agent="agent", id_attribute="name")
@@ -90,3 +90,10 @@ def create_my_ref(base: str | Reference[str]) -> Reference[str]:
     :return: A reference to what can be resolved to a string
     """
     return FooReference(base)
+
+
+@mutator(name="foo::Mutator")
+class FooMutator(Mutator):
+
+    def run(self, logger: "handler.LoggerABC") -> None:
+        return

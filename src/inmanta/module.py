@@ -67,7 +67,6 @@ from inmanta.parser import plyInmantaParser
 from inmanta.parser.plyInmantaParser import cache_manager
 from inmanta.server import config
 from inmanta.stable_api import stable_api
-from inmanta.util import get_compiler_version
 from inmanta.warnings import InmantaWarning
 from packaging.specifiers import SpecifierSet
 from packaging.version import Version
@@ -1531,7 +1530,6 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
     repo: list[ModuleRepoInfo] = []
     downloadpath: Optional[str] = None
     install_mode: InstallMode = InstallMode.release
-    requires: list[str] = []
     relation_precedence_policy: list[
         Annotated[str, StringConstraints(strip_whitespace=True, pattern=_re_relation_precedence_rule, min_length=1)]
     ] = []
@@ -2092,7 +2090,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         return self._ast_cache
 
     def get_imports(self) -> list[DefineImport]:
-        (statements, _) = self.get_ast()
+        statements, _ = self.get_ast()
         imports = [x for x in statements if isinstance(x, DefineImport)]
         if self.autostd:
             std_locatable = LocatableString("std", Range("__internal__", 1, 1, 1, 1), -1, self.root_ns)
@@ -2106,7 +2104,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             return self._complete_ast
         start = time()
         # load ast
-        (statements, block) = self.get_ast()
+        statements, block = self.get_ast()
         blocks = [block]
         statements = [x for x in statements]
 
@@ -2201,7 +2199,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
                 subs = "::".join(parts[0:i])
                 if subs in done[module.name]:
                     continue
-                (nstmt, nb) = module.get_ast(subs)
+                nstmt, nb = module.get_ast(subs)
 
                 done[module.name][subs] = imp
                 ast_by_top_level_mod[module.name].append((subs, nstmt, nb))
@@ -2590,7 +2588,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         if self._project is None:
             raise ValueError("Can only get module's imports in the context of a project.")
 
-        (statements, block) = self.get_ast(name)
+        statements, block = self.get_ast(name)
         imports = [x for x in statements if isinstance(x, DefineImport)]
         if self.name != "std" and self._project.autostd:
             std_locatable = LocatableString("std", Range("__internal__", 1, 1, 1, 1), -1, block.namespace)
@@ -2886,8 +2884,8 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
         for r in requirements:
             versions = [x for x in r.specifier.filter(iterable=versions, prereleases=not release_only)]
 
-        comp_version_raw = get_compiler_version()
-        comp_version = Version(version=comp_version_raw)
+        # Compiler version was dropped so we just hardcoded the latest known compiler version
+        comp_version = Version(version="2026.1")
         return cls.__best_for_compiler_version(modulename, versions, path, comp_version)
 
     @classmethod

@@ -806,11 +806,9 @@ class PythonEnvironment:
         pip_path = os.path.join(self.env_path, "bin", "pip")
 
         with open(pip_path, "w", encoding="utf-8") as fd:
-            fd.write(
-                """#!/bin/sh
+            fd.write("""#!/bin/sh
 "$(dirname "$0")/python" -m pip $@
-                """.strip()
-            )
+                """.strip())
         os.chmod(pip_path, 0o755)
 
     def _write_pth_file(self) -> None:

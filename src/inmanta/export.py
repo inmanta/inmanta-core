@@ -41,7 +41,7 @@ from inmanta.execute.runtime import Instance
 from inmanta.resources import Id, IgnoreResourceException, Resource, resource, to_id
 from inmanta.stable_api import stable_api
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
-from inmanta.util import get_compiler_version, hash_file
+from inmanta.util import hash_file
 
 LOGGER = logging.getLogger(__name__)
 
@@ -293,10 +293,6 @@ class Exporter:
 
             if isinstance(requires, str):
                 myid = Id.parse_id(requires)
-                if myid.version == 0:
-                    raise Exception(
-                        f"A dependency manager inserted a resource id without version this is not allowed {requires}"
-                    )
                 return myid
             if isinstance(requires, Resource):
                 return requires.id
@@ -474,10 +470,6 @@ class Exporter:
         A resource is a map of attributes. This method validates the id
         of the resource and will add a version (if it is not set already)
         """
-        if resource.version > 0:
-            raise Exception("Versions should not be added to resources during model compilation.")
-
-        resource.set_version(self._version)
 
         if resource.id in self._resources:
             raise CompilerException("Resource %s exists more than once in the configuration model" % resource.id)
@@ -631,7 +623,6 @@ class Exporter:
                     unknowns=unknown_parameters,
                     resource_state=self._resource_state,
                     version_info=version_info,
-                    compiler_version=get_compiler_version(),
                     module_version_info=code_manager.get_module_version_info(),
                     project_constraints=project_constraints,
                     **kwargs,
