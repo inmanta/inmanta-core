@@ -259,16 +259,21 @@ server_address: Option[str] = Option(
     "server",
     "server_address",
     "localhost",
-    """The public ip address of the server.
-                           This is required for example to inject the inmanta agent in virtual machines at boot time.""",
+    """The hostname or ip address used by end-users to connect to the Inmanta server.
+       For example, if the Inmanta server is behind a reverse-proxy this is the hostname or ip address
+       of the reverse proxy. If there is no proxy involved this is the hostname or ip address of the
+       Inmanta server itself.""",
 )
 
 internal_server_address: Option[str] = Option(
     "server",
     "internal_server_address",
     "localhost",
-    """The internal ip address of the server.
-       This address is used by processes started by the server (e.g. compilers and schedulers) to connect back to the Inmanta server.""",
+    """The hostname or ip address that is used by internal components (e.g. compiler and scheduler) to connect back
+       to the Inmanta server. The default value 'localhost' should work in most situations given that the internal
+       components run on the same machine as the orchestrator itself. However, if SSL/TLS is enabled on the
+       Inmanta server, this value should be updated to the hostname that is defined in the SSL certificate of
+       the server. Otherwise the SSL validation will fail.""",
 )
 
 server_wait_after_param = Option(
