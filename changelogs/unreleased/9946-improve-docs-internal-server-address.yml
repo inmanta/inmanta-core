@@ -1,5 +1,5 @@
 ---
-description: "Improve documentation server.internal_server_address config option."
+description: "Improve documentation of the server.internal_server_address config option."
 issue-nr: 9946
 issue-repo: inmanta-core
 change-type: patch
