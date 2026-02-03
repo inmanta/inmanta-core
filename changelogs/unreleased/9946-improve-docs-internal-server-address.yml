@@ -1,0 +1,8 @@
+---
+description: "Improve documentation server.internal_server_address config option."
+issue-nr: 9946
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso9, iso8]
+sections:
+  minor-improvement: "{{description}}"
