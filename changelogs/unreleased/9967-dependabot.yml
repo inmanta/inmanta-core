@@ -1,0 +1,6 @@
+change-type: patch
+description: Bump pip from 25.3 to 26.0
+destination-branches:
+- master
+- iso9
+sections: {}
