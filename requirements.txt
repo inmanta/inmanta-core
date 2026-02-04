@@ -24,7 +24,7 @@ myst-parser==5.0.0
 openapi_spec_validator==0.7.2
 opentelemetry-instrumentation-asyncpg==0.60b1
 packaging==26.0
-pip==25.3
+pip==26.0
 pip2pi==0.8.2
 ply==3.11
 psutil==7.2.1
