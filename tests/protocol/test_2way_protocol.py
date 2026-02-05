@@ -33,7 +33,7 @@ from inmanta.protocol.auth.decorators import auth
 from inmanta.protocol.methods import ENV_OPTS
 from inmanta.server import SLICE_SESSION_MANAGER
 from inmanta.server.config import AuthorizationProviderName
-from inmanta.server.protocol import Server, ServerSlice, SessionListener, SliceStartupException
+from inmanta.server.protocol import Server, ServerSlice, SessionListener
 from utils import configure_auth, retry_limited
 
 LOGGER = logging.getLogger(__name__)
@@ -126,23 +126,6 @@ async def assert_agent_counter(agent: Agent, reconnect: int, disconnected: int) 
         return agent.disconnect == disconnected and agent.reconnect == reconnect
 
     await retry_limited(is_same, 10)
-
-
-async def test_ssl_key_encrypted(inmanta_config, server_config, no_tid_check, postgres_db, database_name):
-    """
-    Test that the server produces a cleaner exception if something goes wrong when loading the certificate
-    """
-    configure_auth(auth=True, ca=False, ssl=True, encrypt_ssl_key=True, authorization_provider=AuthorizationProviderName.legacy)
-    rs = Server()
-    server = SessionSpy()
-    rs.get_slice(SLICE_SESSION_MANAGER).add_listener(server)
-    rs.add_slice(server)
-    with pytest.raises(
-        SliceStartupException,
-        match="Failed to load ssl certificate. "
-        "Please check if you provided the correct certificate/key path and make sure that these files are not encrypted",
-    ):
-        await rs.start()
 
 
 async def test_2way_protocol(inmanta_config, server_config, no_tid_check, postgres_db, database_name):

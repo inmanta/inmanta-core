@@ -321,7 +321,7 @@ def configure_auth(
     authorization_provider: AuthorizationProviderName | None = None,
     access_policy: str | None = None,
     path_opa_executable: str | None = None,
-    encrypt_ssl_key: bool = False,
+    use_encrypted_ssl_key: bool = False,
 ) -> None:
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
     if auth:
@@ -349,7 +349,7 @@ def configure_auth(
         if ssl and not ca:
             config.Config.set(x, "ssl_cert_file", os.path.join(path, "server.crt"))
             config.Config.set(x, "ssl_key_file", os.path.join(path, "server.open.key"))
-            if encrypt_ssl_key:
+            if use_encrypted_ssl_key:
                 config.Config.set(x, "ssl_key_file", os.path.join(path, "server.encrypted_key.pgp"))
             else:
                 config.Config.set(x, "ssl_key_file", os.path.join(path, "server.open.key"))
@@ -359,7 +359,7 @@ def configure_auth(
             capath = os.path.join(path, "ca", "enduser-certs")
 
             config.Config.set(x, "ssl_cert_file", os.path.join(capath, "server.crt"))
-            if encrypt_ssl_key:
+            if use_encrypted_ssl_key:
                 config.Config.set(x, "ssl_key_file", os.path.join(capath, "server.encrypted_key.pgp"))
             else:
                 config.Config.set(x, "ssl_key_file", os.path.join(capath, "server.key.open"))
