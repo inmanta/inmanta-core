@@ -129,7 +129,9 @@ async def assert_agent_counter(agent: Agent, reconnect: int, disconnected: int) 
 
 
 async def test_ssl_key_encrypted(inmanta_config, server_config, no_tid_check, postgres_db, database_name):
-    # Authentication complicates this even further
+    """
+    Test that the server produces a cleaner exception if something goes wrong when loading the certificate
+    """
     configure_auth(auth=True, ca=False, ssl=True, encrypt_ssl_key=True, authorization_provider=AuthorizationProviderName.legacy)
     rs = Server()
     server = SessionSpy()
