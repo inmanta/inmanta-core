@@ -313,7 +313,14 @@ class RESTServer(RESTBase):
 
         if crt is not None and key is not None:
             ssl_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-            ssl_ctx.load_cert_chain(crt, key)
+            try:
+                ssl_ctx.load_cert_chain(crt, key)
+            except Exception as e:
+                raise Exception(
+                    "Failed to load ssl certificate. Please check if you provided the correct certificate/key path"
+                    " and make sure that these files are not encrypted",
+                    e,
+                )
 
             self._http_server = httpserver.HTTPServer(application, decompress_request=True, ssl_options=ssl_ctx)
             LOGGER.debug("Created REST transport with SSL")
