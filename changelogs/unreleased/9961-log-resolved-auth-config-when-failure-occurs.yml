@@ -1,5 +1,5 @@
 ---
-description: "Improve logging when auth_jwt config fails to load"
+description: "Improve logging when auth_jwt config fails to load due to issues with sign=True"
 issue-nr: 9961
 issue-repo: inmanta-core
 change-type: patch
