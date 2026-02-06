@@ -623,7 +623,7 @@ auth_jwt_test2 -> sign=False
 """
 
     with open(config_file, "a+", encoding="utf-8") as fd:
-        fd.write(f"""
+        fd.write("""
 [auth_jwt_test3]
 algorithm=HS256
 sign=true
