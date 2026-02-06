@@ -47,6 +47,18 @@ def check_dot_command():
         raise Exception("The 'dot' command is not available. Please install Graphviz (https://graphviz.org) "
                         "and ensure that the 'dot' command is in the PATH.")
 
+def get_pg_version_for_product() -> int:
+    """
+    Fetches the appropriate postgresql version for the product.
+    The `MINIMAL_POSTGRES_VERSION` environment variable should be set by irt
+    """
+    if "INMANTA_DONT_DISCOVER_VERSION" in os.environ:
+        return 16
+    pg_version = os.environ.get("MINIMAL_POSTGRES_VERSION")
+    if pg_version is None:
+        raise Exception("MINIMAL_POSTGRES_VERSION not found, please set it or use the INMANTA_DONT_DISCOVER_VERSION option.")
+    return int(pg_version)
+
 # Check for dot command availability during documentation build
 check_dot_command()
 
@@ -126,6 +138,7 @@ rst_prolog = f"""\
 .. |version_major| replace:: {version_major}
 .. |release| replace:: {release}
 .. |python_version| replace:: {sys.version_info.major}.{sys.version_info.minor}
+.. |pg_version| replace:: {get_pg_version_for_product()}
 """
 
 
