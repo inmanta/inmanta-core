@@ -5,32 +5,32 @@ Install PostgreSQL
 
 This page describes how to install PostgreSQL on RedHat Enterprise Linux or derivatives.
 
-Step 1: Install PostgreSQL 16
+Step 1: Install PostgreSQL |pg_version|
 -----------------------------
 
 .. only:: oss
 
-    For most platforms you can install PostgreSQL 16 following the `installation guide <https://www.postgresql.org/download/>`_ for your
+    For most platforms you can install PostgreSQL |pg_version| following the `installation guide <https://www.postgresql.org/download/>`_ for your
     platform.
 
     For RHEL based systems you can also use the PostgreSQL that comes with the distribution.
 
-    .. code-block:: sh
+    .. parsed-literal::
 
-        sudo dnf module install postgresql:16/server
+        sudo dnf module install postgresql:|pg_version|/server
 
 .. only:: iso
 
-    Install the PostgreSQL 16 package included in RHEL. More info in the 'Included in Distribution' section
+    Install the PostgreSQL |pg_version| package included in RHEL. More info in the 'Included in Distribution' section
     of the `postgresql documentation <https://www.postgresql.org/download/linux/redhat/>`_.
 
     .. tab-set::
 
         .. tab-item:: RHEL 9
 
-            .. code-block:: sh
+            .. parsed-literal::
 
-                sudo dnf module install postgresql:16/server
+                sudo dnf module install postgresql:|pg_version|/server
                 sudo systemctl enable postgresql
 
             .. warning::
@@ -46,9 +46,9 @@ Step 1: Install PostgreSQL 16
 
         .. tab-item:: RHEL 8
 
-            .. code-block:: sh
+            .. parsed-literal::
 
-                sudo dnf module install postgresql:16/server
+                sudo dnf module install postgresql:|pg_version|/server
                 sudo systemctl enable postgresql
 
 
