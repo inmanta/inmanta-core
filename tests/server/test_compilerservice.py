@@ -573,10 +573,7 @@ import std::testing
 std::testing::NullResource(name="test")
     """.strip()
 
-    # Add .inmanta file with inverse SSL config as the server itself.
-    config_file = os.path.join(tmpdir, "auth.cfg")
-    with open(config_file, "w+", encoding="utf-8") as fd:
-        fd.write("""
+    original_config = """
 [server]
 auth=true
 auth_additional_header=Jwt-Assertion
@@ -590,7 +587,20 @@ expire=0
 issuer=https://localhost:8888/
 audience=https://localhost:8888/
 
-            """)
+[auth_jwt_test2]
+algorithm=HS256
+sign=false
+client_types=agent,compiler
+key=eciwliGyqECVmXtIkNpfVrtBLutZiITZKSKYhogeHMM
+expire=0
+issuer=https://localhost:8881/
+audience=https://localhost:8888/
+            """
+
+    # Add .inmanta file with inverse SSL config as the server itself.
+    config_file = os.path.join(tmpdir, "auth.cfg")
+    with open(config_file, "w+", encoding="utf-8") as fd:
+        fd.write(original_config)
 
     config.Config.load_config(config_file)
     env = await environment_factory.create_environment(main=main_cf)
@@ -607,7 +617,44 @@ audience=https://localhost:8888/
     await cr.run()
 
     c = await data.Compile.get_report(compile.id)
-    assert c["reports"][-1]["errstream"] == "One auth_jwt section should have sign set to true\n"
+    assert c["reports"][-1]["errstream"] == """One auth_jwt section should have sign set to true:
+auth_jwt_test -> sign=False
+auth_jwt_test2 -> sign=False
+"""
+
+    with open(config_file, "a+", encoding="utf-8") as fd:
+        fd.write("""
+[auth_jwt_test3]
+algorithm=HS256
+sign=true
+client_types=agent,compiler
+key=eciwliGyqECVmXtIkNpfVrtBLutZiITZKSKYhogeHMM
+expire=0
+issuer=https://localhost:8882/
+audience=https://localhost:8888/
+
+[auth_jwt_test4]
+algorithm=HS256
+sign=true
+client_types=agent,compiler
+key=eciwliGyqECVmXtIkNpfVrtBLutZiITZKSKYhogeHMM
+expire=0
+issuer=https://localhost:8883/
+audience=https://localhost:8888/
+
+                """)
+    config.Config.load_config(config_file)
+    # compile with export
+    cr = CompileRun(compile, project_work_dir)
+    await cr.run()
+
+    c = await data.Compile.get_report(compile.id)
+    assert c["reports"][-1]["errstream"] == """Only one auth_jwt section may have sign set to true, found 2 instances instead:
+auth_jwt_test -> sign=False
+auth_jwt_test2 -> sign=False
+auth_jwt_test3 -> sign=True
+auth_jwt_test4 -> sign=True
+"""
 
 
 @pytest.mark.slowtest

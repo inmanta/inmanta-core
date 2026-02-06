@@ -187,16 +187,19 @@ class AuthJWTConfig:
                         cls.issuers[obj.issuer] = obj
 
             # Verify that only one has sign set to true
-            sign = False
-            for section in cls.sections.values():
+            sign_true_found: int = 0
+            sign_value_context: list[str] = []
+            for section_name, section in cls.sections.items():
+                sign_value_context.append(f"auth_jwt_{section_name} -> sign={section.sign}")
                 if section.sign:
-                    if sign:
-                        raise ValueError("Only one auth_jwt section may have sign set to true")
-                    else:
-                        sign = True
-
-            if len(cls.sections.keys()) > 0 and not sign:
-                raise ValueError("One auth_jwt section should have sign set to true")
+                    sign_true_found += 1
+            if sign_true_found > 1:
+                raise ValueError(
+                    f"Only one auth_jwt section may have sign set to true, found {sign_true_found} instances instead:\n"
+                    f"{'\n'.join(sign_value_context)}"
+                )
+            if len(cls.sections.keys()) > 0 and sign_true_found == 0:
+                raise ValueError(f"One auth_jwt section should have sign set to true:\n{'\n'.join(sign_value_context)}")
         except Exception:
             # Make sure we don't have a partially loaded config.
             cls.reset()
