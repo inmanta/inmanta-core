@@ -199,7 +199,7 @@ class AuthJWTConfig:
                     f"{'\n'.join(sign_value_context)}"
                 )
             if len(cls.sections.keys()) > 0 and sign_true_found == 0:
-                raise ValueError("One auth_jwt section should have sign set to true:\n" f"{'\n'.join(sign_value_context)}")
+                raise ValueError(f"One auth_jwt section should have sign set to true:\n{'\n'.join(sign_value_context)}")
         except Exception:
             # Make sure we don't have a partially loaded config.
             cls.reset()
