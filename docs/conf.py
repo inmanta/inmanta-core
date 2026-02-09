@@ -50,13 +50,15 @@ def check_dot_command():
 def get_pg_version_for_product() -> int:
     """
     Fetches the appropriate postgresql version for the product.
-    The `MINIMAL_POSTGRES_VERSION` environment variable should be set by irt
+    The `INMANTA_MINIMAL_POSTGRES_VERSION` environment variable should be set by irt
     """
     if "INMANTA_DONT_DISCOVER_VERSION" in os.environ:
         return 16
-    pg_version = os.environ.get("MINIMAL_POSTGRES_VERSION")
+    pg_version = os.environ.get("INMANTA_MINIMAL_POSTGRES_VERSION")
     if pg_version is None:
-        raise Exception("MINIMAL_POSTGRES_VERSION not found, please set it or use the INMANTA_DONT_DISCOVER_VERSION option.")
+        raise Exception(
+            "INMANTA_MINIMAL_POSTGRES_VERSION not found, please set it or use the INMANTA_DONT_DISCOVER_VERSION option."
+        )
     return int(pg_version)
 
 # Check for dot command availability during documentation build

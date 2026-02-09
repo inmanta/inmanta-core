@@ -218,7 +218,8 @@ The file ``inmanta-server.image`` defines the details of how/when to pull the do
 
 The file ``inmanta-db.container`` defines the database container. The data is stored in the ``/home/inmanta/mount/db`` directory on the host.
 
-.. parsed-literal::
+.. code-bock:: systemd
+    :substitutions:
 
     [Unit]
     Description=Inmanta orchestrator db

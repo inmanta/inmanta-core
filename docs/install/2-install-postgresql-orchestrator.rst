@@ -15,7 +15,8 @@ Step 1: Install PostgreSQL |pg_version|
 
     For RHEL based systems you can also use the PostgreSQL that comes with the distribution.
 
-    .. parsed-literal::
+    .. code-block:: sh
+        :substitutions:
 
         sudo dnf module install postgresql:|pg_version|/server
 
@@ -28,7 +29,8 @@ Step 1: Install PostgreSQL |pg_version|
 
         .. tab-item:: RHEL 9
 
-            .. parsed-literal::
+            .. code-block:: sh
+                :substitutions:
 
                 sudo dnf module install postgresql:|pg_version|/server
                 sudo systemctl enable postgresql
@@ -46,7 +48,8 @@ Step 1: Install PostgreSQL |pg_version|
 
         .. tab-item:: RHEL 8
 
-            .. parsed-literal::
+            .. code-block:: sh
+                :substitutions:
 
                 sudo dnf module install postgresql:|pg_version|/server
                 sudo systemctl enable postgresql
