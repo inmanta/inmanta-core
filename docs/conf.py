@@ -57,7 +57,8 @@ def get_pg_version_for_product() -> int:
     pg_version = os.environ.get("INMANTA_MINIMAL_POSTGRES_VERSION")
     if pg_version is None:
         raise Exception(
-            "INMANTA_MINIMAL_POSTGRES_VERSION not found, please set it or use the INMANTA_DONT_DISCOVER_VERSION option."
+            "INMANTA_MINIMAL_POSTGRES_VERSION not found."
+            "Please set it or use the INMANTA_DONT_DISCOVER_VERSION environment variable."
         )
     return int(pg_version)
 
