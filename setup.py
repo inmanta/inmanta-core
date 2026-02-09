@@ -29,7 +29,8 @@ requires = [
     "pynacl~=1.5",
     "python-dateutil~=2.0",
     "pyyaml~=6.0",
-    "setuptools",
+    # Version 82.0.0 and higher removed pkg_resources which breaks pip2pi that still depends on it.
+    "setuptools<82.0.0",
     "texttable~=1.0",
     "tornado~=6.0",
     # lower bound because of ilevkivskyi/typing_inspect#100
