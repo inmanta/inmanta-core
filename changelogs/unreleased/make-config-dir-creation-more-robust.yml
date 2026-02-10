@@ -1,4 +1,4 @@
 ---
-description: "Make config directory creation code path more robust from AgentManager"
+description: "Make config directory creation code path more robust from AutostartedAgentManager"
 change-type: patch
 destination-branches: [master, iso9, iso8, iso7]
