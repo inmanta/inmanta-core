@@ -36,7 +36,7 @@ import re
 import shutil
 import sys
 
-from inmanta.util import safe_name
+from inmanta.vendor.pkg_resources import safe_name
 
 
 def try_symlink(source, target):

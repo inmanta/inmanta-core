@@ -30,7 +30,6 @@ import json
 import logging
 import os
 import pathlib
-import re
 import socket
 import threading
 import time
@@ -1089,13 +1088,3 @@ def get_default_event_loop() -> AbstractEventLoop | None:
     If an event loop is returned it will be running.
     """
     return default_event_loop
-
-
-def safe_name(name: str) -> str:
-    """Convert an arbitrary string to a standard distribution name
-
-    Any runs of non-alphanumeric/. characters are replaced with a single '-'.
-
-    This method was copied from the pkg_resoures package.
-    """
-    return re.sub("[^A-Za-z0-9.]+", "-", name)
