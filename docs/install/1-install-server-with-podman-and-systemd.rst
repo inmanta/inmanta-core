@@ -219,6 +219,7 @@ The file ``inmanta-server.image`` defines the details of how/when to pull the do
 The file ``inmanta-db.container`` defines the database container. The data is stored in the ``/home/inmanta/mount/db`` directory on the host.
 
 .. code-block:: systemd
+    :substitutions:
 
     [Unit]
     Description=Inmanta orchestrator db
@@ -226,7 +227,7 @@ The file ``inmanta-db.container`` defines the database container. The data is st
 
     [Container]
     ContainerName=inmanta-db
-    Image=docker.io/library/postgres:16
+    Image=docker.io/library/postgres:|pg_version|
     Network=inmanta.network
     Environment=POSTGRES_USER=<db_username>
     Environment=POSTGRES_PASSWORD=<db_password>
