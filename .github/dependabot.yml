@@ -38,6 +38,3 @@ updates:
       update-types: ["version-update:semver-major"]
     - dependency-name: "execnet"
       update-types: ["version-update:semver-major"]
-    - dependency-name: "setuptools"
-      update-types: ["version-update:semver-major"]
-
