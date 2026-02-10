@@ -3,4 +3,4 @@ description: "Dynamically determine postgresql version for docs. Requires the MI
 issue-nr: 9945
 issue-repo: inmanta-core
 change-type: patch
-destination-branches: [master, iso9, iso8]
+destination-branches: [iso8]
