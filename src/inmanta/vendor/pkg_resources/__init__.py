@@ -1,4 +1,7 @@
 """
+Copyright 2005 setuptools
+Copyright 2026 Inmanta
+
 The method below was copied from the pkg_resources package.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy

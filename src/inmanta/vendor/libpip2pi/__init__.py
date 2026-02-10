@@ -1,4 +1,7 @@
 """
+Copyright 2010 David Wolever <david@wolever.net>
+Copyright 2026 Inmanta
+
 This file is licensed under simplified BSD, unless stated otherwise.
 
 Unless stated otherwise in the source file, this code is copyright 2010 David
@@ -35,11 +38,12 @@ import os
 import re
 import shutil
 import sys
+from collections.abc import Callable
 
 from inmanta.vendor.pkg_resources import safe_name
 
 
-def try_symlink(source, target):
+def try_symlink(source: str, target: str) -> None:
     try:
         os.symlink(source, target)
     except OSError as e:
@@ -49,12 +53,12 @@ def try_symlink(source, target):
         sys.stderr.write("ERROR linking %s to %s (skipping): %s\n" % (source, target, e))
 
 
-def normalize_pep503(pkg_name):
+def normalize_pep503(pkg_name: str) -> str:
     # As per https://www.python.org/dev/peps/pep-0503/#normalized-names
     return re.sub(r"[-_.]+", "-", pkg_name).lower()
 
 
-def file_to_package(file, basedir=None):
+def file_to_package(file: str, basedir: str | None = None) -> tuple[str, str]:
     """Returns the package name for a given file, or raises an
     ``ValueError`` exception if the file name is
     not valid::
@@ -86,6 +90,8 @@ def file_to_package(file, basedir=None):
     """
     file = os.path.basename(file)
     file_ext = os.path.splitext(file)[1].lower()
+    to_safe_name: Callable[[str], str]
+    to_safe_rest: Callable[[str], str]
     if file_ext == ".egg":
         raise Exception(".egg files are not supported")
     elif file_ext == ".whl":
@@ -110,7 +116,7 @@ def file_to_package(file, basedir=None):
 def dir2pi(pkgdir: str) -> None:
     if not os.path.isdir(pkgdir):
         raise ValueError("no such directory: %r" % (pkgdir,))
-    pkgdirpath = lambda *x: os.path.join(pkgdir, *x)  # noqa: E731
+    pkgdirpath: Callable[[*tuple[str, ...]], str] = lambda *x: os.path.join(pkgdir, *x)  # noqa: E731
 
     shutil.rmtree(pkgdirpath("simple"), ignore_errors=True)
     os.mkdir(pkgdirpath("simple"))
