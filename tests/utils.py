@@ -51,8 +51,10 @@ from inmanta.moduletool import ModuleTool
 from inmanta.protocol import Client
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.extensions import ProductMetadata
+from inmanta.server.services.compilerservice import CompilerService
+from inmanta.types import Apireturn, ResourceIdStr
 from inmanta.util import get_compiler_version, hash_file
-from libpip2pi.commands import dir2pi
+from inmanta.vendor import libpip2pi
 
 T = TypeVar("T")
 
@@ -436,7 +438,7 @@ class PipIndex:
         return f"{self.artifact_dir}/simple"
 
     def publish(self) -> None:
-        dir2pi(argv=["dir2pi", self.artifact_dir])
+        libpip2pi.dir2pi(self.artifact_dir)
 
 
 def create_python_package(
