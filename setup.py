@@ -27,7 +27,7 @@ requires = [
     "python-dateutil~=2.0",
     "pyyaml~=6.0",
     # Version 82.0.0 and higher removed pkg_resources which breaks pip2pi that still depends on it.
-    "setuptools<82.0.0",
+    "setuptools<83.0.0",
     "texttable~=1.0",
     # tornado>6.5 because of CVE https://github.com/advisories/GHSA-7cx3-6m66-7c5m
     "tornado>6.5",
