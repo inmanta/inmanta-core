@@ -251,7 +251,7 @@ While not mandatory, it is highly recommended you do so.
 .. _install-step-2:
 
 Step 3: Install PostgreSQL |pg_version|
------------------------------
+---------------------------------------
 
 .. only:: oss
 
@@ -262,6 +262,7 @@ Step 3: Install PostgreSQL |pg_version|
 
     .. code-block:: sh
         :substitutions:
+
         sudo dnf module install postgresql:|pg_version|/server
 
 .. only:: iso
