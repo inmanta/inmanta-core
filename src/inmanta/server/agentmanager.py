@@ -1245,8 +1245,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         root_dir: str = self._server_storage["server"]
         config_dir = os.path.join(root_dir, str(env.id))
 
-        if not os.path.exists(config_dir):
-            os.mkdir(config_dir)
+        os.makedirs(config_dir, exist_ok=True)
 
         config_path = os.path.join(config_dir, "scheduler.cfg")
         with open(config_path, "w+", encoding="utf-8") as fd:
