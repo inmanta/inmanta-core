@@ -1,4 +1,4 @@
 ---
 description: Vendor the pip2pi package.
 change-type: patch
-destination-branches: [master, iso9, iso8, iso7]
+destination-branches: [iso7]
