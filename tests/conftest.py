@@ -103,11 +103,9 @@ from typing import Callable, Dict, Optional, Union
 import asyncpg
 import psutil
 import py
-import pyformance
 import pytest
 from asyncpg.exceptions import DuplicateDatabaseError
 from click import testing
-from pyformance.registry import MetricsRegistry
 from tornado import netutil
 
 import inmanta
@@ -136,8 +134,6 @@ from inmanta.server.protocol import Server, SliceStartupException
 from inmanta.server.services import orchestrationservice
 from inmanta.server.services.compilerservice import CompilerService, CompileRun
 from inmanta.types import JsonType
-from inmanta.warnings import WarningsManager
-from libpip2pi.commands import dir2pi
 from packaging.version import Version
 from pytest_postgresql import factories
 

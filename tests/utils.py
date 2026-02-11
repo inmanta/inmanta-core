@@ -51,8 +51,6 @@ from inmanta.moduletool import ModuleTool
 from inmanta.protocol import Client
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.extensions import ProductMetadata
-from inmanta.server.services.compilerservice import CompilerService
-from inmanta.types import Apireturn, ResourceIdStr
 from inmanta.util import get_compiler_version, hash_file
 from inmanta.vendor import libpip2pi
 
