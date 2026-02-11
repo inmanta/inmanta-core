@@ -1,0 +1,6 @@
+---
+description: "Dynamically determine postgresql version for docs. Requires the MINIMAL_POSTGRES_VERSION environment variable to be set."
+issue-nr: 9945
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [iso8]
