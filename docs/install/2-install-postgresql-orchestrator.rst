@@ -6,7 +6,7 @@ Install PostgreSQL
 This page describes how to install PostgreSQL on RedHat Enterprise Linux or derivatives.
 
 Step 1: Install PostgreSQL |pg_version|
------------------------------
+---------------------------------------
 
 .. only:: oss
 

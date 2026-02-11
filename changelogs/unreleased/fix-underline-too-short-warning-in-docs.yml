@@ -1,0 +1,4 @@
+---
+description: "Fix underline too short warning in docs"
+change-type: patch
+destination-branches: [master, iso9]
