@@ -1164,8 +1164,7 @@ class AutostartedAgentManager(ServerSlice):
         config: str = await self._make_agent_config(env, connection=connection)
 
         config_dir = os.path.join(self._server_storage["agents"], str(env.id))
-        if not os.path.exists(config_dir):
-            os.mkdir(config_dir)
+        os.makedirs(config_dir, exist_ok=True)
 
         config_path = os.path.join(config_dir, "agent.cfg")
         with open(config_path, "w+", encoding="utf-8") as fd:
