@@ -26,7 +26,7 @@ import pytest
 
 import packaging.utils
 from inmanta import env, module, moduletool
-from libpip2pi.commands import dir2pi
+from inmanta.vendor import libpip2pi
 from packaging import version
 from packaging.requirements import Requirement
 from utils import module_from_template
@@ -74,7 +74,7 @@ def pip_index(modules_v2_dir: str) -> str:
 
         # The setuptools and wheel packages are required by `pip download`
         subprocess.check_call([sys.executable, "-m", "pip", "download", "setuptools", "wheel"], cwd=build_dir)
-        dir2pi(argv=["dir2pi", build_dir])
+        libpip2pi.dir2pi(build_dir)
         yield index_dir
 
 
