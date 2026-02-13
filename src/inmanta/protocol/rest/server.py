@@ -318,7 +318,7 @@ class RESTServer(RESTBase):
             except Exception as e:
                 raise Exception(
                     "Failed to load ssl certificate. Please check if you provided the correct certificate/key path"
-                    " and make sure that these files are not encrypted",
+                    " and make sure that these files are not encrypted.",
                     e,
                 )
 

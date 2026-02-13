@@ -1052,6 +1052,6 @@ async def test_ssl_key_encrypted(inmanta_config, server_config, postgres_db, dat
     with pytest.raises(
         SliceStartupException,
         match="Failed to load ssl certificate. "
-        "Please check if you provided the correct certificate/key path and make sure that these files are not encrypted",
+        "Please check if you provided the correct certificate/key path and make sure that these files are not encrypted.",
     ):
         await rs.start()
