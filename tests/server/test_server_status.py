@@ -109,7 +109,7 @@ async def test_server_status_timeout(server, client, monkeypatch):
     assert "error" in compiler_slice["status"]
 
     result = await client.health()
-    assert result.code == 500
+    assert result.code == 503
 
 
 @pytest.mark.parametrize("auto_start_agent", [True])

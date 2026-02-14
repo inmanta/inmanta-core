@@ -170,7 +170,7 @@ class Server(protocol.ServerSlice):
     @handle(methods_v2.health)
     async def health(self) -> ReturnValue[None]:
         status = await self.get_server_status()
-        return ReturnValue(status_code=(200 if status.status == ReportedStatus.OK else 500))
+        return ReturnValue(status_code=(200 if status.status is ReportedStatus.OK else 503))
 
     @handle(methods_v2.get_api_docs)
     async def get_api_docs(

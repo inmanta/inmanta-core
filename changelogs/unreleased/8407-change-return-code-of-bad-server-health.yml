@@ -1,0 +1,6 @@
+---
+description: "Change return code of /health/ fromm 500 to 503 when a slice is unhealthy"
+issue-nr: 8407
+issue-repo: inmanta-core
+change-type: major
+destination-branches: [master]
