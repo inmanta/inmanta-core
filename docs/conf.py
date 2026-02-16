@@ -27,7 +27,7 @@ from sphinx.errors import ConfigError
 # If your documentation needs a minimal Sphinx version, state it here.
 # needs_sphinx = '1.0'
 
-from documenteer.conf.guide import *
+from documenteer.conf.guide import redoc
 
 # Add any Sphinx extension module names here, as strings. They can be extensions
 # coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
@@ -36,6 +36,8 @@ extensions = [
     'sphinx.ext.viewcode', 'sphinxarg.ext', 'sphinxcontrib.contentui', 'sphinxcontrib.inmanta.config',
     'sphinxcontrib.inmanta.dsl', 'sphinxcontrib.inmanta.environmentsettings', 'sphinx_click.ext', 'sphinx_design',
     'myst_parser', 'sphinx_substitution_extensions', 'sphinxcontrib.datatemplates',
+    # "documenteer.ext.openapi",
+    "documenteer.ext.redoc",
 ]
 
 myst_enable_extensions = ["colon_fence"]
@@ -76,18 +78,18 @@ check_dot_command()
 #     # Openapi definition with Redoc won't be included
 #     pass
 #
-redoc_uri = 'https://cdn.jsdelivr.net/npm/redoc/bundles/redoc.standalone.js'
-redoc = [
-    {
-        'name': 'Inmanta REST API',
-        'page': 'reference/openapi',
-        'spec': 'reference/openapi.json',
-        'opts': {
-            'hide-hostname': True,
-        }
-    },
-]
-
+# redoc_uri = 'https://cdn.jsdelivr.net/npm/redoc/bundles/redoc.standalone.js'
+# documenteer_openapi_path = "/home/hugo/work/inmanta/github-repos/inmanta-core/docs/reference/openapi.json"
+# redoc = [
+#     {
+#         'name': 'Inmanta REST API',
+#         'page': "/home/hugo/work/inmanta/github-repos/inmanta-core/docs/reference/openapi",
+#         'spec_path': "/home/hugo/work/inmanta/github-repos/inmanta-core/docs/reference/openapi.json",
+#         'opts': {
+#             'hide-hostname': True,
+#         }
+#     },
+# ]
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
