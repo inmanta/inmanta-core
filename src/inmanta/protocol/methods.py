@@ -29,7 +29,7 @@ from inmanta.data import model
 from inmanta.data.model import InmantaModule, PipConfig
 from inmanta.protocol import exceptions
 from inmanta.protocol.auth.decorators import auth
-from inmanta.protocol.common import ArgOption
+from inmanta.protocol.common import ArgOption, ReturnValue
 from inmanta.protocol.decorators import method, typedmethod
 from inmanta.types import JsonType, PrimitiveTypes, ResourceIdStr
 
@@ -1032,7 +1032,7 @@ def get_state(tid: uuid.UUID, sid: uuid.UUID, agent: str):
 
 @auth(auth_label=const.CoreAuthorizationLabel.STATUS_READ, read_only=True)
 @typedmethod(path="/serverstatus", operation="GET", client_types=[const.ClientType.api])
-def get_server_status() -> model.StatusResponse:
+def get_server_status() -> ReturnValue[model.StatusResponse]:
     """
     Get the status of the server
     """
