@@ -1,3 +1,3 @@
 description: Produce a cleaner exception when ssl_key_file is encrypted
 change-type: patch
-destination-branches: [master, iso9, iso8]
+destination-branches: [iso8]
