@@ -1,9 +1,9 @@
 [project.openapi]
-openapi_path = "docs/reference/openapi.json"
-doc_path = "api"
+openapi_path = "reference/openapi.json"
+doc_path = "reference/openapi"
 
-[project.openapi.generator]
-function = "example.main:create_openapi"
+#[project.openapi.generator]
+#function = "example.main:create_openapi"
 
 [project]
 title = "Example"
@@ -11,3 +11,6 @@ copyright = "2015-2022 Association of Universities for Research in Astronomy, In
 base_url = "https://example.lsst.io"
 github_url = "https://github.com/lsst/example"
 version = "4.2.0"
+
+[sphinx]
+disable_primary_sidebars = []

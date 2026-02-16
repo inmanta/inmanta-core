@@ -29,7 +29,7 @@ SVG2PDF       = inkscape
 SVG2PDF_FLAGS =
 
 # Internal variables.
-ALLSPHINXOPTS   = -t iso -d $(BUILDDIR)/doctrees $(SPHINXOPTS) .
+ALLSPHINXOPTS   = -t oss -d $(BUILDDIR)/doctrees $(SPHINXOPTS) .
 # the i18n builder cannot share the environment and doctrees with the others
 I18NSPHINXOPTS  = $(PAPEROPT_$(PAPER)) $(SPHINXOPTS) .
 
@@ -68,12 +68,12 @@ clean:
 	-rm -rf $(PNGs)
 
 html: openapi
-	$(SPHINXBUILD) -b html -t $(ALLSPHINXOPTS) $(BUILDDIR)/html
+	$(SPHINXBUILD) -b html $(ALLSPHINXOPTS) $(BUILDDIR)/html
 	@echo
 	@echo "Build finished. The HTML pages are in $(BUILDDIR)/html."
 
 onlyhtml:
-	$(SPHINXBUILD) -b html -t $(ALLSPHINXOPTS) $(BUILDDIR)/html
+	$(SPHINXBUILD) -b html $(ALLSPHINXOPTS) $(BUILDDIR)/html
 	@echo
 	@echo "Build finished. The HTML pages are in $(BUILDDIR)/html. PDF and REST API documentation will be missing"
 

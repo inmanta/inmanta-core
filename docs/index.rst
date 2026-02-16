@@ -82,4 +82,4 @@
     reference/index
     troubleshooting
     changelogs
-    api
+

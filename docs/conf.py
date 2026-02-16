@@ -76,18 +76,18 @@ check_dot_command()
 #     # Openapi definition with Redoc won't be included
 #     pass
 #
-# redoc_uri = 'https://cdn.jsdelivr.net/npm/redoc/bundles/redoc.standalone.js'
-# redoc = [
-#     {
-#         'name': 'Inmanta REST API',
-#         'page': 'reference/openapi',
-#         'spec': 'reference/openapi.json',
-#         'opts': {
-#             'hide-hostname': True,
-#             'path-in-middle-panel': True,
-#         }
-#     },
-# ]
+redoc_uri = 'https://cdn.jsdelivr.net/npm/redoc/bundles/redoc.standalone.js'
+redoc = [
+    {
+        'name': 'Inmanta REST API',
+        'page': 'reference/openapi',
+        'spec': 'reference/openapi.json',
+        'opts': {
+            'hide-hostname': True,
+        }
+    },
+]
+
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
