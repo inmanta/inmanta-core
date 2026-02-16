@@ -21,16 +21,14 @@ import pytest
 import nacl.pwhash
 from inmanta import config, const, data
 from inmanta.data.model import AuthMethod, RoleAssignmentsPerEnvironment
-from inmanta.protocol import common, rest
+from inmanta.protocol import auth, common, rest
 from inmanta.protocol.auth import auth, decorators, policy_engine, providers
 from inmanta.protocol.decorators import handle, method, typedmethod
+from inmanta.server import SLICE_USER
 from inmanta.server import config as server_config
 from inmanta.server import protocol
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.protocol import Server, SliceStartupException
-from inmanta.data.model import AuthMethod
-from inmanta.protocol import auth
-from inmanta.server import SLICE_USER, protocol
 
 
 @pytest.fixture
