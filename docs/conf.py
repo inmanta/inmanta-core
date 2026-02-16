@@ -27,6 +27,8 @@ from sphinx.errors import ConfigError
 # If your documentation needs a minimal Sphinx version, state it here.
 # needs_sphinx = '1.0'
 
+from documenteer.conf.guide import *
+
 # Add any Sphinx extension module names here, as strings. They can be extensions
 # coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
 extensions = [
@@ -65,27 +67,27 @@ def get_pg_version_for_product() -> int:
 # Check for dot command availability during documentation build
 check_dot_command()
 
-try:
-    # noinspection PyUnresolvedReferences
-    # "tags" are injected while the file is being read
-    if tags.has("include_redoc"):
-        extensions.append('sphinxcontrib.redoc')
-except NameError as e:
-    # Openapi definition with Redoc won't be included
-    pass
-
-redoc_uri = 'https://cdn.jsdelivr.net/npm/redoc/bundles/redoc.standalone.js'
-redoc = [
-    {
-        'name': 'Inmanta REST API',
-        'page': 'reference/openapi',
-        'spec': 'reference/openapi.json',
-        'opts': {
-            'hide-hostname': True,
-            'path-in-middle-panel': True,
-        }
-    },
-]
+# try:
+#     # noinspection PyUnresolvedReferences
+#     # "tags" are injected while the file is being read
+#     if tags.has("include_redoc"):
+#         extensions.append('sphinxcontrib.redoc')
+# except NameError as e:
+#     # Openapi definition with Redoc won't be included
+#     pass
+#
+# redoc_uri = 'https://cdn.jsdelivr.net/npm/redoc/bundles/redoc.standalone.js'
+# redoc = [
+#     {
+#         'name': 'Inmanta REST API',
+#         'page': 'reference/openapi',
+#         'spec': 'reference/openapi.json',
+#         'opts': {
+#             'hide-hostname': True,
+#             'path-in-middle-panel': True,
+#         }
+#     },
+# ]
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -112,6 +114,7 @@ copyright = f'{datetime.datetime.now().year} Inmanta NV'
 #
 # The short X.Y version.
 version: str
+
 try:
     # if product's conf.py injected version information, use that one
     version
@@ -132,6 +135,7 @@ INMANTA_DONT_DISCOVER_VERSION when the version number is not important for this 
 solution will set the version number to 1.0.0.
                 """
             )
+
 
 # The full version, including alpha/beta/rc tags.
 release = version
