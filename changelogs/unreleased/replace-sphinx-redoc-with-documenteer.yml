@@ -1,0 +1,5 @@
+---
+description: "Replace sphinx-redoc extension in the docs build with the documenteer library."
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso9, iso8, iso7]
