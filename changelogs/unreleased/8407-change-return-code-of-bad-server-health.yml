@@ -1,5 +1,5 @@
 ---
-description: "Change return code of /health/ fromm 500 to 503 when a slice is unhealthy"
+description: "Change return code of /health from 500 to 503 when the server is unhealthy"
 issue-nr: 8407
 issue-repo: inmanta-core
 change-type: major
