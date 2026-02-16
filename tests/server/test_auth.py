@@ -20,15 +20,11 @@ import pytest
 
 import nacl.pwhash
 from inmanta import config, const, data
-from inmanta.data.model import AuthMethod, RoleAssignmentsPerEnvironment
-from inmanta.protocol import auth, common, rest
-from inmanta.protocol.auth import auth, decorators, policy_engine, providers
-from inmanta.protocol.decorators import handle, method, typedmethod
-from inmanta.server import SLICE_USER
-from inmanta.server import config as server_config
-from inmanta.server import protocol
-from inmanta.server.bootloader import InmantaBootloader
+from inmanta.data.model import AuthMethod
+from inmanta.protocol import auth
+from inmanta.server import SLICE_USER, protocol
 from inmanta.server.protocol import Server, SliceStartupException
+from utils import configure_auth
 
 
 @pytest.fixture
@@ -140,7 +136,7 @@ async def test_ssl_key_encrypted(inmanta_config, server_config, postgres_db, dat
     """
     Test that the server produces a cleaner exception if something goes wrong when loading the certificate
     """
-    utils.configure_auth(auth=True, ca=False, ssl=True, use_encrypted_ssl_key=True)
+    configure_auth(auth=True, ca=False, ssl=True, use_encrypted_ssl_key=True)
     rs = Server()
     with pytest.raises(
         SliceStartupException,
