@@ -67,7 +67,7 @@ async def test_server_status(server, client, agent, environment, postgresql_clie
 async def test_server_status_database_unreachable(server, client):
     await data.disconnect_pool()
     result = await client.get_server_status()
-    assert result.code == 200
+    assert result.code == 503
     database_slice = None
     for slice in result.result["data"]["slices"]:
         if slice["name"] == "core.database":
@@ -98,7 +98,7 @@ async def test_server_status_timeout(server, client, monkeypatch):
     monkeypatch.setattr(CompilerService, "get_status", hang)
 
     result = await client.get_server_status()
-    assert result.code == 200
+    assert result.code == 503
     # Error because CompilerService is in the Error state
     assert result.result["data"]["status"] == ReportedStatus.Error
     compiler_slice = None
