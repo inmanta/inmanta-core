@@ -1032,12 +1032,11 @@ def get_state(tid: uuid.UUID, sid: uuid.UUID, agent: str):
 
 @auth(auth_label=const.CoreAuthorizationLabel.STATUS_READ, read_only=True)
 @typedmethod(path="/serverstatus", operation="GET", client_types=[const.ClientType.api])
-def get_server_status() -> ReturnValue[model.StatusResponse]:
+def get_server_status() -> model.StatusResponse:
     """
     Get the status of the server and each loaded slice.
 
     :return: A StatusResponse object containing the status of each slice.
-        It will have a return code of 200 if everything is ok, and a 503 otherwise.
     """
 
 

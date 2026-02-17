@@ -137,7 +137,7 @@ class Server(protocol.ServerSlice):
         return warnings
 
     @handle(methods.get_server_status)
-    async def get_server_status(self) -> ReturnValue[StatusResponse]:
+    async def get_server_status(self) -> StatusResponse:
         product_metadata = self.feature_manager.get_product_metadata()
         if product_metadata.version is None:
             raise exceptions.ServerError(
@@ -166,12 +166,12 @@ class Server(protocol.ServerSlice):
             postgresql_version=postgresql_version,
         )
 
-        return ReturnValue(status_code=200 if status is ReportedStatus.OK else 503, response=response)
+        return response
 
     @handle(methods_v2.health)
     async def health(self) -> ReturnValue[None]:
         status = await self.get_server_status()
-        return ReturnValue(status_code=status.status_code)
+        return ReturnValue(status_code=200 if status.status is ReportedStatus.OK else 503)
 
     @handle(methods_v2.get_api_docs)
     async def get_api_docs(
