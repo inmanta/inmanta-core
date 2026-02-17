@@ -1,5 +1,7 @@
 ---
-description: "Change return code of /health from 500 to 503 when the server is unhealthy"
+description: >
+  Change return code of /health from 500 to 503 when the server is unhealthy
+  Change return code of /serverstatus from 200 to 503 when warnings or errors are detected on any loaded slice
 issue-nr: 8407
 issue-repo: inmanta-core
 change-type: major

@@ -1884,7 +1884,7 @@ def graphql_schema() -> dict[str, Any]:
 def health() -> ReturnValue[None]:
     """
     Returns a 200 response code if the server is healthy
-    or a 500 if the server is not healthy.
+    or a 503 if the server is not healthy.
 
     In contrast to the 'GET /api/v1/serverstatus' endpoint, this endpoint does not require authentication.
     """
