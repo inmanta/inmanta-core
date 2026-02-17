@@ -149,7 +149,6 @@ class Server(protocol.ServerSlice):
 
         db_slice: "DatabaseService" = cast("DatabaseService", self._server.get_slice(SLICE_DATABASE))
         postgresql_version = await db_slice.get_postgresql_version()
-        status = max(ReportedStatus(slice.reported_status) for slice in slices)
         response = StatusResponse(
             product=product_metadata.product,
             edition=product_metadata.edition,
@@ -161,7 +160,7 @@ class Server(protocol.ServerSlice):
                 FeatureStatus(slice=feature.slice, name=feature.name, value=self.feature_manager.get_value(feature))
                 for feature in self.feature_manager.get_features()
             ],
-            status=status,
+            status=max(ReportedStatus(slice.reported_status) for slice in slices),
             python_version=".".join(map(str, sys.version_info[:3])),
             postgresql_version=postgresql_version,
         )

@@ -1034,9 +1034,7 @@ def get_state(tid: uuid.UUID, sid: uuid.UUID, agent: str):
 @typedmethod(path="/serverstatus", operation="GET", client_types=[const.ClientType.api])
 def get_server_status() -> model.StatusResponse:
     """
-    Get the status of the server and each loaded slice.
-
-    :return: A StatusResponse object containing the status of each slice.
+    Get the status of the server
     """
 
 
