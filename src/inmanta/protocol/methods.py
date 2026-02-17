@@ -29,7 +29,7 @@ from inmanta.data import model
 from inmanta.data.model import InmantaModule, PipConfig
 from inmanta.protocol import exceptions
 from inmanta.protocol.auth.decorators import auth
-from inmanta.protocol.common import ArgOption, ReturnValue
+from inmanta.protocol.common import ArgOption
 from inmanta.protocol.decorators import method, typedmethod
 from inmanta.types import JsonType, PrimitiveTypes, ResourceIdStr
 
