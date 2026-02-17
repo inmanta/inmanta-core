@@ -188,7 +188,7 @@ openapi:
 
 move_openapi_after_docs_builds: html
 	@echo "pass......"
-	#mv openapi.html build/html/reference/openapi.html
+	mv openapi.html build/html/reference/openapi.html
 
 # Pattern rule for converting SVG to PDF
 %.pdf: %.svg
