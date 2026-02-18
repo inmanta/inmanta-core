@@ -17,18 +17,15 @@ Contact: code@inmanta.com
 """
 
 import inspect
-import itertools
 import json
 import logging
 import re
-from collections.abc import Sequence
 from typing import Callable, Optional, Union
 
 from pydantic import ConfigDict
 from typing_inspect import get_args, get_origin, is_generic_type
 
 from inmanta import util
-from inmanta.const import INMANTA_MT_HEADER
 from inmanta.data.model import BaseModel
 from inmanta.protocol.common import ArgOption, MethodProperties, ReturnValue, UrlMethod
 from inmanta.protocol.openapi.model import (
@@ -468,16 +465,8 @@ class OperationHandler:
         parameters = function_parameter_handler.get_parameters()
         responses = self._build_responses(url_method.properties)
 
-        request_body_parameters: list[str] = []
-
         if url_method.get_operation() in ["POST", "PUT", "PATCH"]:
             extra_params = {"requestBody": function_parameter_handler.convert_request_body()}
-            try:
-                request_body_parameters = list(
-                    extra_params["requestBody"].content["application/json"].schema_.properties.keys()
-                )
-            except (KeyError, AttributeError):
-                pass
         else:
             extra_params = {}
 
@@ -491,7 +480,6 @@ class OperationHandler:
             tags=tags,
             **extra_params,
         )
-
 
     def _get_tags_of_operation(self, url_method: UrlMethod) -> Optional[list[str]]:
         if url_method.endpoint is not None:
@@ -520,7 +508,11 @@ class OperationHandler:
     def _build_return_value_wrapper(self, url_method_properties: MethodProperties) -> Optional[dict[str, MediaType]]:
         return_type = inspect.signature(url_method_properties.function).return_annotation
 
-        if return_type is None or return_type == inspect.Signature.empty or url_method_properties.hide_response_from_docs_swagger:
+        if (
+            return_type is None
+            or return_type == inspect.Signature.empty
+            or url_method_properties.hide_response_from_docs_swagger
+        ):
             return None
 
         return_properties: Optional[dict[str, Schema]] = None
