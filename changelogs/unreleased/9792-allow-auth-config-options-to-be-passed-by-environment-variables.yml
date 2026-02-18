@@ -1,0 +1,6 @@
+---
+description: "Allow jwt auth config options to be passed in environment variables"
+issue-nr: 9792
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [master, iso9]

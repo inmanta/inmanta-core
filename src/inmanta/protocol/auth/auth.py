@@ -20,8 +20,10 @@ import base64
 import configparser
 import json
 import logging
+import os
 import ssl
 import time
+from collections import defaultdict
 from typing import Any, Mapping, MutableMapping, Optional, Sequence
 from urllib import error, request
 
@@ -146,6 +148,21 @@ def decode_token(token: str) -> tuple[claim_type, "AuthJWTConfig"]:
 # auth
 #############################
 AUTH_JWT_PREFIX = "auth_jwt_"
+ENV_AUTH_JWT_PREFIX = "INMANTA_AUTH_JWT_"
+
+DISCOVER_ENV_AUTH_JWT_SETTING = [
+    "ALGORITHM",
+    "SIGN",
+    "EXPIRE",
+    "CLIENT_TYPES",
+    "ISSUER",
+    "JWT-USERNAME-CLAIM",
+    "JWKS_URI",
+    "AUDIENCE",
+    "VALIDATE_CERT",
+    "JWKS_REQUEST_TIMEOUT",
+    "KEY",
+]
 
 
 class AuthJWTConfig:
@@ -174,10 +191,33 @@ class AuthJWTConfig:
         try:
             cfg = config.Config.get_instance()
             prefix_len = len(AUTH_JWT_PREFIX)
+            env_prefix_len = len(ENV_AUTH_JWT_PREFIX)
 
+            # List of settings that start with ENV_AUTH_JWT_PREFIX
+            found_settings = sorted([env_var for env_var in os.environ if env_var[:env_prefix_len] == ENV_AUTH_JWT_PREFIX])
+            # Save config found on environment variables
+            env_config: dict[str, dict[str, str]] = defaultdict(dict[str, str])
+
+            for setting in found_settings:
+                invalid_setting = True
+                for possible_setting in DISCOVER_ENV_AUTH_JWT_SETTING:
+                    if setting.endswith(possible_setting):
+                        env_config_key = possible_setting.lower()
+                        # The -1 is to take the underscore into account
+                        section_name = setting[env_prefix_len : -len(env_config_key) - 1].lower()
+                        env_config[AUTH_JWT_PREFIX + section_name][env_config_key] = str(os.environ.get(setting))
+                        invalid_setting = False
+                        break
+                if invalid_setting:
+                    raise ValueError(
+                        f"Found the following environment variable {setting} with the {ENV_AUTH_JWT_PREFIX} prefix,"
+                        f"but it doesn't match any available settings: {DISCOVER_ENV_AUTH_JWT_SETTING}"
+                    )
+
+            cfg.read_dict(env_config)
             for config_section in cfg.keys():
                 if config_section[:prefix_len] == AUTH_JWT_PREFIX:
-                    name = config_section[prefix_len:]
+                    name = config_section[prefix_len:].lower()
                     if name not in cls.sections:
                         obj = cls(name, config_section, cfg[config_section])
                         cls.sections[name] = obj
@@ -282,7 +322,7 @@ class AuthJWTConfig:
             self.sign = config.is_bool(self._config["sign"])
 
         if "client_types" not in self._config:
-            raise ValueError("client_types is a required options for %s" % self.section)
+            raise ValueError("client_types is a required option for %s" % self.section)
 
         self.client_types = config.is_list(self._config["client_types"])
         for ct in self.client_types:
