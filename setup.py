@@ -114,7 +114,6 @@ setup(
             "sphinx-click",
             "sphinxcontrib-contentui",
             "sphinxcontrib.datatemplates",
-            "sphinxcontrib-redoc",
             "sphinxcontrib-serializinghtml",
             "sphinx-design",
             "Sphinx-Substitution-Extensions",

@@ -35,7 +35,7 @@ I18NSPHINXOPTS  = $(PAPEROPT_$(PAPER)) $(SPHINXOPTS) .
 
 .PHONY: help clean html dirhtml singlehtml pickle json htmlhelp qthelp devhelp epub latex latexpdf text man changes linkcheck doctest gettext openapi
 
-all: move_openapi_after_docs_builds
+all: html
 
 help:
 	@echo "Please use \`make <target>' where <target> is one of"
