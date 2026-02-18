@@ -89,7 +89,11 @@ class CreateList(ReferenceStatement):
             item.normalize(lhs_attribute=lhs_attribute)
             self.anchors.extend(item.get_anchors())
 
+
+
+
     # TODO: old branch issue/5720-for-loop-skip-values-test may contain something else useful
+    #           -> git diff c1db41ef9...issue/5720-for-loop-skip-values-test
     # TODO: uncomment & implement
     #       STARTING POINT:
     #       - define very clear semantics for normal mode and gradual mode and what it means for ordering
@@ -113,6 +117,10 @@ class CreateList(ReferenceStatement):
     #       GOOD CONCLUSION? gradual execution is a mechanism (internal) to optimize code flows where list results may be
     #           processed as they come in and in any order. It must only be applied in those contexts. Concretely, this means
     #           relations + control flow + constructs like `in`, `is defined`, ...
+
+
+
+
 
     #def requires_emit(
     #    self, resolver: Resolver, queue: QueueScheduler, *, lhs: Optional[ResultCollector[object]] = None
