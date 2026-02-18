@@ -25,7 +25,7 @@ async def test_extract_openapi_for_docs(server, client):
     assert result.code == 200
     content = result.result
     # content["servers"] = [{"url": "http://<inmanta-server-address>"}]
-    # content["info"]["description"] = "Back to <a href='./index.html'>Main documentation</a> for more information"
+    # content["info"]["description"] = "Back to <a href='/index.html'>Main documentation</a> for more information"
     # json_content = json.dumps(content)
     output_file = os.path.abspath(os.path.join(os.path.dirname(__file__), "../..", "docs", "openapi.html"))
     with open(output_file, "w") as html_file:

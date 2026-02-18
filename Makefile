@@ -132,6 +132,6 @@ clean:
 
 .PHONY: docs
 docs:
-	make -C docs move_openapi_after_docs_builds
+	make -C docs html
 
 FORCE:
