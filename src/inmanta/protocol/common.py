@@ -405,6 +405,7 @@ class MethodProperties(Generic[R]):
         varkw: bool = False,
         token_param: str | None = None,
         document_in_service_swagger: bool = False,
+        hide_response_from_docs_swagger: bool = False,
     ) -> None:
         """
         Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
@@ -436,6 +437,8 @@ class MethodProperties(Generic[R]):
         :param document_in_service_swagger: (LSM extension only, ignored otherwise) This parameter controls whether this
             endpoint should be documented in the swagger served by the `lsm_services_openapi_docs` endpoint for each service
             of the catalog.
+        :param hide_response_from_docs_swagger: This parameter controls whether the response for this endpoint should be
+            documented in the swagger served in the `REST API reference` section of the Inmanta documentation.
         """
         if api is None:
             api = not server_agent and not agent_server
@@ -469,6 +472,7 @@ class MethodProperties(Generic[R]):
         self._return_type: Optional[type[R]] = None
         self.token_param = token_param
         self.document_in_service_swagger = document_in_service_swagger
+        self.hide_response_from_docs_swagger = hide_response_from_docs_swagger
 
         self._parsed_docstring = docstring_parser.parse(text=function.__doc__, style=docstring_parser.DocstringStyle.REST)
         self._docstring_parameter_map = {p.arg_name: p.description for p in self._parsed_docstring.params}

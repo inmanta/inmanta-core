@@ -437,7 +437,7 @@ def reserve_version(tid: uuid.UUID) -> int:
 
 
 @auth(auth_label=const.CoreAuthorizationLabel.DOCS_READ, read_only=True)
-@typedmethod(path="/docs", operation="GET", client_types=[ClientType.api], api_version=2, token_param="token")
+@typedmethod(path="/docs", operation="GET", client_types=[ClientType.api], api_version=2, token_param="token", hide_response_from_docs_swagger=True)
 def get_api_docs(
     format: Optional[ApiDocsFormat] = ApiDocsFormat.swagger, token: str | None = None
 ) -> ReturnValue[Union[OpenAPI, str]]:
