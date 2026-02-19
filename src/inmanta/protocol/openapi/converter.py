@@ -87,7 +87,7 @@ class OpenApiConverter:
         metadata = self.feature_manager.get_product_metadata()
         return metadata.version
 
-    def generate_openapi_definition(self, *,  openapi_description: str | None = None) -> OpenAPI:
+    def generate_openapi_definition(self, *, openapi_description: str | None = None) -> OpenAPI:
         version = self._get_inmanta_version()
         info = Info(title="Inmanta Service Orchestrator", version=version if version else "", description=openapi_description)
         servers = self._collect_server_information()

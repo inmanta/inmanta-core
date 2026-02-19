@@ -443,7 +443,7 @@ def reserve_version(tid: uuid.UUID) -> int:
     client_types=[ClientType.api],
     api_version=2,
     token_param="token",
-    include_response_in_docs_swagger=True,
+    include_response_in_docs_swagger=False,
 )
 def get_api_docs(
     format: Optional[ApiDocsFormat] = ApiDocsFormat.swagger, token: str | None = None
