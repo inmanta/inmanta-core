@@ -181,7 +181,7 @@ class Server(protocol.ServerSlice):
         openapi = OpenApiConverter(url_map, feature_manager)
         # Get rid of none values with custom json encoder
         openapi_json_str = openapi.generate_openapi_json(
-            openapi_description="Back to <a href='./index.html'>main documentation</a> for more information"
+            openapi_description="Back to <a href='./index.html'>main documentation</a>"
         )
         if format == ApiDocsFormat.openapi:
             openapi_dict = json.loads(openapi_json_str)

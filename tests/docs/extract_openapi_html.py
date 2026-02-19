@@ -19,10 +19,11 @@ Contact: code@inmanta.com
 import os
 
 
-async def test_extract_openapi_for_docs(server, client):
+async def test_generate_swagger_html(server, client):
     result = await client.get_api_docs("swagger")
     assert result.code == 200
     content = result.result
+    breakpoint()
     output_file = os.path.abspath(os.path.join(os.path.dirname(__file__), "../..", "docs", "openapi.html"))
     with open(output_file, "w") as html_file:
         html_file.write(content)

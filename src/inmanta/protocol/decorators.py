@@ -148,7 +148,7 @@ def typedmethod[C: Callable](
     varkw: bool = False,
     token_param: str | None = None,
     document_in_service_swagger: bool = False,
-    hide_response_from_docs_swagger: bool = False,
+    include_response_in_docs_swagger: bool = True,
 ) -> Callable[[C], C]:
     """
     Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
@@ -184,7 +184,7 @@ def typedmethod[C: Callable](
     :param document_in_service_swagger: (LSM extension only, ignored otherwise) This parameter controls whether this
     endpoint should be documented in the swagger served by the `lsm_services_openapi_docs` endpoint for each service
     of the catalog.
-    :param hide_response_from_docs_swagger: This parameter controls whether the response for this endpoint should be
+    :param include_response_in_docs_swagger: This parameter controls whether the response for this endpoint should be
     documented in the swagger served in the `REST API reference` section of the Inmanta documentation.
     """
 
@@ -213,7 +213,7 @@ def typedmethod[C: Callable](
                 varkw=varkw,
                 token_param=token_param,
                 document_in_service_swagger=document_in_service_swagger,
-                hide_response_from_docs_swagger=hide_response_from_docs_swagger,
+                include_response_in_docs_swagger=include_response_in_docs_swagger,
             )
             common.MethodProperties.register_method(properties)
         return func
