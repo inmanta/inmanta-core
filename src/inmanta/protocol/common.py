@@ -405,7 +405,7 @@ class MethodProperties(Generic[R]):
         varkw: bool = False,
         token_param: str | None = None,
         document_in_service_swagger: bool = False,
-        include_response_in_docs_swagger: bool = False,
+        include_response_in_docs_swagger: bool = True,
     ) -> None:
         """
         Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
