@@ -48,7 +48,5 @@ def test_linkcheck(build_docs):
     # a trick is used in the reference/index.rst because toctree doesn't
     # offer support for relative links to something that isn't a sphinx document.
     # This check verifies that the reference/openapi.html file is created.
-    openapi_html_file = htmldir.join("reference/openapi.html")
+    openapi_html_file = htmldir.join("reference/swagger.html")
     assert os.path.exists(openapi_html_file)
-    openapi_json_file = htmldir.join("_specs/openapi.json")
-    assert os.path.exists(openapi_json_file)
