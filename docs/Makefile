@@ -33,7 +33,7 @@ ALLSPHINXOPTS   = -t oss -d $(BUILDDIR)/doctrees $(SPHINXOPTS) .
 # the i18n builder cannot share the environment and doctrees with the others
 I18NSPHINXOPTS  = $(PAPEROPT_$(PAPER)) $(SPHINXOPTS) .
 
-.PHONY: help clean html dirhtml singlehtml pickle json htmlhelp qthelp devhelp epub latex latexpdf text man changes linkcheck doctest gettext
+.PHONY: help clean html dirhtml singlehtml pickle json htmlhelp qthelp devhelp epub latex latexpdf text man changes linkcheck doctest gettext swagger
 
 all: html
 
@@ -67,13 +67,14 @@ clean:
 	-rm -rf $(BUILDDIR)/*
 	-rm -rf $(PNGs)
 
-html: openapi
-	$(SPHINXBUILD) -b html -t include_redoc $(ALLSPHINXOPTS) $(BUILDDIR)/html
+html: swagger
+	$(SPHINXBUILD) -b html  $(ALLSPHINXOPTS) $(BUILDDIR)/html
+	mv swagger.html build/html/reference/swagger.html
 	@echo
 	@echo "Build finished. The HTML pages are in $(BUILDDIR)/html."
 
 onlyhtml:
-	$(SPHINXBUILD) -b html -t include_redoc $(ALLSPHINXOPTS) $(BUILDDIR)/html
+	$(SPHINXBUILD) -b html  $(ALLSPHINXOPTS) $(BUILDDIR)/html
 	@echo
 	@echo "Build finished. The HTML pages are in $(BUILDDIR)/html. PDF and REST API documentation will be missing"
 
@@ -183,10 +184,8 @@ doctest:
 	@echo "Testing of doctests in the sources finished, look at the " \
 		  "results in $(BUILDDIR)/doctest/output.txt."
 
-.PHONY: openapi
-openapi:
-	pytest --rootdir=../tests ../tests/docs/extract_openapi_json.py
-	mv openapi.json reference/openapi.json
+swagger:
+	pytest --rootdir=../tests ../tests/docs/generate_swagger_html.py
 
 # Pattern rule for converting SVG to PDF
 %.pdf: %.svg

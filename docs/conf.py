@@ -65,28 +65,6 @@ def get_pg_version_for_product() -> int:
 # Check for dot command availability during documentation build
 check_dot_command()
 
-try:
-    # noinspection PyUnresolvedReferences
-    # "tags" are injected while the file is being read
-    if tags.has("include_redoc"):
-        extensions.append('sphinxcontrib.redoc')
-except NameError as e:
-    # Openapi definition with Redoc won't be included
-    pass
-
-redoc_uri = 'https://cdn.jsdelivr.net/npm/redoc/bundles/redoc.standalone.js'
-redoc = [
-    {
-        'name': 'Inmanta REST API',
-        'page': 'reference/openapi',
-        'spec': 'reference/openapi.json',
-        'opts': {
-            'hide-hostname': True,
-            'path-in-middle-panel': True,
-        }
-    },
-]
-
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
 
