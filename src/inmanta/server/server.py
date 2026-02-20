@@ -177,7 +177,6 @@ class Server(protocol.ServerSlice):
         self,
         format: Optional[ApiDocsFormat] = ApiDocsFormat.swagger,
         token: str | None = None,
-        *,
         swagger_description: str | None = None,
     ) -> ReturnValue[Union[OpenAPI, str]]:
         url_map = self._server._transport.get_global_url_map(self._server.get_slices().values())

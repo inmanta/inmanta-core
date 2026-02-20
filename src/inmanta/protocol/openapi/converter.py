@@ -129,7 +129,7 @@ class OpenApiConverter:
             path_item.__setattr__(http_method_name.lower(), operation)
         return path_item
 
-    def generate_openapi_json(self, swagger_description: str | None = None) -> str:
+    def generate_openapi_json(self, *, swagger_description: str | None = None) -> str:
         openapi = self.generate_openapi_definition(swagger_description=swagger_description)
 
         return json.dumps(openapi, default=openapi_json_encoder)
