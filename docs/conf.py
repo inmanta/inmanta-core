@@ -358,15 +358,15 @@ texinfo_documents = [
 # How to display URL addresses: 'footnote', 'no', or 'inline'.
 # texinfo_show_urls = 'footnote'
 
-# Ingnore link check of openapi.html because it's used in a toctree.
+# Ingnore link check of swagger.html because it's used in a toctree.
 # A trick was required to include a non-sphinx document in a toctee.
 linkcheck_ignore = [
     r'http(s)?://localhost:\d+/',
     r'http://127.0.0.1:\d+',
     r'http(s)?://172(.\d{1,3}){3}(:\d+)?',  # Ignoring all docker ips links
-    r'openapi.html',
+    r'swagger.html',
+    r'../reference/swagger.html',
     r'https://twitter.com/inmanta_com',
-    '../_specs/openapi.json',
     'extensions/inmanta-ui/index.html',
     '../extensions/inmanta-ui/index.html',
     '../../reference/modules/std.html#std.validate_type',

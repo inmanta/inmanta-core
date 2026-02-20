@@ -69,7 +69,7 @@ clean:
 
 html: swagger
 	$(SPHINXBUILD) -b html  $(ALLSPHINXOPTS) $(BUILDDIR)/html
-	mv swagger.html build/html/reference/swagger.html
+	mv swagger.html $(BUILDDIR)/html/reference/swagger.html
 	@echo
 	@echo "Build finished. The HTML pages are in $(BUILDDIR)/html."
 
