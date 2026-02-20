@@ -174,15 +174,17 @@ class Server(protocol.ServerSlice):
 
     @handle(methods_v2.get_api_docs)
     async def get_api_docs(
-        self, format: Optional[ApiDocsFormat] = ApiDocsFormat.swagger, token: str | None = None, *, swagger_description: str | None = None
+        self,
+        format: Optional[ApiDocsFormat] = ApiDocsFormat.swagger,
+        token: str | None = None,
+        *,
+        swagger_description: str | None = None,
     ) -> ReturnValue[Union[OpenAPI, str]]:
         url_map = self._server._transport.get_global_url_map(self._server.get_slices().values())
         feature_manager = self.feature_manager
         openapi = OpenApiConverter(url_map, feature_manager)
         # Get rid of none values with custom json encoder
-        openapi_json_str = openapi.generate_openapi_json(
-            swagger_description=swagger_description
-        )
+        openapi_json_str = openapi.generate_openapi_json(swagger_description=swagger_description)
         if format == ApiDocsFormat.openapi:
             openapi_dict = json.loads(openapi_json_str)
             return ReturnValue(response=openapi_dict)

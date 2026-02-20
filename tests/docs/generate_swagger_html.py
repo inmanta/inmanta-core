@@ -20,6 +20,7 @@ import os
 
 
 async def test_generate_swagger_html(server, client):
+    breakpoint()
     result = await client.get_api_docs("swagger", swagger_description="Back to <a href='./index.html'>main documentation</a>")
     assert result.code == 200
     content = result.result

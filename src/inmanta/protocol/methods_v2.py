@@ -446,7 +446,7 @@ def reserve_version(tid: uuid.UUID) -> int:
     include_response_in_docs_swagger=False,
 )
 def get_api_docs(
-    format: Optional[ApiDocsFormat] = ApiDocsFormat.swagger, token: str | None = None, *, swagger_description: str | None = None
+    format: Optional[ApiDocsFormat] = ApiDocsFormat.swagger, token: str | None = None, swagger_description: str | None = None
 ) -> ReturnValue[Union[OpenAPI, str]]:
     """
     Get the OpenAPI definition of the API
