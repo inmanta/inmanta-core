@@ -44,9 +44,9 @@ def test_linkcheck(build_docs):
     docs_dir, doctrees, htmldir, _ = build_docs
     # Execute link check
     subprocess.check_call(["sphinx-build", "-blinkcheck", "-d", str(doctrees), ".", str(htmldir)], cwd=docs_dir)
-    # The link check for openapi.html is ignored in the conf.py file, since
+    # The link check for swagger.html is ignored in the conf.py file, since
     # a trick is used in the reference/index.rst because toctree doesn't
     # offer support for relative links to something that isn't a sphinx document.
-    # This check verifies that the reference/openapi.html file is created.
+    # This check verifies that the reference/swagger.html file is created.
     openapi_html_file = htmldir.join("reference/swagger.html")
     assert os.path.exists(openapi_html_file)
