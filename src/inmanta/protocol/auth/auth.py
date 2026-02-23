@@ -150,7 +150,7 @@ def decode_token(token: str) -> tuple[claim_type, "AuthJWTConfig"]:
 AUTH_JWT_PREFIX = "auth_jwt_"
 ENV_AUTH_JWT_PREFIX = "INMANTA_AUTH_JWT_"
 
-DISCOVER_ENV_AUTH_JWT_SETTING = [
+ENV_AUTH_JWT_SETTINGS = [
     "ALGORITHM",
     "SIGN",
     "EXPIRE",
@@ -194,24 +194,22 @@ class AuthJWTConfig:
             env_prefix_len = len(ENV_AUTH_JWT_PREFIX)
 
             # List of settings that start with ENV_AUTH_JWT_PREFIX
-            found_settings = sorted([env_var for env_var in os.environ if env_var[:env_prefix_len] == ENV_AUTH_JWT_PREFIX])
+            found_settings = sorted([env_var for env_var in os.environ if env_var.startswith(ENV_AUTH_JWT_PREFIX)])
             # Save config found on environment variables
             env_config: dict[str, dict[str, str]] = defaultdict(dict[str, str])
 
             for setting in found_settings:
-                invalid_setting = True
-                for possible_setting in DISCOVER_ENV_AUTH_JWT_SETTING:
+                for possible_setting in ENV_AUTH_JWT_SETTINGS:
                     if setting.endswith(possible_setting):
-                        env_config_key = possible_setting.lower()
+                        setting_name = possible_setting.lower()
                         # The -1 is to take the underscore into account
-                        section_name = setting[env_prefix_len : -len(env_config_key) - 1].lower()
-                        env_config[AUTH_JWT_PREFIX + section_name][env_config_key] = str(os.environ.get(setting))
-                        invalid_setting = False
+                        section_name = setting[env_prefix_len : -len(setting_name) - 1].lower()
+                        env_config[AUTH_JWT_PREFIX + section_name][setting_name] = str(os.environ.get(setting))
                         break
-                if invalid_setting:
-                    raise ValueError(
+                else:
+                    logging.getLogger(__name__).warning(
                         f"Found the following environment variable {setting} with the {ENV_AUTH_JWT_PREFIX} prefix,"
-                        f"but it doesn't match any available settings: {DISCOVER_ENV_AUTH_JWT_SETTING}"
+                        f"but it doesn't match any available settings: {ENV_AUTH_JWT_SETTINGS}"
                     )
 
             cfg.read_dict(env_config)

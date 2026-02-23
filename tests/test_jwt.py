@@ -138,7 +138,7 @@ expire=0
 issuer=https://localhost:8888/
 audience=https://localhost:8888/
 
-""".format(port))
+""")
 
     config.Config.load_config(config_file)
 
