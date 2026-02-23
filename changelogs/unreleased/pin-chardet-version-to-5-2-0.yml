@@ -1,4 +1,4 @@
 ---
-description: "Pin chardet version to 5.2.0 until the requests library releases a fix supporting it"
+description: "Constrain chardet version to match the requirements on the requests library"
 change-type: patch
 destination-branches: [master, iso9, iso8, iso7]
