@@ -185,7 +185,7 @@ audience=https://localhost:8888/
 
     with pytest.raises(
         ValueError,
-        match=f"client_types is a required option for auth_jwt_other_config",
+        match="client_types is a required option for auth_jwt_other_config",
     ):
         await asyncio.get_event_loop().run_in_executor(None, auth.AuthJWTConfig.list)
 

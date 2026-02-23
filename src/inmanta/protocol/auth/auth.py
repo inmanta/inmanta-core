@@ -184,35 +184,41 @@ class AuthJWTConfig:
         cls.issuers = {}
 
     @classmethod
+    def _load_config_from_environment_variables(cls, cfg_instance: config.ConfigParser) -> dict[str, dict[str, str]]:
+        env_prefix_len = len(ENV_AUTH_JWT_PREFIX)
+
+        # List of settings that start with ENV_AUTH_JWT_PREFIX
+        found_settings = sorted([env_var for env_var in os.environ if env_var.startswith(ENV_AUTH_JWT_PREFIX)])
+        # Save config found on environment variables
+        env_config: dict[str, dict[str, str]] = defaultdict(dict[str, str])
+
+        for setting in found_settings:
+            for possible_setting in ENV_AUTH_JWT_SETTINGS:
+                if setting.endswith(possible_setting):
+                    setting_name = possible_setting.lower()
+                    # The -1 is to take the underscore into account
+                    section_name = setting[env_prefix_len : -len(setting_name) - 1].lower()
+                    env_config[AUTH_JWT_PREFIX + section_name][setting_name] = str(os.environ.get(setting))
+                    break
+            else:
+                logging.getLogger(__name__).warning(
+                    f"Found the following environment variable {setting} with the {ENV_AUTH_JWT_PREFIX} prefix,"
+                    f"but it doesn't match any available settings: {ENV_AUTH_JWT_SETTINGS}"
+                )
+
+        return env_config
+
+    @classmethod
     def _load_config_and_validate(cls) -> None:
         if cls._config_successfully_loaded:
             return
 
         try:
             cfg = config.Config.get_instance()
+            cfg.read_dict(cls._load_config_from_environment_variables())
+
             prefix_len = len(AUTH_JWT_PREFIX)
-            env_prefix_len = len(ENV_AUTH_JWT_PREFIX)
 
-            # List of settings that start with ENV_AUTH_JWT_PREFIX
-            found_settings = sorted([env_var for env_var in os.environ if env_var.startswith(ENV_AUTH_JWT_PREFIX)])
-            # Save config found on environment variables
-            env_config: dict[str, dict[str, str]] = defaultdict(dict[str, str])
-
-            for setting in found_settings:
-                for possible_setting in ENV_AUTH_JWT_SETTINGS:
-                    if setting.endswith(possible_setting):
-                        setting_name = possible_setting.lower()
-                        # The -1 is to take the underscore into account
-                        section_name = setting[env_prefix_len : -len(setting_name) - 1].lower()
-                        env_config[AUTH_JWT_PREFIX + section_name][setting_name] = str(os.environ.get(setting))
-                        break
-                else:
-                    logging.getLogger(__name__).warning(
-                        f"Found the following environment variable {setting} with the {ENV_AUTH_JWT_PREFIX} prefix,"
-                        f"but it doesn't match any available settings: {ENV_AUTH_JWT_SETTINGS}"
-                    )
-
-            cfg.read_dict(env_config)
             for config_section in cfg.keys():
                 if config_section[:prefix_len] == AUTH_JWT_PREFIX:
                     name = config_section[prefix_len:].lower()
