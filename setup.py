@@ -39,6 +39,7 @@ requires = [
     "SQLAlchemy~=2.0",
     "strawberry-sqlalchemy-mapper==0.8.0",
     "jsonpath-ng~=1.7",
+    "requests[use_chardet_on_py3]",
 ]
 
 
