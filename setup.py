@@ -37,6 +37,8 @@ requires = [
     "toml~=0.10 ",
     "setproctitle~=1.3",
     "jsonpath-ng~=1.7",
+    # cookiecutter requires requests and (via binaryornot) chardet. With this extra we ensure that it stays in the valid range for requests
+    "requests[use_chardet_on_py3]",
 ]
 
 
