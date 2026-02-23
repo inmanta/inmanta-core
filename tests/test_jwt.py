@@ -18,6 +18,7 @@ Contact: code@inmanta.com
 
 import asyncio
 import json
+import logging
 import os
 import pathlib
 import time
@@ -32,6 +33,7 @@ import requests
 from inmanta import config, const
 from inmanta.protocol.auth import auth
 from inmanta.server.protocol import Server
+from utils import log_contains
 
 
 def test_jwt_create(inmanta_config):
@@ -121,7 +123,7 @@ validate_cert=false
     assert len(cfg_list) == 2
 
 
-async def test_auth_jwt_environment_variables(jwks, tmp_path):
+async def test_auth_jwt_environment_variables(jwks, tmp_path, monkeypatch, caplog):
     """
     Test that we can set auth jwt config via environment variables and that it behaves accordingly and is validated.
     """
@@ -143,20 +145,21 @@ audience=https://localhost:8888/
     config.Config.load_config(config_file)
 
     # Add missing config via environment variable
-    os.environ[f"{auth.ENV_AUTH_JWT_PREFIX}DEFAULT_ALGORITHM"] = "HS256"
+    monkeypatch.setenv(f"{auth.ENV_AUTH_JWT_PREFIX}DEFAULT_ALGORITHM", "HS256")
     # Overwrite config via environment variable
-    os.environ[f"{auth.ENV_AUTH_JWT_PREFIX}DEFAULT_SIGN"] = "true"
+    monkeypatch.setenv(f"{auth.ENV_AUTH_JWT_PREFIX}DEFAULT_SIGN", "true")
     # Add new config section
     new_config = "MY_CONFIG_"
-    os.environ[f"{auth.ENV_AUTH_JWT_PREFIX}{new_config}ALGORITHM"] = "RS256"
-    os.environ[f"{auth.ENV_AUTH_JWT_PREFIX}{new_config}SIGN"] = "false"
-    os.environ[f"{auth.ENV_AUTH_JWT_PREFIX}{new_config}CLIENT_TYPES"] = "api"
-    os.environ[f"{auth.ENV_AUTH_JWT_PREFIX}{new_config}ISSUER"] = f"https://localhost:{port}/auth/realms/inmanta"
-    os.environ[f"{auth.ENV_AUTH_JWT_PREFIX}{new_config}AUDIENCE"] = "sodev"
-    os.environ[f"{auth.ENV_AUTH_JWT_PREFIX}{new_config}JWKS_URI"] = (
-        f"http://localhost:{port}/auth/realms/inmanta/protocol/openid-connect/certs"
+    monkeypatch.setenv(f"{auth.ENV_AUTH_JWT_PREFIX}{new_config}ALGORITHM", "RS256")
+    monkeypatch.setenv(f"{auth.ENV_AUTH_JWT_PREFIX}{new_config}SIGN", "false")
+    monkeypatch.setenv(f"{auth.ENV_AUTH_JWT_PREFIX}{new_config}CLIENT_TYPES", "api")
+    monkeypatch.setenv(f"{auth.ENV_AUTH_JWT_PREFIX}{new_config}ISSUER", f"https://localhost:{port}/auth/realms/inmanta")
+    monkeypatch.setenv(f"{auth.ENV_AUTH_JWT_PREFIX}{new_config}AUDIENCE", "sodev")
+    monkeypatch.setenv(
+        f"{auth.ENV_AUTH_JWT_PREFIX}{new_config}JWKS_URI",
+        f"http://localhost:{port}/auth/realms/inmanta/protocol/openid-connect/certs",
     )
-    os.environ[f"{auth.ENV_AUTH_JWT_PREFIX}{new_config}VALIDATE_CERT"] = "false"
+    monkeypatch.setenv(f"{auth.ENV_AUTH_JWT_PREFIX}{new_config}VALIDATE_CERT", "false")
 
     cfg_list = await asyncio.get_event_loop().run_in_executor(None, auth.AuthJWTConfig.list)
     assert len(cfg_list) == 2
@@ -164,17 +167,21 @@ audience=https://localhost:8888/
     # Test what happens when you submit a wrong option
     config.Config.load_config(config_file)
     wrong_env_var = f"{auth.ENV_AUTH_JWT_PREFIX}{new_config}WRONG_OPTION"
-    os.environ[wrong_env_var] = "true"
+    monkeypatch.setenv(wrong_env_var, "true")
 
-    with pytest.raises(
-        ValueError,
-        match=f"Found the following environment variable {wrong_env_var} with the {auth.ENV_AUTH_JWT_PREFIX} prefix",
-    ):
+    with caplog.at_level(logging.WARNING):
         await asyncio.get_event_loop().run_in_executor(None, auth.AuthJWTConfig.list)
-    del os.environ[f"{auth.ENV_AUTH_JWT_PREFIX}{new_config}WRONG_OPTION"]
+        log_contains(
+            caplog,
+            "inmanta.protocol.auth.auth",
+            logging.WARNING,
+            f"Found the following environment variable {wrong_env_var} with the {auth.ENV_AUTH_JWT_PREFIX} prefix",
+        )
+
+    monkeypatch.delenv(f"{auth.ENV_AUTH_JWT_PREFIX}{new_config}WRONG_OPTION")
 
     config.Config.load_config(config_file)
-    os.environ[f"{auth.ENV_AUTH_JWT_PREFIX}OTHER_CONFIG_ALGORITHM"] = "HS256"
+    monkeypatch.setenv(f"{auth.ENV_AUTH_JWT_PREFIX}OTHER_CONFIG_ALGORITHM", "HS256")
 
     with pytest.raises(
         ValueError,
