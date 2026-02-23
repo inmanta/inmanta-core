@@ -39,6 +39,7 @@ requires = [
     "SQLAlchemy~=2.0",
     "strawberry-sqlalchemy-mapper==0.8.0",
     "jsonpath-ng~=1.7",
+    # cookiecutter requires chardet. With this extra we ensure that it stays in the valid range for requests
     "requests[use_chardet_on_py3]",
 ]
 
