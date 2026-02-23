@@ -37,6 +37,8 @@ requires = [
     "typing_inspect~=0.9",
     "ruamel.yaml~=0.17",
     "toml~=0.10 ",
+    # cookiecutter requires requests and (via binaryornot) chardet. With this extra we ensure that it stays in the valid range for requests
+    "requests[use_chardet_on_py3]",
 ]
 
 
