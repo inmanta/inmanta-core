@@ -182,7 +182,6 @@ audience=https://localhost:8888/
     assert cfg.sign is False
     assert cfg.validate_cert is False
     assert cfg._config.getfloat("jwks_request_timeout") == 40.5
-    # Not sure if this key field is used
     assert cfg._config["key"] == "my-key"
 
     # Test what happens when you submit a wrong option

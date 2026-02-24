@@ -205,7 +205,7 @@ class AuthJWTConfig:
                     break
             else:
                 logging.getLogger(__name__).warning(
-                    f"Found the following environment variable {setting} with the {ENV_AUTH_JWT_PREFIX} prefix,"
+                    f"Found the following environment variable {setting} with the {ENV_AUTH_JWT_PREFIX} prefix, "
                     f"but it doesn't match any available settings: {ENV_AUTH_JWT_SETTINGS}"
                 )
 
