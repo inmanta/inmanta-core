@@ -17,6 +17,7 @@ Contact: code@inmanta.com
 """
 
 import asyncio
+import base64
 import json
 import logging
 import os
@@ -148,7 +149,7 @@ audience=https://localhost:8888/
     monkeypatch.setenv(f"{auth.ENV_AUTH_JWT_PREFIX}DEFAULT_ALGORITHM", "HS256")
     # Overwrite config via environment variable
     monkeypatch.setenv(f"{auth.ENV_AUTH_JWT_PREFIX}DEFAULT_SIGN", "true")
-    # Add new config section
+    # Add new config section with every possible config
     new_config = "MY_CONFIG_"
     monkeypatch.setenv(f"{auth.ENV_AUTH_JWT_PREFIX}{new_config}ALGORITHM", "RS256")
     monkeypatch.setenv(f"{auth.ENV_AUTH_JWT_PREFIX}{new_config}SIGN", "false")
@@ -160,9 +161,30 @@ audience=https://localhost:8888/
         f"http://localhost:{port}/auth/realms/inmanta/protocol/openid-connect/certs",
     )
     monkeypatch.setenv(f"{auth.ENV_AUTH_JWT_PREFIX}{new_config}VALIDATE_CERT", "false")
+    monkeypatch.setenv(f"{auth.ENV_AUTH_JWT_PREFIX}{new_config}EXPIRE", "20")
+    monkeypatch.setenv(f"{auth.ENV_AUTH_JWT_PREFIX}{new_config}JWT_USERNAME_CLAIM", "my-claim")
+    monkeypatch.setenv(f"{auth.ENV_AUTH_JWT_PREFIX}{new_config}JWKS_REQUEST_TIMEOUT", "40.5")
+    monkeypatch.setenv(f"{auth.ENV_AUTH_JWT_PREFIX}{new_config}KEY", "my-key")
 
     cfg_list = await asyncio.get_event_loop().run_in_executor(None, auth.AuthJWTConfig.list)
     assert len(cfg_list) == 2
+    cfg = auth.AuthJWTConfig.get("default")
+    assert cfg.algo == "HS256"
+    assert cfg.sign is True
+
+    cfg = auth.AuthJWTConfig.get("my_config")
+    assert cfg.algo == "RS256"
+    assert cfg.audience == "sodev"
+    assert cfg.client_types == ["api"]
+    assert cfg.expire == 20
+    assert cfg.issuer == "https://localhost:{0}/auth/realms/inmanta".format(port)
+    assert cfg.jwks_uri == "http://localhost:{0}/auth/realms/inmanta/protocol/openid-connect/certs".format(port)
+    assert cfg.jwt_username_claim == "my-claim"
+    assert cfg.sign is False
+    assert cfg.validate_cert is False
+    assert cfg._config.getfloat("jwks_request_timeout") == 40.5
+    # Not sure if this key field is used
+    assert cfg._config["key"] == "my-key"
 
     # Test what happens when you submit a wrong option
     config.Config.load_config(config_file)

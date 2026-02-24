@@ -184,7 +184,7 @@ class AuthJWTConfig:
         cls.issuers = {}
 
     @classmethod
-    def _load_config_from_environment_variables(cls, cfg_instance: config.ConfigParser) -> dict[str, dict[str, str]]:
+    def _load_config_from_environment_variables(cls) -> dict[str, dict[str, str]]:
         env_prefix_len = len(ENV_AUTH_JWT_PREFIX)
 
         # List of settings that start with ENV_AUTH_JWT_PREFIX
