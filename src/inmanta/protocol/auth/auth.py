@@ -156,7 +156,7 @@ ENV_AUTH_JWT_SETTINGS = [
     "EXPIRE",
     "CLIENT_TYPES",
     "ISSUER",
-    "JWT-USERNAME-CLAIM",
+    "JWT_USERNAME_CLAIM",
     "JWKS_URI",
     "AUDIENCE",
     "VALIDATE_CERT",
@@ -195,7 +195,10 @@ class AuthJWTConfig:
         for setting in found_settings:
             for possible_setting in ENV_AUTH_JWT_SETTINGS:
                 if setting.endswith(possible_setting):
-                    setting_name = possible_setting.lower()
+                    # jwt-username-claim breaks the convention of using dashes instead of underscores
+                    setting_name = (
+                        "jwt-username-claim" if possible_setting == "JWT_USERNAME_CLAIM" else possible_setting.lower()
+                    )
                     # The -1 is to take the underscore into account
                     section_name = setting[env_prefix_len : -len(setting_name) - 1].lower()
                     env_config[AUTH_JWT_PREFIX + section_name][setting_name] = str(os.environ.get(setting))
