@@ -58,4 +58,4 @@ types-PyYAML==6.0.12.20250915
 types-setuptools==82.0.0.20260210
 types-toml==0.10.8.20240310
 typing_inspect==0.9.0
-jsonpath-ng==1.7.0
+jsonpath-ng==1.8.0
