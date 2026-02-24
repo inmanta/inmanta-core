@@ -65,28 +65,6 @@ def get_pg_version_for_product() -> int:
 # Check for dot command availability during documentation build
 check_dot_command()
 
-try:
-    # noinspection PyUnresolvedReferences
-    # "tags" are injected while the file is being read
-    if tags.has("include_redoc"):
-        extensions.append('sphinxcontrib.redoc')
-except NameError as e:
-    # Openapi definition with Redoc won't be included
-    pass
-
-redoc_uri = 'https://cdn.jsdelivr.net/npm/redoc/bundles/redoc.standalone.js'
-redoc = [
-    {
-        'name': 'Inmanta REST API',
-        'page': 'reference/openapi',
-        'spec': 'reference/openapi.json',
-        'opts': {
-            'hide-hostname': True,
-            'path-in-middle-panel': True,
-        }
-    },
-]
-
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
 
@@ -380,15 +358,15 @@ texinfo_documents = [
 # How to display URL addresses: 'footnote', 'no', or 'inline'.
 # texinfo_show_urls = 'footnote'
 
-# Ingnore link check of openapi.html because it's used in a toctree.
+# Ingnore link check of swagger.html because it's used in a toctree.
 # A trick was required to include a non-sphinx document in a toctee.
 linkcheck_ignore = [
     r'http(s)?://localhost:\d+/',
     r'http://127.0.0.1:\d+',
     r'http(s)?://172(.\d{1,3}){3}(:\d+)?',  # Ignoring all docker ips links
-    r'openapi.html',
+    r'swagger.html',
+    r'../reference/swagger.html',
     r'https://twitter.com/inmanta_com',
-    '../_specs/openapi.json',
     'extensions/inmanta-ui/index.html',
     '../extensions/inmanta-ui/index.html',
     '../../reference/modules/std.html#std.validate_type',

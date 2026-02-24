@@ -437,15 +437,24 @@ def reserve_version(tid: uuid.UUID) -> int:
 
 
 @auth(auth_label=const.CoreAuthorizationLabel.DOCS_READ, read_only=True)
-@typedmethod(path="/docs", operation="GET", client_types=[ClientType.api], api_version=2, token_param="token")
+@typedmethod(
+    path="/docs",
+    operation="GET",
+    client_types=[ClientType.api],
+    api_version=2,
+    token_param="token",
+    include_response_in_docs_swagger=False,
+)
 def get_api_docs(
-    format: Optional[ApiDocsFormat] = ApiDocsFormat.swagger, token: str | None = None
+    format: Optional[ApiDocsFormat] = ApiDocsFormat.swagger, token: str | None = None, swagger_description: str | None = None
 ) -> ReturnValue[Union[OpenAPI, str]]:
     """
     Get the OpenAPI definition of the API
 
     :param format: Use 'openapi' to get the schema in json format, leave empty or use 'swagger' to get the Swagger-UI view
     :param token: If provided, use this token to authorize the request instead of the value from the authorization header.
+    :param swagger_description: When using the 'swagger' format, the 'description' field of the returned swagger will be set
+    to the value of this parameter.
     """
 
 

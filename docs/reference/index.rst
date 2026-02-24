@@ -19,6 +19,6 @@ Inmanta, please check out the :doc:`../quickstart` guide.
     expertfeatures
     modules
     python_client
-    openapi
+    swagger
     compatibility
     apilinks
