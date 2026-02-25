@@ -174,9 +174,9 @@ id_list: ID ("," ID)*
     | add_expr MINUS_OP mul_expr                                                 -> sub_expr
 
 ?mul_expr: pow_expr
-    | mul_expr "*" pow_expr                                                      -> mul_expr
+    | mul_expr MUL_OP pow_expr                                                   -> mul_expr
     | mul_expr DIVISION_OP pow_expr                                              -> div_expr
-    | mul_expr "%" pow_expr                                                      -> mod_expr
+    | mul_expr MOD_OP pow_expr                                                   -> mod_expr
 
 ?pow_expr: primary
     | primary DOUBLE_STAR pow_expr                                               -> pow_expr
@@ -291,35 +291,37 @@ constants: constant ("," constant)*
 
 // ===== TERMINALS =====
 
-// Keywords (priority 2 beats ID regex priority -1 and CID regex priority 1)
-TYPEDEF.2: "typedef"
-AS.2: "as"
-ENTITY.2: "entity"
-EXTENDS.2: "extends"
-END.2: "end"
-IN.2: "in"
-IMPLEMENTATION.2: "implementation"
-FOR.2: "for"
-MATCHING.2: "matching"
-INDEX.2: "index"
-IMPLEMENT.2: "implement"
-USING.2: "using"
-WHEN.2: "when"
-AND.2: "and"
-OR.2: "or"
-NOT.2: "not"
-TRUE.2: "true"
-FALSE.2: "false"
-IMPORT.2: "import"
-IS.2: "is"
-DEFINED.2: "defined"
-DICT.2: "dict"
-NULL.2: "null"
-UNDEF.2: "undef"
-PARENTS.2: "parents"
-IF.2: "if"
-ELSE.2: "else"
-ELIF.2: "elif"
+// Keywords with word-boundary lookahead: prevent "in" from matching prefix of "int", etc.
+// Inmanta identifiers may contain hyphens, so we check for [a-zA-Z0-9_-] after the keyword.
+// Priority 2 beats ID (priority -1) and CID (priority 1).
+TYPEDEF.2: /typedef(?![a-zA-Z0-9_-])/
+AS.2: /as(?![a-zA-Z0-9_-])/
+ENTITY.2: /entity(?![a-zA-Z0-9_-])/
+EXTENDS.2: /extends(?![a-zA-Z0-9_-])/
+END.2: /end(?![a-zA-Z0-9_-])/
+IN.2: /in(?![a-zA-Z0-9_-])/
+IMPLEMENTATION.2: /implementation(?![a-zA-Z0-9_-])/
+FOR.2: /for(?![a-zA-Z0-9_-])/
+MATCHING.2: /matching(?![a-zA-Z0-9_-])/
+INDEX.2: /index(?![a-zA-Z0-9_-])/
+IMPLEMENT.2: /implement(?![a-zA-Z0-9_-])/
+USING.2: /using(?![a-zA-Z0-9_-])/
+WHEN.2: /when(?![a-zA-Z0-9_-])/
+AND.2: /and(?![a-zA-Z0-9_-])/
+OR.2: /or(?![a-zA-Z0-9_-])/
+NOT.2: /not(?![a-zA-Z0-9_-])/
+TRUE.2: /true(?![a-zA-Z0-9_-])/
+FALSE.2: /false(?![a-zA-Z0-9_-])/
+IMPORT.2: /import(?![a-zA-Z0-9_-])/
+IS.2: /is(?![a-zA-Z0-9_-])/
+DEFINED.2: /defined(?![a-zA-Z0-9_-])/
+DICT.2: /dict(?![a-zA-Z0-9_-])/
+NULL.2: /null(?![a-zA-Z0-9_-])/
+UNDEF.2: /undef(?![a-zA-Z0-9_-])/
+PARENTS.2: /parents(?![a-zA-Z0-9_-])/
+IF.2: /if(?![a-zA-Z0-9_-])/
+ELSE.2: /else(?![a-zA-Z0-9_-])/
+ELIF.2: /elif(?![a-zA-Z0-9_-])/
 
 // REGEX terminal: matches "matching <whitespace> /regex/"
 // Priority 3 ensures it beats MATCHING keyword (priority 2) via longer match
@@ -335,7 +337,9 @@ DOUBLE_STAR: "**"
 // Single-character operators (named for position tracking in transformer)
 PLUS_OP: "+"
 MINUS_OP: "-"
+MUL_OP: "*"
 DIVISION_OP: "/"
+MOD_OP: "%"
 
 // Identifiers
 // CID: uppercase-starting identifiers (entity names, constructors)

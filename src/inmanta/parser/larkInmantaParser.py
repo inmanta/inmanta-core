@@ -30,9 +30,6 @@ from dataclasses import dataclass, field
 from re import error as RegexError
 from typing import Optional, Union
 
-from lark import Lark, Token, Transformer, UnexpectedCharacters, UnexpectedEOF, UnexpectedInput, v_args
-from lark.exceptions import UnexpectedToken, VisitError
-
 from inmanta.ast import LocatableString, Location, Namespace, Range, RuntimeException
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.constraint.expression import And, In, IsDefined, Not, NotEqual, Operator
@@ -63,6 +60,8 @@ from inmanta.ast.variables import AttributeReference, Reference
 from inmanta.execute.util import NoneValue
 from inmanta.parser import InvalidNamespaceAccess, ParserException, ParserWarning, SyntaxDeprecationWarning
 from inmanta.parser.cache import CacheManager
+from lark import Lark, Token, Transformer, UnexpectedCharacters, UnexpectedEOF, UnexpectedInput, v_args
+from lark.exceptions import UnexpectedToken, VisitError
 
 # ---- Grammar loading ----
 
@@ -89,10 +88,34 @@ _format_regex_compiled = re.compile(_format_regex, re.MULTILINE | re.DOTALL)
 # so we must validate at the transformer level.
 _RESERVED_KEYWORDS: frozenset[str] = frozenset(
     [
-        "typedef", "as", "entity", "extends", "end", "in", "implementation",
-        "for", "matching", "index", "implement", "using", "when", "and", "or",
-        "not", "true", "false", "import", "is", "defined", "dict", "null",
-        "undef", "parents", "if", "else", "elif",
+        "typedef",
+        "as",
+        "entity",
+        "extends",
+        "end",
+        "in",
+        "implementation",
+        "for",
+        "matching",
+        "index",
+        "implement",
+        "using",
+        "when",
+        "and",
+        "or",
+        "not",
+        "true",
+        "false",
+        "import",
+        "is",
+        "defined",
+        "dict",
+        "null",
+        "undef",
+        "parents",
+        "if",
+        "else",
+        "elif",
     ]
 )
 
@@ -712,7 +735,7 @@ class InmantaTransformer(Transformer):
         id_token = items[1]
         self._validate_id(id_token)
         class_ref = items[3]
-        docstr = items[4]   # None or LocatableString from impl_header
+        docstr = items[4]  # None or LocatableString from impl_header
         stmts = items[5]
         id_ls = self._locatable(id_token)
         result = DefineImplementation(self.namespace, id_ls, class_ref, BasicBlock(self.namespace, stmts), docstr)
@@ -1020,9 +1043,7 @@ class InmantaTransformer(Transformer):
         left, op_token, right = items
         operator = Operator.get_operator_class(op_str)
         if operator is None:
-            raise ParserException(
-                self._range(op_token), str(op_token), f"Invalid operator {op_str}"
-            )
+            raise ParserException(self._range(op_token), str(op_token), f"Invalid operator {op_str}")
         result = operator(left, right)
         self._attach(result, self._loc(op_token), getattr(op_token, "pos_in_stream", 0) or 0)
         return result
@@ -1584,9 +1605,7 @@ def _process_fstring(string_ast: LocatableString) -> Union[StringFormatV2, Liter
     return StringFormatV2(str(string_ast), _convert_to_references(locatable_matches, string_ast.namespace))
 
 
-def _convert_to_references(
-    variables: list[tuple[str, LocatableString]], namespace: Namespace
-) -> list[tuple["Reference", str]]:
+def _convert_to_references(variables: list[tuple[str, LocatableString]], namespace: Namespace) -> list[tuple["Reference", str]]:
     """Convert variable name strings to References (mirrors PLY's convert_to_references)."""
 
     def normalize(variable: str, locatable: LocatableString, offset: int = 0) -> LocatableString:
