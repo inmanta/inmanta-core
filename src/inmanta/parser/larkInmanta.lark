@@ -1,0 +1,351 @@
+// Lark grammar for the Inmanta DSL
+// Ported from the PLY-based parser (plyInmantaParser.py / plyInmantaLex.py)
+
+// ===== START =====
+start: head body
+
+head: MLS?
+body: top_stmt*
+
+// ===== TOP-LEVEL STATEMENTS =====
+top_stmt: entity_def
+        | implement_def
+        | implementation_def
+        | relation
+        | statement
+        | typedef
+        | index
+        | import_stmt
+
+// ===== IMPORTS =====
+import_stmt: IMPORT ns_ref                -> import_ns
+           | IMPORT ns_ref AS ID          -> import_as
+
+// ===== STATEMENTS =====
+statement: assign
+         | for_stmt
+         | if_stmt
+         | expression                     -> expr_stmt
+
+stmt_list: statement*
+
+assign: var_ref "=" operand              -> assign_eq
+      | var_ref PEQ operand             -> assign_plus_eq
+
+for_stmt: FOR ID IN operand ":" block
+
+block: stmt_list END
+
+if_stmt: IF if_body END
+
+if_body: expression ":" stmt_list if_next
+
+if_next:                                 -> if_next_empty
+       | ELSE ":" stmt_list             -> if_next_else
+       | ELIF if_body                   -> if_next_elif
+
+operand: expression
+
+// ===== ENTITY DEFINITIONS =====
+entity_def: ENTITY CID ":" entity_body_outer                                   -> entity_def
+          | ENTITY CID EXTENDS class_ref_list ":" entity_body_outer            -> entity_def_extends
+          | ENTITY ID ":" entity_body_outer                                     -> entity_def_err
+          | ENTITY ID EXTENDS class_ref_list ":" entity_body_outer             -> entity_def_extends_err
+
+entity_body_outer: MLS entity_body END                                          -> entity_body_outer_mls
+                 | entity_body END                                              -> entity_body_outer_plain
+                 | MLS END                                                      -> entity_body_outer_mls_only
+                 | END                                                          -> entity_body_outer_empty
+
+entity_body: attr+
+
+// ===== ATTRIBUTES =====
+attr_base_type: ns_ref
+
+attr_type_multi: attr_base_type "[" "]"
+
+attr_type_opt: attr_type_multi "?"                                              -> attr_type_opt_multi
+             | attr_base_type "?"                                               -> attr_type_opt_base
+
+?attr_type: attr_type_opt
+          | attr_type_multi
+          | attr_base_type
+
+attr: attr_type ID                                                               -> attr_simple
+    | attr_type ID "=" constant                                                  -> attr_cte
+    | attr_type ID "=" constant_list                                             -> attr_cte_list
+    | attr_type ID "=" UNDEF                                                     -> attr_undef
+    | attr_type CID                                                              -> attr_err
+    | attr_type CID "=" constant                                                 -> attr_err
+    | attr_type CID "=" constant_list                                            -> attr_err
+    | attr_type CID "=" UNDEF                                                    -> attr_err
+    | DICT ID                                                                    -> attr_dict
+    | DICT ID "=" map_def                                                        -> attr_list_dict
+    | DICT ID "=" NULL                                                           -> attr_list_dict_null_err
+    | DICT "?" ID                                                                -> attr_dict_nullable
+    | DICT "?" ID "=" map_def                                                    -> attr_list_dict_nullable
+    | DICT "?" ID "=" NULL                                                       -> attr_list_dict_null
+    | DICT CID                                                                   -> attr_dict_err
+    | DICT "?" CID                                                               -> attr_dict_err
+    | DICT CID "=" map_def                                                       -> attr_dict_err
+    | DICT "?" CID "=" map_def                                                   -> attr_dict_err
+    | DICT CID "=" NULL                                                          -> attr_dict_err
+    | DICT "?" CID "=" NULL                                                      -> attr_dict_err
+
+// ===== IMPLEMENT =====
+implement_def: IMPLEMENT class_ref USING implement_ns_list                       -> implement_def_simple
+             | IMPLEMENT class_ref USING implement_ns_list MLS                  -> implement_def_comment
+             | IMPLEMENT class_ref USING implement_ns_list WHEN expression      -> implement_def_when
+             | IMPLEMENT class_ref USING implement_ns_list WHEN expression MLS  -> implement_def_when_comment
+
+implement_ns_list: implement_ns_item ("," implement_ns_item)*
+
+implement_ns_item: ns_ref                                                        -> impl_ns_ref
+                 | PARENTS                                                       -> impl_parents
+
+// ===== IMPLEMENTATION DEFINITION =====
+implementation_def: IMPLEMENTATION ID FOR class_ref ":" stmt_list END           -> implementation_def_no_doc
+                  | IMPLEMENTATION ID FOR class_ref ":" MLS stmt_list END       -> implementation_def_doc
+
+// ===== RELATION =====
+relation: relation_def MLS                                                       -> relation_comment
+        | relation_def                                                           -> relation_no_comment
+
+relation_def: class_ref "." ID multi REL class_ref "." ID multi                -> relation_bidir
+            | class_ref "." ID multi REL class_ref                             -> relation_unidir
+            | class_ref "." ID multi annotation_list class_ref "." ID multi    -> relation_annotated_bidir
+            | class_ref "." ID multi annotation_list class_ref                 -> relation_annotated_unidir
+
+annotation_list: operand ("," operand)*
+
+multi: "[" INT "]"                                                               -> multi_exact
+     | "[" INT ":" "]"                                                          -> multi_lower_bound
+     | "[" INT ":" INT "]"                                                      -> multi_range
+     | "[" ":" INT "]"                                                          -> multi_upper_bound
+
+// ===== TYPEDEF =====
+typedef: typedef_inner MLS                                                       -> typedef_comment
+       | typedef_inner                                                           -> typedef_no_comment
+
+typedef_inner: TYPEDEF ID AS ns_ref MATCHING expression                         -> typedef_matching
+             | TYPEDEF ID AS ns_ref REGEX                                       -> typedef_regex
+             | TYPEDEF CID AS constructor                                        -> typedef_cls_err
+
+// ===== INDEX =====
+index: INDEX class_ref "(" id_list ")"
+
+id_list: ID ("," ID)*
+
+// ===== EXPRESSIONS (cascading precedence, lowest to highest) =====
+
+?expression: ternary_expr
+
+?ternary_expr: or_expr
+    | or_expr "?" expression ":" ternary_expr                                   -> ternary_expr
+
+?or_expr: and_expr
+    | or_expr OR and_expr                                                        -> or_expr
+
+?and_expr: not_expr
+    | and_expr AND not_expr                                                      -> and_expr
+
+?not_expr: is_defined_expr
+    | NOT not_expr                                                               -> not_expr
+
+?is_defined_expr: cmp_expr
+    | attr_ref IS DEFINED                                                        -> is_defined_attr
+    | ID IS DEFINED                                                              -> is_defined_id
+    | map_lookup IS DEFINED                                                      -> is_defined_map
+
+?cmp_expr: in_expr
+    | cmp_expr CMP_OP in_expr                                                    -> cmp_expr
+
+?in_expr: add_expr
+    | in_expr IN add_expr                                                        -> in_expr
+    | in_expr NOT IN add_expr                                                    -> not_in_expr
+
+?add_expr: mul_expr
+    | add_expr PLUS_OP mul_expr                                                  -> add_expr
+    | add_expr MINUS_OP mul_expr                                                 -> sub_expr
+
+?mul_expr: pow_expr
+    | mul_expr "*" pow_expr                                                      -> mul_expr
+    | mul_expr DIVISION_OP pow_expr                                              -> div_expr
+    | mul_expr "%" pow_expr                                                      -> mod_expr
+
+?pow_expr: unary_expr
+    | unary_expr DOUBLE_STAR pow_expr                                            -> pow_expr
+
+?unary_expr: primary
+    | MINUS_OP unary_expr                                                        -> unary_minus
+
+?primary: atom
+    | "(" expression ")"                                                         -> paren_expr
+
+?atom: constant
+     | var_ref
+     | function_call
+     | constructor
+     | list_def
+     | list_comprehension
+     | map_def
+     | map_lookup
+     | index_lookup
+
+// ===== MAP LOOKUP =====
+map_lookup: var_ref "[" operand "]"                                              -> map_lookup
+          | map_lookup "[" operand "]"                                           -> map_lookup
+
+// ===== CONSTRUCTORS AND FUNCTION CALLS =====
+constructor: class_ref "(" param_list ")"
+
+function_call: ns_ref "(" function_param_list ")"                               -> function_call
+             | attr_ref "(" function_param_list ")"                             -> function_call_err_dot
+
+// ===== INDEX LOOKUP =====
+index_lookup: class_ref "[" param_list "]"                                       -> index_lookup_class
+            | attr_ref "[" param_list "]"                                        -> index_lookup_attr
+
+// ===== LISTS =====
+list_def: "[" operand_list "]"
+
+list_comprehension: "[" expression for_clause+ guard_clause* "]"
+
+for_clause: FOR ID IN expression
+
+guard_clause: IF expression
+
+operand_list: operand ("," operand)*
+            |
+
+// ===== MAP DEF =====
+map_def: "{" pair_list "}"
+
+pair_list: pair_item ("," pair_item)* ","?
+         |
+
+pair_item: dict_key ":" operand
+
+dict_key: STRING                                                                 -> dict_key_string
+        | RSTRING                                                                -> dict_key_rstring
+
+// ===== PARAM LISTS =====
+param_list: param_list_element ("," param_list_element)*
+          |
+
+param_list_element: ID "=" operand                                               -> param_explicit
+                  | DOUBLE_STAR operand                                          -> param_wrapped_kwargs
+
+function_param_list: function_param_list_element ("," function_param_list_element)*
+                   |
+
+function_param_list_element: operand                                             -> func_arg
+                           | ID "=" operand                                      -> func_kwarg
+                           | DOUBLE_STAR operand                                 -> func_wrapped_kwargs
+
+// ===== VARIABLE AND ATTRIBUTE REFERENCES =====
+?var_ref: attr_ref
+        | ns_ref                                                                  -> var_ref_ns
+
+attr_ref: var_ref "." ID
+
+// ===== NAMESPACE AND CLASS REFERENCES =====
+ns_ref: ID                                                                       -> ns_ref_id
+      | ns_ref SEP ID                                                            -> ns_ref_sep
+
+class_ref: CID                                                                   -> class_ref_cid
+         | ns_ref SEP CID                                                        -> class_ref_ns
+         | var_ref "." CID                                                       -> class_ref_err_dot
+
+class_ref_list: class_ref ("," class_ref)*
+
+// ===== CONSTANTS =====
+constant: INT                                                                    -> const_int
+        | FLOAT                                                                  -> const_float
+        | NULL                                                                   -> const_null
+        | REGEX                                                                  -> const_regex
+        | TRUE                                                                   -> const_true
+        | FALSE                                                                  -> const_false
+        | STRING                                                                 -> const_string
+        | FSTRING                                                                -> const_fstring
+        | RSTRING                                                                -> const_rstring
+        | MLS                                                                    -> const_mls
+        | MINUS_OP INT                                                           -> const_neg_int
+        | MINUS_OP FLOAT                                                         -> const_neg_float
+
+constant_list: "[" constants "]"
+
+constants: constant ("," constant)*
+         |
+
+// ===== TERMINALS =====
+
+// Keywords (priority 2 beats ID regex priority -1 and CID regex priority 1)
+TYPEDEF.2: "typedef"
+AS.2: "as"
+ENTITY.2: "entity"
+EXTENDS.2: "extends"
+END.2: "end"
+IN.2: "in"
+IMPLEMENTATION.2: "implementation"
+FOR.2: "for"
+MATCHING.2: "matching"
+INDEX.2: "index"
+IMPLEMENT.2: "implement"
+USING.2: "using"
+WHEN.2: "when"
+AND.2: "and"
+OR.2: "or"
+NOT.2: "not"
+TRUE.2: "true"
+FALSE.2: "false"
+IMPORT.2: "import"
+IS.2: "is"
+DEFINED.2: "defined"
+DICT.2: "dict"
+NULL.2: "null"
+UNDEF.2: "undef"
+PARENTS.2: "parents"
+IF.2: "if"
+ELSE.2: "else"
+ELIF.2: "elif"
+
+// REGEX terminal: matches "matching <whitespace> /regex/"
+// Priority 3 ensures it beats MATCHING keyword (priority 2) via longer match
+REGEX.3: /matching[ \t\n]+\/([^\/\\\n]|\\.)+\//
+
+// Multi-character operators (defined before single-char to ensure correct matching)
+CMP_OP: "!=" | "==" | ">=" | "<=" | "<" | ">"
+PEQ: "+="
+REL: "--" | "->" | "<-"
+SEP: "::"
+DOUBLE_STAR: "**"
+
+// Single-character operators (named for position tracking in transformer)
+PLUS_OP: "+"
+MINUS_OP: "-"
+DIVISION_OP: "/"
+
+// Identifiers
+// CID: uppercase-starting identifiers (entity names, constructors)
+// Priority 1 to ensure CID is tried before ID for uppercase-start strings
+CID.1: /[A-Z][a-zA-Z_0-9-]*/
+// ID: lowercase/underscore-starting identifiers (variables, functions, modules)
+// Default priority -1 (regex), beaten by keywords (priority 2) and CID (priority 1)
+ID: /[a-z_][a-zA-Z_0-9-]*/
+
+// Literals
+// FLOAT before INT so "1.5" matches FLOAT not "1" INT
+FLOAT: /[0-9]+\.[0-9]+/
+INT: /[0-9]+/
+
+// Strings: various forms
+// MLS must come before STRING to match triple-quoted strings correctly
+MLS: /"{3,5}[\s\S]*?"{3,5}/
+STRING: /("([^\\"\n]|\\.)*"|'([^\\'\n]|\\.)*')/
+RSTRING: /(r"([^\\"\n]|\\.)*"|r'([^\\'\n]|\\.)*')/
+FSTRING: /(f"([^\\"\n]|\\.)*"|f'([^\\'\n]|\\.)*')/
+
+// Whitespace and comments (ignored)
+%ignore /[ \t\n\r]+/
+%ignore /#[^\n]*/
