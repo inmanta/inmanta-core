@@ -322,7 +322,10 @@ class InmantaTransformer(Transformer):
         return items[0]
 
     def stmt_list(self, items):
-        return list(items)
+        # PLY's right-recursive stmt_list rule builds statements in reverse order
+        # (appends current statement at the end, so first stmt ends up last).
+        # Mirror that behavior to preserve execution ordering semantics.
+        return list(reversed(items))
 
     def expr_stmt(self, items):
         return items[0]
