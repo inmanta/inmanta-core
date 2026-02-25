@@ -1380,6 +1380,10 @@ def base_parse(ns: Namespace, tfile: str, content: Optional[str]) -> list[Statem
 
 cache_manager = CacheManager()
 
+# Re-export the active Lark parser's cache_manager so that code importing
+# plyInmantaParser.cache_manager (e.g. tests) sees the correct statistics.
+from inmanta.parser.larkInmantaParser import cache_manager  # noqa: E402,F811
+
 
 def parse(namespace: Namespace, filename: str, content: Optional[str] = None) -> list[Statement]:
     statements = cache_manager.un_cache(namespace, filename)

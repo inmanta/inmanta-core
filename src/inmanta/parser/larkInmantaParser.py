@@ -1662,12 +1662,37 @@ def _convert_lark_error(e: UnexpectedInput, tfile: str) -> ParserException:
 
     if isinstance(e, UnexpectedToken):
         token = getattr(e, "token", None)
+        from inmanta.parser.plyInmantaLex import reserved
+
+        # Inspect the parser value_stack to produce better error messages,
+        # mirroring PLY's p_error heuristics.
+        vs = getattr(getattr(e, "state", None), "value_stack", None) or []
+
+        # Case 1: a reserved keyword is on top of the stack (e.g. "index = ...")
+        # mirrors PLY: if parser.symstack[-1].type in reserved.values(): ...
+        if vs:
+            top = vs[-1]
+            if isinstance(top, Token) and top.type in reserved.values():
+                kw_r = Range(tfile, top.line or line, top.column or col, top.line or line, (top.column or col) + len(str(top)))
+                return ParserException(kw_r, str(top), f"invalid identifier, {str(top)} is a reserved keyword")
+
+        # Case 2: lowercase class name used in 'extends' (e.g. "entity Test extends test:")
+        # mirrors PLY's p_class_ref_list_term_err grammar rule.
+        if token is not None and token.type == "COLON" and vs:
+            top = vs[-1]
+            has_extends = any(isinstance(item, Token) and item.type == "EXTENDS" for item in vs)
+            if has_extends and hasattr(top, "data") and top.data.startswith("ns_ref"):
+                # Extract the last ID token from the ns_ref tree
+                id_tokens = [t for t in top.children if isinstance(t, Token)]
+                if id_tokens:
+                    id_tok = id_tokens[-1]
+                    id_r = Range(tfile, id_tok.line or line, id_tok.column or col, id_tok.line or line, (id_tok.column or col) + len(str(id_tok)))
+                    return ParserException(id_r, str(id_tok), "Invalid identifier: Entity names must start with a capital")
+
         if token is not None:
             token_str = str(token)
-            # Check if it's a reserved keyword used as identifier
-            from inmanta.parser.plyInmantaLex import reserved
-
-            if token.type in reserved.values() or token.type in [k.upper() for k in reserved]:
+            # Failing token itself is a reserved keyword (rarely needed after above checks)
+            if token.type in reserved.values():
                 return ParserException(r, token_str, f"invalid identifier, {token_str} is a reserved keyword")
             return ParserException(r, token_str)
         return ParserException(r, None, "Unexpected token")
