@@ -1,0 +1,6 @@
+---
+description: "Display a total count of results in a given GraphQL query"
+issue-nr: 10054
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [master, iso9]
