@@ -23,10 +23,8 @@ import functools
 import os
 import re
 import string
-import typing
 import warnings
-from collections import abc
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from re import error as RegexError
 from typing import Optional, Union
 
@@ -58,7 +56,7 @@ from inmanta.ast.statements.define import (
 from inmanta.ast.statements.generator import ConditionalExpression, Constructor, For, If, ListComprehension, WrappedKwargs
 from inmanta.ast.variables import AttributeReference, Reference
 from inmanta.execute.util import NoneValue
-from inmanta.parser import InvalidNamespaceAccess, ParserException, ParserWarning, SyntaxDeprecationWarning
+from inmanta.parser import InvalidNamespaceAccess, ParserException, ParserWarning
 from inmanta.parser.cache import CacheManager
 from lark import Lark, Token, Transformer, UnexpectedCharacters, UnexpectedEOF, UnexpectedInput, v_args
 from lark.exceptions import UnexpectedToken, VisitError
@@ -893,7 +891,6 @@ class InmantaTransformer(Transformer):
         raw = str(token)
         # Find first slash
         idx = raw.index("/")
-        part_before = raw[:idx]
         regex_with_slashes = raw[idx:]
         regex_str = regex_with_slashes[1:-1]
         value = Reference("self")  # anonymous value
@@ -1345,7 +1342,6 @@ class InmantaTransformer(Transformer):
     def ns_ref_sep(self, items):
         # items: [ns_ref_result, SEP_token, ID_token]
         left = items[0]
-        sep_token = items[1]
         id_token = items[2]
         self._validate_id(id_token)
         id_ls = self._locatable(id_token)
@@ -1363,7 +1359,6 @@ class InmantaTransformer(Transformer):
     def class_ref_ns(self, items):
         # items: [ns_ref_result, SEP_token, CID_token]
         left = items[0]
-        sep_token = items[1]
         cid_token = items[2]
         cid_ls = self._locatable(cid_token)
         merged_value = f"{str(left)}::{str(cid_ls)}"
