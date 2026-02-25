@@ -45,6 +45,7 @@ from inmanta.data import APILIMIT, Compile, Report
 from inmanta.data.model import PipConfig
 from inmanta.env import PythonEnvironment, VirtualEnv
 from inmanta.export import cfg_env
+from inmanta.protocol.auth import auth
 from inmanta.protocol.common import Result
 from inmanta.server import SLICE_COMPILER, SLICE_SERVER, protocol
 from inmanta.server.bootloader import InmantaBootloader
@@ -559,7 +560,7 @@ ssl={str(not ssl_enabled_on_server).lower()}
 
 @pytest.mark.slowtest
 async def test_config_loading_errors_during_compile_are_saved(
-    tmpdir, request, environment_factory: EnvironmentFactory, server, client
+    tmpdir, request, environment_factory: EnvironmentFactory, server, client, monkeypatch
 ) -> None:
     """
     Test that config loading errors during a compile are saved, to the compile logs.
@@ -651,6 +652,20 @@ audience=https://localhost:8888/
     c = await data.Compile.get_report(compile.id)
     assert c["reports"][-1]["errstream"] == """Only one auth_jwt section may have sign set to true, found 2 instances instead:
 auth_jwt_test -> sign=False
+auth_jwt_test2 -> sign=False
+auth_jwt_test3 -> sign=True
+auth_jwt_test4 -> sign=True
+"""
+
+    monkeypatch.setenv(f"{auth.ENV_AUTH_JWT_PREFIX}TEST_SIGN", "true")
+    config.Config.load_config(config_file)
+    # compile with export
+    cr = CompileRun(compile, project_work_dir)
+    await cr.run()
+
+    c = await data.Compile.get_report(compile.id)
+    assert c["reports"][-1]["errstream"] == """Only one auth_jwt section may have sign set to true, found 3 instances instead:
+auth_jwt_test -> sign=True
 auth_jwt_test2 -> sign=False
 auth_jwt_test3 -> sign=True
 auth_jwt_test4 -> sign=True

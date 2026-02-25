@@ -160,6 +160,14 @@ async def server_with_test_slice(
     await rs.stop()
 
 
+async def test_no_dashes_in_env_variables():
+    """
+    Assert that ENV_AUTH_JWT_SETTINGS does not contain a setting with a dash in its name
+    """
+    for setting in auth.ENV_AUTH_JWT_SETTINGS:
+        assert "-" not in setting
+
+
 async def create_client_for_user(client, username: str, password: str) -> protocol.Client:
     """
     Create a client for the given user that uses a token containing the roles

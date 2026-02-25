@@ -18,6 +18,7 @@ Contact: code@inmanta.com
 
 import asyncio
 import json
+import logging
 import os
 import pathlib
 import time
@@ -32,6 +33,7 @@ import requests
 from inmanta import config, const
 from inmanta.protocol.auth import auth
 from inmanta.server.protocol import Server
+from utils import log_contains
 
 
 def test_jwt_create(inmanta_config):
@@ -119,6 +121,93 @@ validate_cert=false
 
     cfg_list = await asyncio.get_event_loop().run_in_executor(None, auth.AuthJWTConfig.list)
     assert len(cfg_list) == 2
+
+
+async def test_auth_jwt_environment_variables(jwks, tmp_path, monkeypatch, caplog):
+    """
+    Test that we can set auth jwt config via environment variables and that it behaves accordingly and is validated.
+    """
+    port = str(list(jwks._sockets.values())[0].getsockname()[1])
+    config_file = os.path.join(tmp_path, "auth.cfg")
+    with open(config_file, "w+", encoding="utf-8") as fd:
+        # Wrong/incomplete config
+        fd.write("""
+[auth_jwt_default]
+sign=false
+client_types=agent,compiler
+key=eciwliGyqECVmXtIkNpfVrtBLutZiITZKSKYhogeHMM
+expire=0
+issuer=https://localhost:8888/
+audience=https://localhost:8888/
+
+""")
+
+    config.Config.load_config(config_file)
+
+    # Add missing config via environment variable
+    monkeypatch.setenv(f"{auth.ENV_AUTH_JWT_PREFIX}DEFAULT_ALGORITHM", "HS256")
+    # Overwrite config via environment variable
+    monkeypatch.setenv(f"{auth.ENV_AUTH_JWT_PREFIX}DEFAULT_SIGN", "true")
+    # Add new config section with every possible config
+    new_config = "MY_CONFIG_"
+    monkeypatch.setenv(f"{auth.ENV_AUTH_JWT_PREFIX}{new_config}ALGORITHM", "RS256")
+    monkeypatch.setenv(f"{auth.ENV_AUTH_JWT_PREFIX}{new_config}SIGN", "false")
+    monkeypatch.setenv(f"{auth.ENV_AUTH_JWT_PREFIX}{new_config}CLIENT_TYPES", "api")
+    monkeypatch.setenv(f"{auth.ENV_AUTH_JWT_PREFIX}{new_config}ISSUER", f"https://localhost:{port}/auth/realms/inmanta")
+    monkeypatch.setenv(f"{auth.ENV_AUTH_JWT_PREFIX}{new_config}AUDIENCE", "sodev")
+    monkeypatch.setenv(
+        f"{auth.ENV_AUTH_JWT_PREFIX}{new_config}JWKS_URI",
+        f"http://localhost:{port}/auth/realms/inmanta/protocol/openid-connect/certs",
+    )
+    monkeypatch.setenv(f"{auth.ENV_AUTH_JWT_PREFIX}{new_config}VALIDATE_CERT", "false")
+    monkeypatch.setenv(f"{auth.ENV_AUTH_JWT_PREFIX}{new_config}EXPIRE", "20")
+    monkeypatch.setenv(f"{auth.ENV_AUTH_JWT_PREFIX}{new_config}JWT_USERNAME_CLAIM", "my-claim")
+    monkeypatch.setenv(f"{auth.ENV_AUTH_JWT_PREFIX}{new_config}JWKS_REQUEST_TIMEOUT", "40.5")
+    monkeypatch.setenv(f"{auth.ENV_AUTH_JWT_PREFIX}{new_config}KEY", "my-key")
+
+    cfg_list = await asyncio.get_event_loop().run_in_executor(None, auth.AuthJWTConfig.list)
+    assert len(cfg_list) == 2
+    cfg = auth.AuthJWTConfig.get("default")
+    assert cfg.algo == "HS256"
+    assert cfg.sign is True
+
+    cfg = auth.AuthJWTConfig.get("my_config")
+    assert cfg.algo == "RS256"
+    assert cfg.audience == "sodev"
+    assert cfg.client_types == ["api"]
+    assert cfg.expire == 20
+    assert cfg.issuer == "https://localhost:{0}/auth/realms/inmanta".format(port)
+    assert cfg.jwks_uri == "http://localhost:{0}/auth/realms/inmanta/protocol/openid-connect/certs".format(port)
+    assert cfg.jwt_username_claim == "my-claim"
+    assert cfg.sign is False
+    assert cfg.validate_cert is False
+    assert cfg._config.getfloat("jwks_request_timeout") == 40.5
+    assert cfg._config["key"] == "my-key"
+
+    # Test what happens when you submit a wrong option
+    config.Config.load_config(config_file)
+    wrong_env_var = f"{auth.ENV_AUTH_JWT_PREFIX}{new_config}WRONG_OPTION"
+    monkeypatch.setenv(wrong_env_var, "true")
+
+    with caplog.at_level(logging.WARNING):
+        await asyncio.get_event_loop().run_in_executor(None, auth.AuthJWTConfig.list)
+        log_contains(
+            caplog,
+            "inmanta.protocol.auth.auth",
+            logging.WARNING,
+            f"Found the following environment variable {wrong_env_var} with the {auth.ENV_AUTH_JWT_PREFIX} prefix",
+        )
+
+    monkeypatch.delenv(f"{auth.ENV_AUTH_JWT_PREFIX}{new_config}WRONG_OPTION")
+
+    config.Config.load_config(config_file)
+    monkeypatch.setenv(f"{auth.ENV_AUTH_JWT_PREFIX}OTHER_CONFIG_ALGORITHM", "HS256")
+
+    with pytest.raises(
+        ValueError,
+        match="client_types is a required option for auth_jwt_other_config",
+    ):
+        await asyncio.get_event_loop().run_in_executor(None, auth.AuthJWTConfig.list)
 
 
 class SlowHandler(web.RequestHandler):
