@@ -1689,7 +1689,13 @@ def _convert_lark_error(e: UnexpectedInput, tfile: str) -> ParserException:
                 id_tokens = [t for t in top.children if isinstance(t, Token)]
                 if id_tokens:
                     id_tok = id_tokens[-1]
-                    id_r = Range(tfile, id_tok.line or line, id_tok.column or col, id_tok.line or line, (id_tok.column or col) + len(str(id_tok)))
+                    id_r = Range(
+                        tfile,
+                        id_tok.line or line,
+                        id_tok.column or col,
+                        id_tok.line or line,
+                        (id_tok.column or col) + len(str(id_tok)),
+                    )
                     return ParserException(id_r, str(id_tok), "Invalid identifier: Entity names must start with a capital")
 
         if token is not None:
