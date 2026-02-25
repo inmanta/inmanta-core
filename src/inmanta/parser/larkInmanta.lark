@@ -215,7 +215,7 @@ for_clause: FOR ID IN expression
 
 guard_clause: IF expression
 
-operand_list: operand ("," operand)*
+operand_list: operand ("," operand)* ","?
             |
 
 // ===== MAP DEF =====
@@ -230,13 +230,13 @@ dict_key: STRING                                                                
         | RSTRING                                                                -> dict_key_rstring
 
 // ===== PARAM LISTS =====
-param_list: param_list_element ("," param_list_element)*
+param_list: param_list_element ("," param_list_element)* ","?
           |
 
 param_list_element: ID "=" operand                                               -> param_explicit
                   | DOUBLE_STAR operand                                          -> param_wrapped_kwargs
 
-function_param_list: function_param_list_element ("," function_param_list_element)*
+function_param_list: function_param_list_element ("," function_param_list_element)* ","?
                    |
 
 function_param_list_element: operand                                             -> func_arg
@@ -256,6 +256,7 @@ ns_ref: ID                                                                      
 class_ref: CID                                                                   -> class_ref_cid
          | ns_ref SEP CID                                                        -> class_ref_ns
          | var_ref "." CID                                                       -> class_ref_err_dot
+         | ns_ref                                                                -> class_ref_id_err
 
 class_ref_list: class_ref ("," class_ref)*
 

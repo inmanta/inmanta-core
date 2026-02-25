@@ -1408,6 +1408,11 @@ class InmantaTransformer(Transformer):
         )
         raise InvalidNamespaceAccess(full_string)
 
+    def class_ref_id_err(self, items):
+        # items: [ns_ref_result]  — lowercase identifier used where class ref expected
+        ns = items[0]
+        raise ParserException(ns.location, str(ns), "Invalid identifier: Entity names must start with a capital")
+
     def class_ref_list(self, items):
         return list(items)
 
@@ -1470,7 +1475,7 @@ class InmantaTransformer(Transformer):
         decoded = _safe_decode(content, "Invalid escape sequence in string.", loc)
         ls = LocatableString(decoded, self._range(token), getattr(token, "pos_in_stream", 0) or 0, self.namespace)
         result = _get_string_ast_node(ls, False)
-        result.location = ls.location
+        result.location = self._loc(token)
         result.namespace = self.namespace
         return result
 
@@ -1485,7 +1490,7 @@ class InmantaTransformer(Transformer):
         decoded = _safe_decode(content, "Invalid escape sequence in f-string.", loc)
         ls = LocatableString(decoded, self._range(token), getattr(token, "pos_in_stream", 0) or 0, self.namespace)
         result = _process_fstring(ls)
-        result.location = ls.location
+        result.location = self._loc(token)
         result.namespace = self.namespace
         return result
 
@@ -1506,7 +1511,7 @@ class InmantaTransformer(Transformer):
         token = items[0]
         ls = self._process_mls(token)
         result = _get_string_ast_node(ls, True)
-        result.location = ls.location
+        result.location = self._loc(token)
         result.namespace = self.namespace
         return result
 
