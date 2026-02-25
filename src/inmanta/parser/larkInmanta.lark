@@ -104,8 +104,13 @@ implement_ns_item: ns_ref                                                       
                  | PARENTS                                                       -> impl_parents
 
 // ===== IMPLEMENTATION DEFINITION =====
-implementation_def: IMPLEMENTATION ID FOR class_ref ":" stmt_list END           -> implementation_def_no_doc
-                  | IMPLEMENTATION ID FOR class_ref ":" MLS stmt_list END       -> implementation_def_doc
+// Use an intermediate impl_header rule to eagerly consume the optional doc comment.
+// This resolves the LALR conflict between constant:MLS and stmt_list: (empty) on END.
+// LALR prefers SHIFT over REDUCE, so when MLS follows ":", it is shifted into impl_header_doc.
+impl_header:                                                                     -> impl_header_plain
+           | MLS                                                                 -> impl_header_doc
+
+implementation_def: IMPLEMENTATION ID FOR class_ref ":" impl_header stmt_list END -> implementation_def
 
 // ===== RELATION =====
 relation: relation_def MLS                                                       -> relation_comment
@@ -173,11 +178,11 @@ id_list: ID ("," ID)*
     | mul_expr DIVISION_OP pow_expr                                              -> div_expr
     | mul_expr "%" pow_expr                                                      -> mod_expr
 
-?pow_expr: unary_expr
-    | unary_expr DOUBLE_STAR pow_expr                                            -> pow_expr
+?pow_expr: primary
+    | primary DOUBLE_STAR pow_expr                                               -> pow_expr
 
-?unary_expr: primary
-    | MINUS_OP unary_expr                                                        -> unary_minus
+// Note: no unary_minus here - negative literals are handled by const_neg_int/const_neg_float in constant.
+// This mirrors the PLY grammar which also does not have a unary_minus expression rule.
 
 ?primary: atom
     | "(" expression ")"                                                         -> paren_expr
@@ -253,14 +258,19 @@ attr_ref: var_ref "." ID
 ns_ref: ID                                                                       -> ns_ref_id
       | ns_ref SEP ID                                                            -> ns_ref_sep
 
+// Note: no "ns_ref -> class_ref_id_err" alternative here.
+// Adding ns_ref directly as class_ref creates a reduce/reduce conflict between
+// class_ref:ns_ref and var_ref:ns_ref. Error reporting for lowercase class names
+// is done via the generic parse error path in _convert_lark_error.
 class_ref: CID                                                                   -> class_ref_cid
          | ns_ref SEP CID                                                        -> class_ref_ns
          | var_ref "." CID                                                       -> class_ref_err_dot
-         | ns_ref                                                                -> class_ref_id_err
 
 class_ref_list: class_ref ("," class_ref)*
 
 // ===== CONSTANTS =====
+// Note: MINUS_OP INT and MINUS_OP FLOAT are included here (not as unary_minus)
+// to exactly match the PLY grammar, which also does not have a unary_minus expression rule.
 constant: INT                                                                    -> const_int
         | FLOAT                                                                  -> const_float
         | NULL                                                                   -> const_null
@@ -341,11 +351,12 @@ FLOAT: /[0-9]+\.[0-9]+/
 INT: /[0-9]+/
 
 // Strings: various forms
-// MLS must come before STRING to match triple-quoted strings correctly
-MLS: /"{3,5}[\s\S]*?"{3,5}/
+// MLS priority 1 ensures it is tried before STRING (priority -1) so that """..."""
+// is matched as a triple-quoted string rather than an empty "" followed by another ".
+MLS.1: /"{3,5}[\s\S]*?"{3,5}/
 STRING: /("([^\\"\n]|\\.)*"|'([^\\'\n]|\\.)*')/
-RSTRING: /(r"([^\\"\n]|\\.)*"|r'([^\\'\n]|\\.)*')/
-FSTRING: /(f"([^\\"\n]|\\.)*"|f'([^\\'\n]|\\.)*')/
+RSTRING.1: /(r"([^\\"\n]|\\.)*"|r'([^\\'\n]|\\.)*')/
+FSTRING.1: /(f"([^\\"\n]|\\.)*"|f'([^\\'\n]|\\.)*')/
 
 // Whitespace and comments (ignored)
 %ignore /[ \t\n\r]+/

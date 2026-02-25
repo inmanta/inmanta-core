@@ -71,23 +71,12 @@ _GRAMMAR_FILE = os.path.join(os.path.dirname(__file__), "larkInmanta.lark")
 with open(_GRAMMAR_FILE, encoding="utf-8") as _f:
     _GRAMMAR = _f.read()
 
-# Build the Lark parser (LALR with earley fallback)
-# We try LALR first for performance; if it has conflicts we fall back to earley.
-try:
-    _lark_parser = Lark(
-        _GRAMMAR,
-        parser="lalr",
-        propagate_positions=True,
-        maybe_placeholders=False,
-    )
-except Exception:
-    _lark_parser = Lark(
-        _GRAMMAR,
-        parser="earley",
-        ambiguity="resolve",
-        propagate_positions=True,
-        maybe_placeholders=False,
-    )
+_lark_parser = Lark(
+    _GRAMMAR,
+    parser="lalr",
+    propagate_positions=True,
+    maybe_placeholders=False,
+)
 
 
 # ---- Format-string regex (same as PLY parser) ----
@@ -707,30 +696,25 @@ class InmantaTransformer(Transformer):
 
     # ---- Implementation definition ----
 
-    @v_args(meta=True)
-    def implementation_def_no_doc(self, meta, items):
-        # items: [IMPLEMENTATION_token, ID_token, FOR_token, class_ref, stmt_list, END_token]
-        impl_token = items[0]
-        id_token = items[1]
-        self._validate_id(id_token)
-        class_ref = items[3]
-        stmts = items[4]
-        id_ls = self._locatable(id_token)
-        result = DefineImplementation(self.namespace, id_ls, class_ref, BasicBlock(self.namespace, stmts), None)
-        self._attach(result, self._loc(impl_token), getattr(impl_token, "pos_in_stream", 0) or 0)
-        return result
+    def impl_header_plain(self, items):
+        # No MLS doc comment: return None
+        return None
+
+    def impl_header_doc(self, items):
+        # items: [MLS_token]
+        return self._process_mls(items[0])
 
     @v_args(meta=True)
-    def implementation_def_doc(self, meta, items):
-        # items: [IMPLEMENTATION_token, ID_token, FOR_token, class_ref, MLS_token, stmt_list, END_token]
+    def implementation_def(self, meta, items):
+        # Grammar: IMPLEMENTATION ID FOR class_ref ":" impl_header stmt_list END
+        # items: [IMPLEMENTATION_token, ID_token, FOR_token, class_ref, impl_header_result, stmt_list_result, END_token]
         impl_token = items[0]
         id_token = items[1]
         self._validate_id(id_token)
         class_ref = items[3]
-        mls_token = items[4]
+        docstr = items[4]   # None or LocatableString from impl_header
         stmts = items[5]
         id_ls = self._locatable(id_token)
-        docstr = self._process_mls(mls_token)
         result = DefineImplementation(self.namespace, id_ls, class_ref, BasicBlock(self.namespace, stmts), docstr)
         self._attach(result, self._loc(impl_token), getattr(impl_token, "pos_in_stream", 0) or 0)
         return result
@@ -1067,28 +1051,6 @@ class InmantaTransformer(Transformer):
     def pow_expr(self, meta, items):
         return self._binary_op(items, "**")
 
-    @v_args(meta=True)
-    def unary_minus(self, meta, items):
-        # items: [MINUS_OP_token, expr]
-        minus_token, expr = items
-        operator = Operator.get_operator_class("-")
-        if operator is None:
-            raise ParserException(self._range(minus_token), "-", "Invalid operator -")
-        # Unary minus: negate the expression
-        # We create a subtraction from 0? No, PLY uses MINUS_OP as a unary. Let's check...
-        # Actually in PLY, unary minus isn't a production - it's handled by the lexer
-        # (negative INT/FLOAT). For Lark, we create a unary minus. But the AST doesn't
-        # have a unary minus node directly. We use Negate which may or may not exist.
-        # Looking at Operator classes: use the minus operator on (Literal(0), expr)?
-        # Actually, let me check what operators exist...
-        # The simplest: wrap as 0 - expr using the minus operator
-        zero = Literal(0)
-        zero.location = self._loc(minus_token)
-        zero.namespace = self.namespace
-        result = operator(zero, expr)
-        self._attach(result, self._loc(minus_token), getattr(minus_token, "pos_in_stream", 0) or 0)
-        return result
-
     def paren_expr(self, items):
         # items: [expression_result]  ("(" and ")" are anonymous => filtered)
         return items[0]
@@ -1408,11 +1370,6 @@ class InmantaTransformer(Transformer):
         )
         raise InvalidNamespaceAccess(full_string)
 
-    def class_ref_id_err(self, items):
-        # items: [ns_ref_result]  — lowercase identifier used where class ref expected
-        ns = items[0]
-        raise ParserException(ns.location, str(ns), "Invalid identifier: Entity names must start with a capital")
-
     def class_ref_list(self, items):
         return list(items)
 
@@ -1490,7 +1447,7 @@ class InmantaTransformer(Transformer):
         decoded = _safe_decode(content, "Invalid escape sequence in f-string.", loc)
         ls = LocatableString(decoded, self._range(token), getattr(token, "pos_in_stream", 0) or 0, self.namespace)
         result = _process_fstring(ls)
-        result.location = self._loc(token)
+        result.location = self._range(token)  # mirrors PLY's attach_from_string (copies Range with column info)
         result.namespace = self.namespace
         return result
 
@@ -1511,7 +1468,7 @@ class InmantaTransformer(Transformer):
         token = items[0]
         ls = self._process_mls(token)
         result = _get_string_ast_node(ls, True)
-        result.location = self._loc(token)
+        result.location = self._range(token)  # mirrors PLY's attach_from_string (copies Range with column info)
         result.namespace = self.namespace
         return result
 
@@ -1731,11 +1688,8 @@ def base_parse(ns: Namespace, tfile: str, content: Optional[str]) -> list[Statem
         raise
     except VisitError as e:
         # Lark wraps exceptions from transformer methods in VisitError.
-        # Unwrap to propagate the original exception.
-        if isinstance(e.orig_exc, ParserException):
-            raise e.orig_exc from e
-        r = Range(tfile, 1, 1, 1, 1)
-        raise ParserException(r, str(e.orig_exc), f"Transform error: {e.orig_exc}") from e
+        # Always unwrap to propagate the original exception unchanged.
+        raise e.orig_exc from e
     except Exception as e:
         r = Range(tfile, 1, 1, 1, 1)
         raise ParserException(r, str(e), f"Transform error: {e}") from e
