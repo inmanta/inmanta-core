@@ -26,12 +26,12 @@ import string
 import warnings
 from dataclasses import dataclass
 from re import error as RegexError
-from typing import NoReturn, Optional, Union, cast, Any
+from typing import Callable, NoReturn, Optional, Union, cast
 
 from inmanta.ast import LocatableString, Location, Namespace, Range, RuntimeException
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.constraint.expression import And, In, IsDefined, Not, NotEqual, Operator
-from inmanta.ast.statements import ExpressionStatement, Literal, Statement
+from inmanta.ast.statements import DynamicStatement, ExpressionStatement, Literal, ReferenceStatement, Statement
 from inmanta.ast.statements.assign import (
     CreateDict,
     CreateList,
@@ -273,44 +273,45 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
 
     # ---- Top-level ----
 
-    def start(self, items: list[Any]) -> list[Statement]:
+    def start(self, items: list[object]) -> list[Statement]:
         # items: [head_result, body_result]
         # head is None or a LocatableString (MLS docstring)
         # body is a list of statements
-        head, body = items
+        head = cast(Optional[LocatableString], items[0])
+        body = cast(list[object], items[1])
         if head is not None:
             body.insert(0, head)
-        return body  # type: ignore[no-any-return]
+        return cast(list[Statement], body)
 
-    def head(self, items: list[Any]) -> Any:
+    def head(self, items: list[object]) -> Optional[LocatableString]:
         # items: [] or [MLS_token]
         if not items:
             return None
-        return self._locatable(items[0])
+        return self._locatable(cast(Token, items[0]))
 
-    def body(self, items: list[Any]) -> Any:
-        return list(items)
+    def body(self, items: list[object]) -> list[Statement]:
+        return cast(list[Statement], list(items))
 
-    def top_stmt(self, items: list[Any]) -> Any:
-        return items[0]
+    def top_stmt(self, items: list[object]) -> Statement:
+        return cast(Statement, items[0])
 
     # ---- Imports ----
 
     @v_args(meta=True)
-    def import_ns(self, meta: Meta, items: list[Any]) -> Any:
+    def import_ns(self, meta: Meta, items: list[object]) -> DefineImport:
         # items: [IMPORT_token, ns_ref_result]
-        import_token = items[0]
-        ns_ref: LocatableString = items[1]
+        import_token = cast(Token, items[0])
+        ns_ref = cast(LocatableString, items[1])
         result = DefineImport(ns_ref, ns_ref)
         self._attach(result, self._loc(import_token), getattr(import_token, "pos_in_stream", 0) or 0)
         return result
 
     @v_args(meta=True)
-    def import_as(self, meta: Meta, items: list[Any]) -> Any:
+    def import_as(self, meta: Meta, items: list[object]) -> DefineImport:
         # items: [IMPORT_token, ns_ref_result, AS_token, ID_token]
-        import_token = items[0]
-        ns_ref: LocatableString = items[1]
-        id_token = items[3]
+        import_token = cast(Token, items[0])
+        ns_ref = cast(LocatableString, items[1])
+        id_token = cast(Token, items[3])
         self._validate_id(id_token)
         id_ls = self._locatable(id_token)
         result = DefineImport(ns_ref, id_ls)
@@ -319,157 +320,157 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
 
     # ---- Statements ----
 
-    def statement(self, items: list[Any]) -> Any:
-        return items[0]
+    def statement(self, items: list[object]) -> Statement:
+        return cast(Statement, items[0])
 
-    def stmt_list(self, items: list[Any]) -> Any:
+    def stmt_list(self, items: list[object]) -> list[Statement]:
         # PLY's right-recursive stmt_list rule builds statements in reverse order
         # (appends current statement at the end, so first stmt ends up last).
         # Mirror that behavior to preserve execution ordering semantics.
-        return list(reversed(items))
+        return cast(list[Statement], list(reversed(items)))
 
-    def expr_stmt(self, items: list[Any]) -> Any:
-        return items[0]
+    def expr_stmt(self, items: list[object]) -> ExpressionStatement:
+        return cast(ExpressionStatement, items[0])
 
     @v_args(meta=True)
-    def assign_eq(self, meta: Meta, items: list[Any]) -> Any:
+    def assign_eq(self, meta: Meta, items: list[object]) -> Statement:
         # items: [var_ref_result, EQ_token_or_nothing, operand_result]
         # "=" is anonymous => filtered; items = [var_ref, operand]
-        var_ref = items[0]
-        operand = items[1]
+        var_ref = cast(Reference, items[0])
+        operand = cast(ExpressionStatement, items[1])
         result = var_ref.as_assign(operand)
         result.location = self._meta_loc(meta)
         result.namespace = self.namespace
         return result
 
     @v_args(meta=True)
-    def assign_plus_eq(self, meta: Meta, items: list[Any]) -> Any:
+    def assign_plus_eq(self, meta: Meta, items: list[object]) -> Statement:
         # items: [var_ref_result, PEQ_token, operand_result]
-        var_ref = items[0]
-        peq_token = items[1]
-        operand = items[2]
+        var_ref = cast(Reference, items[0])
+        peq_token = cast(Token, items[1])
+        operand = cast(ExpressionStatement, items[2])
         result = var_ref.as_assign(operand, list_only=True)
         self._attach(result, self._loc(peq_token), getattr(peq_token, "pos_in_stream", 0) or 0)
-        return result
+        return cast(Statement, result)
 
     @v_args(meta=True)
-    def for_stmt(self, meta: Meta, items: list[Any]) -> Any:
+    def for_stmt(self, meta: Meta, items: list[object]) -> For:
         # items: [FOR_token, ID_token, IN_token, operand_result, block_result]
-        for_token = items[0]
-        id_token = items[1]
+        for_token = cast(Token, items[0])
+        id_token = cast(Token, items[1])
         # IN_token = items[2]
         self._validate_id(id_token)
-        operand = items[3]
-        block = items[4]
+        operand = cast(ExpressionStatement, items[3])
+        block = cast(list[DynamicStatement], items[4])
         id_ls = self._locatable(id_token)
         result = For(operand, id_ls, BasicBlock(self.namespace, block))
         self._attach(result, self._loc(for_token), getattr(for_token, "pos_in_stream", 0) or 0)
         return result
 
-    def block(self, items: list[Any]) -> Any:
+    def block(self, items: list[object]) -> list[Statement]:
         # items: [stmt_list, END_token]
-        return items[0]
+        return cast(list[Statement], items[0])
 
     @v_args(meta=True)
-    def if_stmt(self, meta: Meta, items: list[Any]) -> Any:
+    def if_stmt(self, meta: Meta, items: list[object]) -> If:
         # items: [IF_token, if_body_result, END_token]
-        if_token = items[0]
-        if_body = items[1]
+        if_token = cast(Token, items[0])
+        if_body = cast(If, items[1])
         if_body.location = self._loc(if_token)
         if_body.namespace = self.namespace
         return if_body
 
     @v_args(meta=True)
-    def if_body(self, meta: Meta, items: list[Any]) -> If:
+    def if_body(self, meta: Meta, items: list[object]) -> If:
         # items: [expression_result, stmt_list_result, if_next_result]
         # ":" is anonymous => filtered
-        condition = items[0]
-        stmts = items[1]
-        next_block = items[2]
+        condition = cast(ExpressionStatement, items[0])
+        stmts = cast(list[DynamicStatement], items[1])
+        next_block = cast(BasicBlock, items[2])
         result = If(condition, BasicBlock(self.namespace, stmts), next_block)
         result.location = self._meta_loc(meta)
         result.namespace = self.namespace
         return result
 
-    def if_next_empty(self, items: list[Any]) -> BasicBlock:
+    def if_next_empty(self, items: list[object]) -> BasicBlock:
         return BasicBlock(self.namespace, [])
 
-    def if_next_else(self, items: list[Any]) -> BasicBlock:
+    def if_next_else(self, items: list[object]) -> BasicBlock:
         # items: [ELSE_token, stmt_list_result]
-        stmts = items[1]
+        stmts = cast(list[DynamicStatement], items[1])
         return BasicBlock(self.namespace, stmts)
 
     @v_args(meta=True)
-    def if_next_elif(self, meta: Meta, items: list[Any]) -> BasicBlock:
+    def if_next_elif(self, meta: Meta, items: list[object]) -> BasicBlock:
         # items: [ELIF_token, if_body_result]
-        if_body = items[1]
+        if_body = cast(If, items[1])
         result = BasicBlock(self.namespace, [if_body])
         result.namespace = self.namespace
         return result
 
-    def operand(self, items: list[Any]) -> Any:
-        return items[0]
+    def operand(self, items: list[object]) -> ExpressionStatement:
+        return cast(ExpressionStatement, items[0])
 
     # ---- Entity definitions ----
 
     @v_args(meta=True)
-    def entity_def(self, meta: Meta, items: list[Any]) -> DefineEntity:
+    def entity_def(self, meta: Meta, items: list[object]) -> DefineEntity:
         # items: [ENTITY_token, CID_token, entity_body_outer_result]
-        entity_token = items[0]
-        cid_token = items[1]
-        docstr, attrs = items[2]
+        entity_token = cast(Token, items[0])
+        cid_token = cast(Token, items[1])
+        docstr, attrs = cast(tuple[Optional[LocatableString], list[DefineAttribute]], items[2])
         cid_ls = self._locatable(cid_token)
         result = DefineEntity(self.namespace, cid_ls, docstr, [], attrs)
         self._attach(result, self._loc(entity_token), getattr(entity_token, "pos_in_stream", 0) or 0)
         return result
 
     @v_args(meta=True)
-    def entity_def_extends(self, meta: Meta, items: list[Any]) -> DefineEntity:
+    def entity_def_extends(self, meta: Meta, items: list[object]) -> DefineEntity:
         # items: [ENTITY_token, CID_token, EXTENDS_token, class_ref_list, entity_body_outer]
-        entity_token = items[0]
-        cid_token = items[1]
+        entity_token = cast(Token, items[0])
+        cid_token = cast(Token, items[1])
         # EXTENDS_token = items[2]
-        class_ref_list = items[3]
-        docstr, attrs = items[4]
+        class_ref_list = cast(list[LocatableString], items[3])
+        docstr, attrs = cast(tuple[Optional[LocatableString], list[DefineAttribute]], items[4])
         cid_ls = self._locatable(cid_token)
         result = DefineEntity(self.namespace, cid_ls, docstr, class_ref_list, attrs)
         self._attach(result, self._loc(entity_token), getattr(entity_token, "pos_in_stream", 0) or 0)
         return result
 
-    def entity_def_err(self, items: list[Any]) -> None:
+    def entity_def_err(self, items: list[object]) -> NoReturn:
         # items: [ENTITY_token, ID_token, ...]
-        id_token = items[1]
+        id_token = cast(Token, items[1])
         id_ls = self._locatable(id_token)
         raise ParserException(id_ls.location, str(id_ls), "Invalid identifier: Entity names must start with a capital")
 
-    def entity_def_extends_err(self, items: list[Any]) -> None:
-        id_token = items[1]
+    def entity_def_extends_err(self, items: list[object]) -> NoReturn:
+        id_token = cast(Token, items[1])
         id_ls = self._locatable(id_token)
         raise ParserException(id_ls.location, str(id_ls), "Invalid identifier: Entity names must start with a capital")
 
-    def entity_body_outer_mls(self, items: list[Any]) -> Any:
+    def entity_body_outer_mls(self, items: list[object]) -> tuple[Optional[LocatableString], list[DefineAttribute]]:
         # items: [MLS_token, entity_body_result, END_token]
-        mls_token = items[0]
-        attrs = items[1]
+        mls_token = cast(Token, items[0])
+        attrs = cast(list[DefineAttribute], items[1])
         docstr = self._process_mls(mls_token)
         return (docstr, attrs)
 
-    def entity_body_outer_plain(self, items: list[Any]) -> Any:
+    def entity_body_outer_plain(self, items: list[object]) -> tuple[None, list[DefineAttribute]]:
         # items: [entity_body_result, END_token]
-        attrs = items[0]
+        attrs = cast(list[DefineAttribute], items[0])
         return (None, attrs)
 
-    def entity_body_outer_mls_only(self, items: list[Any]) -> Any:
+    def entity_body_outer_mls_only(self, items: list[object]) -> tuple[Optional[LocatableString], list[DefineAttribute]]:
         # items: [MLS_token, END_token]
-        mls_token = items[0]
+        mls_token = cast(Token, items[0])
         docstr = self._process_mls(mls_token)
         return (docstr, [])
 
-    def entity_body_outer_empty(self, items: list[Any]) -> Any:
+    def entity_body_outer_empty(self, items: list[object]) -> tuple[None, list[DefineAttribute]]:
         return (None, [])
 
-    def entity_body(self, items: list[Any]) -> Any:
-        return list(items)
+    def entity_body(self, items: list[object]) -> list[DefineAttribute]:
+        return cast(list[DefineAttribute], list(items))
 
     def _process_mls(self, token: Token) -> LocatableString:
         """Process a MLS token into a LocatableString with decoded content."""
@@ -495,76 +496,76 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
 
     # ---- Attributes ----
 
-    def attr_base_type(self, items: list[Any]) -> TypeDeclaration:
+    def attr_base_type(self, items: list[object]) -> TypeDeclaration:
         # items: [ns_ref_result]
-        ns = items[0]
+        ns = cast(LocatableString, items[0])
         result = TypeDeclaration(ns)
         self._attach_from_string(result, ns)
         return result
 
-    def attr_type_multi(self, items: list[Any]) -> Any:
+    def attr_type_multi(self, items: list[object]) -> TypeDeclaration:
         # items: [attr_base_type_result]
-        td = items[0]
+        td = cast(TypeDeclaration, items[0])
         td.multi = True
         return td
 
-    def attr_type_opt_multi(self, items: list[Any]) -> Any:
+    def attr_type_opt_multi(self, items: list[object]) -> TypeDeclaration:
         # items: [attr_type_multi_result]
-        td = items[0]
+        td = cast(TypeDeclaration, items[0])
         td.nullable = True
         return td
 
-    def attr_type_opt_base(self, items: list[Any]) -> Any:
+    def attr_type_opt_base(self, items: list[object]) -> TypeDeclaration:
         # items: [attr_base_type_result]
-        td = items[0]
+        td = cast(TypeDeclaration, items[0])
         td.nullable = True
         return td
 
-    def attr_simple(self, items: list[Any]) -> DefineAttribute:
+    def attr_simple(self, items: list[object]) -> DefineAttribute:
         # items: [attr_type_result, ID_token]
-        attr_type = items[0]
-        id_token = items[1]
+        attr_type = cast(TypeDeclaration, items[0])
+        id_token = cast(Token, items[1])
         self._validate_id(id_token)
         id_ls = self._locatable(id_token)
         result = DefineAttribute(attr_type, id_ls, None)
         self._attach_from_string(result, id_ls)
         return result
 
-    def attr_cte(self, items: list[Any]) -> DefineAttribute:
+    def attr_cte(self, items: list[object]) -> DefineAttribute:
         # items: [attr_type_result, ID_token, constant_result]
-        attr_type = items[0]
-        id_token = items[1]
+        attr_type = cast(TypeDeclaration, items[0])
+        id_token = cast(Token, items[1])
         self._validate_id(id_token)
-        constant = items[2]
+        constant = cast(ExpressionStatement, items[2])
         id_ls = self._locatable(id_token)
         result = DefineAttribute(attr_type, id_ls, constant)
         self._attach_from_string(result, id_ls)
         return result
 
-    def attr_cte_list(self, items: list[Any]) -> DefineAttribute:
+    def attr_cte_list(self, items: list[object]) -> DefineAttribute:
         # items: [attr_type_result, ID_token, constant_list_result]
-        attr_type = items[0]
-        id_token = items[1]
+        attr_type = cast(TypeDeclaration, items[0])
+        id_token = cast(Token, items[1])
         self._validate_id(id_token)
-        clist = items[2]
+        clist = cast(ExpressionStatement, items[2])
         id_ls = self._locatable(id_token)
         result = DefineAttribute(attr_type, id_ls, clist)
         self._attach_from_string(result, id_ls)
         return result
 
-    def attr_undef(self, items: list[Any]) -> DefineAttribute:
+    def attr_undef(self, items: list[object]) -> DefineAttribute:
         # items: [attr_type_result, ID_token, UNDEF_token]
-        attr_type = items[0]
-        id_token = items[1]
+        attr_type = cast(TypeDeclaration, items[0])
+        id_token = cast(Token, items[1])
         self._validate_id(id_token)
         id_ls = self._locatable(id_token)
         result = DefineAttribute(attr_type, id_ls, None, remove_default=True)
         self._attach_from_string(result, id_ls)
         return result
 
-    def attr_err(self, items: list[Any]) -> Any:
+    def attr_err(self, items: list[object]) -> NoReturn:
         # items: [attr_type_result, CID_token, ...]
-        cid_token = items[1]
+        cid_token = cast(Token, items[1])
         cid_ls = self._locatable(cid_token)
         raise ParserException(
             cid_ls.location, str(cid_ls), "Invalid identifier: attribute names must start with a lower case character"
@@ -575,70 +576,70 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         dict_ls = self._locatable(dict_token)
         return TypeDeclaration(dict_ls, nullable=nullable)
 
-    def attr_dict(self, items: list[Any]) -> DefineAttribute:
+    def attr_dict(self, items: list[object]) -> DefineAttribute:
         # items: [DICT_token, ID_token]
-        dict_token = items[0]
-        id_token = items[1]
+        dict_token = cast(Token, items[0])
+        id_token = cast(Token, items[1])
         self._validate_id(id_token)
         id_ls = self._locatable(id_token)
         result = DefineAttribute(self._make_dict_type(dict_token), id_ls, None)
         self._attach_from_string(result, id_ls)
         return result
 
-    def attr_list_dict(self, items: list[Any]) -> DefineAttribute:
+    def attr_list_dict(self, items: list[object]) -> DefineAttribute:
         # items: [DICT_token, ID_token, map_def_result]
-        dict_token = items[0]
-        id_token = items[1]
+        dict_token = cast(Token, items[0])
+        id_token = cast(Token, items[1])
         self._validate_id(id_token)
-        map_def = items[2]
+        map_def = cast(ExpressionStatement, items[2])
         id_ls = self._locatable(id_token)
         result = DefineAttribute(self._make_dict_type(dict_token), id_ls, map_def)
         self._attach_from_string(result, id_ls)
         return result
 
-    def attr_list_dict_null_err(self, items: list[Any]) -> Any:
+    def attr_list_dict_null_err(self, items: list[object]) -> NoReturn:
         # items: [DICT_token, ID_token, NULL_token]
-        id_token = items[1]
+        id_token = cast(Token, items[1])
         self._validate_id(id_token)
         id_ls = self._locatable(id_token)
         raise ParserException(
             id_ls.location, str(id_ls), 'null can not be assigned to dict, did you mean "dict? %s = null"' % id_ls
         )
 
-    def attr_dict_nullable(self, items: list[Any]) -> DefineAttribute:
+    def attr_dict_nullable(self, items: list[object]) -> DefineAttribute:
         # items: [DICT_token, ID_token]  ("?" is anonymous => filtered)
-        dict_token = items[0]
-        id_token = items[1]
+        dict_token = cast(Token, items[0])
+        id_token = cast(Token, items[1])
         self._validate_id(id_token)
         id_ls = self._locatable(id_token)
         result = DefineAttribute(self._make_dict_type(dict_token, nullable=True), id_ls, None)
         self._attach_from_string(result, id_ls)
         return result
 
-    def attr_list_dict_nullable(self, items: list[Any]) -> DefineAttribute:
+    def attr_list_dict_nullable(self, items: list[object]) -> DefineAttribute:
         # items: [DICT_token, ID_token, map_def_result]  ("?" filtered)
-        dict_token = items[0]
-        id_token = items[1]
+        dict_token = cast(Token, items[0])
+        id_token = cast(Token, items[1])
         self._validate_id(id_token)
-        map_def = items[2]
+        map_def = cast(ExpressionStatement, items[2])
         id_ls = self._locatable(id_token)
         result = DefineAttribute(self._make_dict_type(dict_token, nullable=True), id_ls, map_def)
         self._attach_from_string(result, id_ls)
         return result
 
-    def attr_list_dict_null(self, items: list[Any]) -> DefineAttribute:
+    def attr_list_dict_null(self, items: list[object]) -> DefineAttribute:
         # items: [DICT_token, ID_token, NULL_token]  ("?" filtered)
-        dict_token = items[0]
-        id_token = items[1]
+        dict_token = cast(Token, items[0])
+        id_token = cast(Token, items[1])
         self._validate_id(id_token)
-        null_token = items[2]
+        null_token = cast(Token, items[2])
         id_ls = self._locatable(id_token)
         none_val = self._make_none(self._loc(null_token), getattr(null_token, "pos_in_stream", 0) or 0)
         result = DefineAttribute(self._make_dict_type(dict_token, nullable=True), id_ls, none_val)
         self._attach_from_string(result, id_ls)
         return result
 
-    def attr_dict_err(self, items: list[Any]) -> Any:
+    def attr_dict_err(self, items: list[object]) -> NoReturn:
         # items: [DICT_token, (opt "?" token), CID_token, ...]
         # Find CID token - it's the first CID token in items
         for t in items:
@@ -654,12 +655,11 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
     # ---- Implement ----
 
     @v_args(meta=True)
-    def implement_def_simple(self, meta: Meta, items: list[Any]) -> DefineImplement:
+    def implement_def_simple(self, meta: Meta, items: list[object]) -> DefineImplement:
         # items: [IMPLEMENT_token, class_ref, USING_token, implement_ns_list_result]
-        impl_token = items[0]
-        class_ref = items[1]
-        ns_list = items[3]
-        inherit, implementations = ns_list
+        impl_token = cast(Token, items[0])
+        class_ref = cast(LocatableString, items[1])
+        inherit, implementations = cast(tuple[bool, list[LocatableString]], items[3])
         when = Literal(True)
         result = DefineImplement(class_ref, implementations, when, inherit=inherit, comment=None)
         self._attach(result, self._loc(impl_token), getattr(impl_token, "pos_in_stream", 0) or 0)
@@ -667,13 +667,12 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         return result
 
     @v_args(meta=True)
-    def implement_def_comment(self, meta: Meta, items: list[Any]) -> DefineImplement:
+    def implement_def_comment(self, meta: Meta, items: list[object]) -> DefineImplement:
         # items: [IMPLEMENT_token, class_ref, USING_token, implement_ns_list_result, MLS_token]
-        impl_token = items[0]
-        class_ref = items[1]
-        ns_list = items[3]
-        mls_token = items[4]
-        inherit, implementations = ns_list
+        impl_token = cast(Token, items[0])
+        class_ref = cast(LocatableString, items[1])
+        inherit, implementations = cast(tuple[bool, list[LocatableString]], items[3])
+        mls_token = cast(Token, items[4])
         comment = self._process_mls(mls_token)
         when = Literal(True)
         result = DefineImplement(class_ref, implementations, when, inherit=inherit, comment=comment)
@@ -682,65 +681,64 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         return result
 
     @v_args(meta=True)
-    def implement_def_when(self, meta: Meta, items: list[Any]) -> DefineImplement:
+    def implement_def_when(self, meta: Meta, items: list[object]) -> DefineImplement:
         # items: [IMPLEMENT_token, class_ref, USING_token, impl_ns_list, WHEN_token, expression]
-        impl_token = items[0]
-        class_ref = items[1]
-        ns_list = items[3]
-        expression = items[5]
-        inherit, implementations = ns_list
+        impl_token = cast(Token, items[0])
+        class_ref = cast(LocatableString, items[1])
+        inherit, implementations = cast(tuple[bool, list[LocatableString]], items[3])
+        expression = cast(ExpressionStatement, items[5])
         result = DefineImplement(class_ref, implementations, expression, inherit=inherit, comment=None)
         self._attach(result, self._loc(impl_token), getattr(impl_token, "pos_in_stream", 0) or 0)
         return result
 
     @v_args(meta=True)
-    def implement_def_when_comment(self, meta: Meta, items: list[Any]) -> DefineImplement:
+    def implement_def_when_comment(self, meta: Meta, items: list[object]) -> DefineImplement:
         # items: [IMPLEMENT_token, class_ref, USING_token, impl_ns_list, WHEN_token, expression, MLS_token]
-        impl_token = items[0]
-        class_ref = items[1]
-        ns_list = items[3]
-        expression = items[5]
-        mls_token = items[6]
-        inherit, implementations = ns_list
+        impl_token = cast(Token, items[0])
+        class_ref = cast(LocatableString, items[1])
+        inherit, implementations = cast(tuple[bool, list[LocatableString]], items[3])
+        expression = cast(ExpressionStatement, items[5])
+        mls_token = cast(Token, items[6])
         comment = self._process_mls(mls_token)
         result = DefineImplement(class_ref, implementations, expression, inherit=inherit, comment=comment)
         self._attach(result, self._loc(impl_token), getattr(impl_token, "pos_in_stream", 0) or 0)
         return result
 
-    def implement_ns_list(self, items: list[Any]) -> Any:
+    def implement_ns_list(self, items: list[object]) -> tuple[bool, list[LocatableString]]:
         # items: list of _ImplementNsItem
-        has_parents = any(item.inherit_parents for item in items)
-        ns_refs = [item.ns_ref for item in items if not item.inherit_parents and item.ns_ref is not None]
+        typed_items = [cast(_ImplementNsItem, item) for item in items]
+        has_parents = any(item.inherit_parents for item in typed_items)
+        ns_refs = [item.ns_ref for item in typed_items if not item.inherit_parents and item.ns_ref is not None]
         return (has_parents, ns_refs)
 
-    def impl_ns_ref(self, items: list[Any]) -> Any:
+    def impl_ns_ref(self, items: list[object]) -> _ImplementNsItem:
         # items: [ns_ref_result]
-        return _ImplementNsItem(inherit_parents=False, ns_ref=items[0])
+        return _ImplementNsItem(inherit_parents=False, ns_ref=cast(LocatableString, items[0]))
 
-    def impl_parents(self, items: list[Any]) -> Any:
+    def impl_parents(self, items: list[object]) -> _ImplementNsItem:
         # items: [PARENTS_token]
         return _ImplementNsItem(inherit_parents=True, ns_ref=None)
 
     # ---- Implementation definition ----
 
-    def impl_header_plain(self, items: list[Any]) -> Any:
+    def impl_header_plain(self, items: list[object]) -> None:
         # No MLS doc comment: return None
         return None
 
-    def impl_header_doc(self, items: list[Any]) -> Any:
+    def impl_header_doc(self, items: list[object]) -> LocatableString:
         # items: [MLS_token]
-        return self._process_mls(items[0])
+        return self._process_mls(cast(Token, items[0]))
 
     @v_args(meta=True)
-    def implementation_def(self, meta: Meta, items: list[Any]) -> DefineImplementation:
+    def implementation_def(self, meta: Meta, items: list[object]) -> DefineImplementation:
         # Grammar: IMPLEMENTATION ID FOR class_ref ":" impl_header stmt_list END
         # items: [IMPLEMENTATION_token, ID_token, FOR_token, class_ref, impl_header_result, stmt_list_result, END_token]
-        impl_token = items[0]
-        id_token = items[1]
+        impl_token = cast(Token, items[0])
+        id_token = cast(Token, items[1])
         self._validate_id(id_token)
-        class_ref = items[3]
-        docstr = items[4]  # None or LocatableString from impl_header
-        stmts = items[5]
+        class_ref = cast(LocatableString, items[3])
+        docstr = cast(LocatableString, items[4])
+        stmts = cast(list[DynamicStatement], items[5])
         id_ls = self._locatable(id_token)
         result = DefineImplementation(self.namespace, id_ls, class_ref, BasicBlock(self.namespace, stmts), docstr)
         # DefineImplementation.__init__ sets location from name.get_location() (a Range)
@@ -751,131 +749,137 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
 
     # ---- Relations ----
 
-    def relation_no_comment(self, items: list[Any]) -> Any:
-        return items[0]
+    def relation_no_comment(self, items: list[object]) -> DefineRelation:
+        return cast(DefineRelation, items[0])
 
-    def relation_comment(self, items: list[Any]) -> Any:
+    def relation_comment(self, items: list[object]) -> DefineRelation:
         # items: [relation_def_result, MLS_token]
-        rel = items[0]
-        rel.comment = str(self._process_mls(items[1]))
+        rel = cast(DefineRelation, items[0])
+        rel.comment = str(self._process_mls(cast(Token, items[1])))  # type: ignore[assignment]
         return rel
 
     @v_args(meta=True)
-    def relation_bidir(self, meta: Meta, items: list[Any]) -> DefineRelation:
+    def relation_bidir(self, meta: Meta, items: list[object]) -> DefineRelation:
         # items: [class_ref, "."(filtered), ID_token, multi, REL_token, class_ref2, "."(filtered), ID_token2, multi2]
         # "." is anonymous => filtered
         # items: [class_ref, ID_token, multi, REL_token, class_ref2, ID_token2, multi2]
-        left_class = items[0]
-        self._validate_id(items[1])
-        left_attr = self._locatable(items[1])
-        left_multi = items[2]
-        rel_token = items[3]
-        right_class = items[4]
-        self._validate_id(items[5])
-        right_attr = self._locatable(items[5])
-        right_multi = items[6]
+        left_class = cast(LocatableString, items[0])
+        id_token_l = cast(Token, items[1])
+        self._validate_id(id_token_l)
+        left_attr = self._locatable(id_token_l)
+        left_multi = cast(tuple[int, Optional[int]], items[2])
+        rel_token = cast(Token, items[3])
+        right_class = cast(LocatableString, items[4])
+        id_token_r = cast(Token, items[5])
+        self._validate_id(id_token_r)
+        right_attr = self._locatable(id_token_r)
+        right_multi = cast(tuple[int, Optional[int]], items[6])
         result = DefineRelation((left_class, right_attr, right_multi), (right_class, left_attr, left_multi))
         self._attach(result, self._loc(rel_token), getattr(rel_token, "pos_in_stream", 0) or 0)
         return result
 
     @v_args(meta=True)
-    def relation_unidir(self, meta: Meta, items: list[Any]) -> DefineRelation:
+    def relation_unidir(self, meta: Meta, items: list[object]) -> DefineRelation:
         # items: [class_ref, ID_token, multi, REL_token, class_ref2]
-        left_class = items[0]
-        self._validate_id(items[1])
-        left_attr = self._locatable(items[1])
-        left_multi = items[2]
-        rel_token = items[3]
-        right_class = items[4]
+        left_class = cast(LocatableString, items[0])
+        id_token_l = cast(Token, items[1])
+        self._validate_id(id_token_l)
+        left_attr = self._locatable(id_token_l)
+        left_multi = cast(tuple[int, Optional[int]], items[2])
+        rel_token = cast(Token, items[3])
+        right_class = cast(LocatableString, items[4])
         result = DefineRelation((left_class, None, None), (right_class, left_attr, left_multi))
         self._attach(result, self._loc(rel_token), getattr(rel_token, "pos_in_stream", 0) or 0)
         return result
 
     @v_args(meta=True)
-    def relation_annotated_bidir(self, meta: Meta, items: list[Any]) -> DefineRelation:
+    def relation_annotated_bidir(self, meta: Meta, items: list[object]) -> DefineRelation:
         # items: [class_ref, ID_token, multi, annotation_list, class_ref2, ID_token2, multi2]
-        left_class = items[0]
-        self._validate_id(items[1])
-        left_attr = self._locatable(items[1])
-        left_multi = items[2]
-        annotations = items[3]
-        right_class = items[4]
-        self._validate_id(items[5])
-        right_attr = self._locatable(items[5])
-        right_multi = items[6]
+        left_class = cast(LocatableString, items[0])
+        id_token_l = cast(Token, items[1])
+        self._validate_id(id_token_l)
+        left_attr = self._locatable(id_token_l)
+        left_multi = cast(tuple[int, Optional[int]], items[2])
+        annotations = cast(list[ExpressionStatement], items[3])
+        right_class = cast(LocatableString, items[4])
+        id_token_r = cast(Token, items[5])
+        self._validate_id(id_token_r)
+        right_attr = self._locatable(id_token_r)
+        right_multi = cast(tuple[int, Optional[int]], items[6])
         result = DefineRelation((left_class, right_attr, right_multi), (right_class, left_attr, left_multi), annotations)
         result.location = self._meta_loc(meta)
         result.namespace = self.namespace
         return result
 
     @v_args(meta=True)
-    def relation_annotated_unidir(self, meta: Meta, items: list[Any]) -> DefineRelation:
+    def relation_annotated_unidir(self, meta: Meta, items: list[object]) -> DefineRelation:
         # items: [class_ref, ID_token, multi, annotation_list, class_ref2]
-        left_class = items[0]
-        self._validate_id(items[1])
-        left_attr = self._locatable(items[1])
-        left_multi = items[2]
-        annotations = items[3]
-        right_class = items[4]
+        left_class = cast(LocatableString, items[0])
+        id_token_l = cast(Token, items[1])
+        self._validate_id(id_token_l)
+        left_attr = self._locatable(id_token_l)
+        left_multi = cast(tuple[int, Optional[int]], items[2])
+        annotations = cast(list[ExpressionStatement], items[3])
+        right_class = cast(LocatableString, items[4])
         result = DefineRelation((left_class, None, None), (right_class, left_attr, left_multi), annotations)
         result.location = self._meta_loc(meta)
         result.namespace = self.namespace
         return result
 
-    def annotation_list(self, items: list[Any]) -> Any:
-        return list(items)
+    def annotation_list(self, items: list[object]) -> list[ExpressionStatement]:
+        return cast(list[ExpressionStatement], list(items))
 
-    def multi_exact(self, items: list[Any]) -> Any:
+    def multi_exact(self, items: list[object]) -> tuple[int, int]:
         # items: [INT_token]
-        n = int(items[0])
+        n = int(cast(Token, items[0]))
         return (n, n)
 
-    def multi_lower_bound(self, items: list[Any]) -> Any:
+    def multi_lower_bound(self, items: list[object]) -> tuple[int, Optional[int]]:
         # items: [INT_token]  (":" filtered)
-        n = int(items[0])
+        n = int(cast(Token, items[0]))
         return (n, None)
 
-    def multi_range(self, items: list[Any]) -> tuple[int, int]:
+    def multi_range(self, items: list[object]) -> tuple[int, int]:
         # items: [INT_token, INT_token]  (":" filtered)
-        n = int(items[0])
-        m = int(items[1])
+        n = int(cast(Token, items[0]))
+        m = int(cast(Token, items[1]))
         return (n, m)
 
-    def multi_upper_bound(self, items: list[Any]) -> tuple[int, int]:
+    def multi_upper_bound(self, items: list[object]) -> tuple[int, int]:
         # items: [INT_token]  (":" filtered)
-        n = int(items[0])
+        n = int(cast(Token, items[0]))
         return (0, n)
 
     # ---- Typedef ----
 
-    def typedef_no_comment(self, items: list[Any]) -> Any:
-        return items[0]
+    def typedef_no_comment(self, items: list[object]) -> DefineTypeConstraint:
+        return cast(DefineTypeConstraint, items[0])
 
-    def typedef_comment(self, items: list[Any]) -> Any:
+    def typedef_comment(self, items: list[object]) -> DefineTypeConstraint:
         # items: [typedef_inner_result, MLS_token]
-        tdef = items[0]
-        tdef.comment = str(self._process_mls(items[1]))
+        tdef = cast(DefineTypeConstraint, items[0])
+        tdef.comment = str(self._process_mls(cast(Token, items[1])))
         return tdef
 
     @v_args(meta=True)
-    def typedef_matching(self, meta: Meta, items: list[Any]) -> DefineTypeConstraint:
+    def typedef_matching(self, meta: Meta, items: list[object]) -> DefineTypeConstraint:
         # items: [TYPEDEF_token, ID_token, AS_token, ns_ref, MATCHING_token, expression]
-        id_token = items[1]
+        id_token = cast(Token, items[1])
         self._validate_id(id_token)
-        ns_ref = items[3]
-        expression = items[5]
+        ns_ref = cast(LocatableString, items[3])
+        expression = cast(ExpressionStatement, items[5])
         id_ls = self._locatable(id_token)
         result = DefineTypeConstraint(self.namespace, id_ls, ns_ref, expression)
         self._attach_from_string(result, id_ls)
         return result
 
     @v_args(meta=True)
-    def typedef_regex(self, meta: Meta, items: list[Any]) -> DefineTypeConstraint:
+    def typedef_regex(self, meta: Meta, items: list[object]) -> DefineTypeConstraint:
         # items: [TYPEDEF_token, ID_token, AS_token, ns_ref, REGEX_token]
-        id_token = items[1]
+        id_token = cast(Token, items[1])
         self._validate_id(id_token)
-        ns_ref = items[3]
-        regex_token = items[4]
+        ns_ref = cast(LocatableString, items[3])
+        regex_token = cast(Token, items[4])
         id_ls = self._locatable(id_token)
         # Process the REGEX token into a Regex expression
         regex_expr = self._process_regex_token(regex_token)
@@ -883,13 +887,13 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         self._attach_from_string(result, id_ls)
         return result
 
-    def typedef_cls_err(self, items: list[Any]) -> None:
+    def typedef_cls_err(self, items: list[object]) -> NoReturn:
         # items: [TYPEDEF_token, CID_token, AS_token, constructor]
-        cid_token = items[1]
+        cid_token = cast(Token, items[1])
         cid_ls = self._locatable(cid_token)
         raise ParserException(cid_ls.location, str(cid_ls), "The use of default constructors is no longer supported")
 
-    def _process_regex_token(self, token: Token) -> Any:
+    def _process_regex_token(self, token: Token) -> ExpressionStatement:
         """Process a REGEX token (matching /.../) into a Regex expression."""
         from inmanta.ast.constraint.expression import Regex
 
@@ -901,7 +905,7 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         value = Reference(LocatableString("self", self._range(token), 0, self.namespace))
         try:
             expr = Regex(value, regex_str)
-            return expr
+            return cast(ExpressionStatement, expr)
         except RegexError as error:
             line = token.line or 1
             col = token.column or 1
@@ -913,18 +917,18 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
     # ---- Index ----
 
     @v_args(meta=True)
-    def index(self, meta: Meta, items: list[Any]) -> DefineIndex:
+    def index(self, meta: Meta, items: list[object]) -> DefineIndex:
         # items: [INDEX_token, class_ref, id_list_result]
-        index_token = items[0]
-        class_ref = items[1]
-        id_list = items[2]
+        index_token = cast(Token, items[0])
+        class_ref = cast(LocatableString, items[1])
+        id_list = cast(list[LocatableString], items[2])
         result = DefineIndex(class_ref, id_list)
         self._attach(result, self._loc(index_token), getattr(index_token, "pos_in_stream", 0) or 0)
         return result
 
-    def id_list(self, items: list[Any]) -> Any:
+    def id_list(self, items: list[object]) -> list[LocatableString]:
         # items: [ID_token, ...]  (commas filtered)
-        result = []
+        result: list[LocatableString] = []
         for t in items:
             if isinstance(t, Token):
                 self._validate_id(t)
@@ -934,77 +938,81 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
     # ---- Expressions ----
 
     @v_args(meta=True)
-    def ternary_expr(self, meta: Meta, items: list[Any]) -> Any:
+    def ternary_expr(self, meta: Meta, items: list[object]) -> ExpressionStatement:
         # items: [condition, "?"(filtered), true_expr, ":"(filtered), false_expr]
         # Actually: [or_expr_result, expression_result, ternary_expr_result]
-        cond = items[0]
-        true_val = items[1]
-        false_val = items[2]
+        cond = cast(ExpressionStatement, items[0])
+        true_val = cast(ExpressionStatement, items[1])
+        false_val = cast(ExpressionStatement, items[2])
         result = ConditionalExpression(cond, true_val, false_val)
         if hasattr(cond, "location"):
-            self._attach_from_string(result, cond) if isinstance(cond, LocatableString) else None
             if hasattr(cond, "location"):
                 result.location = cond.location
                 result.namespace = self.namespace
         return result
 
     @v_args(meta=True)
-    def or_expr(self, meta: Meta, items: list[Any]) -> Any:
+    def or_expr(self, meta: Meta, items: list[object]) -> ExpressionStatement:
         # items: [left, OR_token, right]
-        left, op_token, right = items
+        left = cast(ExpressionStatement, items[0])
+        op_token = cast(Token, items[1])
+        right = cast(ExpressionStatement, items[2])
         operator = Operator.get_operator_class("or")
         assert operator is not None
-        result = operator(left, right)
+        result = cast(Callable[[ExpressionStatement, ExpressionStatement], ExpressionStatement], operator)(left, right)
         self._attach(result, self._loc(op_token), getattr(op_token, "pos_in_stream", 0) or 0)
         return result
 
     @v_args(meta=True)
-    def and_expr(self, meta: Meta, items: list[Any]) -> Any:
+    def and_expr(self, meta: Meta, items: list[object]) -> ExpressionStatement:
         # items: [left, AND_token, right]
-        left, op_token, right = items
+        left = cast(ExpressionStatement, items[0])
+        op_token = cast(Token, items[1])
+        right = cast(ExpressionStatement, items[2])
         operator = Operator.get_operator_class("and")
         assert operator is not None
-        result = operator(left, right)
+        result = cast(Callable[[ExpressionStatement, ExpressionStatement], ExpressionStatement], operator)(left, right)
         self._attach(result, self._loc(op_token), getattr(op_token, "pos_in_stream", 0) or 0)
         return result
 
     @v_args(meta=True)
-    def not_expr(self, meta: Meta, items: list[Any]) -> Any:
+    def not_expr(self, meta: Meta, items: list[object]) -> ExpressionStatement:
         # items: [NOT_token, expr]
-        not_token, expr = items
+        not_token = cast(Token, items[0])
+        expr = cast(ExpressionStatement, items[1])
         result = Not(expr)  # type: ignore[no-untyped-call]
         self._attach(result, self._loc(not_token), getattr(not_token, "pos_in_stream", 0) or 0)
-        return result
+        return cast(ExpressionStatement, result)
 
     @v_args(meta=True)
-    def is_defined_attr(self, meta: Meta, items: list[Any]) -> Any:
+    def is_defined_attr(self, meta: Meta, items: list[object]) -> IsDefined:
         # items: [attr_ref_result, IS_token, DEFINED_token]
-        attr_ref = items[0]
-        is_token = items[1]
+        attr_ref = cast(AttributeReference, items[0])
+        is_token = cast(Token, items[1])
         result = IsDefined(attr_ref.instance, attr_ref.attribute)
         self._attach(result, self._loc(is_token), getattr(is_token, "pos_in_stream", 0) or 0)
         return result
 
     @v_args(meta=True)
-    def is_defined_id(self, meta: Meta, items: list[Any]) -> Any:
+    def is_defined_id(self, meta: Meta, items: list[object]) -> IsDefined:
         # items: [ID_token, IS_token, DEFINED_token]
-        id_token = items[0]
-        is_token = items[1]
+        id_token = cast(Token, items[0])
+        is_token = cast(Token, items[1])
         id_ls = self._locatable(id_token)
         result = IsDefined(None, id_ls)
         self._attach(result, self._loc(is_token), getattr(is_token, "pos_in_stream", 0) or 0)
         return result
 
     @v_args(meta=True)
-    def is_defined_map(self, meta: Meta, items: list[Any]) -> Any:
+    def is_defined_map(self, meta: Meta, items: list[object]) -> ExpressionStatement:
         # items: [map_lookup_result, IS_token, DEFINED_token]
         # syntactic sugar: expands to (key in dict) and (dict[key] != null) and (dict[key] != [])
-        map_lk = items[0]
-        is_token = items[1]
+        map_lk = cast(MapLookup, items[0])
+        is_token = cast(Token, items[1])
         location = self._loc(is_token)
         lexpos = getattr(is_token, "pos_in_stream", 0) or 0
 
-        def attach(inp: Any) -> Any:
+        def attach(inp: ExpressionStatement) -> ExpressionStatement:
             inp.location = location
             inp.namespace = self.namespace
             inp.lexpos = lexpos
@@ -1017,9 +1025,11 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         return out
 
     @v_args(meta=True)
-    def cmp_expr(self, meta: Meta, items: list[Any]) -> Any:
+    def cmp_expr(self, meta: Meta, items: list[object]) -> ExpressionStatement:
         # items: [left, CMP_OP_token, right]
-        left, op_token, right = items
+        left = cast(ExpressionStatement, items[0])
+        op_token = cast(Token, items[1])
+        right = cast(ExpressionStatement, items[2])
         operator = Operator.get_operator_class(str(op_token))
         if operator is None:
             raise ParserException(
@@ -1027,111 +1037,117 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
                 str(op_token),
                 f"Invalid operator {str(op_token)}",
             )
-        result = operator(left, right)
+        result = cast(Callable[[ExpressionStatement, ExpressionStatement], ExpressionStatement], operator)(left, right)
         self._attach(result, self._loc(op_token), getattr(op_token, "pos_in_stream", 0) or 0)
         return result
 
     @v_args(meta=True)
-    def in_expr(self, meta: Meta, items: list[Any]) -> Any:
+    def in_expr(self, meta: Meta, items: list[object]) -> ExpressionStatement:
         # items: [left, IN_token, right]
-        left, op_token, right = items
+        left = cast(ExpressionStatement, items[0])
+        op_token = cast(Token, items[1])
+        right = cast(ExpressionStatement, items[2])
         operator = Operator.get_operator_class("in")
         assert operator is not None
-        result = operator(left, right)
+        result = cast(Callable[[ExpressionStatement, ExpressionStatement], ExpressionStatement], operator)(left, right)
         self._attach(result, self._loc(op_token), getattr(op_token, "pos_in_stream", 0) or 0)
         return result
 
     @v_args(meta=True)
-    def not_in_expr(self, meta: Meta, items: list[Any]) -> Any:
+    def not_in_expr(self, meta: Meta, items: list[object]) -> ExpressionStatement:
         # items: [left, NOT_token, IN_token, right]
-        left, not_token, in_token, right = items
+        left = cast(ExpressionStatement, items[0])
+        not_token = cast(Token, items[1])
+        right = cast(ExpressionStatement, items[3])
         result = Not(In(left, right))  # type: ignore[no-untyped-call]
         self._attach(result, self._loc(not_token), getattr(not_token, "pos_in_stream", 0) or 0)
-        return result
+        return cast(ExpressionStatement, result)
 
-    def _binary_op(self, items: list[Any], op_str: str) -> Any:
-        left, op_token, right = items
+    def _binary_op(self, items: list[object], op_str: str) -> ExpressionStatement:
+        left = cast(ExpressionStatement, items[0])
+        op_token = cast(Token, items[1])
+        right = cast(ExpressionStatement, items[2])
         operator = Operator.get_operator_class(op_str)
         if operator is None:
             raise ParserException(self._range(op_token), str(op_token), f"Invalid operator {op_str}")
-        result = operator(left, right)
+        result = cast(Callable[[ExpressionStatement, ExpressionStatement], ExpressionStatement], operator)(left, right)
         self._attach(result, self._loc(op_token), getattr(op_token, "pos_in_stream", 0) or 0)
         return result
 
     @v_args(meta=True)
-    def add_expr(self, meta: Meta, items: list[Any]) -> Any:
+    def add_expr(self, meta: Meta, items: list[object]) -> ExpressionStatement:
         return self._binary_op(items, "+")
 
     @v_args(meta=True)
-    def sub_expr(self, meta: Meta, items: list[Any]) -> Any:
+    def sub_expr(self, meta: Meta, items: list[object]) -> ExpressionStatement:
         return self._binary_op(items, "-")
 
     @v_args(meta=True)
-    def mul_expr(self, meta: Meta, items: list[Any]) -> Any:
+    def mul_expr(self, meta: Meta, items: list[object]) -> ExpressionStatement:
         return self._binary_op(items, "*")
 
     @v_args(meta=True)
-    def div_expr(self, meta: Meta, items: list[Any]) -> Any:
+    def div_expr(self, meta: Meta, items: list[object]) -> ExpressionStatement:
         return self._binary_op(items, "/")
 
     @v_args(meta=True)
-    def mod_expr(self, meta: Meta, items: list[Any]) -> Any:
+    def mod_expr(self, meta: Meta, items: list[object]) -> ExpressionStatement:
         return self._binary_op(items, "%")
 
     @v_args(meta=True)
-    def pow_expr(self, meta: Meta, items: list[Any]) -> Any:
+    def pow_expr(self, meta: Meta, items: list[object]) -> ExpressionStatement:
         return self._binary_op(items, "**")
 
-    def paren_expr(self, items: list[Any]) -> Any:
+    def paren_expr(self, items: list[object]) -> ExpressionStatement:
         # items: [expression_result]  ("(" and ")" are anonymous => filtered)
-        return items[0]
+        return cast(ExpressionStatement, items[0])
 
     # ---- Map lookup ----
 
     @v_args(meta=True)
-    def map_lookup(self, meta: Meta, items: list[Any]) -> Any:
+    def map_lookup(self, meta: Meta, items: list[object]) -> MapLookup:
         # items: [var_ref_or_map_lookup, operand]  ("[" and "]" filtered)
-        themap = items[0]
-        key = items[1]
+        themap = cast(ExpressionStatement, items[0])
+        key = cast(ExpressionStatement, items[1])
         result = MapLookup(themap, key)
         return result
 
     # ---- Constructors and function calls ----
 
     @v_args(meta=True)
-    def constructor(self, meta: Meta, items: list[Any]) -> Any:
+    def constructor(self, meta: Meta, items: list[object]) -> Constructor:
         # items: [class_ref, param_list_result]  ("(" and ")" filtered)
-        class_ref = items[0]
-        params = items[1]  # list of _ParamListElement
-        kwargs = [(e.key, e.value) for e in params if e.key is not None]
+        class_ref = cast(LocatableString, items[0])
+        params = cast(list[_ParamListElement], items[1])
+        kwargs = cast(list[tuple[LocatableString, ExpressionStatement]], [(e.key, e.value) for e in params if e.key is not None])
         wrapped = [e.wrapped_kwargs for e in params if e.wrapped_kwargs is not None]
         result = Constructor(class_ref, kwargs, wrapped, self._meta_loc(meta), self.namespace)
         return result
 
     @v_args(meta=True)
-    def function_call(self, meta: Meta, items: list[Any]) -> Any:
+    def function_call(self, meta: Meta, items: list[object]) -> FunctionCall:
         # items: [ns_ref_result, function_param_list_result]
-        ns_ref = items[0]
-        fparams = items[1]  # list of _FunctionParamElement
+        ns_ref = cast(LocatableString, items[0])
+        fparams = cast(list[_FunctionParamElement], items[1])
         args = [e.arg for e in fparams if e.arg is not None]
-        kwargs = [(e.key, e.value) for e in fparams if e.key is not None]
+        kwargs = cast(list[tuple[LocatableString, ExpressionStatement]], [(e.key, e.value) for e in fparams if e.key is not None])
         wrapped = [e.wrapped_kwargs for e in fparams if e.wrapped_kwargs is not None]
         result = FunctionCall(ns_ref, args, kwargs, wrapped, self.namespace)
         return result
 
-    def function_call_err_dot(self, items: list[Any]) -> Any:
+    def function_call_err_dot(self, items: list[object]) -> NoReturn:
         # items: [attr_ref_result, function_param_list_result]
-        attr_ref = items[0]
+        attr_ref = cast(AttributeReference, items[0])
         raise InvalidNamespaceAccess(attr_ref.locatable_name)
 
     # ---- Index lookup ----
 
     @v_args(meta=True)
-    def index_lookup_class(self, meta: Meta, items: list[Any]) -> Any:
+    def index_lookup_class(self, meta: Meta, items: list[object]) -> IndexLookup:
         # items: [class_ref, param_list_result]
-        class_ref = items[0]
-        params = items[1]
-        kwargs = [(e.key, e.value) for e in params if e.key is not None]
+        class_ref = cast(LocatableString, items[0])
+        params = cast(list[_ParamListElement], items[1])
+        kwargs = cast(list[tuple[LocatableString, ExpressionStatement]], [(e.key, e.value) for e in params if e.key is not None])
         wrapped = [e.wrapped_kwargs for e in params if e.wrapped_kwargs is not None]
         result = IndexLookup(class_ref, kwargs, wrapped)
         result.location = self._meta_loc(meta)
@@ -1139,11 +1155,11 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         return result
 
     @v_args(meta=True)
-    def index_lookup_attr(self, meta: Meta, items: list[Any]) -> Any:
+    def index_lookup_attr(self, meta: Meta, items: list[object]) -> ShortIndexLookup:
         # items: [attr_ref_result, param_list_result]
-        attr_ref = items[0]
-        params = items[1]
-        kwargs = [(e.key, e.value) for e in params if e.key is not None]
+        attr_ref = cast(AttributeReference, items[0])
+        params = cast(list[_ParamListElement], items[1])
+        kwargs = cast(list[tuple[LocatableString, ExpressionStatement]], [(e.key, e.value) for e in params if e.key is not None])
         wrapped = [e.wrapped_kwargs for e in params if e.wrapped_kwargs is not None]
         result = ShortIndexLookup(attr_ref.instance, attr_ref.attribute, kwargs, wrapped)
         result.location = self._meta_loc(meta)
@@ -1153,9 +1169,9 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
     # ---- Lists ----
 
     @v_args(meta=True)
-    def list_def(self, meta: Meta, items: list[Any]) -> Any:
+    def list_def(self, meta: Meta, items: list[object]) -> Union[CreateList, Literal]:
         # items: [operand_list_result]  ("[" and "]" filtered)
-        operands = items[0]
+        operands = cast(list[ExpressionStatement], items[0])
         node: Union[CreateList, Literal] = CreateList(operands)
         try:
             node = Literal(node.as_constant())
@@ -1167,10 +1183,10 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         return node
 
     @v_args(meta=True)
-    def list_comprehension(self, meta: Meta, items: list[Any]) -> Any:
+    def list_comprehension(self, meta: Meta, items: list[object]) -> ExpressionStatement:
         # items: [value_expr, for_clause1, ..., guard_clause1, ...]
         # The grammar ensures for_clauses come before guard_clauses
-        value_expr = items[0]
+        value_expr = cast(ExpressionStatement, items[0])
         for_clauses = [item for item in items[1:] if isinstance(item, _ForClause)]
         guard_clauses = [item.condition for item in items[1:] if isinstance(item, _GuardClause)]
 
@@ -1207,29 +1223,29 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         return result
 
     @v_args(meta=True)
-    def for_clause(self, meta: Meta, items: list[Any]) -> Any:
+    def for_clause(self, meta: Meta, items: list[object]) -> _ForClause:
         # items: [FOR_token, ID_token, IN_token, expression]
-        id_token = items[1]
+        id_token = cast(Token, items[1])
         self._validate_id(id_token)
-        expression = items[3]
+        expression = cast(ExpressionStatement, items[3])
         id_ls = self._locatable(id_token)
         return _ForClause(variable=id_ls, iterable=expression)
 
     @v_args(meta=True)
-    def guard_clause(self, meta: Meta, items: list[Any]) -> Any:
+    def guard_clause(self, meta: Meta, items: list[object]) -> _GuardClause:
         # items: [IF_token, expression]
-        return _GuardClause(condition=items[1])
+        return _GuardClause(condition=cast(ExpressionStatement, items[1]))
 
-    def operand_list(self, items: list[Any]) -> Any:
-        return list(items)
+    def operand_list(self, items: list[object]) -> list[ExpressionStatement]:
+        return cast(list[ExpressionStatement], list(items))
 
     # ---- Map def ----
 
     @v_args(meta=True)
-    def map_def(self, meta: Meta, items: list[Any]) -> Any:
+    def map_def(self, meta: Meta, items: list[object]) -> Union[CreateDict, Literal]:
         # items: [pair_list_result]  ("{" and "}" filtered)
-        pairs = items[0]
-        node: Union[CreateDict, Literal] = CreateDict(pairs)
+        pairs = cast(list[tuple[str, ExpressionStatement]], items[0])
+        node: Union[CreateDict, Literal] = CreateDict(cast(list[tuple[str, ReferenceStatement]], pairs))
         try:
             node = Literal({k: v.as_constant() for k, v in pairs})
         except RuntimeException:
@@ -1238,23 +1254,23 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         node.namespace = self.namespace
         return node
 
-    def pair_list(self, items: list[Any]) -> Any:
+    def pair_list(self, items: list[object]) -> list[tuple[str, ExpressionStatement]]:
         # items: list of pair_item results (each is (key, value) tuple)
-        return [item for item in items if isinstance(item, tuple)]
+        return [cast(tuple[str, ExpressionStatement], item) for item in items if isinstance(item, tuple)]
 
-    def pair_item(self, items: list[Any]) -> Any:
+    def pair_item(self, items: list[object]) -> tuple[str, ExpressionStatement]:
         # items: [dict_key_result, operand_result]  (":" filtered)
-        key = items[0]
-        value = items[1]
+        key = cast(str, items[0])
+        value = cast(ExpressionStatement, items[1])
         return (key, value)
 
-    def dict_key_string(self, items: list[Any]) -> Any:
+    def dict_key_string(self, items: list[object]) -> str:
         # items: [STRING_token]
-        token = items[0]
+        token = cast(Token, items[0])
         raw = str(token)
         # Strip quotes and decode
         content = raw[1:-1]
-        loc = Location(self.file, token.line)
+        loc = Location(self.file, token.line or 1)
         decoded = _safe_decode(content, "Invalid escape sequence in string.", loc)
         # Check for format strings in dict keys
         match_obj = _format_regex_compiled.findall(decoded)
@@ -1269,9 +1285,9 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
             )
         return decoded
 
-    def dict_key_rstring(self, items: list[Any]) -> Any:
+    def dict_key_rstring(self, items: list[object]) -> str:
         # items: [RSTRING_token]
-        token = items[0]
+        token = cast(Token, items[0])
         raw = str(token)
         # Strip r" prefix and " suffix
         content = raw[2:-1]
@@ -1279,62 +1295,62 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
 
     # ---- Param lists ----
 
-    def param_list(self, items: list[Any]) -> Any:
+    def param_list(self, items: list[object]) -> list[_ParamListElement]:
         return [item for item in items if isinstance(item, _ParamListElement)]
 
-    def param_explicit(self, items: list[Any]) -> Any:
+    def param_explicit(self, items: list[object]) -> _ParamListElement:
         # items: [ID_token, operand_result]  ("=" filtered)
-        id_token = items[0]
+        id_token = cast(Token, items[0])
         self._validate_id(id_token)
-        value = items[1]
+        value = cast(ExpressionStatement, items[1])
         id_ls = self._locatable(id_token)
         return _ParamListElement(key=id_ls, value=value)
 
-    def param_wrapped_kwargs(self, items: list[Any]) -> Any:
+    def param_wrapped_kwargs(self, items: list[object]) -> _ParamListElement:
         # items: [DOUBLE_STAR_token, operand_result]
-        ds_token = items[0]
-        value = items[1]
+        ds_token = cast(Token, items[0])
+        value = cast(ExpressionStatement, items[1])
         wk = WrappedKwargs(value)
         self._attach(wk, self._loc(ds_token), getattr(ds_token, "pos_in_stream", 0) or 0)
         return _ParamListElement(key=None, value=None, wrapped_kwargs=wk)
 
-    def function_param_list(self, items: list[Any]) -> Any:
+    def function_param_list(self, items: list[object]) -> list[_FunctionParamElement]:
         return [item for item in items if isinstance(item, _FunctionParamElement)]
 
-    def func_arg(self, items: list[Any]) -> Any:
+    def func_arg(self, items: list[object]) -> _FunctionParamElement:
         # items: [operand_result]
-        return _FunctionParamElement(arg=items[0])
+        return _FunctionParamElement(arg=cast(ExpressionStatement, items[0]))
 
-    def func_kwarg(self, items: list[Any]) -> Any:
+    def func_kwarg(self, items: list[object]) -> _FunctionParamElement:
         # items: [ID_token, operand_result]  ("=" filtered)
-        id_token = items[0]
+        id_token = cast(Token, items[0])
         self._validate_id(id_token)
-        value = items[1]
+        value = cast(ExpressionStatement, items[1])
         id_ls = self._locatable(id_token)
         return _FunctionParamElement(key=id_ls, value=value)
 
-    def func_wrapped_kwargs(self, items: list[Any]) -> Any:
+    def func_wrapped_kwargs(self, items: list[object]) -> _FunctionParamElement:
         # items: [DOUBLE_STAR_token, operand_result]
-        ds_token = items[0]
-        value = items[1]
+        ds_token = cast(Token, items[0])
+        value = cast(ExpressionStatement, items[1])
         wk = WrappedKwargs(value)
         self._attach(wk, self._loc(ds_token), getattr(ds_token, "pos_in_stream", 0) or 0)
         return _FunctionParamElement(wrapped_kwargs=wk)
 
     # ---- Variable and attribute references ----
 
-    def var_ref_ns(self, items: list[Any]) -> Any:
+    def var_ref_ns(self, items: list[object]) -> Reference:
         # items: [ns_ref_result]
-        ns = items[0]
+        ns = cast(LocatableString, items[0])
         result = Reference(ns)
         self._attach_from_string(result, ns)
         return result
 
     @v_args(meta=True)
-    def attr_ref(self, meta: Meta, items: list[Any]) -> Any:
+    def attr_ref(self, meta: Meta, items: list[object]) -> AttributeReference:
         # items: [var_ref_result, ID_token]  ("." filtered)
-        var_ref = items[0]
-        id_token = items[1]
+        var_ref = cast(Reference, items[0])
+        id_token = cast(Token, items[1])
         self._validate_id(id_token)
         id_ls = self._locatable(id_token)
         result = AttributeReference(var_ref, id_ls)
@@ -1344,15 +1360,16 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
 
     # ---- Namespace and class references ----
 
-    def ns_ref_id(self, items: list[Any]) -> Any:
+    def ns_ref_id(self, items: list[object]) -> LocatableString:
         # items: [ID_token]
-        self._validate_id(items[0])
-        return self._locatable(items[0])
+        token = cast(Token, items[0])
+        self._validate_id(token)
+        return self._locatable(token)
 
-    def ns_ref_sep(self, items: list[Any]) -> Any:
+    def ns_ref_sep(self, items: list[object]) -> LocatableString:
         # items: [ns_ref_result, SEP_token, ID_token]
-        left = items[0]
-        id_token = items[2]
+        left = cast(LocatableString, items[0])
+        id_token = cast(Token, items[2])
         self._validate_id(id_token)
         id_ls = self._locatable(id_token)
         merged_value = f"{str(left)}::{str(id_ls)}"
@@ -1362,14 +1379,14 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
             r = id_ls.location
         return LocatableString(merged_value, r, id_ls.lexpos, self.namespace)
 
-    def class_ref_cid(self, items: list[Any]) -> Any:
+    def class_ref_cid(self, items: list[object]) -> LocatableString:
         # items: [CID_token]
-        return self._locatable(items[0])
+        return self._locatable(cast(Token, items[0]))
 
-    def class_ref_ns(self, items: list[Any]) -> Any:
+    def class_ref_ns(self, items: list[object]) -> LocatableString:
         # items: [ns_ref_result, SEP_token, CID_token]
-        left = items[0]
-        cid_token = items[2]
+        left = cast(LocatableString, items[0])
+        cid_token = cast(Token, items[2])
         cid_ls = self._locatable(cid_token)
         merged_value = f"{str(left)}::{str(cid_ls)}"
         if isinstance(left, LocatableString):
@@ -1378,10 +1395,10 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
             r = cid_ls.location
         return LocatableString(merged_value, r, cid_ls.lexpos, self.namespace)
 
-    def class_ref_err_dot(self, items: list[Any]) -> Any:
+    def class_ref_err_dot(self, items: list[object]) -> NoReturn:
         # items: [var_ref_result, CID_token]
         var_ref = items[0]
-        cid_token = items[1]
+        cid_token = cast(Token, items[1])
         cid_ls = self._locatable(cid_token)
 
         if isinstance(var_ref, LocatableString):
@@ -1399,65 +1416,65 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         )
         raise InvalidNamespaceAccess(full_string)
 
-    def class_ref_list(self, items: list[Any]) -> Any:
-        return list(items)
+    def class_ref_list(self, items: list[object]) -> list[LocatableString]:
+        return cast(list[LocatableString], list(items))
 
     # ---- Constants ----
 
     @v_args(meta=True)
-    def const_int(self, meta: Meta, items: list[Any]) -> Any:
+    def const_int(self, meta: Meta, items: list[object]) -> Literal:
         # items: [INT_token]
-        token = items[0]
+        token = cast(Token, items[0])
         result = Literal(int(str(token)))
         self._attach(result, self._loc(token), getattr(token, "pos_in_stream", 0) or 0)
         return result
 
     @v_args(meta=True)
-    def const_float(self, meta: Meta, items: list[Any]) -> Any:
+    def const_float(self, meta: Meta, items: list[object]) -> Literal:
         # items: [FLOAT_token]
-        token = items[0]
+        token = cast(Token, items[0])
         result = Literal(float(str(token)))
         self._attach(result, self._loc(token), getattr(token, "pos_in_stream", 0) or 0)
         return result
 
     @v_args(meta=True)
-    def const_null(self, meta: Meta, items: list[Any]) -> Any:
+    def const_null(self, meta: Meta, items: list[object]) -> Literal:
         # items: [NULL_token]
-        token = items[0]
+        token = cast(Token, items[0])
         return self._make_none(self._loc(token), getattr(token, "pos_in_stream", 0) or 0)
 
     @v_args(meta=True)
-    def const_regex(self, meta: Meta, items: list[Any]) -> Any:
+    def const_regex(self, meta: Meta, items: list[object]) -> ExpressionStatement:
         # items: [REGEX_token]
-        token = items[0]
+        token = cast(Token, items[0])
         expr = self._process_regex_token(token)
         expr.location = self._loc(token)
         expr.namespace = self.namespace
         return expr
 
     @v_args(meta=True)
-    def const_true(self, meta: Meta, items: list[Any]) -> Any:
+    def const_true(self, meta: Meta, items: list[object]) -> Literal:
         # items: [TRUE_token]
-        token = items[0]
+        token = cast(Token, items[0])
         result = Literal(True)
         self._attach(result, self._loc(token), getattr(token, "pos_in_stream", 0) or 0)
         return result
 
     @v_args(meta=True)
-    def const_false(self, meta: Meta, items: list[Any]) -> Any:
+    def const_false(self, meta: Meta, items: list[object]) -> Literal:
         # items: [FALSE_token]
-        token = items[0]
+        token = cast(Token, items[0])
         result = Literal(False)
         self._attach(result, self._loc(token), getattr(token, "pos_in_stream", 0) or 0)
         return result
 
     @v_args(meta=True)
-    def const_string(self, meta: Meta, items: list[Any]) -> Any:
+    def const_string(self, meta: Meta, items: list[object]) -> Union[Literal, StringFormat]:
         # items: [STRING_token]
-        token = items[0]
+        token = cast(Token, items[0])
         raw = str(token)
         content = raw[1:-1]
-        loc = Location(self.file, token.line)
+        loc = Location(self.file, token.line or 1)
         decoded = _safe_decode(content, "Invalid escape sequence in string.", loc)
         ls = LocatableString(decoded, self._range(token), getattr(token, "pos_in_stream", 0) or 0, self.namespace)
         result = _get_string_ast_node(ls, False)
@@ -1466,13 +1483,13 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         return result
 
     @v_args(meta=True)
-    def const_fstring(self, meta: Meta, items: list[Any]) -> Any:
+    def const_fstring(self, meta: Meta, items: list[object]) -> Union[StringFormatV2, Literal]:
         # items: [FSTRING_token]
-        token = items[0]
+        token = cast(Token, items[0])
         raw = str(token)
         # Strip f" prefix and " suffix
         content = raw[2:-1]
-        loc = Location(self.file, token.line)
+        loc = Location(self.file, token.line or 1)
         decoded = _safe_decode(content, "Invalid escape sequence in f-string.", loc)
         ls = LocatableString(decoded, self._range(token), getattr(token, "pos_in_stream", 0) or 0, self.namespace)
         result = _process_fstring(ls)
@@ -1481,9 +1498,9 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         return result
 
     @v_args(meta=True)
-    def const_rstring(self, meta: Meta, items: list[Any]) -> Any:
+    def const_rstring(self, meta: Meta, items: list[object]) -> Literal:
         # items: [RSTRING_token]
-        token = items[0]
+        token = cast(Token, items[0])
         raw = str(token)
         content = raw[2:-1]
         ls = LocatableString(content, self._range(token), getattr(token, "pos_in_stream", 0) or 0, self.namespace)
@@ -1492,9 +1509,9 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         return result
 
     @v_args(meta=True)
-    def const_mls(self, meta: Meta, items: list[Any]) -> Any:
+    def const_mls(self, meta: Meta, items: list[object]) -> Union[Literal, StringFormat]:
         # items: [MLS_token]
-        token = items[0]
+        token = cast(Token, items[0])
         ls = self._process_mls(token)
         result = _get_string_ast_node(ls, True)
         result.location = self._range(token)  # mirrors PLY's attach_from_string (copies Range with column info)
@@ -1502,32 +1519,32 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         return result
 
     @v_args(meta=True)
-    def const_neg_int(self, meta: Meta, items: list[Any]) -> Any:
+    def const_neg_int(self, meta: Meta, items: list[object]) -> Literal:
         # items: [MINUS_OP_token, INT_token]
-        int_token = items[1]
+        int_token = cast(Token, items[1])
         result = Literal(-int(str(int_token)))
         self._attach(result, self._meta_loc(meta), 0)
         return result
 
     @v_args(meta=True)
-    def const_neg_float(self, meta: Meta, items: list[Any]) -> Any:
+    def const_neg_float(self, meta: Meta, items: list[object]) -> Literal:
         # items: [MINUS_OP_token, FLOAT_token]
-        float_token = items[1]
+        float_token = cast(Token, items[1])
         result = Literal(-float(str(float_token)))
         self._attach(result, self._meta_loc(meta), 0)
         return result
 
     @v_args(meta=True)
-    def constant_list(self, meta: Meta, items: list[Any]) -> Any:
+    def constant_list(self, meta: Meta, items: list[object]) -> CreateList:
         # items: [constants_result]  ("[" and "]" filtered)
-        consts = items[0]
+        consts = cast(list[ExpressionStatement], items[0])
         result = CreateList(consts)
         result.location = self._meta_loc(meta)
         result.namespace = self.namespace
         return result
 
-    def constants(self, items: list[Any]) -> Any:
-        return list(items)
+    def constants(self, items: list[object]) -> list[ExpressionStatement]:
+        return cast(list[ExpressionStatement], list(items))
 
 
 # ---- String processing helpers (mirrors PLY parser) ----
@@ -1576,7 +1593,7 @@ def _process_fstring(string_ast: LocatableString) -> Union[StringFormatV2, Liter
 
     locatable_matches: list[tuple[str, LocatableString]] = []
 
-    def locate_match(match: Any, scp: int, end_char: int) -> None:
+    def locate_match(match: tuple[str, Optional[str], Optional[str], Optional[str]], scp: int, end_char: int) -> None:
         assert match[1]
         r: Range = Range(string_ast.location.file, start_lnr, scp, start_lnr, end_char)
         locatable_string = LocatableString(match[1], r, string_ast.lexpos, string_ast.namespace)
