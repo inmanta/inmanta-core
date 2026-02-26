@@ -53,5 +53,8 @@ async def test_add_tables_for_agent_code_transport_rework(migrate_db_from: abc.C
     assert ["inmanta_plugins.fs", "inmanta_plugins.fs.json_file", "inmanta_plugins.fs.resources"] == [
         module.metadata.name for module in install_spec_2[0].blueprint.sources
     ]
+    assert ["inmanta_plugins.std", "inmanta_plugins.std.resources", "inmanta_plugins.std.types"] == [
+        module.metadata.name for module in install_spec_2[1].blueprint.sources
+    ]
 
     a = 2
