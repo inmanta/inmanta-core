@@ -1378,13 +1378,12 @@ def base_parse(ns: Namespace, tfile: str, content: Optional[str]) -> list[Statem
         return parser.parse(data, lexer=lexer, debug=False)
 
 
-cache_manager = CacheManager()
+# Re-export cache_manager from peInmantaParser so that tests importing
+# plyInmantaParser.cache_manager see the same object as the active parser.
+from inmanta.parser.peInmantaParser import cache_manager  # noqa: E402
 
 
 def parse(namespace: Namespace, filename: str, content: Optional[str] = None) -> list[Statement]:
-    statements = cache_manager.un_cache(namespace, filename)
-    if statements is not None:
-        return statements
-    statements = base_parse(namespace, filename, content)
-    cache_manager.cache(namespace, filename, statements)
-    return statements
+    from inmanta.parser import peInmantaParser
+
+    return peInmantaParser.parse(namespace, filename, content)

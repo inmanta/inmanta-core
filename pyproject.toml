@@ -72,5 +72,9 @@ parallel = true
 sigterm = true
 branch = false
 
+[[tool.mypy.overrides]]
+module = "pe.*"
+ignore_missing_imports = true
+
 [tool.mypy-baseline]
 sort_baseline = true
