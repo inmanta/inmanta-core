@@ -6137,6 +6137,68 @@ class Resource(BaseDocument):
         )
 
     @classmethod
+    async def get_composed_resource_deploy_summary(cls, environment: str) -> m.ComposedResourceDeploySummary:
+        query = """
+        WITH grouped_metrics AS (
+            SELECT
+                is_deploying::text AS is_deploying,
+                blocked::text AS blocked,
+                last_handler_run::text AS last_handler_run,
+                CASE
+                    WHEN is_undefined
+                        THEN 'undefined'
+                    WHEN
+                        last_handler_run='NEW'
+                        OR current_intent_attribute_hash <> last_deployed_attribute_hash
+                        OR last_deployed_attribute_hash IS NULL
+                        THEN 'has_update'
+                    WHEN last_handler_run_compliant
+                        THEN 'compliant'
+                    ELSE
+                        'non_compliant'
+                END AS compliance,
+                COUNT(*) AS row_count
+            FROM resource_persistent_state
+            WHERE environment=$1 AND NOT is_orphan
+            GROUP BY is_deploying, blocked, last_handler_run, compliance
+        )
+
+        SELECT
+            'is_deploying' AS metric,
+            is_deploying AS value,
+            SUM(row_count) AS count
+        FROM grouped_metrics
+        GROUP BY is_deploying
+
+        UNION ALL
+
+        SELECT 'blocked' AS metric,
+                blocked AS value,
+                SUM(row_count) AS count
+        FROM grouped_metrics
+        GROUP BY blocked
+
+        UNION ALL
+
+        SELECT 'last_handler_run' AS metric,
+                last_handler_run AS value,
+                SUM(row_count) AS count
+        FROM grouped_metrics
+        GROUP BY last_handler_run
+
+        UNION ALL
+
+        SELECT 'compliance' AS metric,
+                compliance AS value,
+                SUM(row_count) AS count
+        FROM grouped_metrics
+        GROUP BY compliance;
+        """
+
+        raw_results = await cls._fetch_query(query, cls._get_value(environment))
+        return m.ComposedResourceDeploySummary.create_from_db_result(raw_results)
+
+    @classmethod
     async def get_resource_deploy_summary(cls, environment: uuid.UUID) -> m.ResourceDeploySummary:
         inner_query = f"""
         SELECT rps.resource_id as resource_id,

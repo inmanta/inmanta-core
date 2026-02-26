@@ -31,6 +31,7 @@ from sqlakeyset import Marker, unserialize_bookmark
 from sqlakeyset.asyncio import select_page
 from sqlalchemy import Boolean, Select, UnaryExpression, and_, asc, case, desc, func, not_, select
 from strawberry import relay, scalars
+from strawberry.scalars import JSON
 from strawberry.schema.config import StrawberryConfig
 from strawberry.types import Info
 from strawberry.types.info import ContextType
@@ -553,6 +554,15 @@ class ResourcePersistentState:
     __exclude__ = ["resource_set_"]
 
 
+@strawberry.type
+class DeploySummary:
+    total_count: int
+    last_handler_run: JSON
+    blocked: JSON
+    compliance: JSON
+    is_deploying: JSON
+
+
 def add_filter_and_sort(
     stmt: Select[typing.Any],
     default_sorting: dict[str, UnaryExpression[typing.Any]],
@@ -834,5 +844,16 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
             stmt = add_filter_and_sort(stmt, ResourceOrder.default_order(), filter, order_by)
             stmt = do_required_resource_joins(stmt, filter, order_by)
             return await get_connection(stmt, info=info, model="Resource", first=first, after=after, last=last, before=before)
+
+        @strawberry.field
+        async def deploy_summary(self, info: CustomInfo, environment: str) -> DeploySummary:
+            results = await data.Resource.get_composed_resource_deploy_summary(environment)
+            return DeploySummary(
+                total_count=results.total_count,
+                last_handler_run=results.last_handler_run,
+                blocked=results.blocked,
+                compliance=results.compliance,
+                is_deploying=results.is_deploying,
+            )
 
     return strawberry.Schema(query=Query, config=StrawberryConfig(info_class=CustomInfo))

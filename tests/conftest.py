@@ -3023,6 +3023,9 @@ async def mixed_resource_generator(
                             change=None,
                         ),
                     )
+                else:
+                    print(ResourceVersionIdStr(f"{rid},v={version}"))
+                    print(reported_resource_state)
 
             await asyncio.gather(*(deploy(resource) for resource in resources_in_dirty_set))
             return resources_in_dirty_set

@@ -1,0 +1,4 @@
+---
+description: "Make deploySummary available in GraphQL. This exposes a summary of the new composed state"
+change-type: minor
+destination-branches: [master, iso9]

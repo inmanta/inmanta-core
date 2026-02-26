@@ -24,20 +24,21 @@ import os
 import typing
 import urllib
 import uuid
-from collections import abc
+from collections import abc, defaultdict
 from collections.abc import Sequence
 from enum import Enum, StrEnum
 from typing import ClassVar, Mapping, Optional, Self, Union, assert_never, cast
 
 import asyncpg
 import pydantic.schema
+from asyncpg import Record
 from pydantic import ConfigDict, Field, SerializationInfo, computed_field, field_serializer, field_validator
 
 import inmanta
 import inmanta.ast.export as ast_export
 import pydantic_core.core_schema
 from inmanta import const, data, protocol, resources
-from inmanta.deploy.state import Compliance, HandlerResult
+from inmanta.deploy.state import Blocked, Compliance, HandlerResult
 from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes
 from inmanta.types import BaseModel as BaseModel  # Keep in place for backwards compat with <=ISO8
@@ -433,6 +434,55 @@ class ResourceAction(BaseModel):
     changes: Optional[JsonType] = None
     change: Optional[const.Change] = None
     send_event: Optional[bool] = None  # Deprecated field
+
+
+class ComposedResourceDeploySummary(BaseModel):
+    """
+    :param compliance:
+    :param handler_result:
+    :param blocked:
+    :param is_deploying:
+    """
+
+    total_count: int
+    compliance: dict[Compliance, int]
+    last_handler_run: dict[HandlerResult, int]
+    blocked: dict[Blocked, int]
+    is_deploying: dict[str, int]
+
+    @classmethod
+    def create_from_db_result(cls, summary_by_db_result: Sequence[Record]) -> "ComposedResourceDeploySummary":
+        parsed_results = defaultdict(dict[str, int])
+        for result in summary_by_db_result:
+            parsed_results[result["metric"]][result["value"].lower()] = result["count"]
+
+        expected_values = {
+            "is_deploying": ["true", "false"],
+            "blocked": [x.value for x in Blocked],
+            "compliance": [x.value for x in Compliance],
+            "last_handler_run": [x.value for x in HandlerResult],
+        }
+        expected_count: int | None = None
+        for metric, values in expected_values.items():
+            count = 0
+            for value in values:
+                if value not in parsed_results[metric]:
+                    parsed_results[metric][value] = 0
+                else:
+                    count += parsed_results[metric][value]
+            if expected_count is None:
+                expected_count = count
+            assert (
+                count == expected_count
+            ), f"Different total counts detected: {count} != {expected_count} metrics: {parsed_results}"
+        assert expected_count is not None
+        return ComposedResourceDeploySummary(
+            total_count=expected_count,
+            compliance=parsed_results["compliance"],
+            last_handler_run=parsed_results["last_handler_run"],
+            blocked=parsed_results["blocked"],
+            is_deploying=parsed_results["is_deploying"],
+        )
 
 
 class ResourceDeploySummary(BaseModel):

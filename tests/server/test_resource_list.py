@@ -819,6 +819,26 @@ async def test_resources_paging_performance(client, environment, mixed_resource_
         "total": instances * resources_per_version,
     }
 
+    composed_result = await data.Resource.get_composed_resource_deploy_summary(environment)
+    assert composed_result.total_count == result.result["metadata"]["deploy_summary"]["total"]
+    ## blocked
+    assert composed_result.blocked["blocked"] == instances * 2  # skipped_for_undefined / undefined
+    assert composed_result.blocked["not_blocked"] == instances * (resources_per_version - 2)
+    assert composed_result.blocked["temporarily_blocked"] == 0
+    ## is_deploying
+    assert composed_result.is_deploying["true"] == instances  # deploying
+    assert composed_result.is_deploying["false"] == instances * (resources_per_version - 1)
+    ## last_handler_run
+    assert composed_result.last_handler_run["new"] == instances * 3  # deploying / skipped_for_undefined / undefined
+    assert composed_result.last_handler_run["successful"] == instances * (resources_per_version - 5)
+    assert composed_result.last_handler_run["failed"] == instances  # failed
+    assert composed_result.last_handler_run["skipped"] == instances  # skipped
+    # compliance
+    assert composed_result.compliance["has_update"] == instances * 2  # deploying / skipped_for_undefined
+    assert composed_result.compliance["compliant"] == instances * (resources_per_version - 6)
+    assert composed_result.compliance["non_compliant"] == instances * 3  # failed / non_compliant / skipped
+    assert composed_result.compliance["undefined"] == instances  # undefined
+
     port = config.server_bind_port.get()
     base_url = f"http://localhost:{port}"
     http_client = AsyncHTTPClient()

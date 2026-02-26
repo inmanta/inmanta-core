@@ -668,6 +668,40 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
     )
     assert rps
     await rps.update_fields(last_handler_run_compliant=False)
+    query = """
+    {
+        deploySummary(environment: "%s") {
+            totalCount
+            lastHandlerRun
+            blocked
+            compliance
+            isDeploying
+        }
+    }
+    """ % environment
+    composed_result = await client.graphql(query=query)
+    assert composed_result.code == 200
+    summary = composed_result.result["data"]["data"]["deploySummary"]
+    assert summary["totalCount"] == total_resources_in_latest_version
+    ## Blocked
+    assert summary["blocked"]["blocked"] == instances * 2  # skipped_for_undefined / undefined
+    assert summary["blocked"]["not_blocked"] == instances * (resources_per_version - 2)
+    assert summary["blocked"]["temporarily_blocked"] == 0
+    ## is_deploying
+    assert summary["isDeploying"]["true"] == instances  # deploying
+    assert summary["isDeploying"]["false"] == instances * (resources_per_version - 1)
+    ## last_handler_run
+    assert summary["lastHandlerRun"]["new"] == instances * 3  # deploying / skipped_for_undefined / undefined
+    assert summary["lastHandlerRun"]["successful"] == instances * (resources_per_version - 5)
+    assert summary["lastHandlerRun"]["failed"] == instances  # failed
+    assert summary["lastHandlerRun"]["skipped"] == instances  # skipped
+    # compliance
+    assert summary["compliance"]["has_update"] == instances * 2  # deploying / skipped_for_undefined
+    # -1 is the reporting resource we manually set to fail
+    assert summary["compliance"]["compliant"] == instances * (resources_per_version - 5) - 1
+    # failed / skipped / +1 is the simulated non_compliant reporting resource
+    assert summary["compliance"]["non_compliant"] == instances * 2 + 1
+    assert summary["compliance"]["undefined"] == instances  # undefined
 
     filters = [
         # (1 undefined, 1 skipped for undefined) * <instances>
