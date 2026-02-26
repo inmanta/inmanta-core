@@ -165,7 +165,7 @@ async def update(connection: Connection) -> None:
     ) -> tuple[
         list[tuple[str, str, str, list[str]]],
         list[tuple[str, str, str, str, str, bool]],
-        dict[int, dict[str, str]],
+        dict[str, dict[int, dict[str, str]]],
     ]:
         """
         Use the data from the `code_data` container to populate the following data containers:
@@ -176,7 +176,7 @@ async def update(connection: Connection) -> None:
         """
         module_data: list[tuple[str, str, str, list[str]]] = []
         files_in_module_data: list[tuple[str, str, str, str, str, bool]] = []
-        model_to_module_version_map: dict[int, dict[str, str]] = defaultdict(dict)
+        model_to_module_version_map: dict[str, dict[int, dict[str, str]]] = defaultdict(lambda: defaultdict(dict))
 
         def compute_files_in_module(
             sources_metadata: set[ModuleSourceMetadata],
@@ -205,13 +205,13 @@ async def update(connection: Connection) -> None:
                         compute_files_in_module(module_source_data.sources, module_name, environment, module_version)
                     )
                     module_data.append((module_name, module_version, environment, list(module_source_data.requirements)))
-                    model_to_module_version_map[cm_version][module_name] = module_version
+                    model_to_module_version_map[environment][cm_version][module_name] = module_version
 
         return module_data, files_in_module_data, model_to_module_version_map
 
     async def build_modules_in_agent_data(
         resource_type_to_module: dict[int, dict[str, set[str]]],
-        model_to_module_version_map: dict[int, dict[str, str]],
+        model_to_module_version_map: dict[str, dict[int, dict[str, str]]],
     ) -> list[tuple[int, str, str, str, str]]:
         """
         Use the data from the `resource_type_to_module` and `model_to_module_version_map` containers to populate
@@ -237,7 +237,7 @@ async def update(connection: Connection) -> None:
 
             assert isinstance(model_version, int)
             for module_name in resource_type_to_module[model_version][resource_type]:
-                module_version = model_to_module_version_map[model_version][module_name]
+                module_version = model_to_module_version_map[environment][model_version][module_name]
                 modules_for_agent_data.append((model_version, environment, agent_name, module_name, module_version))
 
         return modules_for_agent_data
