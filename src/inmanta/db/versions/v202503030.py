@@ -106,7 +106,7 @@ async def update(connection: Connection) -> None:
         # Maps environments to model versions
         environments: defaultdict[str, ModulesPerVersion] = field(default_factory=lambda: defaultdict(ModulesPerVersion))
 
-    async def fetch_code_data() -> tuple[VersionsPerEnv, dict[int, dict[str, set[str]]]]:
+    async def fetch_code_data() -> tuple[VersionsPerEnv, dict[str, dict[int, dict[str, set[str]]]]]:
         """
         Read from the Code table and populate the two following data containers:
 
@@ -116,7 +116,9 @@ async def update(connection: Connection) -> None:
         """
 
         code_data: VersionsPerEnv = VersionsPerEnv()
-        resource_type_to_module: dict[int, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
+        resource_type_to_module: dict[str, dict[int, dict[str, set[str]]]] = defaultdict(
+            lambda: defaultdict(lambda: defaultdict(set))
+        )
 
         fetch_source_refs_query = """
             SELECT DISTINCT
@@ -157,7 +159,7 @@ async def update(connection: Connection) -> None:
                 code_data.environments[env].model_versions[model_version].inmanta_modules[
                     inmanta_module_name
                 ].requirements.update(requirements)
-                resource_type_to_module[model_version][resource_type].add(inmanta_module_name)
+                resource_type_to_module[env][model_version][resource_type].add(inmanta_module_name)
         return code_data, resource_type_to_module
 
     def build_module_data(
@@ -210,7 +212,7 @@ async def update(connection: Connection) -> None:
         return module_data, files_in_module_data, model_to_module_version_map
 
     async def build_modules_in_agent_data(
-        resource_type_to_module: dict[int, dict[str, set[str]]],
+        resource_type_to_module: dict[str, dict[int, dict[str, set[str]]]],
         model_to_module_version_map: dict[str, dict[int, dict[str, str]]],
     ) -> list[tuple[int, str, str, str, str]]:
         """
@@ -229,6 +231,7 @@ async def update(connection: Connection) -> None:
         FROM public.resource
             """
         result = await connection.fetch(fetch_agent_for_resource_query)
+
         for res in result:
             model_version = res["model"]
             environment = str(res["environment"])
@@ -236,7 +239,7 @@ async def update(connection: Connection) -> None:
             resource_type = str(res["resource_type"])
 
             assert isinstance(model_version, int)
-            for module_name in resource_type_to_module[model_version][resource_type]:
+            for module_name in resource_type_to_module[environment][model_version][resource_type]:
                 module_version = model_to_module_version_map[environment][model_version][module_name]
                 modules_for_agent_data.append((model_version, environment, agent_name, module_name, module_version))
 
@@ -245,7 +248,7 @@ async def update(connection: Connection) -> None:
     # Data containers to help compute the data to insert into the newly created tables
 
     code_data: VersionsPerEnv
-    resource_type_to_module: dict[int, dict[str, set[str]]]
+    resource_type_to_module: dict[str,dict[int, dict[str, set[str]]]]
 
     code_data, resource_type_to_module = await fetch_code_data()
 
