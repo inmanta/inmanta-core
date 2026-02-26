@@ -35,7 +35,7 @@ async def test_add_tables_for_agent_code_transport_rework(migrate_db_from: abc.C
 
     codemanager = CodeManager()
     install_spec_1 = await codemanager.get_code(
-        environment="a8317edd-74d8-40fc-8933-9aedb77cfed4",
+        environment="f910d25f-13dc-4266-bf85-d351b9bc78ae",
         model_version=1,
         agent_name="internal",
     )
@@ -43,13 +43,15 @@ async def test_add_tables_for_agent_code_transport_rework(migrate_db_from: abc.C
     assert ["inmanta_plugins.std", "inmanta_plugins.std.resources", "inmanta_plugins.std.types"] == [
         module.metadata.name for module in install_spec_1[0].blueprint.sources
     ]
-
+    a=2
     install_spec_2 = await codemanager.get_code(
-        environment="a8317edd-74d8-40fc-8933-9aedb77cfed4",
+        environment="f910d25f-13dc-4266-bf85-d351b9bc78ae",
         model_version=1,
         agent_name="localhost",
     )
-    assert len(install_spec_2) == 1
+    assert len(install_spec_2) == 2
     assert ["inmanta_plugins.fs", "inmanta_plugins.fs.json_file", "inmanta_plugins.fs.resources"] == [
         module.metadata.name for module in install_spec_2[0].blueprint.sources
     ]
+
+    a = 2
