@@ -63,8 +63,8 @@ from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements import BiStatement, DefinitionStatement, DynamicStatement, Statement
 from inmanta.ast.statements.define import DefineImport
 from inmanta.file_parser import PreservativeYamlParser, RequirementsTxtParser
-from inmanta.parser import plyInmantaParser
-from inmanta.parser.plyInmantaParser import cache_manager
+from inmanta.parser import peInmantaParser
+from inmanta.parser.peInmantaParser import cache_manager
 from inmanta.server import config
 from inmanta.stable_api import stable_api
 from inmanta.warnings import InmantaWarning
@@ -1707,7 +1707,7 @@ class ModuleLike(ABC, Generic[TMetadata]):
     def _load_file(self, ns: Namespace, file: str) -> tuple[list[Statement], BasicBlock]:
         ns.location = Location(file, 1)
         statements = []  # type: List[Statement]
-        stmts = plyInmantaParser.parse(ns, file)
+        stmts = peInmantaParser.parse(ns, file)
         block = BasicBlock(ns)
         for s in stmts:
             if isinstance(s, BiStatement):
