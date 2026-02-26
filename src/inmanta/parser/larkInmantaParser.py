@@ -26,7 +26,7 @@ import string
 import warnings
 from dataclasses import dataclass
 from re import error as RegexError
-from typing import Any, Optional, Union, cast
+from typing import NoReturn, Optional, Union, cast
 
 from inmanta.ast import LocatableString, Location, Namespace, Range, RuntimeException
 from inmanta.ast.blocks import BasicBlock
@@ -60,6 +60,7 @@ from inmanta.parser import InvalidNamespaceAccess, ParserException, ParserWarnin
 from inmanta.parser.cache import CacheManager
 from lark import Lark, Token, Transformer, UnexpectedCharacters, UnexpectedEOF, UnexpectedInput, v_args
 from lark.exceptions import UnexpectedToken, VisitError
+from lark.tree import Meta
 
 # ---- Grammar loading ----
 
@@ -187,7 +188,7 @@ def _safe_decode(raw: str, warning_msg: str, location: Location) -> str:
 # ---- Transformer ----
 
 
-class InmantaTransformer(Transformer[Any, Any]):
+class InmantaTransformer(Transformer[Token, list[Statement]]):
     """
     Transforms a Lark parse tree for the Inmanta DSL into the AST used by the compiler.
 
@@ -223,7 +224,7 @@ class InmantaTransformer(Transformer[Any, Any]):
             self.namespace,
         )
 
-    def _meta_range(self, meta: Any) -> Range:
+    def _meta_range(self, meta: Meta) -> Range:
         """Create a Range from a tree's meta (propagated positions)."""
         return Range(
             self.file,
@@ -233,19 +234,19 @@ class InmantaTransformer(Transformer[Any, Any]):
             meta.end_column if meta.end_column is not None else meta.column,
         )
 
-    def _meta_loc(self, meta: Any) -> Location:
+    def _meta_loc(self, meta: Meta) -> Location:
         return Location(self.file, meta.line)
 
-    def _attach(self, node: Any, location: Location, lexpos: int = 0) -> None:
+    def _attach(self, node: object, location: Location, lexpos: int = 0) -> None:
         """Set location and namespace on an AST node (mirrors attach_lnr)."""
-        node.location = location
-        node.namespace = self.namespace
-        node.lexpos = lexpos
+        node.location = location  # type: ignore[attr-defined]
+        node.namespace = self.namespace  # type: ignore[attr-defined]
+        node.lexpos = lexpos  # type: ignore[attr-defined]
 
-    def _attach_from_string(self, node: Any, ls: LocatableString) -> None:
+    def _attach_from_string(self, node: object, ls: LocatableString) -> None:
         """Copy location and namespace from a LocatableString to a node (mirrors attach_from_string)."""
-        node.location = ls.location
-        node.namespace = ls.namespace
+        node.location = ls.location  # type: ignore[attr-defined]
+        node.namespace = ls.namespace  # type: ignore[attr-defined]
 
     def _make_none(self, location: Location, lexpos: int = 0) -> Literal:
         """Create a Literal(NoneValue()) with given location (mirrors make_none)."""
