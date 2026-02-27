@@ -33,10 +33,7 @@ async def test_add_tables_for_agent_code_transport_rework(migrate_db_from: abc.C
 
     await migrate_db_from()
 
-    environments = [
-        "bbfe114d-a91b-4cfe-be61-018c112aeafe",
-        "7d3ec9ea-9759-4beb-8629-c7df42ed8d4e"
-    ]
+    environments = ["bbfe114d-a91b-4cfe-be61-018c112aeafe", "7d3ec9ea-9759-4beb-8629-c7df42ed8d4e"]
     for env in environments:
 
         codemanager = CodeManager()
@@ -59,5 +56,3 @@ async def test_add_tables_for_agent_code_transport_rework(migrate_db_from: abc.C
             module.metadata.name for module in install_spec_2[0].blueprint.sources
         ]
         assert "inmanta-module-std" in install_spec_2[0].blueprint.requirements
-
-

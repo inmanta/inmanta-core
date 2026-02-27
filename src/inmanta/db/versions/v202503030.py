@@ -248,7 +248,7 @@ async def update(connection: Connection) -> None:
     # Data containers to help compute the data to insert into the newly created tables
 
     code_data: VersionsPerEnv
-    resource_type_to_module: dict[str,dict[int, dict[str, set[str]]]]
+    resource_type_to_module: dict[str, dict[int, dict[str, set[str]]]]
 
     code_data, resource_type_to_module = await fetch_code_data()
 
