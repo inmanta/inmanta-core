@@ -897,7 +897,7 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
         assert result_resources[i]["node"]["state"]["isDeploying"] == (False if i < instances or i >= 2 * instances else True)
 
 
-async def test_total_count(server, client, environment, setup_database):
+async def test_total_count(server, client, setup_database):
     """
     Test the totalCount attribute.
     Asserts that it works when multiple queries are requested and that the values are as expected.
@@ -934,10 +934,11 @@ async def test_total_count(server, client, environment, setup_database):
     """
     result = await client.graphql(query=query)
     assert result.code == 200
-    found_counts = []
-    for res in result.result["data"]["data"].values():
+    found_counts = {
+        "environments": 3,
+        "notifications": 6,
+    }
+    for name, res in result.result["data"]["data"].items():
         count = res["totalCount"]
         assert len(res["edges"]) == count
-        assert count > 0
-        assert count not in found_counts
-        found_counts.append(res["totalCount"])
+        assert found_counts[name] == count
