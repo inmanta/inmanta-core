@@ -294,9 +294,6 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
     def body(self, *stmts: Statement) -> list[Statement]:
         return list(stmts)
 
-    def top_stmt(self, item: Statement) -> Statement:
-        return item
-
     # ---- Imports ----
 
     @v_args(meta=True, inline=True)
@@ -315,17 +312,11 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
 
     # ---- Statements ----
 
-    def statement(self, item: Statement) -> Statement:
-        return item
-
     def stmt_list(self, *stmts: Statement) -> list[Statement]:
         # PLY's right-recursive stmt_list rule builds statements in reverse order
         # (appends current statement at the end, so first stmt ends up last).
         # Mirror that behavior to preserve execution ordering semantics.
         return list(reversed(stmts))
-
-    def expr_stmt(self, item: ExpressionStatement) -> ExpressionStatement:
-        return item
 
     @v_args(meta=True, inline=True)
     def assign_eq(self, meta: Meta, var_ref: Reference, operand: ExpressionStatement) -> Statement:
@@ -349,16 +340,14 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         id_token: Token,
         _in: Token,
         operand: ExpressionStatement,
-        block: list[Statement],
+        stmts: list[Statement],
+        _end: Token,
     ) -> For:
         self._validate_id(id_token)
         id_ls = self._locatable(id_token)
-        result = For(operand, id_ls, BasicBlock(self.namespace, block))  # type: ignore[arg-type]
+        result = For(operand, id_ls, BasicBlock(self.namespace, stmts))  # type: ignore[arg-type]
         self._attach(result, self._loc(for_token), getattr(for_token, "pos_in_stream", 0) or 0)
         return result
-
-    def block(self, stmt_list: list[Statement], _end: Token) -> list[Statement]:
-        return stmt_list
 
     @v_args(meta=True, inline=True)
     def if_stmt(self, meta: Meta, _if: Token, if_body: If, _end: Token) -> If:
@@ -387,9 +376,6 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         result = BasicBlock(self.namespace, [if_body])
         result.namespace = self.namespace
         return result
-
-    def operand(self, item: ExpressionStatement) -> ExpressionStatement:
-        return item
 
     # ---- Entity definitions ----
 
@@ -721,9 +707,6 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
 
     # ---- Relations ----
 
-    def relation_no_comment(self, relation_def: DefineRelation) -> DefineRelation:
-        return relation_def
-
     def relation_comment(self, relation_def: DefineRelation, mls_token: Token) -> DefineRelation:
         relation_def.comment = str(self._process_mls(mls_token))  # type: ignore[assignment]
         return relation_def
@@ -831,9 +814,6 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         return (0, n)
 
     # ---- Typedef ----
-
-    def typedef_no_comment(self, typedef_inner: DefineTypeConstraint) -> DefineTypeConstraint:
-        return typedef_inner
 
     def typedef_comment(self, typedef_inner: DefineTypeConstraint, mls_token: Token) -> DefineTypeConstraint:
         typedef_inner.comment = str(self._process_mls(mls_token))
@@ -1039,10 +1019,6 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
     @v_args(meta=True, inline=True)
     def pow_expr(self, meta: Meta, left: ExpressionStatement, op: Token, right: ExpressionStatement) -> ExpressionStatement:
         return self._binary_op(left, op, right, "**")
-
-    def paren_expr(self, item: ExpressionStatement) -> ExpressionStatement:
-        # "(" and ")" are anonymous => filtered
-        return item
 
     # ---- Map lookup ----
 

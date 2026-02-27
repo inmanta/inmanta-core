@@ -8,7 +8,7 @@ head: MLS?
 body: top_stmt*
 
 // ===== TOP-LEVEL STATEMENTS =====
-top_stmt: entity_def
+?top_stmt: entity_def
         | implement_def
         | implementation_def
         | relation
@@ -22,19 +22,17 @@ import_stmt: IMPORT ns_ref                -> import_ns
            | IMPORT ns_ref AS ID          -> import_as
 
 // ===== STATEMENTS =====
-statement: assign
-         | for_stmt
-         | if_stmt
-         | expression                     -> expr_stmt
+?statement: assign
+          | for_stmt
+          | if_stmt
+          | expression
 
 stmt_list: statement*
 
 assign: var_ref "=" operand              -> assign_eq
       | var_ref PEQ operand             -> assign_plus_eq
 
-for_stmt: FOR ID IN operand ":" block
-
-block: stmt_list END
+for_stmt: FOR ID IN operand ":" stmt_list END
 
 if_stmt: IF if_body END
 
@@ -44,7 +42,7 @@ if_next:                                 -> if_next_empty
        | ELSE ":" stmt_list             -> if_next_else
        | ELIF if_body                   -> if_next_elif
 
-operand: expression
+?operand: expression
 
 // ===== ENTITY DEFINITIONS =====
 entity_def: ENTITY CID ":" entity_body_outer                                   -> entity_def
@@ -113,8 +111,8 @@ impl_header:                                                                    
 implementation_def: IMPLEMENTATION ID FOR class_ref ":" impl_header stmt_list END -> implementation_def
 
 // ===== RELATION =====
-relation: relation_def MLS                                                       -> relation_comment
-        | relation_def                                                           -> relation_no_comment
+?relation: relation_def MLS                                                      -> relation_comment
+         | relation_def
 
 relation_def: class_ref "." ID multi REL class_ref "." ID multi                -> relation_bidir
             | class_ref "." ID multi REL class_ref                             -> relation_unidir
@@ -129,8 +127,8 @@ multi: "[" INT "]"                                                              
      | "[" ":" INT "]"                                                          -> multi_upper_bound
 
 // ===== TYPEDEF =====
-typedef: typedef_inner MLS                                                       -> typedef_comment
-       | typedef_inner                                                           -> typedef_no_comment
+?typedef: typedef_inner MLS                                                      -> typedef_comment
+        | typedef_inner
 
 typedef_inner: TYPEDEF ID AS ns_ref MATCHING expression                         -> typedef_matching
              | TYPEDEF ID AS ns_ref REGEX                                       -> typedef_regex
@@ -185,7 +183,7 @@ id_list: ID ("," ID)*
 // This mirrors the PLY grammar which also does not have a unary_minus expression rule.
 
 ?primary: atom
-    | "(" expression ")"                                                         -> paren_expr
+    | "(" expression ")"
 
 ?atom: constant
      | var_ref
