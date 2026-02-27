@@ -35,7 +35,7 @@ async def test_add_tables_for_agent_code_transport_rework(migrate_db_from: abc.C
 
     codemanager = CodeManager()
     install_spec_1 = await codemanager.get_code(
-        environment="f910d25f-13dc-4266-bf85-d351b9bc78ae",
+        environment="f41f2afc-42e7-429a-9145-b9e83c7f1774",
         model_version=1,
         agent_name="internal",
     )
@@ -44,7 +44,7 @@ async def test_add_tables_for_agent_code_transport_rework(migrate_db_from: abc.C
         module.metadata.name for module in install_spec_1[0].blueprint.sources
     ]
     install_spec_2 = await codemanager.get_code(
-        environment="f910d25f-13dc-4266-bf85-d351b9bc78ae",
+        environment="f41f2afc-42e7-429a-9145-b9e83c7f1774",
         model_version=1,
         agent_name="localhost",
     )
