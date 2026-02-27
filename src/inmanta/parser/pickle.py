@@ -16,6 +16,7 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import copyreg
 import threading
 from io import BytesIO
 from pickle import Pickler, Unpickler
@@ -56,9 +57,10 @@ class ASTPickler(Pickler):
 
     def __init__(self, file: BytesIO, protocol: Optional[int] = None) -> None:
         super().__init__(file, protocol=protocol)
-        # Register the Namespace reducer. The C pickler checks dispatch_table
-        # only for matching types, so non-Namespace objects incur no Python overhead.
-        self.dispatch_table = {Namespace: _reduce_namespace}  # type: ignore[dict-item]
+        # Start from the global copyreg table (handles re.Pattern, complex, etc.)
+        # and add our Namespace reducer. The C pickler checks dispatch_table only
+        # for matching types, so non-registered objects incur no Python overhead.
+        self.dispatch_table = {**copyreg.dispatch_table, Namespace: _reduce_namespace}  # type: ignore[dict-item]
 
 
 class ASTUnpickler(Unpickler):
