@@ -1,0 +1,9 @@
+name: simple_project_constrained
+description: A sample project, used for database migration test
+modulepath: libs
+downloadpath: libs
+install_mode: "release"
+repo:
+    - https://github.com/inmanta/
+pip:
+  use_system_config: true
