@@ -33,48 +33,31 @@ async def test_add_tables_for_agent_code_transport_rework(migrate_db_from: abc.C
 
     await migrate_db_from()
 
-    # 1201acea-3124-47f2-bdec-d12a6415b4fb	dev-1
-    # 51276a7c-7c34-492f-9aa4-9a2fa5dd6653	dev-1-twin
+    environments = [
+        "bbfe114d-a91b-4cfe-be61-018c112aeafe",
+        "7d3ec9ea-9759-4beb-8629-c7df42ed8d4e"
+    ]
+    for env in environments:
 
-    codemanager = CodeManager()
-    install_spec_1 = await codemanager.get_code(
-        environment="1201acea-3124-47f2-bdec-d12a6415b4fb",
-        model_version=1,
-        agent_name="internal",
-    )
-    assert len(install_spec_1) == 1
-    assert ["inmanta_plugins.std", "inmanta_plugins.std.resources", "inmanta_plugins.std.types"] == [
-        module.metadata.name for module in install_spec_1[0].blueprint.sources
-    ]
-    install_spec_2 = await codemanager.get_code(
-        environment="1201acea-3124-47f2-bdec-d12a6415b4fb",
-        model_version=1,
-        agent_name="localhost",
-    )
-    assert len(install_spec_2) == 2
-    assert ["inmanta_plugins.fs", "inmanta_plugins.fs.json_file", "inmanta_plugins.fs.resources"] == [
-        module.metadata.name for module in install_spec_2[0].blueprint.sources
-    ]
-    assert ["inmanta_plugins.std", "inmanta_plugins.std.resources", "inmanta_plugins.std.types"] == [
-        module.metadata.name for module in install_spec_2[1].blueprint.sources
-    ]
+        codemanager = CodeManager()
+        install_spec_1 = await codemanager.get_code(
+            environment=env,
+            model_version=1,
+            agent_name="internal",
+        )
+        assert len(install_spec_1) == 1
+        assert ["inmanta_plugins.std", "inmanta_plugins.std.resources", "inmanta_plugins.std.types"] == [
+            module.metadata.name for module in install_spec_1[0].blueprint.sources
+        ]
+        install_spec_2 = await codemanager.get_code(
+            environment=env,
+            model_version=1,
+            agent_name="localhost",
+        )
+        assert len(install_spec_2) == 1
+        assert ["inmanta_plugins.fs", "inmanta_plugins.fs.json_file", "inmanta_plugins.fs.resources"] == [
+            module.metadata.name for module in install_spec_2[0].blueprint.sources
+        ]
+        assert "inmanta-module-std" in install_spec_2[0].blueprint.requirements
 
-    install_spec_1 = await codemanager.get_code(
-        environment="51276a7c-7c34-492f-9aa4-9a2fa5dd6653",
-        model_version=1,
-        agent_name="internal",
-    )
-    assert len(install_spec_1) == 1
-    assert ["inmanta_plugins.std", "inmanta_plugins.std.resources", "inmanta_plugins.std.types"] == [
-        module.metadata.name for module in install_spec_1[0].blueprint.sources
-    ]
-    install_spec_2 = await codemanager.get_code(
-        environment="51276a7c-7c34-492f-9aa4-9a2fa5dd6653",
-        model_version=1,
-        agent_name="localhost",
-    )
-    assert len(install_spec_2) == 1
-    assert ["inmanta_plugins.fs", "inmanta_plugins.fs.json_file", "inmanta_plugins.fs.resources"] == [
-        module.metadata.name for module in install_spec_2[0].blueprint.sources
-    ]
 
