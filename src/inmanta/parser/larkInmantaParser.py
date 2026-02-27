@@ -170,6 +170,11 @@ def _safe_decode(raw: str, warning_msg: str, location: Location) -> str:
     Decode unicode escape sequences in a string, raising ParserWarning for invalid escapes.
     Mirrors PLY's safe_decode() function.
     """
+    # Fast path: most strings have no backslash escape sequences.
+    # decode("unicode_escape") is a no-op for ASCII strings without backslashes,
+    # so we can skip the expensive warnings.catch_warnings() machinery entirely.
+    if "\\" not in raw:
+        return raw
     try:
         with warnings.catch_warnings():
             warnings.filterwarnings("error", message="invalid escape sequence", category=DeprecationWarning)
