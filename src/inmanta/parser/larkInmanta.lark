@@ -1,0 +1,372 @@
+// Lark grammar for the Inmanta DSL
+// Ported from the PLY-based parser (plyInmantaParser.py / plyInmantaLex.py)
+
+// ===== START =====
+start: head body
+
+head: MLS?
+body: top_stmt*
+
+// ===== TOP-LEVEL STATEMENTS =====
+?top_stmt: entity_def
+        | implement_def
+        | implementation_def
+        | relation
+        | statement
+        | typedef
+        | index
+        | import_stmt
+
+// ===== IMPORTS =====
+import_stmt: IMPORT ns_ref                -> import_ns
+           | IMPORT ns_ref _AS ID         -> import_as
+
+// ===== STATEMENTS =====
+?statement: assign
+          | for_stmt
+          | if_stmt
+          | expression
+
+stmt_list: statement*
+
+assign: var_ref "=" operand              -> assign_eq
+      | var_ref PEQ operand             -> assign_plus_eq
+
+for_stmt: _FOR ID IN operand ":" stmt_list _END
+
+// if_stmt has only if_body after filtering _IF/_END, but we keep it non-transparent
+// so the if_stmt method can fix up the location to point to the IF keyword (via meta).
+if_stmt: _IF if_body _END
+
+if_body: expression ":" stmt_list if_next
+
+if_next:                                 -> if_next_empty
+       | _ELSE ":" stmt_list            -> if_next_else
+       | _ELIF if_body                  -> if_next_elif
+
+?operand: expression
+
+// ===== ENTITY DEFINITIONS =====
+entity_def: ENTITY CID ":" entity_body_outer                                    -> entity_def
+          | ENTITY CID _EXTENDS class_ref_list ":" entity_body_outer            -> entity_def_extends
+          | ENTITY ID ":" entity_body_outer                                      -> entity_def_err
+          | ENTITY ID _EXTENDS class_ref_list ":" entity_body_outer             -> entity_def_extends_err
+
+entity_body_outer: MLS entity_body _END                                         -> entity_body_outer_mls
+                 | entity_body _END                                             -> entity_body_outer_plain
+                 | MLS _END                                                     -> entity_body_outer_mls_only
+                 | _END                                                         -> entity_body_outer_empty
+
+entity_body: attr+
+
+// ===== ATTRIBUTES =====
+attr_base_type: ns_ref
+
+attr_type_multi: attr_base_type "[" "]"
+
+attr_type_opt: attr_type_multi "?"                                              -> attr_type_opt_multi
+             | attr_base_type "?"                                               -> attr_type_opt_base
+
+?attr_type: attr_type_opt
+          | attr_type_multi
+          | attr_base_type
+
+attr: attr_type ID                                                               -> attr_simple
+    | attr_type ID "=" constant                                                  -> attr_cte
+    | attr_type ID "=" constant_list                                             -> attr_cte_list
+    | attr_type ID "=" _UNDEF                                                    -> attr_undef
+    | attr_type CID                                                              -> attr_err
+    | attr_type CID "=" constant                                                 -> attr_err
+    | attr_type CID "=" constant_list                                            -> attr_err
+    | attr_type CID "=" _UNDEF                                                   -> attr_err
+    | DICT ID                                                                    -> attr_dict
+    | DICT ID "=" map_def                                                        -> attr_list_dict
+    | DICT ID "=" NULL                                                           -> attr_list_dict_null_err
+    | DICT "?" ID                                                                -> attr_dict_nullable
+    | DICT "?" ID "=" map_def                                                    -> attr_list_dict_nullable
+    | DICT "?" ID "=" NULL                                                       -> attr_list_dict_null
+    | DICT CID                                                                   -> attr_dict_err
+    | DICT "?" CID                                                               -> attr_dict_err
+    | DICT CID "=" map_def                                                       -> attr_dict_err
+    | DICT "?" CID "=" map_def                                                   -> attr_dict_err
+    | DICT CID "=" NULL                                                          -> attr_dict_err
+    | DICT "?" CID "=" NULL                                                      -> attr_dict_err
+
+// ===== IMPLEMENT =====
+implement_def: IMPLEMENT class_ref _USING implement_ns_list                      -> implement_def_simple
+             | IMPLEMENT class_ref _USING implement_ns_list MLS                 -> implement_def_comment
+             | IMPLEMENT class_ref _USING implement_ns_list _WHEN expression    -> implement_def_when
+             | IMPLEMENT class_ref _USING implement_ns_list _WHEN expression MLS -> implement_def_when_comment
+
+implement_ns_list: implement_ns_item ("," implement_ns_item)*
+
+implement_ns_item: ns_ref                                                        -> impl_ns_ref
+                 | _PARENTS                                                      -> impl_parents
+
+// ===== IMPLEMENTATION DEFINITION =====
+// Use an intermediate impl_header rule to eagerly consume the optional doc comment.
+// This resolves the LALR conflict between constant:MLS and stmt_list: (empty) on END.
+// LALR prefers SHIFT over REDUCE, so when MLS follows ":", it is shifted into impl_header_doc.
+impl_header:                                                                     -> impl_header_plain
+           | MLS                                                                 -> impl_header_doc
+
+implementation_def: IMPLEMENTATION ID _FOR class_ref ":" impl_header stmt_list _END -> implementation_def
+
+// ===== RELATION =====
+?relation: relation_def MLS                                                      -> relation_comment
+         | relation_def
+
+relation_def: class_ref "." ID multi REL class_ref "." ID multi                -> relation_bidir
+            | class_ref "." ID multi REL class_ref                             -> relation_unidir
+            | class_ref "." ID multi annotation_list class_ref "." ID multi    -> relation_annotated_bidir
+            | class_ref "." ID multi annotation_list class_ref                 -> relation_annotated_unidir
+
+annotation_list: operand ("," operand)*
+
+multi: "[" INT "]"                                                               -> multi_exact
+     | "[" INT ":" "]"                                                          -> multi_lower_bound
+     | "[" INT ":" INT "]"                                                      -> multi_range
+     | "[" ":" INT "]"                                                          -> multi_upper_bound
+
+// ===== TYPEDEF =====
+?typedef: typedef_inner MLS                                                      -> typedef_comment
+        | typedef_inner
+
+typedef_inner: _TYPEDEF ID _AS ns_ref _MATCHING expression                      -> typedef_matching
+             | _TYPEDEF ID _AS ns_ref REGEX                                     -> typedef_regex
+             | _TYPEDEF CID _AS constructor                                      -> typedef_cls_err
+
+// ===== INDEX =====
+index: INDEX class_ref "(" id_list ")"
+
+id_list: ID ("," ID)*
+
+// ===== EXPRESSIONS (cascading precedence, lowest to highest) =====
+
+?expression: ternary_expr
+
+?ternary_expr: or_expr
+    | or_expr "?" expression ":" ternary_expr                                   -> ternary_expr
+
+?or_expr: and_expr
+    | or_expr OR and_expr                                                        -> or_expr
+
+?and_expr: not_expr
+    | and_expr AND not_expr                                                      -> and_expr
+
+?not_expr: is_defined_expr
+    | NOT not_expr                                                               -> not_expr
+
+?is_defined_expr: cmp_expr
+    | attr_ref IS _DEFINED                                                       -> is_defined_attr
+    | ID IS _DEFINED                                                             -> is_defined_id
+    | map_lookup IS _DEFINED                                                     -> is_defined_map
+
+?cmp_expr: in_expr
+    | cmp_expr CMP_OP in_expr                                                    -> cmp_expr
+
+?in_expr: add_expr
+    | in_expr IN add_expr                                                        -> in_expr
+    | in_expr NOT IN add_expr                                                    -> not_in_expr
+
+?add_expr: mul_expr
+    | add_expr PLUS_OP mul_expr                                                  -> add_expr
+    | add_expr MINUS_OP mul_expr                                                 -> sub_expr
+
+?mul_expr: pow_expr
+    | mul_expr MUL_OP pow_expr                                                   -> mul_expr
+    | mul_expr DIVISION_OP pow_expr                                              -> div_expr
+    | mul_expr MOD_OP pow_expr                                                   -> mod_expr
+
+?pow_expr: primary
+    | primary DOUBLE_STAR pow_expr                                               -> pow_expr
+
+// Note: no unary_minus here - negative literals are handled by const_neg_int/const_neg_float in constant.
+// This mirrors the PLY grammar which also does not have a unary_minus expression rule.
+
+?primary: atom
+    | "(" expression ")"
+
+?atom: constant
+     | var_ref
+     | function_call
+     | constructor
+     | list_def
+     | list_comprehension
+     | map_def
+     | map_lookup
+     | index_lookup
+
+// ===== MAP LOOKUP =====
+// attr_ref "[" operand "]" is also a map_lookup (e.g. t.a["key"])
+// The distinction from index_lookup (attr_ref "[" param_list "]") is that
+// param_list starts with ID "=" or DOUBLE_STAR or "]", while operand starts with any expression.
+map_lookup: var_ref "[" operand "]"                                              -> map_lookup
+          | attr_ref "[" operand "]"                                             -> map_lookup
+          | map_lookup "[" operand "]"                                           -> map_lookup
+
+// ===== CONSTRUCTORS AND FUNCTION CALLS =====
+constructor: class_ref "(" param_list ")"
+
+function_call: ns_ref "(" function_param_list ")"                               -> function_call
+             | attr_ref "(" function_param_list ")"                             -> function_call_err_dot
+
+// ===== INDEX LOOKUP =====
+index_lookup: class_ref "[" param_list "]"                                       -> index_lookup_class
+            | attr_ref "[" param_list "]"                                        -> index_lookup_attr
+
+// ===== LISTS =====
+list_def: "[" operand_list "]"
+
+list_comprehension: "[" expression for_clause+ guard_clause* "]"
+
+for_clause: _FOR ID IN expression
+
+guard_clause: _IF expression
+
+operand_list: operand ("," operand)* ","?
+            |
+
+// ===== MAP DEF =====
+map_def: "{" pair_list "}"
+
+pair_list: pair_item ("," pair_item)* ","?
+         |
+
+pair_item: dict_key ":" operand
+
+dict_key: STRING                                                                 -> dict_key_string
+        | RSTRING                                                                -> dict_key_rstring
+
+// ===== PARAM LISTS =====
+param_list: param_list_element ("," param_list_element)* ","?
+          |
+
+param_list_element: ID "=" operand                                               -> param_explicit
+                  | DOUBLE_STAR operand                                          -> param_wrapped_kwargs
+
+function_param_list: function_param_list_element ("," function_param_list_element)* ","?
+                   |
+
+function_param_list_element: operand                                             -> func_arg
+                           | ID "=" operand                                      -> func_kwarg
+                           | DOUBLE_STAR operand                                 -> func_wrapped_kwargs
+
+// ===== VARIABLE AND ATTRIBUTE REFERENCES =====
+?var_ref: attr_ref
+        | ns_ref                                                                  -> var_ref_ns
+
+attr_ref: var_ref "." ID
+
+// ===== NAMESPACE AND CLASS REFERENCES =====
+ns_ref: ID                                                                       -> ns_ref_id
+      | ns_ref SEP ID                                                            -> ns_ref_sep
+
+// Note: no "ns_ref -> class_ref_id_err" alternative here.
+// Adding ns_ref directly as class_ref creates a reduce/reduce conflict between
+// class_ref:ns_ref and var_ref:ns_ref. Error reporting for lowercase class names
+// is done via the generic parse error path in _convert_lark_error.
+class_ref: CID                                                                   -> class_ref_cid
+         | ns_ref SEP CID                                                        -> class_ref_ns
+         | var_ref "." CID                                                       -> class_ref_err_dot
+
+class_ref_list: class_ref ("," class_ref)*
+
+// ===== CONSTANTS =====
+// Note: MINUS_OP INT and MINUS_OP FLOAT are included here (not as unary_minus)
+// to exactly match the PLY grammar, which also does not have a unary_minus expression rule.
+constant: INT                                                                    -> const_int
+        | FLOAT                                                                  -> const_float
+        | NULL                                                                   -> const_null
+        | REGEX                                                                  -> const_regex
+        | TRUE                                                                   -> const_true
+        | FALSE                                                                  -> const_false
+        | STRING                                                                 -> const_string
+        | FSTRING                                                                -> const_fstring
+        | RSTRING                                                                -> const_rstring
+        | MLS                                                                    -> const_mls
+        | MINUS_OP INT                                                           -> const_neg_int
+        | MINUS_OP FLOAT                                                         -> const_neg_float
+
+constant_list: "[" constants "]"
+
+constants: constant ("," constant)*
+         |
+
+// ===== TERMINALS =====
+
+// Keywords with word-boundary lookahead: prevent "in" from matching prefix of "int", etc.
+// Inmanta identifiers may contain hyphens, so we check for [a-zA-Z0-9_-] after the keyword.
+// Priority 2 beats ID (priority -1) and CID (priority 1).
+// Terminals beginning with _ are automatically filtered from the parse tree by Lark.
+_TYPEDEF.2: /typedef(?![a-zA-Z0-9_-])/
+_AS.2: /as(?![a-zA-Z0-9_-])/
+ENTITY.2: /entity(?![a-zA-Z0-9_-])/
+_EXTENDS.2: /extends(?![a-zA-Z0-9_-])/
+_END.2: /end(?![a-zA-Z0-9_-])/
+IN.2: /in(?![a-zA-Z0-9_-])/
+IMPLEMENTATION.2: /implementation(?![a-zA-Z0-9_-])/
+_FOR.2: /for(?![a-zA-Z0-9_-])/
+_MATCHING.2: /matching(?![a-zA-Z0-9_-])/
+INDEX.2: /index(?![a-zA-Z0-9_-])/
+IMPLEMENT.2: /implement(?![a-zA-Z0-9_-])/
+_USING.2: /using(?![a-zA-Z0-9_-])/
+_WHEN.2: /when(?![a-zA-Z0-9_-])/
+AND.2: /and(?![a-zA-Z0-9_-])/
+OR.2: /or(?![a-zA-Z0-9_-])/
+NOT.2: /not(?![a-zA-Z0-9_-])/
+TRUE.2: /true(?![a-zA-Z0-9_-])/
+FALSE.2: /false(?![a-zA-Z0-9_-])/
+IMPORT.2: /import(?![a-zA-Z0-9_-])/
+IS.2: /is(?![a-zA-Z0-9_-])/
+_DEFINED.2: /defined(?![a-zA-Z0-9_-])/
+DICT.2: /dict(?![a-zA-Z0-9_-])/
+NULL.2: /null(?![a-zA-Z0-9_-])/
+_UNDEF.2: /undef(?![a-zA-Z0-9_-])/
+_PARENTS.2: /parents(?![a-zA-Z0-9_-])/
+_IF.2: /if(?![a-zA-Z0-9_-])/
+_ELSE.2: /else(?![a-zA-Z0-9_-])/
+_ELIF.2: /elif(?![a-zA-Z0-9_-])/
+
+// REGEX terminal: matches "matching <whitespace> /regex/"
+// Priority 3 ensures it beats _MATCHING keyword (priority 2) via longer match
+REGEX.3: /matching[ \t\n]+\/([^\/\\\n]|\\.)+\//
+
+// Multi-character operators (defined before single-char to ensure correct matching)
+CMP_OP: "!=" | "==" | ">=" | "<=" | "<" | ">"
+PEQ: "+="
+REL: "--" | "->" | "<-"
+SEP: "::"
+DOUBLE_STAR: "**"
+
+// Single-character operators (named for position tracking in transformer)
+PLUS_OP: "+"
+MINUS_OP: "-"
+MUL_OP: "*"
+DIVISION_OP: "/"
+MOD_OP: "%"
+
+// Identifiers
+// CID: uppercase-starting identifiers (entity names, constructors)
+// Priority 1 to ensure CID is tried before ID for uppercase-start strings
+CID.1: /[A-Z][a-zA-Z_0-9-]*/
+// ID: lowercase/underscore-starting identifiers (variables, functions, modules)
+// Default priority -1 (regex), beaten by keywords (priority 2) and CID (priority 1)
+ID: /[a-z_][a-zA-Z_0-9-]*/
+
+// Literals
+// FLOAT before INT so "1.5" matches FLOAT not "1" INT
+FLOAT: /[0-9]+\.[0-9]+/
+INT: /[0-9]+/
+
+// Strings: various forms
+// MLS priority 1 ensures it is tried before STRING (priority -1) so that """..."""
+// is matched as a triple-quoted string rather than an empty "" followed by another ".
+MLS.1: /"{3,5}[\s\S]*?"{3,5}/
+STRING: /("([^\\"\n]|\\.)*"|'([^\\'\n]|\\.)*')/
+RSTRING.1: /(r"([^\\"\n]|\\.)*"|r'([^\\'\n]|\\.)*')/
+FSTRING.1: /(f"([^\\"\n]|\\.)*"|f'([^\\'\n]|\\.)*')/
+
+// Whitespace and comments (ignored)
+%ignore /[ \t\n\r]+/
+%ignore /#[^\n]*/
