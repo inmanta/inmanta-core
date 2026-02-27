@@ -135,11 +135,9 @@ async def test_dump_db(
     result = await client.create_environment(project_id=project_id, name="dev-1-twin")
     assert result.code == 200
     env_id_1_twin = result.result["environment"]["id"]
-    env1_twin = await data.Environment.get_by_id(uuid.UUID(env_id_1_twin))
-    await agent_factory(env_id_1_twin)
+    await agent_factory_no_state_check(env_id_1_twin)
 
     env_1_twin_version = 1
-
 
     check_result(await client.create_environment(project_id=project_id, name="dev-2"))
 
