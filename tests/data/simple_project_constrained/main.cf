@@ -1,0 +1,10 @@
+import fs
+import mitogen
+
+agent = std::AgentConfig(agentname=host.name, autostart=true)
+host = std::Host(name="localhost", os=std::linux, requires=agent)
+file = fs::ConfigFile(host=host, path="/tmp/test", content="1234", requires=agent, via=mitogen::Local())
+val = std::get_env(name="add_one_resource",default_value="false")
+if val == "true":
+    file2 = fs::ConfigFile(host=host, path="/tmp/test_orphan", content="test", requires=agent, via=mitogen::Local())
+end
