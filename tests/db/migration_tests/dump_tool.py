@@ -132,23 +132,42 @@ async def test_dump_db(
 
     env_1_version = 1
 
-    check_result(await client.create_environment(project_id=project_id, name="dev-2"))
+    result = await client.create_environment(project_id=project_id, name="dev-1-twin")
+    assert result.code == 200
+    env_id_1_twin = result.result["environment"]["id"]
+    env1_twin = await data.Environment.get_by_id(uuid.UUID(env_id_1_twin))
+    await agent_factory(env_id_1_twin)
 
-    project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["server"], str(env_id_1), "compiler")
-    project_source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../..", "data", "simple_project")
+    env_1_twin_version = 1
+
+
+    check_result(await client.create_environment(project_id=project_id, name="dev-2"))
 
     # Get correct version
     version = sorted([v.version for v in DBSchema(CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES, None)._get_update_functions()])[
         -1
     ]
     outfile = os.path.join(os.path.dirname(__file__), "dumps", f"v{version}.sql")
-    print("Project at: ", project_dir)
+
+    project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["server"], str(env_id_1), "compiler")
+    project_source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../..", "data", "simple_project")
+    print("dev-1 project at: ", project_dir)
+
+    shutil.copytree(project_source, project_dir)
+
+    project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["server"], str(env_id_1_twin), "compiler")
+    project_source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../..", "data", "simple_project_constrained")
+    print("dev-1-twin project at: ", project_dir)
 
     shutil.copytree(project_source, project_dir)
 
     check_result(await client.set_setting(env_id_1, "autostart_agent_deploy_interval", "0"))
     check_result(await client.set_setting(env_id_1, "autostart_agent_repair_interval", "600"))
     check_result(await client.set_setting(env_id_1, "auto_deploy", False))
+
+    check_result(await client.set_setting(env_id_1_twin, "autostart_agent_deploy_interval", "0"))
+    check_result(await client.set_setting(env_id_1_twin, "autostart_agent_repair_interval", "600"))
+    check_result(await client.set_setting(env_id_1_twin, "auto_deploy", False))
 
     check_result(await client.notify_change(id=env_id_1))
 
@@ -158,6 +177,15 @@ async def test_dump_db(
     check_result(await client.release_version(env_id_1, v1))
 
     await wait_until_deployment_finishes(client, env_id_1, timeout=20)
+
+    check_result(await client.notify_change(id=env_id_1_twin))
+
+    versions = await wait_for_version(client, env_id_1_twin, env_1_twin_version, compile_timeout=40)
+    v1_twin = versions["versions"][0]["version"]
+
+    check_result(await client.release_version(env_id_1_twin, v1_twin))
+
+    await wait_until_deployment_finishes(client, env_id_1_twin, timeout=20)
 
     check_result(await client.notify_change(id=env_id_1, update=False))
 
