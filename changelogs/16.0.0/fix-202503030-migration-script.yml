@@ -1,3 +1,8 @@
-description: Fix migration script
+description: >
+  The 202503030.py migration script was not correctly taking into account multiple environments. It would cause
+  the upgrade to version 9 to crash if two (or more) environments were using different versions of the same module.
+  This fix makes sure we correctly register module versions for each environment.
 change-type: patch
-destination-branches: [master]
+destination-branches: [master, iso9]
+sections:
+  bugfix: "Fix bug in a database migration script that was causing the orchestrator upgrade to version 9 to fail."
