@@ -19,7 +19,7 @@ body: top_stmt*
 
 // ===== IMPORTS =====
 import_stmt: IMPORT ns_ref                -> import_ns
-           | IMPORT ns_ref AS ID          -> import_as
+           | IMPORT ns_ref _AS ID         -> import_as
 
 // ===== STATEMENTS =====
 ?statement: assign
@@ -32,28 +32,30 @@ stmt_list: statement*
 assign: var_ref "=" operand              -> assign_eq
       | var_ref PEQ operand             -> assign_plus_eq
 
-for_stmt: FOR ID IN operand ":" stmt_list END
+for_stmt: _FOR ID IN operand ":" stmt_list _END
 
-if_stmt: IF if_body END
+// if_stmt has only if_body after filtering _IF/_END, but we keep it non-transparent
+// so the if_stmt method can fix up the location to point to the IF keyword (via meta).
+if_stmt: _IF if_body _END
 
 if_body: expression ":" stmt_list if_next
 
 if_next:                                 -> if_next_empty
-       | ELSE ":" stmt_list             -> if_next_else
-       | ELIF if_body                   -> if_next_elif
+       | _ELSE ":" stmt_list            -> if_next_else
+       | _ELIF if_body                  -> if_next_elif
 
 ?operand: expression
 
 // ===== ENTITY DEFINITIONS =====
-entity_def: ENTITY CID ":" entity_body_outer                                   -> entity_def
-          | ENTITY CID EXTENDS class_ref_list ":" entity_body_outer            -> entity_def_extends
-          | ENTITY ID ":" entity_body_outer                                     -> entity_def_err
-          | ENTITY ID EXTENDS class_ref_list ":" entity_body_outer             -> entity_def_extends_err
+entity_def: ENTITY CID ":" entity_body_outer                                    -> entity_def
+          | ENTITY CID _EXTENDS class_ref_list ":" entity_body_outer            -> entity_def_extends
+          | ENTITY ID ":" entity_body_outer                                      -> entity_def_err
+          | ENTITY ID _EXTENDS class_ref_list ":" entity_body_outer             -> entity_def_extends_err
 
-entity_body_outer: MLS entity_body END                                          -> entity_body_outer_mls
-                 | entity_body END                                              -> entity_body_outer_plain
-                 | MLS END                                                      -> entity_body_outer_mls_only
-                 | END                                                          -> entity_body_outer_empty
+entity_body_outer: MLS entity_body _END                                         -> entity_body_outer_mls
+                 | entity_body _END                                             -> entity_body_outer_plain
+                 | MLS _END                                                     -> entity_body_outer_mls_only
+                 | _END                                                         -> entity_body_outer_empty
 
 entity_body: attr+
 
@@ -72,11 +74,11 @@ attr_type_opt: attr_type_multi "?"                                              
 attr: attr_type ID                                                               -> attr_simple
     | attr_type ID "=" constant                                                  -> attr_cte
     | attr_type ID "=" constant_list                                             -> attr_cte_list
-    | attr_type ID "=" UNDEF                                                     -> attr_undef
+    | attr_type ID "=" _UNDEF                                                    -> attr_undef
     | attr_type CID                                                              -> attr_err
     | attr_type CID "=" constant                                                 -> attr_err
     | attr_type CID "=" constant_list                                            -> attr_err
-    | attr_type CID "=" UNDEF                                                    -> attr_err
+    | attr_type CID "=" _UNDEF                                                   -> attr_err
     | DICT ID                                                                    -> attr_dict
     | DICT ID "=" map_def                                                        -> attr_list_dict
     | DICT ID "=" NULL                                                           -> attr_list_dict_null_err
@@ -91,15 +93,15 @@ attr: attr_type ID                                                              
     | DICT "?" CID "=" NULL                                                      -> attr_dict_err
 
 // ===== IMPLEMENT =====
-implement_def: IMPLEMENT class_ref USING implement_ns_list                       -> implement_def_simple
-             | IMPLEMENT class_ref USING implement_ns_list MLS                  -> implement_def_comment
-             | IMPLEMENT class_ref USING implement_ns_list WHEN expression      -> implement_def_when
-             | IMPLEMENT class_ref USING implement_ns_list WHEN expression MLS  -> implement_def_when_comment
+implement_def: IMPLEMENT class_ref _USING implement_ns_list                      -> implement_def_simple
+             | IMPLEMENT class_ref _USING implement_ns_list MLS                 -> implement_def_comment
+             | IMPLEMENT class_ref _USING implement_ns_list _WHEN expression    -> implement_def_when
+             | IMPLEMENT class_ref _USING implement_ns_list _WHEN expression MLS -> implement_def_when_comment
 
 implement_ns_list: implement_ns_item ("," implement_ns_item)*
 
 implement_ns_item: ns_ref                                                        -> impl_ns_ref
-                 | PARENTS                                                       -> impl_parents
+                 | _PARENTS                                                      -> impl_parents
 
 // ===== IMPLEMENTATION DEFINITION =====
 // Use an intermediate impl_header rule to eagerly consume the optional doc comment.
@@ -108,7 +110,7 @@ implement_ns_item: ns_ref                                                       
 impl_header:                                                                     -> impl_header_plain
            | MLS                                                                 -> impl_header_doc
 
-implementation_def: IMPLEMENTATION ID FOR class_ref ":" impl_header stmt_list END -> implementation_def
+implementation_def: IMPLEMENTATION ID _FOR class_ref ":" impl_header stmt_list _END -> implementation_def
 
 // ===== RELATION =====
 ?relation: relation_def MLS                                                      -> relation_comment
@@ -130,9 +132,9 @@ multi: "[" INT "]"                                                              
 ?typedef: typedef_inner MLS                                                      -> typedef_comment
         | typedef_inner
 
-typedef_inner: TYPEDEF ID AS ns_ref MATCHING expression                         -> typedef_matching
-             | TYPEDEF ID AS ns_ref REGEX                                       -> typedef_regex
-             | TYPEDEF CID AS constructor                                        -> typedef_cls_err
+typedef_inner: _TYPEDEF ID _AS ns_ref _MATCHING expression                      -> typedef_matching
+             | _TYPEDEF ID _AS ns_ref REGEX                                     -> typedef_regex
+             | _TYPEDEF CID _AS constructor                                      -> typedef_cls_err
 
 // ===== INDEX =====
 index: INDEX class_ref "(" id_list ")"
@@ -156,9 +158,9 @@ id_list: ID ("," ID)*
     | NOT not_expr                                                               -> not_expr
 
 ?is_defined_expr: cmp_expr
-    | attr_ref IS DEFINED                                                        -> is_defined_attr
-    | ID IS DEFINED                                                              -> is_defined_id
-    | map_lookup IS DEFINED                                                      -> is_defined_map
+    | attr_ref IS _DEFINED                                                       -> is_defined_attr
+    | ID IS _DEFINED                                                             -> is_defined_id
+    | map_lookup IS _DEFINED                                                     -> is_defined_map
 
 ?cmp_expr: in_expr
     | cmp_expr CMP_OP in_expr                                                    -> cmp_expr
@@ -218,9 +220,9 @@ list_def: "[" operand_list "]"
 
 list_comprehension: "[" expression for_clause+ guard_clause* "]"
 
-for_clause: FOR ID IN expression
+for_clause: _FOR ID IN expression
 
-guard_clause: IF expression
+guard_clause: _IF expression
 
 operand_list: operand ("," operand)* ","?
             |
@@ -296,19 +298,20 @@ constants: constant ("," constant)*
 // Keywords with word-boundary lookahead: prevent "in" from matching prefix of "int", etc.
 // Inmanta identifiers may contain hyphens, so we check for [a-zA-Z0-9_-] after the keyword.
 // Priority 2 beats ID (priority -1) and CID (priority 1).
-TYPEDEF.2: /typedef(?![a-zA-Z0-9_-])/
-AS.2: /as(?![a-zA-Z0-9_-])/
+// Terminals beginning with _ are automatically filtered from the parse tree by Lark.
+_TYPEDEF.2: /typedef(?![a-zA-Z0-9_-])/
+_AS.2: /as(?![a-zA-Z0-9_-])/
 ENTITY.2: /entity(?![a-zA-Z0-9_-])/
-EXTENDS.2: /extends(?![a-zA-Z0-9_-])/
-END.2: /end(?![a-zA-Z0-9_-])/
+_EXTENDS.2: /extends(?![a-zA-Z0-9_-])/
+_END.2: /end(?![a-zA-Z0-9_-])/
 IN.2: /in(?![a-zA-Z0-9_-])/
 IMPLEMENTATION.2: /implementation(?![a-zA-Z0-9_-])/
-FOR.2: /for(?![a-zA-Z0-9_-])/
-MATCHING.2: /matching(?![a-zA-Z0-9_-])/
+_FOR.2: /for(?![a-zA-Z0-9_-])/
+_MATCHING.2: /matching(?![a-zA-Z0-9_-])/
 INDEX.2: /index(?![a-zA-Z0-9_-])/
 IMPLEMENT.2: /implement(?![a-zA-Z0-9_-])/
-USING.2: /using(?![a-zA-Z0-9_-])/
-WHEN.2: /when(?![a-zA-Z0-9_-])/
+_USING.2: /using(?![a-zA-Z0-9_-])/
+_WHEN.2: /when(?![a-zA-Z0-9_-])/
 AND.2: /and(?![a-zA-Z0-9_-])/
 OR.2: /or(?![a-zA-Z0-9_-])/
 NOT.2: /not(?![a-zA-Z0-9_-])/
@@ -316,17 +319,17 @@ TRUE.2: /true(?![a-zA-Z0-9_-])/
 FALSE.2: /false(?![a-zA-Z0-9_-])/
 IMPORT.2: /import(?![a-zA-Z0-9_-])/
 IS.2: /is(?![a-zA-Z0-9_-])/
-DEFINED.2: /defined(?![a-zA-Z0-9_-])/
+_DEFINED.2: /defined(?![a-zA-Z0-9_-])/
 DICT.2: /dict(?![a-zA-Z0-9_-])/
 NULL.2: /null(?![a-zA-Z0-9_-])/
-UNDEF.2: /undef(?![a-zA-Z0-9_-])/
-PARENTS.2: /parents(?![a-zA-Z0-9_-])/
-IF.2: /if(?![a-zA-Z0-9_-])/
-ELSE.2: /else(?![a-zA-Z0-9_-])/
-ELIF.2: /elif(?![a-zA-Z0-9_-])/
+_UNDEF.2: /undef(?![a-zA-Z0-9_-])/
+_PARENTS.2: /parents(?![a-zA-Z0-9_-])/
+_IF.2: /if(?![a-zA-Z0-9_-])/
+_ELSE.2: /else(?![a-zA-Z0-9_-])/
+_ELIF.2: /elif(?![a-zA-Z0-9_-])/
 
 // REGEX terminal: matches "matching <whitespace> /regex/"
-// Priority 3 ensures it beats MATCHING keyword (priority 2) via longer match
+// Priority 3 ensures it beats _MATCHING keyword (priority 2) via longer match
 REGEX.3: /matching[ \t\n]+\/([^\/\\\n]|\\.)+\//
 
 // Multi-character operators (defined before single-char to ensure correct matching)

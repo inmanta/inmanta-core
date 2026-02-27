@@ -26,7 +26,7 @@ import string
 import warnings
 from dataclasses import dataclass
 from re import error as RegexError
-from typing import NoReturn, Optional, Union
+from typing import NamedTuple, NoReturn, Optional, Union
 
 from inmanta.ast import LocatableString, Location, Namespace, Range, RuntimeException
 from inmanta.ast.blocks import BasicBlock
@@ -123,7 +123,7 @@ _RESERVED_KEYWORDS: frozenset[str] = frozenset(
 # ---- Helper dataclasses (internal to transformer) ----
 
 
-@dataclass
+@dataclass(slots=True)
 class _ForClause:
     """Internal: represents a 'for ID in expression' clause in a list comprehension."""
 
@@ -132,38 +132,34 @@ class _ForClause:
     guard: Optional[ExpressionStatement] = None
 
 
-@dataclass
-class _GuardClause:
+class _GuardClause(NamedTuple):
     """Internal: represents an 'if expression' clause in a list comprehension."""
 
     condition: ExpressionStatement
 
 
-@dataclass
-class _ImplementNsItem:
+class _ImplementNsItem(NamedTuple):
     """Internal: one item in an implement using ... list."""
 
     inherit_parents: bool
     ns_ref: Optional[LocatableString]  # None when inherit_parents is True
 
 
-@dataclass
-class _ParamListElement:
+class _ParamListElement(NamedTuple):
     """Internal: one element in a param_list (for constructors / index lookups)."""
 
     key: Optional[LocatableString]  # None for wrapped_kwargs
     value: Optional[ExpressionStatement]  # None for wrapped_kwargs
-    wrapped_kwargs: Optional["WrappedKwargs"] = None
+    wrapped_kwargs: Optional[WrappedKwargs] = None
 
 
-@dataclass
-class _FunctionParamElement:
+class _FunctionParamElement(NamedTuple):
     """Internal: one element in a function_param_list."""
 
     arg: Optional[ExpressionStatement] = None
     key: Optional[LocatableString] = None
     value: Optional[ExpressionStatement] = None
-    wrapped_kwargs: Optional["WrappedKwargs"] = None
+    wrapped_kwargs: Optional[WrappedKwargs] = None
 
 
 # ---- String decoding (mirrors PLY safe_decode) ----
@@ -227,7 +223,7 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         return LocatableString(
             str(token),
             self._range(token),
-            getattr(token, "pos_in_stream", 0) or 0,
+            token.start_pos or 0,
             self.namespace,
         )
 
@@ -299,15 +295,15 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
     @v_args(meta=True, inline=True)
     def import_ns(self, meta: Meta, import_token: Token, ns_ref: LocatableString) -> DefineImport:
         result = DefineImport(ns_ref, ns_ref)
-        self._attach(result, self._loc(import_token), getattr(import_token, "pos_in_stream", 0) or 0)
+        self._attach(result, self._loc(import_token), import_token.start_pos or 0)
         return result
 
     @v_args(meta=True, inline=True)
-    def import_as(self, meta: Meta, import_token: Token, ns_ref: LocatableString, _as: Token, id_token: Token) -> DefineImport:
+    def import_as(self, meta: Meta, import_token: Token, ns_ref: LocatableString, id_token: Token) -> DefineImport:
         self._validate_id(id_token)
         id_ls = self._locatable(id_token)
         result = DefineImport(ns_ref, id_ls)
-        self._attach(result, self._loc(import_token), getattr(import_token, "pos_in_stream", 0) or 0)
+        self._attach(result, self._loc(import_token), import_token.start_pos or 0)
         return result
 
     # ---- Statements ----
@@ -329,29 +325,27 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
     @v_args(meta=True, inline=True)
     def assign_plus_eq(self, meta: Meta, var_ref: Reference, peq_token: Token, operand: ExpressionStatement) -> Statement:
         result = var_ref.as_assign(operand, list_only=True)
-        self._attach(result, self._loc(peq_token), getattr(peq_token, "pos_in_stream", 0) or 0)
+        self._attach(result, self._loc(peq_token), peq_token.start_pos or 0)
         return result
 
     @v_args(meta=True, inline=True)
     def for_stmt(
         self,
         meta: Meta,
-        for_token: Token,
         id_token: Token,
         _in: Token,
         operand: ExpressionStatement,
         stmts: list[Statement],
-        _end: Token,
     ) -> For:
         self._validate_id(id_token)
         id_ls = self._locatable(id_token)
         result = For(operand, id_ls, BasicBlock(self.namespace, stmts))  # type: ignore[arg-type]
-        self._attach(result, self._loc(for_token), getattr(for_token, "pos_in_stream", 0) or 0)
+        self._attach(result, self._meta_loc(meta), meta.start_pos or 0)
         return result
 
     @v_args(meta=True, inline=True)
-    def if_stmt(self, meta: Meta, _if: Token, if_body: If, _end: Token) -> If:
-        if_body.location = self._loc(_if)
+    def if_stmt(self, meta: Meta, if_body: If) -> If:
+        if_body.location = self._meta_loc(meta)
         if_body.namespace = self.namespace
         return if_body
 
@@ -368,11 +362,11 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
     def if_next_empty(self) -> BasicBlock:
         return BasicBlock(self.namespace, [])
 
-    def if_next_else(self, _else: Token, stmt_list: list[DynamicStatement]) -> BasicBlock:
+    def if_next_else(self, stmt_list: list[DynamicStatement]) -> BasicBlock:
         return BasicBlock(self.namespace, stmt_list)
 
     @v_args(meta=True, inline=True)
-    def if_next_elif(self, meta: Meta, _elif: Token, if_body: If) -> BasicBlock:
+    def if_next_elif(self, meta: Meta, if_body: If) -> BasicBlock:
         result = BasicBlock(self.namespace, [if_body])
         result.namespace = self.namespace
         return result
@@ -390,7 +384,7 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         docstr, attrs = body_outer
         cid_ls = self._locatable(cid_token)
         result = DefineEntity(self.namespace, cid_ls, docstr, [], attrs)
-        self._attach(result, self._loc(entity_token), getattr(entity_token, "pos_in_stream", 0) or 0)
+        self._attach(result, self._loc(entity_token), entity_token.start_pos or 0)
         return result
 
     @v_args(meta=True, inline=True)
@@ -399,14 +393,13 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         meta: Meta,
         entity_token: Token,
         cid_token: Token,
-        _extends: Token,
         class_ref_list: list[LocatableString],
         body_outer: tuple[Optional[LocatableString], list[DefineAttribute]],
     ) -> DefineEntity:
         docstr, attrs = body_outer
         cid_ls = self._locatable(cid_token)
         result = DefineEntity(self.namespace, cid_ls, docstr, class_ref_list, attrs)
-        self._attach(result, self._loc(entity_token), getattr(entity_token, "pos_in_stream", 0) or 0)
+        self._attach(result, self._loc(entity_token), entity_token.start_pos or 0)
         return result
 
     def entity_def_err(self, *args: object) -> NoReturn:
@@ -423,21 +416,19 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         raise ParserException(id_ls.location, str(id_ls), "Invalid identifier: Entity names must start with a capital")
 
     def entity_body_outer_mls(
-        self, mls_token: Token, entity_body: list[DefineAttribute], _end: Token
+        self, mls_token: Token, entity_body: list[DefineAttribute]
     ) -> tuple[Optional[LocatableString], list[DefineAttribute]]:
         docstr = self._process_mls(mls_token)
         return (docstr, entity_body)
 
-    def entity_body_outer_plain(self, entity_body: list[DefineAttribute], _end: Token) -> tuple[None, list[DefineAttribute]]:
+    def entity_body_outer_plain(self, entity_body: list[DefineAttribute]) -> tuple[None, list[DefineAttribute]]:
         return (None, entity_body)
 
-    def entity_body_outer_mls_only(
-        self, mls_token: Token, _end: Token
-    ) -> tuple[Optional[LocatableString], list[DefineAttribute]]:
+    def entity_body_outer_mls_only(self, mls_token: Token) -> tuple[Optional[LocatableString], list[DefineAttribute]]:
         docstr = self._process_mls(mls_token)
         return (docstr, [])
 
-    def entity_body_outer_empty(self, _end: Token) -> tuple[None, list[DefineAttribute]]:
+    def entity_body_outer_empty(self) -> tuple[None, list[DefineAttribute]]:
         return (None, [])
 
     def entity_body(self, *attrs: DefineAttribute) -> list[DefineAttribute]:
@@ -463,7 +454,7 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         end_line = line + len(lines) - 1
         end_col = len(lines[-1]) + 1
         r = Range(self.file, line, col, end_line, end_col)
-        return LocatableString(decoded, r, getattr(token, "pos_in_stream", 0) or 0, self.namespace)
+        return LocatableString(decoded, r, token.start_pos or 0, self.namespace)
 
     # ---- Attributes ----
 
@@ -510,7 +501,7 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         self._attach_from_string(result, id_ls)
         return result
 
-    def attr_undef(self, attr_type: TypeDeclaration, id_token: Token, _undef: Token) -> DefineAttribute:
+    def attr_undef(self, attr_type: TypeDeclaration, id_token: Token) -> DefineAttribute:
         self._validate_id(id_token)
         id_ls = self._locatable(id_token)
         result = DefineAttribute(attr_type, id_ls, None, remove_default=True)
@@ -575,7 +566,7 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         # "?" and "=" filtered
         self._validate_id(id_token)
         id_ls = self._locatable(id_token)
-        none_val = self._make_none(self._loc(null_token), getattr(null_token, "pos_in_stream", 0) or 0)
+        none_val = self._make_none(self._loc(null_token), null_token.start_pos or 0)
         result = DefineAttribute(self._make_dict_type(dict_token, nullable=True), id_ls, none_val)
         self._attach_from_string(result, id_ls)
         return result
@@ -600,13 +591,12 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         meta: Meta,
         impl_token: Token,
         class_ref: LocatableString,
-        _using: Token,
         impl_ns_list: tuple[bool, list[LocatableString]],
     ) -> DefineImplement:
         inherit, implementations = impl_ns_list
         when = Literal(True)
         result = DefineImplement(class_ref, implementations, when, inherit=inherit, comment=None)
-        self._attach(result, self._loc(impl_token), getattr(impl_token, "pos_in_stream", 0) or 0)
+        self._attach(result, self._loc(impl_token), impl_token.start_pos or 0)
         result.copy_location(when)
         return result
 
@@ -616,7 +606,6 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         meta: Meta,
         impl_token: Token,
         class_ref: LocatableString,
-        _using: Token,
         impl_ns_list: tuple[bool, list[LocatableString]],
         mls_token: Token,
     ) -> DefineImplement:
@@ -624,7 +613,7 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         comment = self._process_mls(mls_token)
         when = Literal(True)
         result = DefineImplement(class_ref, implementations, when, inherit=inherit, comment=comment)
-        self._attach(result, self._loc(impl_token), getattr(impl_token, "pos_in_stream", 0) or 0)
+        self._attach(result, self._loc(impl_token), impl_token.start_pos or 0)
         result.copy_location(when)
         return result
 
@@ -634,14 +623,12 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         meta: Meta,
         impl_token: Token,
         class_ref: LocatableString,
-        _using: Token,
         impl_ns_list: tuple[bool, list[LocatableString]],
-        _when: Token,
         expression: ExpressionStatement,
     ) -> DefineImplement:
         inherit, implementations = impl_ns_list
         result = DefineImplement(class_ref, implementations, expression, inherit=inherit, comment=None)
-        self._attach(result, self._loc(impl_token), getattr(impl_token, "pos_in_stream", 0) or 0)
+        self._attach(result, self._loc(impl_token), impl_token.start_pos or 0)
         return result
 
     @v_args(meta=True, inline=True)
@@ -650,16 +637,14 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         meta: Meta,
         impl_token: Token,
         class_ref: LocatableString,
-        _using: Token,
         impl_ns_list: tuple[bool, list[LocatableString]],
-        _when: Token,
         expression: ExpressionStatement,
         mls_token: Token,
     ) -> DefineImplement:
         inherit, implementations = impl_ns_list
         comment = self._process_mls(mls_token)
         result = DefineImplement(class_ref, implementations, expression, inherit=inherit, comment=comment)
-        self._attach(result, self._loc(impl_token), getattr(impl_token, "pos_in_stream", 0) or 0)
+        self._attach(result, self._loc(impl_token), impl_token.start_pos or 0)
         return result
 
     def implement_ns_list(self, *items: _ImplementNsItem) -> tuple[bool, list[LocatableString]]:
@@ -670,7 +655,7 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
     def impl_ns_ref(self, ns_ref: LocatableString) -> _ImplementNsItem:
         return _ImplementNsItem(inherit_parents=False, ns_ref=ns_ref)
 
-    def impl_parents(self, _parents: Token) -> _ImplementNsItem:
+    def impl_parents(self) -> _ImplementNsItem:
         return _ImplementNsItem(inherit_parents=True, ns_ref=None)
 
     # ---- Implementation definition ----
@@ -687,13 +672,11 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         meta: Meta,
         impl_token: Token,
         id_token: Token,
-        _for: Token,
         class_ref: LocatableString,
         docstr: Optional[LocatableString],
         stmts: list[DynamicStatement],
-        _end: Token,
     ) -> DefineImplementation:
-        # Grammar: IMPLEMENTATION ID FOR class_ref ":" impl_header stmt_list END
+        # Grammar: IMPLEMENTATION ID _FOR class_ref ":" impl_header stmt_list _END
         # ":" is anonymous => filtered
         self._validate_id(id_token)
         id_ls = self._locatable(id_token)
@@ -702,7 +685,7 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         # DefineImplementation.__init__ sets location from name.get_location() (a Range)
         # and namespace from TypeDefinitionStatement.__init__.
         # Do not call _attach here — it would overwrite the Range location with a bare Location.
-        result.lexpos = getattr(impl_token, "pos_in_stream", 0) or 0
+        result.lexpos = impl_token.start_pos or 0
         return result
 
     # ---- Relations ----
@@ -729,7 +712,7 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         self._validate_id(right_id_token)
         right_attr = self._locatable(right_id_token)
         result = DefineRelation((left_class, right_attr, right_multi), (right_class, left_attr, left_multi))
-        self._attach(result, self._loc(rel_token), getattr(rel_token, "pos_in_stream", 0) or 0)
+        self._attach(result, self._loc(rel_token), rel_token.start_pos or 0)
         return result
 
     @v_args(meta=True, inline=True)
@@ -746,7 +729,7 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         self._validate_id(left_id_token)
         left_attr = self._locatable(left_id_token)
         result = DefineRelation((left_class, None, None), (right_class, left_attr, left_multi))
-        self._attach(result, self._loc(rel_token), getattr(rel_token, "pos_in_stream", 0) or 0)
+        self._attach(result, self._loc(rel_token), rel_token.start_pos or 0)
         return result
 
     @v_args(meta=True, inline=True)
@@ -823,11 +806,8 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
     def typedef_matching(
         self,
         meta: Meta,
-        _typedef: Token,
         id_token: Token,
-        _as: Token,
         ns_ref: LocatableString,
-        _matching: Token,
         expression: ExpressionStatement,
     ) -> DefineTypeConstraint:
         self._validate_id(id_token)
@@ -840,9 +820,7 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
     def typedef_regex(
         self,
         meta: Meta,
-        _typedef: Token,
         id_token: Token,
-        _as: Token,
         ns_ref: LocatableString,
         regex_token: Token,
     ) -> DefineTypeConstraint:
@@ -853,7 +831,7 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         self._attach_from_string(result, id_ls)
         return result
 
-    def typedef_cls_err(self, _typedef: Token, cid_token: Token, _as: Token, _constructor: object) -> NoReturn:
+    def typedef_cls_err(self, cid_token: Token, _constructor: object) -> NoReturn:
         cid_ls = self._locatable(cid_token)
         raise ParserException(cid_ls.location, str(cid_ls), "The use of default constructors is no longer supported")
 
@@ -884,7 +862,7 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
     def index(self, meta: Meta, index_token: Token, class_ref: LocatableString, id_list: list[LocatableString]) -> DefineIndex:
         # Grammar: INDEX class_ref "(" id_list ")"  →  "(" and ")" filtered
         result = DefineIndex(class_ref, id_list)
-        self._attach(result, self._loc(index_token), getattr(index_token, "pos_in_stream", 0) or 0)
+        self._attach(result, self._loc(index_token), index_token.start_pos or 0)
         return result
 
     def id_list(self, *tokens: Token) -> list[LocatableString]:
@@ -923,27 +901,27 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
     @v_args(meta=True, inline=True)
     def not_expr(self, meta: Meta, not_token: Token, expr: ExpressionStatement) -> ExpressionStatement:
         result = Not(expr)  # type: ignore[no-untyped-call]
-        self._attach(result, self._loc(not_token), getattr(not_token, "pos_in_stream", 0) or 0)
+        self._attach(result, self._loc(not_token), not_token.start_pos or 0)
         return result
 
     @v_args(meta=True, inline=True)
-    def is_defined_attr(self, meta: Meta, attr_ref: AttributeReference, is_token: Token, _defined: Token) -> IsDefined:
+    def is_defined_attr(self, meta: Meta, attr_ref: AttributeReference, is_token: Token) -> IsDefined:
         result = IsDefined(attr_ref.instance, attr_ref.attribute)
-        self._attach(result, self._loc(is_token), getattr(is_token, "pos_in_stream", 0) or 0)
+        self._attach(result, self._loc(is_token), is_token.start_pos or 0)
         return result
 
     @v_args(meta=True, inline=True)
-    def is_defined_id(self, meta: Meta, id_token: Token, is_token: Token, _defined: Token) -> IsDefined:
+    def is_defined_id(self, meta: Meta, id_token: Token, is_token: Token) -> IsDefined:
         id_ls = self._locatable(id_token)
         result = IsDefined(None, id_ls)
-        self._attach(result, self._loc(is_token), getattr(is_token, "pos_in_stream", 0) or 0)
+        self._attach(result, self._loc(is_token), is_token.start_pos or 0)
         return result
 
     @v_args(meta=True, inline=True)
-    def is_defined_map(self, meta: Meta, map_lk: MapLookup, is_token: Token, _defined: Token) -> ExpressionStatement:
+    def is_defined_map(self, meta: Meta, map_lk: MapLookup, is_token: Token) -> ExpressionStatement:
         # syntactic sugar: expands to (key in dict) and (dict[key] != null) and (dict[key] != [])
         location = self._loc(is_token)
-        lexpos = getattr(is_token, "pos_in_stream", 0) or 0
+        lexpos = is_token.start_pos or 0
 
         def attach(inp: ExpressionStatement) -> ExpressionStatement:
             inp.location = location
@@ -969,7 +947,7 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
                 f"Invalid operator {str(op_token)}",
             )
         result: ExpressionStatement = operator(left, right)  # type: ignore[arg-type]
-        self._attach(result, self._loc(op_token), getattr(op_token, "pos_in_stream", 0) or 0)
+        self._attach(result, self._loc(op_token), op_token.start_pos or 0)
         return result
 
     @v_args(meta=True, inline=True)
@@ -983,7 +961,7 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         self, meta: Meta, left: ExpressionStatement, not_token: Token, _in: Token, right: ExpressionStatement
     ) -> ExpressionStatement:
         result = Not(In(left, right))  # type: ignore[no-untyped-call]
-        self._attach(result, self._loc(not_token), getattr(not_token, "pos_in_stream", 0) or 0)
+        self._attach(result, self._loc(not_token), not_token.start_pos or 0)
         return result
 
     def _binary_op(
@@ -993,7 +971,7 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         if operator is None:
             raise ParserException(self._range(op_token), str(op_token), f"Invalid operator {op_str}")
         result: ExpressionStatement = operator(left, right)  # type: ignore[arg-type]
-        self._attach(result, self._loc(op_token), getattr(op_token, "pos_in_stream", 0) or 0)
+        self._attach(result, self._loc(op_token), op_token.start_pos or 0)
         return result
 
     @v_args(meta=True, inline=True)
@@ -1138,13 +1116,13 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         return result
 
     @v_args(meta=True, inline=True)
-    def for_clause(self, meta: Meta, _for: Token, id_token: Token, _in: Token, expression: ExpressionStatement) -> _ForClause:
+    def for_clause(self, meta: Meta, id_token: Token, _in: Token, expression: ExpressionStatement) -> _ForClause:
         self._validate_id(id_token)
         id_ls = self._locatable(id_token)
         return _ForClause(variable=id_ls, iterable=expression)
 
     @v_args(meta=True, inline=True)
-    def guard_clause(self, meta: Meta, _if: Token, expression: ExpressionStatement) -> _GuardClause:
+    def guard_clause(self, meta: Meta, expression: ExpressionStatement) -> _GuardClause:
         return _GuardClause(condition=expression)
 
     def operand_list(self, *items: ExpressionStatement) -> list[ExpressionStatement]:
@@ -1209,7 +1187,7 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
 
     def param_wrapped_kwargs(self, ds_token: Token, value: ExpressionStatement) -> _ParamListElement:
         wk = WrappedKwargs(value)
-        self._attach(wk, self._loc(ds_token), getattr(ds_token, "pos_in_stream", 0) or 0)
+        self._attach(wk, self._loc(ds_token), ds_token.start_pos or 0)
         return _ParamListElement(key=None, value=None, wrapped_kwargs=wk)
 
     def function_param_list(self, *items: _FunctionParamElement) -> list[_FunctionParamElement]:
@@ -1226,7 +1204,7 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
 
     def func_wrapped_kwargs(self, ds_token: Token, value: ExpressionStatement) -> _FunctionParamElement:
         wk = WrappedKwargs(value)
-        self._attach(wk, self._loc(ds_token), getattr(ds_token, "pos_in_stream", 0) or 0)
+        self._attach(wk, self._loc(ds_token), ds_token.start_pos or 0)
         return _FunctionParamElement(wrapped_kwargs=wk)
 
     # ---- Variable and attribute references ----
@@ -1301,18 +1279,18 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
     @v_args(meta=True, inline=True)
     def const_int(self, meta: Meta, token: Token) -> Literal:
         result = Literal(int(str(token)))
-        self._attach(result, self._loc(token), getattr(token, "pos_in_stream", 0) or 0)
+        self._attach(result, self._loc(token), token.start_pos or 0)
         return result
 
     @v_args(meta=True, inline=True)
     def const_float(self, meta: Meta, token: Token) -> Literal:
         result = Literal(float(str(token)))
-        self._attach(result, self._loc(token), getattr(token, "pos_in_stream", 0) or 0)
+        self._attach(result, self._loc(token), token.start_pos or 0)
         return result
 
     @v_args(meta=True, inline=True)
     def const_null(self, meta: Meta, token: Token) -> Literal:
-        return self._make_none(self._loc(token), getattr(token, "pos_in_stream", 0) or 0)
+        return self._make_none(self._loc(token), token.start_pos or 0)
 
     @v_args(meta=True, inline=True)
     def const_regex(self, meta: Meta, token: Token) -> ExpressionStatement:
@@ -1324,13 +1302,13 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
     @v_args(meta=True, inline=True)
     def const_true(self, meta: Meta, token: Token) -> Literal:
         result = Literal(True)
-        self._attach(result, self._loc(token), getattr(token, "pos_in_stream", 0) or 0)
+        self._attach(result, self._loc(token), token.start_pos or 0)
         return result
 
     @v_args(meta=True, inline=True)
     def const_false(self, meta: Meta, token: Token) -> Literal:
         result = Literal(False)
-        self._attach(result, self._loc(token), getattr(token, "pos_in_stream", 0) or 0)
+        self._attach(result, self._loc(token), token.start_pos or 0)
         return result
 
     @v_args(meta=True, inline=True)
@@ -1339,7 +1317,7 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         content = raw[1:-1]
         loc = Location(self.file, token.line or 1)
         decoded = _safe_decode(content, "Invalid escape sequence in string.", loc)
-        ls = LocatableString(decoded, self._range(token), getattr(token, "pos_in_stream", 0) or 0, self.namespace)
+        ls = LocatableString(decoded, self._range(token), token.start_pos or 0, self.namespace)
         result = _get_string_ast_node(ls, False)
         result.location = self._loc(token)
         result.namespace = self.namespace
@@ -1352,7 +1330,7 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         content = raw[2:-1]
         loc = Location(self.file, token.line or 1)
         decoded = _safe_decode(content, "Invalid escape sequence in f-string.", loc)
-        ls = LocatableString(decoded, self._range(token), getattr(token, "pos_in_stream", 0) or 0, self.namespace)
+        ls = LocatableString(decoded, self._range(token), token.start_pos or 0, self.namespace)
         result = _process_fstring(ls)
         result.location = self._range(token)  # mirrors PLY's attach_from_string (copies Range with column info)
         result.namespace = self.namespace
@@ -1362,7 +1340,7 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
     def const_rstring(self, meta: Meta, token: Token) -> Literal:
         raw = str(token)
         content = raw[2:-1]
-        ls = LocatableString(content, self._range(token), getattr(token, "pos_in_stream", 0) or 0, self.namespace)
+        ls = LocatableString(content, self._range(token), token.start_pos or 0, self.namespace)
         result = Literal(str(ls))
         self._attach_from_string(result, ls)
         return result
@@ -1549,7 +1527,7 @@ def _convert_lark_error(e: UnexpectedInput, tfile: str) -> ParserException:
         # mirrors PLY: if parser.symstack[-1].type in reserved.values(): ...
         if vs:
             top = vs[-1]
-            if isinstance(top, Token) and top.type in reserved.values():
+            if isinstance(top, Token) and top.type.lstrip("_") in reserved.values():
                 kw_r = Range(tfile, top.line or line, top.column or col, top.line or line, (top.column or col) + len(str(top)))
                 return ParserException(kw_r, str(top), f"invalid identifier, {str(top)} is a reserved keyword")
 
@@ -1557,7 +1535,7 @@ def _convert_lark_error(e: UnexpectedInput, tfile: str) -> ParserException:
         # mirrors PLY's p_class_ref_list_term_err grammar rule.
         if token is not None and token.type == "COLON" and vs:
             top = vs[-1]
-            has_extends = any(isinstance(item, Token) and item.type == "EXTENDS" for item in vs)
+            has_extends = any(isinstance(item, Token) and item.type == "_EXTENDS" for item in vs)
             if has_extends:
                 if hasattr(top, "data") and top.data.startswith("ns_ref"):
                     # Tree-based: extract the last ID token from the ns_ref tree
@@ -1579,7 +1557,7 @@ def _convert_lark_error(e: UnexpectedInput, tfile: str) -> ParserException:
         if token is not None:
             token_str = str(token)
             # Failing token itself is a reserved keyword (rarely needed after above checks)
-            if token.type in reserved.values():
+            if token.type.lstrip("_") in reserved.values():
                 return ParserException(r, token_str, f"invalid identifier, {token_str} is a reserved keyword")
             return ParserException(r, token_str)
         return ParserException(r, None, "Unexpected token")
