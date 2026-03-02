@@ -23,11 +23,22 @@ from inmanta import const, data
 from inmanta.data import model
 from inmanta.deploy import state
 from inmanta.graphql.schema import to_snake_case
+from inmanta.protocol import Result
 from inmanta.server import SLICE_COMPILER
 from inmanta.server.services.compilerservice import CompilerService
 from inmanta.util import retry_limited
 from utils import insert_with_link_to_configuration_model, run_compile_and_wait_until_compile_is_done
 
+
+def check_correct_graphql_response(result: Result[object]) -> None:
+    """
+    GraphQL still returns 200 even if errors occurred.
+    This method asserts that no errors actually occured.
+    """
+    assert result.code == 200
+    data = result.result["data"]
+    assert data
+    assert data["errors"] is None, data["errors"]
 
 @pytest.fixture
 async def setup_database(project_default, server, client):
@@ -208,23 +219,24 @@ async def test_query_environment_settings(server, client, setup_database):
     )
     assert result.code == 200
     query = """
-{
-    environments(filter:{id: "%s"}) {
-        edges {
-            node {
-              id
-              settings
+    query GetEnvironments($environment: String) {
+        environments(filter: { id: $environment }) {
+            edges {
+                node {
+                    id
+                    settings
+                }
             }
         }
     }
-}
+    """
 
-""" % env_id
-
-    result = await client.graphql(query=query)
-    assert result.code == 200
+    result = await client.graphql(query=query, variables={"environment": env_id})
+    check_correct_graphql_response(result)
     # Result settings
-    settings = result.result["data"]["data"]["environments"]["edges"][0]["node"]["settings"]
+    node = result.result["data"]["data"]["environments"]["edges"][0]["node"]
+    settings = node["settings"]
+    assert node["id"] == env_id
     # Expected settings
     api_result = await client.list_settings(tid=env_id)
     assert api_result.code == 200
@@ -259,7 +271,7 @@ async def test_query_environments_with_filtering(server, client, setup_database)
 }
 """
     result = await client.graphql(query=query)
-    assert result.code == 200
+    check_correct_graphql_response(result)
     assert result.result["data"] == {
         "data": {
             "environments": {
@@ -304,7 +316,7 @@ async def test_query_environments_with_sorting(server, client, setup_database):
 
     for test_case in test_cases:
         result = await client.graphql(query=query % test_case[0])
-        assert result.code == 200
+        check_correct_graphql_response(result)
         results = result.result["data"]["data"]["environments"]["edges"]
         assert [node["node"]["name"] for node in results] == test_case[1]
 
@@ -353,14 +365,14 @@ async def test_query_environments_with_paging(server, client, setup_database):
 
     for test_case in test_cases:
         result = await client.graphql(query=query % test_case[0])
-        assert result.code == 200
+        check_correct_graphql_response(result)
         results = result.result["data"]["data"]["environments"]["edges"]
         assert [node["node"]["name"] for node in results] == test_case[1]
 
     # Get the first 5 elements
     # [b, c, a, 0, 1]
     result = await client.graphql(query=query % "first: 5")
-    assert result.code == 200
+    check_correct_graphql_response(result)
     environments = result.result["data"]["data"]["environments"]
     results = environments["edges"]
     assert len(results) == 5
@@ -375,7 +387,7 @@ async def test_query_environments_with_paging(server, client, setup_database):
     # Get 5 environments starting from the second to last cursor of the previous result
     second_to_last_cursor = results[-2]["cursor"]
     result = await client.graphql(query=query % f'first: 5, after:"{second_to_last_cursor}"')
-    assert result.code == 200
+    check_correct_graphql_response(result)
     environments = result.result["data"]["data"]["environments"]
     results = environments["edges"]
     assert len(results) == 5
@@ -395,7 +407,7 @@ async def test_query_environments_with_paging(server, client, setup_database):
     previous_second_to_last_cursor = results[3]["cursor"]
     previous_first_cursor = first_cursor
     result = await client.graphql(query=query % f'last: 5, before:"{new_last_cursor}"')
-    assert result.code == 200
+    check_correct_graphql_response(result)
     environments = result.result["data"]["data"]["environments"]
     results = environments["edges"]
     assert len(results) == 5
@@ -494,7 +506,7 @@ async def test_is_environment_compiling(server, client, clienthelper, environmen
         }
 
     result = await client.graphql(query=query)
-    assert result.code == 200
+    check_correct_graphql_response(result)
     assert result.result["data"] == get_response(is_compiling=False)
 
     # Trigger compile
@@ -504,7 +516,7 @@ async def test_is_environment_compiling(server, client, clienthelper, environmen
 
     # Assert that GraphQL reports that environment is compiling
     result = await client.graphql(query=query)
-    assert result.code == 200
+    check_correct_graphql_response(result)
     # Check if regular endpoint confirms that it is compiling
     regular_check = await client.is_compiling(environment)
     assert regular_check.code == 200
@@ -515,7 +527,7 @@ async def test_is_environment_compiling(server, client, clienthelper, environmen
 
     # Assert that GraphQL reports that environment is no longer compiling
     result = await client.graphql(query=query)
-    assert result.code == 200
+    check_correct_graphql_response(result)
     assert result.result["data"] == get_response(is_compiling=False)
 
 
@@ -563,7 +575,7 @@ async def test_notifications(server, client, setup_database):
                 {key: "created" order: "desc"}
             ])
     """)
-    assert result.code == 200
+    check_correct_graphql_response(result)
     edges = result.result["data"]["data"]["notifications"]["edges"]
     # Environments 1 has 6 uncleared notifications
     assert len(edges) == 6
@@ -588,7 +600,7 @@ async def test_notifications(server, client, setup_database):
             ],
             first: 3)
     """)
-    assert result.code == 200
+    check_correct_graphql_response(result)
     notifications = result.result["data"]["data"]["notifications"]
     pageInfo = notifications["pageInfo"]
     assert pageInfo["hasPreviousPage"] is False
@@ -619,7 +631,7 @@ async def test_notifications(server, client, setup_database):
             first: 3, after: "%s")
     """ % pageInfo["endCursor"]
     result = await client.graphql(query=query % next_page_filter)
-    assert result.code == 200
+    check_correct_graphql_response(result)
     notifications = result.result["data"]["data"]["notifications"]
     pageInfo = notifications["pageInfo"]
     assert pageInfo["hasPreviousPage"] is True
@@ -792,8 +804,7 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
             f["query"],
         )
         result = await client.graphql(query=query)
-        assert result.code == 200
-        assert result.result["data"]["errors"] is None
+        check_correct_graphql_response(result)
         assert len(result.result["data"]["data"]["resources"]["edges"]) == f["result"], f["query"]
         assertion = f.get("assertion", None)
         if assertion:
@@ -815,8 +826,7 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
     }
     """ % environment
     result = await client.graphql(query=query)
-    assert result.code == 200
-    assert result.result["data"]["errors"] is None
+    check_correct_graphql_response(result)
     result_resources = result.result["data"]["data"]["resources"]["edges"]
     assert len(result_resources) == 3 * instances
     for i in range(0, len(result_resources)):
@@ -842,8 +852,7 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
     }
     """ % environment
     result = await client.graphql(query=query)
-    assert result.code == 200
-    assert result.result["data"]["errors"] is None
+    check_correct_graphql_response(result)
     result_resources = result.result["data"]["data"]["resources"]["edges"]
     assert len(result_resources) == 3 * instances
     for i in range(0, len(result_resources)):
@@ -871,8 +880,7 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
        }
        """ % environment
     result = await client.graphql(query=query)
-    assert result.code == 200
-    assert result.result["data"]["errors"] is None
+    check_correct_graphql_response(result)
     result_resources = result.result["data"]["data"]["resources"]["edges"]
     assert len(result_resources) == 3 * instances
     for i in range(0, len(result_resources)):
