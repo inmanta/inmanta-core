@@ -255,16 +255,49 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
                     dispatch[name] = lambda children, meta, f=bound, w=vw, d=name: w(f, d, children, meta)
         self._call_dispatch: dict[str, Callable[..., object]] = dispatch
 
-    def _call_userfunc(self, tree: Tree[Token], new_children: Optional[list[object]] = None) -> object:
-        """Optimized rule callback dispatcher using pre-built dispatch table."""
-        children: list[object] = new_children if new_children is not None else tree.children  # type: ignore[assignment]
+    def _transform_tree(self, tree: Tree[Token]) -> object:
+        """
+        Optimised single-pass tree transformer.
+
+        Replaces Lark's 4-function call chain
+        (transform → _transform_children generator → _call_userfunc → dispatch)
+        with one tight recursive loop per tree node:
+
+        For each child:
+          - If it is a Tree (non-transparent sub-rule), recurse.
+          - If it is a Token, pass it through unchanged (visit_tokens=False means
+            Lark's default path would also skip it; we just inline that skip).
+
+        After collecting all transformed children, look up the rule callback in
+        the pre-built _call_dispatch dict (populated in __init__) and call it
+        directly with *children — no VArgsWrapper.__get__, no functools overhead,
+        no generator object, no isinstance-Token loop, no Discard check.
+
+        Falls through to __default__ for any rule not in _call_dispatch (transparent
+        rules are already inlined by Lark's LALR engine before we see them).
+        """
+        new_children: list[object] = []
+        for c in tree.children:
+            if isinstance(c, Tree):
+                new_children.append(self._transform_tree(c))
+            else:
+                # Token — visit_tokens=False, pass through unchanged
+                new_children.append(c)
         f = self._call_dispatch.get(tree.data)
         if f is None:
-            return self.__default__(tree.data, children, tree.meta)  # type: ignore[no-untyped-call]
+            return self.__default__(tree.data, new_children, tree.meta)  # type: ignore[no-untyped-call]
         try:
-            return f(*children)
+            return f(*new_children)
         except Exception as e:
             raise VisitError(tree.data, tree, e) from e  # type: ignore[no-untyped-call]
+
+    def transform(self, tree: Tree[Token]) -> list[Statement]:
+        """
+        Entry point: replaces the default Transformer.transform() which does
+        list(_transform_children([tree])) — a generator over a single-element list.
+        We call _transform_tree directly, eliminating that extra generator hop.
+        """
+        return self._transform_tree(tree)  # type: ignore[return-value]
 
     # ---- Position helpers ----
 
@@ -1214,7 +1247,12 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
 
     def ns_ref_id(self, token: Token) -> LocatableString:
         self._validate_id(token)
-        return self._locatable(token)
+        # Inline _locatable/_range to save 2 function-call hops (called ~75k times per compile).
+        line = token.line or 1
+        col = token.column or 1
+        end_line = token.end_line if token.end_line is not None else line
+        end_col = token.end_column if token.end_column is not None else (col + len(str(token)))
+        return LocatableString(str(token), Range(self.file, line, col, end_line, end_col), token.start_pos or 0, self.namespace)
 
     def ns_ref_sep(self, left: LocatableString, _sep: Token, id_token: Token) -> LocatableString:
         self._validate_id(id_token)
@@ -1227,7 +1265,14 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         return LocatableString(merged_value, r, id_ls.lexpos, self.namespace)
 
     def class_ref_cid(self, cid_token: Token) -> LocatableString:
-        return self._locatable(cid_token)
+        # Inline _locatable/_range to save 2 function-call hops (called ~9k times per compile).
+        line = cid_token.line or 1
+        col = cid_token.column or 1
+        end_line = cid_token.end_line if cid_token.end_line is not None else line
+        end_col = cid_token.end_column if cid_token.end_column is not None else (col + len(str(cid_token)))
+        return LocatableString(
+            str(cid_token), Range(self.file, line, col, end_line, end_col), cid_token.start_pos or 0, self.namespace
+        )
 
     def class_ref_ns(self, left: LocatableString, _sep: Token, cid_token: Token) -> LocatableString:
         cid_ls = self._locatable(cid_token)
