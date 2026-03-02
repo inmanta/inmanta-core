@@ -850,10 +850,10 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
             results = await data.Resource.get_composed_resource_deploy_summary(environment)
             return DeploySummary(
                 total_count=results.total_count,
-                last_handler_run=results.last_handler_run,
-                blocked=results.blocked,
-                compliance=results.compliance,
-                is_deploying=results.is_deploying,
+                last_handler_run=cast(JSON, results.last_handler_run),
+                blocked=cast(JSON, results.blocked),
+                compliance=cast(JSON, results.compliance),
+                is_deploying=cast(JSON, results.is_deploying),
             )
 
     return strawberry.Schema(query=Query, config=StrawberryConfig(info_class=CustomInfo))

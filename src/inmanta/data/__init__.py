@@ -6137,7 +6137,7 @@ class Resource(BaseDocument):
         )
 
     @classmethod
-    async def get_composed_resource_deploy_summary(cls, environment: str) -> m.ComposedResourceDeploySummary:
+    async def get_composed_resource_deploy_summary(cls, environment: str) -> m.ComposedResourceSummary:
         query = """
         WITH grouped_metrics AS (
             SELECT
@@ -6196,7 +6196,7 @@ class Resource(BaseDocument):
         """
 
         raw_results = await cls._fetch_query(query, cls._get_value(environment))
-        return m.ComposedResourceDeploySummary.create_from_db_result(raw_results)
+        return m.ComposedResourceSummary.create_from_db_result(raw_results)
 
     @classmethod
     async def get_resource_deploy_summary(cls, environment: uuid.UUID) -> m.ResourceDeploySummary:

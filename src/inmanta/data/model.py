@@ -436,25 +436,28 @@ class ResourceAction(BaseModel):
     send_event: Optional[bool] = None  # Deprecated field
 
 
-class ComposedResourceDeploySummary(BaseModel):
+class ComposedResourceSummary(BaseModel):
     """
-    :param compliance:
-    :param handler_result:
-    :param blocked:
-    :param is_deploying:
+    A summary of the composed status of all resources in an environment.
+
+    :param total_count: Total count of resources.
+    :param compliance:  Summary of the compliance status of resources
+    :param last_handler_run: Summary of the status of the last handler run of resources
+    :param blocked: Summary of the blocked status of resources
+    :param is_deploying: Summary of the status of the deployment status of resources
     """
 
     total_count: int
-    compliance: dict[Compliance, int]
-    last_handler_run: dict[HandlerResult, int]
-    blocked: dict[Blocked, int]
+    compliance: dict[str, int]
+    last_handler_run: dict[str, int]
+    blocked: dict[str, int]
     is_deploying: dict[str, int]
 
     @classmethod
-    def create_from_db_result(cls, summary_by_db_result: Sequence[Record]) -> "ComposedResourceDeploySummary":
-        parsed_results = defaultdict(dict[str, int])
+    def create_from_db_result(cls, summary_by_db_result: Sequence[Record]) -> "ComposedResourceSummary":
+        parsed_results: typing.DefaultDict[str, dict[str, int]] = defaultdict(dict[str, int])
         for result in summary_by_db_result:
-            parsed_results[result["metric"]][result["value"].lower()] = result["count"]
+            parsed_results[str(result["metric"])][str(result["value"]).lower()] = cast(int, result["count"])
 
         expected_values = {
             "is_deploying": ["true", "false"],
@@ -476,7 +479,7 @@ class ComposedResourceDeploySummary(BaseModel):
                 count == expected_count
             ), f"Different total counts detected: {count} != {expected_count} metrics: {parsed_results}"
         assert expected_count is not None
-        return ComposedResourceDeploySummary(
+        return ComposedResourceSummary(
             total_count=expected_count,
             compliance=parsed_results["compliance"],
             last_handler_run=parsed_results["last_handler_run"],
