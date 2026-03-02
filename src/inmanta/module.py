@@ -64,7 +64,7 @@ from inmanta.ast.statements import BiStatement, DefinitionStatement, DynamicStat
 from inmanta.ast.statements.define import DefineImport
 from inmanta.file_parser import PreservativeYamlParser, RequirementsTxtParser
 from inmanta.parser import larkInmantaParser as plyInmantaParser
-from inmanta.parser.larkInmantaParser import cache_manager
+from inmanta.parser.larkInmantaParser import attach_to_project
 from inmanta.server import config
 from inmanta.stable_api import stable_api
 from inmanta.warnings import InmantaWarning
@@ -1886,7 +1886,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         self.root_ns = Namespace("__root__")
         self.autostd = autostd
         if attach_cf_cache:
-            cache_manager.attach_to_project(path)
+            attach_to_project(path)
 
         self._complete_ast: Optional[tuple[list[Statement], list[BasicBlock]]] = None
         # Cache for the complete ast
@@ -2114,7 +2114,6 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
         end = time()
         LOGGER.debug("Parsing took %0.03f seconds", end - start)
-        cache_manager.log_stats()
         self._complete_ast = (statements, blocks)
         return self._complete_ast
 

@@ -55,9 +55,9 @@ from inmanta.ast.statements.define import (
 )
 from inmanta.ast.statements.generator import ConditionalExpression, Constructor, For, If, ListComprehension, WrappedKwargs
 from inmanta.ast.variables import AttributeReference, Reference
+from inmanta.const import CF_CACHE_DIR
 from inmanta.execute.util import NoneValue
 from inmanta.parser import InvalidNamespaceAccess, ParserException, ParserWarning
-from inmanta.parser.cache import CacheManager
 from lark import Lark, Token, Transformer, Tree, UnexpectedCharacters, UnexpectedEOF, UnexpectedInput, v_args
 from lark.exceptions import UnexpectedToken, VisitError
 
@@ -68,12 +68,30 @@ _GRAMMAR_FILE = os.path.join(os.path.dirname(__file__), "larkInmanta.lark")
 with open(_GRAMMAR_FILE, encoding="utf-8") as _f:
     _GRAMMAR = _f.read()
 
-_lark_parser = Lark(
-    _GRAMMAR,
-    parser="lalr",
-    maybe_placeholders=False,
-    cache=True,
-)
+_lark_parser: Optional[Lark] = None
+
+
+def _build_lark_parser(cache: Union[bool, str] = False) -> Lark:
+    return Lark(_GRAMMAR, parser="lalr", maybe_placeholders=False, cache=cache)
+
+
+def _get_parser() -> Lark:
+    global _lark_parser
+    if _lark_parser is None:
+        _lark_parser = _build_lark_parser()
+    return _lark_parser
+
+
+def attach_to_project(project_dir: str) -> None:
+    global _lark_parser
+    cache_dir = os.path.join(project_dir, CF_CACHE_DIR)
+    os.makedirs(cache_dir, exist_ok=True)
+    _lark_parser = _build_lark_parser(cache=os.path.join(cache_dir, "lark_grammar.cache"))
+
+
+def detach_from_project() -> None:
+    global _lark_parser
+    _lark_parser = None
 
 
 # ---- Format-string regex (same as PLY parser) ----
@@ -1541,7 +1559,7 @@ def base_parse(ns: Namespace, tfile: str, content: Optional[str]) -> list[Statem
     data = data + "\n"
 
     try:
-        tree = _lark_parser.parse(data)
+        tree = _get_parser().parse(data)
     except UnexpectedInput as e:
         raise _convert_lark_error(e, tfile) from e
     except Exception as e:
@@ -1566,17 +1584,6 @@ def base_parse(ns: Namespace, tfile: str, content: Optional[str]) -> list[Statem
     return result
 
 
-_cache_manager = CacheManager()
-
-# Public alias expected by module.py
-cache_manager = _cache_manager
-
-
 def parse(namespace: Namespace, filename: str, content: Optional[str] = None) -> list[Statement]:
-    """Parse an Inmanta file, using cache if available."""
-    statements = _cache_manager.un_cache(namespace, filename)
-    if statements is not None:
-        return statements
-    statements = base_parse(namespace, filename, content)
-    _cache_manager.cache(namespace, filename, statements)
-    return statements
+    """Parse an Inmanta file."""
+    return base_parse(namespace, filename, content)

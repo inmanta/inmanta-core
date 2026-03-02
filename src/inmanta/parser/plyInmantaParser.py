@@ -57,7 +57,6 @@ from inmanta.ast.statements.generator import ConditionalExpression, Constructor,
 from inmanta.ast.variables import AttributeReference, Reference
 from inmanta.execute.util import NoneValue
 from inmanta.parser import InvalidNamespaceAccess, ParserException, plyInmantaLex
-from inmanta.parser.cache import CacheManager
 from inmanta.parser.plyInmantaLex import reserved, tokens  # NOQA
 
 # the token map is imported from the lexer. This is required.
@@ -1378,17 +1377,8 @@ def base_parse(ns: Namespace, tfile: str, content: Optional[str]) -> list[Statem
         return parser.parse(data, lexer=lexer, debug=False)
 
 
-cache_manager = CacheManager()
-
-# Re-export the active Lark parser's cache_manager so that code importing
-# plyInmantaParser.cache_manager (e.g. tests) sees the correct statistics.
-from inmanta.parser.larkInmantaParser import cache_manager  # noqa: E402,F811
+from inmanta.parser.larkInmantaParser import attach_to_project, detach_from_project  # noqa: E402,F401
 
 
 def parse(namespace: Namespace, filename: str, content: Optional[str] = None) -> list[Statement]:
-    statements = cache_manager.un_cache(namespace, filename)
-    if statements is not None:
-        return statements
-    statements = base_parse(namespace, filename, content)
-    cache_manager.cache(namespace, filename, statements)
-    return statements
+    return base_parse(namespace, filename, content)

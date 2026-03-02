@@ -96,7 +96,7 @@ from inmanta.export import ResourceDict, cfg_env, unknown_parameters
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
 from inmanta.moduletool import DefaultIsolatedEnvCached, ModuleTool, V2ModuleBuilder
-from inmanta.parser.plyInmantaParser import cache_manager
+from inmanta.parser.plyInmantaParser import detach_from_project
 from inmanta.protocol import VersionMatch
 from inmanta.protocol.auth import auth
 from inmanta.references import mutator, reference
@@ -561,7 +561,7 @@ async def clean_reset(create_db, clean_db, deactive_venv):
     config.Config._reset()
     reset_all_objects()
     loader.unload_inmanta_plugins()
-    cache_manager.detach_from_project()
+    detach_from_project()
     data.Environment._settings = default_settings
 
 
