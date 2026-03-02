@@ -15,8 +15,6 @@ Tree) of statement objects that the compiler then normalizes and executes.
 | `larkInmantaParser.py` | Lark-based parser and transformer (active parser) |
 | `plyInmantaParser.py` | Legacy PLY-based parser (delegates to Lark at runtime) |
 | `plyInmantaLex.py` | PLY lexer (still used for the `reserved` keyword map) |
-| `cache.py` | Parse result caching (avoids re-parsing unchanged files) |
-| `pickle.py` | Pickle-based cache serialization |
 
 ## Architecture
 
@@ -48,16 +46,31 @@ parsing library. It uses an LALR(1) parser with a contextual lexer.
 - **`map_lookup` covers `attr_ref`**: `t.a["key"]` is a map lookup, not an index lookup.
   The grammar has an explicit `attr_ref "[" operand "]"` alternative in `map_lookup`.
 
+- **Filtered keyword terminals**: Many keyword terminals are renamed with a `_` prefix (e.g.
+  `_TYPEDEF`, `_AS`, `_END`) so Lark's contextual lexer auto-filters them from the transformer
+  arguments, reducing per-call overhead. The exceptions are `FOR` and `IF`, which are kept
+  unfiltered because their token is used as the source position for the enclosing statement.
+
+- **Transparent rules**: Several intermediate grammar rules are marked `?` (e.g. `?statement`,
+  `?operand`, `?relation`) so Lark inlines the single child directly without creating a Tree
+  node, avoiding unnecessary transformer dispatch.
+
 **Transformer**: `InmantaTransformer` (in `larkInmantaParser.py`) is a Lark `Transformer`
-subclass. Each grammar rule has a corresponding method that builds the AST node. Position
-information (`propagate_positions=True`) is used to set `location` on every AST node so that
-error messages reference the correct source file/line/column.
+subclass decorated with `@v_args(inline=True)` so every rule callback receives its children as
+individual positional arguments. Position information is derived directly from token attributes
+(`token.line`, `token.start_pos`) rather than from `propagate_positions`, which avoids the
+overhead of Lark annotating every tree node.
+
+The transformer builds a pre-computed dispatch dict at construction time (`_call_dispatch`) by
+walking the class MRO and binding `_VArgsWrapper.base_func` methods directly. The overridden
+`_call_userfunc` uses this dict for O(1) dispatch, bypassing the per-call `__get__` overhead
+from the default Lark implementation.
 
 ### Legacy: PLY
 
 `plyInmantaParser.py` and `plyInmantaLex.py` contain the original PLY-based parser. At
-runtime, `plyInmantaParser.py` re-exports `cache_manager` from `larkInmantaParser` so that
-existing code importing `plyInmantaParser.cache_manager` sees the correct statistics.
+runtime, `plyInmantaParser.py` re-exports `attach_to_project` and `detach_from_project` from
+`larkInmantaParser` so that existing code importing via `plyInmantaParser` still works.
 
 `plyInmantaLex.py` is still used at runtime for the `reserved` keyword dictionary, which maps
 keyword strings (e.g. `"in"`) to their token type names (e.g. `"IN"`). This mapping is used by
@@ -80,9 +93,19 @@ parser's output:
 
 ## Caching
 
-`CacheManager` (in `cache.py`) caches parsed AST lists keyed by `(namespace, filename)`.
-The cache avoids re-parsing files that have not changed between compilation runs within the
-same process lifetime.
+The parser uses two levels of caching:
+
+**Lark grammar cache** (`attach_to_project` / `detach_from_project` in `larkInmantaParser.py`):
+When a project is loaded, `attach_to_project(project_dir)` builds the Lark parser with
+`cache=<path>`, pointing to `.cfcache/lark_grammar.cache` inside the project directory. This
+caches the compiled LALR parser tables (grammar → state machines) to disk so that repeated
+`Lark(...)` constructor calls across processes are fast. Lark handles cache invalidation
+automatically via a SHA-256 hash of the grammar content, Lark version, and Python version
+embedded in the cache file. `detach_from_project()` resets the parser to uncached mode.
+
+**No per-file AST cache**: The custom per-file AST cache (previously in `cache.py` / `pickle.py`)
+has been removed. Every `.cf` file is re-parsed on each compilation run. The Lark grammar cache
+is sufficient to avoid the dominant startup cost (grammar compilation).
 
 ## Why Lark?
 
@@ -94,9 +117,5 @@ The PLY parser had several limitations:
 2. **Grammar readability**: Lark's grammar syntax is more readable and closer to standard BNF,
    making it easier to reason about and modify.
 
-3. **Error recovery**: Lark's contextual lexer provides better token disambiguation and
-   `propagate_positions=True` gives accurate source positions for all tree nodes without
-   needing manual position tracking in every grammar rule.
-
-4. **Python ecosystem**: Lark is a pure-Python library with active maintenance and good
+3. **Python ecosystem**: Lark is a pure-Python library with active maintenance and good
    documentation.
