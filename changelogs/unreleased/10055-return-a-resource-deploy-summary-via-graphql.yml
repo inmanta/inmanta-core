@@ -1,4 +1,8 @@
 ---
-description: "Make deploySummary available in GraphQL. This exposes a summary of the new composed state"
+description: >
+    Made available the resourceSummary in GraphQL and the get_composed_resource_summary on data.Resource.
+    These methods return a summary of the composed state of all resources in an environment.
 change-type: minor
 destination-branches: [master, iso9]
+sections:
+  minor-improvement: "{{description}}"

@@ -670,7 +670,7 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
     await rps.update_fields(last_handler_run_compliant=False)
     query = """
     {
-        deploySummary(environment: "%s") {
+        resourceSummary(environment: "%s") {
             totalCount
             lastHandlerRun
             blocked
@@ -681,7 +681,7 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
     """ % environment
     composed_result = await client.graphql(query=query)
     assert composed_result.code == 200
-    summary = composed_result.result["data"]["data"]["deploySummary"]
+    summary = composed_result.result["data"]["data"]["resourceSummary"]
     assert summary["totalCount"] == total_resources_in_latest_version
     ## Blocked
     assert summary["blocked"]["blocked"] == instances * 2  # skipped_for_undefined / undefined
