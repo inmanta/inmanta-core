@@ -32,11 +32,10 @@ stmt_list: statement*
 assign: var_ref "=" operand              -> assign_eq
       | var_ref PEQ operand             -> assign_plus_eq
 
-for_stmt: _FOR ID IN operand ":" stmt_list _END
+for_stmt: FOR ID IN operand ":" stmt_list _END
 
-// if_stmt has only if_body after filtering _IF/_END, but we keep it non-transparent
-// so the if_stmt method can fix up the location to point to the IF keyword (via meta).
-if_stmt: _IF if_body _END
+// if_stmt receives the IF token so the transformer can use its position directly.
+if_stmt: IF if_body _END
 
 if_body: expression ":" stmt_list if_next
 
@@ -110,7 +109,7 @@ implement_ns_item: ns_ref                                                       
 impl_header:                                                                     -> impl_header_plain
            | MLS                                                                 -> impl_header_doc
 
-implementation_def: IMPLEMENTATION ID _FOR class_ref ":" impl_header stmt_list _END -> implementation_def
+implementation_def: IMPLEMENTATION ID FOR class_ref ":" impl_header stmt_list _END -> implementation_def
 
 // ===== RELATION =====
 ?relation: relation_def MLS                                                      -> relation_comment
@@ -220,9 +219,9 @@ list_def: "[" operand_list "]"
 
 list_comprehension: "[" expression for_clause+ guard_clause* "]"
 
-for_clause: _FOR ID IN expression
+for_clause: FOR ID IN expression
 
-guard_clause: _IF expression
+guard_clause: IF expression
 
 operand_list: operand ("," operand)* ","?
             |
@@ -306,7 +305,7 @@ _EXTENDS.2: /extends(?![a-zA-Z0-9_-])/
 _END.2: /end(?![a-zA-Z0-9_-])/
 IN.2: /in(?![a-zA-Z0-9_-])/
 IMPLEMENTATION.2: /implementation(?![a-zA-Z0-9_-])/
-_FOR.2: /for(?![a-zA-Z0-9_-])/
+FOR.2: /for(?![a-zA-Z0-9_-])/
 _MATCHING.2: /matching(?![a-zA-Z0-9_-])/
 INDEX.2: /index(?![a-zA-Z0-9_-])/
 IMPLEMENT.2: /implement(?![a-zA-Z0-9_-])/
@@ -324,7 +323,7 @@ DICT.2: /dict(?![a-zA-Z0-9_-])/
 NULL.2: /null(?![a-zA-Z0-9_-])/
 _UNDEF.2: /undef(?![a-zA-Z0-9_-])/
 _PARENTS.2: /parents(?![a-zA-Z0-9_-])/
-_IF.2: /if(?![a-zA-Z0-9_-])/
+IF.2: /if(?![a-zA-Z0-9_-])/
 _ELSE.2: /else(?![a-zA-Z0-9_-])/
 _ELIF.2: /elif(?![a-zA-Z0-9_-])/
 

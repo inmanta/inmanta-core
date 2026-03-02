@@ -20,7 +20,7 @@ import copyreg
 import threading
 from io import BytesIO
 from pickle import Pickler, Unpickler
-from typing import Optional
+from typing import IO, Optional
 
 from inmanta.ast import Namespace
 
@@ -55,7 +55,7 @@ class ASTPickler(Pickler):
     callback per object) for significantly lower pickling overhead.
     """
 
-    def __init__(self, file: BytesIO, protocol: Optional[int] = None) -> None:
+    def __init__(self, file: IO[bytes], protocol: Optional[int] = None) -> None:
         super().__init__(file, protocol=protocol)
         # Start from the global copyreg table (handles re.Pattern, complex, etc.)
         # and add our Namespace reducer. The C pickler checks dispatch_table only
