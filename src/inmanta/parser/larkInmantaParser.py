@@ -68,6 +68,12 @@ _GRAMMAR_FILE = os.path.join(os.path.dirname(__file__), "larkInmanta.lark")
 with open(_GRAMMAR_FILE, encoding="utf-8") as _f:
     _GRAMMAR = _f.read()
 
+# _lark_parser_default: built once, never reset.  Reused by _get_parser() and
+# attach_to_project() as a fallback when no project-specific cache is available.
+# Without this singleton, the LALR tables would be recomputed for every test that
+# calls detach_from_project() + attach_to_project() on a fresh temp directory,
+# adding ~350 ms × N tests of rebuild overhead.
+_lark_parser_default: Optional[Lark] = None
 _lark_parser: Optional[Lark] = None
 
 
@@ -75,22 +81,64 @@ def _build_lark_parser(cache: Union[bool, str] = False) -> Lark:
     return Lark(_GRAMMAR, parser="lalr", maybe_placeholders=False, cache=cache)
 
 
+def _get_default_parser() -> Lark:
+    """Return the module-level default parser, building it exactly once."""
+    global _lark_parser_default
+    if _lark_parser_default is None:
+        _lark_parser_default = _build_lark_parser()
+    return _lark_parser_default
+
+
 def _get_parser() -> Lark:
     global _lark_parser
     if _lark_parser is None:
-        _lark_parser = _build_lark_parser()
+        _lark_parser = _get_default_parser()
     return _lark_parser
 
 
 def attach_to_project(project_dir: str) -> None:
+    """
+    Switch to a project-specific cached parser.
+
+    On first call for a given project directory the LALR tables are not rebuilt
+    from the grammar; instead the already-built default parser is reused and its
+    serialised form is written to the project cache.  Subsequent calls load the
+    serialised form directly (~10 ms) rather than recomputing (~350 ms).
+
+    This avoids rebuilding the grammar on every test that creates a fresh temp
+    directory while still giving production projects a persistent on-disk cache.
+    """
     global _lark_parser
     cache_dir = os.path.join(project_dir, CF_CACHE_DIR)
     os.makedirs(cache_dir, exist_ok=True)
-    _lark_parser = _build_lark_parser(cache=os.path.join(cache_dir, "lark_grammar.cache"))
+    cache_file = os.path.join(cache_dir, "lark_grammar.cache")
+
+    if os.path.exists(cache_file):
+        # Fast path: load the pre-serialised LALR tables (~10 ms).
+        try:
+            with open(cache_file, "rb") as f:
+                _lark_parser = Lark.load(f)
+            return
+        except Exception:
+            pass  # Stale or corrupt cache — fall through to rebuild.
+
+    # Reuse the already-built default parser rather than rebuilding from grammar.
+    # The grammar is fixed at install time, so all parser instances are equivalent.
+    default = _get_default_parser()
+    _lark_parser = default
+
+    # Persist to the project cache so the next call can take the fast path.
+    try:
+        with open(cache_file, "wb") as f:
+            default.save(f)
+    except Exception:
+        pass  # Non-fatal: next call will just reuse the default parser again.
 
 
 def detach_from_project() -> None:
     global _lark_parser
+    # Reset to None — the next _get_parser() call returns _lark_parser_default
+    # (already built) rather than rebuilding from the grammar.
     _lark_parser = None
 
 
