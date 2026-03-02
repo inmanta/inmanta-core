@@ -555,7 +555,13 @@ class ResourcePersistentState:
 
 
 @strawberry.type
-class DeploySummary:
+class ComposedResourceSummary:
+    """
+    Modeled after inmanta.data.model.ComposedResourceSummary.
+
+    Summary of the composed status of all resources in an environment.
+    """
+
     total_count: int
     last_handler_run: JSON
     blocked: JSON
@@ -846,9 +852,10 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
             return await get_connection(stmt, info=info, model="Resource", first=first, after=after, last=last, before=before)
 
         @strawberry.field
-        async def deploy_summary(self, info: CustomInfo, environment: str) -> DeploySummary:
-            results = await data.Resource.get_composed_resource_deploy_summary(environment)
-            return DeploySummary(
+        async def resource_summary(self, info: CustomInfo, environment: str) -> ComposedResourceSummary:
+            results = await data.Resource.get_composed_resource_summary(environment)
+            # scalars.JSON is just object, so I believe we can just cast it
+            return ComposedResourceSummary(
                 total_count=results.total_count,
                 last_handler_run=cast(JSON, results.last_handler_run),
                 blocked=cast(JSON, results.blocked),

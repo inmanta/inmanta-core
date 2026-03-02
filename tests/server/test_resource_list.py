@@ -819,7 +819,7 @@ async def test_resources_paging_performance(client, environment, mixed_resource_
         "total": instances * resources_per_version,
     }
 
-    composed_result = await data.Resource.get_composed_resource_deploy_summary(environment)
+    composed_result = await data.Resource.get_composed_resource_summary(environment)
     assert composed_result.total_count == result.result["metadata"]["deploy_summary"]["total"]
     ## blocked
     assert composed_result.blocked["blocked"] == instances * 2  # skipped_for_undefined / undefined

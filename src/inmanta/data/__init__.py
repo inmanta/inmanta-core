@@ -6137,7 +6137,12 @@ class Resource(BaseDocument):
         )
 
     @classmethod
-    async def get_composed_resource_deploy_summary(cls, environment: str) -> m.ComposedResourceSummary:
+    async def get_composed_resource_summary(cls, environment: str) -> m.ComposedResourceSummary:
+        """
+        Returns a summary containing the composed (scheduler) status of every resource in an environment.
+
+        :param environment: The environment we want the summary for.
+        """
         query = """
         WITH grouped_metrics AS (
             SELECT
