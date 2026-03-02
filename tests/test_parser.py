@@ -43,7 +43,7 @@ from inmanta.ast.statements.generator import ConditionalExpression, Constructor,
 from inmanta.ast.variables import AttributeReference, Reference
 from inmanta.execute.util import NoneValue
 from inmanta.parser import InvalidNamespaceAccess, ParserException
-from inmanta.parser.plyInmantaParser import base_parse
+from inmanta.parser.larkInmantaParser import base_parse
 from utils import log_contains, log_doesnt_contain
 
 

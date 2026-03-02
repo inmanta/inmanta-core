@@ -13,8 +13,6 @@ Tree) of statement objects that the compiler then normalizes and executes.
 |---|---|
 | `larkInmanta.lark` | Lark grammar definition for the Inmanta DSL |
 | `larkInmantaParser.py` | Lark-based parser and transformer (active parser) |
-| `plyInmantaParser.py` | Legacy PLY-based parser (delegates to Lark at runtime) |
-| `plyInmantaLex.py` | PLY lexer (still used for the `reserved` keyword map) |
 
 ## Architecture
 
@@ -66,16 +64,12 @@ walking the class MRO and binding `_VArgsWrapper.base_func` methods directly. Th
 `_call_userfunc` uses this dict for O(1) dispatch, bypassing the per-call `__get__` overhead
 from the default Lark implementation.
 
-### Legacy: PLY
+### Legacy: PLY (removed)
 
-`plyInmantaParser.py` and `plyInmantaLex.py` contain the original PLY-based parser. At
-runtime, `plyInmantaParser.py` re-exports `attach_to_project` and `detach_from_project` from
-`larkInmantaParser` so that existing code importing via `plyInmantaParser` still works.
-
-`plyInmantaLex.py` is still used at runtime for the `reserved` keyword dictionary, which maps
-keyword strings (e.g. `"in"`) to their token type names (e.g. `"IN"`). This mapping is used by
-the Lark error converter to produce user-friendly error messages like "invalid identifier,
-`index` is a reserved keyword".
+`plyInmantaParser.py` and `plyInmantaLex.py` have been removed. The reserved keyword set
+previously provided by `plyInmantaLex.py`'s `reserved` dict is now defined directly in
+`larkInmantaParser.py` as `_RESERVED_KEYWORDS_UPPER` (derived from `_RESERVED_KEYWORDS`).
+The `ply` pip dependency has been removed from `setup.py`.
 
 ## Error Handling
 

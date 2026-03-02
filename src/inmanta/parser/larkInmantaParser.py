@@ -134,6 +134,7 @@ _RESERVED_KEYWORDS: frozenset[str] = frozenset(
         "elif",
     ]
 )
+_RESERVED_KEYWORDS_UPPER: frozenset[str] = frozenset(k.upper() for k in _RESERVED_KEYWORDS)
 
 
 # ---- Helper dataclasses (internal to transformer) ----
@@ -333,7 +334,7 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         # Grammar: head: MLS?  →  0 or 1 items
         if not args:
             return None
-        return self._locatable(args[0])
+        return self._process_mls(args[0])
 
     def body(self, *stmts: Statement) -> list[Statement]:
         return list(stmts)
@@ -471,14 +472,10 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
     def _process_mls(self, token: Token) -> LocatableString:
         """Process a MLS token into a LocatableString with decoded content."""
         raw = str(token)
-        # Strip triple quotes (3-5 quotes)
-        n = 0
-        for c in raw:
-            if c == '"':
-                n += 1
-            else:
-                break
-        content = raw[n:-n]
+        # Always strip exactly 3 quotes (the MLS delimiter), mirroring PLY behaviour.
+        # The grammar allows 3-5 quotes, but the delimiter is always 3; extra opening/
+        # closing quotes are part of the content.
+        content = raw[3:-3]
         line = token.line or 1
         col = token.column or 1
         loc = Location(self.file, line)
@@ -862,8 +859,11 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
             expr: ExpressionStatement = Regex(value, regex_str)
             return expr
         except RegexError as error:
-            line = token.line or 1
+            start_line = token.line or 1
             col = token.column or 1
+            prefix = raw[:idx]
+            newlines_in_prefix = prefix.count("\n")
+            line = start_line + newlines_in_prefix
             end_col = col + len(raw)
             start_col = col + idx
             r = Range(self.file, line, start_col, line, end_col)
@@ -1493,7 +1493,6 @@ def _convert_lark_error(e: UnexpectedInput, tfile: str) -> ParserException:
 
     if isinstance(e, UnexpectedToken):
         token = getattr(e, "token", None)
-        from inmanta.parser.plyInmantaLex import reserved
 
         # Inspect the parser value_stack to produce better error messages,
         # mirroring PLY's p_error heuristics.
@@ -1503,7 +1502,7 @@ def _convert_lark_error(e: UnexpectedInput, tfile: str) -> ParserException:
         # mirrors PLY: if parser.symstack[-1].type in reserved.values(): ...
         if vs:
             top = vs[-1]
-            if isinstance(top, Token) and top.type.lstrip("_") in reserved.values():
+            if isinstance(top, Token) and top.type.lstrip("_") in _RESERVED_KEYWORDS_UPPER:
                 kw_r = Range(tfile, top.line or line, top.column or col, top.line or line, (top.column or col) + len(str(top)))
                 return ParserException(kw_r, str(top), f"invalid identifier, {str(top)} is a reserved keyword")
 
@@ -1533,7 +1532,7 @@ def _convert_lark_error(e: UnexpectedInput, tfile: str) -> ParserException:
         if token is not None:
             token_str = str(token)
             # Failing token itself is a reserved keyword (rarely needed after above checks)
-            if token.type.lstrip("_") in reserved.values():
+            if token.type.lstrip("_") in _RESERVED_KEYWORDS_UPPER:
                 return ParserException(r, token_str, f"invalid identifier, {token_str} is a reserved keyword")
             return ParserException(r, token_str)
         return ParserException(r, None, "Unexpected token")
