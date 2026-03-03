@@ -59,6 +59,7 @@ from inmanta.ast.variables import AttributeReference, Reference
 from inmanta.const import CF_CACHE_DIR
 from inmanta.execute.util import NoneValue
 from inmanta.parser import InvalidNamespaceAccess, ParserException, ParserWarning
+from inmanta.parser.keywords import RESERVED_KEYWORDS
 from lark import Lark, Token, Transformer, Tree, UnexpectedCharacters, UnexpectedEOF, UnexpectedInput, v_args
 from lark.exceptions import UnexpectedToken, VisitError
 
@@ -157,38 +158,7 @@ _format_regex_compiled = re.compile(_format_regex, re.MULTILINE | re.DOTALL)
 # Set of reserved keywords – used to reject keywords used as identifiers.
 # Lark's contextual lexer matches keywords as ID when ID is valid in the grammar,
 # so we must validate at the transformer level.
-_RESERVED_KEYWORDS: frozenset[str] = frozenset(
-    [
-        "typedef",
-        "as",
-        "entity",
-        "extends",
-        "end",
-        "in",
-        "implementation",
-        "for",
-        "matching",
-        "index",
-        "implement",
-        "using",
-        "when",
-        "and",
-        "or",
-        "not",
-        "true",
-        "false",
-        "import",
-        "is",
-        "defined",
-        "dict",
-        "null",
-        "undef",
-        "parents",
-        "if",
-        "else",
-        "elif",
-    ]
-)
+_RESERVED_KEYWORDS: frozenset[str] = frozenset(RESERVED_KEYWORDS)
 _RESERVED_KEYWORDS_UPPER: frozenset[str] = frozenset(k.upper() for k in _RESERVED_KEYWORDS)
 
 

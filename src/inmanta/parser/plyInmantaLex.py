@@ -1,5 +1,5 @@
 """
-Copyright 2025 Inmanta
+Copyright 2026 Inmanta
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,38 +22,10 @@ This module exists solely to preserve the public API that external code may impo
 particular ``keyworldlist`` and ``reserved``.
 """
 
-# The canonical list of reserved keywords in the Inmanta DSL.  Kept in sync with the
-# Lark grammar (larkInmanta.lark) and _RESERVED_KEYWORDS in larkInmantaParser.py.
-keyworldlist: list[str] = [
-    "typedef",
-    "as",
-    "entity",
-    "extends",
-    "end",
-    "in",
-    "implementation",
-    "for",
-    "matching",
-    "index",
-    "implement",
-    "using",
-    "when",
-    "and",
-    "or",
-    "not",
-    "true",
-    "false",
-    "import",
-    "is",
-    "defined",
-    "dict",
-    "null",
-    "undef",
-    "parents",
-    "if",
-    "else",
-    "elif",
-]
+from inmanta.parser.keywords import RESERVED_KEYWORDS
+
+# List of reserved keywords, mirroring the PLY lexer's ``keyworldlist``.
+keyworldlist: list[str] = list(RESERVED_KEYWORDS)
 
 # Map keyword → upper-case token name, mirroring the PLY lexer's ``reserved`` dict.
 reserved: dict[str, str] = {k: k.upper() for k in keyworldlist}
