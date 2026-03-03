@@ -854,7 +854,6 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
         @strawberry.field
         async def resource_summary(self, info: CustomInfo, environment: str) -> ComposedResourceSummary:
             results = await data.Resource.get_composed_resource_summary(environment)
-            # scalars.JSON is just object, so I believe we can just cast it
             return ComposedResourceSummary(
                 total_count=results.total_count,
                 last_handler_run=cast(JSON, results.last_handler_run),

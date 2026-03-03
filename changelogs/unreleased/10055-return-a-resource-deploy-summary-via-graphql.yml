@@ -1,7 +1,7 @@
 ---
 description: >
-    Made available the resourceSummary in GraphQL and the get_composed_resource_summary on data.Resource.
-    These methods return a summary of the composed state of all resources in an environment.
+    Added the resourceSummary query to the GraphQL endpoint.
+    This query returns a summary of the composed state of all resources in the latest processed model version of an environment.
 change-type: minor
 destination-branches: [master, iso9]
 sections:

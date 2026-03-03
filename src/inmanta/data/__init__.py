@@ -6139,7 +6139,8 @@ class Resource(BaseDocument):
     @classmethod
     async def get_composed_resource_summary(cls, environment: str) -> m.ComposedResourceSummary:
         """
-        Returns a summary containing the composed (scheduler) status of every resource in an environment.
+        Returns a summary containing the composed (scheduler) status of every resource
+        in the latest processed model version of an environment.
 
         :param environment: The environment we want the summary for.
         """
