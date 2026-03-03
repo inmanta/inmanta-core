@@ -76,22 +76,18 @@ with open(_GRAMMAR_FILE, encoding="utf-8") as _f:
 # upgrading the grammar automatically invalidates any stale cached LALR tables.
 _GRAMMAR_HASH: str = hashlib.sha256(_GRAMMAR.encode()).hexdigest()[:16]
 
-# _lark_parser_default: built once, never reset.  Reused by _get_parser() and
-# attach_to_project() as a fallback when no project-specific cache is available.
-# Without this singleton, the LALR tables would be recomputed for every test that
-# calls detach_from_project() + attach_to_project() on a fresh temp directory,
-# adding ~350 ms × N tests of rebuild overhead.
-_lark_parser_default: Optional[Lark] = None
+# Singleton parser — built once per process, never reset.
+# The grammar cache is stored alongside this module (like PLY's parsetab.py).
+# If the module directory is not writable (e.g. system package install),
+# attach_to_project() falls back to the project's .cfcache directory.
 _lark_parser: Optional[Lark] = None
 
-# Primary grammar cache location: alongside this module (like PLY's parsetab.py).
-# Falls back to the project .cfcache dir if the module directory is not writable.
 _MODULE_DIR: str = os.path.dirname(os.path.abspath(__file__))
 _MODULE_CACHE_FILE: str = os.path.join(_MODULE_DIR, f"lark_grammar_{_GRAMMAR_HASH}.cache")
 
 
-def _build_lark_parser(cache: Union[bool, str] = False) -> Lark:
-    return Lark(_GRAMMAR, parser="lalr", maybe_placeholders=False, cache=cache)
+def _build_lark_parser() -> Lark:
+    return Lark(_GRAMMAR, parser="lalr", maybe_placeholders=False)
 
 
 def _load_parser_from_cache(cache_file: str) -> Optional[Lark]:
@@ -118,30 +114,23 @@ def _save_parser_to_cache(parser: Lark, cache_file: str) -> bool:
 cache_manager = CacheManager()
 
 
-def _get_default_parser() -> Lark:
-    """Return the module-level default parser, building it exactly once.
+def _get_parser() -> Lark:
+    """Return the singleton parser, building it exactly once.
 
     Tries to load from the module-directory cache first (~10 ms).
     On cache miss, builds from grammar and persists to the module directory.
     """
-    global _lark_parser_default
-    if _lark_parser_default is not None:
-        return _lark_parser_default
+    global _lark_parser
+    if _lark_parser is not None:
+        return _lark_parser
 
     loaded = _load_parser_from_cache(_MODULE_CACHE_FILE)
     if loaded is not None:
-        _lark_parser_default = loaded
+        _lark_parser = loaded
         return loaded
 
-    _lark_parser_default = _build_lark_parser()
-    _save_parser_to_cache(_lark_parser_default, _MODULE_CACHE_FILE)
-    return _lark_parser_default
-
-
-def _get_parser() -> Lark:
-    global _lark_parser
-    if _lark_parser is None:
-        _lark_parser = _get_default_parser()
+    _lark_parser = _build_lark_parser()
+    _save_parser_to_cache(_lark_parser, _MODULE_CACHE_FILE)
     return _lark_parser
 
 
@@ -149,39 +138,23 @@ def attach_to_project(project_dir: str) -> None:
     """
     Attach to a project directory for AST caching.
 
-    The grammar cache is stored in the parser module directory (like PLY's
-    parsetab.py).  If that location is not writable (e.g. installed as a
-    system package), the project's .cfcache directory is used as a fallback.
+    Ensures the grammar cache exists (in the module directory or, as a fallback,
+    in the project's .cfcache directory) and attaches the AST cache manager.
     """
-    global _lark_parser
-
-    # Ensure the module-dir cache exists; if not, try to create it now
-    # (covers the case where _get_default_parser() was called before any project).
-    default = _get_default_parser()
+    # Ensure the parser singleton is initialised.
+    parser = _get_parser()
 
     if not os.path.exists(_MODULE_CACHE_FILE):
         # Module dir not writable — fall back to project cache.
         cache_dir = os.path.join(project_dir, CF_CACHE_DIR)
         os.makedirs(cache_dir, exist_ok=True)
         fallback_cache = os.path.join(cache_dir, f"lark_grammar_{_GRAMMAR_HASH}.cache")
-
-        loaded = _load_parser_from_cache(fallback_cache)
-        if loaded is not None:
-            _lark_parser = loaded
-        else:
-            _lark_parser = default
-            _save_parser_to_cache(default, fallback_cache)
-    else:
-        _lark_parser = default
+        _save_parser_to_cache(parser, fallback_cache)
 
     cache_manager.attach_to_project(project_dir)
 
 
 def detach_from_project() -> None:
-    global _lark_parser
-    # Reset to None — the next _get_parser() call returns _lark_parser_default
-    # (already built) rather than rebuilding from the grammar.
-    _lark_parser = None
     cache_manager.detach_from_project()
 
 
