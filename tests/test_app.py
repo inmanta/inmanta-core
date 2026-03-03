@@ -391,7 +391,7 @@ o = Test(attr="1234")
         """,
         autostd=True,
     )
-    cwd = snippetcompiler.project_dir
+    cwd = snippetcompiler.project_dir if cache_cf_files else "."
 
     output = (
         f"""Could not set attribute `attr` on instance `__config__::Test (instantiated at {cwd}/main.cf:8)` """
