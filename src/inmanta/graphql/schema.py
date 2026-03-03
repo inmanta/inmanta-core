@@ -247,7 +247,12 @@ class StrawberryFilter:
         This is fed to the SQLAlchemy query to apply as filter.
         This is only used for simple filters i.e. exact match on the same table
         """
-        return {key: value for key, value in self.__dict__.items()}
+        filter_dict = {}
+        for key, value in self.__dict__.items():
+            if value is strawberry.UNSET:
+                raise ValueError(f"Filter {key} was requested but no value was provided")
+            filter_dict[key] = value
+        return filter_dict
 
     def apply_filters(self, stmt: Select[typing.Any]) -> Select[typing.Any]:
         """

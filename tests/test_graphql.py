@@ -891,3 +891,51 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
             else state.Compliance.HAS_UPDATE.name
         )
         assert result_resources[i]["node"]["state"]["isDeploying"] == (False if i < instances or i >= 2 * instances else True)
+
+async def test_graphql_variables(server, client, setup_database):
+    """
+    Test that graphql variables work as intended.
+    """
+    env_id = "11111111-1234-5678-1234-000000000001"
+    query = """
+    query GetEnvironments($environment: String!) {
+        environments(filter: { id: $environment }) {
+            edges {
+                node {
+                    id
+
+                }
+            }
+        }
+    }
+    """
+    result = await client.graphql(query=query, variables={"environment": env_id})
+    check_correct_graphql_response(result)
+    assert result.result["data"]["data"]["environments"]["edges"][0]["node"]["id"] == env_id
+
+    # omit variables
+    result = await client.graphql(query=query)
+    assert result.code == 200
+    assert result.result["data"]["data"] is None
+    assert len(result.result["data"]["errors"]) == 1
+    assert result.result["data"]["errors"][0] == "Variable '$environment' of required type 'String!' was not provided."
+
+    # $environment is now optional
+    query = """
+    query GetEnvironments($environment: String) {
+        environments(filter: { id: $environment }) {
+            edges {
+                node {
+                    id
+
+                }
+            }
+        }
+    }
+    """
+    # omit variables
+    result = await client.graphql(query=query)
+    assert result.code == 200
+    assert result.result["data"]["data"] is None
+    assert len(result.result["data"]["errors"]) == 1
+    assert result.result["data"]["errors"][0] == "Filter id was requested but no value was provided"
