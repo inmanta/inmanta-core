@@ -28,6 +28,7 @@ import warnings
 from dataclasses import dataclass
 from re import error as RegexError
 from typing import Callable, NamedTuple, NoReturn, Optional, Union
+from collections.abc import Sequence
 
 from inmanta.ast import LocatableString, Location, Namespace, Range, RuntimeException
 from inmanta.ast.blocks import BasicBlock
