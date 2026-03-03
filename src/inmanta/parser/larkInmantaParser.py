@@ -1074,7 +1074,7 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
 
     # ---- Constructors and function calls ----
 
-    def constructor(self, class_ref: LocatableString, params: list[_ParamListElement]) -> Constructor:
+    def constructor(self, class_ref: LocatableString, params: Sequence[_ParamListElement]) -> Constructor:
         # "(" and ")" are anonymous => filtered
         kwargs: list[tuple[LocatableString, ExpressionStatement]] = [
             (e.key, e.value) for e in params if e.key is not None  # type: ignore[misc]
@@ -1083,7 +1083,7 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         result = Constructor(class_ref, kwargs, wrapped, Location(self.file, class_ref.location.lnr), self.namespace)
         return result
 
-    def function_call(self, ns_ref: LocatableString, fparams: list[_FunctionParamElement]) -> FunctionCall:
+    def function_call(self, ns_ref: LocatableString, fparams: Sequence[_FunctionParamElement]) -> FunctionCall:
         # "(" and ")" are anonymous => filtered
         args = [e.arg for e in fparams if e.arg is not None]
         kwargs: list[tuple[LocatableString, ExpressionStatement]] = [
@@ -1093,12 +1093,12 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         result = FunctionCall(ns_ref, args, kwargs, wrapped, self.namespace)
         return result
 
-    def function_call_err_dot(self, attr_ref: AttributeReference, _fparams: list[_FunctionParamElement]) -> NoReturn:
+    def function_call_err_dot(self, attr_ref: AttributeReference, _fparams: Sequence[_FunctionParamElement]) -> NoReturn:
         raise InvalidNamespaceAccess(attr_ref.locatable_name)
 
     # ---- Index lookup ----
 
-    def index_lookup_class(self, class_ref: LocatableString, params: list[_ParamListElement]) -> IndexLookup:
+    def index_lookup_class(self, class_ref: LocatableString, params: Sequence[_ParamListElement]) -> IndexLookup:
         # "[" and "]" are anonymous => filtered
         kwargs: list[tuple[LocatableString, ExpressionStatement]] = [
             (e.key, e.value) for e in params if e.key is not None  # type: ignore[misc]
@@ -1109,7 +1109,7 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         result.namespace = self.namespace
         return result
 
-    def index_lookup_attr(self, attr_ref: AttributeReference, params: list[_ParamListElement]) -> ShortIndexLookup:
+    def index_lookup_attr(self, attr_ref: AttributeReference, params: Sequence[_ParamListElement]) -> ShortIndexLookup:
         # "[" and "]" are anonymous => filtered
         kwargs: list[tuple[LocatableString, ExpressionStatement]] = [
             (e.key, e.value) for e in params if e.key is not None  # type: ignore[misc]
@@ -1528,7 +1528,7 @@ def _process_fstring(string_ast: LocatableString) -> Union[StringFormatV2, Liter
     return StringFormatV2(str(string_ast), _convert_to_references(locatable_matches, string_ast.namespace))
 
 
-def _convert_to_references(variables: list[tuple[str, LocatableString]], namespace: Namespace) -> list[tuple["Reference", str]]:
+def _convert_to_references(variables: Sequence[tuple[str, LocatableString]], namespace: Namespace) -> list[tuple["Reference", str]]:
     """Convert variable name strings to References (mirrors PLY's convert_to_references)."""
 
     def normalize(variable: str, locatable: LocatableString, offset: int = 0) -> LocatableString:
