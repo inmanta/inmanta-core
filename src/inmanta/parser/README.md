@@ -13,6 +13,8 @@ Tree) of statement objects that the compiler then normalizes and executes.
 |---|---|
 | `larkInmanta.lark` | Lark grammar definition for the Inmanta DSL |
 | `larkInmantaParser.py` | Lark-based parser and transformer (active parser) |
+| `cache.py` | Per-file AST cache manager (`CacheManager`) |
+| `pickle.py` | Custom pickler/unpickler for AST objects (handles `Namespace` replacement) |
 
 ## Architecture
 
@@ -97,9 +99,62 @@ caches the compiled LALR parser tables (grammar → state machines) to disk so t
 automatically via a SHA-256 hash of the grammar content, Lark version, and Python version
 embedded in the cache file. `detach_from_project()` resets the parser to uncached mode.
 
-**No per-file AST cache**: The custom per-file AST cache (previously in `cache.py` / `pickle.py`)
-has been removed. Every `.cf` file is re-parsed on each compilation run. The Lark grammar cache
-is sufficient to avoid the dominant startup cost (grammar compilation).
+**Per-file AST cache** (`cache.py` / `pickle.py`): Each `.cf` file's parsed AST statements are
+cached in `.cfcache/` as versioned `.cfc` files. On subsequent compilations, `CacheManager.un_cache`
+checks if the cached file exists and its source file hasn't been modified (mtime comparison). Cache
+hits skip parsing entirely. `ASTPickler` uses a `dispatch_table` (C-level type dispatch) to replace
+`Namespace` objects with their fully-qualified name during pickling; `ASTUnpickler` restores them
+from a thread-local context. The cache is controlled by the `compiler.cache` config option and can
+be disabled with `--no-cache`.
+
+## Performance
+
+### Benchmark: juniper-mx v23 (16803 .cf files)
+
+Full `inmanta compile` on a project that includes all files from the juniper-mx v23 module:
+
+| Parser               | Parsing   | Total compile | Total time |
+|----------------------|-----------|---------------|------------|
+| PLY with cold cache  | 131.7s    | 146.7s        | 193.5s     |
+| PLY with warm cache  | 67.7s     | 84.7s         | 134.5s     |
+| Lark without cache   | 125.1s    | 138.7s        | 181.8s     |
+| Lark with cold cache | 154.1s    | 168.7s        | 215.3s     |
+| Lark with warm cache | 48.8s     | 62.4s         | 110.9s     |
+
+Lark is **5% faster** than PLY for raw parsing (no cache on either side). With a warm AST cache,
+Lark is **28% faster** than PLY with warm cache (48.8s vs 67.7s parsing, 110.9s vs 134.5s total).
+Cold cache adds overhead from pickling the AST on the first run, but subsequent runs benefit from
+the cached AST.
+
+### Overhead breakdown
+
+Of the 110.9s total time with Lark (warm cache):
+
+| Phase       | Time   | Notes |
+|-------------|--------|-------|
+| Parsing     | 48.8s  | Cache hits skip parsing; misses use Lark LALR(1) |
+| Compilation | 13.6s  | Normalisation, type checking, execute |
+| GC + other  | 48.5s  | Garbage collection dominates; also module loading, plugin init, I/O |
+
+With warm cache, parsing is no longer the dominant phase — garbage collection of the large AST
+object graph takes roughly equal time.
+
+### Optimizations applied
+
+The following optimizations were applied to close the initial 3× gap between Lark and PLY:
+
+| Optimization | Effect |
+|---|---|
+| Transparent rules (`?` prefix) | Fewer tree nodes to allocate and transform |
+| Filtered terminals (`_KEYWORD`) | Keywords auto-removed from transformer args |
+| Custom `_transform_tree` loop | Replaces Lark's 4-function dispatch chain with a single recursive loop |
+| Pre-built dispatch dict | O(1) method lookup per rule, bypasses `_VArgsWrapper.__get__` |
+| Friedl-unrolled string regexes | ~46% faster lexing of STRING/RSTRING/FSTRING |
+| `propagate_positions` removal | Positions derived from tokens directly (~2s saving) |
+| `_lark_parser_default` singleton | Build LALR tables once per process |
+| Grammar hash cache filename | Automatic stale-cache eviction on grammar changes |
+| `dispatch_table` for pickle | 10× faster AST serialization (C-level type check) |
+| `_safe_decode` fast path | 57× faster string literal decoding (skip backslash-free strings) |
 
 ## Why Lark?
 

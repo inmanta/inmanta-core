@@ -59,6 +59,7 @@ from inmanta.ast.variables import AttributeReference, Reference
 from inmanta.const import CF_CACHE_DIR
 from inmanta.execute.util import NoneValue
 from inmanta.parser import InvalidNamespaceAccess, ParserException, ParserWarning
+from inmanta.parser.cache import CacheManager
 from inmanta.parser.keywords import RESERVED_KEYWORDS
 from lark import Lark, Token, Transformer, Tree, UnexpectedCharacters, UnexpectedEOF, UnexpectedInput, v_args
 from lark.exceptions import UnexpectedToken, VisitError
@@ -85,6 +86,9 @@ _lark_parser: Optional[Lark] = None
 
 def _build_lark_parser(cache: Union[bool, str] = False) -> Lark:
     return Lark(_GRAMMAR, parser="lalr", maybe_placeholders=False, cache=cache)
+
+
+cache_manager = CacheManager()
 
 
 def _get_default_parser() -> Lark:
@@ -126,6 +130,7 @@ def attach_to_project(project_dir: str) -> None:
         try:
             with open(cache_file, "rb") as f:
                 _lark_parser = Lark.load(f)
+            cache_manager.attach_to_project(project_dir)
             return
         except Exception:
             pass  # Stale or corrupt cache — fall through to rebuild.
@@ -142,12 +147,15 @@ def attach_to_project(project_dir: str) -> None:
     except Exception:
         pass  # Non-fatal: next call will just reuse the default parser again.
 
+    cache_manager.attach_to_project(project_dir)
+
 
 def detach_from_project() -> None:
     global _lark_parser
     # Reset to None — the next _get_parser() call returns _lark_parser_default
     # (already built) rather than rebuilding from the grammar.
     _lark_parser = None
+    cache_manager.detach_from_project()
 
 
 # ---- Format-string regex (same as PLY parser) ----
@@ -1668,5 +1676,12 @@ def base_parse(ns: Namespace, tfile: str, content: Optional[str]) -> list[Statem
 
 
 def parse(namespace: Namespace, filename: str, content: Optional[str] = None) -> list[Statement]:
-    """Parse an Inmanta file."""
-    return base_parse(namespace, filename, content)
+    """Parse an Inmanta file, using the AST cache when available."""
+    if content is None:
+        stmts = cache_manager.un_cache(namespace, filename)
+        if stmts is not None:
+            return stmts
+    stmts = base_parse(namespace, filename, content)
+    if content is None:
+        cache_manager.cache(namespace, filename, stmts)
+    return stmts
