@@ -1105,8 +1105,12 @@ Output and debugging
 Templates and files
 +++++++++++++++++++
 
-- ``std::template(path)`` — Render a Jinja2 template from a module's ``templates/`` directory. The first
-  path component is the module name (e.g. ``std::template("mymod/config.tmpl")``).
+- ``std::template(path, **kwargs)`` — Render a Jinja2 template from a module's ``templates/`` directory.
+  The first path component is the module name (e.g. ``std::template("mymod/config.tmpl")``).
+  When no additional arguments are provided, the template has access to all variables in the same
+  lexical scope as the call site. When keyword arguments are provided, only those variables are
+  available in the template (e.g. ``std::template("mymod/config.tmpl", svc=self, env=env_name)``).
+  The latter form is more verbose but makes the template's dependencies explicit and more robust.
 - ``std::file(path)`` — Read a file from a module's ``files/`` directory and return its content as a string.
 - ``std::source(path)`` — Get the absolute path to a file in a module's ``files/`` directory.
 
