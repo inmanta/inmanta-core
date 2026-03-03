@@ -27,6 +27,7 @@ import string
 import warnings
 from dataclasses import dataclass
 from re import error as RegexError
+from collections.abc import Sequence
 from typing import Callable, NamedTuple, NoReturn, Optional, Union
 from collections.abc import Sequence
 

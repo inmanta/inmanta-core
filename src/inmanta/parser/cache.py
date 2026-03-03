@@ -95,7 +95,7 @@ class CacheManager:
                 self.misses += 1
                 return None
             mtime = os.path.getmtime(filename)
-            if os.path.getmtime(filename) > os.path.getmtime(cache_filename):
+            if mtime > os.path.getmtime(cache_filename):
                 self.misses += 1
                 return None
             with open(cache_filename, "rb") as fh:
@@ -110,10 +110,10 @@ class CacheManager:
                 return result.statements
         except Exception:
             self.failures += 1
-            LOGGER.warning(
+            LOGGER.debug(
                 "Compile cache loading failure, ignoring cache entry for %s",
                 filename,
-                exc_info=LOGGER.isEnabledFor(LogLevel.DEBUG.to_int),
+                exc_info=True,
             )
             return None
 
@@ -143,6 +143,11 @@ class CacheManager:
     def log_stats(self) -> None:
         if not self.cache_enabled.get():
             return
+        if self.failures > 0:
+            LOGGER.warning(
+                "Compiler cache: %d entries could not be loaded and were re-parsed (set log level to DEBUG for details)",
+                self.failures,
+            )
         if self.hits + self.misses != 0:
             LOGGER.debug(
                 "Compiler cache observed %d hits and %d misses (%d%%)",
