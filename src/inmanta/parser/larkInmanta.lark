@@ -329,7 +329,7 @@ _ELIF.2: /elif(?![a-zA-Z0-9_-])/
 
 // REGEX terminal: matches "matching <whitespace> /regex/"
 // Priority 3 ensures it beats _MATCHING keyword (priority 2) via longer match
-REGEX.3: /matching[ \t\n]+\/([^\/\\\n]|\\.)+\//
+REGEX.3: /matching[ \t\n]+\/(?:[^\/\\\n]|\\.)+\//
 
 // Multi-character operators (defined before single-char to ensure correct matching)
 CMP_OP: "!=" | "==" | ">=" | "<=" | "<" | ">"
@@ -362,9 +362,12 @@ INT: /[0-9]+/
 // MLS priority 1 ensures it is tried before STRING (priority -1) so that """..."""
 // is matched as a triple-quoted string rather than an empty "" followed by another ".
 MLS.1: /"{3,5}[\s\S]*?"{3,5}/
-STRING: /("([^\\"\n]|\\.)*"|'([^\\'\n]|\\.)*')/
-RSTRING.1: /(r"([^\\"\n]|\\.)*"|r'([^\\'\n]|\\.)*')/
-FSTRING.1: /(f"([^\\"\n]|\\.)*"|f'([^\\'\n]|\\.)*')/
+// Friedl-unrolled patterns: replace per-character alternation (A|B)* with
+// bulk-scan A*(BA*)* so the regex engine scans large non-backslash runs in
+// one stride instead of one character at a time.
+STRING: /"[^\\"\n]*(?:\\.[^\\"\n]*)*"|'[^\\'\n]*(?:\\.[^\\'\n]*)*'/
+RSTRING.1: /r"[^\\"\n]*(?:\\.[^\\"\n]*)*"|r'[^\\'\n]*(?:\\.[^\\'\n]*)*'/
+FSTRING.1: /f"[^\\"\n]*(?:\\.[^\\"\n]*)*"|f'[^\\'\n]*(?:\\.[^\\'\n]*)*'/
 
 // Whitespace and comments (ignored)
 %ignore /[ \t\n\r]+/

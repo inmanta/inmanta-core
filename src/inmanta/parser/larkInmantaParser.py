@@ -20,6 +20,7 @@ This is a port of the PLY-based parser (plyInmantaParser.py / plyInmantaLex.py) 
 """
 
 import functools
+import hashlib
 import os
 import re
 import string
@@ -68,6 +69,10 @@ _GRAMMAR_FILE = os.path.join(os.path.dirname(__file__), "larkInmanta.lark")
 with open(_GRAMMAR_FILE, encoding="utf-8") as _f:
     _GRAMMAR = _f.read()
 
+# Short hash of the grammar text — used in the on-disk cache filename so that
+# upgrading the grammar automatically invalidates any stale cached LALR tables.
+_GRAMMAR_HASH: str = hashlib.sha256(_GRAMMAR.encode()).hexdigest()[:16]
+
 # _lark_parser_default: built once, never reset.  Reused by _get_parser() and
 # attach_to_project() as a fallback when no project-specific cache is available.
 # Without this singleton, the LALR tables would be recomputed for every test that
@@ -111,7 +116,9 @@ def attach_to_project(project_dir: str) -> None:
     global _lark_parser
     cache_dir = os.path.join(project_dir, CF_CACHE_DIR)
     os.makedirs(cache_dir, exist_ok=True)
-    cache_file = os.path.join(cache_dir, "lark_grammar.cache")
+    # Include the grammar hash in the filename so that upgrading the grammar
+    # automatically uses a fresh cache rather than loading stale LALR tables.
+    cache_file = os.path.join(cache_dir, f"lark_grammar_{_GRAMMAR_HASH}.cache")
 
     if os.path.exists(cache_file):
         # Fast path: load the pre-serialised LALR tables (~10 ms).
@@ -323,19 +330,33 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
 
         Falls through to __default__ for any rule not in _call_dispatch (transparent
         rules are already inlined by Lark's LALR engine before we see them).
+
+        Single-scan optimisation: if no child is a Tree (the common case for
+        leaf-heavy rules), we reuse tree.children directly instead of allocating
+        a new list. Only when a sub-Tree is encountered do we materialise a new
+        list, seeded with the already-seen Token children.
         """
-        new_children: list[object] = []
-        for c in tree.children:
-            if isinstance(c, Tree):
+        children = tree.children
+        # Fast path: scan to find first Tree child.  For all-token nodes (common
+        # in leaf rules like ns_ref_id, const_string, …) this avoids any list
+        # allocation at all.
+        new_children: list[object] | None = None
+        for i, c in enumerate(children):
+            if type(c) is Tree:
+                if new_children is None:
+                    # First sub-Tree found at index i — seed the new list with
+                    # the Token children we've already passed over.
+                    new_children = list(children[:i])
                 new_children.append(self._transform_tree(c))
-            else:
-                # Token — visit_tokens=False, pass through unchanged
+            elif new_children is not None:
+                # We are already building a new list — append this Token.
                 new_children.append(c)
+        effective_children: list[object] = new_children if new_children is not None else children  # type: ignore[assignment]
         f = self._call_dispatch.get(tree.data)
         if f is None:
-            return self.__default__(tree.data, new_children, tree.meta)  # type: ignore[no-untyped-call]
+            return self.__default__(tree.data, effective_children, tree.meta)  # type: ignore[no-untyped-call]
         try:
-            return f(*new_children)
+            return f(*effective_children)
         except Exception as e:
             raise VisitError(tree.data, tree, e) from e  # type: ignore[no-untyped-call]
 

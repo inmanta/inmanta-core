@@ -1848,7 +1848,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         if not os.path.exists(path):
             raise ProjectNotFoundException(f"Directory {path} doesn't exist")
         super().__init__(path)
-        self.project_path = path
+        self.project_path = os.path.abspath(path)
         self.main_file = main_file
 
         self._ast_cache: Optional[tuple[list[Statement], BasicBlock]] = None  # Cache for expensive method calls
