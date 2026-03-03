@@ -35,6 +35,8 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicNumbers
 from inmanta import config, const
 from inmanta.protocol import exceptions
 
+LOGGER = logging.getLogger(__name__)
+
 claim_type = Mapping[str, str | bool | Sequence[str] | Mapping[str, str]]
 
 
@@ -131,7 +133,7 @@ def decode_token(token: str) -> tuple[claim_type, "AuthJWTConfig"]:
                     unsupported.append(k)
 
         if unsupported:
-            logging.getLogger(__name__).debug(
+            LOGGER.debug(
                 "Only claims of type string or list of strings are supported. %s are filtered out.", ", ".join(unsupported)
             )
 
@@ -204,9 +206,9 @@ class AuthJWTConfig:
                     env_config[AUTH_JWT_PREFIX + section_name][setting_name] = str(os.environ.get(setting))
                     break
             else:
-                logging.getLogger(__name__).warning(
+                LOGGER.warning(
                     f"Found the following environment variable {setting} with the {ENV_AUTH_JWT_PREFIX} prefix, "
-                    f"but it doesn't match any available settings: {ENV_AUTH_JWT_SETTINGS}"
+                    f"but it doesn't match any available JWT settings: {ENV_AUTH_JWT_SETTINGS}"
                 )
 
         return env_config

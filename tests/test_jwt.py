@@ -129,7 +129,7 @@ async def test_auth_jwt_environment_variables(jwks, tmp_path, monkeypatch, caplo
     """
     port = str(list(jwks._sockets.values())[0].getsockname()[1])
     config_file = os.path.join(tmp_path, "auth.cfg")
-    with open(config_file, "w+", encoding="utf-8") as fd:
+    with open(config_file, "w", encoding="utf-8") as fd:
         # Wrong/incomplete config
         fd.write("""
 [auth_jwt_default]
