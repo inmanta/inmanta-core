@@ -530,7 +530,7 @@ def test_post_operation(api_methods_fixture):
     )
 
     operation_handler = OperationHandler(OpenApiTypeConverter(), ArgOptionHandler(OpenApiTypeConverter()))
-    operation = operation_handler.handle_method(post, "/operation/<id>")
+    operation = operation_handler.handle_method(post, "/operation/{id}")
 
     # Asserts on request body
     expected_params = ["param", "non_header"]
@@ -621,7 +621,7 @@ def test_post_operation_no_docstring(api_methods_fixture):
     )
 
     operation_handler = OperationHandler(OpenApiTypeConverter(), ArgOptionHandler(OpenApiTypeConverter()))
-    operation = operation_handler.handle_method(post, "/operation/<id>")
+    operation = operation_handler.handle_method(post, "/operation/{id}")
 
     # Asserts on request body
     expected_params = ["param", "non_header"]
@@ -696,7 +696,7 @@ def test_post_operation_partial_documentation(api_methods_fixture):
     )
 
     operation_handler = OperationHandler(OpenApiTypeConverter(), ArgOptionHandler(OpenApiTypeConverter()))
-    operation = operation_handler.handle_method(post, "/operation/<id_doc>/<id_no_doc>")
+    operation = operation_handler.handle_method(post, "/operation/{id_doc}/{id_no_doc}")
 
     # Asserts on request body
     request_body_parameters = list(operation.requestBody.content["application/json"].schema_.properties.keys())

@@ -319,6 +319,14 @@ class UrlPath:
     def path(self) -> str:
         return self._path
 
+    @property
+    def openapi_path(self) -> str:
+        """Return the path with variables in OpenAPI {var} notation."""
+        path = self._path
+        for var in self._vars:
+            path = path.replace(f"<{var}>", f"{{{var}}}")
+        return path
+
     def generate_path(self, variables: dict[str, str]) -> str:
         """Create a path with all variables substituted"""
         path = self._path
@@ -929,6 +937,10 @@ class MethodProperties(Generic[R]):
         """
         return f"/{self._api_prefix}/v{self._api_version}{self._path.path}"
 
+    def get_openapi_path(self) -> str:
+        """Return the full path with OpenAPI {var} notation for path parameters."""
+        return f"/{self._api_prefix}/v{self._api_version}{self._path.openapi_path}"
+
     def get_call_url(self, msg: dict[str, str]) -> str:
         """
         Create a calling url for the client
@@ -1080,6 +1092,10 @@ class UrlMethod:
         Returns the path part of the URL. Parameters in this path are templated using the <param> notation.
         """
         return self._properties.get_full_path()
+
+    def get_openapi_path(self) -> str:
+        """Returns the path with OpenAPI {var} notation."""
+        return self._properties.get_openapi_path()
 
 
 # Util functions
