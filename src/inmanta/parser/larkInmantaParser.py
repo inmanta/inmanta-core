@@ -25,11 +25,10 @@ import os
 import re
 import string
 import warnings
+from collections.abc import Sequence
 from dataclasses import dataclass
 from re import error as RegexError
-from collections.abc import Sequence
 from typing import Callable, NamedTuple, NoReturn, Optional, Union
-from collections.abc import Sequence
 
 from inmanta.ast import LocatableString, Location, Namespace, Range, RuntimeException
 from inmanta.ast.blocks import BasicBlock
@@ -85,19 +84,57 @@ _GRAMMAR_HASH: str = hashlib.sha256(_GRAMMAR.encode()).hexdigest()[:16]
 _lark_parser_default: Optional[Lark] = None
 _lark_parser: Optional[Lark] = None
 
+# Primary grammar cache location: alongside this module (like PLY's parsetab.py).
+# Falls back to the project .cfcache dir if the module directory is not writable.
+_MODULE_DIR: str = os.path.dirname(os.path.abspath(__file__))
+_MODULE_CACHE_FILE: str = os.path.join(_MODULE_DIR, f"lark_grammar_{_GRAMMAR_HASH}.cache")
+
 
 def _build_lark_parser(cache: Union[bool, str] = False) -> Lark:
     return Lark(_GRAMMAR, parser="lalr", maybe_placeholders=False, cache=cache)
+
+
+def _load_parser_from_cache(cache_file: str) -> Optional[Lark]:
+    """Try to load a serialised Lark parser from *cache_file*. Returns None on any failure."""
+    if not os.path.exists(cache_file):
+        return None
+    try:
+        with open(cache_file, "rb") as f:
+            return Lark.load(f)
+    except Exception:
+        return None
+
+
+def _save_parser_to_cache(parser: Lark, cache_file: str) -> bool:
+    """Persist *parser* to *cache_file*. Returns True on success."""
+    try:
+        with open(cache_file, "wb") as f:
+            parser.save(f)
+        return True
+    except OSError:
+        return False
 
 
 cache_manager = CacheManager()
 
 
 def _get_default_parser() -> Lark:
-    """Return the module-level default parser, building it exactly once."""
+    """Return the module-level default parser, building it exactly once.
+
+    Tries to load from the module-directory cache first (~10 ms).
+    On cache miss, builds from grammar and persists to the module directory.
+    """
     global _lark_parser_default
-    if _lark_parser_default is None:
-        _lark_parser_default = _build_lark_parser()
+    if _lark_parser_default is not None:
+        return _lark_parser_default
+
+    loaded = _load_parser_from_cache(_MODULE_CACHE_FILE)
+    if loaded is not None:
+        _lark_parser_default = loaded
+        return loaded
+
+    _lark_parser_default = _build_lark_parser()
+    _save_parser_to_cache(_lark_parser_default, _MODULE_CACHE_FILE)
     return _lark_parser_default
 
 
@@ -110,44 +147,32 @@ def _get_parser() -> Lark:
 
 def attach_to_project(project_dir: str) -> None:
     """
-    Switch to a project-specific cached parser.
+    Attach to a project directory for AST caching.
 
-    On first call for a given project directory the LALR tables are not rebuilt
-    from the grammar; instead the already-built default parser is reused and its
-    serialised form is written to the project cache.  Subsequent calls load the
-    serialised form directly (~10 ms) rather than recomputing (~350 ms).
-
-    This avoids rebuilding the grammar on every test that creates a fresh temp
-    directory while still giving production projects a persistent on-disk cache.
+    The grammar cache is stored in the parser module directory (like PLY's
+    parsetab.py).  If that location is not writable (e.g. installed as a
+    system package), the project's .cfcache directory is used as a fallback.
     """
     global _lark_parser
-    cache_dir = os.path.join(project_dir, CF_CACHE_DIR)
-    os.makedirs(cache_dir, exist_ok=True)
-    # Include the grammar hash in the filename so that upgrading the grammar
-    # automatically uses a fresh cache rather than loading stale LALR tables.
-    cache_file = os.path.join(cache_dir, f"lark_grammar_{_GRAMMAR_HASH}.cache")
 
-    if os.path.exists(cache_file):
-        # Fast path: load the pre-serialised LALR tables (~10 ms).
-        try:
-            with open(cache_file, "rb") as f:
-                _lark_parser = Lark.load(f)
-            cache_manager.attach_to_project(project_dir)
-            return
-        except Exception:
-            pass  # Stale or corrupt cache — fall through to rebuild.
-
-    # Reuse the already-built default parser rather than rebuilding from grammar.
-    # The grammar is fixed at install time, so all parser instances are equivalent.
+    # Ensure the module-dir cache exists; if not, try to create it now
+    # (covers the case where _get_default_parser() was called before any project).
     default = _get_default_parser()
-    _lark_parser = default
 
-    # Persist to the project cache so the next call can take the fast path.
-    try:
-        with open(cache_file, "wb") as f:
-            default.save(f)
-    except Exception:
-        pass  # Non-fatal: next call will just reuse the default parser again.
+    if not os.path.exists(_MODULE_CACHE_FILE):
+        # Module dir not writable — fall back to project cache.
+        cache_dir = os.path.join(project_dir, CF_CACHE_DIR)
+        os.makedirs(cache_dir, exist_ok=True)
+        fallback_cache = os.path.join(cache_dir, f"lark_grammar_{_GRAMMAR_HASH}.cache")
+
+        loaded = _load_parser_from_cache(fallback_cache)
+        if loaded is not None:
+            _lark_parser = loaded
+        else:
+            _lark_parser = default
+            _save_parser_to_cache(default, fallback_cache)
+    else:
+        _lark_parser = default
 
     cache_manager.attach_to_project(project_dir)
 
@@ -177,7 +202,10 @@ _RESERVED_KEYWORDS_UPPER: frozenset[str] = frozenset(k.upper() for k in _RESERVE
 
 @dataclass(slots=True)
 class _ForClause:
-    """Internal: represents a 'for ID in expression' clause in a list comprehension."""
+    """Internal: represents a 'for ID in expression' clause in a list comprehension.
+
+    Kept as a dataclass (not NamedTuple) because .guard is set after construction.
+    """
 
     variable: LocatableString
     iterable: ExpressionStatement
@@ -1530,7 +1558,9 @@ def _process_fstring(string_ast: LocatableString) -> Union[StringFormatV2, Liter
     return StringFormatV2(str(string_ast), _convert_to_references(locatable_matches, string_ast.namespace))
 
 
-def _convert_to_references(variables: Sequence[tuple[str, LocatableString]], namespace: Namespace) -> list[tuple["Reference", str]]:
+def _convert_to_references(
+    variables: Sequence[tuple[str, LocatableString]], namespace: Namespace
+) -> list[tuple["Reference", str]]:
     """Convert variable name strings to References (mirrors PLY's convert_to_references)."""
 
     def normalize(variable: str, locatable: LocatableString, offset: int = 0) -> LocatableString:

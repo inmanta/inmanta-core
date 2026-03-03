@@ -17,6 +17,7 @@ Contact: code@inmanta.com
 """
 
 import logging
+import os
 import re
 
 import pytest
@@ -42,7 +43,7 @@ from inmanta.ast.statements.define import DefineEntity, DefineImplement, DefineI
 from inmanta.ast.statements.generator import ConditionalExpression, Constructor, If
 from inmanta.ast.variables import AttributeReference, Reference
 from inmanta.execute.util import NoneValue
-from inmanta.parser import InvalidNamespaceAccess, ParserException
+from inmanta.parser import InvalidNamespaceAccess, ParserException, larkInmantaParser
 from inmanta.parser.larkInmantaParser import base_parse
 from utils import log_contains, log_doesnt_contain
 
@@ -2158,3 +2159,41 @@ std::print(s1)
         logging.WARNING,
         absent_warning,
     )
+
+
+def test_grammar_cache_in_module_dir() -> None:
+    """The grammar cache file is stored next to the parser module. The file is created when
+    inmanta is loaded.
+    """
+    from inmanta import app  # noqa: F401
+
+    assert os.path.exists(
+        larkInmantaParser._MODULE_CACHE_FILE
+    ), f"Expected grammar cache at {larkInmantaParser._MODULE_CACHE_FILE}"
+    assert os.path.dirname(larkInmantaParser._MODULE_CACHE_FILE) == larkInmantaParser._MODULE_DIR
+
+
+def test_grammar_cache_fallback_to_project_dir(tmp_path: "os.PathLike[str]") -> None:
+    """When the module directory cache is missing, attach_to_project falls back to .cfcache."""
+    from unittest.mock import patch
+
+    project_dir = str(tmp_path)
+
+    # Pretend the module-dir cache does not exist and cannot be written,
+    # so attach_to_project must fall back to the project .cfcache directory.
+    fake_module_cache = os.path.join(str(tmp_path), "nonexistent", "grammar.cache")
+    with patch.object(larkInmantaParser, "_MODULE_CACHE_FILE", fake_module_cache):
+        larkInmantaParser.attach_to_project(project_dir)
+
+        fallback_cache = os.path.join(
+            project_dir,
+            larkInmantaParser.CF_CACHE_DIR,
+            f"lark_grammar_{larkInmantaParser._GRAMMAR_HASH}.cache",
+        )
+        assert os.path.exists(fallback_cache), f"Expected fallback grammar cache at {fallback_cache}"
+
+        # Parser should still work after fallback.
+        stmts = parse_code("x = 1")
+        assert len(stmts) == 1
+
+        larkInmantaParser.detach_from_project()

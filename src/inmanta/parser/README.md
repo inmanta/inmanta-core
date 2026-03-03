@@ -113,31 +113,21 @@ be disabled with `--no-cache`.
 
 Full `inmanta compile` on a project that includes all files from the juniper-mx v23 module:
 
-| Parser               | Parsing   | Total compile | Total time |
-|----------------------|-----------|---------------|------------|
-| PLY with cold cache  | 131.7s    | 146.7s        | 193.5s     |
-| PLY with warm cache  | 67.7s     | 84.7s         | 134.5s     |
-| Lark without cache   | 125.1s    | 138.7s        | 181.8s     |
-| Lark with cold cache | 154.1s    | 168.7s        | 215.3s     |
-| Lark with warm cache | 48.8s     | 62.4s         | 110.9s     |
+| Parser                        | Parsing   | Total compile | User wall clock time |
+|-------------------------------|-----------|---------------|----------------------|
+| PLY with cold cache           | 131.7s    | 146.7s        | 193.5s               |
+| PLY with warm cache           | 67.7s     | 84.7s         | 134.5s               |
+| Lark without cache            | 125.1s    | 138.7s        | 181.8s               |
+| Lark with cold cache          | 154.1s    | 168.7s        | 215.3s               |
+| Lark with warm cache          | 48.8s     | 62.4s         | 110.9s               |
+| Lark with cold cache + fast exit | 147.8s | 163.4s        | 156.9s               |
+| Lark with warm cache + fast exit | 45.3s  | 58.5s         | 55.5s                |
 
 Lark is **5% faster** than PLY for raw parsing (no cache on either side). With a warm AST cache,
 Lark is **28% faster** than PLY with warm cache (48.8s vs 67.7s parsing, 110.9s vs 134.5s total).
 Cold cache adds overhead from pickling the AST on the first run, but subsequent runs benefit from
-the cached AST.
-
-### Overhead breakdown
-
-Of the 110.9s total time with Lark (warm cache):
-
-| Phase       | Time   | Notes |
-|-------------|--------|-------|
-| Parsing     | 48.8s  | Cache hits skip parsing; misses use Lark LALR(1) |
-| Compilation | 13.6s  | Normalisation, type checking, execute |
-| GC + other  | 48.5s  | Garbage collection dominates; also module loading, plugin init, I/O |
-
-With warm cache, parsing is no longer the dominant phase — garbage collection of the large AST
-object graph takes roughly equal time.
+the cached AST. The "fast exit" rows show timings when the process exits immediately after
+compilation (avoiding GC teardown overhead on the large AST object graph).
 
 ### Optimizations applied
 
