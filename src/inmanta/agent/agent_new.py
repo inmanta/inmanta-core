@@ -318,7 +318,7 @@ class Agent(SessionEndpoint):
                 max_pool=0,
                 open_connections=0,
                 free_connections=0,
-                pool_exhaustion_count=0,
+                pool_exhaustion_time=0,
             )
         return await self._db_monitor.get_status()
 
