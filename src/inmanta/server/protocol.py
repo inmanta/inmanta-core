@@ -574,9 +574,7 @@ class Session:
         self._seen = time.monotonic()
         self.endpoint_names = endpoint_names
 
-    async def _handle_timeout(
-        self, reply_id: uuid.UUID, future: asyncio.Future, timeout: int, log_message: str
-    ) -> None:
+    async def _handle_timeout(self, reply_id: uuid.UUID, future: asyncio.Future, timeout: int, log_message: str) -> None:
         """A function that awaits a future until its value is ready or until timeout. When the call times out, a message is
         logged. The future itself will be cancelled.
 
