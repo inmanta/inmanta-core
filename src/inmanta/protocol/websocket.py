@@ -667,21 +667,44 @@ class SessionEndpoint(endpoints.Endpoint, common.CallTarget, WebsocketFrameDecod
             LOGGER.warning("Tried writing into a closed websocket.")
 
     async def _process_messages(self) -> None:
-        """Process incoming messages"""
+        """Process incoming messages from the WebSocket connection.
+
+        This method runs as a long-lived background task for the lifetime of the endpoint.
+        It handles the full connection lifecycle: initial connection, message dispatch,
+        and reconnection after failures.
+
+        Error handling:
+            - Connection failures (refused, DNS, SSL, timeout) in _reconnect() are caught,
+              logged, and retried after reconnect_delay seconds.
+            - Message processing errors in on_message() are caught and logged without
+              dropping the connection.
+            - asyncio.CancelledError is allowed to propagate for clean shutdown via stop().
+        """
         try:
             while True:
-                if self._ws_client is not None and not self._ws_client.closed:
-                    msg = await self._ws_client.read_message()
-                    if msg is None:
-                        # we are disconnected. We wait and try to connect. If it fails, we will retry next iteration.
-                        await asyncio.sleep(self.reconnect_delay)
-                        await self._reconnect()
+                try:
+                    if self._ws_client is not None and not self._ws_client.closed:
+                        msg = await self._ws_client.read_message()
+                        if msg is None:
+                            # we are disconnected. We wait and try to connect. If it fails, we will retry next iteration.
+                            await asyncio.sleep(self.reconnect_delay)
+                            await self._reconnect()
+                        else:
+                            await self.on_message(msg)
                     else:
-                        await self.on_message(msg)
-                else:
-                    # There is no connection (probably because we just started). Connect to the server.
-                    await self._reconnect()
-
+                        # There is no connection (probably because we just started). Connect to the server.
+                        await self._reconnect()
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    LOGGER.exception(
+                        "Exception in message loop for %s in environment %s, reconnecting in %s seconds",
+                        self.name,
+                        self.environment,
+                        self.reconnect_delay,
+                    )
+                    self._ws_client = None
+                    await asyncio.sleep(self.reconnect_delay)
         except asyncio.CancelledError:
             pass
 

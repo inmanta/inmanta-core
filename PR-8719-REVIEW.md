@@ -26,7 +26,7 @@ The PR description is excellent. The architectural direction is sound — WebSoc
 ## Critical Issues
 
 ### C1. Reconnection loop crashes on connection failure
-- [ ] **Fix required**
+- [x] **Fix required**
 - **File:** `src/inmanta/protocol/websocket.py:659-676`
 
 Only `CancelledError` is caught in `_process_messages`. If `_reconnect()` raises any other exception (connection refused, DNS failure, SSL error), the message loop dies silently and the agent becomes permanently disconnected with no recovery.
