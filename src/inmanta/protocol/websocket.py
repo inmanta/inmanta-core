@@ -212,9 +212,15 @@ type WSMessages = Annotated[
 ]
 
 
-async def handle_timeout(future: asyncio.Future, timeout: int, log_message: str) -> None:
+async def handle_timeout(
+    future: asyncio.Future[common.Result],
+    timeout: int,
+    log_message: str,
+    replies: dict[uuid.UUID, "asyncio.Future[common.Result]"],
+    reply_id: uuid.UUID,
+) -> None:
     """A function that awaits a future until its value is ready or until timeout. When the call times out, a message is
-    logged. The future itself will be cancelled.
+    logged and the future is cancelled. The entry is also removed from the replies dict to prevent a memory leak.
 
     This method should be called as a background task. Any other exceptions (which should not occur) will be logged in
     the background task.
@@ -223,6 +229,8 @@ async def handle_timeout(future: asyncio.Future, timeout: int, log_message: str)
         await asyncio.wait_for(future, timeout)
     except asyncio.TimeoutError:
         LOGGER.warning(log_message)
+    finally:
+        replies.pop(reply_id, None)
 
 
 class WebsocketFrameDecoder(util.TaskHandler[None]):
@@ -268,14 +276,16 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
         # The timeout covers the full round-trip including handler execution on the remote side.
         timeout = max(properties.timeout or 120, 30)
         if properties.reply:
+            self._replies[call_spec.reply_id] = future
             self.add_background_task(
                 handle_timeout(
                     future=future,
                     timeout=timeout,
-                    log_message=f"Call {call_spec.reply_id}: {call_spec.method} {call_spec.url} for timed out.",  # TODO
+                    log_message=f"Call {call_spec.reply_id}: {call_spec.method} {call_spec.url} timed out.",
+                    replies=self._replies,
+                    reply_id=call_spec.reply_id,
                 )
             )
-            self._replies[call_spec.reply_id] = future
         else:
             future.set_result(common.Result(code=200, result=None))
 
