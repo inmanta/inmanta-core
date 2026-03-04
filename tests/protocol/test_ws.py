@@ -178,3 +178,99 @@ async def test_ws_reconnect_on_connection_failure(inmanta_config, server_config)
     finally:
         await rs.stop()
         await agent.stop()
+
+
+async def test_ws_reject_duplicate_session_on_same_connection(inmanta_config, server_config) -> None:
+    """Test that the server rejects a second OpenSession on the same connection.
+
+    When a duplicate OpenSession arrives on a connection that already has a session, the server sends
+    RejectSession. The agent's on_message processes the RejectSession, closes the session and
+    reconnects. After reconnection, RPC should work again.
+    """
+    rs = Server()
+    server = WSServer()
+    rs.add_slice(server)
+    await rs.start()
+
+    agent = WSAgent("agent", reconnect_delay=1)
+    await agent.start()
+
+    async def wait_for_active() -> None:
+        while not agent.session or not agent.session.active:
+            await asyncio.sleep(0.1)
+
+    await asyncio.wait_for(wait_for_active(), timeout=10)
+
+    original_session_id = agent.session.id
+
+    # Send a duplicate OpenSession on the same WebSocket connection.
+    # The server-side frame decoder will reject it with RejectSession.
+    # The agent's _process_messages loop receives the RejectSession, closes the session,
+    # and reconnects.
+    assert agent._ws_client is not None
+    duplicate_msg = websocket.OpenSession(
+        environment_id=agent.environment,
+        session_name="agent",
+        hostname="duplicate",
+    ).model_dump_json()
+    await agent._ws_client.write_message(duplicate_msg)
+
+    # Wait for the agent to reconnect with a new session
+    async def wait_for_new_session() -> None:
+        while True:
+            if agent.session and agent.session.active and agent.session.id != original_session_id:
+                return
+            await asyncio.sleep(0.1)
+
+    await asyncio.wait_for(wait_for_new_session(), timeout=30)
+
+    # RPC works on the new session
+    client_a2s = agent.session.get_typed_client()
+    result = await client_a2s.get_current_server_status()
+    assert result == "server status"
+
+    await rs.stop()
+    await agent.stop()
+
+
+async def test_ws_client_handles_reject_session(inmanta_config, server_config) -> None:
+    """Test that the client handles a RejectSession by closing the session and reconnecting."""
+    rs = Server()
+    server = WSServer()
+    rs.add_slice(server)
+    await rs.start()
+
+    agent = WSAgent("agent", reconnect_delay=1)
+    await agent.start()
+
+    async def wait_for_active() -> None:
+        while not agent.session or not agent.session.active:
+            await asyncio.sleep(0.1)
+
+    await asyncio.wait_for(wait_for_active(), timeout=10)
+
+    original_session_id = agent.session.id
+
+    # Simulate the server sending a RejectSession to the agent's on_message handler
+    reject_msg = websocket.RejectSession(reason="test rejection").model_dump_json()
+    await agent.on_message(reject_msg)
+
+    # The agent's session should be cleared
+    assert agent._session is None or not agent.active()
+
+    # The agent should reconnect and establish a new active session
+    async def wait_for_new_session() -> None:
+        while True:
+            if agent.session and agent.session.active and agent.session.id != original_session_id:
+                return
+            await asyncio.sleep(0.1)
+
+    await asyncio.wait_for(wait_for_new_session(), timeout=30)
+
+    # Verify the new session works
+    client_a2s = agent.session.get_typed_client()
+    result = await client_a2s.get_current_server_status()
+    assert result == "server status"
+
+    await rs.stop()
+    await agent.stop()

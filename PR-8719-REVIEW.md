@@ -99,7 +99,7 @@ With `id_primary` removed, there's no way to determine if an agent is actually c
 ---
 
 ### C6. Duplicate session handling not implemented on frame decoder
-- [ ] **Fix required**
+- [x] **Fix required**
 - **File:** `src/inmanta/protocol/websocket.py:303` — `# TODO: handle duplicate sessions`
 
 The server-side `register_session` (`rest/server.py:407-419`) handles the race by evicting the old session, but the frame decoder has no protection against a client opening multiple sessions on the same connection.
@@ -107,7 +107,7 @@ The server-side `register_session` (`rest/server.py:407-419`) handles the race b
 ---
 
 ### C7. `RejectSession` handling is a stub
-- [ ] **Fix required**
+- [x] **Fix required**
 - **File:** `src/inmanta/protocol/websocket.py:325-329`
 
 ```python

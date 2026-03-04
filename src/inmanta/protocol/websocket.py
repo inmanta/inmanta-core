@@ -306,11 +306,20 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
 
         match msg:
             case OpenSession():
+                if self._session is not None:
+                    LOGGER.warning(
+                        "Rejecting duplicate OpenSession on connection that already has session %s",
+                        self._session,
+                    )
+                    await self.write_message(
+                        RejectSession(reason="A session is already open on this connection").model_dump_json()
+                    )
+                    return
+
                 LOGGER.info(
                     "Opening session %s on host %s with environment %s", msg.session_name, msg.hostname, msg.environment_id
                 )
                 # session open request: normally only initiated by the client and received by the server
-                # TODO: handle duplicate sessions
                 self._session = Session(
                     environment_id=msg.environment_id,
                     session_name=msg.session_name,
@@ -335,8 +344,11 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
             case RejectSession():
                 # the server rejected the session: for example when the same session already exists or when the server
                 # is shutting down
-                # TODO: implement
-                pass
+                LOGGER.warning("Session rejected by server: %s", msg.reason)
+                if self._session is not None:
+                    self._session.close_session()
+                    self._session = None
+                await self.close_connection()
 
             case CloseSession():
                 if not self.active():
@@ -635,6 +647,9 @@ class SessionEndpoint(endpoints.Endpoint, common.CallTarget, WebsocketFrameDecod
         )
 
         self._ws_client = await conn.connect_future
+        # Create a fresh session for each connection attempt. This ensures a clean state after
+        # rejection or disconnection (where the old session may be closed).
+        self.create_session(environment_id=self.environment, session_name=self.name)
         await self.session.open()
         await self.start_connected()
 
