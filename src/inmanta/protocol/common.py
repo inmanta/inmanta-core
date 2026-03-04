@@ -57,8 +57,6 @@ from inmanta.types import ArgumentTypes, BaseModel, DateTimeNormalizerModel, Han
 if TYPE_CHECKING:
     from inmanta.protocol.rest.client import RESTClient
 
-    from .endpoints import CallTarget
-
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 
@@ -120,7 +118,9 @@ class Request:
     A protocol request
     """
 
-    def __init__(self, url: str, method: str, headers: dict[str, str], body: Optional[JsonType]) -> None:
+    def __init__(
+        self, url: str, method: str, headers: dict[str, str], body: Optional[JsonType], reply_id: Optional[uuid.UUID] = None
+    ) -> None:
         self._url = url
         self._method = method
         self._headers = headers
@@ -128,7 +128,7 @@ class Request:
         # Reply ID is used to send back the result
         # If None, no reply is expected
         #  i.e. this call will immediately return, potentially even before the request is dispatched
-        self._reply_id: Optional[uuid.UUID] = None
+        self.reply_id: uuid.UUID | None = reply_id
 
     @property
     def body(self) -> Optional[JsonType]:
@@ -146,23 +146,16 @@ class Request:
     def method(self) -> str:
         return self._method
 
-    def set_reply_id(self, reply_id: uuid.UUID) -> None:
-        self._reply_id = reply_id
-
-    def get_reply_id(self) -> Optional[uuid.UUID]:
-        return self._reply_id
-
-    reply_id = property(get_reply_id, set_reply_id)
-
     def to_dict(self) -> JsonType:
         return_dict: JsonType = {"url": self._url, "headers": self._headers, "body": self._body, "method": self._method}
-        if self._reply_id is not None:
-            return_dict["reply_id"] = self._reply_id
+        if self.reply_id is not None:
+            return_dict["reply_id"] = self.reply_id
 
         return return_dict
 
     @classmethod
     def from_dict(cls, value: JsonType) -> "Request":
+        """Rebuild a request from a dict"""
         reply_id: Optional[str] = None
         if "reply_id" in value:
             reply_id = cast(str, value["reply_id"])
@@ -352,6 +345,18 @@ VALID_URL_ARG_TYPES = (Enum, uuid.UUID, str, float, int, bool, datetime)
 VALID_SIMPLE_ARG_TYPES = (BaseModel, Enum, uuid.UUID, str, float, int, bool, datetime, bytes, pydantic.AnyUrl)
 
 
+class VersionMatch(str, Enum):
+    lowest = "lowest"
+    """ Select the lowest available version of the method
+    """
+    highest = "highest"
+    """ Select the highest available version of the method
+    """
+    exact = "exact"
+    """ Select the exact version of the method
+    """
+
+
 class MethodProperties(Generic[R]):
     """
     This class stores the information from a method definition
@@ -382,6 +387,30 @@ class MethodProperties(Generic[R]):
 
         cls.methods[properties.function_name].append(properties)
 
+    @classmethod
+    def select_method(
+        cls, name: str, match_constraint: VersionMatch = VersionMatch.lowest, exact_version: int = 0
+    ) -> Optional["MethodProperties"]:
+        """Select a method to call with the given name and using the given match constraint
+
+        :param name: The name of the method to select
+        :param match_constraint: How to decide which version to match against
+        :param exact_version: The exact version to match against in case of VersionMatch.exact
+        """
+        if name not in cls.methods:
+            return None
+
+        methods = cls.methods[name]
+
+        if match_constraint is VersionMatch.lowest:
+            return min(methods, key=lambda x: x.api_version)
+        elif match_constraint is VersionMatch.highest:
+            return max(methods, key=lambda x: x.api_version)
+        elif match_constraint is VersionMatch.exact:
+            return next((m for m in methods if m.api_version == exact_version), None)
+
+        return None
+
     def __init__(
         self,
         function: Callable[..., R | ReturnValue[R]],
@@ -393,7 +422,6 @@ class MethodProperties(Generic[R]):
         server_agent: bool,
         api: Optional[bool],
         agent_server: bool,
-        validate_sid: Optional[bool],
         client_types: list[const.ClientType],
         api_version: int,
         api_prefix: str,
@@ -417,7 +445,6 @@ class MethodProperties(Generic[R]):
         :param api: This is a call from the client to the Server (True if not server_agent and not agent_server)
         :param server_agent: This is a call from the Server to the Agent (reverse http channel through long poll)
         :param agent_server: This is a call from the Agent to the Server
-        :param validate_sid: This call requires a valid session, true by default if agent_server and not api
         :param client_types: The allowed client types for this call
         :param arg_options: Options related to arguments passed to the method. The key of this dict is the name of the arg
                             to which the options apply.
@@ -443,9 +470,6 @@ class MethodProperties(Generic[R]):
         if api is None:
             api = not server_agent and not agent_server
 
-        if validate_sid is None:
-            validate_sid = agent_server and not api
-
         assert not (enforce_auth and server_agent), "Can not authenticate the return channel"
 
         self._path = UrlPath(path)
@@ -457,7 +481,6 @@ class MethodProperties(Generic[R]):
         self._server_agent = server_agent
         self._api: bool = api
         self._agent_server = agent_server
-        self._validate_sid: bool = validate_sid
         self._client_types = client_types
         self._api_version = api_version
         self._api_prefix = api_prefix
@@ -797,10 +820,6 @@ class MethodProperties(Generic[R]):
     @property
     def timeout(self) -> Optional[int]:
         return self._timeout
-
-    @property
-    def validate_sid(self) -> bool:
-        return self._validate_sid
 
     @property
     def agent_server(self) -> bool:
@@ -1451,15 +1470,106 @@ class PageableClientCall(ClientCall[list[V]], Awaitable[PageableResult[V]]):
         yield from self.sync(timeout=timeout, ioloop=ioloop).all_sync(timeout=timeout, ioloop=ioloop)
 
 
-class SessionManagerInterface:
+class CallTarget:
     """
-    An interface for a sessionmanager
+    A baseclass for all classes that are target for protocol calls / methods
     """
 
-    def validate_sid(self, sid: uuid.UUID) -> bool:
+    def _get_endpoint_metadata(self) -> dict[str, list[tuple[str, Callable]]]:
+        total_dict = {
+            method_name: method
+            for method_name, method in inspect.getmembers(self)
+            if callable(method) and method_name[0] != "_"
+        }
+
+        methods: dict[str, list[tuple[str, Callable]]] = defaultdict(list)
+        for name, attr in total_dict.items():
+            if hasattr(attr, "__protocol_method__"):
+                methods[attr.__protocol_method__.__name__].append((name, attr))
+
+        return methods
+
+    def get_op_mapping(self) -> dict[str, dict[str, UrlMethod]]:
         """
-        Check if the given sid is a valid session
-        :param sid: The session id
-        :return: True if the session is valid
+        Build a mapping between urls, ops and methods
         """
-        raise NotImplementedError()
+        url_map: dict[str, dict[str, UrlMethod]] = defaultdict(dict)
+
+        # Loop over all methods in this class that have a handler annotation. The handler annotation refers to a method
+        # definition. This method definition defines how the handler is invoked.
+        for method, handler_list in self._get_endpoint_metadata().items():
+            for method_handlers in handler_list:
+                # Go over all method annotation on the method associated with the handler
+                for properties in MethodProperties.methods[method]:
+                    url = properties.get_listen_url()
+
+                    # Associate the method with the handler if:
+                    # - the handler does not specific a method version
+                    # - the handler specifies a method version and the method version matches the method properties
+                    if method_handlers[1].__api_version__ is None or (
+                        method_handlers[1].__api_version__ is not None
+                        and properties.api_version == method_handlers[1].__api_version__
+                    ):
+                        # there can only be one
+                        if url in url_map and properties.operation in url_map[url]:
+                            raise Exception(f"A handler is already registered for {properties.operation} {url}. ")
+
+                        url_map[url][properties.operation] = UrlMethod(properties, self, method_handlers[1], method_handlers[0])
+        return url_map
+
+
+def typed_process_response(method_properties: MethodProperties, response: Result) -> types.ReturnTypes:
+    """Convert the response into a proper type and restore exception if any"""
+
+    def _raise_exception(exception_class: type[exceptions.BaseHttpException], result: Optional[types.JsonType]) -> None:
+        """Raise an exception based on the provided status"""
+        if result is None:
+            raise exception_class()
+
+        message = result.get("message", None)
+        details = result.get("error_details", None)
+
+        raise exception_class(message=message, details=details)
+
+    match response.code:
+        case 200:
+            # typed methods always require an envelope key
+            if response.result is None or method_properties.envelope_key not in response.result:
+                raise exceptions.BadRequest("No data was provided in the body. Make sure to only use typed methods.")
+
+            if method_properties.return_type is None:
+                return None
+
+            try:
+                ta = pydantic.TypeAdapter(method_properties.return_type)
+            except InvalidMethodDefinition:
+                raise exceptions.BadRequest("Typed client can only be used with typed methods.")
+
+            return ta.validate_python(response.result[method_properties.envelope_key])
+
+        case 400:
+            _raise_exception(exceptions.BadRequest, response.result)
+
+        case 401:
+            _raise_exception(exceptions.UnauthorizedException, response.result)
+
+        case 403:
+            _raise_exception(exceptions.Forbidden, response.result)
+
+        case 404:
+            _raise_exception(exceptions.NotFound, response.result)
+
+        case 409:
+            _raise_exception(exceptions.Conflict, response.result)
+
+        case 500:
+            _raise_exception(exceptions.ServerError, response.result)
+
+        case 503:
+            _raise_exception(exceptions.ShutdownInProgress, response.result)
+
+        case _:
+            _raise_exception(exceptions.ServerError, response.result)
+
+    # make mypy happy, it cannot deduce that all the cases will always raise an exception
+    return None

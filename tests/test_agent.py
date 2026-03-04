@@ -24,14 +24,13 @@ from inmanta.agent import reporting
 from inmanta.agent.handler import HandlerContext, InvalidOperation
 from inmanta.data.model import AttributeStateChange
 from inmanta.resources import Id, PurgeableResource
-from inmanta.server import SLICE_SESSION_MANAGER
 
 logger = logging.getLogger(__name__)
 
 
 @pytest.mark.slowtest
 async def test_agent_get_status(server, environment, agent):
-    clients = server.get_slice(SLICE_SESSION_MANAGER)._sessions.values()
+    clients = server._transport._sessions.values()
     assert len(clients) == 1
     clients = [x for x in clients]
     client = clients[0].get_client()

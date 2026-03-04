@@ -2913,8 +2913,7 @@ class Environment(BaseDocument):
         """
         async with self.get_connection(connection=connection) as con:
             await Agent.delete_all(environment=self.id, connection=con)
-            await AgentInstance.delete_all(tid=self.id, connection=con)
-            await AgentProcess.delete_all(environment=self.id, connection=con)
+            await SchedulerSession.delete_all(environment=self.id, connection=con)
             await Compile.delete_all(environment=self.id, connection=con)  # Triggers cascading delete on report table
             await Parameter.delete_all(environment=self.id, connection=con)
             await Notification.delete_all(environment=self.id, connection=con)
@@ -3308,13 +3307,12 @@ class UnknownParameter(BaseDocument):
             return [cls(from_postgres=True, **uk) for uk in result]
 
 
-class AgentProcess(BaseDocument):
+class SchedulerSession(BaseDocument):
     """
     A process in the infrastructure that has (had) a session as an agent.
 
     :param hostname: The hostname of the device.
     :param environment: To what environment is this process bound
-    :param last_seen: When did the server receive data from the node for the last time.
     """
 
     __primary_key__ = ("sid",)
@@ -3323,23 +3321,22 @@ class AgentProcess(BaseDocument):
     hostname: str
     environment: uuid.UUID
     first_seen: Optional[datetime.datetime] = None
-    last_seen: Optional[datetime.datetime] = None
     expired: Optional[datetime.datetime] = None
 
     @classmethod
-    async def get_live(cls, environment: Optional[uuid.UUID] = None) -> list["AgentProcess"]:
+    async def get_live(cls, environment: Optional[uuid.UUID] = None) -> list["SchedulerSession"]:
         if environment is not None:
             result = await cls.get_list(
-                limit=DBLIMIT, environment=environment, expired=None, order_by_column="last_seen", order="ASC NULLS LAST"
+                limit=DBLIMIT, environment=environment, expired=None, order_by_column="first_seen", order="ASC NULLS LAST"
             )
         else:
-            result = await cls.get_list(limit=DBLIMIT, expired=None, order_by_column="last_seen", order="ASC NULLS LAST")
+            result = await cls.get_list(limit=DBLIMIT, expired=None, order_by_column="first_seen", order="ASC NULLS LAST")
         return result
 
     @classmethod
     async def get_by_sid(
         cls, sid: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None
-    ) -> Optional["AgentProcess"]:
+    ) -> Optional["SchedulerSession"]:
         objects = await cls.get_list(limit=DBLIMIT, connection=connection, expired=None, sid=sid)
         if len(objects) == 0:
             return None
@@ -3350,31 +3347,19 @@ class AgentProcess(BaseDocument):
             return objects[0]
 
     @classmethod
-    async def seen(
+    async def register(
         cls,
         env: uuid.UUID,
-        nodename: str,
+        hostname: str,
         sid: uuid.UUID,
         now: datetime.datetime,
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> None:
         """
-        Update the last_seen parameter of the process and mark as not expired.
+        Register a new scheduler session.
         """
-        proc = await cls.get_one(connection=connection, sid=sid)
-        if proc is None:
-            proc = cls(hostname=nodename, environment=env, first_seen=now, last_seen=now, sid=sid)
-            await proc.insert(connection=connection)
-        else:
-            await proc.update_fields(connection=connection, last_seen=now, expired=None)
-
-    @classmethod
-    async def update_last_seen(
-        cls, sid: uuid.UUID, last_seen: datetime.datetime, connection: Optional[asyncpg.connection.Connection] = None
-    ) -> None:
-        aps = await cls.get_by_sid(sid=sid, connection=connection)
-        if aps:
-            await aps.update_fields(connection=connection, last_seen=last_seen)
+        proc = cls(hostname=hostname, environment=env, first_seen=now, sid=sid)
+        await proc.insert(connection=connection)
 
     @classmethod
     async def expire_process(
@@ -3383,6 +3368,14 @@ class AgentProcess(BaseDocument):
         aps = await cls.get_by_sid(sid=sid, connection=connection)
         if aps is not None:
             await aps.update_fields(connection=connection, expired=now)
+
+    @classmethod
+    async def clean_up_expired_for_env(
+        cls, environment: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> None:
+        """Delete all expired session records for the given environment."""
+        query = f"DELETE FROM {cls.table_name()} WHERE environment=$1 AND expired IS NOT NULL"
+        await cls._execute_query(query, cls._get_value(environment), connection=connection)
 
     @classmethod
     async def expire_all(cls, now: datetime.datetime, connection: Optional[asyncpg.connection.Connection] = None) -> None:
@@ -3395,6 +3388,7 @@ class AgentProcess(BaseDocument):
 
     @classmethod
     async def cleanup(cls, nr_expired_records_to_keep: int) -> None:
+        # TODO
         query = f"""
             WITH halted_env AS (
                 SELECT id FROM environment WHERE halted = true
@@ -3410,16 +3404,7 @@ class AgentProcess(BaseDocument):
                           a1.hostname=a2.hostname AND
                           a2.expired IS NOT NULL AND
                           a2.expired > a1.expired
-                  ) >= $1
-                  AND
-                  -- Agent process only has expired agent instances
-                  NOT EXISTS(
-                    SELECT 1
-                    FROM {cls.table_name()} AS agentprocess
-                    INNER JOIN {AgentInstance.table_name()} AS agentinstance
-                    ON agentinstance.process = agentprocess.sid
-                    WHERE agentprocess.sid = a1.sid AND agentinstance.expired IS NULL
-                  );
+                  ) >= $1;
         """
         await cls._execute_query(query, cls._get_value(nr_expired_records_to_keep))
 
@@ -3435,103 +3420,8 @@ class AgentProcess(BaseDocument):
             hostname=self.hostname,
             environment=self.environment,
             first_seen=self.first_seen,
-            last_seen=self.last_seen,
             expired=self.expired,
         )
-
-
-TAgentInstance = TypeVar("TAgentInstance", bound="AgentInstance")
-
-
-class AgentInstance(BaseDocument):
-    """
-    A physical server/node in the infrastructure that reports to the management server.
-
-    :param hostname: The hostname of the device.
-    :param last_seen: When did the server receive data from the node for the last time.
-    """
-
-    __primary_key__ = ("id",)
-
-    # TODO: add env to speed up cleanup
-    id: uuid.UUID
-    process: uuid.UUID
-    name: str
-    expired: Optional[datetime.datetime] = None
-    tid: uuid.UUID
-
-    @classmethod
-    async def active_for(
-        cls: type[TAgentInstance],
-        tid: uuid.UUID,
-        endpoint: str,
-        process: Optional[uuid.UUID] = None,
-        connection: Optional[asyncpg.connection.Connection] = None,
-    ) -> list[TAgentInstance]:
-        if process is not None:
-            objects = await cls.get_list(expired=None, tid=tid, name=endpoint, connection=connection)
-        else:
-            objects = await cls.get_list(expired=None, tid=tid, name=endpoint, connection=connection)
-        return objects
-
-    @classmethod
-    async def active(cls: type[TAgentInstance]) -> list[TAgentInstance]:
-        objects = await cls.get_list(expired=None)
-        return objects
-
-    @classmethod
-    async def log_instance_creation(
-        cls: type[TAgentInstance],
-        tid: uuid.UUID,
-        process: uuid.UUID,
-        endpoints: set[str],
-        connection: Optional[asyncpg.connection.Connection] = None,
-    ) -> None:
-        """
-        Create new agent instances for a given session.
-        """
-        if not endpoints:
-            return
-        async with cls.get_connection(connection) as con:
-            await con.executemany(
-                f"""
-                INSERT INTO
-                {cls.table_name()}
-                (id, tid, process, name, expired)
-                VALUES ($1, $2, $3, $4, null)
-                ON CONFLICT ON CONSTRAINT {cls.table_name()}_unique DO UPDATE
-                SET expired = null
-                ;
-                """,
-                [tuple(map(cls._get_value, (cls._new_id(), tid, process, name))) for name in endpoints],
-            )
-
-    @classmethod
-    async def log_instance_expiry(
-        cls: type[TAgentInstance],
-        sid: uuid.UUID,
-        endpoints: set[str],
-        now: datetime.datetime,
-        connection: Optional[asyncpg.connection.Connection] = None,
-    ) -> None:
-        """
-        Expire specific instances for a given session id.
-        """
-        if not endpoints:
-            return
-        instances: list[TAgentInstance] = await cls.get_list(connection=connection, process=sid)
-        for ai in instances:
-            if ai.name in endpoints:
-                await ai.update_fields(connection=connection, expired=now)
-
-    @classmethod
-    async def expire_all(cls, now: datetime.datetime, connection: Optional[asyncpg.connection.Connection] = None) -> None:
-        query = f"""
-                UPDATE {cls.table_name()}
-                SET expired=$1
-                WHERE expired IS NULL
-        """
-        await cls._execute_query(query, cls._get_value(now), connection=connection)
 
 
 class Agent(BaseDocument):
@@ -3553,12 +3443,7 @@ class Agent(BaseDocument):
     name: str
     last_failover: Optional[datetime.datetime] = None
     paused: bool = False
-    id_primary: Optional[uuid.UUID] = None
     unpause_on_resume: Optional[bool] = None
-
-    @property
-    def primary(self) -> Optional[uuid.UUID]:
-        return self.id_primary
 
     @classmethod
     def get_valid_field_names(cls) -> list[str]:
@@ -3581,8 +3466,9 @@ class Agent(BaseDocument):
     def get_status(self) -> AgentStatus:
         if self.paused:
             return AgentStatus.paused
-        if self.primary is not None:
-            return AgentStatus.up
+        # if self.primary is not None:
+        return AgentStatus.up
+        # TODO: fix
         return AgentStatus.down
 
     def to_dict(self) -> JsonType:
@@ -3590,22 +3476,12 @@ class Agent(BaseDocument):
         if self.last_failover is None:
             base["last_failover"] = ""
 
-        if self.primary is None:
-            base["primary"] = ""
-        else:
-            base["primary"] = base["id_primary"]
-            del base["id_primary"]
+        # Field kept for backward compatibility
+        base["primary"] = ""
 
         base["state"] = self.get_status().value
 
         return base
-
-    @classmethod
-    def _convert_field_names_to_db_column_names(cls, field_dict: dict[str, object]) -> dict[str, object]:
-        if "primary" in field_dict:
-            field_dict["id_primary"] = field_dict["primary"]
-            del field_dict["primary"]
-        return field_dict
 
     @classmethod
     async def get(
@@ -3624,8 +3500,8 @@ class Agent(BaseDocument):
     ) -> None:
         query = """
             INSERT INTO agent
-            (last_failover,paused,id_primary,unpause_on_resume,environment,name)
-            VALUES (now(),FALSE,NULL,NULL,$1,$2)
+            (last_failover,paused,unpause_on_resume,environment,name)
+            VALUES (now(),FALSE,NULL,$1,$2)
             ON CONFLICT DO NOTHING
         """
         values = [cls._get_value(environment), cls._get_value(endpoint)]
@@ -3701,55 +3577,11 @@ class Agent(BaseDocument):
         await cls._execute_query(query, *values, connection=connection)
 
     @classmethod
-    async def update_primary(
-        cls,
-        env: uuid.UUID,
-        endpoints_with_new_primary: Sequence[tuple[str, Optional[uuid.UUID]]],
-        now: datetime.datetime,
-        connection: Optional[asyncpg.connection.Connection] = None,
-    ) -> None:
-        """
-        Update the primary agent instance for agents present in the database.
-
-        :param env: The environment of the agent
-        :param endpoints_with_new_primary: Contains a tuple (agent-name, sid) for each agent that has got a new
-                                           primary agent instance. The sid in the tuple is the session id of the new
-                                           primary. If the session id is None, the Agent doesn't have a primary anymore.
-        :param now: Timestamp of this failover
-        """
-        for endpoint, sid in endpoints_with_new_primary:
-            # Lock mode is required because we will update in this transaction
-            # Deadlocks with cleanup otherwise
-            agent = await cls.get(env, endpoint, connection=connection, lock=RowLockMode.FOR_NO_KEY_UPDATE)
-            if agent is None:
-                continue
-
-            if sid is None:
-                await agent.update_fields(last_failover=now, primary=None, connection=connection)
-            else:
-                instances = await AgentInstance.active_for(tid=env, endpoint=agent.name, process=sid, connection=connection)
-                if instances:
-                    await agent.update_fields(last_failover=now, id_primary=instances[0].id, connection=connection)
-                else:
-                    await agent.update_fields(last_failover=now, id_primary=None, connection=connection)
-
-    @classmethod
-    async def mark_all_as_non_primary(cls, connection: Optional[asyncpg.connection.Connection] = None) -> None:
-        query = f"""
-                UPDATE {cls.table_name()}
-                SET id_primary=NULL
-                WHERE id_primary IS NOT NULL
-        """
-        await cls._execute_query(query, connection=connection)
-
-    @classmethod
     async def clean_up(cls, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         query = """
 DELETE FROM public.agent AS a
-WHERE -- have no primary ID set (that are down)
-      id_primary IS NULL
-      -- not used by any version
-      AND NOT EXISTS (
+WHERE -- not used by any version
+      NOT EXISTS (
           SELECT 1
           FROM public.resource AS re
           WHERE a.environment=re.environment
@@ -7168,8 +7000,7 @@ _classes = [
     Project,
     Environment,
     UnknownParameter,
-    AgentProcess,
-    AgentInstance,
+    SchedulerSession,
     Agent,
     Resource,
     ResourceAction,

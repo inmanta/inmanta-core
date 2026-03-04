@@ -126,7 +126,7 @@ LOGGER = logging.getLogger(LOGGER_NAME_EXECUTOR)
 class ExecutorContext:
     """The context object used by the executor to expose state to the incoming calls"""
 
-    client: typing.Optional[inmanta.protocol.SessionClient]
+    client: typing.Optional[inmanta.protocol.Client]
     venv: typing.Optional[inmanta.env.VirtualEnv]
     environment: uuid.UUID
     executors: dict[str, "inmanta.agent.in_process_executor.InProcessExecutor"] = {}
@@ -384,7 +384,7 @@ class StopCommandFor(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]
 class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedInmantaModules]):
     """
     Initialize the executor process:
-    1. setup the client, using the session id of the agent
+    1. setup the REST client
     2. activate the venv created for this executor
     3. load additional source files
 
@@ -395,7 +395,6 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
         self,
         venv_path: str,
         storage_folder: str,
-        session_gid: uuid.UUID,
         sources: Sequence[inmanta.data.model.ModuleSource],
         venv_touch_interval: float = 60.0,
     ):
@@ -406,7 +405,6 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
         """
         self.venv_path = venv_path
         self.storage_folder = storage_folder
-        self.gid = session_gid
         self.sources = sources
         self._venv_touch_interval = venv_touch_interval
 
@@ -420,7 +418,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
         context.server.post_init(self._venv_touch_interval)
 
         # setup client
-        context.client = inmanta.protocol.SessionClient("agent", self.gid)
+        context.client = inmanta.protocol.Client("agent")
 
         # activate venv
         context.venv = inmanta.env.VirtualEnv(self.venv_path)
@@ -851,7 +849,6 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
     def __init__(
         self,
         thread_pool: concurrent.futures.thread.ThreadPoolExecutor,
-        session_gid: uuid.UUID,
         environment: uuid.UUID,
         log_folder: str,
         storage_folder: str,
@@ -860,7 +857,6 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
     ) -> None:
         """
         :param thread_pool:  threadpool to perform work on
-        :param session_gid: agent session id, used to connect to the server, the agent should keep this alive
         :param environment: the inmanta environment we are deploying for
         :param log_folder: folder to place log files for the executors
         :param storage_folder: folder to place code files and venvs
@@ -877,7 +873,6 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
         self.thread_pool = thread_pool
 
         self.environment = environment
-        self.session_gid = session_gid
 
         # on disk
         self.log_folder = log_folder
@@ -960,7 +955,6 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
                 InitCommand(
                     venv_path=venv.env_path,
                     storage_folder=storage_for_blueprint,
-                    session_gid=self.session_gid,
                     sources=blueprint.sources,
                     venv_touch_interval=self.venv_checkup_interval,
                 )
@@ -1032,7 +1026,6 @@ class MPManager(
     def __init__(
         self,
         thread_pool: concurrent.futures.thread.ThreadPoolExecutor,
-        session_gid: uuid.UUID,
         environment: uuid.UUID,
         log_folder: str,
         storage_folder: str,
@@ -1041,7 +1034,6 @@ class MPManager(
     ) -> None:
         """
         :param thread_pool:  threadpool to perform work on
-        :param session_gid: agent session id, used to connect to the server, the agent should keep this alive
         :param environment: the inmanta environment we are deploying for
         :param log_folder: folder to place log files for the executors
         :param storage_folder: folder to place code files and venvs
@@ -1053,7 +1045,7 @@ class MPManager(
             retention_time=inmanta.agent.config.agent_executor_retention_time.get(),
         )
 
-        self.process_pool = MPPool(thread_pool, session_gid, environment, log_folder, storage_folder, log_level, cli_log)
+        self.process_pool = MPPool(thread_pool, environment, log_folder, storage_folder, log_level, cli_log)
 
         self.environment = environment
 

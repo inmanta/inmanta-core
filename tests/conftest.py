@@ -962,7 +962,7 @@ def executor_factory():
 
     def default_executor(
         environment: uuid.UUID,
-        client: inmanta.protocol.SessionClient,
+        client: inmanta.protocol.Client,
         eventloop: asyncio.AbstractEventLoop,
         parent_logger: logging.Logger,
         thread_pool: ThreadPoolExecutor,
@@ -990,10 +990,11 @@ def executor_factory():
 async def agent_factory(
     server, client, monkeypatch, executor_factory
 ) -> AsyncIterator[Callable[[uuid.UUID], Awaitable[Agent]]]:
-    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     agents: list[Agent] = []
 
-    async def create(environment: uuid.UUID) -> Agent:
+    async def create(environment: uuid.UUID | str) -> Agent:
+        if isinstance(environment, str):
+            environment = uuid.UUID(environment)
         # Mock scheduler state-dir: outside of tests this happens
         # when the scheduler config is loaded, before starting the scheduler
         server_state_dir = config.Config.get("config", "state-dir")
@@ -1018,9 +1019,13 @@ async def agent_factory(
         a.scheduler.executor_manager = executor
         a.scheduler.code_manager = utils.DummyCodeManager()
         await a.start()
+
+        def _is_session_established() -> bool:
+            """Wait until this agent's session has completed the handshake (SESSION_OPENED received)."""
+            return a.session is not None and a.session.active
+
         await utils.retry_limited(
-            lambda: agentmanager.get_agent_client(tid=environment, endpoint=const.AGENT_SCHEDULER_ID, live_agent_only=True)
-            is not None,
+            _is_session_established,
             timeout=10,
         )
         return a
