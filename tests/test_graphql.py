@@ -13,6 +13,7 @@ Contact: code@inmanta.com
 """
 
 import datetime
+import inspect
 import logging
 import typing
 import uuid
@@ -27,6 +28,7 @@ from inmanta.graphql.schema import to_snake_case
 from inmanta.server import SLICE_COMPILER
 from inmanta.server.services.compilerservice import CompilerService
 from inmanta.util import retry_limited
+from strawberry_sqlalchemy_mapper import StrawberrySQLAlchemyMapper
 from utils import insert_with_link_to_configuration_model, run_compile_and_wait_until_compile_is_done
 
 env_1: typing.Final[str] = "11111111-1234-5678-1234-000000000001"
@@ -942,3 +944,88 @@ async def test_total_count(server, client, setup_database):
         count = res["totalCount"]
         assert len(res["edges"]) == count
         assert found_counts[name] == count
+
+    # Test on InlineFragment and FragmentSpread
+    query = f"""
+    {{
+        environments{{
+            ...EnvironmentFields
+        }}
+        notifications(filter: {{
+                  cleared: false
+                  environment: "{env_1}"
+                }}){{
+            ... on NotificationConnection{{
+                totalCount
+                edges {{
+                    node {{
+                        id
+                    }}
+                }}
+            }}
+        }}
+    }}
+    fragment EnvironmentFields on EnvironmentConnection {{
+        totalCount
+        edges {{
+            node {{
+                id
+            }}
+        }}
+    }}
+    """
+    result = await client.graphql(query=query)
+    assert result.code == 200
+    for name, res in result.result["data"]["data"].items():
+        count = res["totalCount"]
+        assert len(res["edges"]) == count
+        assert found_counts[name] == count
+
+    # Test on nested fragments
+    query = """
+    {
+        environments{
+            ...NestedFragment
+        }
+    }
+    fragment NestedFragment on EnvironmentConnection {
+        ...EnvironmentFields
+    }
+    fragment EnvironmentFields on EnvironmentConnection {
+        totalCount
+    }
+    """
+    result = await client.graphql(query=query)
+    assert result.code == 200
+    assert result.result["data"]["data"]["environments"]["totalCount"] == found_counts["environments"]
+
+
+async def test_connection_type_for_unchanged():
+    """
+    This test makes sure that StrawberrySQLAlchemyMapper._connection_type_for is not updated without our knowledge.
+    This is because we have a CustomStrawberrySQLAlchemyMapper that overrides this method with some small changes
+    but any changes that they make to the original method will not be inherited into ours, and that could break our code.
+    """
+    code, line_no = inspect.getsourcelines(StrawberrySQLAlchemyMapper._connection_type_for)
+    assert "".join(code) == """    def _connection_type_for(self, type_name: str) -> Type[Any]:
+        \"\"\"
+        Get or create a corresponding Connection model for the given type
+        (to support future pagination)
+        \"\"\"
+        connection_name = f"{type_name}Connection"
+        if connection_name not in self.connection_types:
+            edge_type = self._edge_type_for(type_name)
+            lazy_type = StrawberrySQLAlchemyLazy(type_name=type_name, mapper=self)
+            self.connection_types[connection_name] = connection_type = strawberry.type(
+                dataclasses.make_dataclass(
+                    connection_name,
+                    [
+                        ("edges", List[edge_type]),  # type: ignore[valid-type]
+                    ],
+                    bases=(relay.ListConnection[lazy_type],),  # type: ignore[valid-type]
+                )
+            )
+            setattr(connection_type, _GENERATED_FIELD_KEYS_KEY, ["edges"])
+            setattr(connection_type, _IS_GENERATED_CONNECTION_TYPE_KEY, True)
+        return self.connection_types[connection_name]
+"""

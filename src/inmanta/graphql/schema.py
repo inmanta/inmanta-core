@@ -36,7 +36,7 @@ from strawberry.schema.config import StrawberryConfig
 from strawberry.types import Info
 from strawberry.types.field import field
 from strawberry.types.info import ContextType
-from strawberry.types.nodes import SelectedField
+from strawberry.types.nodes import SelectedField, Selection
 from strawberry_sqlalchemy_mapper import StrawberrySQLAlchemyLoader, StrawberrySQLAlchemyMapper
 from strawberry_sqlalchemy_mapper.mapper import (
     _GENERATED_FIELD_KEYS_KEY,
@@ -206,22 +206,41 @@ class CustomStrawberrySQLAlchemyMapper(StrawberrySQLAlchemyMapper[BaseModelType]
         return self.connection_types[connection_name]
 
 
-mapper: CustomStrawberrySQLAlchemyMapper[typing.Any] = CustomStrawberrySQLAlchemyMapper()
+# We set always_use_list to true because we don't support pagination for nested entities
+mapper: CustomStrawberrySQLAlchemyMapper[typing.Any] = CustomStrawberrySQLAlchemyMapper(always_use_list=True)
 DEFAULT_PER_PAGE: int = 50
 
 
 def is_field_selected(info: Info, field_name: str) -> bool:
     """
-    Checks if a field was requested by the user.
+    Checks if a field was requested by the user, including nested fields and fragments.
     """
+
+    def _selection_contains_field(selection: Selection) -> bool:
+        """
+        Recursively checks whether a selection (field/fragment) contains the field.
+        """
+        # Direct field match
+        if isinstance(selection, SelectedField):
+            if selection.name == field_name:
+                return True
+
+        # Check nested selections
+        # Inline fragment (e.g. ... on Type { field })
+        # Named fragment (e.g. ...MyFragment)
+        if selection.selections:
+            for sub_selection in selection.selections:
+                if _selection_contains_field(sub_selection):
+                    return True
+        return False
+
     for selected_field in info.selected_fields:
         if not selected_field.selections:
             continue
 
-        for selection in selected_field.selections:
-            if isinstance(selection, SelectedField):
-                if selection.name == field_name:
-                    return True
+        for top_level_selection in selected_field.selections:
+            if _selection_contains_field(top_level_selection):
+                return True
     return False
 
 
