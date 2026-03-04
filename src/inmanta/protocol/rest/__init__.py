@@ -689,9 +689,9 @@ async def execute_call(
         LOGGER.debug("An HTTP Error occurred", exc_info=True)
         raise
 
-    except Exception as e:
+    except Exception:
         LOGGER.exception("An exception occurred during the request.")
-        raise exceptions.ServerError(str(e.args))
+        raise exceptions.ServerError("An internal server error occurred.")
 
 
 def match_call(

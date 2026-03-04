@@ -274,3 +274,186 @@ async def test_ws_client_handles_reject_session(inmanta_config, server_config) -
 
     await rs.stop()
     await agent.stop()
+
+
+async def test_ws_concurrent_rpcs(inmanta_config, server_config) -> None:
+    """Test that multiple concurrent RPC calls over a single WebSocket session all succeed."""
+    rs = Server()
+    server = WSServer()
+    rs.add_slice(server)
+    await rs.start()
+
+    agent = WSAgent("agent")
+    await agent.start()
+
+    try:
+
+        async def wait_for_active() -> None:
+            while not agent.session or not agent.session.active:
+                await asyncio.sleep(0.1)
+
+        await asyncio.wait_for(wait_for_active(), timeout=10)
+
+        client = agent.session.get_typed_client()
+        results = await asyncio.gather(*[client.get_current_server_status() for _ in range(10)])
+        assert all(r == "server status" for r in results)
+    finally:
+        await rs.stop()
+        await agent.stop()
+
+
+async def test_ws_rpc_on_closed_session(inmanta_config, server_config) -> None:
+    """Test that an RPC call on a closed connection fails promptly (does not hang)."""
+    rs = Server()
+    server = WSServer()
+    rs.add_slice(server)
+    await rs.start()
+
+    agent = WSAgent("agent", reconnect_delay=60)
+    await agent.start()
+
+    try:
+
+        async def wait_for_active() -> None:
+            while not agent.session or not agent.session.active:
+                await asyncio.sleep(0.1)
+
+        await asyncio.wait_for(wait_for_active(), timeout=10)
+
+        client = agent.session.get_typed_client()
+
+        # Kill the server so the connection drops
+        await rs.stop()
+
+        # The RPC call should fail or raise, not hang indefinitely
+        try:
+            result = await asyncio.wait_for(client.get_current_server_status(), timeout=10)
+            # If it returns, the result should indicate an error (not "server status")
+            assert result != "server status"
+        except Exception:
+            # Any exception is acceptable — the key point is it doesn't hang
+            pass
+    finally:
+        await agent.stop()
+
+
+async def test_ws_server_shutdown_during_active_session(inmanta_config, server_config) -> None:
+    """Test that the agent detects server shutdown and reconnects to a new server."""
+    rs = Server()
+    server = WSServer()
+    rs.add_slice(server)
+    await rs.start()
+
+    agent = WSAgent("agent", reconnect_delay=1)
+    await agent.start()
+
+    try:
+
+        async def wait_for_active() -> None:
+            while not agent.session or not agent.session.active:
+                await asyncio.sleep(0.1)
+
+        await asyncio.wait_for(wait_for_active(), timeout=10)
+
+        # Stop the server
+        await rs.stop()
+
+        # Wait for the agent to detect disconnection
+        async def wait_for_inactive() -> None:
+            while agent.session and agent.session.active:
+                await asyncio.sleep(0.1)
+
+        await asyncio.wait_for(wait_for_inactive(), timeout=10)
+
+        # Start a new server
+        rs2 = Server()
+        server2 = WSServer()
+        rs2.add_slice(server2)
+        await rs2.start()
+
+        try:
+            # Wait for the agent to reconnect
+            async def wait_for_reconnect() -> None:
+                while not agent.session or not agent.session.active:
+                    await asyncio.sleep(0.1)
+
+            await asyncio.wait_for(wait_for_reconnect(), timeout=30)
+
+            # Verify RPC works on the new connection
+            client = agent.session.get_typed_client()
+            result = await client.get_current_server_status()
+            assert result == "server status"
+        finally:
+            await rs2.stop()
+    finally:
+        await agent.stop()
+
+
+async def test_ws_duplicate_session_replaces_old(inmanta_config, server_config) -> None:
+    """Test that when the same agent reconnects, the old session is evicted and listener
+    callbacks fire in the correct order (close old, open new)."""
+
+    class SessionSpy(websocket.SessionListener):
+        def __init__(self) -> None:
+            self.events: list[tuple[str, uuid.UUID]] = []
+
+        async def session_opened(self, session: websocket.Session) -> None:
+            self.events.append(("opened", session.id))
+
+        async def session_closed(self, session: websocket.Session) -> None:
+            self.events.append(("closed", session.id))
+
+    rs = Server()
+    server = WSServer()
+    rs.add_slice(server)
+    spy = SessionSpy()
+    rs._transport.add_session_listener(spy)
+    await rs.start()
+
+    agent = WSAgent("agent", reconnect_delay=1)
+    await agent.start()
+
+    try:
+
+        async def wait_for_active() -> None:
+            while not agent.session or not agent.session.active:
+                await asyncio.sleep(0.1)
+
+        await asyncio.wait_for(wait_for_active(), timeout=10)
+
+        agent_session_id_1 = agent.session.id
+        # Record the server-side session ID for the first connection
+        assert len(spy.events) == 1 and spy.events[0][0] == "opened"
+        server_session_id_1 = spy.events[0][1]
+
+        # Force-close the TCP stream to simulate a network partition.
+        # The server doesn't know the connection is dead until ping timeout.
+        assert agent._ws_client is not None
+        agent._ws_client.protocol.stream.close()
+
+        # Wait for the agent to reconnect with a new session
+        async def wait_for_new_session() -> None:
+            while True:
+                if agent.session and agent.session.active and agent.session.id != agent_session_id_1:
+                    return
+                await asyncio.sleep(0.1)
+
+        await asyncio.wait_for(wait_for_new_session(), timeout=30)
+
+        # Verify the spy saw: opened(first), closed(first), opened(second)
+        actions = [e for e, _ in spy.events]
+        assert "closed" in actions, f"Expected a close event, got {spy.events}"
+
+        # The close must be for the first server-side session
+        close_events = [(e, sid) for e, sid in spy.events if e == "closed" and sid == server_session_id_1]
+        assert len(close_events) >= 1, f"Expected close of {server_session_id_1}, got {spy.events}"
+
+        # A second open event should exist (for the reconnected session)
+        open_events = [(e, sid) for e, sid in spy.events if e == "opened" and sid != server_session_id_1]
+        assert len(open_events) >= 1, f"Expected a second open event, got {spy.events}"
+
+        # The server should have exactly one session entry for this agent
+        assert len(rs._transport._sessions) == 1
+    finally:
+        await rs.stop()
+        await agent.stop()

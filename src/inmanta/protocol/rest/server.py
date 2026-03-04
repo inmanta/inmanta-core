@@ -268,7 +268,7 @@ class WebsocketHandler(tornado_websocket.WebSocketHandler, websocket.WebsocketFr
 
     async def on_pong(self, data: bytes) -> None:
         """Called when we get a response to our ping"""
-        self.seen()
+        pass
 
     def on_close(self) -> None:
         """Called when the websocket closes. This must be synchronous because tornado calls it synchronously."""

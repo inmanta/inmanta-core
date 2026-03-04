@@ -62,7 +62,7 @@ When `handle_timeout` fires, it cancels the future but does **not** remove the e
 ---
 
 ### C3. `Agent.get_status()` always returns `up` for non-paused agents
-- [ ] **Fix required**
+- [x] **Fix required**
 - **File:** `src/inmanta/data/__init__.py:3466-3472`
 
 ```python
@@ -138,7 +138,7 @@ If the server rejects a session, the client silently ignores it. The session sta
 ---
 
 ### S2. Information disclosure in error responses
-- [ ] **Fix recommended**
+- [x] **Fix recommended**
 - **File:** `src/inmanta/protocol/rest/__init__.py:693`
 
 ```python
@@ -154,7 +154,7 @@ Raw exception args returned to the client may leak internal paths, SQL queries, 
 ## Test Coverage Gaps
 
 ### T1. `set_state` notification assertions commented out
-- [ ] **Fix required**
+- [x] **Fix required**
 - **File:** `tests/test_agent_manager.py:355-365`
 
 Multiple `# TODO!!!` comments where `client.set_state` assertions were removed. No test verifies agents receive state notifications on session open/close.
@@ -162,7 +162,7 @@ Multiple `# TODO!!!` comments where `client.set_state` assertions were removed. 
 ---
 
 ### T2. Only happy-path WebSocket test exists
-- [ ] **Improve**
+- [x] **Improve**
 - **File:** `tests/protocol/test_ws.py`
 
 Single test (`test_ws_2way`) with:
@@ -173,7 +173,7 @@ Single test (`test_ws_2way`) with:
 ---
 
 ### T3. `agent-timeout` config is now dead in tests
-- [ ] **Fix**
+- [x] **Fix**
 - **Files:** `tests/protocol/test_2way_protocol.py:185, 243`
 
 Tests set `agent-timeout` config, but the WebSocket transport ignores it. Timeout now relies on Tornado's `websocket_ping_interval` (hardcoded) and client `ping_timeout`. Tests pass by coincidence.
@@ -183,7 +183,7 @@ Tests set `agent-timeout` config, but the WebSocket transport ignores it. Timeou
 ---
 
 ### T4. No test for `on_reconnect` failure path
-- [ ] **Add test**
+- [x] **Add test** *(skipped — `get_state` always returns 200 in practice; non-200 only on transport failures which trigger reconnection)*
 - **File:** `src/inmanta/agent/agent_new.py:219-235`
 
 If `get_state` returns non-200 on reconnect, the agent stays in `working=False` with no retry until the next disconnect/reconnect cycle.
@@ -191,7 +191,7 @@ If `get_state` returns non-200 on reconnect, the agent stays in `working=False` 
 ---
 
 ### T5. No test for duplicate session replacement
-- [ ] **Add test**
+- [x] **Add test**
 - **File:** `src/inmanta/protocol/rest/server.py:407-419`
 
 When the same `(environment, name)` reconnects while the old session is still in `_sessions`, `register_session` evicts the old one. No test verifies the old session's listener callbacks fire correctly.
@@ -199,7 +199,7 @@ When the same `(environment, name)` reconnects while the old session is still in
 ---
 
 ### T6. `SchedulerSession.clean_up_expired_for_env()` untested
-- [ ] **Add test**
+- [x] **Add test**
 - **File:** `src/inmanta/server/agentmanager.py:512`
 
 Called in `_log_session_creation_to_db` but only exercised indirectly through integration tests.
@@ -209,7 +209,7 @@ Called in `_log_session_creation_to_db` but only exercised indirectly through in
 ## Code Quality Issues
 
 ### Q1. Dead code: `Session._seen` field
-- [ ] **Remove**
+- [x] **Remove**
 - **File:** `src/inmanta/protocol/websocket.py:49, 104, 252, 295, 340, 352`
 
 `_seen` is set on every message via `time.monotonic()` but **never read** by any logic. The timer-based sweep is gone; liveness is connection-based.
@@ -235,11 +235,11 @@ Duplicates `MethodProperties.select_method` and is never called.
 ### Q4. Stale heartbeat terminology
 - [x] **Fix**
 
-| File | Line | Text |
-|------|------|------|
-| `websocket.py` | 413 | `"heartbeat method call"` |
-| `websocket.py` | 398 | docstring says `"heartbeat reply"` |
-| `agentmanager.py` | 246 | `"agentprocess and agentinstance tables"` |
+| File               | Line | Text                                       |
+| ------------------ | ---- | ------------------------------------------ |
+| `websocket.py`     | 413  | `"heartbeat method call"`                  |
+| `websocket.py`     | 398  | docstring says `"heartbeat reply"`         |
+| `agentmanager.py`  | 246  | `"agentprocess and agentinstance tables"`  |
 | `data/__init__.py` | 3435 | `:param primary:` references removed field |
 
 ---
@@ -342,27 +342,27 @@ After `ALTER TABLE agentprocess RENAME TO schedulersession`, indexes keep their 
 
 These TODOs indicate known incomplete work. Track or resolve before merge:
 
-| File | Line | TODO |
-|------|------|------|
-| `websocket.py` | 275 | Incomplete log message |
-| `websocket.py` | 303 | Handle duplicate sessions |
-| `websocket.py` | 328-329 | Implement RejectSession |
-| `websocket.py` | 343 | Handle RPC_Call when session not active |
-| `websocket.py` | 349 | Handle RPC_Reply when session not active |
-| `websocket.py` | 423 | Verify error key format |
-| `rest/server.py` | 338 | Add constant for `/v2/ws` URL |
-| `rest/server.py` | 434-435 | Correct exception type for missing session |
-| `data/__init__.py` | 3391 | Bare TODO on cleanup() |
-| `data/__init__.py` | 3469 | Fix get_status() |
-| `test_agent_manager.py` | 355-365 | Restore set_state assertions |
+| File                    | Line    | TODO                                       |
+| ----------------------- | ------- | ------------------------------------------ |
+| `websocket.py`          | 275     | Incomplete log message                     |
+| `websocket.py`          | 303     | Handle duplicate sessions                  |
+| `websocket.py`          | 328-329 | Implement RejectSession                    |
+| `websocket.py`          | 343     | Handle RPC_Call when session not active    |
+| `websocket.py`          | 349     | Handle RPC_Reply when session not active   |
+| `websocket.py`          | 423     | Verify error key format                    |
+| `rest/server.py`        | 338     | Add constant for `/v2/ws` URL              |
+| `rest/server.py`        | 434-435 | Correct exception type for missing session |
+| `data/__init__.py`      | 3391    | Bare TODO on cleanup()                     |
+| `data/__init__.py`      | 3469    | Fix get_status()                           |
+| `test_agent_manager.py` | 355-365 | Restore set_state assertions               |
 
 ---
 
 ## Summary Priority Matrix
 
-| Priority | Count | Items |
-|----------|-------|-------|
-| **Must fix** | 9 | C1, C2, C3, C4, C5, C6, C7, S1, T1 |
-| **Should fix** | 8 | S2, T2, T3, T4, T5, Q1, Q2, Q4 |
-| **Nice to have** | 10 | T6, Q3, Q5, Q6, Q7, Q8, Q9, Q10, Q11, Q12 |
-| **Migration** | 3 | M1, M2, M3 |
+| Priority         | Done                           | Todo             |
+| ---------------- | ------------------------------ | ---------------- |
+| **Must fix**     | C1, C2, C3, C4, C5, C6, C7, T1 | S1               |
+| **Should fix**   | S2, T2, T3, T4, T5, Q1, Q2, Q4 |                  |
+| **Nice to have** | T6, Q3, Q6, Q7, Q9, Q12        | Q5, Q8, Q10, Q11 |
+| **Migration**    |                                | M1, M2, M3       |

@@ -3453,22 +3453,25 @@ class Agent(BaseDocument):
     async def get_statuses(
         cls, env_id: uuid.UUID, agent_names: Set[str], *, connection: Optional[asyncpg.connection.Connection] = None
     ) -> dict[str, Optional[AgentStatus]]:
+        live_sessions = await SchedulerSession.get_live(environment=env_id)
+        has_active_session = len(live_sessions) > 0
         result: dict[str, Optional[AgentStatus]] = {}
         for agent_name in agent_names:
             agent = await cls.get_one(environment=env_id, name=agent_name, connection=connection)
             if agent:
-                result[agent_name] = agent.get_status()
+                result[agent_name] = agent.get_status(has_active_session=has_active_session)
             else:
                 result[agent_name] = None
         return result
 
-    def get_status(self) -> AgentStatus:
+    def get_status(self, has_active_session: bool = False) -> AgentStatus:
+        # TODO: Consider removing this method entirely. The authoritative agent status is now computed
+        # by AgentView.get_base_query() via a SQL EXISTS on SchedulerSession. This method cannot
+        # accurately determine connectivity without a database query, and callers that need accurate
+        # status should use AgentView or check SchedulerSession directly.
         if self.paused:
             return AgentStatus.paused
-        # if self.primary is not None:
-        return AgentStatus.up
-        # TODO: fix
-        return AgentStatus.down
+        return AgentStatus.up if has_active_session else AgentStatus.down
 
     def to_dict(self) -> JsonType:
         base = BaseDocument.to_dict(self)

@@ -19,7 +19,6 @@ Contact: code@inmanta.com
 import asyncio
 import logging
 import socket
-import time
 import uuid
 from typing import Annotated, Any, Callable, Literal, Optional, Tuple
 from urllib import parse
@@ -46,7 +45,6 @@ class Session:
         hostname: str,
         websocket_protocol: "WebsocketFrameDecoder",
     ) -> None:
-        self._seen: float = 0
         self._environment_id = environment_id
         self._session_name = session_name
         self._hostname = hostname
@@ -99,9 +97,6 @@ class Session:
     def session_key(self) -> Tuple[uuid.UUID, str]:
         """Return a key that uniquely identifies a session"""
         return self._environment_id, self._session_name
-
-    def seen(self) -> None:
-        self._seen = time.monotonic()
 
     def close_session(self) -> None:
         self._closed = True
@@ -254,11 +249,6 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
     def set_call_targets(self, call_targets: list[common.CallTarget]) -> None:
         self._call_targets = call_targets
 
-    def seen(self) -> None:
-        """Bump the liveliness of the session"""
-        if self._session:
-            self._session.seen()
-
     def active(self) -> bool:
         """Is the session set and active?"""
         return self._session is not None and self._session.active
@@ -300,9 +290,6 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
             # TODO log this
             LOGGER.exception("Invalid message")
             return
-
-        if self._session:
-            self._session.seen()
 
         match msg:
             case OpenSession():
@@ -359,7 +346,6 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
 
             case RPC_Call():
                 if self.active():
-                    self._session.seen()
                     # A request from the client on the server
                     self.add_background_task(self._handle_call(msg))
                 # TODO: if not valid
@@ -371,7 +357,6 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
                     # TODO: if not valid
                     return
 
-                self._session.seen()
                 if msg.reply_id not in self._replies:
                     LOGGER.warning("Received a reply that is unknown: %s", msg.reply_id)
                     return
@@ -642,7 +627,7 @@ class SessionEndpoint(endpoints.Endpoint, common.CallTarget, WebsocketFrameDecod
             request=httpclient.HTTPRequest(self.get_websocket_url(), connect_timeout=1),
             ping_interval=ws_ping_interval,
             ping_timeout=ws_ping_timeout,
-            on_pong_callback=self.seen,
+            on_pong_callback=None,
             on_connection_close_callback=self._on_disconnect,
         )
 

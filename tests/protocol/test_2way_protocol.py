@@ -182,8 +182,6 @@ async def check_sessions(sessions: list[Session]) -> None:
 async def test_agent_timeout(server_config, no_tid_check, async_finalizer):
     from inmanta.config import Config
 
-    Config.set("server", "agent-timeout", "1")
-
     # Get a config for each agent. The session layer needs a unique name per agent
     Config.set("agent1_rest_transport", "port", str(Config.get("agent_rest_transport", "port")))
     Config.set("agent2_rest_transport", "port", str(Config.get("agent_rest_transport", "port")))
@@ -227,9 +225,8 @@ async def test_agent_timeout(server_config, no_tid_check, async_finalizer):
     # take it down
     await agent2.stop()
 
-    # Timeout=2
-    # -> 1sec: Wait for agent-timeout
-    # -> 1sec: Wait until session bookkeeping is updated
+    # Wait for the server to detect the closed WebSocket (via ws-ping-interval/ws-ping-timeout)
+    # and update session bookkeeping
     await retry_limited(lambda: len(server.get_sessions()) == 1, timeout=5)
     await check_sessions(server.get_sessions())
     assert server.expires == 1
@@ -239,10 +236,6 @@ async def test_agent_timeout(server_config, no_tid_check, async_finalizer):
 
 @pytest.mark.slowtest
 async def test_server_timeout(server_config, no_tid_check, async_finalizer):
-    from inmanta.config import Config
-
-    Config.set("server", "agent-timeout", "0.1")
-
     async def start_server() -> tuple[SessionSpy, Server]:
         rs = Server()
         server = SessionSpy()

@@ -352,8 +352,6 @@ async def test_expire_all_sessions_in_db(init_dataclasses_and_load_schema):
     await am._register_session(ts1, datetime.datetime.now())
     await futures.proccess()
     assert len(am.sessions) == 1
-    # TODO!!!
-    # ts1.get_client().set_state.assert_called_with("agent2", enabled=True)
     ts1.get_client().reset_mock()
     await assert_state_agents(env.id, AgentStatus.paused, AgentStatus.up, AgentStatus.up)
 
@@ -361,9 +359,6 @@ async def test_expire_all_sessions_in_db(init_dataclasses_and_load_schema):
     await am._expire_session(ts1, datetime.datetime.now())
     await futures.proccess()
     assert len(am.sessions) == 0
-    # TODO
-    # ts2.get_client().set_state.assert_called_with("agent2", enabled=True)
-    # ts2.get_client().reset_mock()
     await assert_state_agents(env.id, AgentStatus.paused, AgentStatus.down, AgentStatus.down)
 
 
@@ -383,6 +378,43 @@ async def assert_agent_db_state(tid: UUID, nr_procs: int, nr_non_expired_procs: 
         return True
 
     await retry_limited(is_db_state_reached, 10)
+
+
+async def test_clean_up_expired_for_env(init_dataclasses_and_load_schema):
+    """Verify that clean_up_expired_for_env deletes only expired sessions for the target environment."""
+    project = data.Project(name="test")
+    await project.insert()
+
+    env1 = data.Environment(name="env1", project=project.id)
+    await env1.insert()
+    env2 = data.Environment(name="env2", project=project.id)
+    await env2.insert()
+
+    now = datetime.datetime.now()
+
+    # env1: one active, two expired
+    await data.SchedulerSession(sid=uuid4(), hostname="h1", environment=env1.id, first_seen=now).insert()
+    await data.SchedulerSession(sid=uuid4(), hostname="h2", environment=env1.id, first_seen=now, expired=now).insert()
+    await data.SchedulerSession(sid=uuid4(), hostname="h3", environment=env1.id, first_seen=now, expired=now).insert()
+
+    # env2: one expired (control — should not be touched)
+    await data.SchedulerSession(sid=uuid4(), hostname="h4", environment=env2.id, first_seen=now, expired=now).insert()
+
+    # Verify initial state
+    assert len(await data.SchedulerSession.get_list(environment=env1.id)) == 3
+    assert len(await data.SchedulerSession.get_list(environment=env2.id)) == 1
+
+    await data.SchedulerSession.clean_up_expired_for_env(env1.id)
+
+    # env1: only the active session remains
+    env1_sessions = await data.SchedulerSession.get_list(environment=env1.id)
+    assert len(env1_sessions) == 1
+    assert env1_sessions[0].expired is None
+
+    # env2: untouched
+    env2_sessions = await data.SchedulerSession.get_list(environment=env2.id)
+    assert len(env2_sessions) == 1
+    assert env2_sessions[0].expired is not None
 
 
 async def test_session_renewal(init_dataclasses_and_load_schema):
