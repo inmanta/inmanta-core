@@ -1194,6 +1194,10 @@ class Result(Generic[R]):
             )
         return self._method_properties
 
+    @method_properties.setter
+    def method_properties(self, value: MethodProperties[R]) -> None:
+        self._method_properties = value
+
     def get_result(self) -> Optional[JsonType]:
         """
         Only when the result is marked as available the result can be returned

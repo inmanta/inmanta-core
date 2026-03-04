@@ -3388,23 +3388,23 @@ class SchedulerSession(BaseDocument):
 
     @classmethod
     async def cleanup(cls, nr_expired_records_to_keep: int) -> None:
-        # TODO
+        # Uses ROW_NUMBER() to rank expired records per (environment, hostname) by recency,
+        # then deletes all beyond the retention limit in a single pass. This replaces a correlated
+        # COUNT(*) subquery that re-scanned the table for every candidate row (O(n^2)).
         query = f"""
-            WITH halted_env AS (
-                SELECT id FROM environment WHERE halted = true
-            )
-            DELETE FROM {cls.table_name()} AS a1
-            WHERE a1.expired IS NOT NULL AND
-                  a1.environment NOT IN (SELECT id FROM halted_env) AND
-                  (
-                    -- Take nr_expired_records_to_keep into account
-                    SELECT count(*)
-                    FROM {cls.table_name()} a2
-                    WHERE a1.environment=a2.environment AND
-                          a1.hostname=a2.hostname AND
-                          a2.expired IS NOT NULL AND
-                          a2.expired > a1.expired
-                  ) >= $1;
+            DELETE FROM {cls.table_name()}
+            WHERE sid IN (
+                SELECT sid FROM (
+                    SELECT sid, ROW_NUMBER() OVER (
+                        PARTITION BY environment, hostname
+                        ORDER BY expired DESC
+                    ) AS rn
+                    FROM {cls.table_name()}
+                    WHERE expired IS NOT NULL
+                      AND environment NOT IN (SELECT id FROM environment WHERE halted = true)
+                ) ranked
+                WHERE rn > $1
+            );
         """
         await cls._execute_query(query, cls._get_value(nr_expired_records_to_keep))
 

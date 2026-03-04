@@ -730,7 +730,6 @@ class AgentProcess(BaseModel):
     hostname: str
     environment: uuid.UUID
     first_seen: Optional[datetime.datetime] = None
-    last_seen: Optional[datetime.datetime] = None
     expired: Optional[datetime.datetime] = None
     state: Optional[dict[str, Union[dict[str, list[str]], dict[str, str], dict[str, float], str]]] = None
 

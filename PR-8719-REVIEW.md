@@ -245,7 +245,7 @@ Duplicates `MethodProperties.select_method` and is never called.
 ---
 
 ### Q5. `AuthnzInterface` doesn't inherit `abc.ABC`
-- [ ] **Fix**
+- [x] **Fix**
 - **File:** `src/inmanta/protocol/rest/__init__.py:634-648`
 
 `@abc.abstractmethod` on `get_authorization_provider` has no effect without `abc.ABC` as base class.
@@ -269,7 +269,7 @@ Duplicates `MethodProperties.select_method` and is never called.
 ---
 
 ### Q8. `SchedulerSession.cleanup()` uses O(n²) query
-- [ ] **Improve**
+- [x] **Improve**
 - **File:** `src/inmanta/data/__init__.py:3390-3409`
 
 Correlated subquery with `count(*)`. Use `ROW_NUMBER() OVER (PARTITION BY ...)` instead.
@@ -285,7 +285,7 @@ Correlated subquery with `count(*)`. Use `ROW_NUMBER() OVER (PARTITION BY ...)` 
 ---
 
 ### Q10. Stale DTO field: `AgentProcess.last_seen`
-- [ ] **Remove**
+- [x] **Remove**
 - **File:** `src/inmanta/data/model.py:733`
 
 Column dropped in migration but field remains in DTO. Always `None`.
@@ -293,7 +293,7 @@ Column dropped in migration but field remains in DTO. Always `None`.
 ---
 
 ### Q11. `_SessionClient` sets private attribute on `Result`
-- [ ] **Fix**
+- [x] **Fix**
 - **File:** `src/inmanta/protocol/websocket.py:150`
 
 `r._method_properties = method` — sets a private attribute from outside. `Result` should accept this via constructor or setter.
@@ -364,5 +364,5 @@ These TODOs indicate known incomplete work. Track or resolve before merge:
 | ---------------- | ------------------------------ | ---------------- |
 | **Must fix**     | C1, C2, C3, C4, C5, C6, C7, T1 | S1               |
 | **Should fix**   | S2, T2, T3, T4, T5, Q1, Q2, Q4 |                  |
-| **Nice to have** | T6, Q3, Q6, Q7, Q9, Q12        | Q5, Q8, Q10, Q11 |
+| **Nice to have** | T6, Q3, Q5, Q6, Q7, Q8, Q9, Q10, Q11, Q12 |                  |
 | **Migration**    |                                | M1, M2, M3       |

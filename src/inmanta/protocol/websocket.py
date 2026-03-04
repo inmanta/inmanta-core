@@ -142,7 +142,7 @@ class _SessionClient:
 
             async def with_properties() -> common.Result:
                 r = await result
-                r._method_properties = method
+                r.method_properties = method
                 return r
 
             return common.ClientCall.create(with_properties(), properties=method)

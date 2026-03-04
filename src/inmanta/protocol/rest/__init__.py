@@ -631,9 +631,10 @@ class RESTBase(util.TaskHandler[None], abc.ABC):
         return result
 
 
-class AuthnzInterface:
+class AuthnzInterface(abc.ABC):
     """An interface that provides access to auth status and policy engine."""
 
+    @abc.abstractmethod
     def is_auth_enabled(self) -> bool:
         """
         Return True iff authentication is enabled.
