@@ -601,8 +601,8 @@ any values to the relation attribute.
 
 .. _lang-dict-spread:
 
-Dict spread in constructors
-+++++++++++++++++++++++++++
+Dict keyword argument unpacking in constructors
++++++++++++++++++++++++++++++++++++++++++++++++
 
 Attributes can be assigned in a constructor using keyword arguments by using ``**dct`` where ``dct`` is a dictionary that contains
 attribute names as keys and the desired values as values. This is particularly useful for config-driven entity instantiation,
@@ -616,7 +616,7 @@ where configuration is loaded from external sources (e.g. YAML files) and passed
     file1_config = {"path": "/opt/1"}
     f1 = File(host=h1, **file1_config)
 
-The ``**`` spread can also be combined with explicit keyword arguments.
+The ``**`` keyword argument unpacking operator can also be combined with explicit keyword arguments.
 
 .. code-block:: inmanta
 

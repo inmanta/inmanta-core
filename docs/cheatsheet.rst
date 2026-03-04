@@ -193,8 +193,8 @@ Imports and aliases
     import mymodule::subns as sub
 
 
-Constructor with dict spread
-============================
+Constructor with dict keyword argument unpacking
+================================================
 
 .. code-block:: inmanta
 
