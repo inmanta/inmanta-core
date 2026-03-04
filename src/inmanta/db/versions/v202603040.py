@@ -1,5 +1,5 @@
 """
-Copyright 2025 Inmanta
+Copyright 2026 Inmanta
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,9 +21,16 @@ from asyncpg import Connection
 
 async def update(connection: Connection) -> None:
     """
-    Rename some rps columns and values
+    Replace heartbeat-based agent sessions with WebSocket-based scheduler sessions.
+
+    - Drop agent.id_primary FK and index (references removed agentinstance table)
+    - Drop agentinstance table
+    - Rename agentprocess to schedulersession and drop last_seen column
+    - Rename indexes to match new table name
     """
     schema = """
+        DROP INDEX IF EXISTS public.agent_id_primary_index;
+        ALTER TABLE public.agent DROP CONSTRAINT IF EXISTS agent_id_primary_fkey;
         ALTER TABLE public.agent DROP COLUMN id_primary;
 
         DROP TABLE public.agentinstance;
@@ -31,5 +38,9 @@ async def update(connection: Connection) -> None:
         ALTER TABLE public.agentprocess RENAME TO schedulersession;
         ALTER TABLE public.schedulersession DROP COLUMN last_seen;
 
+        ALTER INDEX agentprocess_env_expired_index RENAME TO schedulersession_env_expired_index;
+        ALTER INDEX agentprocess_env_hostname_expired_index RENAME TO schedulersession_env_hostname_expired_index;
+        ALTER INDEX agentprocess_expired_index RENAME TO schedulersession_expired_index;
+        ALTER INDEX agentprocess_sid_expired_index RENAME TO schedulersession_sid_expired_index;
     """
     await connection.execute(schema)
