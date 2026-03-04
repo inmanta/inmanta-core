@@ -52,7 +52,7 @@ async def _process_messages(self) -> None:
 ---
 
 ### C2. Memory leak in timed-out RPC replies
-- [ ] **Fix required**
+- [x] **Fix required**
 - **File:** `src/inmanta/protocol/websocket.py:258-283`
 
 When `handle_timeout` fires, it cancels the future but does **not** remove the entry from `self._replies`. Cleanup only happens when a reply arrives (line 358). Timed-out calls leave orphaned entries forever.
@@ -301,7 +301,7 @@ Column dropped in migration but field remains in DTO. Always `None`.
 ---
 
 ### Q12. Incomplete log message
-- [ ] **Fix**
+- [x] **Fix**
 - **File:** `src/inmanta/protocol/websocket.py:275`
 
 ```python
