@@ -316,6 +316,7 @@ class Agent(SessionEndpoint):
                 database="",
                 host="",
                 max_pool=0,
+                free_pool=0,
                 open_connections=0,
                 free_connections=0,
                 pool_exhaustion_time=0,
