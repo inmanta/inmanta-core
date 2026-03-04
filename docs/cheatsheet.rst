@@ -129,6 +129,7 @@ For loop
         Host(name=f"app{i}")
     end
 
+    hosts = [Host(name="vm-1"), Host(name="vm-2")]
     for host in all_hosts:
         File(host=host, path="/etc/motd", content="Welcome")
     end
@@ -176,7 +177,7 @@ String types
     regular   = "hello\nworld"                  # escape sequences interpreted
     raw       = r"no\nescapes"                  # backslashes are literal
     fstring   = f"host={hostname}, port={port}" # f-string formatting
-    interp    = "host={{hostname}}"              # template interpolation (legacy)
+    interp    = "host={{hostname}}"              # string interpolation (legacy)
     multiline = """line one
     line two"""                                  # triple-quoted multi-line
     concat    = "hello " + "world"              # string concatenation
@@ -270,8 +271,8 @@ Common ``std`` functions
     std::assert(count > 0, "count must be positive")
 
     content = std::template("mymod/config.tmpl")
-    data = std::file("mymod/data.json")
-    path = std::source("mymod/schema.json")
+    path = std::file("mymod/data.json")
+    data = std::source("mymod/schema.json")
 
     items = std::sequence(10, 1)       # [1, 2, ..., 10]
     elem = std::at(my_list, 0)         # first element

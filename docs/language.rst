@@ -31,7 +31,7 @@ The source is organized in modules. Each module is a git repository with the fol
     for Python code. V1 modules are no longer supported. If you encounter V1 modules, migrate them
     to V2 format.
 
-The ``model`` directory and the ``model/_init.cf`` file are required. The ``pyproject.toml`` file
+The ``model`` directory and the ``model/_init.cf`` file are required. The ``setup.cfg`` file
 defines the module's metadata and dependencies.
 
 For example::
@@ -616,8 +616,7 @@ where configuration is loaded from external sources (e.g. YAML files) and passed
     file1_config = {"path": "/opt/1"}
     f1 = File(host=h1, **file1_config)
 
-The ``**`` spread can also be combined with explicit keyword arguments. Explicit arguments take precedence
-over values from the dictionary:
+The ``**`` spread can also be combined with explicit keyword arguments.
 
 .. code-block:: inmanta
 
@@ -1064,7 +1063,7 @@ Resource dependencies
 =====================
 
 Resources can express deployment ordering using the ``requires`` and ``provides``
-relations inherited from ``std::ManagedResource``. A resource will only be deployed
+relations. A resource will only be deployed
 after all resources in its ``requires`` list have been successfully deployed.
 
 .. code-block:: inmanta
@@ -1111,8 +1110,8 @@ Templates and files
   lexical scope as the call site. When keyword arguments are provided, only those variables are
   available in the template (e.g. ``std::template("mymod/config.tmpl", svc=self, env=env_name)``).
   The latter form is more verbose but makes the template's dependencies explicit and more robust.
-- ``std::file(path)`` — Read a file from a module's ``files/`` directory and return its content as a string.
-- ``std::source(path)`` — Get the absolute path to a file in a module's ``files/`` directory.
+- ``std::file(path)`` — Get the absolute path to a file in a module's ``files/`` directory.
+- ``std::source(path)`` — Read a file from a module's ``files/`` directory and return its content as a string.
 
 String operations
 +++++++++++++++++
