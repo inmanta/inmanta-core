@@ -3341,7 +3341,7 @@ class SchedulerSession(BaseDocument):
         if len(objects) == 0:
             return None
         elif len(objects) > 1:
-            LOGGER.exception("Multiple objects with the same unique id found!")
+            LOGGER.error("Multiple objects with the same unique id found!")
             return objects[0]
         else:
             return objects[0]
@@ -3432,7 +3432,6 @@ class Agent(BaseDocument):
     :param name: The name of this agent
     :param last_failover: Moment at which the primary was last changed
     :param paused: is this agent paused (if so, skip it)
-    :param primary: what is the current active instance (if none, state is down). Only relevant for the $__scheduler agent.
     :param unpause_on_resume: whether this agent should be unpaused when resuming from environment-wide halt. Used to
         persist paused state when halting.
     """

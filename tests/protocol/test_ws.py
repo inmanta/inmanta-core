@@ -84,6 +84,55 @@ async def test_ws_2way(inmanta_config, server_config) -> None:
     await agent.stop()
 
 
+async def test_ws_ping_timeout_closes_stale_connection(inmanta_config, server_config) -> None:
+    """Test that a stale connection is closed by the server when pong responses stop arriving,
+    and that the agent reconnects automatically afterward.
+    """
+    rs = Server()
+    server = WSServer()
+    rs.add_slice(server)
+    await rs.start()
+
+    agent = WSAgent("agent", reconnect_delay=1)
+    await agent.start()
+
+    # Wait for the session to become active
+    async def wait_for_active() -> None:
+        while not agent.session or not agent.session.active:
+            await asyncio.sleep(0.1)
+
+    await asyncio.wait_for(wait_for_active(), timeout=10)
+
+    # Verify the server has the session
+    session_key = agent.session.session_key
+    assert session_key in rs._transport._sessions
+
+    # Simulate network partition: close the underlying TCP stream without a WebSocket close frame.
+    # This prevents pong responses from reaching the server.
+    assert agent._ws_client is not None
+    agent._ws_client.protocol.stream.close()
+
+    # Wait for the server to detect the stale connection and remove the session.
+    # With ws-ping-interval=1, ws-ping-timeout=1, this should happen within a few seconds.
+    async def wait_for_session_removed() -> None:
+        while session_key in rs._transport._sessions:
+            await asyncio.sleep(0.1)
+
+    await asyncio.wait_for(wait_for_session_removed(), timeout=10)
+
+    # The agent should reconnect and establish a new active session
+    async def wait_for_server_session() -> None:
+        while True:
+            if agent.session and agent.session.active and agent.session.session_key in rs._transport._sessions:
+                return
+            await asyncio.sleep(0.1)
+
+    await asyncio.wait_for(wait_for_server_session(), timeout=10)
+
+    await rs.stop()
+    await agent.stop()
+
+
 async def test_ws_reconnect_on_connection_failure(inmanta_config, server_config) -> None:
     """Test that the agent recovers when the server is unavailable at startup.
 

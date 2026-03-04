@@ -342,7 +342,19 @@ class RESTServer(RESTBase, AuthnzInterface):
             rules.append(routing.Rule(routing.PathMatches(url), RESTHandler, {"transport": self, "config": handler_config}))
             LOGGER.debug("Registering handler(s) for url %s and methods %s", url, ", ".join(handler_config.keys()))
 
-        application = web.Application(handlers=[*additional_rules, *rules], compress_response=True, websocket_ping_interval=1)
+        ws_ping_interval = server_config.server_ws_ping_interval.get()
+        ws_ping_timeout = server_config.server_ws_ping_timeout.get()
+        if ws_ping_timeout > ws_ping_interval:
+            raise Exception(
+                f"server.ws-ping-timeout ({ws_ping_timeout}) must not exceed " f"server.ws-ping-interval ({ws_ping_interval})"
+            )
+
+        application = web.Application(
+            handlers=[*additional_rules, *rules],
+            compress_response=True,
+            websocket_ping_interval=ws_ping_interval,
+            websocket_ping_timeout=ws_ping_timeout,
+        )
 
         crt = inmanta_config.Config.get("server", "ssl_cert_file", None)
         key = inmanta_config.Config.get("server", "ssl_key_file", None)

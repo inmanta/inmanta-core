@@ -18,6 +18,7 @@ Contact: code@inmanta.com
 
 import asyncio
 import enum
+import functools
 import gzip
 import importlib
 import inspect
@@ -158,8 +159,7 @@ class Request:
         """Rebuild a request from a dict"""
         reply_id: Optional[str] = None
         if "reply_id" in value:
-            reply_id = cast(str, value["reply_id"])
-            del value["reply_id"]
+            reply_id = cast(str, value.pop("reply_id"))
 
         req = Request(**value)
 
@@ -580,6 +580,11 @@ class MethodProperties(Generic[R]):
         if self._return_type is None:
             raise InvalidMethodDefinition("Only typed methods have a return type")
         return self._return_type
+
+    @functools.cached_property
+    def return_type_adapter(self) -> pydantic.TypeAdapter[R]:
+        """Return a cached TypeAdapter for this method's return type."""
+        return pydantic.TypeAdapter(self.return_type)
 
     def validate_arguments(self, values: dict[str, Any]) -> dict[str, Any]:
         """
@@ -1271,7 +1276,7 @@ class Result(Generic[R]):
             raise exceptions.BadRequest("No data was provided in the body. Make sure to only use typed methods.")
 
         try:
-            ta = pydantic.TypeAdapter(self.method_properties.return_type)
+            ta = self.method_properties.return_type_adapter
         except InvalidMethodDefinition:
             raise exceptions.BadRequest("Typed client can only be used with typed methods.")
 
@@ -1541,7 +1546,7 @@ def typed_process_response(method_properties: MethodProperties, response: Result
                 return None
 
             try:
-                ta = pydantic.TypeAdapter(method_properties.return_type)
+                ta = method_properties.return_type_adapter
             except InvalidMethodDefinition:
                 raise exceptions.BadRequest("Typed client can only be used with typed methods.")
 

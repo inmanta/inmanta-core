@@ -406,8 +406,8 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
         await self.write_message(CloseSession().model_dump_json())
 
     async def dispatch_method(self, msg: RPC_Call) -> Optional[RPC_Reply]:
-        """Dispatch a request from the server into the RPC code so the requests gets executed. The call results is send back
-        to the server using a heartbeat reply.
+        """Dispatch a request from the server into the RPC code so the requests gets executed. The call result is sent back
+        to the server using a WebSocket reply.
         """
         parsed_url = parse.urlparse(msg.url)
         method_call = common.Request(
@@ -421,7 +421,7 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
             # We cannot match the call to method on this endpoint. We send a reply to report this + ensure that the session
             # does not time out
             error = (
-                "An error occurred during heartbeat method call "
+                "An error occurred during websocket method call "
                 f"({method_call.reply_id} {method_call.method} {method_call.url}): No such method"
             )
             LOGGER.error(error)
@@ -616,11 +616,20 @@ class SessionEndpoint(endpoints.Endpoint, common.CallTarget, WebsocketFrameDecod
 
     async def _reconnect(self) -> None:
         """Connect (again) to the websocket on the server"""
+        from inmanta.agent import config as agent_cfg
+
+        ws_ping_interval = agent_cfg.agent_ws_ping_interval.get()
+        ws_ping_timeout = agent_cfg.agent_ws_ping_timeout.get()
+        if ws_ping_timeout > ws_ping_interval:
+            raise Exception(
+                f"client.ws-ping-timeout ({ws_ping_timeout}) must not exceed " f"client.ws-ping-interval ({ws_ping_interval})"
+            )
+
         LOGGER.info("Creating websocket connection from server for %s in environment %s", self.name, self.environment)
         conn = WebSocketClientConnection(
             request=httpclient.HTTPRequest(self.get_websocket_url(), connect_timeout=1),
-            ping_interval=1,
-            ping_timeout=0.5,
+            ping_interval=ws_ping_interval,
+            ping_timeout=ws_ping_timeout,
             on_pong_callback=self.seen,
             on_connection_close_callback=self._on_disconnect,
         )

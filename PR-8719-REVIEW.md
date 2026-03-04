@@ -79,7 +79,7 @@ With `id_primary` removed, there's no way to determine if an agent is actually c
 ---
 
 ### C4. Server ping timeout not configured — stale sessions persist
-- [ ] **Fix required**
+- [x] **Fix required**
 - **File:** `src/inmanta/protocol/rest/server.py:345`
 
 `websocket_ping_interval=1` is set but `websocket_ping_timeout` is not. The **server** will never proactively close a dead client connection. If a client is killed without TCP FIN, the server session persists until OS TCP keepalive expires (~2 hours).
@@ -89,7 +89,7 @@ With `id_primary` removed, there's no way to determine if an agent is actually c
 ---
 
 ### C5. `_db_monitor` AttributeError on early stop
-- [ ] **Fix required**
+- [x] **Fix required**
 - **File:** `src/inmanta/agent/agent_new.py`
 
 `self._db_monitor` is assigned in `start()` but checked in `stop()` (`if self._db_monitor:`). Calling `stop()` before `start()` raises `AttributeError`.
@@ -217,7 +217,7 @@ Called in `_log_session_creation_to_db` but only exercised indirectly through in
 ---
 
 ### Q2. Dead code: `SessionActionType.SEEN_SESSION`
-- [ ] **Remove**
+- [x] **Remove**
 - **File:** `src/inmanta/server/agentmanager.py:105`
 
 Defined in the enum but never used. The PR description says it was removed.
@@ -225,7 +225,7 @@ Defined in the enum but never used. The PR description says it was removed.
 ---
 
 ### Q3. Dead code: `Client._select_method`
-- [ ] **Remove**
+- [x] **Remove**
 - **File:** `src/inmanta/protocol/endpoints.py:98-111`
 
 Duplicates `MethodProperties.select_method` and is never called.
@@ -233,7 +233,7 @@ Duplicates `MethodProperties.select_method` and is never called.
 ---
 
 ### Q4. Stale heartbeat terminology
-- [ ] **Fix**
+- [x] **Fix**
 
 | File | Line | Text |
 |------|------|------|
@@ -253,7 +253,7 @@ Duplicates `MethodProperties.select_method` and is never called.
 ---
 
 ### Q6. `TypeAdapter` created per-call (performance)
-- [ ] **Fix**
+- [x] **Fix**
 - **File:** `src/inmanta/protocol/common.py:1544`
 
 `pydantic.TypeAdapter(method_properties.return_type)` constructed on every typed RPC response. Should be cached on `MethodProperties`.
@@ -261,7 +261,7 @@ Duplicates `MethodProperties.select_method` and is never called.
 ---
 
 ### Q7. `Request.from_dict` mutates input dict
-- [ ] **Fix**
+- [x] **Fix**
 - **File:** `src/inmanta/protocol/common.py:162-163`
 
 `del value["reply_id"]` modifies the caller's dict. Use `.pop()` or work on a copy.
@@ -277,7 +277,7 @@ Correlated subquery with `count(*)`. Use `ROW_NUMBER() OVER (PARTITION BY ...)` 
 ---
 
 ### Q9. `LOGGER.exception()` without active exception
-- [ ] **Fix**
+- [x] **Fix**
 - **File:** `src/inmanta/data/__init__.py:3344`
 
 `LOGGER.exception("Multiple objects...")` used without an active exception context. Should be `LOGGER.error()`.

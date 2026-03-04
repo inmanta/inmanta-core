@@ -21,7 +21,19 @@ import logging
 import warnings
 from typing import Optional
 
-from inmanta.config import Config, Option, is_bool, is_float, is_int, is_list, is_map, is_str, is_str_opt, is_time
+from inmanta.config import (
+    Config,
+    Option,
+    is_bool,
+    is_float,
+    is_int,
+    is_list,
+    is_lower_bounded_int,
+    is_map,
+    is_str,
+    is_str_opt,
+    is_time,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -368,6 +380,22 @@ def default_hangtime() -> int:
 
 agent_hangtime = Option(
     "server", "agent-hold", default_hangtime, "Maximal time the server will hold an agent heartbeat call", is_time
+)
+
+server_ws_ping_interval = Option(
+    "server",
+    "ws-ping-interval",
+    3,
+    "Interval in seconds between WebSocket ping frames sent to agents",
+    is_lower_bounded_int(1),
+)
+server_ws_ping_timeout = Option(
+    "server",
+    "ws-ping-timeout",
+    2,
+    "Time in seconds to wait for a WebSocket pong response before closing the connection. "
+    "Must not exceed ws-ping-interval.",
+    is_lower_bounded_int(1),
 )
 
 agent_process_purge_interval = Option(

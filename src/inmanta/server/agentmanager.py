@@ -102,7 +102,6 @@ set_parameters
 class SessionActionType(str, Enum):
     REGISTER_SESSION = "register_session"
     EXPIRE_SESSION = "expire_session"
-    SEEN_SESSION = "seen_session"
 
 
 class SessionAction:
@@ -243,7 +242,7 @@ class AgentManager(ServerSlice, websocket.SessionListener):
             await self._expire_all_sessions_in_db()
 
         self.add_background_task(self._process_session_listener_actions())
-        # Schedule cleanup agentprocess and agentinstance tables
+        # Schedule cleanup of schedulersession table
         agent_process_purge_interval = opt.agent_process_purge_interval.get()
         if agent_process_purge_interval > 0:
             self.schedule(

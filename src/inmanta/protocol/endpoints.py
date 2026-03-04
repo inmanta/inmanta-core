@@ -95,21 +95,6 @@ class Client(Endpoint):
         """
         return await self._transport_instance.call(method_properties, args, kwargs)
 
-    def _select_method(self, name: str) -> Optional[common.MethodProperties]:
-        if name not in common.MethodProperties.methods:
-            return None
-
-        methods = common.MethodProperties.methods[name]
-
-        if self._version_match is VersionMatch.lowest:
-            return min(methods, key=lambda x: x.api_version)
-        elif self._version_match is VersionMatch.highest:
-            return max(methods, key=lambda x: x.api_version)
-        elif self._version_match is VersionMatch.exact:
-            return next((m for m in methods if m.api_version == self._exact_version), None)
-
-        return None
-
     def __getattr__(self, name: str) -> Callable[..., common.ClientCall]:
         """
         Return a function that will call self._call with the correct method properties associated

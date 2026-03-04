@@ -78,6 +78,7 @@ class Agent(SessionEndpoint):
         self.scheduler = scheduler.ResourceScheduler(self._env_id, self.executor_manager, self.session.get_client())
         self.working = False
         self._client = self.session.get_client()
+        self._db_monitor: DatabaseMonitor | None = None
 
     @property
     def sessionid(self) -> uuid.UUID:
