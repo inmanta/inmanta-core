@@ -40,6 +40,7 @@ def check_correct_graphql_response(result: Result[object]) -> None:
     assert data
     assert data["errors"] is None, data["errors"]
 
+
 @pytest.fixture
 async def setup_database(project_default, server, client):
     id_env_1 = uuid.UUID("11111111-1234-5678-1234-000000000001")
@@ -891,6 +892,7 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
             else state.Compliance.HAS_UPDATE.name
         )
         assert result_resources[i]["node"]["state"]["isDeploying"] == (False if i < instances or i >= 2 * instances else True)
+
 
 async def test_graphql_variables(server, client, setup_database):
     """
