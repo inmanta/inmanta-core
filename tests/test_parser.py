@@ -877,6 +877,45 @@ a='\\\\'
     assert stmt.value.value == "\\"
 
 
+def test_string_non_ascii_with_backslash():
+    """
+    Issue 2.1: _safe_decode corrupts non-ASCII strings containing backslashes.
+    The unicode_escape codec misinterprets UTF-8 bytes as Latin-1, garbling
+    non-ASCII characters when they appear alongside escape sequences.
+    """
+    # "café\n" — literal non-ASCII char + escape sequence in same string
+    statements = parse_code('a="café\\n"')
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, Assign)
+    assert isinstance(stmt.value, Literal)
+    assert stmt.value.value == "café\n"
+
+
+def test_string_non_ascii_with_tab_escape():
+    """
+    Issue 2.1: Another variant — non-ASCII character with \\t escape.
+    """
+    statements = parse_code('a="über\\tcool"')
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, Assign)
+    assert isinstance(stmt.value, Literal)
+    assert stmt.value.value == "über\tcool"
+
+
+def test_mls_non_ascii_with_backslash():
+    """
+    Issue 2.1: Same bug in multi-line strings.
+    """
+    statements = parse_code('a=\"\"\"café\\n\"\"\"')
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, Assign)
+    assert isinstance(stmt.value, Literal)
+    assert stmt.value.value == "café\n"
+
+
 def test_empty():
     statements = parse_code("""
 a=""

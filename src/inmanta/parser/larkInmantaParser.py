@@ -218,24 +218,52 @@ class _FunctionParamElement(NamedTuple):
 # ---- String decoding (mirrors PLY safe_decode) ----
 
 
+_ESCAPE_MAP: dict[str, str] = {
+    "\\": "\\",
+    "'": "'",
+    '"': '"',
+    "n": "\n",
+    "t": "\t",
+    "r": "\r",
+    "a": "\a",
+    "b": "\b",
+    "f": "\f",
+    "v": "\v",
+    "0": "\0",
+}
+
+_ESCAPE_RE = re.compile(r"\\(u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}|x[0-9a-fA-F]{2}|.)")
+
+
 def _safe_decode(raw: str, warning_msg: str, location: Location) -> str:
     """
-    Decode unicode escape sequences in a string, raising ParserWarning for invalid escapes.
-    Mirrors PLY's safe_decode() function.
+    Decode backslash escape sequences in a string, raising ParserWarning for invalid escapes.
+
+    Uses a lookup table + re.sub instead of ``bytes(s, "utf_8").decode("unicode_escape")``.
+    The ``unicode_escape`` codec is a known Python footgun: it expects Latin-1 input, not UTF-8.
+    Multi-byte UTF-8 characters (e.g. ``é`` = 0xC3 0xA9) are misinterpreted as two Latin-1
+    characters, producing garbled output. For example ``"café\\n"`` would decode to ``"cafÃ©\\n"``.
+    The re.sub approach processes only recognised escape sequences and leaves all other characters
+    (including non-ASCII) untouched.
     """
     # Fast path: most strings have no backslash escape sequences.
-    # decode("unicode_escape") is a no-op for ASCII strings without backslashes,
-    # so we can skip the expensive warnings.catch_warnings() machinery entirely.
     if "\\" not in raw:
         return raw
-    try:
-        with warnings.catch_warnings():
-            warnings.filterwarnings("error", message="invalid escape sequence", category=DeprecationWarning)
-            value: str = bytes(raw, "utf_8").decode("unicode_escape")
-    except DeprecationWarning:
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore")
-            value = bytes(raw, "utf_8").decode("unicode_escape")
+    has_invalid = False
+
+    def _replace(m: re.Match[str]) -> str:
+        nonlocal has_invalid
+        ch = m.group(1)
+        replacement = _ESCAPE_MAP.get(ch)
+        if replacement is not None:
+            return replacement
+        if ch[0] in ("u", "U", "x"):
+            return chr(int(ch[1:], 16))
+        has_invalid = True
+        return m.group(0)
+
+    value = _ESCAPE_RE.sub(_replace, raw)
+    if has_invalid:
         warnings.warn(ParserWarning(location=location, msg=warning_msg, value=value))
     return value
 
