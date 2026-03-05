@@ -333,9 +333,9 @@ the decoded strings are used as literal values in the DSL, not for code executio
 |------|-----------------------------------------------------------------------------|------------|-----------------|------------|
 | 2.1  | `_safe_decode` corrupts non-ASCII strings containing backslashes            | **HIGH**   | Robustness      | Yes        |
 | 2.2  | Thread-safety of `ASTUnpickler` via `threading.local`                       | **HIGH**   | Robustness      | Yes        |
-| 2.3  | Reliance on Lark internal `state.value_stack` for error messages            | **MEDIUM** | Robustness      | Partially  |
-| 2.4  | `dispatch_table` as mutable shared class attribute                          | **MEDIUM** | Robustness      | No         |
-| 2.5  | Broad `except Exception` in `cache.py`                                      | **MEDIUM** | Robustness      | No         |
+| 2.3  | Reliance on Lark internal `state.value_stack` for error messages            | **MEDIUM** | Robustness      | Yes        |
+| 2.4  | `dispatch_table` as mutable shared class attribute                          | **MEDIUM** | Robustness      | Yes        |
+| 2.5  | Broad `except Exception` in `cache.py`                                      | **MEDIUM** | Robustness      | Yes        |
 | 2.6  | `stmt_list` reversal lacks explanatory comment on *why*                     | **LOW**    | Robustness      | No         |
 | 3.2a | `stmts[::-1]` vs `list(reversed(stmts))` micro-optimization                | **LOW**    | Performance     | No         |
 | 3.2b | `_validate_id` inlining on hot paths                                        | **LOW**    | Performance     | No         |
@@ -349,7 +349,7 @@ the decoded strings are used as literal values in the DSL, not for code executio
 | 5.4  | No test for MLS with 4-5 quote delimiters                                   | **LOW**    | Test Coverage   | No         |
 | 5.5  | `_convert_lark_error` heuristic paths not fully tested                      | **LOW**    | Test Coverage   | No         |
 | 5.6  | No fuzz/property-based testing                                              | **LOW**    | Test Coverage   | No         |
-| 7.3  | Pin Lark version in `setup.py`                                              | **MEDIUM** | Recommendations | No         |
+| 7.3  | Pin Lark version in `setup.py`                                              | **MEDIUM** | Recommendations | Won't fix  |
 
 ---
 

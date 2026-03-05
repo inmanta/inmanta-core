@@ -1621,6 +1621,9 @@ def _convert_lark_error(e: UnexpectedInput, tfile: str) -> ParserException:
 
         # Inspect the parser value_stack to produce better error messages,
         # mirroring PLY's p_error heuristics.
+        # NOTE: state.value_stack is a Lark internal (verified with lark 1.3.1).
+        # The defensive getattr chain ensures silent fallback to generic messages
+        # if Lark changes this. Tests in test_parser.py verify the friendly messages.
         vs = getattr(getattr(e, "state", None), "value_stack", None) or []
 
         # Case 1: a reserved keyword is on top of the stack (e.g. "index = ...")

@@ -23,6 +23,7 @@ restored from a thread-local context during unpickling.
 """
 
 import copyreg
+import types
 from pickle import Pickler, Unpickler, UnpicklingError
 from typing import IO, Callable
 
@@ -58,7 +59,7 @@ class ASTPickler(Pickler):
     (Python callback per object) for ~10x faster pickling.
     """
 
-    dispatch_table = {**copyreg.dispatch_table, Namespace: _reduce_namespace}
+    dispatch_table = types.MappingProxyType({**copyreg.dispatch_table, Namespace: _reduce_namespace})
 
     def __init__(self, file: IO[bytes], protocol: int = 4) -> None:
         super().__init__(file, protocol=protocol)

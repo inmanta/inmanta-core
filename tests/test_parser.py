@@ -882,9 +882,9 @@ a='\\\\'
 
 def test_string_non_ascii_with_backslash():
     """
-    Issue 2.1: _safe_decode corrupts non-ASCII strings containing backslashes.
-    The unicode_escape codec misinterprets UTF-8 bytes as Latin-1, garbling
-    non-ASCII characters when they appear alongside escape sequences.
+    Verify _safe_decode preserves non-ASCII strings containing backslashes.
+    The old unicode_escape codec misinterpreted UTF-8 bytes as Latin-1, garbling
+    non-ASCII characters when they appeared alongside escape sequences.
     """
     # "café\n" — literal non-ASCII char + escape sequence in same string
     statements = parse_code('a="café\\n"')
@@ -897,7 +897,7 @@ def test_string_non_ascii_with_backslash():
 
 def test_string_non_ascii_with_tab_escape():
     """
-    Issue 2.1: Another variant — non-ASCII character with \\t escape.
+    Verify non-ASCII character with \\t escape is preserved correctly.
     """
     statements = parse_code('a="über\\tcool"')
     assert len(statements) == 1
@@ -909,7 +909,7 @@ def test_string_non_ascii_with_tab_escape():
 
 def test_mls_non_ascii_with_backslash():
     """
-    Issue 2.1: Same bug in multi-line strings.
+    Verify non-ASCII + backslash escape in multi-line strings.
     """
     statements = parse_code('a=\"\"\"café\\n\"\"\"')
     assert len(statements) == 1
@@ -2251,12 +2251,9 @@ def _make_pickled_ast(namespace: Namespace) -> bytes:
 
 def test_pickle_reentrant_namespace_safe():
     """
-    Issue 2.2: Verify that creating multiple ASTUnpicklers on the same thread
+    Verify that creating multiple ASTUnpicklers on the same thread
     before calling load() works correctly. Each unpickler uses its own
     instance-local namespace, so they don't interfere with each other.
-
-    Previously, namespace was stored in a thread-local, so the second
-    ASTUnpickler.__init__ would overwrite the first's namespace.
     """
     root_ns = Namespace("__root__")
     ns_a = Namespace("ns_a")
@@ -2280,9 +2277,9 @@ def test_pickle_reentrant_namespace_safe():
 
 def test_pickle_concurrent_threads():
     """
-    Issue 2.2: Verify that concurrent unpickling in separate threads is safe.
-    threading.local gives each thread its own namespace slot, so concurrent
-    unpickling should work correctly.
+    Verify that concurrent unpickling in separate threads is safe.
+    Each unpickler uses instance-local state, so concurrent unpickling
+    should work correctly.
     """
     root_ns = Namespace("__root__")
     results: dict[str, object] = {}
@@ -2318,3 +2315,25 @@ def test_pickle_concurrent_threads():
 
     assert not errors, f"Concurrent unpickling failed: {errors}"
     assert "a" in results and "b" in results, "Both threads should produce results"
+
+
+def test_convert_lark_error_reserved_keyword_on_value_stack():
+    """
+    _convert_lark_error inspects Lark's internal state.value_stack
+    (verified with lark 1.3.1) to produce friendly error messages when a reserved
+    keyword is used as an identifier. If Lark changes this internal API, the
+    defensive getattr chain falls back to generic messages silently. This test
+    ensures the friendly message is actually produced, so a Lark upgrade that
+    breaks value_stack access will be caught.
+    """
+    with pytest.raises(ParserException, match="index is a reserved keyword"):
+        parse_code('index = "hello"')
+
+
+def test_convert_lark_error_lowercase_entity_extends():
+    """
+    Same as above but for the value_stack Case 2 — lowercase class
+    name after 'extends'. Depends on Lark's internal state.value_stack.
+    """
+    with pytest.raises(ParserException, match="Entity names must start with a capital"):
+        parse_code("entity Test extends bad:\nend")
