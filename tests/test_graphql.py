@@ -13,7 +13,9 @@ Contact: code@inmanta.com
 """
 
 import datetime
+import inspect
 import logging
+import typing
 import uuid
 
 import pytest
@@ -27,7 +29,10 @@ from inmanta.protocol import Result
 from inmanta.server import SLICE_COMPILER
 from inmanta.server.services.compilerservice import CompilerService
 from inmanta.util import retry_limited
+from strawberry_sqlalchemy_mapper import StrawberrySQLAlchemyMapper
 from utils import insert_with_link_to_configuration_model, run_compile_and_wait_until_compile_is_done
+
+env_1: typing.Final[str] = "11111111-1234-5678-1234-000000000001"
 
 
 def check_correct_graphql_response(result: Result[object]) -> None:
@@ -43,7 +48,7 @@ def check_correct_graphql_response(result: Result[object]) -> None:
 
 @pytest.fixture
 async def setup_database(project_default, server, client):
-    id_env_1 = uuid.UUID("11111111-1234-5678-1234-000000000001")
+    id_env_1 = uuid.UUID(env_1)
     result = await client.environment_create(
         project_id=project_default,
         name="test-env-b",
@@ -324,7 +329,8 @@ async def test_query_environments_with_sorting(server, client, setup_database):
 
 async def test_query_environments_with_paging(server, client, setup_database):
     """
-    Display basic paging capabilities
+    Display basic paging capabilities.
+    Assert that the totalCount is the same regardless of where we are on the page.
     """
     # Create second project
     id_project_2 = uuid.UUID("00000000-1234-5678-1234-000000000002")
@@ -349,6 +355,7 @@ async def test_query_environments_with_paging(server, client, setup_database):
             hasPreviousPage,
             hasNextPage
         }
+        totalCount
         edges {
             cursor
             node {
@@ -369,6 +376,7 @@ async def test_query_environments_with_paging(server, client, setup_database):
         check_correct_graphql_response(result)
         results = result.result["data"]["data"]["environments"]["edges"]
         assert [node["node"]["name"] for node in results] == test_case[1]
+        assert result.result["data"]["data"]["environments"]["totalCount"] == 9
 
     # Get the first 5 elements
     # [b, c, a, 0, 1]
@@ -384,6 +392,7 @@ async def test_query_environments_with_paging(server, client, setup_database):
     assert environments["pageInfo"]["endCursor"] == last_cursor
     assert environments["pageInfo"]["hasNextPage"] is True
     assert environments["pageInfo"]["hasPreviousPage"] is False
+    assert result.result["data"]["data"]["environments"]["totalCount"] == 9
 
     # Get 5 environments starting from the second to last cursor of the previous result
     second_to_last_cursor = results[-2]["cursor"]
@@ -400,6 +409,7 @@ async def test_query_environments_with_paging(server, client, setup_database):
     assert environments["pageInfo"]["endCursor"] == new_last_cursor
     assert environments["pageInfo"]["hasNextPage"] is False
     assert environments["pageInfo"]["hasPreviousPage"] is True
+    assert result.result["data"]["data"]["environments"]["totalCount"] == 9
     expected_ids = [1, 2, 3, 4, 5]
     for i in range(len(results)):
         assert results[i]["node"]["name"] == f"test-env-{expected_ids[i]}"
@@ -417,6 +427,7 @@ async def test_query_environments_with_paging(server, client, setup_database):
     assert environments["pageInfo"]["endCursor"] == previous_second_to_last_cursor
     assert environments["pageInfo"]["hasNextPage"] is True
     assert environments["pageInfo"]["hasPreviousPage"] is True
+    assert result.result["data"]["data"]["environments"]["totalCount"] == 9
     expected_ids = [0, 1, 2, 3, 4]
     for i in range(len(results)):
         assert results[i]["node"]["name"] == f"test-env-{expected_ids[i]}"
@@ -777,6 +788,7 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
         query = """
         {
             resources (filter: {environment: "%s" %s}) {
+                totalCount
                 edges {
                     node {
                       resourceId
@@ -807,6 +819,8 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
         result = await client.graphql(query=query)
         check_correct_graphql_response(result)
         assert len(result.result["data"]["data"]["resources"]["edges"]) == f["result"], f["query"]
+        # Assert that the totalCount takes the filter into account
+        assert result.result["data"]["data"]["resources"]["totalCount"] == f["result"], f["query"]
         assertion = f.get("assertion", None)
         if assertion:
             for res in result.result["data"]["data"]["resources"]["edges"]:
@@ -962,3 +976,137 @@ async def test_graphql_variables(server, client, setup_database):
     for notification in notifications:
         assert notification["node"]["environment"] == env_id
         assert notification["node"]["cleared"] is False
+
+
+async def test_total_count(server, client, setup_database):
+    """
+    Test the totalCount attribute.
+    Asserts that it works when multiple queries are requested and that the values are as expected.
+    Assumes that for each query the amount of results is different
+    """
+    query = f"""
+    {{
+        environments{{
+            pageInfo{{
+                startCursor,
+                endCursor,
+                hasPreviousPage,
+                hasNextPage
+            }}
+            totalCount
+            edges {{
+                cursor
+                node {{
+                  id
+                  name
+                }}
+            }}
+        }}
+        notifications(filter: {{
+                  cleared: false
+                  environment: "{env_1}"
+                }}){{
+            totalCount
+            edges {{
+                cursor
+            }}
+        }}
+    }}
+    """
+    result = await client.graphql(query=query)
+    assert result.code == 200
+    found_counts = {
+        "environments": 3,
+        "notifications": 6,
+    }
+    assert result.result["data"]["data"].items()
+    for name, res in result.result["data"]["data"].items():
+        count = res["totalCount"]
+        assert len(res["edges"]) == count
+        assert found_counts[name] == count
+
+    # Test on InlineFragment and FragmentSpread
+    query = f"""
+    {{
+        environments{{
+            ...EnvironmentFields
+        }}
+        notifications(filter: {{
+                  cleared: false
+                  environment: "{env_1}"
+                }}){{
+            ... on NotificationConnection{{
+                totalCount
+                edges {{
+                    node {{
+                        id
+                    }}
+                }}
+            }}
+        }}
+    }}
+    fragment EnvironmentFields on EnvironmentConnection {{
+        totalCount
+        edges {{
+            node {{
+                id
+            }}
+        }}
+    }}
+    """
+    result = await client.graphql(query=query)
+    assert result.code == 200
+    assert result.result["data"]["data"].items()
+    for name, res in result.result["data"]["data"].items():
+        count = res["totalCount"]
+        assert len(res["edges"]) == count
+        assert found_counts[name] == count
+
+    # Test on nested fragments
+    query = """
+    {
+        environments{
+            ...NestedFragment
+        }
+    }
+    fragment NestedFragment on EnvironmentConnection {
+        ...EnvironmentFields
+    }
+    fragment EnvironmentFields on EnvironmentConnection {
+        totalCount
+    }
+    """
+    result = await client.graphql(query=query)
+    assert result.code == 200
+    assert result.result["data"]["data"]["environments"]["totalCount"] == found_counts["environments"]
+
+
+async def test_connection_type_for_unchanged():
+    """
+    This test makes sure that StrawberrySQLAlchemyMapper._connection_type_for is not updated without our knowledge.
+    This is because we have a CustomStrawberrySQLAlchemyMapper that overrides this method with some small changes
+    but any changes that they make to the original method will not be inherited into ours, and that could break our code.
+    """
+    code, line_no = inspect.getsourcelines(StrawberrySQLAlchemyMapper._connection_type_for)
+    assert "".join(code) == """    def _connection_type_for(self, type_name: str) -> Type[Any]:
+        \"\"\"
+        Get or create a corresponding Connection model for the given type
+        (to support future pagination)
+        \"\"\"
+        connection_name = f"{type_name}Connection"
+        if connection_name not in self.connection_types:
+            edge_type = self._edge_type_for(type_name)
+            lazy_type = StrawberrySQLAlchemyLazy(type_name=type_name, mapper=self)
+            self.connection_types[connection_name] = connection_type = strawberry.type(
+                dataclasses.make_dataclass(
+                    connection_name,
+                    [
+                        ("edges", List[edge_type]),  # type: ignore[valid-type]
+                    ],
+                    bases=(relay.ListConnection[lazy_type],),  # type: ignore[valid-type]
+                )
+            )
+            setattr(connection_type, _GENERATED_FIELD_KEYS_KEY, ["edges"])
+            setattr(connection_type, _IS_GENERATED_CONNECTION_TYPE_KEY, True)
+        return self.connection_types[connection_name]
+"""

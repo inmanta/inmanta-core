@@ -6,7 +6,7 @@ bumpversion==0.6.0
 click==8.3.1
 click-plugins==1.1.1.2
 colorlog==6.10.1
-cookiecutter==2.6.0
+cookiecutter==2.7.1
 crontab==1.0.5
 cryptography==46.0.5
 docstring-parser==0.17.0
@@ -47,13 +47,13 @@ sphinxcontrib-redoc==1.6.0
 sphinxcontrib-serializinghtml==2.0.0
 sphinx-design==0.7.0
 Sphinx-Substitution-Extensions==2026.1.12
-SQLAlchemy==2.0.47
+SQLAlchemy==2.0.48
 strawberry-sqlalchemy-mapper==0.8.0
 texttable==1.7.0
 time-machine==3.2.0
 toml==0.10.2
 tornado==6.5.4
-types-python-dateutil==2.9.0.20260124
+types-python-dateutil==2.9.0.20260302
 types-PyYAML==6.0.12.20250915
 types-setuptools==82.0.0.20260210
 types-toml==0.10.8.20240310
