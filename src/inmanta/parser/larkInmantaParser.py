@@ -113,6 +113,10 @@ def _save_parser_to_cache(parser: Lark, cache_file: str) -> bool:
 
 cache_manager = CacheManager()
 
+# Set to True after a failed grammar cache write to avoid retrying on every
+# attach_to_project call (e.g. on read-only installs).
+_grammar_cache_write_failed: bool = False
+
 
 def _get_parser() -> Lark:
     """Return the singleton parser, building it exactly once.
@@ -141,15 +145,18 @@ def attach_to_project(project_dir: str) -> None:
     Ensures the grammar cache exists (in the module directory or, as a fallback,
     in the project's .cfcache directory) and attaches the AST cache manager.
     """
+    global _grammar_cache_write_failed
+
     # Ensure the parser singleton is initialised.
     parser = _get_parser()
 
-    if not os.path.exists(_MODULE_CACHE_FILE):
+    if not _grammar_cache_write_failed and not os.path.exists(_MODULE_CACHE_FILE):
         # Module dir not writable — fall back to project cache.
         cache_dir = os.path.join(project_dir, CF_CACHE_DIR)
         os.makedirs(cache_dir, exist_ok=True)
         fallback_cache = os.path.join(cache_dir, f"lark_grammar_{_GRAMMAR_HASH}.cache")
-        _save_parser_to_cache(parser, fallback_cache)
+        if not _save_parser_to_cache(parser, fallback_cache):
+            _grammar_cache_write_failed = True
 
     cache_manager.attach_to_project(project_dir)
 
@@ -467,10 +474,14 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
     # ---- Statements ----
 
     def stmt_list(self, *stmts: Statement) -> list[Statement]:
-        # PLY's right-recursive stmt_list rule builds statements in reverse order
-        # (appends current statement at the end, so first stmt ends up last).
-        # Mirror that behavior to preserve execution ordering semantics.
-        return list(reversed(stmts))
+        # PLY used a right-recursive rule: `stmt_list : statement stmt_list`
+        # with `p[2].append(p[1])`, which builds the list from last statement
+        # to first (each new statement is appended, so the first source-level
+        # statement ends up last in the list). The compiler processes this
+        # reversed list during execution and definition ordering, so changing
+        # the order would alter which definitions "win" on conflicts and the
+        # sequence of side effects. We preserve this for backwards compatibility.
+        return list(stmts[::-1])
 
     def assign_eq(self, var_ref: Reference, operand: ExpressionStatement) -> Statement:
         # "=" is anonymous => filtered; items = [var_ref, operand]

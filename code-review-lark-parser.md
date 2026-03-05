@@ -336,10 +336,10 @@ the decoded strings are used as literal values in the DSL, not for code executio
 | 2.3  | Reliance on Lark internal `state.value_stack` for error messages            | **MEDIUM** | Robustness      | Yes        |
 | 2.4  | `dispatch_table` as mutable shared class attribute                          | **MEDIUM** | Robustness      | Yes        |
 | 2.5  | Broad `except Exception` in `cache.py`                                      | **MEDIUM** | Robustness      | Yes        |
-| 2.6  | `stmt_list` reversal lacks explanatory comment on *why*                     | **LOW**    | Robustness      | No         |
-| 3.2a | `stmts[::-1]` vs `list(reversed(stmts))` micro-optimization                | **LOW**    | Performance     | No         |
-| 3.2b | `_validate_id` inlining on hot paths                                        | **LOW**    | Performance     | No         |
-| 3.2c | Grammar cache write fails on read-only installs                             | **LOW**    | Performance     | No         |
+| 2.6  | `stmt_list` reversal lacks explanatory comment on *why*                     | **LOW**    | Robustness      | Yes        |
+| 3.2a | `stmts[::-1]` vs `list(reversed(stmts))` micro-optimization                | **LOW**    | Performance     | Yes        |
+| 3.2b | `_validate_id` inlining on hot paths                                        | **LOW**    | Performance     | Won't fix  |
+| 3.2c | Grammar cache write fails on read-only installs                             | **LOW**    | Performance     | Yes        |
 | 4.1  | 23 `# type: ignore` — could reduce with AST `Protocol`                     | **LOW**    | Code Quality    | No         |
 | 4.2  | Mixed `Optional[X]` / `X \| None` style; `RESERVED_KEYWORDS` not `Final`   | **LOW**    | Code Quality    | No         |
 | 4.3  | Dead code: redundant `isinstance` checks (1311, 1330, 978), unused λ (291) | **LOW**    | Code Quality    | No         |
