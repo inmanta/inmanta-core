@@ -940,6 +940,7 @@ async def test_total_count(server, client, setup_database):
         "environments": 3,
         "notifications": 6,
     }
+    assert result.result["data"]["data"].items()
     for name, res in result.result["data"]["data"].items():
         count = res["totalCount"]
         assert len(res["edges"]) == count
@@ -976,6 +977,7 @@ async def test_total_count(server, client, setup_database):
     """
     result = await client.graphql(query=query)
     assert result.code == 200
+    assert result.result["data"]["data"].items()
     for name, res in result.result["data"]["data"].items():
         count = res["totalCount"]
         assert len(res["edges"]) == count
