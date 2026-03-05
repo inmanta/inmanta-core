@@ -397,7 +397,10 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
 
         reply = await self.dispatch_method(msg)
         if reply is not None:
-            await self.write_message(reply.model_dump_json())
+            try:
+                await self.write_message(reply.model_dump_json())
+            except Exception:
+                LOGGER.debug("Failed to send RPC reply for %s, connection may already be closed.", msg.reply_id)
 
     async def on_open_session(self, session: Session) -> None:
         """Called when a new session is opened.
