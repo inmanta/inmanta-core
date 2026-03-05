@@ -487,10 +487,13 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
                 e.to_body(),
             )
             if method_call.reply_id is not None:
+                # Round-trip through json_encode to normalize non-serializable objects
+                # (e.g. ValueError in validation error ctx) into plain JSON-compatible dicts.
+                body = json.loads(common.json_encode(e.to_body()))
                 return RPC_Reply(
                     reply_id=msg.reply_id,
                     code=e.to_status(),
-                    result=e.to_body(),
+                    result=body,
                 )
             return None
         except Exception as e:
