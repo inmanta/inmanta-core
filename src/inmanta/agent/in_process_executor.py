@@ -307,7 +307,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                 resource_id: ResourceVersionIdStr = resource.rvid
 
                 try:
-                    self.resource_action_logger.debug("Running dryrun for %s", resource_id)
+                    self.resource_action_logger.debug("Running dryrun for %s (dry_run_id=%s)", resource_id, dry_run_id)
 
                     try:
                         provider = await self.get_provider(resource_obj)
@@ -353,6 +353,8 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                                 finished=datetime.datetime.now().astimezone(),
                                 messages=ctx.logs,
                             )
+                            self.resource_action_logger.debug("Finished dryrun for %s (dry_run_id=%s)", resource_id, dry_run_id)
+
                         except Exception as e:
                             ctx.exception(
                                 "Exception during dryrun for %(resource_id)s (exception: %(exception)s",
