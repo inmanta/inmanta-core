@@ -25,6 +25,6 @@ async def update(connection: Connection) -> None:
     """
     schema = """
     CREATE INDEX resource_persistent_state_environment_is_orphan_index
-        ON public.resource_persistent_state (environment, is_orphan);
+        ON public.resource_persistent_state (environment, is_orphan) WHERE NOT is_orphan;
     """
     await connection.execute(schema)
