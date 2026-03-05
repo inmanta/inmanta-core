@@ -372,6 +372,13 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
             return
 
         self._session.close_session()
+
+        # Resolve any pending RPC futures so callers don't hang until timeout
+        for reply_id, future in self._replies.items():
+            if not future.done():
+                future.set_result(common.Result(code=503, result={"message": "Session closed"}))
+        self._replies.clear()
+
         await self.on_close_session(self._session)
 
     async def _handle_call(self, msg: RPC_Call) -> None:

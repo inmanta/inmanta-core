@@ -389,6 +389,49 @@ async def test_ws_server_shutdown_during_active_session(inmanta_config, server_c
         await agent.stop()
 
 
+async def test_ws_pending_futures_resolved_on_disconnect(inmanta_config, server_config) -> None:
+    """Test that in-flight RPC calls are resolved with 503 when the session closes,
+    rather than hanging until timeout."""
+    rs = Server()
+    server = WSServer()
+    rs.add_slice(server)
+    await rs.start()
+
+    agent = WSAgent("agent", reconnect_delay=60)
+    await agent.start()
+
+    try:
+
+        async def wait_for_active() -> None:
+            while not agent.session or not agent.session.active:
+                await asyncio.sleep(0.1)
+
+        await asyncio.wait_for(wait_for_active(), timeout=10)
+
+        # Start an RPC call from server to agent. We use the server-side session's client
+        # to call the agent. The agent has pending futures on its decoder.
+        # Instead, let's directly put a pending future in the agent's _replies dict
+        # to simulate an in-flight RPC call.
+        pending_future: asyncio.Future[websocket.common.Result] = asyncio.Future()
+        fake_reply_id = uuid.uuid4()
+        agent._replies[fake_reply_id] = pending_future
+
+        # Close the session — this should resolve the pending future with 503
+        await agent.close_session()
+
+        # The future should be resolved quickly, not hang until timeout
+        result = await asyncio.wait_for(pending_future, timeout=2)
+        assert result.code == 503
+        assert result.result is not None
+        assert "Session closed" in result.result["message"]
+
+        # _replies should be cleared
+        assert len(agent._replies) == 0
+    finally:
+        await rs.stop()
+        await agent.stop()
+
+
 async def test_ws_duplicate_session_replaces_old(inmanta_config, server_config) -> None:
     """Test that when the same agent reconnects, the old session is evicted and listener
     callbacks fire in the correct order (close old, open new)."""
