@@ -335,8 +335,9 @@ class RESTServer(RESTBase, AuthnzInterface):
 
         global_url_map: dict[str, dict[str, common.UrlMethod]] = self.get_global_url_map(targets)
 
-        # TODO: add constant for url
-        rules: list[routing.Rule] = [routing.Rule(routing.PathMatches("/v2/ws"), WebsocketHandler, {"transport": self})]
+        rules: list[routing.Rule] = [
+            routing.Rule(routing.PathMatches(const.WS_URL_PATH), WebsocketHandler, {"transport": self})
+        ]
 
         for url, handler_config in global_url_map.items():
             rules.append(routing.Rule(routing.PathMatches(url), RESTHandler, {"transport": self, "config": handler_config}))
@@ -443,7 +444,6 @@ class RESTServer(RESTBase, AuthnzInterface):
         """Get the requested session"""
         key = (environment_id, session_name)
         if key not in self._sessions:
-            # TODO: correct exception
-            raise KeyError("Duplication session")
+            raise KeyError(f"Session not found for ({environment_id}, {session_name})")
 
         return self._sessions[key]

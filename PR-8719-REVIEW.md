@@ -4,6 +4,7 @@
 **Branch:** `websocket-refactor` → `master`
 **Author:** Bart Vanbrabant (+ Claude co-authored commits)
 **Reviewed:** 2026-03-04
+**Updated:** 2026-03-04 (round 2 deep review after rebase)
 **Diff:** +1,722 / -2,328 lines across 46 files
 
 > **To resume working on these items with Claude Code:**
@@ -19,350 +20,369 @@
 
 This PR replaces REST-based heartbeat/long-poll for server-agent communication with persistent WebSocket connections. It removes `AgentInstance`, renames `AgentProcess` → `SchedulerSession`, removes `SessionManager`, the heartbeat protocol, and primary election logic.
 
-The PR description is excellent. The architectural direction is sound — WebSockets are the right choice here. The happy path works well. However, error handling, edge cases, and test coverage need more work before merge.
+The PR description is excellent. The architectural direction is sound. Most round-1 issues have been addressed. The round-2 deep review found significant new issues in concurrency, resource management, and protocol correctness.
 
 ---
 
-## Critical Issues
+## Round 1 Issues — Status
 
-### C1. Reconnection loop crashes on connection failure
-- [x] **Fix required**
-- **File:** `src/inmanta/protocol/websocket.py:659-676`
+All round-1 items have been verified. Summary:
 
-Only `CancelledError` is caught in `_process_messages`. If `_reconnect()` raises any other exception (connection refused, DNS failure, SSL error), the message loop dies silently and the agent becomes permanently disconnected with no recovery.
+| ID | Issue | Status |
+|----|-------|--------|
+| C1 | Reconnection loop crashes | **FIXED** |
+| C2 | Memory leak in timed-out replies | **FIXED** |
+| C3 | `Agent.get_status()` always returns up | **FIXED** |
+| C4 | Server ping timeout not configured | **FIXED** |
+| C5 | `_db_monitor` AttributeError | **FIXED** |
+| C6 | Duplicate session on frame decoder | **FIXED** |
+| C7 | `RejectSession` stub | **FIXED** |
+| S1 | WebSocket auth bypass | **OPEN** — see below |
+| S2 | Information disclosure | **FIXED** |
+| T1-T6 | Test gaps | **FIXED** (T2 residual: `test_ws_2way` busy-wait) |
+| Q1-Q12 | Code quality | **FIXED** (Q4 residual: `on_reconnect` docstring) |
+| M1-M3 | Migration | **FIXED** |
+
+---
+
+## Round 2 — Deep Review Findings
+
+### CRITICAL
+
+#### D1. `_register_session` assert checks wrong key — ghost sessions accumulate
+- [ ] **Fix required**
+- **File:** `src/inmanta/server/agentmanager.py:499`
 
 ```python
-# Current code — no error handling around reconnect
-async def _process_messages(self) -> None:
-    try:
-        while True:
-            if self._ws_client is not None and not self._ws_client.closed:
-                msg = await self._ws_client.read_message()
-                if msg is None:
-                    await asyncio.sleep(self.reconnect_delay)
-                    await self._reconnect()  # <-- unhandled exceptions kill the loop
-            else:
-                await self._reconnect()  # <-- same here
-    except asyncio.CancelledError:
-        pass
+async def _register_session(self, session, now):
+    async with self.session_lock:
+        assert session.id not in self.scheduler_for_env  # BUG: wrong dict!
+        self.scheduler_for_env[session.environment] = session
+        self.sessions[session.id] = session
 ```
 
-**Fix:** Wrap `_reconnect()` calls in `try/except Exception` with logging and retry after `reconnect_delay`.
+`self.scheduler_for_env` is keyed by **environment UUID**, but the assert checks `session.id` (a random UUID). This assert is **always true** and checks nothing. If a second session registers for the same environment, the old session is silently overwritten in `scheduler_for_env` but remains as a ghost entry in `self.sessions` (keyed by the old session ID), never getting expired from memory.
+
+**Fix:** `assert session.environment not in self.scheduler_for_env`
 
 ---
 
-### C2. Memory leak in timed-out RPC replies
-- [x] **Fix required**
-- **File:** `src/inmanta/protocol/websocket.py:258-283`
+#### D2. Pending RPC futures not cleaned up on disconnect — callers hang until timeout
+- [ ] **Fix required**
+- **File:** `src/inmanta/protocol/websocket.py` — `close_session()` (lines 369-375) and `_process_messages` disconnect path
 
-When `handle_timeout` fires, it cancels the future but does **not** remove the entry from `self._replies`. Cleanup only happens when a reply arrives (line 358). Timed-out calls leave orphaned entries forever.
+When the WebSocket connection drops, all pending futures in `self._replies` are **never resolved**. Callers awaiting those futures hang until their individual timeouts (up to 120 seconds). If 50 RPCs are in-flight when the connection dies, all 50 callers wait independently.
 
-**Fix:** `handle_timeout` should receive `self._replies` and `reply_id`, and `del self._replies[reply_id]` after timeout.
+**Fix:** In `close_session()` or on disconnect, iterate `_replies`, set an error result on each pending future, and clear the dict:
+```python
+for reply_id, future in self._replies.items():
+    if not future.done():
+        future.set_result(common.Result(code=503, result={"message": "Connection lost"}))
+self._replies.clear()
+```
 
 ---
 
-### C3. `Agent.get_status()` always returns `up` for non-paused agents
-- [x] **Fix required**
-- **File:** `src/inmanta/data/__init__.py:3466-3472`
+#### D3. `_handle_call` uses `json_encode` instead of `model_dump_json` — serialization mismatch
+- [ ] **Fix required**
+- **File:** `src/inmanta/protocol/websocket.py:384`
 
 ```python
-def get_status(self) -> AgentStatus:
-    if self.paused:
-        return AgentStatus.paused
-    return AgentStatus.up
-    # TODO: fix
-    return AgentStatus.down  # UNREACHABLE
+reply = await self.dispatch_method(msg)
+if reply is not None:
+    await self.write_message(common.json_encode(reply))  # BUG
 ```
 
-With `id_primary` removed, there's no way to determine if an agent is actually connected. The `AgentView` in `dataview.py:1264-1276` partially compensates with an environment-wide `SchedulerSession` check, but `get_status()` on the model itself is broken.
+Every other serialization point in the file uses Pydantic's `.model_dump_json()`. `json_encode` is a `json.dumps` wrapper with a custom encoder. The receiving side parses with `pydantic.TypeAdapter.validate_json()`. Serialization/deserialization format mismatch could cause parsing failures, especially for UUID fields and datetime types.
+
+**Fix:** `await self.write_message(reply.model_dump_json())`
 
 ---
 
-### C4. Server ping timeout not configured — stale sessions persist
-- [x] **Fix required**
-- **File:** `src/inmanta/protocol/rest/server.py:345`
+#### D4. Rapid reconnect can leak sessions on server side
+- [ ] **Investigate**
+- **File:** `src/inmanta/protocol/websocket.py:637-639`
 
-`websocket_ping_interval=1` is set but `websocket_ping_timeout` is not. The **server** will never proactively close a dead client connection. If a client is killed without TCP FIN, the server session persists until OS TCP keepalive expires (~2 hours).
+Each `_reconnect()` call creates a new `Session` via `create_session()`, replacing `self._session`. The old session is **never explicitly closed** — its `_closed` flag stays `False`, and it retains a reference to the `WebsocketFrameDecoder` (via `websocket_protocol`). If any background task holds a reference to the old session (e.g., from `on_open_session`), calling methods on it will operate on the *current* decoder state, not the old session's.
 
-**Fix:** Add `websocket_ping_timeout=<N>` to the Tornado application settings.
-
----
-
-### C5. `_db_monitor` AttributeError on early stop
-- [x] **Fix required**
-- **File:** `src/inmanta/agent/agent_new.py`
-
-`self._db_monitor` is assigned in `start()` but checked in `stop()` (`if self._db_monitor:`). Calling `stop()` before `start()` raises `AttributeError`.
-
-**Fix:** Initialize `self._db_monitor = None` in `__init__`.
+On the server side, if the TCP connection drops without a clean close, the old session remains registered until the server's ping timeout fires. During this window, the agent's reconnect creates a new connection + new session. The server-side `register_session` handles this by evicting the old session (rest/server.py:409-414), but there's a timing window where the old listener callbacks haven't completed yet when the new session registers.
 
 ---
 
-### C6. Duplicate session handling not implemented on frame decoder
-- [x] **Fix required**
-- **File:** `src/inmanta/protocol/websocket.py:303` — `# TODO: handle duplicate sessions`
+### HIGH
 
-The server-side `register_session` (`rest/server.py:407-419`) handles the race by evicting the old session, but the frame decoder has no protection against a client opening multiple sessions on the same connection.
-
----
-
-### C7. `RejectSession` handling is a stub
-- [x] **Fix required**
-- **File:** `src/inmanta/protocol/websocket.py:325-329`
+#### D5. `close_connection` sends `CloseSession` after closing local session — wrong order
+- [ ] **Fix recommended**
+- **File:** `src/inmanta/protocol/websocket.py:400-403`
 
 ```python
-case RejectSession():
-    # TODO: implement
-    pass
+async def close_connection(self) -> None:
+    await self.close_session()            # closes local session first
+    await self.write_message(CloseSession().model_dump_json())  # then notifies remote
 ```
 
-If the server rejects a session, the client silently ignores it. The session stays unconfirmed and reconnect logic won't trigger.
-
-**Fix:** At minimum, log the rejection reason, close the session, and trigger reconnect.
+The remote side should be notified **before** local teardown, so it can process the close message while the session is still logically open. As written, the remote side receives `CloseSession` after the local session state is already torn down.
 
 ---
 
-## Security Concerns
-
-### S1. WebSocket endpoint lacks authentication
-- [ ] **Verify / Fix**
-- **File:** `src/inmanta/protocol/websocket.py:562-566`
-
-`SessionEndpoint.is_auth_enabled()` returns `False` unconditionally. There is no authentication step in the `OPEN_SESSION` flow. If `/v2/ws` is network-accessible, any client can open a session for any environment.
-
-**Action:** Verify that either:
-- HTTP upgrade requires authentication (not visible in this diff), or
-- Network-level access control prevents unauthorized connections, or
-- Add token-based auth to the `OPEN_SESSION` message.
-
----
-
-### S2. Information disclosure in error responses
-- [x] **Fix recommended**
-- **File:** `src/inmanta/protocol/rest/__init__.py:693`
+#### D6. `write_message` failure in `rpc_call` silently leaves caller hanging
+- [ ] **Fix recommended**
+- **File:** `src/inmanta/protocol/websocket.py:284`
 
 ```python
-raise exceptions.ServerError(str(e.args))
+self.add_background_task(self.write_message(RPC_Call(...).model_dump_json()))
 ```
 
-Raw exception args returned to the client may leak internal paths, SQL queries, or stack details.
+The write is a fire-and-forget background task. If it fails (e.g., `WebSocketClosedError`), the caller's future is never resolved. The caller waits until timeout (up to 120s). Combined with D2, this makes error recovery very slow.
 
-**Fix:** Use a generic error message; only log details server-side.
-
----
-
-## Test Coverage Gaps
-
-### T1. `set_state` notification assertions commented out
-- [x] **Fix required**
-- **File:** `tests/test_agent_manager.py:355-365`
-
-Multiple `# TODO!!!` comments where `client.set_state` assertions were removed. No test verifies agents receive state notifications on session open/close.
+**Suggestion:** Either detect write failure and resolve the future immediately, or don't use a background task for the write.
 
 ---
 
-### T2. Only happy-path WebSocket test exists
-- [x] **Improve**
-- **File:** `tests/protocol/test_ws.py`
+#### D7. `stop()` and `_reconnect()` can interleave
+- [ ] **Investigate**
+- **File:** `src/inmanta/protocol/websocket.py:645-649, 607-639`
 
-Single test (`test_ws_2way`) with:
-- Infinite busy-wait loop (line 72-73) — hangs forever on failure. Use `asyncio.wait_for`.
-- No cleanup on failure — needs `try/finally` or fixtures.
-- Missing coverage for: reconnection, rejection, auth, concurrent RPCs, network failures, closed-session calls.
+`stop()` cancels background tasks (including `_process_messages`) and then calls `close_connection()`. But `_process_messages` might be inside `_reconnect()` when cancelled. The `CancelledError` propagates out of `_reconnect`, but `close_connection()` then tries to write `CloseSession` on a half-initialized connection. The `write_message` guard protects against `None` `_ws_client`, but not against a connection in an indeterminate state.
 
 ---
 
-### T3. `agent-timeout` config is now dead in tests
-- [x] **Fix**
-- **Files:** `tests/protocol/test_2way_protocol.py:185, 243`
+#### D8. Dual disconnect handling — `_on_disconnect` callback races with `_process_messages`
+- [ ] **Investigate**
+- **File:** `src/inmanta/protocol/websocket.py:634-643, 676-697`
 
-Tests set `agent-timeout` config, but the WebSocket transport ignores it. Timeout now relies on Tornado's `websocket_ping_interval` (hardcoded) and client `ping_timeout`. Tests pass by coincidence.
+When the connection drops, two things happen simultaneously:
+1. `_on_disconnect` callback fires (line 634-636), scheduling `on_disconnect()` as a background task
+2. `_process_messages` gets `None` from `read_message()` (line 677), sleeps, and calls `_reconnect()`
 
-**Fix:** Remove the dead config setting. If the tests need to control timeout, make ping interval/timeout configurable.
-
----
-
-### T4. No test for `on_reconnect` failure path
-- [x] **Add test** *(skipped — `get_state` always returns 200 in practice; non-200 only on transport failures which trigger reconnection)*
-- **File:** `src/inmanta/agent/agent_new.py:219-235`
-
-If `get_state` returns non-200 on reconnect, the agent stays in `working=False` with no retry until the next disconnect/reconnect cycle.
+No coordination exists between these paths. `on_disconnect()` may run while `_reconnect()` is in progress. `on_reconnect()` (called from `on_open_session`) could interleave with `on_disconnect()` from the callback. For `Agent`, `on_disconnect` calls `stop_working()` while `on_reconnect` calls `start_working()` — if they interleave, the scheduler state can be corrupted.
 
 ---
 
-### T5. No test for duplicate session replacement
-- [x] **Add test**
-- **File:** `src/inmanta/protocol/rest/server.py:407-419`
-
-When the same `(environment, name)` reconnects while the old session is still in `_sessions`, `register_session` evicts the old one. No test verifies the old session's listener callbacks fire correctly.
-
----
-
-### T6. `SchedulerSession.clean_up_expired_for_env()` untested
-- [x] **Add test**
-- **File:** `src/inmanta/server/agentmanager.py:512`
-
-Called in `_log_session_creation_to_db` but only exercised indirectly through integration tests.
-
----
-
-## Code Quality Issues
-
-### Q1. Dead code: `Session._seen` field
-- [x] **Remove**
-- **File:** `src/inmanta/protocol/websocket.py:49, 104, 252, 295, 340, 352`
-
-`_seen` is set on every message via `time.monotonic()` but **never read** by any logic. The timer-based sweep is gone; liveness is connection-based.
-
----
-
-### Q2. Dead code: `SessionActionType.SEEN_SESSION`
-- [x] **Remove**
-- **File:** `src/inmanta/server/agentmanager.py:105`
-
-Defined in the enum but never used. The PR description says it was removed.
-
----
-
-### Q3. Dead code: `Client._select_method`
-- [x] **Remove**
-- **File:** `src/inmanta/protocol/endpoints.py:98-111`
-
-Duplicates `MethodProperties.select_method` and is never called.
-
----
-
-### Q4. Stale heartbeat terminology
-- [x] **Fix**
-
-| File               | Line | Text                                       |
-| ------------------ | ---- | ------------------------------------------ |
-| `websocket.py`     | 413  | `"heartbeat method call"`                  |
-| `websocket.py`     | 398  | docstring says `"heartbeat reply"`         |
-| `agentmanager.py`  | 246  | `"agentprocess and agentinstance tables"`  |
-| `data/__init__.py` | 3435 | `:param primary:` references removed field |
-
----
-
-### Q5. `AuthnzInterface` doesn't inherit `abc.ABC`
-- [x] **Fix**
-- **File:** `src/inmanta/protocol/rest/__init__.py:634-648`
-
-`@abc.abstractmethod` on `get_authorization_provider` has no effect without `abc.ABC` as base class.
-
----
-
-### Q6. `TypeAdapter` created per-call (performance)
-- [x] **Fix**
-- **File:** `src/inmanta/protocol/common.py:1544`
-
-`pydantic.TypeAdapter(method_properties.return_type)` constructed on every typed RPC response. Should be cached on `MethodProperties`.
-
----
-
-### Q7. `Request.from_dict` mutates input dict
-- [x] **Fix**
-- **File:** `src/inmanta/protocol/common.py:162-163`
-
-`del value["reply_id"]` modifies the caller's dict. Use `.pop()` or work on a copy.
-
----
-
-### Q8. `SchedulerSession.cleanup()` uses O(n²) query
-- [x] **Improve**
-- **File:** `src/inmanta/data/__init__.py:3390-3409`
-
-Correlated subquery with `count(*)`. Use `ROW_NUMBER() OVER (PARTITION BY ...)` instead.
-
----
-
-### Q9. `LOGGER.exception()` without active exception
-- [x] **Fix**
-- **File:** `src/inmanta/data/__init__.py:3344`
-
-`LOGGER.exception("Multiple objects...")` used without an active exception context. Should be `LOGGER.error()`.
-
----
-
-### Q10. Stale DTO field: `AgentProcess.last_seen`
-- [x] **Remove**
-- **File:** `src/inmanta/data/model.py:733`
-
-Column dropped in migration but field remains in DTO. Always `None`.
-
----
-
-### Q11. `_SessionClient` sets private attribute on `Result`
-- [x] **Fix**
-- **File:** `src/inmanta/protocol/websocket.py:150`
-
-`r._method_properties = method` — sets a private attribute from outside. `Result` should accept this via constructor or setter.
-
----
-
-### Q12. Incomplete log message
-- [x] **Fix**
-- **File:** `src/inmanta/protocol/websocket.py:275`
+#### D9. `Agent.to_dict()` always reports status as "down"
+- [ ] **Fix recommended**
+- **File:** `src/inmanta/data/__init__.py:~3484`
 
 ```python
-log_message=f"Call {call_spec.reply_id}: {call_spec.method} {call_spec.url} for timed out.",  # TODO
+def to_dict(self) -> JsonType:
+    base = BaseDocument.to_dict(self)
+    base["state"] = self.get_status().value  # has_active_session defaults to False
 ```
 
-Sentence fragment: "for timed out."
+`get_status()` is called without `has_active_session` argument, defaulting to `False`. Every call to `to_dict()` reports non-paused agents as "down". The v1 `list_agents` API uses `to_dict()` indirectly.
 
 ---
 
-## Migration Concerns
-
-### M1. Stale migration docstring
+#### D10. `_ws_client.close()` not awaited — incomplete shutdown
 - [ ] **Fix**
-- **File:** `src/inmanta/db/versions/v202502031.py:24`
+- **File:** `src/inmanta/protocol/websocket.py:723`
 
-Says "Rename some rps columns and values" — copy-pasted from another migration.
+```python
+if self._ws_client:
+    self._ws_client.close()  # returns a future that is not awaited
+```
+
+Tornado's `close()` returns a future. Not awaiting it means the WebSocket close handshake may not complete, leaving server-side resources in an ambiguous state.
 
 ---
 
-### M2. Old index names persist after table rename
+#### D11. `Agent.get_statuses` N+1 query problem
 - [ ] **Consider fixing**
-- **File:** `src/inmanta/db/versions/v202502031.py`
+- **File:** `src/inmanta/data/__init__.py:~3453-3465`
 
-After `ALTER TABLE agentprocess RENAME TO schedulersession`, indexes keep their `agentprocess_*` names. The SQLAlchemy model declares `schedulersession_*` names. These diverge on upgraded databases.
-
----
-
-### M3. Implicit FK constraint drop
-- [ ] **Consider explicit DROP CONSTRAINT**
-- **File:** `src/inmanta/db/versions/v202502031.py:27-34`
-
-`DROP COLUMN id_primary` implicitly drops the FK to `agentinstance`. An explicit `DROP CONSTRAINT agent_id_primary_fkey` before the column drop would be clearer.
+Performs 1 query for live sessions + N queries for N agent names. Should use a single `WHERE name IN (...)` query.
 
 ---
 
-## Remaining TODO Comments in Code
+#### D12. Wrong error message in `get_session` — says "Duplication" when session not found
+- [ ] **Fix**
+- **File:** `src/inmanta/protocol/rest/server.py:434-435`
 
-These TODOs indicate known incomplete work. Track or resolve before merge:
+```python
+raise KeyError("Duplication session")  # TODO: correct exception
+```
 
-| File                    | Line    | TODO                                       |
-| ----------------------- | ------- | ------------------------------------------ |
-| `websocket.py`          | 275     | Incomplete log message                     |
-| `websocket.py`          | 303     | Handle duplicate sessions                  |
-| `websocket.py`          | 328-329 | Implement RejectSession                    |
-| `websocket.py`          | 343     | Handle RPC_Call when session not active    |
-| `websocket.py`          | 349     | Handle RPC_Reply when session not active   |
-| `websocket.py`          | 423     | Verify error key format                    |
-| `rest/server.py`        | 338     | Add constant for `/v2/ws` URL              |
-| `rest/server.py`        | 434-435 | Correct exception type for missing session |
-| `data/__init__.py`      | 3391    | Bare TODO on cleanup()                     |
-| `data/__init__.py`      | 3469    | Fix get_status()                           |
-| `test_agent_manager.py` | 355-365 | Restore set_state assertions               |
+Error message says "Duplication" but condition is "not found". Exception type `KeyError` is inappropriate for API layer.
+
+---
+
+### MEDIUM
+
+#### D13. `_expire_session` silently drops cleanup during shutdown
+- [ ] **Acceptable risk — document**
+- **File:** `src/inmanta/server/agentmanager.py:521-526`
+
+If `is_stopping()` is true, queued expire actions are discarded. Sessions are cleaned from DB at next startup (`_expire_all_sessions_in_db`), but in-memory dictionaries can have stale entries during the shutdown window.
+
+---
+
+#### D14. `on_open_session` runs inline on server (blocks message loop) but as background on client
+- [ ] **Document / Consider**
+- **File:** `src/inmanta/protocol/websocket.py:316-318 vs 321-329`
+
+On the server side, a slow `on_open_session` blocks all message processing on that connection. On the client side, it runs as a background task. This asymmetry is intentional but could cause issues if `on_open_session` performs RPCs or DB queries.
+
+---
+
+#### D15. `match_call` rebuilds URL mapping on every WebSocket RPC message
+- [ ] **Performance improvement**
+- **File:** `src/inmanta/protocol/rest/__init__.py:698-713`
+
+`target.get_op_mapping()` rebuilds the mapping each call. Should be cached once at startup.
+
+---
+
+#### D16. `start_connected()` called before session is confirmed
+- [ ] **Document**
+- **File:** `src/inmanta/protocol/websocket.py:639`
+
+`start_connected()` runs after `session.open()` sends `OpenSession` but before `SessionOpened` is received. Session is not yet `active`. RPC calls in `start_connected()` would fail.
+
+---
+
+#### D17. Diamond inheritance in `SessionEndpoint` — double `TaskHandler.__init__`
+- [ ] **Investigate**
+- **File:** `src/inmanta/protocol/websocket.py:535-548`
+
+```python
+class SessionEndpoint(endpoints.Endpoint, common.CallTarget, WebsocketFrameDecoder, rest.AuthnzInterface):
+    def __init__(self, ...):
+        endpoints.Endpoint.__init__(self, name)       # calls TaskHandler.__init__
+        WebsocketFrameDecoder.__init__(self)           # calls TaskHandler.__init__ AGAIN
+```
+
+`TaskHandler.__init__` is called twice, resetting `_background_tasks`. If `Endpoint.__init__` adds tasks before `WebsocketFrameDecoder.__init__`, they are lost.
+
+---
+
+#### D18. Invalid type annotation for `_sessions` dict key
+- [ ] **Fix**
+- **File:** `src/inmanta/protocol/rest/server.py:304`
+
+```python
+self._sessions: dict[(uuid.UUID, str), websocket.Session] = {}
+```
+
+Should be `dict[tuple[uuid.UUID, str], websocket.Session]`.
+
+---
+
+#### D19. Mutable default argument in `RESTServer.start()`
+- [ ] **Fix**
+- **File:** `src/inmanta/protocol/rest/server.py:329`
+
+```python
+async def start(self, targets, additional_rules: list[routing.Rule] = []) -> None:
+```
+
+Classic Python anti-pattern. Should be `= None` with guard.
+
+---
+
+#### D20. Dead `on_pong_callback` — pong never tracked on client
+- [ ] **Consider**
+- **File:** `src/inmanta/protocol/websocket.py:623, 525-527`
+
+`on_pong_callback=None` is always passed. The `WebSocketClientConnection` class has pong handling code (lines 525-527) that is never triggered. If client-side liveness tracking was intended, this needs to be wired up.
+
+---
+
+### LOW
+
+#### D21. `_process_session_listener_actions` references potentially unbound variable
+- **File:** `src/inmanta/server/agentmanager.py:438`
+
+If `queue.get()` raises non-CancelledError, `session_action` is unbound in the `except` block → `UnboundLocalError` masks original exception.
+
+---
+
+#### D22. `get_agent_client` isinstance check contradicts type annotation
+- **File:** `src/inmanta/server/agentmanager.py:564`
+
+`tid: uuid.UUID` but code does `if isinstance(tid, str)`. Either fix callers or update annotation.
+
+---
+
+#### D23. Test bug: truthiness assertion instead of equality
+- [ ] **Fix**
+- **File:** `tests/protocol/test_2way_protocol.py:153`
+
+```python
+assert status.result["agents"][0]["status"], "ok"
+```
+
+This asserts truthiness, not equality. Should be `== "ok"`.
+
+---
+
+#### D24. Typo "tupple" in error message
+- **File:** `src/inmanta/protocol/rest/__init__.py:523`
+
+---
+
+## Security — S1 Still Open
+
+### S1. WebSocket endpoint authentication
+- [ ] **Verify / Fix**
+- **File:** `src/inmanta/protocol/websocket.py:569-573`
+
+No authentication occurs during WebSocket upgrade or `OPEN_SESSION`. No test validates that unauthenticated/expired-token WebSocket upgrades are rejected. This is the most important open item.
+
+---
+
+## Test Coverage Analysis (Round 2)
+
+### What IS well tested
+- Basic bidirectional RPC (test_ws_2way)
+- Ping timeout detection and auto-reconnect (test_ws_ping_timeout_closes_stale_connection)
+- Reconnection after connection failure (test_ws_reconnect_on_connection_failure)
+- Duplicate session rejection on same connection (test_ws_reject_duplicate_session_on_same_connection)
+- Client-side RejectSession handling (test_ws_client_handles_reject_session)
+- Concurrent RPCs (test_ws_concurrent_rpcs, 10 calls)
+- RPC on dead connection fails (test_ws_rpc_on_closed_session)
+- Server shutdown + agent reconnect (test_ws_server_shutdown_during_active_session)
+- Session eviction on duplicate (test_ws_duplicate_session_replaces_old)
+- SessionListener callback ordering
+- SchedulerSession CRUD and cleanup
+- AgentManager session registration/expiry
+
+### What is NOT tested (significant gaps)
+
+| Gap | Risk | Notes |
+|-----|------|-------|
+| WebSocket upgrade auth | **Critical** | No test for unauthenticated WS connection |
+| Malformed WS messages | High | No test for invalid JSON, wrong action types, wrong field types |
+| Agent crash with in-flight RPCs | High | Server-side future cleanup untested |
+| Concurrent register + expire for same env | High | Only sequential paths tested |
+| Server crash (SIGKILL) recovery | Medium | Only graceful shutdown tested |
+| DB failure during session expiry logging | Medium | Only creation failure tested |
+| Multiple environments interleaved | Medium | All multi-env tests are sequential |
+| Large-scale concurrent RPCs (100+) | Medium | Only 10 tested |
+| `on_disconnect` / `on_reconnect` interleaving | Medium | Related to D8 |
+| `stop()` during `_reconnect()` | Medium | Related to D7 |
+
+### MockSession fidelity issues
+The `MockSession` in `test_agent_manager.py` does not implement: `active` property, `session_key`, `close_session()`, `is_closed()`, `confirm_open()`, `get_typed_client()`, `close_connection()`. Tests using this mock may pass even when production code has bugs in these code paths.
+
+---
+
+## Remaining TODO Comments
+
+| File | Line | TODO | Status |
+|------|------|------|--------|
+| `websocket.py` | 292 | "log this" | Stale — already logging |
+| `websocket.py` | 345 | Handle RPC_Call when not active | Open |
+| `websocket.py` | 351 | Handle RPC_Reply when not active | Open |
+| `rest/server.py` | 338 | Add constant for `/v2/ws` | Open |
+| `rest/server.py` | 434 | Correct exception type | Open |
 
 ---
 
 ## Summary Priority Matrix
 
-| Priority         | Done                           | Todo             |
-| ---------------- | ------------------------------ | ---------------- |
-| **Must fix**     | C1, C2, C3, C4, C5, C6, C7, T1 | S1               |
-| **Should fix**   | S2, T2, T3, T4, T5, Q1, Q2, Q4 |                  |
-| **Nice to have** | T6, Q3, Q5, Q6, Q7, Q8, Q9, Q10, Q11, Q12 |                  |
-| **Migration**    |                                | M1, M2, M3       |
+| Priority | Items |
+|----------|-------|
+| **Critical** | S1 (auth), D1 (wrong assert), D2 (futures not cleaned), D3 (serialization mismatch) |
+| **High** | D4 (session leak on reconnect), D5 (close ordering), D6 (write failure hangs caller), D7 (stop/reconnect race), D8 (dual disconnect), D9 (to_dict always "down"), D10 (close not awaited), D11 (N+1 queries), D12 (wrong error message) |
+| **Medium** | D13-D20, N1 (docstring), N4 (stale diagram), N5 (stale class docstring) |
+| **Low** | D21-D24, N2 (busy-wait), N3 (heartbeat docstring), remaining TODOs |

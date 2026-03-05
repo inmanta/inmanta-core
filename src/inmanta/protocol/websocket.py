@@ -287,7 +287,6 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
         try:
             msg = self._message_parser.validate_json(message)
         except pydantic.ValidationError:
-            # TODO log this
             LOGGER.exception("Invalid message")
             return
 
@@ -348,13 +347,14 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
                 if self.active():
                     # A request from the client on the server
                     self.add_background_task(self._handle_call(msg))
-                # TODO: if not valid
+                else:
+                    LOGGER.warning("Received RPC_Call on inactive session, ignoring: %s", self)
 
             case RPC_Reply():
                 LOGGER.debug("Got a reply on %s with %s", self, msg)
                 # A reply to a request send by the server to the client
                 if not self.active():
-                    # TODO: if not valid
+                    LOGGER.warning("Received RPC_Reply on inactive session, ignoring: %s", self)
                     return
 
                 if msg.reply_id not in self._replies:
@@ -427,7 +427,7 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
                 return RPC_Reply(
                     reply_id=msg.reply_id,
                     code=500,
-                    result={"error": error},  # TODO verify if this is the correct key to report the error
+                    result={"message": error},
                 )
             return None
 
@@ -592,7 +592,7 @@ class SessionEndpoint(endpoints.Endpoint, common.CallTarget, WebsocketFrameDecod
         else:
             protocol = "ws"
 
-        return f"{protocol}://{host}:{port}/v2/ws"
+        return f"{protocol}://{host}:{port}{const.WS_URL_PATH}"
 
     @property
     def environment(self) -> uuid.UUID:
