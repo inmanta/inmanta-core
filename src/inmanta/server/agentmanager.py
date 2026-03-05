@@ -522,6 +522,9 @@ class AgentManager(ServerSlice, websocket.SessionListener):
         This method expires the given session and update the in-memory session state.
         The in-database session log is updated asynchronously. These database updates
         are allowed to fail when the database connection is lost.
+
+        During shutdown, this method returns early — in-memory state is discarded and
+        DB cleanup happens at next startup via _expire_all_sessions_in_db.
         """
         if not self.is_running() or self.is_stopping():
             return
@@ -562,8 +565,6 @@ class AgentManager(ServerSlice, websocket.SessionListener):
         return session
 
     def get_agent_client(self, tid: uuid.UUID) -> Optional[endpoints.Client]:
-        if isinstance(tid, str):
-            tid = uuid.UUID(tid)
         session = self.scheduler_for_env.get(tid)
         if session is None:
             return None

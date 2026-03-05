@@ -150,7 +150,7 @@ async def test_2way_protocol(inmanta_config, server_config, no_tid_check):
     assert status.code == 200
     assert "agents" in status.result
     assert len(status.result["agents"]) == 1
-    assert status.result["agents"][0]["status"], "ok"
+    assert status.result["agents"][0]["status"] == "ok"
     await server.stop()
 
     # test no reply

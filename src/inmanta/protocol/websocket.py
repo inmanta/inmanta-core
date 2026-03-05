@@ -391,7 +391,11 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
             await self.write_message(reply.model_dump_json())
 
     async def on_open_session(self, session: Session) -> None:
-        """Called when a new session is opened"""
+        """Called when a new session is opened.
+
+        Note: On the server side (WebsocketHandler) this runs inline, blocking the message loop.
+        On the client side (SessionEndpoint) it runs as a background task via on_message.
+        """
 
     async def on_close_session(self, session: Session) -> None:
         """Called when a session is closed"""
@@ -513,25 +517,19 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
 
 
 class WebSocketClientConnection(websocket.WebSocketClientConnection):
-    """A websocket connection with on_ping and on_pong handlers that we use to register session liveness"""
+    """A websocket connection with a disconnect callback for session liveness tracking."""
 
     def __init__(
         self,
-        on_pong_callback: Optional[Callable[[], ...]] = None,
         on_connection_close_callback: Optional[Callable[[], ...]] = None,
         **kwargs: object,
     ) -> None:
         super().__init__(**kwargs)
-        self._on_pong_cb = on_pong_callback
         self._on_connection_close_callback = on_connection_close_callback
 
     @property
     def closed(self) -> bool:
         return self.protocol is None
-
-    def on_pong(self, data: bytes) -> None:
-        if self._on_pong_cb:
-            self._on_pong_cb()
 
     def on_connection_close(self) -> None:
         super().on_connection_close()
@@ -607,8 +605,9 @@ class SessionEndpoint(endpoints.Endpoint, common.CallTarget, WebsocketFrameDecod
         return self._env_id
 
     async def start_connected(self) -> None:
-        """
-        This method is called after starting the client transport, but before establishing the websocket connection.
+        """Called after sending OpenSession but before receiving SessionOpened confirmation.
+
+        The websocket connection is established but the session is not yet confirmed active.
         """
 
     async def start(self) -> None:
@@ -643,7 +642,6 @@ class SessionEndpoint(endpoints.Endpoint, common.CallTarget, WebsocketFrameDecod
                 request=httpclient.HTTPRequest(self.get_websocket_url(), connect_timeout=1),
                 ping_interval=ws_ping_interval,
                 ping_timeout=ws_ping_timeout,
-                on_pong_callback=None,
                 on_connection_close_callback=self._on_disconnect,
             )
 
@@ -661,6 +659,11 @@ class SessionEndpoint(endpoints.Endpoint, common.CallTarget, WebsocketFrameDecod
             self.add_background_task(self.on_disconnect())
 
     async def stop(self) -> None:
+        """Stop the endpoint.
+
+        Ordering: super().stop() cancels all background tasks (including _process_messages and any
+        in-progress _reconnect), then close_connection() cleanly shuts down the session and websocket.
+        """
         LOGGER.info("Stopping session endpoint %s in environment %s", self.name, self.environment)
         await self._sched.stop()
         await super().stop()

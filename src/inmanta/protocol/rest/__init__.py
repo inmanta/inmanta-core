@@ -520,7 +520,7 @@ class CallArguments:
 
             else:
                 raise exceptions.ServerError(
-                    f"Method {self._config.method_name} returned an invalid result {result} instead of a status code or tupple"
+                    f"Method {self._config.method_name} returned an invalid result {result} instead of a status code or tuple"
                 )
 
             if body is not None:

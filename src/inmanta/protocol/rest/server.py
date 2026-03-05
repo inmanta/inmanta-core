@@ -301,7 +301,7 @@ class RESTServer(RESTBase, AuthnzInterface):
         self._authorization_provider = providers.AuthorizationProvider.create_from_config() if self.is_auth_enabled() else None
 
         # Session handling
-        self._sessions: dict[(uuid.UUID, str), websocket.Session] = {}
+        self._sessions: dict[tuple[uuid.UUID, str], websocket.Session] = {}
         self.listeners: list[websocket.SessionListener] = []
 
     def start_request(self) -> None:
@@ -326,10 +326,14 @@ class RESTServer(RESTBase, AuthnzInterface):
                     handler_config[op] = cfg
         return global_url_map
 
-    async def start(self, targets: Sequence[common.CallTarget], additional_rules: list[routing.Rule] = []) -> None:
+    async def start(
+        self, targets: Sequence[common.CallTarget], additional_rules: Optional[Sequence[routing.Rule]] = None
+    ) -> None:
         """
         Start the server on the current ioloop
         """
+        if additional_rules is None:
+            additional_rules = []
         if self._authorization_provider:
             await self._authorization_provider.start()
 
