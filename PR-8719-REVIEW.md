@@ -477,7 +477,7 @@ Note: `close_connection` sends CloseSession, calls `close_session()` (setting `_
 ### MEDIUM
 
 #### E4. Stale ASCII diagram and class docstring in agentmanager.py
-- [ ] **Cleanup**
+- [x] **Fixed** — updated diagram and docstring to reflect current model (no more agent instances)
 - **File:** `src/inmanta/server/agentmanager.py:72-99, 127-137`
 
 The ASCII diagram still references "AGENT INSTANCE" and the old model. The class docstring still mentions "primary agent instance" and "agent instance process". These concepts were removed by this PR.
@@ -485,7 +485,7 @@ The ASCII diagram still references "AGENT INSTANCE" and the old model. The class
 ---
 
 #### E5. `_on_disconnect` fires `on_disconnect()` even when session hasn't been cleaned up yet
-- [ ] **Investigate**
+- [x] **Documented** — intentional ordering: on_disconnect fires promptly to stop work, session cleanup happens later in _reconnect
 - **File:** `src/inmanta/protocol/websocket.py:669-671`
 
 When the connection drops, `_on_disconnect` schedules `on_disconnect()` as a background task. But at this point, `close_session()` hasn't been called yet (it happens later in `_reconnect`). This means `Agent.on_disconnect()` → `stop_working()` fires while the session is still technically active. The `_process_messages` loop then sleeps for `reconnect_delay` before calling `_reconnect()` → `close_session()`. During this window, the agent has stopped working but the session is still registered on the server.
@@ -495,7 +495,7 @@ When the connection drops, `_on_disconnect` schedules `on_disconnect()` as a bac
 ### LOW
 
 #### E6. `close_connection` sends CloseSession even when session is already closed
-- [ ] **Minor**
+- [x] **Fixed** — guard write with session state check
 - **File:** `src/inmanta/protocol/websocket.py:420-426`
 
 ```python
@@ -942,5 +942,5 @@ async def test_ws_rapid_reconnect_cycles(inmanta_config, server_config) -> None:
 | ------------ | ----------------------------------------- | ------------------------------------------ |
 | **Critical** | D1, D2, D3, E1                            | S1 (auth)                                  |
 | **High**     | D4, D5, D6, D7, D8, D9, D10, D11, D12, E2, E3 |         |
-| **Medium**   | D13, D14, D15, D16, D17, D18, D19, D20    | E4 (stale docs), E5 (on_disconnect timing) |
-| **Low**      | D21, D22, D23, D24                        | E6 (CloseSession on closed session)        |
+| **Medium**   | D13, D14, D15, D16, D17, D18, D19, D20, E4, E5 |           |
+| **Low**      | D21, D22, D23, D24, E6                    |           |

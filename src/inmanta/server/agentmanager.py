@@ -74,28 +74,26 @@ Model in server         On Agent
 
 +---------------+        +----------+
 |               |        |          |
-|  ENVIRONMENT  |   +---->  PROC    |
-|               |   |    |          |
-+------+--------+   |    +----+-----+
-       |            |         |
-       |            |         |
-+------v--------+   |    +----v-------------+
-|               |   |    |                  |
-|  AGENT        |   |    |   AGENT INSTANCE |
-|               |   |    |                  |
-+------+--------+   |    +------------------+
+|  ENVIRONMENT  |   +---->  AGENT   |
+|               |   |    |  PROCESS |
++------+--------+   |    +----------+
+       |            |
+       |            |
++------v--------+   |
+|               |   |
+|  AGENT        |   |
+|               |   |
++------+--------+   |
        |            |
        |            |
 +------v--------+   |
 |               |   |
 |  SESSION      +---+
-|               |
+|  (WebSocket)  |
 +---------------+
 
-
-dryrun_update
-
-set_parameters
+Each environment has one or more logical agents. Each agent has at most one
+active session (WebSocket connection) to the agent process at any time.
 """
 
 
@@ -126,14 +124,12 @@ AUTO_STARTED_AGENT_WAIT_LOG_INTERVAL = 1
 class AgentManager(ServerSlice, websocket.SessionListener):
     """
     This class contains all server functionality related to the management of agents.
-    Each logical agent managed by an instance of this class has at most one primary agent instance process associated with
-    it. A subset of these processes are autostarted, those are managed by :py:class:`AutostartedAgentManager`.
-    The server ignores all requests from non-primary agent instances. Therefore an agent without a primary is effectively
-    paused as far as the server is concerned, though any rogue agent instances could still perform actions agent-side.
 
-    Throughout this class the terms "logical agent" or sometimes just "agent" refer to a logical agent managed by an
-    instance of this class. The terms "agent instance", "agent process" or just "process" refer to a concrete process
-    running an agent instance, which might be the primary for a logical agent.
+    Each logical agent is identified by a name within an environment. An agent connects to the server
+    via a WebSocket session. At most one active session exists per agent at any time; when an agent
+    reconnects, the old session is evicted and replaced.
+
+    A subset of agents are autostarted by the server, managed by :py:class:`AutostartedAgentManager`.
     """
 
     def __init__(self, closesessionsonstart: bool = True, fact_back_off: Optional[int] = None) -> None:

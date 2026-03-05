@@ -419,10 +419,11 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
 
     async def close_connection(self) -> None:
         """Close the connection that belongs to this session and the session itself"""
-        try:
-            await self.write_message(CloseSession().model_dump_json())
-        except Exception:
-            LOGGER.debug("Failed to send CloseSession message, connection may already be closed.")
+        if self._session is not None and not self._session.is_closed():
+            try:
+                await self.write_message(CloseSession().model_dump_json())
+            except Exception:
+                LOGGER.debug("Failed to send CloseSession message, connection may already be closed.")
         await self.close_session()
 
     async def dispatch_method(self, msg: RPC_Call) -> Optional[RPC_Reply]:
@@ -667,6 +668,9 @@ class SessionEndpoint(endpoints.Endpoint, common.CallTarget, WebsocketFrameDecod
             self._reconnecting = False
 
     def _on_disconnect(self) -> None:
+        # This fires before close_session() (which happens later in _reconnect). This is intentional:
+        # on_disconnect should stop the agent's scheduler promptly rather than waiting for
+        # reconnect_delay seconds. The session cleanup happens when _reconnect calls close_session().
         if self.is_running() and not self._reconnecting:
             self.add_background_task(self.on_disconnect())
 
