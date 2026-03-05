@@ -540,7 +540,7 @@ class Session:
         self._seen = time.monotonic()
         self.endpoint_names = endpoint_names
 
-    async def _handle_timeout(self, future: asyncio.Future, timeout: int, log_message: str) -> None:
+    async def _handle_timeout(self, reply_id: uuid.UUID, future: asyncio.Future, timeout: int, log_message: str) -> None:
         """A function that awaits a future until its value is ready or until timeout. When the call times out, a message is
         logged. The future itself will be cancelled.
 
@@ -550,6 +550,7 @@ class Session:
         try:
             await asyncio.wait_for(future, timeout)
         except asyncio.TimeoutError:
+            self._replies.pop(reply_id, None)
             LOGGER.warning(log_message)
 
     def put_call(self, call_spec: common.Request, timeout: int = 10, expect_reply: bool = True) -> asyncio.Future:
@@ -562,6 +563,7 @@ class Session:
             call_spec.reply_id = reply_id
             self._sessionstore.add_background_task(
                 self._handle_timeout(
+                    reply_id,
                     future,
                     timeout,
                     f"Call {reply_id}: {call_spec.method} {call_spec.url} for agent {self._sid} timed out.",
