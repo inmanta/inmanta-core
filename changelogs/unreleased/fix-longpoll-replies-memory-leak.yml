@@ -1,0 +1,7 @@
+description: >
+  Fix memory leak in the longpoll return channel where timed-out futures were not removed from
+  the _replies dict of a Session. On timeout, _handle_timeout now cleans up the stale entry.
+change-type: patch
+destination-branches: [master, iso9, iso8, iso7]
+sections:
+  bugfix: "Fix memory leak in longpoll session where timed-out call futures were never removed from the _replies dict."

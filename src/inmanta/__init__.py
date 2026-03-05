@@ -19,7 +19,7 @@ Contact: code@inmanta.com
 OPA_VERSION = "1.3.0"
 # This version is managed by bumpversion. Should you ever update it manually, make sure to consistently update it everywhere
 # (See the bumpversion.cfg file for relevant locations).
-__version__ = "18.0.1"
+__version__ = "18.1.0"
 
 RUNNING_TESTS = False
 """
