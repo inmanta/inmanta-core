@@ -402,7 +402,7 @@ class Environment:
 
 @strawberry.input
 class EnvironmentFilter(StrawberryFilter):
-    id: typing.Optional[str] = strawberry.UNSET
+    id: typing.Optional[uuid.UUID] = strawberry.UNSET
 
 
 @strawberry.input

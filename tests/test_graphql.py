@@ -220,7 +220,7 @@ async def test_query_environment_settings(server, client, setup_database):
     )
     assert result.code == 200
     query = """
-    query GetEnvironments($environment: String) {
+    query GetEnvironments($environment: UUID!) {
         environments(filter: { id: $environment }) {
             edges {
                 node {
@@ -900,7 +900,7 @@ async def test_graphql_variables(server, client, setup_database):
     """
     env_id = "11111111-1234-5678-1234-000000000001"
     query = """
-    query GetEnvironments($environment: String!) {
+    query GetEnvironments($environment: UUID!) {
         environments(filter: { id: $environment }) {
             edges {
                 node {
@@ -920,11 +920,11 @@ async def test_graphql_variables(server, client, setup_database):
     assert result.code == 200
     assert result.result["data"]["data"] is None
     assert len(result.result["data"]["errors"]) == 1
-    assert result.result["data"]["errors"][0] == "Variable '$environment' of required type 'String!' was not provided."
+    assert result.result["data"]["errors"][0] == "Variable '$environment' of required type 'UUID!' was not provided."
 
     # $environment is now optional
     query = """
-    query GetEnvironments($environment: String) {
+    query GetEnvironments($environment: UUID) {
         environments(filter: { id: $environment }) {
             edges {
                 node {
@@ -941,3 +941,24 @@ async def test_graphql_variables(server, client, setup_database):
     assert result.result["data"]["data"] is None
     assert len(result.result["data"]["errors"]) == 1
     assert result.result["data"]["errors"][0] == "Filter id was requested but no value was provided"
+
+    # Test with multiple variables
+    query = """
+    query GetNotifications($environment: UUID!, $cleared: Boolean!){
+            notifications (filter: {environment: $environment, cleared: $cleared}) {
+                edges {
+                    node {
+                        id
+                        environment
+                        cleared
+                    }
+                }
+            }
+        }
+    """
+    result = await client.graphql(query=query, variables={"environment": env_id, "cleared": False})
+    check_correct_graphql_response(result)
+    notifications = result.result["data"]["data"]["notifications"]["edges"]
+    for notification in notifications:
+        assert notification["node"]["environment"] == env_id
+        assert notification["node"]["cleared"] is False
