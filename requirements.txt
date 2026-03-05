@@ -6,7 +6,7 @@ bumpversion==0.6.0
 click==8.3.1
 click-plugins==1.1.1.2
 colorlog==6.10.1
-cookiecutter==2.7.0
+cookiecutter==2.7.1
 crontab==1.0.5
 cryptography==46.0.5
 docstring-parser==0.17.0
