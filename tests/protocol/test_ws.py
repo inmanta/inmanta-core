@@ -59,6 +59,22 @@ class WSAgent(SessionEndpoint):
         return "agent status"
 
 
+class TrackingWSAgent(WSAgent):
+    """WSAgent that records lifecycle events in order for testing."""
+
+    def __init__(self, name: str, timeout: int = 120, reconnect_delay: int = 5) -> None:
+        super().__init__(name, timeout, reconnect_delay)
+        self.events: list[str] = []
+
+    async def on_reconnect(self) -> None:
+        self.events.append("reconnect")
+        await super().on_reconnect()
+
+    async def on_disconnect(self) -> None:
+        self.events.append("disconnect")
+        await super().on_disconnect()
+
+
 async def test_ws_2way(inmanta_config, server_config) -> None:
     """Test websocket 2-way communication"""
     rs = Server()
@@ -497,6 +513,112 @@ async def test_ws_duplicate_session_replaces_old(inmanta_config, server_config) 
 
         # The server should have exactly one session entry for this agent
         assert len(rs._transport._sessions) == 1
+    finally:
+        await rs.stop()
+        await agent.stop()
+
+
+async def test_ws_old_session_closed_on_reconnect(inmanta_config, server_config) -> None:
+    """Test that when the agent reconnects, the old session is properly closed
+    and on_disconnect/on_reconnect don't interleave."""
+    rs = Server()
+    server = WSServer()
+    rs.add_slice(server)
+    await rs.start()
+
+    agent = TrackingWSAgent("agent", reconnect_delay=1)
+    await agent.start()
+
+    try:
+
+        async def wait_for_active() -> None:
+            while not agent.session or not agent.session.active:
+                await asyncio.sleep(0.1)
+
+        await asyncio.wait_for(wait_for_active(), timeout=10)
+
+        old_session = agent.session
+        assert old_session is not None
+        assert not old_session.is_closed()
+
+        # Also inject a pending future to verify it gets cleaned up (D2 interaction with D4)
+        pending_future: asyncio.Future[websocket.common.Result] = asyncio.Future()
+        agent._replies[uuid.uuid4()] = pending_future
+
+        agent.events.clear()
+
+        # Force-close the TCP stream to trigger reconnection
+        assert agent._ws_client is not None
+        agent._ws_client.protocol.stream.close()
+
+        # Wait for reconnection
+        async def wait_for_new_session() -> None:
+            while True:
+                if agent.session and agent.session.active and agent.session is not old_session:
+                    return
+                await asyncio.sleep(0.1)
+
+        await asyncio.wait_for(wait_for_new_session(), timeout=30)
+
+        # The old session should be closed
+        assert old_session.is_closed(), "Old session was not closed during reconnect"
+
+        # The pending future should have been resolved (not left hanging)
+        assert pending_future.done(), "Pending future was not resolved when old session closed"
+        assert pending_future.result().code == 503
+
+        # on_disconnect should not have fired during reconnection (D8: no interleaving)
+        # We expect: reconnect (from on_open_session). No disconnect during the reconnect window.
+        # Allow for a disconnect event from the Tornado callback, but it must come before reconnect.
+        for i, event in enumerate(agent.events):
+            if event == "disconnect":
+                # Any disconnect must precede the reconnect, not interleave
+                remaining = agent.events[i + 1 :]
+                assert (
+                    "disconnect" not in remaining
+                ), f"Multiple disconnect events detected, possible interleaving: {agent.events}"
+    finally:
+        await rs.stop()
+        await agent.stop()
+
+
+async def test_ws_close_connection_notifies_remote_before_local_teardown(inmanta_config, server_config) -> None:
+    """Test that close_connection sends CloseSession to the remote before closing the local session,
+    so the remote can clean up while the session is still logically open."""
+    rs = Server()
+    server = WSServer()
+    rs.add_slice(server)
+    await rs.start()
+
+    agent = WSAgent("agent", reconnect_delay=60)
+    await agent.start()
+
+    try:
+
+        async def wait_for_active() -> None:
+            while not agent.session or not agent.session.active:
+                await asyncio.sleep(0.1)
+
+        await asyncio.wait_for(wait_for_active(), timeout=10)
+
+        # Track the order: was CloseSession sent while the session was still open?
+        session_open_when_close_sent: list[bool] = []
+        original_write = agent.write_message
+
+        async def tracking_write(message: str | bytes, binary: bool = False) -> None:
+            if isinstance(message, str) and "CLOSE_SESSION" in message:
+                session_open_when_close_sent.append(not agent.session.is_closed())
+            await original_write(message, binary)
+
+        agent.write_message = tracking_write  # type: ignore[assignment]
+
+        await agent.close_connection()
+
+        assert len(session_open_when_close_sent) == 1, "CloseSession should have been sent exactly once"
+        assert session_open_when_close_sent[0], "CloseSession should be sent before local session is closed"
+
+        # Local session should be closed after close_connection completes
+        assert agent.session.is_closed()
     finally:
         await rs.stop()
         await agent.stop()

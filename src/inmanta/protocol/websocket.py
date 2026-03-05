@@ -366,7 +366,7 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
                 if not future.done():
                     future.set_result(common.Result(code=msg.code, result=msg.result))
 
-    async def close_session(self):
+    async def close_session(self) -> None:
         """Close the session linked with the decoder. Call this method when the connection closes."""
         if self._session is None or self._session.is_closed():
             return
@@ -406,8 +406,8 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
 
     async def close_connection(self) -> None:
         """Close the connection that belongs to this session and the session itself"""
-        await self.close_session()
         await self.write_message(CloseSession().model_dump_json())
+        await self.close_session()
 
     async def dispatch_method(self, msg: RPC_Call) -> Optional[RPC_Reply]:
         """Dispatch a request from the server into the RPC code so the requests gets executed. The call result is sent back
@@ -565,6 +565,7 @@ class SessionEndpoint(endpoints.Endpoint, common.CallTarget, WebsocketFrameDecod
         self.add_call_target(self)
 
         self._ws_client: Optional[WebSocketClientConnection] = None
+        self._reconnecting: bool = False
         self.set_call_targets(self.call_targets)
         self.set_authnz_context(self)
 
@@ -629,24 +630,34 @@ class SessionEndpoint(endpoints.Endpoint, common.CallTarget, WebsocketFrameDecod
                 f"client.ws-ping-timeout ({ws_ping_timeout}) must not exceed " f"client.ws-ping-interval ({ws_ping_interval})"
             )
 
-        LOGGER.info("Creating websocket connection from server for %s in environment %s", self.name, self.environment)
-        conn = WebSocketClientConnection(
-            request=httpclient.HTTPRequest(self.get_websocket_url(), connect_timeout=1),
-            ping_interval=ws_ping_interval,
-            ping_timeout=ws_ping_timeout,
-            on_pong_callback=None,
-            on_connection_close_callback=self._on_disconnect,
-        )
+        # Clean up old session and connection before creating new ones
+        self._reconnecting = True
+        try:
+            if self._session is not None and not self._session.is_closed():
+                await self.close_session()
+            if self._ws_client is not None and not self._ws_client.closed:
+                self._ws_client.close()
 
-        self._ws_client = await conn.connect_future
-        # Create a fresh session for each connection attempt. This ensures a clean state after
-        # rejection or disconnection (where the old session may be closed).
-        self.create_session(environment_id=self.environment, session_name=self.name)
-        await self.session.open()
-        await self.start_connected()
+            LOGGER.info("Creating websocket connection from server for %s in environment %s", self.name, self.environment)
+            conn = WebSocketClientConnection(
+                request=httpclient.HTTPRequest(self.get_websocket_url(), connect_timeout=1),
+                ping_interval=ws_ping_interval,
+                ping_timeout=ws_ping_timeout,
+                on_pong_callback=None,
+                on_connection_close_callback=self._on_disconnect,
+            )
+
+            self._ws_client = await conn.connect_future
+            # Create a fresh session for each connection attempt. This ensures a clean state after
+            # rejection or disconnection (where the old session may be closed).
+            self.create_session(environment_id=self.environment, session_name=self.name)
+            await self.session.open()
+            await self.start_connected()
+        finally:
+            self._reconnecting = False
 
     def _on_disconnect(self) -> None:
-        if self.is_running():
+        if self.is_running() and not self._reconnecting:
             self.add_background_task(self.on_disconnect())
 
     async def stop(self) -> None:
