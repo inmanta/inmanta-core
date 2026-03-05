@@ -509,9 +509,6 @@ class AgentManager(ServerSlice, websocket.SessionListener):
         """
         Note: This method call is allowed to fail when the database connection is lost.
         """
-        # Clean up expired sessions for this environment before registering the new one.
-        # There is only one agent per environment, so expired sessions are stale.
-        await data.SchedulerSession.clean_up_expired_for_env(session.environment)
         await data.SchedulerSession.register(session.environment, session.hostname, session.id, now)
 
     # Session expiry
