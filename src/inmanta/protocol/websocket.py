@@ -388,7 +388,7 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
 
         reply = await self.dispatch_method(msg)
         if reply is not None:
-            await self.write_message(common.json_encode(reply))
+            await self.write_message(reply.model_dump_json())
 
     async def on_open_session(self, session: Session) -> None:
         """Called when a new session is opened"""
