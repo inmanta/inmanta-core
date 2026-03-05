@@ -6168,6 +6168,10 @@ class Resource(BaseDocument):
             FROM resource_persistent_state
             WHERE environment=$1 AND NOT is_orphan
             GROUP BY is_deploying, blocked, last_handler_run, compliance
+        ),
+        total AS (
+            SELECT SUM(row_count) AS total_count
+            FROM grouped_metrics
         )
 
         -- Query to calculate total_count
@@ -6175,7 +6179,7 @@ class Resource(BaseDocument):
             metric,
             value,
             count,
-            SUM(count) OVER () AS total_count
+            total_count
         FROM (
             -- Calculate each value
             SELECT
@@ -6208,7 +6212,7 @@ class Resource(BaseDocument):
                     SUM(row_count) AS count
             FROM grouped_metrics
             GROUP BY compliance
-        )
+        ) CROSS JOIN total;
         """
 
         raw_results = await cls._fetch_query(query, cls._get_value(environment))
