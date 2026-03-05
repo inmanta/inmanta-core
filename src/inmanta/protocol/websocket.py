@@ -703,8 +703,7 @@ class SessionEndpoint(endpoints.Endpoint, common.CallTarget, WebsocketFrameDecod
 
     async def write_message(self, message: str | bytes, binary: bool = False) -> None:
         if self._ws_client is None or self._ws_client.closed:
-            LOGGER.warning("Tried writing into a closed websocket.")
-            return
+            raise ConnectionError("WebSocket is closed")
         await self._ws_client.write_message(message, binary)
 
     async def _process_messages(self) -> None:

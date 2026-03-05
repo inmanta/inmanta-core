@@ -255,10 +255,7 @@ class WebsocketHandler(tornado_websocket.WebSocketHandler, websocket.WebsocketFr
         await websocket.WebsocketFrameDecoder.on_message(self, message)
 
     async def write_message(self, message: str | bytes, binary: bool = False) -> None:
-        try:
-            await tornado_websocket.WebSocketHandler.write_message(self, message, binary)
-        except tornado_websocket.WebSocketClosedError:
-            LOGGER.warning("Tried writing into a closed websocket.")
+        await tornado_websocket.WebSocketHandler.write_message(self, message, binary)
 
     async def on_open_session(self, session: websocket.Session) -> None:
         await self._server.register_session(session)
@@ -425,10 +422,14 @@ class RESTServer(RESTBase, AuthnzInterface):
         """Register a session with the server"""
         if session.session_key in self._sessions:
             old_session = self._sessions[session.session_key]
-            # The old session's connection was already closed (or is being closed),
-            # but the async cleanup hasn't completed yet. Clean it up now before
-            # registering the new session.
-            await self.notify_close_session(old_session)
+            # Close the old session before registering the new one. This marks it as closed
+            # so that when the old handler's deferred on_close eventually fires,
+            # WebsocketFrameDecoder.close_session() returns early (is_closed() is True)
+            # and doesn't accidentally remove the new session from the registry.
+            old_session.close_session()
+            del self._sessions[session.session_key]
+            for listener in self.listeners:
+                await listener.session_closed(old_session)
 
         self._sessions[session.session_key] = session
 
@@ -436,7 +437,9 @@ class RESTServer(RESTBase, AuthnzInterface):
             await listener.session_opened(session)
 
     async def notify_close_session(self, session: websocket.Session) -> None:
-        if session.session_key not in self._sessions:
+        # Check identity, not just key existence: a new session with the same key
+        # may have been registered after this session was evicted.
+        if self._sessions.get(session.session_key) is not session:
             return
 
         del self._sessions[session.session_key]

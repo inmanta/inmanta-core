@@ -4,7 +4,7 @@
 **Branch:** `websocket-refactor` → `master`
 **Author:** Bart Vanbrabant (+ Claude co-authored commits)
 **Reviewed:** 2026-03-04
-**Updated:** 2026-03-04 (round 2 deep review after rebase)
+**Updated:** 2026-03-05 (round 3 protocol & server-client interaction review)
 **Diff:** +1,722 / -2,328 lines across 46 files
 
 > **To resume working on these items with Claude Code:**
@@ -379,11 +379,568 @@ The `MockSession` in `test_agent_manager.py` does not implement: `active` proper
 
 ---
 
+## Round 3 — Protocol & Server-Client Interaction Review
+
+**Updated:** 2026-03-05
+
+Focus: protocol correctness, race conditions in session lifecycle, edge cases in RPC delivery, targeted tests to break the implementation.
+
+### CRITICAL
+
+#### E1. `notify_close_session` can delete the wrong session — active session dropped from registry
+- [x] **Fixed** — identity check (`is not session`) instead of key existence in `notify_close_session`
+- **File:** `src/inmanta/protocol/rest/server.py:438-445`
+- **Test:** `tests/protocol/test_ws_round3.py::test_ws_notify_close_session_identity_check`
+
+`notify_close_session` checks `session.session_key not in self._sessions` but does **not** verify that the session currently in the dict is the *same* session being closed. When a new session B replaces old session A (same agent reconnecting), the old connection's deferred `on_close` callback can delete the new session:
+
+1. Agent connects → H1 creates session A, registered with key `(env, "agent")`
+2. Agent reconnects → H2 creates session B with same key
+3. `register_session(B)` evicts A via `notify_close_session(A)` — deletes dict entry, notifies listeners, registers B
+4. H1's WebSocket eventually closes (ping timeout) → `on_close()` → `close_session()`
+5. `A.is_closed()` is **False** — nobody called `A.close_session()`, only `notify_close_session` (which is a listener notification, not session state change)
+6. `close_session()` proceeds → calls `on_close_session(A)` → `notify_close_session(A)`
+7. `A.session_key in self._sessions` → **True** (because B has the same key!)
+8. **Deletes B from the dict!** Notifies listeners that A closed → cascading damage to `AgentManager` (removes `scheduler_for_env[env]` which now points to B)
+
+After this, the server has no session for this agent. All RPC calls to the agent fail. The agent doesn't know its session was dropped.
+
+**Fix:** Check identity, not just key existence:
+```python
+async def notify_close_session(self, session: websocket.Session) -> None:
+    if self._sessions.get(session.session_key) is not session:
+        return
+    del self._sessions[session.session_key]
+    for listener in self.listeners:
+        await listener.session_closed(session)
+```
+
+**Cascade impact:** Without this fix, `test_ws_rapid_reconnect_cycles` and `test_ws_duplicate_session_replaces_old` can intermittently fail depending on timing of the old handler's `on_close`.
+
+---
+
+### HIGH
+
+#### E2. `write_message` silently drops messages when WS is closed — RPC futures hang
+- [x] **Fixed** — `SessionEndpoint.write_message` raises `ConnectionError`, `WebsocketHandler.write_message` lets `WebSocketClosedError` propagate; `_send_rpc_call` catches both and resolves future with 503
+- **File:** `src/inmanta/protocol/websocket.py:704-708` (client) and `src/inmanta/protocol/rest/server.py:257-261` (server)
+- **Test:** `tests/protocol/test_ws_round3.py::test_ws_write_message_silent_drop_rpc_hangs`
+
+Both `SessionEndpoint.write_message` and `WebsocketHandler.write_message` silently return when the WebSocket is closed (one checks `self._ws_client.closed`, the other catches `WebSocketClosedError`). The `_send_rpc_call` helper resolves the future only on exception, so a silent return leaves the future pending until `handle_timeout` fires (30-120 seconds later).
+
+The existing D6 fix (`_send_rpc_call`) correctly catches exceptions from `write_message`, but both implementations swallow the error before it can propagate.
+
+**Fix:** Either:
+1. Make `write_message` raise on failure (all callers already handle exceptions), or
+2. Have `_send_rpc_call` check a return value/flag from `write_message`
+
+Option 1 is cleaner:
+```python
+# SessionEndpoint.write_message
+async def write_message(self, message: str | bytes, binary: bool = False) -> None:
+    if self._ws_client is None or self._ws_client.closed:
+        raise ConnectionError("WebSocket is closed")
+    await self._ws_client.write_message(message, binary)
+
+# WebsocketHandler.write_message
+async def write_message(self, message: str | bytes, binary: bool = False) -> None:
+    await tornado_websocket.WebSocketHandler.write_message(self, message, binary)
+    # Let WebSocketClosedError propagate — callers handle it
+```
+
+---
+
+#### E3. `register_session` doesn't close evicted session's connection — stale handler lingers
+- [x] **Fixed** — `register_session` now calls `old_session.close_session()` before evicting, preventing deferred on_close from causing damage
+- **File:** `src/inmanta/protocol/rest/server.py:424-436`
+
+When `register_session(B)` evicts old session A, it only calls `notify_close_session(A)` (listener notification). It does **not** close A's WebSocket connection or call `A.close_session()`. This means:
+- H1 (old WebSocket handler) remains alive, still receiving messages
+- Session A's `_closed` flag remains False
+- When H1's connection eventually closes, its `close_session()` runs and triggers E1
+
+**Fix:** Close the old session's connection before registering the new one:
+```python
+async def register_session(self, session: websocket.Session) -> None:
+    if session.session_key in self._sessions:
+        old_session = self._sessions[session.session_key]
+        await old_session.close_connection()  # This closes the WS and marks session as closed
+    self._sessions[session.session_key] = session
+    for listener in self.listeners:
+        await listener.session_opened(session)
+```
+
+Note: `close_connection` sends CloseSession, calls `close_session()` (setting `_closed=True`), and then `on_close_session` fires which calls `notify_close_session`. This correctly cleans up and prevents E1.
+
+---
+
+### MEDIUM
+
+#### E4. Stale ASCII diagram and class docstring in agentmanager.py
+- [ ] **Cleanup**
+- **File:** `src/inmanta/server/agentmanager.py:72-99, 127-137`
+
+The ASCII diagram still references "AGENT INSTANCE" and the old model. The class docstring still mentions "primary agent instance" and "agent instance process". These concepts were removed by this PR.
+
+---
+
+#### E5. `_on_disconnect` fires `on_disconnect()` even when session hasn't been cleaned up yet
+- [ ] **Investigate**
+- **File:** `src/inmanta/protocol/websocket.py:669-671`
+
+When the connection drops, `_on_disconnect` schedules `on_disconnect()` as a background task. But at this point, `close_session()` hasn't been called yet (it happens later in `_reconnect`). This means `Agent.on_disconnect()` → `stop_working()` fires while the session is still technically active. The `_process_messages` loop then sleeps for `reconnect_delay` before calling `_reconnect()` → `close_session()`. During this window, the agent has stopped working but the session is still registered on the server.
+
+---
+
+### LOW
+
+#### E6. `close_connection` sends CloseSession even when session is already closed
+- [ ] **Minor**
+- **File:** `src/inmanta/protocol/websocket.py:420-426`
+
+```python
+async def close_connection(self) -> None:
+    try:
+        await self.write_message(CloseSession().model_dump_json())
+    except Exception:
+        ...
+    await self.close_session()
+```
+
+If `close_session()` was already called (session `_closed=True`), `close_connection` still tries to send CloseSession. The `close_session()` call then returns early (line 380). This is mostly harmless but wastes a write on a message that will confuse the remote if the session is already closed.
+
+---
+
+## Round 3 Tests
+
+Created: `tests/protocol/test_ws_round3.py`
+
+| Test                                          | Target                                                               | Status                                  |
+| --------------------------------------------- | -------------------------------------------------------------------- | --------------------------------------- |
+| `test_ws_notify_close_session_identity_check` | E1: Verifies new session not deleted by old session's close callback | **Expected to fail** (E1 bug)           |
+| `test_ws_write_message_silent_drop_rpc_hangs` | E2: RPC on closed WS resolves promptly, not at timeout               | **Expected to fail** (E2 bug)           |
+| `test_ws_malformed_message_no_crash`          | Robustness: various malformed messages don't crash                   | Should pass                             |
+| `test_ws_rpc_reply_for_unknown_id_ignored`    | Stale/spoofed RPC_Reply safely ignored                               | Should pass                             |
+| `test_ws_close_session_then_rpc_call`         | CloseSession followed by RPC_Call doesn't crash                      | Should pass                             |
+| `test_ws_rapid_reconnect_cycles`              | E1 interaction: 5 rapid reconnect cycles, registry stays consistent  | **May intermittently fail** (E1 timing) |
+
+### Full test source: `tests/protocol/test_ws_round3.py`
+
+```python
+"""
+Round 3 review tests: Protocol edge cases and server-client interaction.
+
+These tests target specific race conditions and edge cases in the WebSocket
+protocol implementation.
+"""
+
+import asyncio
+import logging
+import uuid
+
+from inmanta import const
+from inmanta.protocol import SessionEndpoint, handle, typedmethod, websocket
+from inmanta.protocol.auth.decorators import auth
+from inmanta.server.protocol import Server, ServerSlice
+
+LOGGER = logging.getLogger(__name__)
+
+
+@auth(auth_label=const.CoreAuthorizationLabel.STATUS_READ, read_only=True)
+@typedmethod(path="/server_status", operation="GET")
+def get_current_server_status() -> str:
+    """Get the status of the server"""
+
+
+@auth(auth_label=const.CoreAuthorizationLabel.STATUS_READ, read_only=True)
+@typedmethod(path="/agent_status", operation="GET")
+def get_current_agent_status() -> str:
+    """Get the status of the agent"""
+
+
+class WSServer(websocket.SessionListener, ServerSlice):
+    def __init__(self) -> None:
+        ServerSlice.__init__(self, "wsserver")
+
+    @handle(get_current_server_status)
+    async def get_current_server_status(self) -> str:
+        return "server status"
+
+
+class WSAgent(SessionEndpoint):
+    def __init__(self, name: str, timeout: int = 120, reconnect_delay: int = 5) -> None:
+        super().__init__(name, uuid.uuid4(), timeout, reconnect_delay)
+
+    @handle(get_current_agent_status)
+    async def get_current_agent_status(self) -> str:
+        return "agent status"
+
+
+class SessionSpy(websocket.SessionListener):
+    """Records session lifecycle events for assertions."""
+
+    def __init__(self) -> None:
+        self.events: list[tuple[str, uuid.UUID]] = []
+
+    async def session_opened(self, session: websocket.Session) -> None:
+        self.events.append(("opened", session.id))
+
+    async def session_closed(self, session: websocket.Session) -> None:
+        self.events.append(("closed", session.id))
+
+
+async def test_ws_notify_close_session_identity_check(inmanta_config, server_config) -> None:
+    """E1: Test that notify_close_session does not delete a newer session with the same key.
+
+    Scenario:
+    1. Agent connects → session A registered
+    2. Agent reconnects → session B registered (evicting A from dict)
+    3. Old connection (H1) closes asynchronously → on_close fires for H1's decoder
+    4. H1's close_session() calls on_close_session(A) → notify_close_session(A)
+    5. BUG: notify_close_session sees A.session_key in _sessions (because B has the same key)
+       and deletes B from the registry!
+
+    After this, the server has no session for this agent and RPC calls fail.
+    """
+    rs = Server()
+    server = WSServer()
+    rs.add_slice(server)
+    spy = SessionSpy()
+    rs._transport.add_session_listener(spy)
+    await rs.start()
+
+    agent = WSAgent("agent", reconnect_delay=1)
+    await agent.start()
+
+    try:
+        # Wait for session to become active
+        async def wait_for_active() -> None:
+            while not agent.session or not agent.session.active:
+                await asyncio.sleep(0.1)
+
+        await asyncio.wait_for(wait_for_active(), timeout=10)
+
+        # Record the first session
+        session_key = agent.session.session_key
+        assert session_key in rs._transport._sessions
+        first_server_session = rs._transport._sessions[session_key]
+
+        # Force-close the TCP stream to simulate network partition.
+        # The server-side ping timeout hasn't fired yet, so the server still thinks H1 is alive.
+        assert agent._ws_client is not None
+        agent._ws_client.protocol.stream.close()
+
+        # Wait for agent to reconnect with a new session
+        async def wait_for_new_session() -> None:
+            while True:
+                if agent.session and agent.session.active and agent.session.session_key in rs._transport._sessions:
+                    server_session = rs._transport._sessions[agent.session.session_key]
+                    if server_session is not first_server_session:
+                        return
+                await asyncio.sleep(0.1)
+
+        await asyncio.wait_for(wait_for_new_session(), timeout=30)
+
+        # Session B is now registered. Record it.
+        second_server_session = rs._transport._sessions[session_key]
+        assert second_server_session is not first_server_session
+
+        # Now wait for the server's ping timeout to detect H1's dead connection.
+        # When H1.on_close fires, it calls close_session() for H1's decoder,
+        # which calls notify_close_session(session_A).
+        # Give it enough time for the ping timeout (ws-ping-interval=1, ws-ping-timeout=1)
+        await asyncio.sleep(5)
+
+        # THE CRITICAL CHECK: Session B should still be in the registry!
+        assert session_key in rs._transport._sessions, (
+            "BUG: The new session was deleted from the registry by the old session's close callback. "
+            f"Events: {spy.events}"
+        )
+        assert rs._transport._sessions[session_key] is second_server_session, (
+            "BUG: The session in the registry is not the expected one"
+        )
+
+        # Verify RPC still works through the current session
+        client_a2s = agent.session.get_typed_client()
+        result = await asyncio.wait_for(client_a2s.get_current_server_status(), timeout=5)
+        assert result == "server status"
+
+        # Verify server-to-agent RPC also works
+        client_s2a = rs._transport.get_session(*agent.session.session_key).get_typed_client()
+        result = await asyncio.wait_for(client_s2a.get_current_agent_status(), timeout=5)
+        assert result == "agent status"
+    finally:
+        await rs.stop()
+        await agent.stop()
+
+
+async def test_ws_write_message_silent_drop_rpc_hangs(inmanta_config, server_config) -> None:
+    """E2: Test that RPC calls don't hang when write_message silently drops the message.
+
+    SessionEndpoint.write_message returns silently when self._ws_client is None or closed.
+    If _send_rpc_call doesn't detect this, the RPC future hangs until timeout.
+    """
+    rs = Server()
+    server = WSServer()
+    rs.add_slice(server)
+    await rs.start()
+
+    agent = WSAgent("agent", reconnect_delay=60)  # Long delay to prevent reconnect during test
+    await agent.start()
+
+    try:
+        async def wait_for_active() -> None:
+            while not agent.session or not agent.session.active:
+                await asyncio.sleep(0.1)
+
+        await asyncio.wait_for(wait_for_active(), timeout=10)
+
+        # Set _ws_client to None to trigger the silent return path in write_message
+        old_ws = agent._ws_client
+        agent._ws_client = None
+
+        # Make an RPC call. write_message will return silently without sending.
+        # The future should still resolve (not hang).
+        client = agent.session.get_typed_client()
+        try:
+            result = await asyncio.wait_for(client.get_current_server_status(), timeout=5)
+            # If we get a result, it should indicate an error
+            assert result != "server status", f"Got unexpected success: {result}"
+        except asyncio.TimeoutError:
+            raise AssertionError(
+                "BUG: RPC future was not resolved after write_message silently dropped the message. "
+                "The future hangs until handle_timeout fires (up to 120s)."
+            )
+        except Exception:
+            # Any other exception is acceptable
+            pass
+        finally:
+            # Restore for clean shutdown
+            agent._ws_client = old_ws
+    finally:
+        await rs.stop()
+        await agent.stop()
+
+
+async def test_ws_malformed_message_no_crash(inmanta_config, server_config) -> None:
+    """E3: Test that malformed messages don't crash the connection.
+
+    Send various malformed messages and verify the session stays active.
+    """
+    rs = Server()
+    server = WSServer()
+    rs.add_slice(server)
+    await rs.start()
+
+    agent = WSAgent("agent", reconnect_delay=1)
+    await agent.start()
+
+    try:
+        async def wait_for_active() -> None:
+            while not agent.session or not agent.session.active:
+                await asyncio.sleep(0.1)
+
+        await asyncio.wait_for(wait_for_active(), timeout=10)
+
+        assert agent._ws_client is not None
+
+        # Send various malformed messages directly to the server's WebSocket
+        malformed_messages = [
+            "",                                          # empty
+            "not json at all",                           # not JSON
+            "{}",                                        # missing action field
+            '{"action": "UNKNOWN_ACTION"}',              # unknown action
+            '{"action": "RPC_CALL"}',                    # missing required fields
+            '{"action": "OPEN_SESSION"}',                # missing required fields
+            '{"action": "RPC_REPLY", "reply_id": "not-a-uuid", "code": 200}',  # invalid UUID
+            '{"action": "SESSION_OPENED"}',              # unexpected SessionOpened
+            '{"action": "CLOSE_SESSION"}',               # premature close (session already active)
+        ]
+
+        for msg in malformed_messages:
+            try:
+                await agent._ws_client.write_message(msg)
+            except Exception:
+                pass  # Connection might close on some of these
+            await asyncio.sleep(0.1)
+
+        # Give the server time to process all messages
+        await asyncio.sleep(1)
+
+        # The agent should eventually reconnect if the connection was dropped
+        async def wait_for_active_again() -> None:
+            while not agent.session or not agent.session.active:
+                await asyncio.sleep(0.1)
+
+        await asyncio.wait_for(wait_for_active_again(), timeout=30)
+
+        # Verify RPC still works
+        client = agent.session.get_typed_client()
+        result = await asyncio.wait_for(client.get_current_server_status(), timeout=5)
+        assert result == "server status"
+    finally:
+        await rs.stop()
+        await agent.stop()
+
+
+async def test_ws_rpc_reply_for_unknown_id_ignored(inmanta_config, server_config) -> None:
+    """E4: Test that a spoofed or stale RPC_Reply for an unknown reply_id is safely ignored."""
+    rs = Server()
+    server = WSServer()
+    rs.add_slice(server)
+    await rs.start()
+
+    agent = WSAgent("agent", reconnect_delay=1)
+    await agent.start()
+
+    try:
+        async def wait_for_active() -> None:
+            while not agent.session or not agent.session.active:
+                await asyncio.sleep(0.1)
+
+        await asyncio.wait_for(wait_for_active(), timeout=10)
+
+        # Send a fake RPC_Reply with a random reply_id to the agent
+        fake_reply = websocket.RPC_Reply(
+            reply_id=uuid.uuid4(),
+            result={"data": "injected"},
+            code=200,
+        ).model_dump_json()
+        await agent._ws_client.write_message(fake_reply)
+        await asyncio.sleep(0.5)
+
+        # Session should still be active
+        assert agent.session.active
+
+        # RPC should still work
+        client = agent.session.get_typed_client()
+        result = await asyncio.wait_for(client.get_current_server_status(), timeout=5)
+        assert result == "server status"
+    finally:
+        await rs.stop()
+        await agent.stop()
+
+
+async def test_ws_close_session_then_rpc_call(inmanta_config, server_config) -> None:
+    """E5: Test that sending a CloseSession followed by an RPC_Call doesn't crash.
+
+    After CloseSession, the session is inactive and RPC_Call should be dropped.
+    """
+    rs = Server()
+    server = WSServer()
+    rs.add_slice(server)
+    await rs.start()
+
+    agent = WSAgent("agent", reconnect_delay=1)
+    await agent.start()
+
+    try:
+        async def wait_for_active() -> None:
+            while not agent.session or not agent.session.active:
+                await asyncio.sleep(0.1)
+
+        await asyncio.wait_for(wait_for_active(), timeout=10)
+
+        assert agent._ws_client is not None
+
+        # Send CloseSession to the agent
+        close_msg = websocket.CloseSession().model_dump_json()
+        await agent._ws_client.write_message(close_msg)
+        await asyncio.sleep(0.5)
+
+        # Now send an RPC_Call on the same connection — should be ignored since session is closed
+        rpc_msg = websocket.RPC_Call(
+            url="/api/v2/server_status",
+            method="GET",
+            headers={},
+            body=None,
+            reply_id=uuid.uuid4(),
+        ).model_dump_json()
+        await agent._ws_client.write_message(rpc_msg)
+        await asyncio.sleep(0.5)
+
+        # The agent should reconnect and be active again
+        async def wait_for_active_again() -> None:
+            while not agent.session or not agent.session.active:
+                await asyncio.sleep(0.1)
+
+        await asyncio.wait_for(wait_for_active_again(), timeout=30)
+
+        # Verify everything works
+        client = agent.session.get_typed_client()
+        result = await client.get_current_server_status()
+        assert result == "server status"
+    finally:
+        await rs.stop()
+        await agent.stop()
+
+
+async def test_ws_rapid_reconnect_cycles(inmanta_config, server_config) -> None:
+    """E6: Test that rapid connect/disconnect cycles don't corrupt state.
+
+    Rapidly close the TCP stream multiple times to trigger reconnect cycles
+    and verify the server's session registry stays consistent.
+    """
+    rs = Server()
+    server = WSServer()
+    rs.add_slice(server)
+    spy = SessionSpy()
+    rs._transport.add_session_listener(spy)
+    await rs.start()
+
+    agent = WSAgent("agent", reconnect_delay=1)
+    await agent.start()
+
+    try:
+        for cycle in range(5):
+            # Wait for active session
+            async def wait_for_active() -> None:
+                while not agent.session or not agent.session.active:
+                    await asyncio.sleep(0.1)
+
+            await asyncio.wait_for(wait_for_active(), timeout=15)
+
+            # Verify the server has exactly one session for this agent
+            session_key = agent.session.session_key
+            assert session_key in rs._transport._sessions, f"Cycle {cycle}: session not in registry"
+
+            if cycle < 4:  # Don't break on the last iteration
+                # Force-close TCP stream
+                assert agent._ws_client is not None
+                agent._ws_client.protocol.stream.close()
+                # Brief delay to let the disconnect propagate
+                await asyncio.sleep(0.5)
+
+        # After all cycles, verify final state
+        assert agent.session is not None
+        assert agent.session.active
+        assert len(rs._transport._sessions) == 1
+
+        # Verify RPC works
+        client = agent.session.get_typed_client()
+        result = await asyncio.wait_for(client.get_current_server_status(), timeout=5)
+        assert result == "server status"
+
+        # Wait for all server-side session cleanups to complete
+        await asyncio.sleep(5)
+
+        # The server should still have exactly one session
+        assert len(rs._transport._sessions) == 1, (
+            f"Expected 1 session, got {len(rs._transport._sessions)}. "
+            f"Possible ghost sessions from race condition. Events: {spy.events}"
+        )
+    finally:
+        await rs.stop()
+        await agent.stop()
+```
+
+---
+
 ## Summary Priority Matrix
 
-| Priority     | Fixed                                 | Remaining |
-| ------------ | ------------------------------------- | --------- |
-| **Critical** | D1, D2, D3                            | S1 (auth) |
-| **High**     | D4, D5, D6, D7, D8, D9, D10, D11, D12 |           |
-| **Medium**   | D13, D14, D15, D16, D17, D18, D19, D20 |           |
-| **Low**      | D21, D22, D23, D24                    |           |
+| Priority     | Fixed                                     | Remaining                                  |
+| ------------ | ----------------------------------------- | ------------------------------------------ |
+| **Critical** | D1, D2, D3, E1                            | S1 (auth)                                  |
+| **High**     | D4, D5, D6, D7, D8, D9, D10, D11, D12, E2, E3 |         |
+| **Medium**   | D13, D14, D15, D16, D17, D18, D19, D20    | E4 (stale docs), E5 (on_disconnect timing) |
+| **Low**      | D21, D22, D23, D24                        | E6 (CloseSession on closed session)        |

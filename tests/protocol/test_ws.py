@@ -661,3 +661,155 @@ async def test_ws_write_failure_resolves_future(inmanta_config, server_config) -
     finally:
         await rs.stop()
         await agent.stop()
+
+
+async def test_ws_notify_close_session_identity_check(inmanta_config, server_config) -> None:
+    """Test that when an old session's close callback fires after a new session with the same key
+    has been registered, the new session is NOT removed from the registry.
+
+    Scenario:
+    1. Agent connects → server registers session A with key (env, "agent")
+    2. Agent reconnects → server evicts A via notify_close_session, registers session B with same key
+    3. Old handler's on_close fires → close_session(A) → on_close_session(A) → notify_close_session(A)
+    4. notify_close_session must check identity (is not session) to avoid deleting session B
+    """
+    rs = Server()
+    server = WSServer()
+    rs.add_slice(server)
+    await rs.start()
+
+    env_id = uuid.uuid4()
+
+    try:
+        # Simulate two sessions with the same key (same agent reconnecting)
+        session_a = websocket.Session(
+            environment_id=env_id,
+            session_name="agent",
+            hostname="host1",
+            websocket_protocol=websocket.WebsocketFrameDecoder(),
+        )
+        session_b = websocket.Session(
+            environment_id=env_id,
+            session_name="agent",
+            hostname="host1",
+            websocket_protocol=websocket.WebsocketFrameDecoder(),
+        )
+        assert session_a.session_key == session_b.session_key
+        assert session_a is not session_b
+
+        # Register session A
+        await rs._transport.register_session(session_a)
+        assert rs._transport._sessions[session_a.session_key] is session_a
+
+        # Agent reconnects: register session B (evicts A)
+        await rs._transport.register_session(session_b)
+        assert rs._transport._sessions[session_b.session_key] is session_b
+
+        # Now simulate old handler's deferred on_close firing for session A.
+        # This calls notify_close_session(A). The bug: it deletes B because same key.
+        await rs._transport.notify_close_session(session_a)
+
+        # Session B should still be in the registry
+        assert (
+            session_a.session_key in rs._transport._sessions
+        ), "Session B was incorrectly removed from registry by old session A's close callback"
+        assert (
+            rs._transport._sessions[session_b.session_key] is session_b
+        ), "Registry entry should still point to session B, not be deleted"
+    finally:
+        await rs.stop()
+
+
+async def test_ws_evicted_session_connection_closed(inmanta_config, server_config) -> None:
+    """Test that register_session itself closes the evicted session, rather than relying
+    on the ping timeout to eventually close it.
+
+    When register_session evicts an old session, it must close the session state (not just
+    remove it from the dict). Otherwise the old session remains active and its deferred
+    on_close callback can accidentally delete the new session from the registry.
+    """
+    rs = Server()
+    server = WSServer()
+    rs.add_slice(server)
+    await rs.start()
+
+    env_id = uuid.uuid4()
+
+    try:
+        # Create two sessions with the same key, simulating an agent reconnect
+        session_a = websocket.Session(
+            environment_id=env_id,
+            session_name="agent",
+            hostname="host1",
+            websocket_protocol=websocket.WebsocketFrameDecoder(),
+        )
+        session_b = websocket.Session(
+            environment_id=env_id,
+            session_name="agent",
+            hostname="host1",
+            websocket_protocol=websocket.WebsocketFrameDecoder(),
+        )
+
+        # Register session A
+        await rs._transport.register_session(session_a)
+        assert not session_a.is_closed()
+
+        # Register session B with the same key — should evict A
+        await rs._transport.register_session(session_b)
+
+        # register_session must close the old session's state, not just remove it from
+        # the dict and notify listeners.
+        assert session_a.is_closed(), (
+            "Old session A should be closed by register_session when evicted, "
+            "but it's still active — its deferred on_close can cause E1"
+        )
+    finally:
+        await rs.stop()
+
+
+async def test_ws_write_message_silent_drop_resolves_future(inmanta_config, server_config) -> None:
+    """Test that when write_message silently returns (WebSocket already known to be closed),
+    the pending RPC future is still resolved promptly rather than hanging until timeout.
+
+    This covers the case where _ws_client.closed is True before write_message is called,
+    so no exception is raised — write_message must signal failure so the caller doesn't hang.
+    """
+    rs = Server()
+    server = WSServer()
+    rs.add_slice(server)
+    await rs.start()
+
+    agent = WSAgent("agent", reconnect_delay=60)
+    await agent.start()
+
+    try:
+
+        async def wait_for_active() -> None:
+            while not agent.session or not agent.session.active:
+                await asyncio.sleep(0.1)
+
+        await asyncio.wait_for(wait_for_active(), timeout=10)
+
+        # Close the websocket cleanly so _ws_client.closed becomes True.
+        # This is different from test_ws_write_failure_resolves_future which closes the
+        # underlying TCP stream (causing write_message to raise). Here write_message detects
+        # the closed state before writing and must still signal failure.
+        assert agent._ws_client is not None
+        agent._ws_client.close()
+
+        # Wait briefly for the close to take effect
+        await asyncio.sleep(0.1)
+
+        # Make an RPC call — write_message should detect the closed WS and signal failure
+        client = agent.session.get_typed_client()
+        try:
+            result = await asyncio.wait_for(client.get_current_server_status(), timeout=5)
+            assert result != "server status"
+        except asyncio.TimeoutError:
+            raise AssertionError("RPC future was not resolved after silent write_message drop — hung until timeout")
+        except Exception:
+            # Any exception other than TimeoutError is acceptable
+            pass
+    finally:
+        await rs.stop()
+        await agent.stop()
