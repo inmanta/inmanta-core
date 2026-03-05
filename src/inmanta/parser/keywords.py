@@ -21,9 +21,9 @@ Kept in a separate lightweight module so it can be imported without pulling in
 the full parser or AST infrastructure (avoids circular-import issues).
 """
 
-from collections.abc import Sequence
+from typing import Final
 
-RESERVED_KEYWORDS: Sequence[str] = [
+RESERVED_KEYWORDS: Final[tuple[str, ...]] = (
     "typedef",
     "as",
     "entity",
@@ -52,4 +52,4 @@ RESERVED_KEYWORDS: Sequence[str] = [
     "if",
     "else",
     "elif",
-]
+)

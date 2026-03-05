@@ -919,6 +919,31 @@ def test_mls_non_ascii_with_backslash():
     assert stmt.value.value == "café\n"
 
 
+def test_mls_four_quote_delimiters():
+    """
+    Verify that MLS with 4 opening/closing quotes preserves one quote on each side.
+    The grammar accepts 3-5 quotes; the transformer strips exactly 3.
+    """
+    statements = parse_code('a = """"content""""')
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, Assign)
+    assert isinstance(stmt.value, Literal)
+    assert stmt.value.value == '"content"'
+
+
+def test_mls_five_quote_delimiters():
+    """
+    Verify that MLS with 5 opening/closing quotes preserves two quotes on each side.
+    """
+    statements = parse_code('a = """""content"""""')
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, Assign)
+    assert isinstance(stmt.value, Literal)
+    assert stmt.value.value == '""content""'
+
+
 def test_empty():
     statements = parse_code("""
 a=""

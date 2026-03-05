@@ -340,15 +340,15 @@ the decoded strings are used as literal values in the DSL, not for code executio
 | 3.2a | `stmts[::-1]` vs `list(reversed(stmts))` micro-optimization                | **LOW**    | Performance     | Yes        |
 | 3.2b | `_validate_id` inlining on hot paths                                        | **LOW**    | Performance     | Won't fix  |
 | 3.2c | Grammar cache write fails on read-only installs                             | **LOW**    | Performance     | Yes        |
-| 4.1  | 23 `# type: ignore` — could reduce with AST `Protocol`                     | **LOW**    | Code Quality    | No         |
-| 4.2  | Mixed `Optional[X]` / `X \| None` style; `RESERVED_KEYWORDS` not `Final`   | **LOW**    | Code Quality    | No         |
-| 4.3  | Dead code: redundant `isinstance` checks (1311, 1330, 978), unused λ (291) | **LOW**    | Code Quality    | No         |
-| 4.4  | `plyInmantaLex.py` `keyworldlist` typo needs intentional-comment            | **LOW**    | Documentation   | No         |
+| 4.1  | 23 `# type: ignore` — could reduce with AST `Protocol`                     | **LOW**    | Code Quality    | Won't fix  |
+| 4.2  | Mixed `Optional[X]` / `X \| None` style; `RESERVED_KEYWORDS` not `Final`   | **LOW**    | Code Quality    | Yes        |
+| 4.3  | Dead code: redundant `isinstance` checks (1311, 1330, 978), unused λ (291) | **LOW**    | Code Quality    | Yes        |
+| 4.4  | `plyInmantaLex.py` `keyworldlist` typo needs intentional-comment            | **LOW**    | Documentation   | Yes        |
 | 5.2  | **AST cache integration tests deleted, not replaced**                       | **HIGH**   | Test Coverage   | Yes        |
 | 5.3  | No unit tests for `pickle.py`                                               | **MEDIUM** | Test Coverage   | Yes        |
-| 5.4  | No test for MLS with 4-5 quote delimiters                                   | **LOW**    | Test Coverage   | No         |
-| 5.5  | `_convert_lark_error` heuristic paths not fully tested                      | **LOW**    | Test Coverage   | No         |
-| 5.6  | No fuzz/property-based testing                                              | **LOW**    | Test Coverage   | No         |
+| 5.4  | No test for MLS with 4-5 quote delimiters                                   | **LOW**    | Test Coverage   | Yes        |
+| 5.5  | `_convert_lark_error` heuristic paths not fully tested                      | **LOW**    | Test Coverage   | Won't fix  |
+| 5.6  | No fuzz/property-based testing                                              | **LOW**    | Test Coverage   | Won't fix  |
 | 7.3  | Pin Lark version in `setup.py`                                              | **MEDIUM** | Recommendations | Won't fix  |
 
 ---

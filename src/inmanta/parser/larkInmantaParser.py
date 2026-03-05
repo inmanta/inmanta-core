@@ -1014,9 +1014,8 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
     ) -> ExpressionStatement:
         # "?" and ":" are anonymous => filtered
         result = ConditionalExpression(cond, true_val, false_val)
-        if hasattr(cond, "location"):
-            result.location = cond.location
-            result.namespace = self.namespace
+        result.location = cond.location
+        result.namespace = self.namespace
         return result
 
     def or_expr(self, left: ExpressionStatement, op_token: Token, right: ExpressionStatement) -> ExpressionStatement:
@@ -1347,10 +1346,7 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         self._validate_id(id_token)
         id_ls = self._locatable(id_token)
         merged_value = f"{str(left)}::{str(id_ls)}"
-        if isinstance(left, LocatableString):
-            r = self._expand_range(left.location, id_ls.location)
-        else:
-            r = id_ls.location
+        r = self._expand_range(left.location, id_ls.location)
         return LocatableString(merged_value, r, id_ls.lexpos, self.namespace)
 
     def class_ref_cid(self, cid_token: Token) -> LocatableString:
@@ -1366,10 +1362,7 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
     def class_ref_ns(self, left: LocatableString, _sep: Token, cid_token: Token) -> LocatableString:
         cid_ls = self._locatable(cid_token)
         merged_value = f"{str(left)}::{str(cid_ls)}"
-        if isinstance(left, LocatableString):
-            r = self._expand_range(left.location, cid_ls.location)
-        else:
-            r = cid_ls.location
+        r = self._expand_range(left.location, cid_ls.location)
         return LocatableString(merged_value, r, cid_ls.lexpos, self.namespace)
 
     def class_ref_err_dot(self, var_ref: object, cid_token: Token) -> NoReturn:

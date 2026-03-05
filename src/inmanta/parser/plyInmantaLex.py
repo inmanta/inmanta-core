@@ -24,7 +24,7 @@ particular ``keyworldlist`` and ``reserved``.
 
 from inmanta.parser.keywords import RESERVED_KEYWORDS
 
-# List of reserved keywords, mirroring the PLY lexer's ``keyworldlist``.
+# Intentional typo ("keyworld") — external modules (e.g. restbase) import this name.
 keyworldlist: list[str] = list(RESERVED_KEYWORDS)
 
 # Map keyword → upper-case token name, mirroring the PLY lexer's ``reserved`` dict.
