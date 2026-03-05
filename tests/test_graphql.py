@@ -984,36 +984,37 @@ async def test_total_count(server, client, setup_database):
     Asserts that it works when multiple queries are requested and that the values are as expected.
     Assumes that for each query the amount of results is different
     """
-    query = f"""
-    {{
-        environments{{
-            pageInfo{{
+    query = """
+    query GetEnvironments($environment: UUID!, $cleared: Boolean!)
+    {
+        environments{
+            pageInfo{
                 startCursor,
                 endCursor,
                 hasPreviousPage,
                 hasNextPage
-            }}
+            }
             totalCount
-            edges {{
+            edges {
                 cursor
-                node {{
+                node {
                   id
                   name
-                }}
-            }}
-        }}
-        notifications(filter: {{
-                  cleared: false
-                  environment: "{env_1}"
-                }}){{
+                }
+            }
+        }
+        notifications(filter: {
+                  cleared: $cleared
+                  environment: $environment
+                }){
             totalCount
-            edges {{
+            edges {
                 cursor
-            }}
-        }}
-    }}
+            }
+        }
+    }
     """
-    result = await client.graphql(query=query)
+    result = await client.graphql(query=query, variables={"environment": env_1, "cleared": False})
     assert result.code == 200
     found_counts = {
         "environments": 3,
@@ -1026,35 +1027,35 @@ async def test_total_count(server, client, setup_database):
         assert found_counts[name] == count
 
     # Test on InlineFragment and FragmentSpread
-    query = f"""
-    {{
-        environments{{
+    query = """
+    query GetEnvironments($environment: UUID!, $cleared: Boolean!) {
+        environments{
             ...EnvironmentFields
-        }}
-        notifications(filter: {{
-                  cleared: false
-                  environment: "{env_1}"
-                }}){{
-            ... on NotificationConnection{{
+        }
+        notifications(filter: {
+                  cleared: $cleared
+                  environment: $environment
+                }){
+            ... on NotificationConnection{
                 totalCount
-                edges {{
-                    node {{
+                edges {
+                    node {
                         id
-                    }}
-                }}
-            }}
-        }}
-    }}
-    fragment EnvironmentFields on EnvironmentConnection {{
+                    }
+                }
+            }
+        }
+    }
+    fragment EnvironmentFields on EnvironmentConnection {
         totalCount
-        edges {{
-            node {{
+        edges {
+            node {
                 id
-            }}
-        }}
-    }}
+            }
+        }
+    }
     """
-    result = await client.graphql(query=query)
+    result = await client.graphql(query=query, variables={"environment": env_1, "cleared": False})
     assert result.code == 200
     assert result.result["data"]["data"].items()
     for name, res in result.result["data"]["data"].items():
