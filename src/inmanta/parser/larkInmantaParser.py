@@ -264,7 +264,7 @@ def _safe_decode(raw: str, warning_msg: str, location: Location) -> str:
         replacement = _ESCAPE_MAP.get(ch)
         if replacement is not None:
             return replacement
-        if ch[0] in ("u", "U", "x"):
+        if len(ch) > 1 and ch[0] in ("u", "U", "x"):
             return chr(int(ch[1:], 16))
         has_invalid = True
         return m.group(0)

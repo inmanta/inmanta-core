@@ -99,6 +99,7 @@ setup(
             "openapi_spec_validator",
             "pep8-naming",
             "pip2pi",
+            "hypothesis[lark]",
             "psutil",
             "time-machine",
             # types

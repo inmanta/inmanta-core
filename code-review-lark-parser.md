@@ -348,7 +348,7 @@ the decoded strings are used as literal values in the DSL, not for code executio
 | 5.3  | No unit tests for `pickle.py`                                               | **MEDIUM** | Test Coverage   | Yes        |
 | 5.4  | No test for MLS with 4-5 quote delimiters                                   | **LOW**    | Test Coverage   | Yes        |
 | 5.5  | `_convert_lark_error` heuristic paths not fully tested                      | **LOW**    | Test Coverage   | Won't fix  |
-| 5.6  | No fuzz/property-based testing                                              | **LOW**    | Test Coverage   | Won't fix  |
+| 5.6  | No fuzz/property-based testing                                              | **LOW**    | Test Coverage   | Yes        |
 | 7.3  | Pin Lark version in `setup.py`                                              | **MEDIUM** | Recommendations | Won't fix  |
 
 ---
