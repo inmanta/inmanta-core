@@ -492,7 +492,12 @@ class AgentManager(ServerSlice, websocket.SessionListener):
         """
         LOGGER.debug("New session %s for environment %s", session.name, session.environment)
         async with self.session_lock:
-            assert session.id not in self.scheduler_for_env
+            if session.environment in self.scheduler_for_env or session.id in self.sessions:
+                raise Exception(
+                    f"Duplicate session registration: session {session.id} for environment {session.environment} "
+                    f"(environment registered: {session.environment in self.scheduler_for_env}, "
+                    f"session registered: {session.id in self.sessions})"
+                )
             self.scheduler_for_env[session.environment] = session
             self.sessions[session.id] = session
 
