@@ -986,12 +986,9 @@ src/inmanta/protocol/rest/client.py:0: error: Incompatible types in assignment (
 src/inmanta/protocol/rest/client.py:0: error: Incompatible types in assignment (expression has type "str | int | None", variable has type "int")  [assignment]
 src/inmanta/protocol/rest/client.py:0: note: Use "-> None" if function does not return a value
 src/inmanta/protocol/rest/server.py:0: error: Argument 1 of "write_message" is incompatible with supertype "tornado.websocket.WebSocketHandler"; supertype defines the argument type as "bytes | str | dict[str, Any]"  [override]
-src/inmanta/protocol/rest/server.py:0: error: Call to untyped function "close_session" in typed context  [no-untyped-call]
 src/inmanta/protocol/rest/server.py:0: error: Return type "Coroutine[Any, Any, None]" of "on_pong" incompatible with return type "None" in supertype "tornado.websocket.WebSocketHandler"  [override]
 src/inmanta/protocol/rest/server.py:0: error: Return type "Coroutine[Any, Any, None]" of "write_message" incompatible with return type "Future[None]" in supertype "tornado.websocket.WebSocketHandler"  [override]
-src/inmanta/protocol/rest/server.py:0: error: Syntax error in type annotation  [syntax]
 src/inmanta/protocol/rest/server.py:0: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#incompatible-overrides
-src/inmanta/protocol/rest/server.py:0: note: Suggestion: Use Tuple[T1, ..., Tn] instead of (T1, ..., Tn)
 src/inmanta/protocol/rest/server.py:0: note: This violates the Liskov substitution principle
 src/inmanta/protocol/websocket.py:0: error: Argument "args" to "rpc_call" of "WebsocketFrameDecoder" has incompatible type "tuple[object, ...]"; expected "list[object]"  [arg-type]
 src/inmanta/protocol/websocket.py:0: error: Argument "kwargs" to "build_call" of "MethodProperties" has incompatible type "dict[str, object] | None"; expected "Mapping[str, object]"  [arg-type]
@@ -1010,9 +1007,7 @@ src/inmanta/protocol/websocket.py:0: error: Argument 1 to "execute_call" has inc
 src/inmanta/protocol/websocket.py:0: error: Argument 1 to "match_call" has incompatible type "list[CallTarget] | None"; expected "list[CallTarget]"  [arg-type]
 src/inmanta/protocol/websocket.py:0: error: Argument 1 to "on_close_session" of "WebsocketFrameDecoder" has incompatible type "Session | None"; expected "Session"  [arg-type]
 src/inmanta/protocol/websocket.py:0: error: Argument 1 to "update" of "MutableMapping" has incompatible type "dict[str, str] | None"; expected "SupportsKeysAndGetItem[str, Any]"  [arg-type]
-src/inmanta/protocol/websocket.py:0: error: Call to untyped function "close_session" in typed context  [no-untyped-call]
 src/inmanta/protocol/websocket.py:0: error: Call to untyped function "wait" in typed context  [no-untyped-call]
-src/inmanta/protocol/websocket.py:0: error: Function is missing a return type annotation  [no-untyped-def]
 src/inmanta/protocol/websocket.py:0: error: Function is missing a return type annotation  [no-untyped-def]
 src/inmanta/protocol/websocket.py:0: error: Incompatible return value type (got "_SessionClient", expected "Client")  [return-value]
 src/inmanta/protocol/websocket.py:0: error: Incompatible return value type (got "_SessionClient", expected "TypedClient")  [return-value]
@@ -1022,17 +1017,12 @@ src/inmanta/protocol/websocket.py:0: error: Incompatible types in assignment (ex
 src/inmanta/protocol/websocket.py:0: error: Incompatible types in assignment (expression has type "tornado.websocket.WebSocketClientConnection", variable has type "inmanta.protocol.websocket.WebSocketClientConnection | None")  [assignment]
 src/inmanta/protocol/websocket.py:0: error: Item "None" of "Session | None" has no attribute "close_session"  [union-attr]
 src/inmanta/protocol/websocket.py:0: error: Item "None" of "Session | None" has no attribute "open"  [union-attr]
-src/inmanta/protocol/websocket.py:0: error: Item "None" of "Session | None" has no attribute "seen"  [union-attr]
-src/inmanta/protocol/websocket.py:0: error: Item "None" of "Session | None" has no attribute "seen"  [union-attr]
 src/inmanta/protocol/websocket.py:0: error: Missing return statement  [return]
-src/inmanta/protocol/websocket.py:0: error: Missing type parameters for generic type "Future"  [type-arg]
 src/inmanta/protocol/websocket.py:0: error: Need type annotation for "_message_parser"  [var-annotated]
 src/inmanta/protocol/websocket.py:0: error: Need type annotation for "future"  [var-annotated]
 src/inmanta/protocol/websocket.py:0: error: Unexpected "..."  [misc]
-src/inmanta/protocol/websocket.py:0: error: Unexpected "..."  [misc]
 src/inmanta/protocol/websocket.py:0: note: "dict" is invariant -- see https://mypy.readthedocs.io/en/stable/common_issues.html#variance
 src/inmanta/protocol/websocket.py:0: note: Consider using "Mapping" instead, which is covariant in the value type
-src/inmanta/protocol/websocket.py:0: note: Use "-> None" if function does not return a value
 src/inmanta/references.py:0: error: Argument "value" to "MutatedJsonArgument" has incompatible type "object"; expected "StrictJson"  [arg-type]
 src/inmanta/references.py:0: error: Argument 1 to "update" of "JSONPath" has incompatible type "Resource"; expected "JsonValue"  [arg-type]
 src/inmanta/references.py:0: error: Incompatible types in assignment (expression has type "dict[str, StrictJson] | list[StrictJson] | str | int | float | None", variable has type "dict[str, Any]")  [assignment]

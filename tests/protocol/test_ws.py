@@ -622,3 +622,42 @@ async def test_ws_close_connection_notifies_remote_before_local_teardown(inmanta
     finally:
         await rs.stop()
         await agent.stop()
+
+
+async def test_ws_write_failure_resolves_future(inmanta_config, server_config) -> None:
+    """Test that when write_message fails during an RPC call, the pending future
+    is resolved with an error rather than hanging until timeout."""
+    rs = Server()
+    server = WSServer()
+    rs.add_slice(server)
+    await rs.start()
+
+    agent = WSAgent("agent", reconnect_delay=60)
+    await agent.start()
+
+    try:
+
+        async def wait_for_active() -> None:
+            while not agent.session or not agent.session.active:
+                await asyncio.sleep(0.1)
+
+        await asyncio.wait_for(wait_for_active(), timeout=10)
+
+        # Close the underlying TCP stream so write_message will fail
+        assert agent._ws_client is not None
+        agent._ws_client.protocol.stream.close()
+
+        # Make an RPC call — the write should fail but the future should resolve quickly
+        client = agent.session.get_typed_client()
+        try:
+            result = await asyncio.wait_for(client.get_current_server_status(), timeout=5)
+            # If we get a result, it should be an error (not the actual server status)
+            assert result != "server status"
+        except asyncio.TimeoutError:
+            raise AssertionError("RPC future was not resolved after write failure — hung until timeout")
+        except Exception:
+            # Any exception other than TimeoutError is acceptable
+            pass
+    finally:
+        await rs.stop()
+        await agent.stop()

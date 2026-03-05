@@ -279,8 +279,17 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
         else:
             future.set_result(common.Result(code=200, result=None))
 
-        self.add_background_task(self.write_message(RPC_Call(**call_spec.to_dict()).model_dump_json()))
+        self.add_background_task(self._send_rpc_call(call_spec.reply_id, RPC_Call(**call_spec.to_dict()).model_dump_json()))
         return future
+
+    async def _send_rpc_call(self, reply_id: uuid.UUID, message: str) -> None:
+        """Send an RPC call message, resolving the pending future with 503 if the write fails."""
+        try:
+            await self.write_message(message)
+        except Exception:
+            future = self._replies.pop(reply_id, None)
+            if future is not None and not future.done():
+                future.set_result(common.Result(code=503, result={"message": "Failed to send RPC call"}))
 
     async def on_message(self, message: str | bytes) -> None:
         LOGGER.debug("%s got %s", self, message)
@@ -410,7 +419,10 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
 
     async def close_connection(self) -> None:
         """Close the connection that belongs to this session and the session itself"""
-        await self.write_message(CloseSession().model_dump_json())
+        try:
+            await self.write_message(CloseSession().model_dump_json())
+        except Exception:
+            LOGGER.debug("Failed to send CloseSession message, connection may already be closed.")
         await self.close_session()
 
     async def dispatch_method(self, msg: RPC_Call) -> Optional[RPC_Reply]:
@@ -690,11 +702,10 @@ class SessionEndpoint(endpoints.Endpoint, common.CallTarget, WebsocketFrameDecod
         """Called when a session is closed"""
 
     async def write_message(self, message: str | bytes, binary: bool = False) -> None:
-        try:
-            if self._ws_client is not None and not self._ws_client.closed:
-                await self._ws_client.write_message(message, binary)
-        except websocket.WebSocketClosedError:
+        if self._ws_client is None or self._ws_client.closed:
             LOGGER.warning("Tried writing into a closed websocket.")
+            return
+        await self._ws_client.write_message(message, binary)
 
     async def _process_messages(self) -> None:
         """Process incoming messages from the WebSocket connection.

@@ -434,6 +434,8 @@ class AgentManager(ServerSlice, websocket.SessionListener):
             except asyncio.CancelledError:
                 return
             except Exception:
+                # session_action is guaranteed to be bound here: queue.get() can only raise
+                # CancelledError (handled above), so any other exception comes from _process_action.
                 LOGGER.exception(
                     "An exception occurred while handling session action %s on session id %s.",
                     session_action.action_type.name,

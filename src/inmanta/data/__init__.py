@@ -3455,9 +3455,11 @@ class Agent(BaseDocument):
     ) -> dict[str, Optional[AgentStatus]]:
         live_sessions = await SchedulerSession.get_live(environment=env_id)
         has_active_session = len(live_sessions) > 0
+        agents = await cls.get_list(environment=env_id, connection=connection)
+        agents_by_name: dict[str, "Agent"] = {agent.name: agent for agent in agents}
         result: dict[str, Optional[AgentStatus]] = {}
         for agent_name in agent_names:
-            agent = await cls.get_one(environment=env_id, name=agent_name, connection=connection)
+            agent = agents_by_name.get(agent_name)
             if agent:
                 result[agent_name] = agent.get_status(has_active_session=has_active_session)
             else:
@@ -3481,6 +3483,9 @@ class Agent(BaseDocument):
         # Field kept for backward compatibility
         base["primary"] = ""
 
+        # Note: get_status() without has_active_session always reports "down" for non-paused agents.
+        # This is a known limitation: to_dict() is sync and cannot query SchedulerSession.
+        # Callers that need accurate status should use AgentView or get_statuses() instead.
         base["state"] = self.get_status().value
 
         return base

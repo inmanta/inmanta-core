@@ -1484,6 +1484,8 @@ class CallTarget:
     A baseclass for all classes that are target for protocol calls / methods
     """
 
+    _op_mapping_cache: dict[str, dict[str, "UrlMethod"]]
+
     def _get_endpoint_metadata(self) -> dict[str, list[tuple[str, Callable]]]:
         total_dict = {
             method_name: method
@@ -1498,9 +1500,12 @@ class CallTarget:
 
         return methods
 
-    def get_op_mapping(self) -> dict[str, dict[str, UrlMethod]]:
+    def _build_op_mapping(self) -> dict[str, dict[str, UrlMethod]]:
         """
-        Build a mapping between urls, ops and methods
+        Build a mapping between urls, ops and methods.
+
+        This is called once and cached by get_op_mapping(). The mapping is stable after
+        initialization because handler annotations and MethodProperties are set at import time.
         """
         url_map: dict[str, dict[str, UrlMethod]] = defaultdict(dict)
 
@@ -1525,6 +1530,22 @@ class CallTarget:
 
                         url_map[url][properties.operation] = UrlMethod(properties, self, method_handlers[1], method_handlers[0])
         return url_map
+
+    def get_op_mapping(self) -> dict[str, dict[str, UrlMethod]]:
+        """
+        Get the mapping between urls, ops and methods. The result is cached after the first call.
+        """
+        # Use AttributeError-based caching instead of __init__ to avoid adding an __init__ to this
+        # mixin class. CallTarget is used in diamond inheritance hierarchies (ServerSlice,
+        # SessionEndpoint) where adding __init__ would require verifying cooperative super().__init__()
+        # calls in all subclasses.
+        try:
+            return self._op_mapping_cache
+        except AttributeError:
+            pass
+        cache: dict[str, dict[str, UrlMethod]] = self._build_op_mapping()
+        self._op_mapping_cache = cache
+        return cache
 
 
 def typed_process_response(method_properties: MethodProperties, response: Result) -> types.ReturnTypes:
