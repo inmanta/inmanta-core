@@ -463,7 +463,6 @@ class ServerSlice(common.CallTarget, TaskHandler[Result | None]):
         return []
 
 
-
 # Internals
 class TransportSlice(ServerSlice):
     """Slice to manage the listening socket"""
