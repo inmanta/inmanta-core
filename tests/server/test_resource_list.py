@@ -36,6 +36,7 @@ import utils
 from inmanta import data, util
 from inmanta.const import ResourceState
 from inmanta.data.model import LatestReleasedResource
+from inmanta.deploy.state import Blocked, Compliance, HandlerResult
 from inmanta.server import config
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 
@@ -822,25 +823,25 @@ async def test_resources_paging_performance(client, environment, mixed_resource_
     composed_result = await data.Resource.get_composed_resource_summary(environment)
     assert composed_result.total_count == result.result["metadata"]["deploy_summary"]["total"]
     ## blocked
-    assert composed_result.blocked["blocked"] == instances * 2  # skipped_for_undefined / undefined
-    assert composed_result.blocked["not_blocked"] == instances * (resources_per_version - 2)
-    assert composed_result.blocked["temporarily_blocked"] == 0
+    assert composed_result.blocked[Blocked.BLOCKED] == instances * 2  # skipped_for_undefined / undefined
+    assert composed_result.blocked[Blocked.NOT_BLOCKED] == instances * (resources_per_version - 2)
+    assert composed_result.blocked[Blocked.TEMPORARILY_BLOCKED] == 0
     assert sum([count for count in composed_result.blocked.values()]) == composed_result.total_count
     ## is_deploying
-    assert composed_result.is_deploying["true"] == instances  # deploying
-    assert composed_result.is_deploying["false"] == instances * (resources_per_version - 1)
+    assert composed_result.is_deploying[True] == instances  # deploying
+    assert composed_result.is_deploying[False] == instances * (resources_per_version - 1)
     assert sum([count for count in composed_result.is_deploying.values()]) == composed_result.total_count
     ## last_handler_run
-    assert composed_result.last_handler_run["new"] == instances * 3  # deploying / skipped_for_undefined / undefined
-    assert composed_result.last_handler_run["successful"] == instances * (resources_per_version - 5)
-    assert composed_result.last_handler_run["failed"] == instances  # failed
-    assert composed_result.last_handler_run["skipped"] == instances  # skipped
+    assert composed_result.last_handler_run[HandlerResult.NEW] == instances * 3  # deploying / skipped_for_undefined / undefined
+    assert composed_result.last_handler_run[HandlerResult.SUCCESSFUL] == instances * (resources_per_version - 5)
+    assert composed_result.last_handler_run[HandlerResult.FAILED] == instances  # failed
+    assert composed_result.last_handler_run[HandlerResult.SKIPPED] == instances  # skipped
     assert sum([count for count in composed_result.last_handler_run.values()]) == composed_result.total_count
     # compliance
-    assert composed_result.compliance["has_update"] == instances * 2  # deploying / skipped_for_undefined
-    assert composed_result.compliance["compliant"] == instances * (resources_per_version - 6)
-    assert composed_result.compliance["non_compliant"] == instances * 3  # failed / non_compliant / skipped
-    assert composed_result.compliance["undefined"] == instances  # undefined
+    assert composed_result.compliance[Compliance.HAS_UPDATE] == instances * 2  # deploying / skipped_for_undefined
+    assert composed_result.compliance[Compliance.COMPLIANT] == instances * (resources_per_version - 6)
+    assert composed_result.compliance[Compliance.NON_COMPLIANT] == instances * 3  # failed / non_compliant / skipped
+    assert composed_result.compliance[Compliance.UNDEFINED] == instances  # undefined
     assert sum([count for count in composed_result.compliance.values()]) == composed_result.total_count
 
     port = config.server_bind_port.get()

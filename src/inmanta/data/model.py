@@ -448,14 +448,14 @@ class ComposedResourceSummary(BaseModel):
     """
 
     total_count: int
-    compliance: dict[str, int]
-    last_handler_run: dict[str, int]
-    blocked: dict[str, int]
-    is_deploying: dict[str, int]
+    compliance: dict[Compliance, int]
+    last_handler_run: dict[HandlerResult, int]
+    blocked: dict[Blocked, int]
+    is_deploying: dict[bool, int]
 
     @classmethod
     def create_from_db_result(cls, summary_by_db_result: Sequence[Record]) -> "ComposedResourceSummary":
-        parsed_results: typing.DefaultDict[str, dict[str, int]] = defaultdict(dict[str, int])
+        parsed_results: typing.DefaultDict[str, dict[str, int]] = defaultdict(dict)
         for result in summary_by_db_result:
             parsed_results[str(result["metric"])][str(result["value"]).lower()] = cast(int, result["count"])
 
@@ -469,13 +469,14 @@ class ComposedResourceSummary(BaseModel):
             for value in values:
                 if value not in parsed_results[metric]:
                     parsed_results[metric][value] = 0
+
         return ComposedResourceSummary(
             # total_count is the same on every row
             total_count=cast(int, summary_by_db_result[0]["total_count"]),
-            compliance=parsed_results["compliance"],
-            last_handler_run=parsed_results["last_handler_run"],
-            blocked=parsed_results["blocked"],
-            is_deploying=parsed_results["is_deploying"],
+            compliance={Compliance(k): v for k, v in parsed_results["compliance"].items()},
+            blocked={Blocked(k): v for k, v in parsed_results["blocked"].items()},
+            last_handler_run={HandlerResult(k): v for k, v in parsed_results["last_handler_run"].items()},
+            is_deploying={k == "true": v for k, v in parsed_results["is_deploying"].items()},
         )
 
 
