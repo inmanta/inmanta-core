@@ -6145,6 +6145,7 @@ class Resource(BaseDocument):
         :param environment: The environment we want the summary for.
         """
         query = """
+        -- Group information from the rps table
         WITH grouped_metrics AS (
             SELECT
                 is_deploying::text AS is_deploying,
@@ -6169,36 +6170,45 @@ class Resource(BaseDocument):
             GROUP BY is_deploying, blocked, last_handler_run, compliance
         )
 
+        -- Query to calculate total_count
         SELECT
-            'is_deploying' AS metric,
-            is_deploying AS value,
-            SUM(row_count) AS count
-        FROM grouped_metrics
-        GROUP BY is_deploying
-
-        UNION ALL
-
-        SELECT 'blocked' AS metric,
-                blocked AS value,
+            metric,
+            value,
+            count,
+            SUM(count) OVER () AS total_count
+        FROM (
+            -- Calculate each value
+            SELECT
+                'is_deploying' AS metric,
+                is_deploying AS value,
                 SUM(row_count) AS count
-        FROM grouped_metrics
-        GROUP BY blocked
+            FROM grouped_metrics
+            GROUP BY is_deploying
 
-        UNION ALL
+            UNION ALL
 
-        SELECT 'last_handler_run' AS metric,
-                last_handler_run AS value,
-                SUM(row_count) AS count
-        FROM grouped_metrics
-        GROUP BY last_handler_run
+            SELECT 'blocked' AS metric,
+                    blocked AS value,
+                    SUM(row_count) AS count
+            FROM grouped_metrics
+            GROUP BY blocked
 
-        UNION ALL
+            UNION ALL
 
-        SELECT 'compliance' AS metric,
-                compliance AS value,
-                SUM(row_count) AS count
-        FROM grouped_metrics
-        GROUP BY compliance;
+            SELECT 'last_handler_run' AS metric,
+                    last_handler_run AS value,
+                    SUM(row_count) AS count
+            FROM grouped_metrics
+            GROUP BY last_handler_run
+
+            UNION ALL
+
+            SELECT 'compliance' AS metric,
+                    compliance AS value,
+                    SUM(row_count) AS count
+            FROM grouped_metrics
+            GROUP BY compliance
+        )
         """
 
         raw_results = await cls._fetch_query(query, cls._get_value(environment))

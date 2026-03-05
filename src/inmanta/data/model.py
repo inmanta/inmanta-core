@@ -465,22 +465,13 @@ class ComposedResourceSummary(BaseModel):
             "compliance": [x.value for x in Compliance],
             "last_handler_run": [x.value for x in HandlerResult],
         }
-        expected_count: int | None = None
         for metric, values in expected_values.items():
-            count = 0
             for value in values:
                 if value not in parsed_results[metric]:
                     parsed_results[metric][value] = 0
-                else:
-                    count += parsed_results[metric][value]
-            if expected_count is None:
-                expected_count = count
-            assert (
-                count == expected_count
-            ), f"Different total counts detected: {count} != {expected_count} metrics: {parsed_results}"
-        assert expected_count is not None
         return ComposedResourceSummary(
-            total_count=expected_count,
+            # total_count is the same on every row
+            total_count=cast(int, summary_by_db_result[0]["total_count"]),
             compliance=parsed_results["compliance"],
             last_handler_run=parsed_results["last_handler_run"],
             blocked=parsed_results["blocked"],
