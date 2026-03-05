@@ -452,7 +452,8 @@ async def test_session_renewal(init_dataclasses_and_load_schema):
 
     await assert_agent_db_state(env.id, nr_procs=1, nr_non_expired_procs=0)
     await agent_manager._register_session(session=session, now=datetime.datetime.now())
-    await assert_agent_db_state(env.id, nr_procs=1, nr_non_expired_procs=1)
+    # The expired record from the first session remains; cleanup happens via _purge_agent_processes.
+    await assert_agent_db_state(env.id, nr_procs=2, nr_non_expired_procs=1)
 
 
 @pytest.mark.parametrize("auto_start_agent", [False])  # prevent autostart to keep agent under control
