@@ -16,9 +16,11 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import io
 import logging
 import os
 import re
+import threading
 
 import pytest
 
@@ -45,6 +47,7 @@ from inmanta.ast.variables import AttributeReference, Reference
 from inmanta.execute.util import NoneValue
 from inmanta.parser import InvalidNamespaceAccess, ParserException, larkInmantaParser
 from inmanta.parser.larkInmantaParser import base_parse
+from inmanta.parser.pickle import ASTPickler, ASTUnpickler
 from utils import log_contains, log_doesnt_contain
 
 
@@ -2236,3 +2239,82 @@ def test_grammar_cache_fallback_to_project_dir(tmp_path: "os.PathLike[str]") -> 
         assert len(stmts) == 1
 
         larkInmantaParser.detach_from_project()
+
+
+def _make_pickled_ast(namespace: Namespace) -> bytes:
+    """Parse a simple snippet and pickle the resulting AST statements."""
+    stmts = base_parse(namespace, "test", "x = 1")
+    buf = io.BytesIO()
+    ASTPickler(buf).dump(stmts)
+    return buf.getvalue()
+
+
+def test_pickle_reentrant_namespace_safe():
+    """
+    Issue 2.2: Verify that creating multiple ASTUnpicklers on the same thread
+    before calling load() works correctly. Each unpickler uses its own
+    instance-local namespace, so they don't interfere with each other.
+
+    Previously, namespace was stored in a thread-local, so the second
+    ASTUnpickler.__init__ would overwrite the first's namespace.
+    """
+    root_ns = Namespace("__root__")
+    ns_a = Namespace("ns_a")
+    ns_a.parent = root_ns
+    ns_b = Namespace("ns_b")
+    ns_b.parent = root_ns
+
+    data_a = _make_pickled_ast(ns_a)
+    data_b = _make_pickled_ast(ns_b)
+
+    # Create both unpicklers before loading either (simulating re-entrancy)
+    unpickler_a = ASTUnpickler(io.BytesIO(data_a), ns_a)
+    unpickler_b = ASTUnpickler(io.BytesIO(data_b), ns_b)
+
+    # Both should load successfully with their own namespace
+    result_a = unpickler_a.load()
+    result_b = unpickler_b.load()
+    assert result_a is not None
+    assert result_b is not None
+
+
+def test_pickle_concurrent_threads():
+    """
+    Issue 2.2: Verify that concurrent unpickling in separate threads is safe.
+    threading.local gives each thread its own namespace slot, so concurrent
+    unpickling should work correctly.
+    """
+    root_ns = Namespace("__root__")
+    results: dict[str, object] = {}
+    errors: dict[str, BaseException] = {}
+
+    def unpickle_in_thread(name: str, ns: Namespace, data: bytes) -> None:
+        try:
+            result = ASTUnpickler(io.BytesIO(data), ns).load()
+            results[name] = result
+        except BaseException as e:
+            errors[name] = e
+
+    ns_a = Namespace("ns_a")
+    ns_a.parent = root_ns
+    ns_b = Namespace("ns_b")
+    ns_b.parent = root_ns
+
+    data_a = _make_pickled_ast(ns_a)
+    data_b = _make_pickled_ast(ns_b)
+
+    barrier = threading.Barrier(2)
+
+    def thread_func(name: str, ns: Namespace, data: bytes) -> None:
+        barrier.wait()  # Ensure both threads start unpickling at the same time
+        unpickle_in_thread(name, ns, data)
+
+    t1 = threading.Thread(target=thread_func, args=("a", ns_a, data_a))
+    t2 = threading.Thread(target=thread_func, args=("b", ns_b, data_b))
+    t1.start()
+    t2.start()
+    t1.join(timeout=5)
+    t2.join(timeout=5)
+
+    assert not errors, f"Concurrent unpickling failed: {errors}"
+    assert "a" in results and "b" in results, "Both threads should produce results"

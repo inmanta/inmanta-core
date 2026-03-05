@@ -23,14 +23,10 @@ restored from a thread-local context during unpickling.
 """
 
 import copyreg
-import threading
 from pickle import Pickler, Unpickler, UnpicklingError
 from typing import IO, Callable
 
 from inmanta.ast import Namespace
-
-# Thread-local storage for unpickling context
-_unpickle_context: threading.local = threading.local()
 
 
 def _reduce_namespace(
@@ -42,11 +38,17 @@ def _reduce_namespace(
 
 
 def _restore_namespace(full_name: str) -> Namespace:
-    """Restore a Namespace from the thread-local unpickle context."""
-    ns: Namespace = _unpickle_context.namespace
-    if ns.get_full_name() != full_name:
-        raise UnpicklingError(f"Namespace mismatch: expected {ns.get_full_name()}, got {full_name}")
-    return ns
+    """Restore a Namespace during unpickling.
+
+    This module-level function is referenced in the pickle stream via dispatch_table.
+    ASTUnpickler intercepts calls to it via find_class() and binds the namespace
+    from the unpickler instance, avoiding thread-local state entirely.
+
+    If called directly (outside ASTUnpickler), raises UnpicklingError.
+    """
+    raise UnpicklingError(
+        f"_restore_namespace({full_name!r}) called outside ASTUnpickler context"
+    )
 
 
 class ASTPickler(Pickler):
@@ -63,12 +65,34 @@ class ASTPickler(Pickler):
 
 
 class ASTUnpickler(Unpickler):
-    """Unpickler that restores Namespace objects from thread-local context."""
+    """Unpickler that restores Namespace objects from an instance-local reference.
+
+    Overrides find_class() to intercept the pickle stream's reference to
+    _restore_namespace and bind it to this instance's namespace. This avoids
+    thread-local state, making concurrent and re-entrant unpickling safe.
+    """
 
     def __init__(self, file: IO[bytes], namespace: Namespace) -> None:
         super().__init__(file)
-        # Store namespace in thread-local so _restore_namespace can access it
-        _unpickle_context.namespace = namespace
+        self._namespace = namespace
+
+    def find_class(self, module: str, name: str) -> Callable[..., object]:
+        if module == _RESTORE_MODULE and name == _RESTORE_QUALNAME:
+            return self._restore_namespace_bound
+        return super().find_class(module, name)
+
+    def _restore_namespace_bound(self, full_name: str) -> Namespace:
+        """Instance-bound namespace restoration — no shared mutable state."""
+        if self._namespace.get_full_name() != full_name:
+            raise UnpicklingError(
+                f"Namespace mismatch: expected {self._namespace.get_full_name()}, got {full_name}"
+            )
+        return self._namespace
+
+
+# Module and qualname of _restore_namespace, used by find_class() to intercept it.
+_RESTORE_MODULE = _restore_namespace.__module__
+_RESTORE_QUALNAME = _restore_namespace.__qualname__
 
 
 def pickle_ast(file: IO[bytes], obj: object) -> None:
