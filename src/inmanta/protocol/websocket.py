@@ -17,6 +17,7 @@ Contact: code@inmanta.com
 """
 
 import asyncio
+import json
 import logging
 import socket
 import uuid
@@ -400,7 +401,7 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
             try:
                 await self.write_message(reply.model_dump_json())
             except Exception:
-                LOGGER.debug("Failed to send RPC reply for %s, connection may already be closed.", msg.reply_id)
+                LOGGER.debug("Failed to send RPC reply for %s, connection may already be closed.", msg.reply_id, exc_info=True)
 
     async def on_open_session(self, session: Session) -> None:
         """Called when a new session is opened.
@@ -525,6 +526,10 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
             body = response.body
             if body is not None and not isinstance(body, dict):
                 body = {"message": str(body)}
+            elif body is not None:
+                # Round-trip through json_encode to normalize complex types (e.g. resources.Id, datetime)
+                # into plain JSON-compatible dicts, matching the REST path's serialization.
+                body = json.loads(common.json_encode(body))
             return RPC_Reply(
                 reply_id=msg.reply_id,
                 code=response.status_code,
