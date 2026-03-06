@@ -345,7 +345,7 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
         self, properties: common.MethodProperties, args: list[object], kwargs: Optional[dict[str, object]] = None
     ) -> asyncio.Future[common.Result]:
         call_spec = properties.build_call(args=args, kwargs=kwargs)
-        call_spec.reply_id = uuid.uuid4()
+        call_spec.reply_id = uuid.uuid4() if properties.reply else None
         call_spec.headers.update(tracing.get_context())
         future = asyncio.Future()
 
@@ -370,7 +370,7 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
         self.add_background_task(self._send_rpc_call(call_spec.reply_id, RPC_Call(**call_spec.to_dict()).model_dump_json()))
         return future
 
-    async def _send_rpc_call(self, reply_id: uuid.UUID, message: str) -> None:
+    async def _send_rpc_call(self, reply_id: uuid.UUID | None, message: str) -> None:
         """Send an RPC call message, resolving the pending future with 503 if the write fails."""
         try:
             await self.write_message(message)
