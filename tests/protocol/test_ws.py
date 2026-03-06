@@ -75,7 +75,7 @@ class TrackingWSAgent(WSAgent):
         await super().on_disconnect()
 
 
-async def test_ws_2way(inmanta_config, server_config) -> None:
+async def test_ws_2way(inmanta_config: object, server_config: object) -> None:
     """Test websocket 2-way communication"""
     rs = Server()
     server = WSServer()
@@ -100,7 +100,7 @@ async def test_ws_2way(inmanta_config, server_config) -> None:
     await agent.stop()
 
 
-async def test_ws_ping_timeout_closes_stale_connection(inmanta_config, server_config) -> None:
+async def test_ws_ping_timeout_closes_stale_connection(inmanta_config: object, server_config: object) -> None:
     """Test that a stale connection is closed by the server when pong responses stop arriving,
     and that the agent reconnects automatically afterward.
     """
@@ -149,7 +149,7 @@ async def test_ws_ping_timeout_closes_stale_connection(inmanta_config, server_co
     await agent.stop()
 
 
-async def test_ws_reconnect_on_connection_failure(inmanta_config, server_config) -> None:
+async def test_ws_reconnect_on_connection_failure(inmanta_config: object, server_config: object) -> None:
     """Test that the agent recovers when the server is unavailable at startup.
 
     Without the error handling in _process_messages(), a connection failure in
@@ -177,7 +177,7 @@ async def test_ws_reconnect_on_connection_failure(inmanta_config, server_config)
             while not agent.session or not agent.session.active:
                 await asyncio.sleep(0.1)
 
-        await asyncio.wait_for(wait_for_session(), timeout=30)
+        await asyncio.wait_for(wait_for_session(), timeout=10)
 
         # Verify session is established
         assert agent.session is not None
@@ -196,7 +196,7 @@ async def test_ws_reconnect_on_connection_failure(inmanta_config, server_config)
         await agent.stop()
 
 
-async def test_ws_reject_duplicate_session_on_same_connection(inmanta_config, server_config) -> None:
+async def test_ws_reject_duplicate_session_on_same_connection(inmanta_config: object, server_config: object) -> None:
     """Test that the server rejects a second OpenSession on the same connection.
 
     When a duplicate OpenSession arrives on a connection that already has a session, the server sends
@@ -249,7 +249,7 @@ async def test_ws_reject_duplicate_session_on_same_connection(inmanta_config, se
     await agent.stop()
 
 
-async def test_ws_client_handles_reject_session(inmanta_config, server_config) -> None:
+async def test_ws_client_handles_reject_session(inmanta_config: object, server_config: object) -> None:
     """Test that the client handles a RejectSession by closing the session and reconnecting."""
     rs = Server()
     server = WSServer()
@@ -292,7 +292,7 @@ async def test_ws_client_handles_reject_session(inmanta_config, server_config) -
     await agent.stop()
 
 
-async def test_ws_concurrent_rpcs(inmanta_config, server_config) -> None:
+async def test_ws_concurrent_rpcs(inmanta_config: object, server_config: object) -> None:
     """Test that multiple concurrent RPC calls over a single WebSocket session all succeed."""
     rs = Server()
     server = WSServer()
@@ -318,7 +318,7 @@ async def test_ws_concurrent_rpcs(inmanta_config, server_config) -> None:
         await agent.stop()
 
 
-async def test_ws_rpc_on_closed_session(inmanta_config, server_config) -> None:
+async def test_ws_rpc_on_closed_session(inmanta_config: object, server_config: object) -> None:
     """Test that an RPC call on a closed connection fails promptly (does not hang)."""
     rs = Server()
     server = WSServer()
@@ -353,7 +353,7 @@ async def test_ws_rpc_on_closed_session(inmanta_config, server_config) -> None:
         await agent.stop()
 
 
-async def test_ws_server_shutdown_during_active_session(inmanta_config, server_config) -> None:
+async def test_ws_server_shutdown_during_active_session(inmanta_config: object, server_config: object) -> None:
     """Test that the agent detects server shutdown and reconnects to a new server."""
     rs = Server()
     server = WSServer()
@@ -405,7 +405,7 @@ async def test_ws_server_shutdown_during_active_session(inmanta_config, server_c
         await agent.stop()
 
 
-async def test_ws_pending_futures_resolved_on_disconnect(inmanta_config, server_config) -> None:
+async def test_ws_pending_futures_resolved_on_disconnect(inmanta_config: object, server_config: object) -> None:
     """Test that in-flight RPC calls are resolved with 503 when the session closes,
     rather than hanging until timeout."""
     rs = Server()
@@ -448,7 +448,7 @@ async def test_ws_pending_futures_resolved_on_disconnect(inmanta_config, server_
         await agent.stop()
 
 
-async def test_ws_duplicate_session_replaces_old(inmanta_config, server_config) -> None:
+async def test_ws_duplicate_session_replaces_old(inmanta_config: object, server_config: object) -> None:
     """Test that when the same agent reconnects, the old session is evicted and listener
     callbacks fire in the correct order (close old, open new)."""
 
@@ -518,7 +518,7 @@ async def test_ws_duplicate_session_replaces_old(inmanta_config, server_config) 
         await agent.stop()
 
 
-async def test_ws_old_session_closed_on_reconnect(inmanta_config, server_config) -> None:
+async def test_ws_old_session_closed_on_reconnect(inmanta_config: object, server_config: object) -> None:
     """Test that when the agent reconnects, the old session is properly closed
     and on_disconnect/on_reconnect don't interleave."""
     rs = Server()
@@ -582,7 +582,7 @@ async def test_ws_old_session_closed_on_reconnect(inmanta_config, server_config)
         await agent.stop()
 
 
-async def test_ws_close_connection_notifies_remote_before_local_teardown(inmanta_config, server_config) -> None:
+async def test_ws_close_connection_notifies_remote_before_local_teardown(inmanta_config: object, server_config: object) -> None:
     """Test that close_connection sends CloseSession to the remote before closing the local session,
     so the remote can clean up while the session is still logically open."""
     rs = Server()
@@ -624,7 +624,7 @@ async def test_ws_close_connection_notifies_remote_before_local_teardown(inmanta
         await agent.stop()
 
 
-async def test_ws_write_failure_resolves_future(inmanta_config, server_config) -> None:
+async def test_ws_write_failure_resolves_future(inmanta_config: object, server_config: object) -> None:
     """Test that when write_message fails during an RPC call, the pending future
     is resolved with an error rather than hanging until timeout."""
     rs = Server()
@@ -663,7 +663,7 @@ async def test_ws_write_failure_resolves_future(inmanta_config, server_config) -
         await agent.stop()
 
 
-async def test_ws_notify_close_session_identity_check(inmanta_config, server_config) -> None:
+async def test_ws_notify_close_session_identity_check(inmanta_config: object, server_config: object) -> None:
     """Test that when an old session's close callback fires after a new session with the same key
     has been registered, the new session is NOT removed from the registry.
 
@@ -720,7 +720,7 @@ async def test_ws_notify_close_session_identity_check(inmanta_config, server_con
         await rs.stop()
 
 
-async def test_ws_evicted_session_connection_closed(inmanta_config, server_config) -> None:
+async def test_ws_evicted_session_connection_closed(inmanta_config: object, server_config: object) -> None:
     """Test that register_session itself closes the evicted session, rather than relying
     on the ping timeout to eventually close it.
 
@@ -767,7 +767,7 @@ async def test_ws_evicted_session_connection_closed(inmanta_config, server_confi
         await rs.stop()
 
 
-async def test_ws_write_message_silent_drop_resolves_future(inmanta_config, server_config) -> None:
+async def test_ws_write_message_silent_drop_resolves_future(inmanta_config: object, server_config: object) -> None:
     """Test that when write_message silently returns (WebSocket already known to be closed),
     the pending RPC future is still resolved promptly rather than hanging until timeout.
 
