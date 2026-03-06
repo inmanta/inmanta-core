@@ -394,11 +394,6 @@ class RESTServer(RESTBase, AuthnzInterface):
         self.running = False
         LOGGER.debug("Stopping Server Rest Endpoint")
 
-        # terminate all sessions cleanly (do we need to hold the lock?)
-        # for session in self._sessions.copy().values():
-        #     await session.expire(0)
-        #     session.abort()
-
         for session in self._sessions.copy().values():
             await session.close_connection()
 

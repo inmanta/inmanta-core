@@ -696,7 +696,6 @@ class AgentManager(ServerSlice, websocket.SessionListener):
 
         def mangle_format(agent: model.Agent) -> dict[str, object]:
             native = agent.model_dump()
-            native["primary"] = ""
             native["state"] = agent.status
             if native["last_failover"] is None:
                 native["last_failover"] = ""

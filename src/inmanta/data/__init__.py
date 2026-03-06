@@ -3480,9 +3480,6 @@ class Agent(BaseDocument):
         if self.last_failover is None:
             base["last_failover"] = ""
 
-        # Field kept for backward compatibility
-        base["primary"] = ""
-
         # Note: get_status() without has_active_session always reports "down" for non-paused agents.
         # This is a known limitation: to_dict() is sync and cannot query SchedulerSession.
         # Callers that need accurate status should use AgentView or get_statuses() instead.

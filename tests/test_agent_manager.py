@@ -324,7 +324,7 @@ async def test_api(init_dataclasses_and_load_schema):
     assert code == 200
     shouldbe = {
         "agents": [
-            {"name": "agent4", "paused": False, "last_failover": "", "primary": "", "environment": env2.id, "state": "down"}
+            {"name": "agent4", "paused": False, "last_failover": "", "environment": env2.id, "state": "down"}
         ]
     }
     assert_equal_ish(shouldbe, all_agents)
@@ -718,20 +718,6 @@ async def test_are_agents_active(server, client, environment, async_finalizer) -
 
     # Ensure the agent is still active
     await retry_limited(agentmanager.is_scheduler_active, tid=env_id, timeout=10)
-
-
-@pytest.mark.skip(reason="Test validates REST connection pool behavior which doesn't apply to websocket transport")
-async def test_heartbeat_different_session(server_pre_start, async_finalizer, caplog):
-    """
-    Verify that:
-      - if the max_clients is reached, the heartbeat will still work as it is in a different pool
-      - the max_clients option in the config changes the number of max_clients in a pool
-      - debug logs concerning 'max_clients limit reached' logged by Tornado, are logged as inmanta warnings.
-
-    NOTE: This test is skipped because it validates REST HTTP connection pool behavior.
-    With websockets, there is a single persistent connection and no separate heartbeat pool.
-    """
-    pass
 
 
 @pytest.mark.parametrize("halt_environment", (True, False))
