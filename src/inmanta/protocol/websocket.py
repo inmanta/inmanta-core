@@ -125,11 +125,11 @@ class Session:
 
     def get_client(self) -> endpoints.Client:
         """Get a client to communicate with the endpoint on the other side of the session."""
-        return _SessionClient(self, False)
+        return _SessionClient(self.websocket_protocol, False)
 
     def get_typed_client(self) -> endpoints.TypedClient:
         """Get a typed client to communicate with the endpoint on the other side of the session."""
-        return _SessionClient(self, True)
+        return _SessionClient(self.websocket_protocol, True)
 
     async def close_connection(self) -> None:
         """Close the underlying websocket connection (delegates to the frame decoder)."""
@@ -137,20 +137,20 @@ class Session:
 
 
 class _SessionClient:
-    """A dynamic RPC client that routes method calls through a websocket session.
+    """A dynamic RPC client that routes method calls through a websocket frame decoder.
 
     This client is obtained via `Session.get_client` or `Session.get_typed_client`.
     It uses `__getattr__` to intercept attribute access: any method name defined in the protocol's
     `inmanta.protocol.common.MethodProperties` registry can be called as if it were a local
-    method. The call is serialized as an `RPC_Call` message and sent over the session's
+    method. The call is serialized as an `RPC_Call` message and sent over the decoder's
     websocket connection.
 
     When `typed=True`, the response is deserialized into the method's declared return type.
     When `typed=False`, a raw `inmanta.protocol.common.Result` is returned.
     """
 
-    def __init__(self, session: Session, typed: bool) -> None:
-        self._session = session
+    def __init__(self, decoder: "WebsocketFrameDecoder", typed: bool) -> None:
+        self._decoder = decoder
         self._typed = typed
 
     def __getattr__(self, name: str) -> Callable[..., Any]:
@@ -162,7 +162,7 @@ class _SessionClient:
 
         def wrap(*args: object, **kwargs: object) -> Any:
             assert method
-            result = self._session.websocket_protocol.rpc_call(properties=method, args=args, kwargs=kwargs)
+            result = self._decoder.rpc_call(properties=method, args=args, kwargs=kwargs)
             if self._typed:
 
                 async def wait():
