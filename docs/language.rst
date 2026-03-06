@@ -15,14 +15,24 @@ The source is organized in modules. Each module is a git repository with the fol
     +-- files/
     +-- model/
     |  +-- _init.cf
-    +-- plugins/
+    +-- inmanta_plugins/
+    |  +-- <module_name>/
+    |     +-- __init__.py
     +-- templates/
-    +-- module.yml
+    +-- pyproject.toml
+    +-- setup.cfg
 
 .. note::
-    The module format described here is the v1 module format. For more details see :ref:`moddev-module`.
+    The module format shown above is the V2 module format, which is the current standard.
+    For more details on module formats and migration see :ref:`moddev-module`.
 
-The ``module.yml`` file, the ``model`` directory and the ``model/_init.cf`` are required.
+.. note::
+    The legacy V1 module format used ``module.yml`` for metadata and a ``plugins/`` directory
+    for Python code. V1 modules are no longer supported. If you encounter V1 modules, migrate them
+    to V2 format.
+
+The ``model`` directory and the ``model/_init.cf`` file are required. The ``setup.cfg`` file
+defines the module's metadata and dependencies.
 
 For example::
 
@@ -34,9 +44,12 @@ For example::
     |  +-- policy
     |  |  +-- _init.cf
     |  |  +-- other.cf
-    +-- plugins/
+    +-- inmanta_plugins/
+    |  +-- test/
+    |     +-- __init__.py
     +-- templates/
-    +-- module.yml
+    +-- pyproject.toml
+    +-- setup.cfg
 
 The model code is in the ``.cf`` files. Each file forms a namespace. The namespaces for the files are the following.
 
@@ -387,6 +400,19 @@ The ``in`` and ``not in`` operators can be used to check if a value is present i
     condition5 = not "/a/b/c" in myfiles # evaluates to False
     condition6 = not "/f/g/h" in myfiles # evaluates to True
 
+The ``in`` operator also works on dictionaries, testing for key membership:
+
+.. code-block:: inmanta
+
+    config = {"host": "server1", "port": 8080}
+
+    has_host = "host" in config       # evaluates to True
+    has_timeout = "timeout" in config  # evaluates to False
+
+    if "host" in config:
+        std::print(config["host"])
+    end
+
 
 The ``is defined`` keyword checks if a value was assigned to an attribute or a relation of a certain entity. The following
 example sets the monitoring configuration on a certain host when it has a monitoring server associated:
@@ -474,7 +500,7 @@ The syntax for defining entities is:
     classlist: class
               | class ',' classlist;
 
-    attribute: primitve_type ID ('=' literal)?;
+    attribute: primitive_type ID ('=' literal)?;
 
 Defining entities in a configuration model
 
@@ -573,8 +599,14 @@ any values to the relation attribute.
     # adding a value twice does not affect the relation,
     # s1.files still equals [f1, f2, f3]
 
-In addition, attributes can be assigned in a constructor using keyword arguments by using ``**dct`` where ``dct`` is a dictionary that contains
-attribute names as keys and the desired values as values. For example:
+.. _lang-dict-spread:
+
+Dict keyword argument unpacking in constructors
++++++++++++++++++++++++++++++++++++++++++++++++
+
+Attributes can be assigned in a constructor using keyword arguments by using ``**dct`` where ``dct`` is a dictionary that contains
+attribute names as keys and the desired values as values. This is particularly useful for config-driven entity instantiation,
+where configuration is loaded from external sources (e.g. YAML files) and passed directly into constructors.
 
 .. code-block:: inmanta
 
@@ -583,6 +615,13 @@ attribute names as keys and the desired values as values. For example:
 
     file1_config = {"path": "/opt/1"}
     f1 = File(host=h1, **file1_config)
+
+The ``**`` keyword argument unpacking operator can also be combined with explicit keyword arguments.
+
+.. code-block:: inmanta
+
+    defaults = {"mode": 644, "owner": "root"}
+    f = File(path="/etc/motd", **defaults)
 
 It is also possible to add elements to a relation with the ``+=`` operator:
 
@@ -966,3 +1005,148 @@ it might remain in the result, or it might be filtered out, depending on whether
     :language: inmanta
     :caption: my_project/main.cf
     :linenos:
+
+
+.. _lang-module-constants:
+
+Module-level constants
+======================
+
+Variables can be defined at module scope (i.e. directly in a ``.cf`` file, outside any implementation
+block). These variables can be referenced from other modules using their fully qualified name. This
+pattern is commonly used to define pseudo-enums and shared constants.
+
+.. code-block:: inmanta
+
+    # In module myinfra, file model/_init.cf
+    nokia_sros = "nokia_sros"
+    juniper_mx = "juniper_mx"
+    cisco_xr = "cisco_xr"
+
+    # In another module, reference as:
+    import myinfra
+    implement Router using sros_impl when self.device_kind == myinfra::nokia_sros
+
+Environment variables can also be read at compile time using ``std::get_env`` and ``std::get_env_int``:
+
+.. code-block:: inmanta
+
+    retry_count = std::get_env_int("INMANTA_RETRY_COUNT", 5)
+    schema_file = std::get_env("INMANTA_SCHEMA_FILE", "default.json")
+
+
+.. _lang-entity-vs-resource:
+
+Entities and resources
+======================
+
+It is important to understand the distinction between entities and resources:
+
+- An **entity** is a type in the configuration model, defined with the ``entity`` keyword. Entities
+  model concepts in the infrastructure at any level of abstraction.
+- A **resource** is an entity that has been mapped to a :term:`handler` via the ``@resource``
+  decorator in Python. Resources are the units of deployment — the compiler finds all entities with
+  resource mappings and serializes them for export to the server.
+- **Not all entities become resources.** Many entities are intermediate or abstract — they exist to
+  structure the model and are refined into concrete resources through implementations.
+
+For example, you might define a high-level ``WebApplication`` entity that gets refined into multiple
+concrete resources like ``std::File``, ``std::Package``, and ``std::Service``.
+
+See the :doc:`handler development guide <model_developers/handlers>` for details on defining
+resources and their handlers.
+
+
+.. _lang-resource-deps:
+
+Resource dependencies
+=====================
+
+Resources can express deployment ordering using the ``requires`` and ``provides``
+relations. A resource will only be deployed
+after all resources in its ``requires`` list have been successfully deployed.
+
+.. code-block:: inmanta
+
+    implementation my_impl for MyResource:
+        # This resource depends on the project being created first
+        self.requires += self.project
+
+        # Multiple dependencies can be added
+        self.requires += self.network
+        self.requires += self.subnet
+    end
+
+The ``provides`` relation is the reverse of ``requires``. Setting ``a.requires += b`` is equivalent
+to setting ``b.provides += a``.
+
+.. note::
+
+    The ``requires`` relation only affects deployment ordering. It does not create a data dependency
+    between resources. Data dependencies are expressed through the configuration model itself (e.g.
+    by passing an attribute of one entity into another).
+
+
+.. _lang-std-builtins:
+
+Commonly used built-in functions
+================================
+
+The ``std`` module provides many built-in functions (plugins) that are available in every Inmanta
+project. Below are the most commonly used ones.
+
+Output and debugging
+++++++++++++++++++++
+
+- ``std::print(value)`` — Print a value to stdout during compilation.
+- ``std::assert(condition, message)`` — Assert a condition at compile time. Raises a compiler error if the condition is false.
+
+Templates and files
++++++++++++++++++++
+
+- ``std::template(path, **kwargs)`` — Render a Jinja2 template from a module's ``templates/`` directory.
+  The first path component is the module name (e.g. ``std::template("mymod/config.tmpl")``).
+  When no additional arguments are provided, the template has access to all variables in the same
+  lexical scope as the call site. When keyword arguments are provided, only those variables are
+  available in the template (e.g. ``std::template("mymod/config.tmpl", svc=self, env=env_name)``).
+  The latter form is more verbose but makes the template's dependencies explicit and more robust.
+- ``std::file(path)`` — Get the absolute path to a file in a module's ``files/`` directory.
+- ``std::source(path)`` — Read a file from a module's ``files/`` directory and return its content as a string.
+
+String operations
++++++++++++++++++
+
+- ``std::replace(string, old, new)`` — Replace all occurrences of ``old`` with ``new`` in a string.
+- ``std::length(value)`` — Return the length of a string or list.
+- ``std::split(string, separator)`` — Split a string by a separator and return a list.
+
+List operations
++++++++++++++++
+
+- ``std::count(list)`` — Count the number of elements in a list.
+- ``std::at(list, index)`` — Get the element at a specific index in a list.
+- ``std::sequence(n, start=0)`` — Generate a sequence ``[start, start+1, ..., start+n-1]``.
+- ``std::key_sort(list, key)`` — Sort a list of entities by an attribute.
+
+Type operations
++++++++++++++++
+
+- ``string(value)`` / ``int(value)`` / ``float(value)`` / ``bool(value)`` — Type casting functions.
+- ``std::validate_type(type_name, value, constraints)`` — Validate a value against a pydantic type.
+
+Networking
+++++++++++
+
+- ``std::ipindex(network, index, keep_prefix=true)`` — Get the nth IP address from a network prefix.
+
+Facts and environment
++++++++++++++++++++++
+
+- ``std::getfact(resource, fact_name)`` — Retrieve a runtime :term:`fact <facts>` from a resource.
+- ``std::get_env(name, default)`` — Read an environment variable at compile time.
+- ``std::get_env_int(name, default)`` — Read an environment variable as an integer at compile time.
+
+.. note::
+
+    For a complete list of built-in functions, see the ``std`` module's API documentation or inspect
+    the module's plugin source code.

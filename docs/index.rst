@@ -73,6 +73,7 @@
     install
     architecture
     language
+    cheatsheet
     model_developers
     platform_developers
     lsm/index

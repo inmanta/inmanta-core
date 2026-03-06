@@ -61,15 +61,15 @@ This folder contains a **project.yml**, which looks like this:
     modulepath: libs
     downloadpath: libs
     pip:
-      index_url: url: https://packages.inmanta.com/public/quickstart/python/simple/
+      index_url: https://packages.inmanta.com/public/quickstart/python/simple/
 
 
 
 
 
 - The ``modulepath`` setting defines that modules will be stored in ``libs`` directory.
-- The ``repo`` setting points to one or more Git repositories containing Inmanta modules.
-- The ``requires`` setting is used to pin versions of modules, otherwise the latest version is used.
+- The ``downloadpath`` setting defines the directory where downloaded modules are stored.
+- The ``pip.index_url`` setting points to a Python package index for resolving Inmanta module dependencies.
 
 1. Install the required modules inside the `SR Linux` folder:
 

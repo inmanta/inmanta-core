@@ -1,7 +1,7 @@
 Platform Developers Guide
 =========================
 
-This page provides information for developers of the ochestration platform.
+This page provides information for developers of the orchestration platform.
 
 Dependencies
 ------------
