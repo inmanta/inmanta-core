@@ -541,9 +541,9 @@ def agent_list(client: Client, environment: str) -> None:
     agents = client.get_list("list_agents", key_name="agents", arguments=dict(tid=env_id))
     data: list[list[str]] = []
     for agent in agents:
-        data.append([agent["name"], agent["environment"], str(agent["paused"]), agent["last_failover"]])
+        data.append([agent["name"], agent["environment"], str(agent["paused"])])
 
-    print_table(["Agent", "Environment", "Paused", "Last fail over"], data)
+    print_table(["Agent", "Environment", "Paused"], data)
 
 
 @agent.command(name="pause")

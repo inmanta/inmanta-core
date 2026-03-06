@@ -414,6 +414,9 @@ STD_PACKAGE = f"{MODULE_PKG_NAME_PREFIX}std"
 
 TRACEPARENT = "traceparent"
 
+# WebSocket endpoint path
+WS_URL_PATH = "/v2/ws"
+
 # Resource sets marked for deletion during a partial export can be passed via this env
 # variable as a space separated list of set ids.
 INMANTA_REMOVED_SET_ID = "INMANTA_REMOVED_RESOURCE_SET_ID"

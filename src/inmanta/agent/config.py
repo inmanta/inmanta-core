@@ -116,6 +116,22 @@ agent_cache_cleanup_tick_rate = Option[int](
     is_time,
 )
 
+agent_ws_ping_interval: Option[int] = Option(
+    "client",
+    "ws-ping-interval",
+    3,
+    "Interval in seconds between WebSocket ping frames sent to the server",
+    is_lower_bounded_int(1),
+)
+agent_ws_ping_timeout: Option[int] = Option(
+    "client",
+    "ws-ping-timeout",
+    2,
+    "Time in seconds to wait for a WebSocket pong response before considering the connection lost. "
+    "Must not exceed ws-ping-interval.",
+    is_lower_bounded_int(1),
+)
+
 ##############################
 # agent_rest_transport
 ##############################

@@ -626,6 +626,14 @@ class TaskHandler(Generic[T]):
 
     def __init__(self) -> None:
         super().__init__()
+        # Guard against double initialization in diamond inheritance hierarchies.
+        # For example, SessionEndpoint inherits from both Endpoint and WebsocketFrameDecoder,
+        # which both inherit from TaskHandler. Without this guard, explicit __init__ calls
+        # in SessionEndpoint would reset _background_tasks, losing any previously added tasks.
+        # Note: check __dict__ directly instead of hasattr() to avoid triggering __getattr__
+        # on subclasses (e.g. Client.__getattr__) before the object is fully initialized.
+        if "_background_tasks" in self.__dict__:
+            return
         self._background_tasks: set[Task[T]] = set()
         self._await_tasks: set[Task[T]] = set()
         self._stopped = False
