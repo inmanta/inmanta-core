@@ -645,7 +645,6 @@ async def test_halt_deploy(
     assert len(actual_data) == 1
     expected_data = {
         "environment": environment,
-        "last_failover": actual_data[0]["last_failover"],
         "name": "agent1",
         "paused": True,
         "process_id": actual_data[0]["process_id"],
@@ -821,7 +820,6 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent1", pat
     assert len(actual_data) == 1
     expected_data = {
         "environment": environment,
-        "last_failover": actual_data[0]["last_failover"],
         "name": "agent1",
         "paused": False,
         "process_id": actual_data[0]["process_id"],
@@ -1180,7 +1178,6 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent3", pat
     expected_data = [
         {
             "environment": environment,
-            "last_failover": actual_data[0]["last_failover"],
             "name": "agent1",
             "paused": True,
             "process_id": actual_data[0]["process_id"],
@@ -1190,7 +1187,6 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent3", pat
         },
         {
             "environment": environment,
-            "last_failover": actual_data[1]["last_failover"],
             "name": "agent2",
             "paused": True,
             "process_id": actual_data[1]["process_id"],
@@ -1200,7 +1196,6 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent3", pat
         },
         {
             "environment": environment,
-            "last_failover": actual_data[2]["last_failover"],
             "name": "agent3",
             "paused": True,
             "process_id": actual_data[2]["process_id"],
@@ -1230,7 +1225,6 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent3", pat
     expected_data = [
         {
             "environment": environment,
-            "last_failover": actual_data[0]["last_failover"],
             "name": "agent1",
             "paused": False,
             "process_id": actual_data[0]["process_id"],
@@ -1240,7 +1234,6 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent3", pat
         },
         {
             "environment": environment,
-            "last_failover": actual_data[1]["last_failover"],
             "name": "agent2",
             "paused": False,
             "process_id": actual_data[1]["process_id"],
@@ -1250,7 +1243,6 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent3", pat
         },
         {
             "environment": environment,
-            "last_failover": actual_data[2]["last_failover"],
             "name": "agent3",
             "paused": False,
             "process_id": actual_data[2]["process_id"],
@@ -1356,7 +1348,6 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep", agent="agent1", path
     assert len(actual_data) == 1
     expected_data = {
         "environment": environment,
-        "last_failover": actual_data[0]["last_failover"],
         "name": "agent1",
         "paused": False,
         "process_id": actual_data[0]["process_id"],

@@ -39,12 +39,13 @@ async def test_replace_heartbeat_sessions_with_websocket(
     assert "agentinstance" in old_tables
     assert "schedulersession" not in old_tables
 
-    # Verify agent table has id_primary column
+    # Verify agent table has id_primary and last_failover columns
     agent_cols = {
         r["column_name"]
         for r in await postgresql_client.fetch("SELECT column_name FROM information_schema.columns WHERE table_name = 'agent'")
     }
     assert "id_primary" in agent_cols
+    assert "last_failover" in agent_cols
 
     await migrate_db_from()
 
@@ -56,12 +57,13 @@ async def test_replace_heartbeat_sessions_with_websocket(
     assert "agentprocess" not in new_tables
     assert "agentinstance" not in new_tables
 
-    # Verify agent.id_primary column is removed
+    # Verify agent.id_primary and agent.last_failover columns are removed
     agent_cols_after = {
         r["column_name"]
         for r in await postgresql_client.fetch("SELECT column_name FROM information_schema.columns WHERE table_name = 'agent'")
     }
     assert "id_primary" not in agent_cols_after
+    assert "last_failover" not in agent_cols_after
 
     # Verify last_seen column is removed from schedulersession
     session_cols = {

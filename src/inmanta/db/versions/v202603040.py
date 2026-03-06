@@ -24,6 +24,7 @@ async def update(connection: Connection) -> None:
     Replace heartbeat-based agent sessions with WebSocket-based scheduler sessions.
 
     - Drop agent.id_primary FK and index (references removed agentinstance table)
+    - Drop agent.last_failover column (no longer meaningful without heartbeat sessions)
     - Drop agentinstance table
     - Rename agentprocess to schedulersession and drop last_seen column
     - Rename indexes to match new table name
@@ -32,6 +33,7 @@ async def update(connection: Connection) -> None:
         DROP INDEX IF EXISTS public.agent_id_primary_index;
         ALTER TABLE public.agent DROP CONSTRAINT IF EXISTS agent_id_primary_fkey;
         ALTER TABLE public.agent DROP COLUMN id_primary;
+        ALTER TABLE public.agent DROP COLUMN last_failover;
 
         DROP TABLE public.agentinstance;
 

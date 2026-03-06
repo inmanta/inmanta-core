@@ -322,11 +322,7 @@ async def test_api(init_dataclasses_and_load_schema):
 
     code, all_agents = await am.list_agents(env2)
     assert code == 200
-    shouldbe = {
-        "agents": [
-            {"name": "agent4", "paused": False, "last_failover": "", "environment": env2.id, "state": "down"}
-        ]
-    }
+    shouldbe = {"agents": [{"name": "agent4", "paused": False, "environment": env2.id, "state": "down"}]}
     assert_equal_ish(shouldbe, all_agents)
 
 

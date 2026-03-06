@@ -792,7 +792,6 @@ class AgentOrder(AbstractDatabaseOrderV2):
             ColumnNameStr("name"): TablePrefixWrapper("a", StringColumn),
             ColumnNameStr("process_name"): OptionalStringColumn,
             ColumnNameStr("paused"): BoolColumn,
-            ColumnNameStr("last_failover"): OptionalDateTimeColumn,
             ColumnNameStr("status"): StringColumn,
         }
 
@@ -3430,7 +3429,6 @@ class Agent(BaseDocument):
 
     :param environment: The environment this resource is defined in
     :param name: The name of this agent
-    :param last_failover: Moment at which the primary was last changed
     :param paused: is this agent paused (if so, skip it)
     :param unpause_on_resume: whether this agent should be unpaused when resuming from environment-wide halt. Used to
         persist paused state when halting.
@@ -3440,7 +3438,6 @@ class Agent(BaseDocument):
 
     environment: uuid.UUID
     name: str
-    last_failover: Optional[datetime.datetime] = None
     paused: bool = False
     unpause_on_resume: Optional[bool] = None
 
@@ -3477,8 +3474,6 @@ class Agent(BaseDocument):
 
     def to_dict(self) -> JsonType:
         base = BaseDocument.to_dict(self)
-        if self.last_failover is None:
-            base["last_failover"] = ""
 
         # Note: get_status() without has_active_session always reports "down" for non-paused agents.
         # This is a known limitation: to_dict() is sync and cannot query SchedulerSession.
@@ -3504,8 +3499,8 @@ class Agent(BaseDocument):
     ) -> None:
         query = """
             INSERT INTO agent
-            (last_failover,paused,unpause_on_resume,environment,name)
-            VALUES (now(),FALSE,NULL,$1,$2)
+            (paused,unpause_on_resume,environment,name)
+            VALUES (FALSE,NULL,$1,$2)
             ON CONFLICT DO NOTHING
         """
         values = [cls._get_value(environment), cls._get_value(endpoint)]

@@ -16,7 +16,6 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import datetime
 import json
 import uuid
 from operator import itemgetter
@@ -25,10 +24,8 @@ from typing import Optional
 import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
-import inmanta.const
 from inmanta import data
 from inmanta.server import SLICE_AGENT_MANAGER, config
-from inmanta.util import parse_timestamp
 
 
 @pytest.fixture
@@ -39,20 +36,16 @@ async def env_with_agents(client, environment: str) -> None:
     # create scheduler
     process_sid = uuid.uuid4()
     await data.SchedulerSession(hostname="localhost", environment=env_uuid, sid=process_sid).insert()
-    scheduler_agent = await data.Agent.get_one(environment=env_uuid, name=inmanta.const.AGENT_SCHEDULER_ID)
-    await scheduler_agent.update(last_failover=(datetime.datetime.now() - datetime.timedelta(minutes=5)))
 
     async def create_agent(
         name: str,
         paused: bool = False,
-        last_failover: Optional[datetime.datetime] = None,
         unpause_on_resume: Optional[bool] = None,
     ):
         await data.Agent(
             environment=env_uuid,
             name=name,
             paused=paused,
-            last_failover=last_failover,
             unpause_on_resume=unpause_on_resume,
         ).insert()
 
@@ -63,8 +56,8 @@ async def env_with_agents(client, environment: str) -> None:
     await create_agent(name="paused_agent", paused=True)  # paused
     await create_agent(name="paused_agent_with_instance", paused=True)  # paused
     await create_agent(name="unpause_on_resume", unpause_on_resume=True)  # up
-    await create_agent(name="failover1", last_failover=(datetime.datetime.now() - datetime.timedelta(minutes=1)))  # up
-    await create_agent(name="failover2", last_failover=datetime.datetime.now())  # up
+    await create_agent(name="failover1")  # up
+    await create_agent(name="failover2")  # up
 
 
 @pytest.mark.parametrize("no_agent", [True])
@@ -108,7 +101,7 @@ def agent_names(agents: list[dict[str, str]]) -> list[str]:
 
 
 @pytest.mark.parametrize("no_agent", [True])
-@pytest.mark.parametrize("order_by_column", ["name", "status", "process_name", "last_failover", "paused"])
+@pytest.mark.parametrize("order_by_column", ["name", "status", "process_name", "paused"])
 @pytest.mark.parametrize("order", ["DESC", "ASC"])
 async def test_agents_paging(server, client, env_with_agents: None, environment: str, order_by_column: str, order: str) -> None:
     result = await client.get_agents(
@@ -121,10 +114,6 @@ async def test_agents_paging(server, client, env_with_agents: None, environment:
     for agent in all_agents:
         if not agent["process_name"]:
             agent["process_name"] = ""
-        if not agent["last_failover"]:
-            agent["last_failover"] = datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
-        else:
-            agent["last_failover"] = parse_timestamp(agent["last_failover"])
     all_agents_in_expected_order = sorted(all_agents, key=itemgetter(order_by_column, "name"), reverse=order == "DESC")
     all_agent_names_in_expected_order = agent_names(all_agents_in_expected_order)
 
@@ -207,7 +196,7 @@ async def test_agents_paging(server, client, env_with_agents: None, environment:
 
     assert result.result["metadata"] == {"total": 9, "before": 0, "after": 0, "page_size": 100}
 
-    if order_by_column != "last_failover" or order != "ASC":
+    if order_by_column != "name" or order != "ASC":
         return
 
     # verify that paging beyond the last page returns correct counts and links

@@ -191,7 +191,7 @@ async def test_project_cascade_delete(init_dataclasses_and_load_schema):
         )
         await agent_proc.insert()
 
-        agent = data.Agent(environment=env.id, name="agi1", last_failover=datetime.datetime.now(), paused=False)
+        agent = data.Agent(environment=env.id, name="agi1", paused=False)
         await agent.insert()
 
         version = int(time.time())
@@ -300,7 +300,7 @@ async def test_environment_cascade_content_only(init_dataclasses_and_load_schema
     )
     await agent_proc.insert()
 
-    agent = data.Agent(environment=env.id, name="agi1", last_failover=datetime.datetime.now(), paused=False)
+    agent = data.Agent(environment=env.id, name="agi1", paused=False)
     await agent.insert()
 
     version = int(time.time())
@@ -569,7 +569,7 @@ async def test_agent(init_dataclasses_and_load_schema):
     env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
     await env.insert()
 
-    agent1 = data.Agent(environment=env.id, name="agi1_agent1", last_failover=datetime.datetime.now(), paused=False)
+    agent1 = data.Agent(environment=env.id, name="agi1_agent1", paused=False)
     await agent1.insert()
     agent2 = data.Agent(environment=env.id, name="agi1_agent2", paused=False)
     await agent2.insert()
@@ -612,7 +612,7 @@ async def test_pause_agent_endpoint_set(environment):
     """
     env_id = uuid.UUID(environment)
     agent_name = "test"
-    agent = data.Agent(environment=env_id, name=agent_name, last_failover=datetime.datetime.now(), paused=False)
+    agent = data.Agent(environment=env_id, name=agent_name, paused=False)
     await agent.insert()
 
     # Verify not paused
@@ -640,9 +640,9 @@ async def test_pause_all_agent_in_environment(init_dataclasses_and_load_schema):
     env2 = data.Environment(name="env2", project=project.id)
     await env2.insert()
 
-    await data.Agent(environment=env1.id, name="agent1", last_failover=datetime.datetime.now(), paused=False).insert()
-    await data.Agent(environment=env1.id, name="agent2", last_failover=datetime.datetime.now(), paused=False).insert()
-    await data.Agent(environment=env2.id, name="agent3", last_failover=datetime.datetime.now(), paused=False).insert()
+    await data.Agent(environment=env1.id, name="agent1", paused=False).insert()
+    await data.Agent(environment=env1.id, name="agent2", paused=False).insert()
+    await data.Agent(environment=env2.id, name="agent3", paused=False).insert()
     agents_in_env1 = ["agent1", "agent2"]
 
     async def assert_paused(env_paused_map: dict[uuid.UUID, bool]) -> None:

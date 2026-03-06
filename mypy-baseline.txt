@@ -429,7 +429,6 @@ src/inmanta/data/dataview.py:0: error: Argument "id" to "CompileReport" has inco
 src/inmanta/data/dataview.py:0: error: Argument "id" to "Fact" has incompatible type "object"; expected "UUID"  [arg-type]
 src/inmanta/data/dataview.py:0: error: Argument "id" to "Notification" has incompatible type "object"; expected "UUID"  [arg-type]
 src/inmanta/data/dataview.py:0: error: Argument "id" to "Parameter" has incompatible type "object"; expected "UUID"  [arg-type]
-src/inmanta/data/dataview.py:0: error: Argument "last_failover" to "Agent" has incompatible type "object"; expected "datetime | None"  [arg-type]
 src/inmanta/data/dataview.py:0: error: Argument "mergeable_environment_variables" to "CompileReport" has incompatible type "object"; expected "dict[str, str]"  [arg-type]
 src/inmanta/data/dataview.py:0: error: Argument "message" to "DesiredStateLabel" has incompatible type "object"; expected "str"  [arg-type]
 src/inmanta/data/dataview.py:0: error: Argument "message" to "Notification" has incompatible type "object"; expected "str"  [arg-type]

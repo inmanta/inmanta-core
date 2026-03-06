@@ -1038,7 +1038,6 @@ class Agent(Base):
 
     environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
     name: Mapped[str] = mapped_column(String, primary_key=True)
-    last_failover: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     paused: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text("false"))
     unpause_on_resume: Mapped[Optional[bool]] = mapped_column(Boolean)
 

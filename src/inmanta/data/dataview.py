@@ -1255,7 +1255,6 @@ class AgentView(DataView[AgentOrder, model.Agent]):
         base = SimpleQueryBuilder(
             select_clause=f"""SELECT a.name,
                                      a.environment,
-                                     a.last_failover,
                                      a.paused,
                                      a.unpause_on_resume,
                                      NULL AS process_name,
@@ -1298,7 +1297,6 @@ class AgentView(DataView[AgentOrder, model.Agent]):
             model.Agent(
                 name=agent["name"],
                 environment=agent["environment"],
-                last_failover=agent["last_failover"],
                 paused=agent["paused"],
                 unpause_on_resume=agent["unpause_on_resume"],
                 process_id=agent["process_id"],
