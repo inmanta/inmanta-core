@@ -45,6 +45,7 @@ coverage.xml
 # Generated
 src/*/parser/parser.out
 src/*/parser/parsetab.py
+src/*/parser/lark_grammar_*.cache
 
 # Venv
 .env
