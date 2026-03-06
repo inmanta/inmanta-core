@@ -911,7 +911,7 @@ def test_mls_non_ascii_with_backslash():
     """
     Verify non-ASCII + backslash escape in multi-line strings.
     """
-    statements = parse_code('a=\"\"\"café\\n\"\"\"')
+    statements = parse_code('a="""café\\n"""')
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, Assign)

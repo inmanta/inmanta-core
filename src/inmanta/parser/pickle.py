@@ -47,9 +47,7 @@ def _restore_namespace(full_name: str) -> Namespace:
 
     If called directly (outside ASTUnpickler), raises UnpicklingError.
     """
-    raise UnpicklingError(
-        f"_restore_namespace({full_name!r}) called outside ASTUnpickler context"
-    )
+    raise UnpicklingError(f"_restore_namespace({full_name!r}) called outside ASTUnpickler context")
 
 
 class ASTPickler(Pickler):
@@ -80,14 +78,13 @@ class ASTUnpickler(Unpickler):
     def find_class(self, module: str, name: str) -> Callable[..., object]:
         if module == _RESTORE_MODULE and name == _RESTORE_QUALNAME:
             return self._restore_namespace_bound
-        return super().find_class(module, name)
+        result: Callable[..., object] = super().find_class(module, name)
+        return result
 
     def _restore_namespace_bound(self, full_name: str) -> Namespace:
         """Instance-bound namespace restoration — no shared mutable state."""
         if self._namespace.get_full_name() != full_name:
-            raise UnpicklingError(
-                f"Namespace mismatch: expected {self._namespace.get_full_name()}, got {full_name}"
-            )
+            raise UnpicklingError(f"Namespace mismatch: expected {self._namespace.get_full_name()}, got {full_name}")
         return self._namespace
 
 
