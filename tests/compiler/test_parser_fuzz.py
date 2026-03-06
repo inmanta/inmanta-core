@@ -30,10 +30,11 @@ import os
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 from hypothesis.extra.lark import from_lark
+from lark import Lark
+
 from inmanta.ast import CompilerException, Namespace
 from inmanta.parser import ParserException
 from inmanta.parser.larkInmantaParser import base_parse
-from lark import Lark
 
 # Build a Lark instance from the grammar file for Hypothesis.
 # This must be a fresh Lark (not the serialised singleton) because
