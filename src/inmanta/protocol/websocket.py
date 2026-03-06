@@ -37,7 +37,21 @@ LOGGER = logging.getLogger(__name__)
 
 
 class Session:
-    """A session using websockets"""
+    """Represents a websocket session between a client (agent) and the server. Each side has an instance
+    representing the session.
+
+    A session is uniquely identified by (environment_id, session_name). It goes through the
+    following lifecycle:
+
+    1. Created locally (client or server side)
+    2. OpenSession message sent over the websocket
+    3. Server confirms with SessionOpened → session becomes `active` (confirmed and not closed)
+    4. RPC calls can flow in both directions while active
+    5. Session is closed via CloseSession message or connection loss
+
+    The session holds a reference to its :class:`WebsocketFrameDecoder`, which provides the
+    underlying websocket transport for sending messages and making RPC calls.
+    """
 
     def __init__(
         self,
@@ -79,13 +93,15 @@ class Session:
 
     @property
     def active(self) -> bool:
-        """Can this session be used? It is confirmed and not closed"""
+        """Can this session be used? It is confirmed and not closed."""
         return not self._closed and self._confirmed
 
     def confirm_open(self) -> None:
+        """Mark the session as confirmed after receiving a SessionOpened acknowledgment."""
         self._confirmed = True
 
     async def open(self) -> None:
+        """Send an OpenSession message to the remote side to initiate the session handshake."""
         await self.websocket_protocol.write_message(
             OpenSession(
                 environment_id=self._environment_id,
@@ -96,36 +112,49 @@ class Session:
 
     @property
     def session_key(self) -> Tuple[uuid.UUID, str]:
-        """Return a key that uniquely identifies a session"""
+        """Return a (environment_id, session_name) tuple that uniquely identifies this session."""
         return self._environment_id, self._session_name
 
     def close_session(self) -> None:
+        """Mark the session as closed. This is a local state change only; it does not send a message."""
         self._closed = True
 
     def is_closed(self) -> bool:
+        """Return True if the session has been closed."""
         return self._closed
 
     def get_client(self) -> endpoints.Client:
-        """Get a client to communicate with the endpoint on the other side of the session"""
+        """Get a client to communicate with the endpoint on the other side of the session."""
         return _SessionClient(self, False)
 
     def get_typed_client(self) -> endpoints.TypedClient:
-        """Get a typed client to communicate with the endpoint on the other side of the session"""
+        """Get a typed client to communicate with the endpoint on the other side of the session."""
         return _SessionClient(self, True)
 
     async def close_connection(self) -> None:
+        """Close the underlying websocket connection (delegates to the frame decoder)."""
         await self.websocket_protocol.close_connection()
 
 
 class _SessionClient:
+    """A dynamic RPC client that routes method calls through a websocket session.
+
+    This client is obtained via `Session.get_client` or `Session.get_typed_client`.
+    It uses `__getattr__` to intercept attribute access: any method name defined in the protocol's
+    `inmanta.protocol.common.MethodProperties` registry can be called as if it were a local
+    method. The call is serialized as an `RPC_Call` message and sent over the session's
+    websocket connection.
+
+    When `typed=True`, the response is deserialized into the method's declared return type.
+    When `typed=False`, a raw `inmanta.protocol.common.Result` is returned.
+    """
+
     def __init__(self, session: Session, typed: bool) -> None:
         self._session = session
         self._typed = typed
 
     def __getattr__(self, name: str) -> Callable[..., Any]:
-        """
-        Return a function that will call self._call with the correct method properties associated
-        """
+        """Look up the named RPC method and return a callable that dispatches it over the websocket."""
         method = common.MethodProperties.select_method(name)
 
         if method is None:
@@ -152,20 +181,39 @@ class _SessionClient:
 
 
 class SessionListener:
+    """Interface for receiving session lifecycle events.
+
+    Implement this interface to be notified when sessions are opened or closed.
+    """
+
     async def session_opened(self, session: Session) -> None:
+        """Called when a new session has been opened and confirmed."""
         pass
 
     async def session_closed(self, session: Session) -> None:
+        """Called when a session has been closed (either gracefully or due to connection loss)."""
         pass
 
 
 class WSMessage(model.BaseModel):
-    """A websocket message"""
+    """Base class for all websocket protocol messages.
+
+    Each subclass represents a distinct message type in the websocket protocol. Messages are
+    discriminated by their `action` field, which is set to a fixed literal value per subclass.
+    The `WSMessages` type alias uses Pydantic's discriminated union for efficient parsing.
+    """
 
     action: str
 
 
 class OpenSession(WSMessage):
+    """Sent by the client to request a new session with the server.
+
+    :param environment_id: The environment this session belongs to.
+    :param session_name: A unique name for this session within the environment (e.g. the agent name).
+    :param hostname: The hostname of the machine initiating the session.
+    """
+
     action: Literal["OPEN_SESSION"] = "OPEN_SESSION"
     environment_id: uuid.UUID
     session_name: str
@@ -173,21 +221,37 @@ class OpenSession(WSMessage):
 
 
 class SessionOpened(WSMessage):
+    """Sent by the server to confirm that the session has been accepted and is now active."""
+
     action: Literal["SESSION_OPENED"] = "SESSION_OPENED"
 
 
 class RejectSession(WSMessage):
-    """This message is sent when a session is rejected by the server"""
+    """Sent by the server when it refuses a session request (e.g. duplicate session, server shutting down).
+
+    :param reason: Human-readable explanation for the rejection.
+    """
 
     action: Literal["REJECT_SESSION"] = "REJECT_SESSION"
     reason: str
 
 
 class CloseSession(WSMessage):
+    """Sent by either side to gracefully close the session."""
+
     action: Literal["CLOSE_SESSION"] = "CLOSE_SESSION"
 
 
 class RPC_Call(WSMessage):
+    """An RPC request sent over the websocket. Can flow in either direction (server→client or client→server).
+
+    :param url: The API endpoint URL (e.g. `/api/v2/resource`). May include query parameters.
+    :param method: The HTTP method (GET, POST, PUT, DELETE, etc.).
+    :param headers: HTTP headers to pass along (e.g. tracing context, authentication).
+    :param body: The JSON request body, or None for bodyless requests.
+    :param reply_id: Correlation ID for matching the reply. None for fire-and-forget calls.
+    """
+
     action: Literal["RPC_CALL"] = "RPC_CALL"
     url: str
     method: str
@@ -197,6 +261,13 @@ class RPC_Call(WSMessage):
 
 
 class RPC_Reply(WSMessage):
+    """The response to an `RPC_Call`, correlated by `reply_id`.
+
+    :param reply_id: The correlation ID from the original `RPC_Call`.
+    :param result: The JSON response body, or None.
+    :param code: The HTTP status code of the response.
+    """
+
     action: Literal["RPC_REPLY"] = "RPC_REPLY"
     reply_id: uuid.UUID
     result: Optional[types.JsonType]
@@ -230,7 +301,20 @@ async def handle_timeout(
 
 
 class WebsocketFrameDecoder(util.TaskHandler[None]):
-    """A close that offers an on_message to handle websocket frames and calls handlers for each event"""
+    """Handles incoming websocket frames and dispatches them to the appropriate handler.
+
+    This is the core protocol handler for the websocket-based RPC layer. It parses incoming
+    messages into typed `WSMessage` objects and processes them according to their type:
+
+    - **Session lifecycle**: `OpenSession` / `SessionOpened` / `RejectSession` / `CloseSession`
+      manage the session handshake and teardown.
+    - **RPC dispatch**: `RPC_Call` messages are dispatched to registered call targets (the same
+      handler methods used by the REST layer). `RPC_Reply` messages resolve pending futures from
+      outgoing `rpc_call` invocations.
+
+    Subclasses must implement `write_message` to provide the actual transport. Override
+    `on_open_session` and `on_close_session` for session lifecycle hooks.
+    """
 
     def __init__(self) -> None:
         super().__init__()
@@ -241,17 +325,20 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
         self._authnz_context: rest.AuthnzInterface | None = None
 
     def set_authnz_context(self, context: rest.AuthnzInterface) -> None:
+        """Set the authentication/authorization context used when dispatching incoming RPC calls."""
         self._authnz_context = context
 
     @property
     def session(self) -> Optional[Session]:
+        """The session associated with this decoder, or None if no session has been established yet."""
         return self._session
 
     def set_call_targets(self, call_targets: list[common.CallTarget]) -> None:
+        """Set the call targets that incoming RPC calls will be dispatched to."""
         self._call_targets = call_targets
 
     def active(self) -> bool:
-        """Is the session set and active?"""
+        """Return True if a session is established and active (confirmed and not closed)."""
         return self._session is not None and self._session.active
 
     def rpc_call(
@@ -293,6 +380,7 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
                 future.set_result(common.Result(code=503, result={"message": "Failed to send RPC call"}))
 
     async def on_message(self, message: str | bytes) -> None:
+        """Parse an incoming websocket frame and dispatch it based on message type."""
         LOGGER.debug("%s got %s", self, message)
         try:
             msg = self._message_parser.validate_json(message)
@@ -362,7 +450,7 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
 
             case RPC_Reply():
                 LOGGER.debug("Got a reply on %s with %s", self, msg)
-                # A reply to a request send by the server to the client
+                # A reply to a request sent by the server to the client
                 if not self.active():
                     LOGGER.warning("Received RPC_Reply on inactive session, ignoring: %s", self)
                     return
@@ -417,6 +505,7 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
         """Write the message in the correct transport"""
 
     def create_session(self, environment_id: uuid.UUID, session_name: str) -> None:
+        """Create a new local session (client-side). The session is not yet confirmed until the server responds."""
         self._session = Session(
             environment_id=environment_id, session_name=session_name, hostname=socket.gethostname(), websocket_protocol=self
         )
@@ -661,7 +750,7 @@ class SessionEndpoint(endpoints.Endpoint, common.CallTarget, WebsocketFrameDecod
             if self._ws_client is not None and not self._ws_client.closed:
                 self._ws_client.close()
 
-            LOGGER.info("Creating websocket connection from server for %s in environment %s", self.name, self.environment)
+            LOGGER.info("Creating websocket connection to server for %s in environment %s", self.name, self.environment)
             conn = WebSocketClientConnection(
                 request=httpclient.HTTPRequest(self.get_websocket_url(), connect_timeout=1),
                 ping_interval=ws_ping_interval,
@@ -699,7 +788,7 @@ class SessionEndpoint(endpoints.Endpoint, common.CallTarget, WebsocketFrameDecod
     async def on_reconnect(self) -> None:
         """
         Called when a connection becomes active. i.e. when a first heartbeat is received after startup or
-        a first heartbeat after an :py:`on_disconnect`
+        a first heartbeat after an `on_disconnect`
         """
         LOGGER.info("Session %s in environment %s is connected", self.name, self.environment)
 
