@@ -37,3 +37,37 @@ Also, onboarding of existing configuration is no different from a new deployment
 
 Additionally, we can perform *dryrun* on all intent, to determine what would change if we would deploy an intent. This also uses the same smart adapter, but stops before actually enforcing the intent.
 
+
+.. _arch-pipeline:
+
+The compile-export-deploy pipeline
+-----------------------------------
+
+The end-to-end flow from source code to deployed infrastructure follows these stages:
+
+1. **Compile**: The compiler reads the project's ``main.cf`` file and all imported modules. It evaluates
+   the declarative model, resolving all entities, relations, implementations, and plugins into a
+   complete resource model. The compiler determines which entities have ``@resource`` mappings and
+   serializes them into deployable resources.
+
+2. **Export**: The exporter takes the compiled resource model and sends it to the Inmanta server via
+   its REST API. Each resource is serialized to a JSON representation that captures all attributes
+   needed for deployment. Resources with :term:`unknown` values are marked as undefined and excluded
+   from deployment until those values become known.
+
+3. **Store**: The server stores the new desired state in its PostgreSQL database. It compares the new
+   desired state with the previous version to determine which resources have changed.
+
+4. **Schedule**: The resource scheduler detects changes and schedules deployments. It respects the
+   ``requires``/``provides`` ordering between resources, ensuring dependencies are deployed first.
+   Resources are grouped by their :term:`agent`, and the scheduler spawns :term:`executor` processes
+   as needed.
+
+5. **Deploy**: Each executor loads the appropriate :term:`handler` (smart adapter) for its assigned
+   resources. The handler reads the current state from the target infrastructure, computes the
+   difference with the desired state, and applies the necessary changes. Results are reported back
+   to the server.
+
+This pipeline runs both for initial deployments and for ongoing changes. When the model is updated
+and recompiled, only the resources that have actually changed are redeployed.
+

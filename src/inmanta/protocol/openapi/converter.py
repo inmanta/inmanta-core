@@ -96,7 +96,7 @@ class OpenApiConverter:
             api_methods = self._filter_api_methods(methods)
             if len(api_methods) > 0:
                 url_method: UrlMethod = next(iter(methods.values()))
-                parameterized_path: str = url_method.get_path()
+                parameterized_path: str = url_method.get_openapi_path()
                 path_item = self._extract_operations_from_methods(api_methods, parameterized_path)
                 paths[parameterized_path] = path_item
         security: list[dict[SecuritySchemeName, list[Scope]]] | None = (
@@ -354,7 +354,7 @@ class FunctionParameterHandler:
         self.non_path_and_non_header_params: dict[str, inspect.Parameter] = {}
 
         for param_name, param in self.all_params_dct.items():
-            if f"<{param_name}>" in self.path:
+            if f"{{{param_name}}}" in self.path:
                 self.path_params[param_name] = param
             elif (
                 param_name in self.method_properties.arg_options.keys()
