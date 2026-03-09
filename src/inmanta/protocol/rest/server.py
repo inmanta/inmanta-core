@@ -417,12 +417,13 @@ class RESTServer(RESTBase, AuthnzInterface):
         """Register a session with the server"""
         if session.session_key in self._sessions:
             old_session = self._sessions[session.session_key]
-            # Close the old session before registering the new one. This marks it as closed
-            # so that when the old handler's deferred on_close eventually fires,
-            # WebsocketFrameDecoder.close_session() returns early (is_closed() is True)
-            # and doesn't accidentally remove the new session from the registry.
-            old_session.close_session()
+            # Close the old session's connection before registering the new one. This sends
+            # CloseSession to the old client, marks the session as closed, and tears down the
+            # websocket. Because we remove from _sessions first, the close_session() ->
+            # on_close_session() -> notify_close_session() path returns early (identity check
+            # fails), so we notify listeners explicitly below.
             del self._sessions[session.session_key]
+            await old_session.close_connection()
             for listener in self.listeners:
                 await listener.session_closed(old_session)
 

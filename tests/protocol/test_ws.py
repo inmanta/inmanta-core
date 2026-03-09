@@ -707,19 +707,26 @@ async def test_ws_notify_close_session_identity_check(inmanta_config: object, se
     env_id = uuid.uuid4()
 
     try:
-        # Simulate two sessions with the same key (same agent reconnecting)
+        # Simulate two sessions with the same key (same agent reconnecting).
+        # Wire decoder._session so close_connection() works as in production.
+        decoder_a = websocket.WebsocketFrameDecoder()
         session_a = websocket.Session(
             environment_id=env_id,
             session_name="agent",
             hostname="host1",
-            websocket_protocol=websocket.WebsocketFrameDecoder(),
+            websocket_protocol=decoder_a,
         )
+        decoder_a._session = session_a
+
+        decoder_b = websocket.WebsocketFrameDecoder()
         session_b = websocket.Session(
             environment_id=env_id,
             session_name="agent",
             hostname="host1",
-            websocket_protocol=websocket.WebsocketFrameDecoder(),
+            websocket_protocol=decoder_b,
         )
+        decoder_b._session = session_b
+
         assert session_a.session_key == session_b.session_key
         assert session_a is not session_b
 
@@ -762,19 +769,25 @@ async def test_ws_evicted_session_connection_closed(inmanta_config: object, serv
     env_id = uuid.uuid4()
 
     try:
-        # Create two sessions with the same key, simulating an agent reconnect
+        # Create two sessions with the same key, simulating an agent reconnect.
+        # Wire decoder._session so close_connection() works as in production.
+        decoder_a = websocket.WebsocketFrameDecoder()
         session_a = websocket.Session(
             environment_id=env_id,
             session_name="agent",
             hostname="host1",
-            websocket_protocol=websocket.WebsocketFrameDecoder(),
+            websocket_protocol=decoder_a,
         )
+        decoder_a._session = session_a
+
+        decoder_b = websocket.WebsocketFrameDecoder()
         session_b = websocket.Session(
             environment_id=env_id,
             session_name="agent",
             hostname="host1",
-            websocket_protocol=websocket.WebsocketFrameDecoder(),
+            websocket_protocol=decoder_b,
         )
+        decoder_b._session = session_b
 
         # Register session A
         await rs._transport.register_session(session_a)
@@ -783,8 +796,8 @@ async def test_ws_evicted_session_connection_closed(inmanta_config: object, serv
         # Register session B with the same key — should evict A
         await rs._transport.register_session(session_b)
 
-        # register_session must close the old session's state, not just remove it from
-        # the dict and notify listeners.
+        # register_session must close the old session's connection, not just remove it
+        # from the dict and notify listeners.
         assert session_a.is_closed(), (
             "Old session A should be closed by register_session when evicted, "
             "but it's still active — its deferred on_close can cause E1"

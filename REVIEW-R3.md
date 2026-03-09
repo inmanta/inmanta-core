@@ -78,7 +78,7 @@ connection open until the ping timeout detects it as dead. During this window:
 the websocket. The identity check in `notify_close_session` prevents double-removal of the
 new session.
 
-**Status**: [ ] TODO
+**Status**: [x] DONE
 
 
 ## R4. `_register_session` in AgentManager has no shutdown guard (Minor)
@@ -102,7 +102,7 @@ async def _register_session(self, session, now):
     ...
 ```
 
-**Status**: [ ] TODO
+**Status**: [x] DONE
 
 
 ## R5. `on_reconnect` failure leaves agent in half-connected state (Edge case)
@@ -130,7 +130,7 @@ disconnect/reconnect cycle.
 **Suggestion**: Wrap `on_reconnect` in a try/except that closes the connection on failure,
 forcing a reconnect cycle. Or add a retry loop within `on_reconnect`.
 
-**Status**: [ ] TODO
+**Status**: [x] DONE
 
 
 ## R6. `_on_disconnect` can fire from failed connection attempts (Minor race)
@@ -159,7 +159,7 @@ def _on_disconnect(self) -> None:
 One way: pass `conn` as a bound argument to the callback and compare against
 `self._ws_client`.
 
-**Status**: [ ] TODO
+**Status**: [x] DONE
 
 
 ## R7. `rpc_call` parameter type mismatch (Typing)
@@ -175,7 +175,7 @@ def rpc_call(
 `_SessionClient.wrap` passes `args=args` where `args` is a `tuple` (from `*args`). Should
 be `Sequence[object]` to match `build_call`'s signature and the actual usage.
 
-**Status**: [ ] TODO
+**Status**: [x] DONE
 
 
 ## R8. `close_session` _replies iteration safety (Observation)
@@ -196,7 +196,7 @@ iteration and the `clear()`. A `handle_timeout` coroutine cannot interleave. The
 No action needed, but a brief comment explaining the safety invariant would help future
 readers.
 
-**Status**: [ ] TODO
+**Status**: [x] DONE
 
 
 ## R9. Websocket transport has no authentication (Security)
@@ -239,10 +239,10 @@ server→agent calls never inject tokens (agent endpoints use `enforce_auth=Fals
 |----|-------------|----------------------------------------------------------------------|--------|
 | R1 | Bug         | Fire-and-forget RPCs set `reply_id`, causing spurious warnings       | DONE   |
 | R2 | Fragile     | Agent `_client` and scheduler hold stale session references          | DONE   |
-| R3 | Edge case   | Old websocket connection not closed on session eviction              | TODO   |
-| R4 | Minor       | No shutdown guard in `_register_session`                             | TODO   |
-| R5 | Edge case   | `on_reconnect` failure leaves agent half-connected                   | TODO   |
-| R6 | Minor race  | Stale connection close callback fires `on_disconnect` spuriously     | TODO   |
-| R7 | Typing      | `rpc_call` `args` declared as `list` but receives `tuple`            | TODO   |
-| R8 | Observation | `close_session` `_replies` iteration relies on single-thread asyncio | TODO   |
+| R3 | Edge case   | Old websocket connection not closed on session eviction              | DONE   |
+| R4 | Minor       | No shutdown guard in `_register_session`                             | DONE   |
+| R5 | Edge case   | `on_reconnect` failure leaves agent half-connected                   | DONE   |
+| R6 | Minor race  | Stale connection close callback fires `on_disconnect` spuriously     | DONE   |
+| R7 | Typing      | `rpc_call` `args` declared as `list` but receives `tuple`            | DONE   |
+| R8 | Observation | `close_session` `_replies` iteration relies on single-thread asyncio | DONE   |
 | R9 | Security    | Websocket transport has no authentication                            | DONE   |

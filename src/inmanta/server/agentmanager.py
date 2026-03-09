@@ -488,6 +488,8 @@ class AgentManager(ServerSlice, websocket.SessionListener):
         session log in the database. When the database connection is lost, the get_statuses()
         call fails and the new session will be refused.
         """
+        if not self.is_running() or self.is_stopping():
+            return
         LOGGER.debug("New session %s for environment %s", session.name, session.environment)
         async with self.session_lock:
             if session.environment in self.scheduler_for_env or session.id in self.sessions:

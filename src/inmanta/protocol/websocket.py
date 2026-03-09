@@ -21,6 +21,7 @@ import json
 import logging
 import socket
 import uuid
+from collections.abc import Sequence
 from typing import Annotated, Any, Callable, Literal, Optional, Tuple
 from urllib import parse
 
@@ -351,7 +352,7 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
         return self._session is not None and self._session.active
 
     def rpc_call(
-        self, properties: common.MethodProperties, args: list[object], kwargs: Optional[dict[str, object]] = None
+        self, properties: common.MethodProperties, args: Sequence[object], kwargs: Optional[dict[str, object]] = None
     ) -> asyncio.Future[common.Result]:
         call_spec = properties.build_call(args=args, kwargs=kwargs)
         call_spec.reply_id = uuid.uuid4() if properties.reply else None
@@ -493,7 +494,10 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
 
         self._session.close_session()
 
-        # Resolve any pending RPC futures so callers don't hang until timeout
+        # Resolve any pending RPC futures so callers don't hang until timeout.
+        # Safe without a copy: no `await` between iteration and clear(), so no other coroutine
+        # can modify _replies. The if-not-done guard handles the case where handle_timeout
+        # resolves a future after close_session completes.
         for reply_id, future in self._replies.items():
             if not future.done():
                 future.set_result(common.Result(code=503, result={"message": "Session closed"}))
@@ -798,7 +802,10 @@ class SessionEndpoint(endpoints.Endpoint, common.CallTarget, WebsocketFrameDecod
         # This fires before close_session() (which happens later in _reconnect). This is intentional:
         # on_disconnect should stop the agent's scheduler promptly rather than waiting for
         # reconnect_delay seconds. The session cleanup happens when _reconnect calls close_session().
-        if self.is_running() and not self._reconnecting:
+        # The _ws_client check guards against stale callbacks from failed connection attempts:
+        # if _reconnect fails at connect_future, _ws_client is set to None in the except block
+        # of _process_messages, so a late on_connection_close from the failed connection is ignored.
+        if self.is_running() and not self._reconnecting and self._ws_client is not None:
             self.add_background_task(self.on_disconnect())
 
     async def stop(self) -> None:
@@ -826,8 +833,16 @@ class SessionEndpoint(endpoints.Endpoint, common.CallTarget, WebsocketFrameDecod
         LOGGER.info("Connection to server for session %s in environment %s is disconnected", self.name, self.environment)
 
     async def on_open_session(self, session: Session) -> None:
-        """Called when a new session is opened"""
-        await self.on_reconnect()
+        """Called when a new session is opened.
+
+        If on_reconnect() fails, the connection is closed to force a reconnect cycle rather
+        than leaving the agent in a half-connected state (session active but scheduler not started).
+        """
+        try:
+            await self.on_reconnect()
+        except Exception:
+            LOGGER.exception("on_reconnect failed, closing connection to force reconnect")
+            await self.close_connection()
 
     async def on_close_session(self, session: Session) -> None:
         """Called when a session is closed"""
