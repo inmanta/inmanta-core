@@ -1,0 +1,5 @@
+change-type: patch
+description: Add support for GraphQL variables
+destination-branches: [master, iso9]
+sections:
+  minor-improvement: "{{description}}"
