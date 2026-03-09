@@ -16,12 +16,13 @@ limitations under the License.
 Contact: code@inmanta.com
 
 Lark-based parser for the Inmanta DSL.
-Lark-based parser for the Inmanta DSL.
 """
 
 import functools
 import hashlib
+import logging
 import os
+import pickle
 import re
 import string
 import warnings
@@ -30,9 +31,12 @@ from dataclasses import dataclass
 from re import error as RegexError
 from typing import Callable, NamedTuple, NoReturn, Optional, Union
 
+from lark import Lark, Token, Transformer, Tree, UnexpectedCharacters, UnexpectedEOF, UnexpectedInput, v_args
+from lark.exceptions import UnexpectedToken, VisitError
+
 from inmanta.ast import LocatableString, Location, Namespace, Range, RuntimeException
 from inmanta.ast.blocks import BasicBlock
-from inmanta.ast.constraint.expression import And, In, IsDefined, Not, NotEqual, Operator
+from inmanta.ast.constraint.expression import And, In, IsDefined, Not, NotEqual, Operator, Regex
 from inmanta.ast.statements import DynamicStatement, ExpressionStatement, Literal, Statement
 from inmanta.ast.statements.assign import (
     CreateDict,
@@ -62,8 +66,8 @@ from inmanta.execute.util import NoneValue
 from inmanta.parser import InvalidNamespaceAccess, ParserException, ParserWarning
 from inmanta.parser.cache import CacheManager
 from inmanta.parser.keywords import RESERVED_KEYWORDS
-from lark import Lark, Token, Transformer, Tree, UnexpectedCharacters, UnexpectedEOF, UnexpectedInput, v_args
-from lark.exceptions import UnexpectedToken, VisitError
+
+LOGGER = logging.getLogger(__name__)
 
 # ---- Grammar loading ----
 
@@ -97,7 +101,8 @@ def _load_parser_from_cache(cache_file: str) -> Optional[Lark]:
     try:
         with open(cache_file, "rb") as f:
             return Lark.load(f)
-    except Exception:
+    except (OSError, pickle.UnpicklingError, EOFError, AttributeError, ImportError, ValueError):
+        LOGGER.debug("Failed to load Lark grammar cache from %s, will rebuild", cache_file, exc_info=True)
         return None
 
 
@@ -222,7 +227,7 @@ class _FunctionParamElement(NamedTuple):
     wrapped_kwargs: Optional[WrappedKwargs] = None
 
 
-# ---- String decoding (mirrors PLY safe_decode) ----
+# ---- String decoding ----
 
 
 _ESCAPE_MAP: dict[str, str] = {
@@ -283,13 +288,10 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
     """
     Transforms a Lark parse tree for the Inmanta DSL into the AST used by the compiler.
 
-    This mirrors the p_* functions in the PLY-based parser.
     Each method corresponds to one grammar rule alias.
 
     The class-level @v_args(inline=True) decorator makes every rule callback receive
     its children as individual positional arguments (instead of a single list[object]).
-    Methods that additionally need propagated position metadata use
-    @v_args(meta=True, inline=True) which overrides the class-level decorator.
     """
 
     def __init__(self, tfile: str, namespace: Namespace) -> None:
@@ -408,18 +410,18 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         )
 
     def _attach(self, node: object, location: Location, lexpos: int = 0) -> None:
-        """Set location and namespace on an AST node (mirrors attach_lnr)."""
+        """Set location and namespace on an AST node."""
         node.location = location  # type: ignore[attr-defined]
         node.namespace = self.namespace  # type: ignore[attr-defined]
         node.lexpos = lexpos  # type: ignore[attr-defined]
 
     def _attach_from_string(self, node: object, ls: LocatableString) -> None:
-        """Copy location and namespace from a LocatableString to a node (mirrors attach_from_string)."""
+        """Copy location and namespace from a LocatableString to a node."""
         node.location = ls.location  # type: ignore[attr-defined]
         node.namespace = ls.namespace  # type: ignore[attr-defined]
 
     def _make_none(self, location: Location, lexpos: int = 0) -> Literal:
-        """Create a Literal(NoneValue()) with given location (mirrors make_none)."""
+        """Create a Literal(NoneValue()) with given location."""
         none = Literal(NoneValue())
         none.location = location
         none.namespace = self.namespace
@@ -434,7 +436,7 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         """Raise ParserException if an ID token holds a reserved keyword value.
 
         Lark's contextual lexer matches keywords as ID when the grammar expects ID.
-        We enforce keyword rejection here, mirroring the PLY parser's p_error behaviour.
+        We enforce keyword rejection here to produce clear error messages.
         """
         value = str(token)
         if value in _RESERVED_KEYWORDS:
@@ -594,7 +596,7 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
     def _process_mls(self, token: Token) -> LocatableString:
         """Process a MLS token into a LocatableString with decoded content."""
         raw = str(token)
-        # Always strip exactly 3 quotes (the MLS delimiter), mirroring PLY behaviour.
+        # Always strip exactly 3 quotes (the MLS delimiter).
         # The grammar allows 3-5 quotes, but the delimiter is always 3; extra opening/
         # closing quotes are part of the content.
         content = raw[3:-3]
@@ -969,8 +971,6 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
 
     def _process_regex_token(self, token: Token) -> ExpressionStatement:
         """Process a REGEX token (matching /.../) into a Regex expression."""
-        from inmanta.ast.constraint.expression import Regex
-
         raw = str(token)
         # Find first slash
         idx = raw.index("/")
@@ -1437,7 +1437,7 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         decoded = _safe_decode(content, "Invalid escape sequence in f-string.", loc)
         ls = LocatableString(decoded, self._range(token), token.start_pos or 0, self.namespace)
         result = _process_fstring(ls)
-        result.location = self._range(token)  # mirrors PLY's attach_from_string (copies Range with column info)
+        result.location = self._range(token)
         result.namespace = self.namespace
         return result
 
@@ -1452,7 +1452,7 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
     def const_mls(self, token: Token) -> Union[Literal, StringFormat]:
         ls = self._process_mls(token)
         result = _get_string_ast_node(ls, True)
-        result.location = self._range(token)  # mirrors PLY's attach_from_string (copies Range with column info)
+        result.location = self._range(token)
         result.namespace = self.namespace
         return result
 
@@ -1480,11 +1480,11 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         return list(items)
 
 
-# ---- String processing helpers (mirrors PLY parser) ----
+# ---- String processing helpers ----
 
 
 def _get_string_ast_node(string_ast: LocatableString, mls: bool) -> Union[Literal, StringFormat]:
-    """Process a string for interpolation (mirrors PLY's get_string_ast_node)."""
+    """Process a string for interpolation, expanding {{var}} references into a StringFormat."""
     matches: list[re.Match[str]] = list(_format_regex_compiled.finditer(str(string_ast)))
     if len(matches) == 0:
         return Literal(str(string_ast))
@@ -1514,7 +1514,7 @@ def _get_string_ast_node(string_ast: LocatableString, mls: bool) -> Union[Litera
 
 
 def _process_fstring(string_ast: LocatableString) -> Union[StringFormatV2, Literal]:
-    """Process an f-string for interpolation (mirrors PLY's p_constant_fstring)."""
+    """Process an f-string for interpolation, expanding {field} references into a StringFormatV2."""
     formatter = string.Formatter()
     try:
         parsed = list(formatter.parse(str(string_ast)))
@@ -1566,7 +1566,7 @@ def _process_fstring(string_ast: LocatableString) -> Union[StringFormatV2, Liter
 def _convert_to_references(
     variables: Sequence[tuple[str, LocatableString]], namespace: Namespace
 ) -> list[tuple["Reference", str]]:
-    """Convert variable name strings to References (mirrors PLY's convert_to_references)."""
+    """Convert variable name strings to References with proper location tracking."""
 
     def normalize(variable: str, locatable: LocatableString, offset: int = 0) -> LocatableString:
         start_char = locatable.location.start_char + offset
@@ -1584,7 +1584,7 @@ def _convert_to_references(
         )
         return LocatableString(var_full_trim, r, locatable.lexpos, locatable.namespace)
 
-    _vars: list[tuple[Reference, str]] = []
+    var_list: list[tuple[Reference, str]] = []
     for match, var in variables:
         var_name: str = str(var)
         var_parts: list[str] = var_name.split(".")
@@ -1600,8 +1600,8 @@ def _convert_to_references(
                 ref.location = attr_ls.location
                 ref.namespace = namespace
                 offset += len(attr) + 1
-        _vars.append((ref, match))
-    return _vars
+        var_list.append((ref, match))
+    return var_list
 
 
 # ---- Error handling ----
@@ -1623,15 +1623,13 @@ def _convert_lark_error(e: UnexpectedInput, tfile: str) -> ParserException:
     if isinstance(e, UnexpectedToken):
         token = getattr(e, "token", None)
 
-        # Inspect the parser value_stack to produce better error messages,
-        # mirroring PLY's p_error heuristics.
+        # Inspect the parser value_stack to produce better error messages.
         # NOTE: state.value_stack is a Lark internal (verified with lark 1.3.1).
         # The defensive getattr chain ensures silent fallback to generic messages
         # if Lark changes this. Tests in test_parser.py verify the friendly messages.
         vs = getattr(getattr(e, "state", None), "value_stack", None) or []
 
         # Case 1: a reserved keyword is on top of the stack (e.g. "index = ...")
-        # mirrors PLY: if parser.symstack[-1].type in reserved.values(): ...
         if vs:
             top = vs[-1]
             if isinstance(top, Token) and top.type.lstrip("_") in _RESERVED_KEYWORDS_UPPER:
@@ -1639,7 +1637,6 @@ def _convert_lark_error(e: UnexpectedInput, tfile: str) -> ParserException:
                 return ParserException(kw_r, str(top), f"invalid identifier, {str(top)} is a reserved keyword")
 
         # Case 2: lowercase class name used in 'extends' (e.g. "entity Test extends test:")
-        # mirrors PLY's p_class_ref_list_term_err grammar rule.
         if token is not None and token.type == "COLON" and vs:
             top = vs[-1]
             has_extends = any(isinstance(item, Token) and item.type == "_EXTENDS" for item in vs)

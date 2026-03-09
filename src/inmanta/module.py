@@ -1707,7 +1707,7 @@ class ModuleLike(ABC, Generic[TMetadata]):
     def _load_file(self, ns: Namespace, file: str) -> tuple[list[Statement], BasicBlock]:
         ns.location = Location(file, 1)
         statements = []  # type: List[Statement]
-        stmts = plyInmantaParser.parse(ns, file)
+        stmts = larkInmantaParser.parse(ns, file)
         block = BasicBlock(ns)
         for s in stmts:
             if isinstance(s, BiStatement):

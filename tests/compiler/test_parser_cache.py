@@ -27,7 +27,6 @@ import pytest
 import inmanta.parser.larkInmantaParser as parser
 from inmanta.ast import Namespace
 from inmanta.ast.statements import Statement
-from inmanta.parser.cache import CacheEnvelope
 from inmanta.parser.pickle import ASTPickler, ASTUnpickler
 
 
@@ -128,12 +127,7 @@ a=1
     # Find the cached main.cf by walking the cache directory
     cache_dir = os.path.join(snippetcompiler.project_dir, ".cfcache")
     assert os.path.isdir(cache_dir), f"Cache directory {cache_dir} does not exist"
-    cache_files = [
-        os.path.join(root, f)
-        for root, _, files in os.walk(cache_dir)
-        for f in files
-        if f.endswith(".cfc")
-    ]
+    cache_files = [os.path.join(root, f) for root, _, files in os.walk(cache_dir) for f in files if f.endswith(".cfc")]
     assert len(cache_files) >= 1, f"Expected at least one .cfc file in {cache_dir}"
 
     # Corrupt all cache files

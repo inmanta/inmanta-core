@@ -13,6 +13,7 @@ Tree) of statement objects that the compiler then normalizes and executes.
 | ---------------------- | -------------------------------------------------------------------------- |
 | `larkInmanta.lark`     | Lark grammar definition for the Inmanta DSL                                |
 | `larkInmantaParser.py` | Lark-based parser and transformer (active parser)                          |
+| `keywords.py`          | Canonical list of reserved keywords (single source of truth)               |
 | `cache.py`             | Per-file AST cache manager (`CacheManager`)                                |
 | `pickle.py`            | Custom pickler/unpickler for AST objects (handles `Namespace` replacement) |
 
@@ -69,8 +70,7 @@ from the default Lark implementation.
 ### Legacy: PLY (removed)
 
 `plyInmantaParser.py` and `plyInmantaLex.py` have been removed. The reserved keyword set
-previously provided by `plyInmantaLex.py`'s `reserved` dict is now defined directly in
-`larkInmantaParser.py` as `_RESERVED_KEYWORDS_UPPER` (derived from `_RESERVED_KEYWORDS`).
+is now defined in `keywords.py` as `RESERVED_KEYWORDS` and imported by `larkInmantaParser.py`.
 The `ply` pip dependency has been removed from `setup.py`.
 
 ## Error Handling
@@ -92,19 +92,20 @@ parser's output:
 The parser uses two levels of caching:
 
 **Lark grammar cache** (`attach_to_project` / `detach_from_project` in `larkInmantaParser.py`):
-When a project is loaded, `attach_to_project(project_dir)` builds the Lark parser with
-`cache=<path>`, pointing to `.cfcache/lark_grammar.cache` inside the project directory. This
-caches the compiled LALR parser tables (grammar → state machines) to disk so that repeated
-`Lark(...)` constructor calls across processes are fast. Lark handles cache invalidation
-automatically via a SHA-256 hash of the grammar content, Lark version, and Python version
-embedded in the cache file. `detach_from_project()` resets the parser to uncached mode.
+The Lark parser is built once per process and its compiled LALR tables are cached to disk as
+`lark_grammar_{hash}.cache` (where `{hash}` is a truncated SHA-256 of the grammar text).
+The cache is stored alongside the parser module for fast startup; if the module directory is
+not writable, `attach_to_project()` falls back to `.cfcache/` inside the project directory.
+Cache invalidation is automatic: changing the grammar produces a different hash, so the old
+cache file is ignored and a new one is created. `detach_from_project()` resets the parser to
+uncached mode.
 
 **Per-file AST cache** (`cache.py` / `pickle.py`): Each `.cf` file's parsed AST statements are
 cached in `.cfcache/` as versioned `.cfc` files. On subsequent compilations, `CacheManager.un_cache`
 checks if the cached file exists and its source file hasn't been modified (mtime comparison). Cache
 hits skip parsing entirely. `ASTPickler` uses a `dispatch_table` (C-level type dispatch) to replace
 `Namespace` objects with their fully-qualified name during pickling; `ASTUnpickler` restores them
-from a thread-local context. The cache is controlled by the `compiler.cache` config option and can
+from the unpickler instance. The cache is controlled by the `compiler.cache` config option and can
 be disabled with `--no-cache`.
 
 ## Performance

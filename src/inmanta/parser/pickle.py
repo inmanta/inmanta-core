@@ -19,7 +19,7 @@ Custom pickler/unpickler for AST Statement objects.
 
 Namespace objects cannot be pickled (they're tied to runtime compilation context),
 so they are replaced with their fully-qualified name string during pickling and
-restored from a thread-local context during unpickling.
+restored from the unpickler instance during unpickling.
 """
 
 import copyreg
@@ -91,13 +91,3 @@ class ASTUnpickler(Unpickler):
 # Module and qualname of _restore_namespace, used by find_class() to intercept it.
 _RESTORE_MODULE = _restore_namespace.__module__
 _RESTORE_QUALNAME = _restore_namespace.__qualname__
-
-
-def pickle_ast(file: IO[bytes], obj: object) -> None:
-    """Pickle an AST object to a file."""
-    ASTPickler(file, protocol=4).dump(obj)
-
-
-def unpickle_ast(file: IO[bytes], namespace: Namespace) -> object:
-    """Unpickle an AST object from a file, restoring Namespace references."""
-    return ASTUnpickler(file, namespace).load()
