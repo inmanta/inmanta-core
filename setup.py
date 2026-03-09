@@ -20,7 +20,7 @@ requires = [
     "packaging>=21.3,<26.1",
     # pip>=21.3 required for editable pyproject.toml + setup.cfg based install support
     "pip>=21.3",
-    "ply~=3.0",
+    "lark~=1.3",
     "pydantic~=2.5,!=2.9.2",
     "PyJWT~=2.0",
     "pynacl~=1.5",
@@ -99,6 +99,7 @@ setup(
             "openapi_spec_validator",
             "pep8-naming",
             "pip2pi",
+            "hypothesis[lark]",
             "psutil",
             "time-machine",
             # types

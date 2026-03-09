@@ -16,8 +16,11 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import io
 import logging
+import os
 import re
+import threading
 
 import pytest
 
@@ -42,8 +45,9 @@ from inmanta.ast.statements.define import DefineEntity, DefineImplement, DefineI
 from inmanta.ast.statements.generator import ConditionalExpression, Constructor, If
 from inmanta.ast.variables import AttributeReference, Reference
 from inmanta.execute.util import NoneValue
-from inmanta.parser import InvalidNamespaceAccess, ParserException
-from inmanta.parser.plyInmantaParser import base_parse
+from inmanta.parser import InvalidNamespaceAccess, ParserException, lark_parser
+from inmanta.parser.lark_parser import base_parse
+from inmanta.parser.pickle import ASTPickler, ASTUnpickler
 from utils import log_contains, log_doesnt_contain
 
 
@@ -874,6 +878,70 @@ a='\\\\'
     assert isinstance(stmt, Assign)
     assert isinstance(stmt.value, Literal)
     assert stmt.value.value == "\\"
+
+
+def test_string_non_ascii_with_backslash():
+    """
+    Verify _safe_decode preserves non-ASCII strings containing backslashes.
+    The old unicode_escape codec misinterpreted UTF-8 bytes as Latin-1, garbling
+    non-ASCII characters when they appeared alongside escape sequences.
+    """
+    # "café\n" — literal non-ASCII char + escape sequence in same string
+    statements = parse_code('a="café\\n"')
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, Assign)
+    assert isinstance(stmt.value, Literal)
+    assert stmt.value.value == "café\n"
+
+
+def test_string_non_ascii_with_tab_escape():
+    """
+    Verify non-ASCII character with \\t escape is preserved correctly.
+    """
+    statements = parse_code('a="über\\tcool"')
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, Assign)
+    assert isinstance(stmt.value, Literal)
+    assert stmt.value.value == "über\tcool"
+
+
+def test_mls_non_ascii_with_backslash():
+    """
+    Verify non-ASCII + backslash escape in multi-line strings.
+    """
+    statements = parse_code('a="""café\\n"""')
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, Assign)
+    assert isinstance(stmt.value, Literal)
+    assert stmt.value.value == "café\n"
+
+
+def test_mls_four_quote_delimiters():
+    """
+    Verify that MLS with 4 opening/closing quotes preserves one quote on each side.
+    The grammar accepts 3-5 quotes; the transformer strips exactly 3.
+    """
+    statements = parse_code('a = """"content""""')
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, Assign)
+    assert isinstance(stmt.value, Literal)
+    assert stmt.value.value == '"content"'
+
+
+def test_mls_five_quote_delimiters():
+    """
+    Verify that MLS with 5 opening/closing quotes preserves two quotes on each side.
+    """
+    statements = parse_code('a = """""content"""""')
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, Assign)
+    assert isinstance(stmt.value, Literal)
+    assert stmt.value.value == '""content""'
 
 
 def test_empty():
@@ -2158,3 +2226,137 @@ std::print(s1)
         logging.WARNING,
         absent_warning,
     )
+
+
+def test_grammar_cache_in_module_dir() -> None:
+    """The grammar cache file is stored next to the parser module. The file is created when
+    inmanta is loaded.
+    """
+    from inmanta import app  # noqa: F401
+
+    assert os.path.exists(lark_parser._MODULE_CACHE_FILE), f"Expected grammar cache at {lark_parser._MODULE_CACHE_FILE}"
+    assert os.path.dirname(lark_parser._MODULE_CACHE_FILE) == lark_parser._MODULE_DIR
+
+
+def test_grammar_cache_fallback_to_project_dir(tmp_path: "os.PathLike[str]") -> None:
+    """When the module directory cache is missing, attach_to_project falls back to .cfcache."""
+    from unittest.mock import patch
+
+    project_dir = str(tmp_path)
+
+    # Pretend the module-dir cache does not exist and cannot be written,
+    # so attach_to_project must fall back to the project .cfcache directory.
+    fake_module_cache = os.path.join(str(tmp_path), "nonexistent", "grammar.cache")
+    with patch.object(lark_parser, "_MODULE_CACHE_FILE", fake_module_cache):
+        lark_parser.attach_to_project(project_dir)
+
+        fallback_cache = os.path.join(
+            project_dir,
+            lark_parser.CF_CACHE_DIR,
+            f"lark_grammar_{lark_parser._GRAMMAR_HASH}.cache",
+        )
+        assert os.path.exists(fallback_cache), f"Expected fallback grammar cache at {fallback_cache}"
+
+        # Parser should still work after fallback.
+        stmts = parse_code("x = 1")
+        assert len(stmts) == 1
+
+        lark_parser.detach_from_project()
+
+
+def _make_pickled_ast(namespace: Namespace) -> bytes:
+    """Parse a simple snippet and pickle the resulting AST statements."""
+    stmts = base_parse(namespace, "test", "x = 1")
+    buf = io.BytesIO()
+    ASTPickler(buf).dump(stmts)
+    return buf.getvalue()
+
+
+def test_pickle_reentrant_namespace_safe():
+    """
+    Verify that creating multiple ASTUnpicklers on the same thread
+    before calling load() works correctly. Each unpickler uses its own
+    instance-local namespace, so they don't interfere with each other.
+    """
+    root_ns = Namespace("__root__")
+    ns_a = Namespace("ns_a")
+    ns_a.parent = root_ns
+    ns_b = Namespace("ns_b")
+    ns_b.parent = root_ns
+
+    data_a = _make_pickled_ast(ns_a)
+    data_b = _make_pickled_ast(ns_b)
+
+    # Create both unpicklers before loading either (simulating re-entrancy)
+    unpickler_a = ASTUnpickler(io.BytesIO(data_a), ns_a)
+    unpickler_b = ASTUnpickler(io.BytesIO(data_b), ns_b)
+
+    # Both should load successfully with their own namespace
+    result_a = unpickler_a.load()
+    result_b = unpickler_b.load()
+    assert result_a is not None
+    assert result_b is not None
+
+
+def test_pickle_concurrent_threads():
+    """
+    Verify that concurrent unpickling in separate threads is safe.
+    Each unpickler uses instance-local state, so concurrent unpickling
+    should work correctly.
+    """
+    root_ns = Namespace("__root__")
+    results: dict[str, object] = {}
+    errors: dict[str, BaseException] = {}
+
+    def unpickle_in_thread(name: str, ns: Namespace, data: bytes) -> None:
+        try:
+            result = ASTUnpickler(io.BytesIO(data), ns).load()
+            results[name] = result
+        except BaseException as e:
+            errors[name] = e
+
+    ns_a = Namespace("ns_a")
+    ns_a.parent = root_ns
+    ns_b = Namespace("ns_b")
+    ns_b.parent = root_ns
+
+    data_a = _make_pickled_ast(ns_a)
+    data_b = _make_pickled_ast(ns_b)
+
+    barrier = threading.Barrier(2)
+
+    def thread_func(name: str, ns: Namespace, data: bytes) -> None:
+        barrier.wait()  # Ensure both threads start unpickling at the same time
+        unpickle_in_thread(name, ns, data)
+
+    t1 = threading.Thread(target=thread_func, args=("a", ns_a, data_a))
+    t2 = threading.Thread(target=thread_func, args=("b", ns_b, data_b))
+    t1.start()
+    t2.start()
+    t1.join(timeout=5)
+    t2.join(timeout=5)
+
+    assert not errors, f"Concurrent unpickling failed: {errors}"
+    assert "a" in results and "b" in results, "Both threads should produce results"
+
+
+def test_convert_lark_error_reserved_keyword_on_value_stack():
+    """
+    _convert_lark_error inspects Lark's internal state.value_stack
+    (verified with lark 1.3.1) to produce friendly error messages when a reserved
+    keyword is used as an identifier. If Lark changes this internal API, the
+    defensive getattr chain falls back to generic messages silently. This test
+    ensures the friendly message is actually produced, so a Lark upgrade that
+    breaks value_stack access will be caught.
+    """
+    with pytest.raises(ParserException, match="index is a reserved keyword"):
+        parse_code('index = "hello"')
+
+
+def test_convert_lark_error_lowercase_entity_extends():
+    """
+    Same as above but for the value_stack Case 2 — lowercase class
+    name after 'extends'. Depends on Lark's internal state.value_stack.
+    """
+    with pytest.raises(ParserException, match="Entity names must start with a capital"):
+        parse_code("entity Test extends bad:\nend")
