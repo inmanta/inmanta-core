@@ -63,7 +63,7 @@ from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements import BiStatement, DefinitionStatement, DynamicStatement, Statement
 from inmanta.ast.statements.define import DefineImport
 from inmanta.file_parser import PreservativeYamlParser, RequirementsTxtParser
-from inmanta.parser import larkInmantaParser as plyInmantaParser
+from inmanta.parser import larkInmantaParser
 from inmanta.parser.larkInmantaParser import attach_to_project, cache_manager
 from inmanta.server import config
 from inmanta.stable_api import stable_api

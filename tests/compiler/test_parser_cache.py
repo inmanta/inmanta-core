@@ -115,7 +115,7 @@ def test_pickle_namespace_mismatch():
         ASTUnpickler(buf, ns_b).load()
 
 
-def test_cache_corrupt_file(snippetcompiler, tmp_path):
+def test_cache_corrupt_file(snippetcompiler):
     """Verify graceful handling of corrupt cache files."""
     parser.cache_manager.reset_stats()
     snippetcompiler.setup_for_snippet(

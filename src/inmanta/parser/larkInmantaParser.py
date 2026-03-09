@@ -16,7 +16,7 @@ limitations under the License.
 Contact: code@inmanta.com
 
 Lark-based parser for the Inmanta DSL.
-This is a port of the PLY-based parser (plyInmantaParser.py / plyInmantaLex.py) to Lark.
+Lark-based parser for the Inmanta DSL.
 """
 
 import functools
@@ -77,7 +77,7 @@ with open(_GRAMMAR_FILE, encoding="utf-8") as _f:
 _GRAMMAR_HASH: str = hashlib.sha256(_GRAMMAR.encode()).hexdigest()[:16]
 
 # Singleton parser — built once per process, never reset.
-# The grammar cache is stored alongside this module (like PLY's parsetab.py).
+# The grammar cache is stored alongside this module for fast startup.
 # If the module directory is not writable (e.g. system package install),
 # attach_to_project() falls back to the project's .cfcache directory.
 _lark_parser: Optional[Lark] = None
