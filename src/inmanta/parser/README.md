@@ -11,8 +11,8 @@ Tree) of statement objects that the compiler then normalizes and executes.
 
 | File                   | Description                                                                |
 | ---------------------- | -------------------------------------------------------------------------- |
-| `larkInmanta.lark`     | Lark grammar definition for the Inmanta DSL                                |
-| `larkInmantaParser.py` | Lark-based parser and transformer (active parser)                          |
+| `inmanta.lark`         | Lark grammar definition for the Inmanta DSL                                |
+| `lark_parser.py`       | Lark-based parser and transformer (active parser)                          |
 | `keywords.py`          | Canonical list of reserved keywords (single source of truth)               |
 | `cache.py`             | Per-file AST cache manager (`CacheManager`)                                |
 | `pickle.py`            | Custom pickler/unpickler for AST objects (handles `Namespace` replacement) |
@@ -24,10 +24,10 @@ Tree) of statement objects that the compiler then normalizes and executes.
 The active parser is implemented using [Lark](https://lark-parser.readthedocs.io/), a Python
 parsing library. It uses an LALR(1) parser with a contextual lexer.
 
-**Entry point**: `larkInmantaParser.parse(namespace, filename, content)` returns a list of
+**Entry point**: `lark_parser.parse(namespace, filename, content)` returns a list of
 `Statement` AST nodes.
 
-**Grammar**: `larkInmanta.lark` defines the full Inmanta DSL grammar. Key design decisions:
+**Grammar**: `inmanta.lark` defines the full Inmanta DSL grammar. Key design decisions:
 
 - **Keyword terminals use regex with negative lookahead** (`/in(?![a-zA-Z0-9_-])/`). Inmanta
   identifiers can contain hyphens, so `"in"` as a plain string literal would incorrectly match
@@ -44,8 +44,9 @@ parsing library. It uses an LALR(1) parser with a contextual lexer.
   source ends up last in the list). The Lark transformer mirrors this with
   `list(reversed(items))` to preserve execution ordering semantics that the compiler relies on.
 
-- **`map_lookup` covers `attr_ref`**: `t.a["key"]` is a map lookup, not an index lookup.
-  The grammar has an explicit `attr_ref "[" operand "]"` alternative in `map_lookup`.
+- **`map_lookup` for bracket access on attributes**: Expressions like `t.a["key"]` are parsed
+  as `map_lookup`, not `index_lookup`. The grammar has an explicit `attr_ref "[" operand "]"`
+  alternative in `map_lookup` to handle this.
 
 - **Filtered keyword terminals**: Many keyword terminals are renamed with a `_` prefix (e.g.
   `_TYPEDEF`, `_AS`, `_END`) so Lark's contextual lexer auto-filters them from the transformer
@@ -56,7 +57,7 @@ parsing library. It uses an LALR(1) parser with a contextual lexer.
   `?operand`, `?relation`) so Lark inlines the single child directly without creating a Tree
   node, avoiding unnecessary transformer dispatch.
 
-**Transformer**: `InmantaTransformer` (in `larkInmantaParser.py`) is a Lark `Transformer`
+**Transformer**: `InmantaTransformer` (in `lark_parser.py`) is a Lark `Transformer`
 subclass decorated with `@v_args(inline=True)` so every rule callback receives its children as
 individual positional arguments. Position information is derived directly from token attributes
 (`token.line`, `token.start_pos`) rather than from `propagate_positions`, which avoids the
@@ -70,7 +71,7 @@ from the default Lark implementation.
 ### Legacy: PLY (removed)
 
 `plyInmantaParser.py` and `plyInmantaLex.py` have been removed. The reserved keyword set
-is now defined in `keywords.py` as `RESERVED_KEYWORDS` and imported by `larkInmantaParser.py`.
+is now defined in `keywords.py` as `RESERVED_KEYWORDS` and imported by `lark_parser.py`.
 The `ply` pip dependency has been removed from `setup.py`.
 
 ## Error Handling
@@ -91,7 +92,7 @@ parser's output:
 
 The parser uses two levels of caching:
 
-**Lark grammar cache** (`attach_to_project` / `detach_from_project` in `larkInmantaParser.py`):
+**Lark grammar cache** (`attach_to_project` / `detach_from_project` in `lark_parser.py`):
 The Lark parser is built once per process and its compiled LALR tables are cached to disk as
 `lark_grammar_{hash}.cache` (where `{hash}` is a truncated SHA-256 of the grammar text).
 The cache is stored alongside the parser module for fast startup; if the module directory is
@@ -121,14 +122,11 @@ Full `inmanta compile` on a project that includes all files from the juniper-mx 
 | Lark without cache               | 125.1s  | 138.7s        | 181.8s               |
 | Lark with cold cache             | 154.1s  | 168.7s        | 215.3s               |
 | Lark with warm cache             | 48.8s   | 62.4s         | 110.9s               |
-| Lark with cold cache + fast exit | 147.8s  | 163.4s        | 156.9s               |
-| Lark with warm cache + fast exit | 45.3s   | 58.5s         | 55.5s                |
 
 Lark is **5% faster** than PLY for raw parsing (no cache on either side). With a warm AST cache,
 Lark is **28% faster** than PLY with warm cache (48.8s vs 67.7s parsing, 110.9s vs 134.5s total).
 Cold cache adds overhead from pickling the AST on the first run, but subsequent runs benefit from
-the cached AST. The "fast exit" rows show timings when the process exits immediately after
-compilation (avoiding GC teardown overhead on the large AST object graph).
+the cached AST.
 
 ### Optimizations applied
 

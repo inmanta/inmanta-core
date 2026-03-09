@@ -24,7 +24,7 @@ from time import sleep
 
 import pytest
 
-import inmanta.parser.larkInmantaParser as parser
+import inmanta.parser.lark_parser as parser
 from inmanta.ast import Namespace
 from inmanta.ast.statements import Statement
 from inmanta.parser.pickle import ASTPickler, ASTUnpickler

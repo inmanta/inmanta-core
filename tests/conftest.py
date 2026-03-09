@@ -96,7 +96,7 @@ from inmanta.export import ResourceDict, cfg_env, unknown_parameters
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
 from inmanta.moduletool import DefaultIsolatedEnvCached, ModuleTool, V2ModuleBuilder
-from inmanta.parser.larkInmantaParser import detach_from_project
+from inmanta.parser.lark_parser import detach_from_project
 from inmanta.protocol import VersionMatch
 from inmanta.protocol.auth import auth
 from inmanta.references import mutator, reference

@@ -45,8 +45,8 @@ from inmanta.ast.statements.define import DefineEntity, DefineImplement, DefineI
 from inmanta.ast.statements.generator import ConditionalExpression, Constructor, If
 from inmanta.ast.variables import AttributeReference, Reference
 from inmanta.execute.util import NoneValue
-from inmanta.parser import InvalidNamespaceAccess, ParserException, larkInmantaParser
-from inmanta.parser.larkInmantaParser import base_parse
+from inmanta.parser import InvalidNamespaceAccess, ParserException, lark_parser
+from inmanta.parser.lark_parser import base_parse
 from inmanta.parser.pickle import ASTPickler, ASTUnpickler
 from utils import log_contains, log_doesnt_contain
 
@@ -2234,10 +2234,8 @@ def test_grammar_cache_in_module_dir() -> None:
     """
     from inmanta import app  # noqa: F401
 
-    assert os.path.exists(
-        larkInmantaParser._MODULE_CACHE_FILE
-    ), f"Expected grammar cache at {larkInmantaParser._MODULE_CACHE_FILE}"
-    assert os.path.dirname(larkInmantaParser._MODULE_CACHE_FILE) == larkInmantaParser._MODULE_DIR
+    assert os.path.exists(lark_parser._MODULE_CACHE_FILE), f"Expected grammar cache at {lark_parser._MODULE_CACHE_FILE}"
+    assert os.path.dirname(lark_parser._MODULE_CACHE_FILE) == lark_parser._MODULE_DIR
 
 
 def test_grammar_cache_fallback_to_project_dir(tmp_path: "os.PathLike[str]") -> None:
@@ -2249,13 +2247,13 @@ def test_grammar_cache_fallback_to_project_dir(tmp_path: "os.PathLike[str]") -> 
     # Pretend the module-dir cache does not exist and cannot be written,
     # so attach_to_project must fall back to the project .cfcache directory.
     fake_module_cache = os.path.join(str(tmp_path), "nonexistent", "grammar.cache")
-    with patch.object(larkInmantaParser, "_MODULE_CACHE_FILE", fake_module_cache):
-        larkInmantaParser.attach_to_project(project_dir)
+    with patch.object(lark_parser, "_MODULE_CACHE_FILE", fake_module_cache):
+        lark_parser.attach_to_project(project_dir)
 
         fallback_cache = os.path.join(
             project_dir,
-            larkInmantaParser.CF_CACHE_DIR,
-            f"lark_grammar_{larkInmantaParser._GRAMMAR_HASH}.cache",
+            lark_parser.CF_CACHE_DIR,
+            f"lark_grammar_{lark_parser._GRAMMAR_HASH}.cache",
         )
         assert os.path.exists(fallback_cache), f"Expected fallback grammar cache at {fallback_cache}"
 
@@ -2263,7 +2261,7 @@ def test_grammar_cache_fallback_to_project_dir(tmp_path: "os.PathLike[str]") -> 
         stmts = parse_code("x = 1")
         assert len(stmts) == 1
 
-        larkInmantaParser.detach_from_project()
+        lark_parser.detach_from_project()
 
 
 def _make_pickled_ast(namespace: Namespace) -> bytes:

@@ -71,7 +71,7 @@ LOGGER = logging.getLogger(__name__)
 
 # ---- Grammar loading ----
 
-_GRAMMAR_FILE = os.path.join(os.path.dirname(__file__), "larkInmanta.lark")
+_GRAMMAR_FILE = os.path.join(os.path.dirname(__file__), "inmanta.lark")
 
 with open(_GRAMMAR_FILE, encoding="utf-8") as _f:
     _GRAMMAR = _f.read()
@@ -300,9 +300,16 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         self.namespace = namespace
 
         # Pre-build dispatch dict: rule_name -> bound_callable
-        # Avoids _VArgsWrapper.__get__ (which calls functools.update_wrapper) on every rule invocation.
-        # Walk the MRO to find _VArgsWrapper descriptors and bind base_func directly to self.
-        # All transformer methods use @v_args(inline=True) so they accept *children positional args.
+        #
+        # We use @v_args(inline=True) on the class so that each rule method receives its children
+        # as individual typed positional args instead of a single list[object]. Without inline, every
+        # method would need casts for each argument (e.g. cast(LocatableString, items[0])), making
+        # the code harder to read and losing static type checking.
+        #
+        # However, Lark's inline mechanism wraps each method in a _VArgsWrapper descriptor whose
+        # __get__ calls functools.update_wrapper on every invocation — significant overhead when
+        # thousands of rule nodes are dispatched per file. To avoid this, we walk the MRO at init
+        # time, find _VArgsWrapper descriptors, and bind base_func directly to self once.
         cls = type(self)
         dispatch: dict[str, Callable[..., object]] = {}
         seen: set[str] = set()

@@ -34,12 +34,12 @@ from lark import Lark
 
 from inmanta.ast import CompilerException, Namespace
 from inmanta.parser import ParserException
-from inmanta.parser.larkInmantaParser import base_parse
+from inmanta.parser.lark_parser import base_parse
 
 # Build a Lark instance from the grammar file for Hypothesis.
 # This must be a fresh Lark (not the serialised singleton) because
 # from_lark() needs access to the grammar rules.
-_GRAMMAR_PATH = os.path.join(os.path.dirname(__file__), "../../src/inmanta/parser/larkInmanta.lark")
+_GRAMMAR_PATH = os.path.join(os.path.dirname(__file__), "../../src/inmanta/parser/inmanta.lark")
 with open(_GRAMMAR_PATH) as _f:
     _fuzz_parser = Lark(_f.read(), parser="lalr", start="start")
 
