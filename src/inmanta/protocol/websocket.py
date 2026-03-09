@@ -31,6 +31,7 @@ from inmanta import config as inmanta_config
 from inmanta import const, tracing, types, util
 from inmanta.data import model
 from inmanta.protocol import common, endpoints, rest
+from inmanta.protocol.auth import auth as auth_module
 from inmanta.protocol.auth import providers
 
 LOGGER = logging.getLogger(__name__)
@@ -100,13 +101,17 @@ class Session:
         """Mark the session as confirmed after receiving a SessionOpened acknowledgment."""
         self._confirmed = True
 
-    async def open(self) -> None:
-        """Send an OpenSession message to the remote side to initiate the session handshake."""
+    async def open(self, token: str | None = None) -> None:
+        """Send an OpenSession message to the remote side to initiate the session handshake.
+
+        :param token: Optional JWT bearer token to include in the handshake for authentication.
+        """
         await self.websocket_protocol.write_message(
             OpenSession(
                 environment_id=self._environment_id,
                 session_name=self._session_name,
                 hostname=self._hostname,
+                token=token,
             ).model_dump_json()
         )
 
@@ -212,12 +217,15 @@ class OpenSession(WSMessage):
     :param environment_id: The environment this session belongs to.
     :param session_name: A unique name for this session within the environment (e.g. the agent name).
     :param hostname: The hostname of the machine initiating the session.
+    :param token: Optional JWT bearer token for authentication. When auth is enabled on the server,
+                  this token is validated before the session is accepted.
     """
 
     action: Literal["OPEN_SESSION"] = "OPEN_SESSION"
     environment_id: uuid.UUID
     session_name: str
     hostname: str
+    token: str | None = None
 
 
 class SessionOpened(WSMessage):
@@ -323,6 +331,7 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
         self._call_targets: Optional[list[common.CallTarget]] = None
         self._replies: dict[uuid.UUID, asyncio.Future[common.Result]] = {}
         self._authnz_context: rest.AuthnzInterface | None = None
+        self._token: str | None = None
 
     def set_authnz_context(self, context: rest.AuthnzInterface) -> None:
         """Set the authentication/authorization context used when dispatching incoming RPC calls."""
@@ -347,6 +356,8 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
         call_spec = properties.build_call(args=args, kwargs=kwargs)
         call_spec.reply_id = uuid.uuid4() if properties.reply else None
         call_spec.headers.update(tracing.get_context())
+        if self._token is not None:
+            call_spec.headers["Authorization"] = "Bearer " + self._token
         future = asyncio.Future()
 
         LOGGER.debug("Putting call %s: %s %s in queue at %s", call_spec.reply_id, call_spec.method, call_spec.url, self)
@@ -399,6 +410,17 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
                         RejectSession(reason="A session is already open on this connection").model_dump_json()
                     )
                     return
+
+                # Validate token if auth is enabled
+                if self._authnz_context is not None and self._authnz_context.is_auth_enabled():
+                    if msg.token is None:
+                        await self.write_message(RejectSession(reason="Authentication required").model_dump_json())
+                        return
+                    try:
+                        auth_module.decode_token(msg.token)
+                    except Exception:
+                        await self.write_message(RejectSession(reason="Invalid authentication token").model_dump_json())
+                        return
 
                 LOGGER.info(
                     "Opening session %s on host %s with environment %s", msg.session_name, msg.hostname, msg.environment_id
@@ -680,6 +702,9 @@ class SessionEndpoint(endpoints.Endpoint, common.CallTarget, WebsocketFrameDecod
         self.set_call_targets(self.call_targets)
         self.set_authnz_context(self)
 
+        client_id = f"{name}_rest_transport"
+        self._token = inmanta_config.Config.get(client_id, "token", None)
+
         self.create_session(
             environment_id=self.environment,
             session_name=self.name,
@@ -751,8 +776,10 @@ class SessionEndpoint(endpoints.Endpoint, common.CallTarget, WebsocketFrameDecod
                 self._ws_client.close()
 
             LOGGER.info("Creating websocket connection to server for %s in environment %s", self.name, self.environment)
+            client_id = f"{self.name}_rest_transport"
+            ca_certs = inmanta_config.Config.get(client_id, "ssl_ca_cert_file", None)
             conn = WebSocketClientConnection(
-                request=httpclient.HTTPRequest(self.get_websocket_url(), connect_timeout=1),
+                request=httpclient.HTTPRequest(self.get_websocket_url(), connect_timeout=1, ca_certs=ca_certs),
                 ping_interval=ws_ping_interval,
                 ping_timeout=ws_ping_timeout,
                 on_connection_close_callback=self._on_disconnect,
@@ -762,7 +789,7 @@ class SessionEndpoint(endpoints.Endpoint, common.CallTarget, WebsocketFrameDecod
             # Create a fresh session for each connection attempt. This ensures a clean state after
             # rejection or disconnection (where the old session may be closed).
             self.create_session(environment_id=self.environment, session_name=self.name)
-            await self.session.open()
+            await self.session.open(token=self._token)
             await self.start_connected()
         finally:
             self._reconnecting = False

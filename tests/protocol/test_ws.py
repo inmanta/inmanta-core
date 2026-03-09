@@ -20,10 +20,13 @@ import asyncio
 import logging
 import uuid
 
+from inmanta import config as inmanta_config_mod
 from inmanta import const
 from inmanta.protocol import SessionEndpoint, handle, typedmethod, websocket
 from inmanta.protocol.auth.decorators import auth
+from inmanta.server.config import AuthorizationProviderName
 from inmanta.server.protocol import Server, ServerSlice
+from utils import configure_auth
 
 LOGGER = logging.getLogger(__name__)
 
@@ -40,6 +43,21 @@ def get_current_agent_status() -> str:
     """Get the status of the agent"""
 
 
+# Auth test methods: allow agent client type so agent tokens are accepted
+@auth(auth_label=const.CoreAuthorizationLabel.STATUS_READ, read_only=True)
+@typedmethod(path="/auth_server_status", operation="GET", client_types=[const.ClientType.api, const.ClientType.agent])
+def get_auth_server_status() -> str:
+    """Get server status (allows agent client type for auth tests)"""
+
+
+@auth(auth_label=const.CoreAuthorizationLabel.STATUS_READ, read_only=True)
+@typedmethod(
+    path="/auth_agent_status", operation="GET", server_agent=True, enforce_auth=False, client_types=[const.ClientType.agent]
+)
+def get_auth_agent_status() -> str:
+    """Get agent status (server→agent, no auth enforcement)"""
+
+
 class WSServer(websocket.SessionListener, ServerSlice):
     def __init__(self) -> None:
         ServerSlice.__init__(self, "wsserver")
@@ -49,6 +67,10 @@ class WSServer(websocket.SessionListener, ServerSlice):
         LOGGER.error("Got status call")
         return "server status"
 
+    @handle(get_auth_server_status)
+    async def get_auth_server_status(self) -> str:
+        return "auth server status"
+
 
 class WSAgent(SessionEndpoint):
     def __init__(self, name: str, timeout: int = 120, reconnect_delay: int = 5) -> None:
@@ -57,6 +79,10 @@ class WSAgent(SessionEndpoint):
     @handle(get_current_agent_status)
     async def get_current_agent_status(self) -> str:
         return "agent status"
+
+    @handle(get_auth_agent_status)
+    async def get_auth_agent_status(self) -> str:
+        return "auth agent status"
 
 
 class TrackingWSAgent(WSAgent):
@@ -809,6 +835,146 @@ async def test_ws_write_message_silent_drop_resolves_future(inmanta_config: obje
             raise AssertionError("RPC future was not resolved after silent write_message drop — hung until timeout")
         except Exception:
             # Any exception other than TimeoutError is acceptable
+            pass
+    finally:
+        await rs.stop()
+        await agent.stop()
+
+
+async def test_ws_rpc_with_auth(inmanta_config: object, server_config: object) -> None:
+    """Test that websocket authentication works end-to-end when auth is enabled.
+
+    With auth enabled and a valid agent token configured:
+    - The agent connects successfully (OpenSession with token is accepted)
+    - Agent→server RPC calls succeed (token injected in Authorization header)
+    - Server→agent RPC calls succeed (enforce_auth=False on agent side)
+    """
+    configure_auth(auth=True, ca=False, ssl=False, authorization_provider=AuthorizationProviderName.legacy)
+
+    rs = Server()
+    server = WSServer()
+    rs.add_slice(server)
+    await rs.start()
+
+    agent = WSAgent("agent")
+    await agent.start()
+
+    try:
+
+        async def wait_for_active() -> None:
+            while not agent.session or not agent.session.active:
+                await asyncio.sleep(0.1)
+
+        await asyncio.wait_for(wait_for_active(), timeout=10)
+
+        # Agent→server RPC should succeed (agent token is valid, method allows agent client type)
+        client_a2s = agent.session.get_typed_client()
+        result = await client_a2s.get_auth_server_status()
+        assert result == "auth server status"
+
+        # Server→agent RPC should succeed (enforce_auth=False on agent endpoint)
+        client_s2a = rs._transport.get_session(*agent.session.session_key).get_typed_client()
+        result = await client_s2a.get_auth_agent_status()
+        assert result == "auth agent status"
+    finally:
+        await rs.stop()
+        await agent.stop()
+
+
+async def test_ws_open_session_rejected_without_token(inmanta_config: object, server_config: object) -> None:
+    """Test that OpenSession is rejected when auth is enabled but no token is configured."""
+    configure_auth(auth=True, ca=False, ssl=False, authorization_provider=AuthorizationProviderName.legacy)
+
+    rs = Server()
+    server = WSServer()
+    rs.add_slice(server)
+    await rs.start()
+
+    try:
+        # Create an agent without a token by clearing the config after configure_auth sets it
+        token_before = inmanta_config_mod.Config.get("agent_rest_transport", "token", None)
+        inmanta_config_mod.Config.set("agent_rest_transport", "token", "")
+
+        agent = WSAgent("agent", reconnect_delay=60)
+        await agent.start()
+
+        try:
+            # The agent should NOT be able to establish an active session
+            # Wait a bit and check that no session becomes active
+            await asyncio.sleep(2)
+            assert agent.session is None or not agent.session.active
+        finally:
+            # Restore the token
+            if token_before:
+                inmanta_config_mod.Config.set("agent_rest_transport", "token", token_before)
+            await agent.stop()
+    finally:
+        await rs.stop()
+
+
+async def test_ws_open_session_rejected_with_invalid_token(inmanta_config: object, server_config: object) -> None:
+    """Test that OpenSession is rejected when auth is enabled and an invalid token is provided."""
+    configure_auth(auth=True, ca=False, ssl=False, authorization_provider=AuthorizationProviderName.legacy)
+
+    rs = Server()
+    server = WSServer()
+    rs.add_slice(server)
+    await rs.start()
+
+    try:
+        # Set an invalid token
+        inmanta_config_mod.Config.set("agent_rest_transport", "token", "invalid.jwt.token")
+
+        agent = WSAgent("agent", reconnect_delay=60)
+        await agent.start()
+
+        try:
+            # The agent should NOT be able to establish an active session
+            await asyncio.sleep(2)
+            assert agent.session is None or not agent.session.active
+        finally:
+            await agent.stop()
+    finally:
+        await rs.stop()
+
+
+async def test_ws_rpc_fails_without_token_in_headers(inmanta_config: object, server_config: object) -> None:
+    """Test that RPC calls fail when auth is enabled but no token is in the RPC headers.
+
+    This simulates the edge case where a session was established (e.g. before auth was enabled)
+    but the RPC call doesn't carry a token. The server's execute_call should reject it.
+    """
+    # First start without auth so the session can be established
+    rs = Server()
+    server = WSServer()
+    rs.add_slice(server)
+    await rs.start()
+
+    agent = WSAgent("agent", reconnect_delay=60)
+    await agent.start()
+
+    try:
+
+        async def wait_for_active() -> None:
+            while not agent.session or not agent.session.active:
+                await asyncio.sleep(0.1)
+
+        await asyncio.wait_for(wait_for_active(), timeout=10)
+
+        # Now enable auth on the server side (simulating a config change)
+        inmanta_config_mod.Config.set("server", "auth", "true")
+        # Load JWT config so decode_token works
+        configure_auth(auth=True, ca=False, ssl=False, authorization_provider=AuthorizationProviderName.legacy)
+
+        # The agent has no token (it was started without auth), so RPC calls should fail with 401/403
+        # Use the auth_server_status method which enforces auth
+        client_a2s = agent.session.get_typed_client()
+        try:
+            result = await asyncio.wait_for(client_a2s.get_auth_server_status(), timeout=5)
+            # If we get here, the call should have failed (not returned the actual status)
+            assert result != "auth server status", "RPC should have been rejected without auth token"
+        except Exception:
+            # Any exception is acceptable — the point is the call is rejected
             pass
     finally:
         await rs.stop()

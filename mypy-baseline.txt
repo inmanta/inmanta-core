@@ -988,9 +988,12 @@ src/inmanta/protocol/rest/server.py:0: error: Return type "Coroutine[Any, Any, N
 src/inmanta/protocol/rest/server.py:0: error: Return type "Coroutine[Any, Any, None]" of "write_message" incompatible with return type "Future[None]" in supertype "tornado.websocket.WebSocketHandler"  [override]
 src/inmanta/protocol/rest/server.py:0: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#incompatible-overrides
 src/inmanta/protocol/rest/server.py:0: note: This violates the Liskov substitution principle
+src/inmanta/protocol/websocket.py:0: error: Argument 1 to "pop" of "dict" has incompatible type "UUID | None"; expected "UUID"  [arg-type]
 src/inmanta/protocol/websocket.py:0: error: Argument "args" to "rpc_call" of "WebsocketFrameDecoder" has incompatible type "tuple[object, ...]"; expected "list[object]"  [arg-type]
 src/inmanta/protocol/websocket.py:0: error: Argument "kwargs" to "build_call" of "MethodProperties" has incompatible type "dict[str, object] | None"; expected "Mapping[str, object]"  [arg-type]
 src/inmanta/protocol/websocket.py:0: error: Argument "reply_id" to "RPC_Reply" has incompatible type "UUID | None"; expected "UUID"  [arg-type]
+src/inmanta/protocol/websocket.py:0: error: Argument "reply_id" to "handle_timeout" has incompatible type "UUID | None"; expected "UUID"  [arg-type]
+src/inmanta/protocol/websocket.py:0: error: Invalid index type "UUID | None" for "dict[UUID, Future[Result[BaseModel | UUID | bool | int | float | <6 more items> | None]]]"; expected type "UUID"  [index]
 src/inmanta/protocol/websocket.py:0: error: Argument "reply_id" to "RPC_Reply" has incompatible type "UUID | None"; expected "UUID"  [arg-type]
 src/inmanta/protocol/websocket.py:0: error: Argument "reply_id" to "RPC_Reply" has incompatible type "UUID | None"; expected "UUID"  [arg-type]
 src/inmanta/protocol/websocket.py:0: error: Argument "reply_id" to "RPC_Reply" has incompatible type "UUID | None"; expected "UUID"  [arg-type]
