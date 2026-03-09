@@ -17,11 +17,9 @@ Contact: code@inmanta.com
 """
 
 import logging
-import re
 from asyncio import CancelledError
 from collections.abc import Mapping, Sequence
-from typing import TYPE_CHECKING, AnyStr, Optional
-from urllib.parse import unquote
+from typing import TYPE_CHECKING, Optional
 
 import tornado.simple_httpclient
 from tornado.httpclient import AsyncHTTPClient, HTTPError, HTTPRequest, HTTPResponse
@@ -31,7 +29,7 @@ from inmanta import tracing, types
 from inmanta.const import INMANTA_MT_HEADER
 from inmanta.protocol import common
 from inmanta.protocol.auth import providers
-from inmanta.protocol.rest import RESTBase
+from inmanta.protocol.rest import AuthnzInterface, RESTBase, match_call
 
 if TYPE_CHECKING:
     from inmanta.protocol.endpoints import Endpoint
@@ -39,13 +37,14 @@ if TYPE_CHECKING:
 LOGGER: logging.Logger = logging.getLogger(__name__)
 
 
-class RESTClient(RESTBase):
-    """ "
+class RESTClient(RESTBase, AuthnzInterface):
+    """
     A REST (json body over http) client transport. Only methods that operate on resource can use all
     HTTP verbs. For other methods the POST verb is used.
     """
 
     def __init__(self, endpoint: "Endpoint", connection_timout: int = 120, force_instance: bool = False) -> None:
+        """Create the rest client that either uses normal http or a websocket"""
         super().__init__()
         self.__end_point: "Endpoint" = endpoint
         self.daemon: bool = True
@@ -71,20 +70,11 @@ class RESTClient(RESTBase):
         """
         return "%s_rest_transport" % self.__end_point.name
 
-    def match_call(self, url: str, method: str) -> tuple[Optional[dict[str, AnyStr]], Optional[common.UrlMethod]]:
+    def match_call(self, url: str, method: str) -> tuple[dict[str, str] | None, common.UrlMethod | None]:
         """
-        Get the method call for the given url and http method. This method is used for return calls over long poll
+        Match a URL and HTTP method against registered call targets, returning the matched parameters and method handler.
         """
-        for target in self.endpoint.call_targets:
-            url_map = target.get_op_mapping()
-            for url_re, handlers in url_map.items():
-                if not url_re.endswith("$"):
-                    url_re += "$"
-                match = re.match(url_re, url)
-                if match and method in handlers:
-                    return {unquote(k): unquote(v) for k, v in match.groupdict().items()}, handlers[method]
-
-        return None, None
+        return match_call(self.endpoint.call_targets, url, method)
 
     def _get_client_config(self) -> str:
         """

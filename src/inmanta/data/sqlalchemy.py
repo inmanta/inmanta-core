@@ -468,7 +468,7 @@ class Environment(Base):
     is_marked_for_deletion: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text("false"))
 
     project_: Mapped["Project"] = relationship("Project", back_populates="environment")
-    agentprocess: Mapped[list["Agentprocess"]] = relationship("Agentprocess", back_populates="environment_")
+    schedulersession: Mapped[list["SchedulerSession"]] = relationship("SchedulerSession", back_populates="environment_")
     compile: Mapped[list["Compile"]] = relationship("Compile", back_populates="environment_")
     configurationmodel: Mapped[list["Configurationmodel"]] = relationship("Configurationmodel", back_populates="environment_")
     discoveredresource: Mapped[list["Discoveredresource"]] = relationship("Discoveredresource", back_populates="environment_")
@@ -490,26 +490,24 @@ class Environment(Base):
     agent: Mapped[list["Agent"]] = relationship("Agent", back_populates="environment_")
 
 
-class Agentprocess(Base):
-    __tablename__ = "agentprocess"
+class SchedulerSession(Base):
+    __tablename__ = "schedulersession"
     __table_args__ = (
-        ForeignKeyConstraint(["environment"], ["environment.id"], ondelete="CASCADE", name="agentprocess_environment_fkey"),
-        PrimaryKeyConstraint("sid", name="agentprocess_pkey"),
-        Index("agentprocess_env_expired_index", "environment", "expired"),
-        Index("agentprocess_env_hostname_expired_index", "environment", "hostname", "expired"),
-        Index("agentprocess_expired_index", "expired"),
-        Index("agentprocess_sid_expired_index", "sid", "expired", unique=True),
+        ForeignKeyConstraint(["environment"], ["environment.id"], ondelete="CASCADE", name="schedulersession_environment_fkey"),
+        PrimaryKeyConstraint("sid", name="schedulersession_pkey"),
+        Index("schedulersession_env_expired_index", "environment", "expired"),
+        Index("schedulersession_env_hostname_expired_index", "environment", "hostname", "expired"),
+        Index("schedulersession_expired_index", "expired"),
+        Index("schedulersession_sid_expired_index", "sid", "expired", unique=True),
     )
 
     hostname: Mapped[str] = mapped_column(String, nullable=False)
     environment: Mapped[uuid.UUID] = mapped_column(UUID, nullable=False)
     sid: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
     first_seen: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
-    last_seen: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     expired: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
 
-    environment_: Mapped["Environment"] = relationship("Environment", back_populates="agentprocess")
-    agentinstance: Mapped[list["Agentinstance"]] = relationship("Agentinstance", back_populates="agentprocess")
+    environment_: Mapped["Environment"] = relationship("Environment", back_populates="schedulersession")
 
 
 class Compile(Base):
@@ -841,27 +839,6 @@ class Scheduler(Environment):
     last_processed_model_version: Mapped[Optional[int]] = mapped_column(Integer)
 
 
-class Agentinstance(Base):
-    __tablename__ = "agentinstance"
-    __table_args__ = (
-        ForeignKeyConstraint(["process"], ["agentprocess.sid"], ondelete="CASCADE", name="agentinstance_process_fkey"),
-        PrimaryKeyConstraint("id", name="agentinstance_pkey"),
-        UniqueConstraint("tid", "process", "name", name="agentinstance_unique"),
-        Index("agentinstance_expired_index", "expired"),
-        Index("agentinstance_expired_tid_endpoint_index", "tid", "name", "expired"),
-        Index("agentinstance_process_index", "process"),
-    )
-
-    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
-    process: Mapped[uuid.UUID] = mapped_column(UUID, nullable=False)
-    name: Mapped[str] = mapped_column(String, nullable=False)
-    tid: Mapped[uuid.UUID] = mapped_column(UUID, nullable=False)
-    expired: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
-
-    agentprocess: Mapped["Agentprocess"] = relationship("Agentprocess", back_populates="agentinstance")
-    agent: Mapped[list["Agent"]] = relationship("Agent", back_populates="agentinstance")
-
-
 class Dryrun(Base):
     __tablename__ = "dryrun"
     __table_args__ = (
@@ -1056,20 +1033,15 @@ class Agent(Base):
     __tablename__ = "agent"
     __table_args__ = (
         ForeignKeyConstraint(["environment"], ["environment.id"], ondelete="CASCADE", name="agent_environment_fkey"),
-        ForeignKeyConstraint(["id_primary"], ["agentinstance.id"], ondelete="RESTRICT", name="agent_id_primary_fkey"),
         PrimaryKeyConstraint("environment", "name", name="agent_pkey"),
-        Index("agent_id_primary_index", "id_primary"),
     )
 
     environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
     name: Mapped[str] = mapped_column(String, primary_key=True)
-    last_failover: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     paused: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text("false"))
-    id_primary: Mapped[Optional[uuid.UUID]] = mapped_column(UUID)
     unpause_on_resume: Mapped[Optional[bool]] = mapped_column(Boolean)
 
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="agent")
-    agentinstance: Mapped[Optional["Agentinstance"]] = relationship("Agentinstance", back_populates="agent")
     agent_modules: Mapped[list["AgentModules"]] = relationship("AgentModules", back_populates="agent", viewonly=True)
 
 

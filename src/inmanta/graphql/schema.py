@@ -56,7 +56,7 @@ There are 4 important building blocks that we have to take into account:
             class Environment:
                 __exclude__ = [
                     "project_",
-                    "agentprocess",
+                    "schedulersession",
                     ...
                 ]
                 is_expert_mode: bool = strawberry.field(resolver=get_expert_mode)
@@ -462,7 +462,7 @@ class Environment:
     # Add every relation/attribute that we don't want to expose in our GraphQL endpoint to `__exclude__`
     __exclude__ = [
         "project_",
-        "agentprocess",
+        "schedulersession",
         "code",
         "compile",
         "configurationmodel",

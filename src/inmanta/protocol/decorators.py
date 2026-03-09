@@ -32,6 +32,9 @@ class handle:
     Decorator for subclasses of an endpoint to handle protocol methods
 
     :param method: A subclass of method that defines the method
+    :param api_version: When specific this handler is only associated with a method of the specific api version. If the
+                        version is not defined, the handler is not associated with a rest endpoint.
+    :param kwargs: Map arguments in the message from one name to another
     :param kwargs: Map arguments in the message from one name to an other
     """
 
@@ -65,7 +68,6 @@ def method[C: Callable](
     server_agent: bool = False,
     api: Optional[bool] = None,
     agent_server: bool = False,
-    validate_sid: Optional[bool] = None,
     client_types: list[const.ClientType] = [const.ClientType.api],
     api_version: int = 1,
     api_prefix: str = "api",
@@ -84,7 +86,6 @@ def method[C: Callable](
     :param api: This is a call from the client to the Server (True if not server_agent and not agent_server).
     :param server_agent: This is a call from the Server to the Agent (reverse http channel through long poll).
     :param agent_server: This is a call from the Agent to the Server.
-    :param validate_sid: This call requires a valid session, true by default if agent_server and not api
     :param client_types: The allowed client types for this call.
         The valid values are defined by the :const:`inmanta.const.ClientType` enum.
     :param arg_options: Options related to arguments passed to the method. The key of this dict is the name of the arg to
@@ -114,7 +115,6 @@ def method[C: Callable](
             server_agent,
             api,
             agent_server,
-            validate_sid,
             client_types,
             api_version,
             api_prefix,
@@ -138,7 +138,6 @@ def typedmethod[C: Callable](
     server_agent: bool = False,
     api: Optional[bool] = None,
     agent_server: bool = False,
-    validate_sid: Optional[bool] = None,
     client_types: list[const.ClientType] = [const.ClientType.api],
     api_version: int = 1,
     api_prefix: str = "api",
@@ -161,7 +160,6 @@ def typedmethod[C: Callable](
     :param api: This is a call from the client to the Server (True if not server_agent and not agent_server)
     :param server_agent: This is a call from the Server to the Agent (reverse http channel through long poll)
     :param agent_server: This is a call from the Agent to the Server
-    :param validate_sid: This call requires a valid session, true by default if agent_server and not api
     :param client_types: The allowed client types for this call.
             The valid values are defined by the :const:`inmanta.const.ClientType` enum.
     :param arg_options: Options related to arguments passed to the method. The key of this dict is the name of the arg to
@@ -201,7 +199,6 @@ def typedmethod[C: Callable](
                 server_agent,
                 api,
                 agent_server,
-                validate_sid,
                 client_types,
                 api_version,
                 api_prefix,
