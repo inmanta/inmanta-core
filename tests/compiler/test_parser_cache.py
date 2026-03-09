@@ -56,7 +56,7 @@ a=1
 
     main_file = os.path.join(snippetcompiler.project_dir, "main.cf")
     root_ns = snippetcompiler.project.root_ns
-    cached_main = parser.cache_manager._get_file_name(root_ns.get_child_or_create("main.cf"), main_file)
+    cached_main = parser.cache_manager._ensure_cache_path(root_ns.get_child_or_create("main.cf"), main_file)
     Path(main_file).touch()
     # make the cache a tiny bit newer
     sleep(0.001)

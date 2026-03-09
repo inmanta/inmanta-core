@@ -55,7 +55,7 @@ class CacheManager:
         self.cache_enabled = feature_compiler_cache
         self.root_cache_dir: str | None = None
 
-    def _get_file_name(self, namespace: Namespace, filename: str) -> str:
+    def _ensure_cache_path(self, namespace: Namespace, filename: str) -> str:
         """
         Returns the cache file path for a given source file.
 
@@ -90,7 +90,7 @@ class CacheManager:
         if not self.is_attached_to_project():
             return None
         try:
-            cache_filename = self._get_file_name(namespace, filename)
+            cache_filename = self._ensure_cache_path(namespace, filename)
             if not os.path.exists(cache_filename):
                 self.misses += 1
                 return None
@@ -123,7 +123,7 @@ class CacheManager:
         if not self.is_attached_to_project():
             return
         try:
-            cache_filename = self._get_file_name(namespace, filename)
+            cache_filename = self._ensure_cache_path(namespace, filename)
             mtime = os.path.getmtime(filename)
             cache_entry = CacheEnvelope(mtime, statements)
             with open(cache_filename, "wb") as fh:

@@ -9,12 +9,12 @@ Tree) of statement objects that the compiler then normalizes and executes.
 
 ## Files
 
-| File | Description |
-|---|---|
-| `larkInmanta.lark` | Lark grammar definition for the Inmanta DSL |
-| `larkInmantaParser.py` | Lark-based parser and transformer (active parser) |
-| `cache.py` | Per-file AST cache manager (`CacheManager`) |
-| `pickle.py` | Custom pickler/unpickler for AST objects (handles `Namespace` replacement) |
+| File                   | Description                                                                |
+| ---------------------- | -------------------------------------------------------------------------- |
+| `larkInmanta.lark`     | Lark grammar definition for the Inmanta DSL                                |
+| `larkInmantaParser.py` | Lark-based parser and transformer (active parser)                          |
+| `cache.py`             | Per-file AST cache manager (`CacheManager`)                                |
+| `pickle.py`            | Custom pickler/unpickler for AST objects (handles `Namespace` replacement) |
 
 ## Architecture
 
@@ -113,15 +113,15 @@ be disabled with `--no-cache`.
 
 Full `inmanta compile` on a project that includes all files from the juniper-mx v23 module:
 
-| Parser                        | Parsing   | Total compile | User wall clock time |
-|-------------------------------|-----------|---------------|----------------------|
-| PLY with cold cache           | 131.7s    | 146.7s        | 193.5s               |
-| PLY with warm cache           | 67.7s     | 84.7s         | 134.5s               |
-| Lark without cache            | 125.1s    | 138.7s        | 181.8s               |
-| Lark with cold cache          | 154.1s    | 168.7s        | 215.3s               |
-| Lark with warm cache          | 48.8s     | 62.4s         | 110.9s               |
-| Lark with cold cache + fast exit | 147.8s | 163.4s        | 156.9s               |
-| Lark with warm cache + fast exit | 45.3s  | 58.5s         | 55.5s                |
+| Parser                           | Parsing | Total compile | User wall clock time |
+| -------------------------------- | ------- | ------------- | -------------------- |
+| PLY with cold cache              | 131.7s  | 146.7s        | 193.5s               |
+| PLY with warm cache              | 67.7s   | 84.7s         | 134.5s               |
+| Lark without cache               | 125.1s  | 138.7s        | 181.8s               |
+| Lark with cold cache             | 154.1s  | 168.7s        | 215.3s               |
+| Lark with warm cache             | 48.8s   | 62.4s         | 110.9s               |
+| Lark with cold cache + fast exit | 147.8s  | 163.4s        | 156.9s               |
+| Lark with warm cache + fast exit | 45.3s   | 58.5s         | 55.5s                |
 
 Lark is **5% faster** than PLY for raw parsing (no cache on either side). With a warm AST cache,
 Lark is **28% faster** than PLY with warm cache (48.8s vs 67.7s parsing, 110.9s vs 134.5s total).
@@ -133,18 +133,18 @@ compilation (avoiding GC teardown overhead on the large AST object graph).
 
 The following optimizations were applied to close the initial 3× gap between Lark and PLY:
 
-| Optimization | Effect |
-|---|---|
-| Transparent rules (`?` prefix) | Fewer tree nodes to allocate and transform |
-| Filtered terminals (`_KEYWORD`) | Keywords auto-removed from transformer args |
-| Custom `_transform_tree` loop | Replaces Lark's 4-function dispatch chain with a single recursive loop |
-| Pre-built dispatch dict | O(1) method lookup per rule, bypasses `_VArgsWrapper.__get__` |
-| Friedl-unrolled string regexes | ~46% faster lexing of STRING/RSTRING/FSTRING |
-| `propagate_positions` removal | Positions derived from tokens directly (~2s saving) |
-| `_lark_parser_default` singleton | Build LALR tables once per process |
-| Grammar hash cache filename | Automatic stale-cache eviction on grammar changes |
-| `dispatch_table` for pickle | 10× faster AST serialization (C-level type check) |
-| `_safe_decode` fast path | 57× faster string literal decoding (skip backslash-free strings) |
+| Optimization                     | Effect                                                                 |
+| -------------------------------- | ---------------------------------------------------------------------- |
+| Transparent rules (`?` prefix)   | Fewer tree nodes to allocate and transform                             |
+| Filtered terminals (`_KEYWORD`)  | Keywords auto-removed from transformer args                            |
+| Custom `_transform_tree` loop    | Replaces Lark's 4-function dispatch chain with a single recursive loop |
+| Pre-built dispatch dict          | O(1) method lookup per rule, bypasses `_VArgsWrapper.__get__`          |
+| Friedl-unrolled string regexes   | ~46% faster lexing of STRING/RSTRING/FSTRING                           |
+| `propagate_positions` removal    | Positions derived from tokens directly (~2s saving)                    |
+| `_lark_parser_default` singleton | Build LALR tables once per process                                     |
+| Grammar hash cache filename      | Automatic stale-cache eviction on grammar changes                      |
+| `dispatch_table` for pickle      | 10× faster AST serialization (C-level type check)                      |
+| `_safe_decode` fast path         | 57× faster string literal decoding (skip backslash-free strings)       |
 
 ## Why Lark?
 
