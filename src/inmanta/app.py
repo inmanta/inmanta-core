@@ -810,15 +810,9 @@ class CompileSummaryReporter:
     def print_summary_and_exit(self, show_stack_traces: bool) -> None:
         """
         Print the compile summary and exit with a 0 status code in case of success or 1 in case of failure.
-
-        Uses os._exit() to skip Python's interpreter shutdown, which would otherwise spend significant time
-        running the garbage collector over the compiler's large cyclic object graph (Namespace trees, Entity
-        hierarchies, Instance/ResultVariable webs). Since the process is terminating, this GC work is unnecessary.
         """
         self.print_summary(show_stack_traces)
-        sys.stdout.flush()
-        sys.stderr.flush()
-        os._exit(1 if self.is_failure() else 0)
+        exit(1 if self.is_failure() else 0)
 
 
 def cmd_parser() -> argparse.ArgumentParser:
