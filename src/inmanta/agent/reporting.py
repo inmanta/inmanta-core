@@ -48,7 +48,7 @@ def collect_report(agent: "SessionEndpoint") -> dict[str, ReportReturn]:
 
 
 def report_environment(agent: "SessionEndpoint") -> str:
-    return str(agent._env_id)
+    return str(agent._environment_id)
 
 
 reports["environment"] = report_environment

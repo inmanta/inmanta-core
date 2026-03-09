@@ -75,7 +75,7 @@ class Agent(SessionEndpoint):
 
         self.executor_manager: executor.ExecutorManager[executor.Executor] = self.create_executor_manager()
         assert self.session is not None
-        self.scheduler = scheduler.ResourceScheduler(self._env_id, self.executor_manager, self.session.get_client())
+        self.scheduler = scheduler.ResourceScheduler(self._environment_id, self.executor_manager, self.session.get_client())
         self.working = False
         self._client = self.session.get_client()
         self._db_monitor: DatabaseMonitor | None = None
@@ -96,10 +96,10 @@ class Agent(SessionEndpoint):
         await super().start()
 
     def create_executor_manager(self) -> executor.ExecutorManager[executor.Executor]:
-        assert self._env_id is not None
+        assert self._environment_id is not None
         return forking_executor.MPManager(
             self.thread_pool,
-            self._env_id,
+            self._environment_id,
             config.log_dir.get(),
             self._storage["executors"],
             LOGGER.level,
@@ -145,7 +145,7 @@ class Agent(SessionEndpoint):
         """
         try:
             await data.Notification(
-                environment=self._env_id,
+                environment=self._environment_id,
                 created=datetime.datetime.now().astimezone(),
                 title="Agent operations suspended",
                 message="Agent operations are temporarily suspended because the user requested to remove the agent venvs.",
@@ -158,7 +158,7 @@ class Agent(SessionEndpoint):
             await self._remove_executor_venvs()
         except Exception as e:
             await data.Notification(
-                environment=self._env_id,
+                environment=self._environment_id,
                 created=datetime.datetime.now().astimezone(),
                 title="Agent venv removal failed",
                 message=f"Failed to remove agent venvs: {e}",
@@ -166,7 +166,7 @@ class Agent(SessionEndpoint):
             ).insert()
         else:
             await data.Notification(
-                environment=self._env_id,
+                environment=self._environment_id,
                 created=datetime.datetime.now().astimezone(),
                 title="Agent venv removal finished",
                 message="The agent venvs were successfully removed. Resuming agent operations.",
@@ -219,7 +219,7 @@ class Agent(SessionEndpoint):
 
     async def on_reconnect(self) -> None:
         await super().on_reconnect()
-        result = await self._client.get_state(tid=self._env_id, agent=AGENT_SCHEDULER_ID)
+        result = await self._client.get_state(tid=self._environment_id, agent=AGENT_SCHEDULER_ID)
         if result.code == 200 and result.result is not None:
             state = result.result
             # The server wraps the response in a "data" envelope

@@ -22,7 +22,7 @@ import logging
 import socket
 import uuid
 from collections.abc import Sequence
-from typing import Annotated, Any, Callable, Literal, Optional, Tuple
+from typing import Annotated, Callable, Literal
 from urllib import parse
 
 import pydantic
@@ -36,6 +36,10 @@ from inmanta.protocol.auth import auth as auth_module
 from inmanta.protocol.auth import providers
 
 LOGGER = logging.getLogger(__name__)
+
+DEFAULT_RPC_TIMEOUT_S: int = 120
+MIN_RPC_TIMEOUT_S: int = 30
+WS_CONNECT_TIMEOUT_S: int = 1
 
 
 class Session:
@@ -117,7 +121,7 @@ class Session:
         )
 
     @property
-    def session_key(self) -> Tuple[uuid.UUID, str]:
+    def session_key(self) -> tuple[uuid.UUID, str]:
         """Return a (environment_id, session_name) tuple that uniquely identifies this session."""
         return self._environment_id, self._session_name
 
@@ -159,14 +163,14 @@ class _SessionClient:
         self._decoder = decoder
         self._typed = typed
 
-    def __getattr__(self, name: str) -> Callable[..., Any]:
+    def __getattr__(self, name: str) -> Callable[..., object]:
         """Look up the named RPC method and return a callable that dispatches it over the websocket."""
         method = common.MethodProperties.select_method(name)
 
         if method is None:
             raise AttributeError("Method with name %s is not defined for this client" % name)
 
-        def wrap(*args: object, **kwargs: object) -> Any:
+        def wrap(*args: object, **kwargs: object) -> object:
             assert method
             result = self._decoder.rpc_call(properties=method, args=args, kwargs=kwargs)
             if self._typed:
@@ -265,8 +269,8 @@ class RPC_Call(WSMessage):
     url: str
     method: str
     headers: dict[str, str]
-    body: Optional[types.JsonType]
-    reply_id: Optional[uuid.UUID] = None
+    body: types.JsonType | None
+    reply_id: uuid.UUID | None = None
 
 
 class RPC_Reply(WSMessage):
@@ -279,7 +283,7 @@ class RPC_Reply(WSMessage):
 
     action: Literal["RPC_REPLY"] = "RPC_REPLY"
     reply_id: uuid.UUID
-    result: Optional[types.JsonType]
+    result: types.JsonType | None
     code: int
 
 
@@ -328,8 +332,8 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
     def __init__(self) -> None:
         super().__init__()
         self._message_parser = pydantic.TypeAdapter(WSMessages)
-        self._session: Optional[Session] = None
-        self._call_targets: Optional[list[common.CallTarget]] = None
+        self._session: Session | None = None
+        self._call_targets: list[common.CallTarget] | None = None
         self._replies: dict[uuid.UUID, asyncio.Future[common.Result]] = {}
         self._authnz_context: rest.AuthnzInterface | None = None
         self._token: str | None = None
@@ -339,7 +343,7 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
         self._authnz_context = context
 
     @property
-    def session(self) -> Optional[Session]:
+    def session(self) -> Session | None:
         """The session associated with this decoder, or None if no session has been established yet."""
         return self._session
 
@@ -352,7 +356,7 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
         return self._session is not None and self._session.active
 
     def rpc_call(
-        self, properties: common.MethodProperties, args: Sequence[object], kwargs: Optional[dict[str, object]] = None
+        self, properties: common.MethodProperties, args: Sequence[object], kwargs: dict[str, object] | None = None
     ) -> asyncio.Future[common.Result]:
         call_spec = properties.build_call(args=args, kwargs=kwargs)
         call_spec.reply_id = uuid.uuid4() if properties.reply else None
@@ -364,7 +368,7 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
         LOGGER.debug("Putting call %s: %s %s in queue at %s", call_spec.reply_id, call_spec.method, call_spec.url, self)
         # Use the method-defined timeout or a generous default.
         # The timeout covers the full round-trip including handler execution on the remote side.
-        timeout = max(properties.timeout or 120, 30)
+        timeout = max(properties.timeout or DEFAULT_RPC_TIMEOUT_S, MIN_RPC_TIMEOUT_S)
         if properties.reply:
             self._replies[call_spec.reply_id] = future
             self.add_background_task(
@@ -545,7 +549,7 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
                 LOGGER.debug("Failed to send CloseSession message, connection may already be closed.")
         await self.close_session()
 
-    async def dispatch_method(self, msg: RPC_Call) -> Optional[RPC_Reply]:
+    async def dispatch_method(self, msg: RPC_Call) -> RPC_Reply | None:
         """Dispatch a request from the server into the RPC code so the requests gets executed. The call result is sent back
         to the server using a WebSocket reply.
         """
@@ -660,7 +664,7 @@ class WebSocketClientConnection(websocket.WebSocketClientConnection):
 
     def __init__(
         self,
-        on_connection_close_callback: Optional[Callable[[], ...]] = None,
+        on_connection_close_callback: Callable[[], None] | None = None,
         **kwargs: object,
     ) -> None:
         super().__init__(**kwargs)
@@ -681,7 +685,7 @@ class SessionEndpoint(endpoints.Endpoint, common.CallTarget, WebsocketFrameDecod
     An endpoint for clients that make calls to a server and that receive calls back from the server using websockets.
     """
 
-    def __init__(self, name: str, environment: uuid.UUID, timeout: int = 120, reconnect_delay: int = 5):
+    def __init__(self, name: str, environment: uuid.UUID, timeout: int = DEFAULT_RPC_TIMEOUT_S, reconnect_delay: int = 5):
         """
         :param name: The name of the session. This has to be unique per environment
         :param environment: The environment this session is for
@@ -694,14 +698,14 @@ class SessionEndpoint(endpoints.Endpoint, common.CallTarget, WebsocketFrameDecod
 
         self._sched = util.Scheduler("session endpoint")
 
-        self._env_id: uuid.UUID = environment
+        self._environment_id: uuid.UUID = environment
 
         self.running: bool = True
         self.server_timeout = timeout
         self.reconnect_delay = reconnect_delay
         self.add_call_target(self)
 
-        self._ws_client: Optional[WebSocketClientConnection] = None
+        self._ws_client: WebSocketClientConnection | None = None
         self._reconnecting: bool = False
         self.set_call_targets(self.call_targets)
         self.set_authnz_context(self)
@@ -727,7 +731,7 @@ class SessionEndpoint(endpoints.Endpoint, common.CallTarget, WebsocketFrameDecod
         return None
 
     def get_environment(self) -> uuid.UUID:
-        return self._env_id
+        return self._environment_id
 
     def get_websocket_url(self) -> str:
         """Build the websocket url based on the configuration file"""
@@ -744,7 +748,7 @@ class SessionEndpoint(endpoints.Endpoint, common.CallTarget, WebsocketFrameDecod
 
     @property
     def environment(self) -> uuid.UUID:
-        return self._env_id
+        return self._environment_id
 
     async def start_connected(self) -> None:
         """Called after sending OpenSession but before receiving SessionOpened confirmation.
@@ -756,7 +760,8 @@ class SessionEndpoint(endpoints.Endpoint, common.CallTarget, WebsocketFrameDecod
         """
         Connect to the server using a websocket for bidirectional communication.
         """
-        assert self._env_id is not None
+        if self._environment_id is None:
+            raise RuntimeError("Cannot start SessionEndpoint: environment ID is not set")
         LOGGER.info("Starting session endpoint %s in environment %s", self.name, self.environment)
         self.add_background_task(self._process_messages())
 
@@ -783,7 +788,9 @@ class SessionEndpoint(endpoints.Endpoint, common.CallTarget, WebsocketFrameDecod
             client_id = f"{self.name}_rest_transport"
             ca_certs = inmanta_config.Config.get(client_id, "ssl_ca_cert_file", None)
             conn = WebSocketClientConnection(
-                request=httpclient.HTTPRequest(self.get_websocket_url(), connect_timeout=1, ca_certs=ca_certs),
+                request=httpclient.HTTPRequest(
+                    self.get_websocket_url(), connect_timeout=WS_CONNECT_TIMEOUT_S, ca_certs=ca_certs
+                ),
                 ping_interval=ws_ping_interval,
                 ping_timeout=ws_ping_timeout,
                 on_connection_close_callback=self._on_disconnect,

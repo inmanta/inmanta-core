@@ -18,6 +18,7 @@ Contact: code@inmanta.com
 
 import asyncio
 import logging
+import unittest.mock
 import uuid
 
 from inmanta import config as inmanta_config_mod
@@ -26,9 +27,11 @@ from inmanta.protocol import SessionEndpoint, handle, typedmethod, websocket
 from inmanta.protocol.auth.decorators import auth
 from inmanta.server.config import AuthorizationProviderName
 from inmanta.server.protocol import Server, ServerSlice
-from utils import configure_auth
+from utils import configure_auth, retry_limited
 
 LOGGER = logging.getLogger(__name__)
+
+TEST_TIMEOUT_S: int = 10
 
 
 @auth(auth_label=const.CoreAuthorizationLabel.STATUS_READ, read_only=True)
@@ -73,7 +76,7 @@ class WSServer(websocket.SessionListener, ServerSlice):
 
 
 class WSAgent(SessionEndpoint):
-    def __init__(self, name: str, timeout: int = 120, reconnect_delay: int = 5) -> None:
+    def __init__(self, name: str, timeout: int = websocket.DEFAULT_RPC_TIMEOUT_S, reconnect_delay: int = 5) -> None:
         super().__init__(name, uuid.uuid4(), timeout, reconnect_delay)
 
     @handle(get_current_agent_status)
@@ -88,7 +91,7 @@ class WSAgent(SessionEndpoint):
 class TrackingWSAgent(WSAgent):
     """WSAgent that records lifecycle events in order for testing."""
 
-    def __init__(self, name: str, timeout: int = 120, reconnect_delay: int = 5) -> None:
+    def __init__(self, name: str, timeout: int = websocket.DEFAULT_RPC_TIMEOUT_S, reconnect_delay: int = 5) -> None:
         super().__init__(name, timeout, reconnect_delay)
         self.events: list[str] = []
 
@@ -111,8 +114,7 @@ async def test_ws_2way(inmanta_config: object, server_config: object) -> None:
     agent = WSAgent("agent")
     await agent.start()
 
-    while not agent.session or not agent.session.active:
-        await asyncio.sleep(0.01)
+    await retry_limited(lambda: agent.session is not None and agent.session.active, TEST_TIMEOUT_S)
 
     client_a2s = agent.session.get_typed_client()
     result = await client_a2s.get_current_server_status()
@@ -139,11 +141,7 @@ async def test_ws_ping_timeout_closes_stale_connection(inmanta_config: object, s
     await agent.start()
 
     # Wait for the session to become active
-    async def wait_for_active() -> None:
-        while not agent.session or not agent.session.active:
-            await asyncio.sleep(0.1)
-
-    await asyncio.wait_for(wait_for_active(), timeout=10)
+    await retry_limited(lambda: agent.session is not None and agent.session.active, TEST_TIMEOUT_S)
 
     # Verify the server has the session
     session_key = agent.session.session_key
@@ -156,20 +154,13 @@ async def test_ws_ping_timeout_closes_stale_connection(inmanta_config: object, s
 
     # Wait for the server to detect the stale connection and remove the session.
     # With ws-ping-interval=1, ws-ping-timeout=1, this should happen within a few seconds.
-    async def wait_for_session_removed() -> None:
-        while session_key in rs._transport._sessions:
-            await asyncio.sleep(0.1)
-
-    await asyncio.wait_for(wait_for_session_removed(), timeout=10)
+    await retry_limited(lambda: session_key not in rs._transport._sessions, TEST_TIMEOUT_S)
 
     # The agent should reconnect and establish a new active session
-    async def wait_for_server_session() -> None:
-        while True:
-            if agent.session and agent.session.active and agent.session.session_key in rs._transport._sessions:
-                return
-            await asyncio.sleep(0.1)
-
-    await asyncio.wait_for(wait_for_server_session(), timeout=10)
+    await retry_limited(
+        lambda: agent.session is not None and agent.session.active and agent.session.session_key in rs._transport._sessions,
+        TEST_TIMEOUT_S,
+    )
 
     await rs.stop()
     await agent.stop()
@@ -199,11 +190,7 @@ async def test_ws_reconnect_on_connection_failure(inmanta_config: object, server
 
     try:
         # Wait for the agent to connect
-        async def wait_for_session() -> None:
-            while not agent.session or not agent.session.active:
-                await asyncio.sleep(0.1)
-
-        await asyncio.wait_for(wait_for_session(), timeout=10)
+        await retry_limited(lambda: agent.session is not None and agent.session.active, TEST_TIMEOUT_S)
 
         # Verify session is established
         assert agent.session is not None
@@ -237,11 +224,7 @@ async def test_ws_reject_duplicate_session_on_same_connection(inmanta_config: ob
     agent = WSAgent("agent", reconnect_delay=1)
     await agent.start()
 
-    async def wait_for_active() -> None:
-        while not agent.session or not agent.session.active:
-            await asyncio.sleep(0.1)
-
-    await asyncio.wait_for(wait_for_active(), timeout=10)
+    await retry_limited(lambda: agent.session is not None and agent.session.active, TEST_TIMEOUT_S)
 
     original_session_id = agent.session.id
 
@@ -258,13 +241,9 @@ async def test_ws_reject_duplicate_session_on_same_connection(inmanta_config: ob
     await agent._ws_client.write_message(duplicate_msg)
 
     # Wait for the agent to reconnect with a new session
-    async def wait_for_new_session() -> None:
-        while True:
-            if agent.session and agent.session.active and agent.session.id != original_session_id:
-                return
-            await asyncio.sleep(0.1)
-
-    await asyncio.wait_for(wait_for_new_session(), timeout=30)
+    await retry_limited(
+        lambda: agent.session is not None and agent.session.active and agent.session.id != original_session_id, 30
+    )
 
     # RPC works on the new session
     client_a2s = agent.session.get_typed_client()
@@ -285,11 +264,7 @@ async def test_ws_client_handles_reject_session(inmanta_config: object, server_c
     agent = WSAgent("agent", reconnect_delay=1)
     await agent.start()
 
-    async def wait_for_active() -> None:
-        while not agent.session or not agent.session.active:
-            await asyncio.sleep(0.1)
-
-    await asyncio.wait_for(wait_for_active(), timeout=10)
+    await retry_limited(lambda: agent.session is not None and agent.session.active, TEST_TIMEOUT_S)
 
     original_session_id = agent.session.id
 
@@ -301,13 +276,9 @@ async def test_ws_client_handles_reject_session(inmanta_config: object, server_c
     assert agent._session is None or not agent.active()
 
     # The agent should reconnect and establish a new active session
-    async def wait_for_new_session() -> None:
-        while True:
-            if agent.session and agent.session.active and agent.session.id != original_session_id:
-                return
-            await asyncio.sleep(0.1)
-
-    await asyncio.wait_for(wait_for_new_session(), timeout=30)
+    await retry_limited(
+        lambda: agent.session is not None and agent.session.active and agent.session.id != original_session_id, 30
+    )
 
     # Verify the new session works
     client_a2s = agent.session.get_typed_client()
@@ -330,11 +301,7 @@ async def test_ws_concurrent_rpcs(inmanta_config: object, server_config: object)
 
     try:
 
-        async def wait_for_active() -> None:
-            while not agent.session or not agent.session.active:
-                await asyncio.sleep(0.1)
-
-        await asyncio.wait_for(wait_for_active(), timeout=10)
+        await retry_limited(lambda: agent.session is not None and agent.session.active, TEST_TIMEOUT_S)
 
         client = agent.session.get_typed_client()
         results = await asyncio.gather(*[client.get_current_server_status() for _ in range(10)])
@@ -356,11 +323,7 @@ async def test_ws_rpc_on_closed_session(inmanta_config: object, server_config: o
 
     try:
 
-        async def wait_for_active() -> None:
-            while not agent.session or not agent.session.active:
-                await asyncio.sleep(0.1)
-
-        await asyncio.wait_for(wait_for_active(), timeout=10)
+        await retry_limited(lambda: agent.session is not None and agent.session.active, TEST_TIMEOUT_S)
 
         client = agent.session.get_typed_client()
 
@@ -369,7 +332,7 @@ async def test_ws_rpc_on_closed_session(inmanta_config: object, server_config: o
 
         # The RPC call should fail or raise, not hang indefinitely
         try:
-            result = await asyncio.wait_for(client.get_current_server_status(), timeout=10)
+            result = await asyncio.wait_for(client.get_current_server_status(), timeout=TEST_TIMEOUT_S)
             # If it returns, the result should indicate an error (not "server status")
             assert result != "server status"
         except Exception:
@@ -391,21 +354,13 @@ async def test_ws_server_shutdown_during_active_session(inmanta_config: object, 
 
     try:
 
-        async def wait_for_active() -> None:
-            while not agent.session or not agent.session.active:
-                await asyncio.sleep(0.1)
-
-        await asyncio.wait_for(wait_for_active(), timeout=10)
+        await retry_limited(lambda: agent.session is not None and agent.session.active, TEST_TIMEOUT_S)
 
         # Stop the server
         await rs.stop()
 
         # Wait for the agent to detect disconnection
-        async def wait_for_inactive() -> None:
-            while agent.session and agent.session.active:
-                await asyncio.sleep(0.1)
-
-        await asyncio.wait_for(wait_for_inactive(), timeout=10)
+        await retry_limited(lambda: agent.session is None or not agent.session.active, TEST_TIMEOUT_S)
 
         # Start a new server
         rs2 = Server()
@@ -415,11 +370,7 @@ async def test_ws_server_shutdown_during_active_session(inmanta_config: object, 
 
         try:
             # Wait for the agent to reconnect
-            async def wait_for_reconnect() -> None:
-                while not agent.session or not agent.session.active:
-                    await asyncio.sleep(0.1)
-
-            await asyncio.wait_for(wait_for_reconnect(), timeout=30)
+            await retry_limited(lambda: agent.session is not None and agent.session.active, 30)
 
             # Verify RPC works on the new connection
             client = agent.session.get_typed_client()
@@ -444,11 +395,7 @@ async def test_ws_pending_futures_resolved_on_disconnect(inmanta_config: object,
 
     try:
 
-        async def wait_for_active() -> None:
-            while not agent.session or not agent.session.active:
-                await asyncio.sleep(0.1)
-
-        await asyncio.wait_for(wait_for_active(), timeout=10)
+        await retry_limited(lambda: agent.session is not None and agent.session.active, TEST_TIMEOUT_S)
 
         # Start an RPC call from server to agent. We use the server-side session's client
         # to call the agent. The agent has pending futures on its decoder.
@@ -500,11 +447,7 @@ async def test_ws_duplicate_session_replaces_old(inmanta_config: object, server_
 
     try:
 
-        async def wait_for_active() -> None:
-            while not agent.session or not agent.session.active:
-                await asyncio.sleep(0.1)
-
-        await asyncio.wait_for(wait_for_active(), timeout=10)
+        await retry_limited(lambda: agent.session is not None and agent.session.active, TEST_TIMEOUT_S)
 
         agent_session_id_1 = agent.session.id
         # Record the server-side session ID for the first connection
@@ -517,13 +460,9 @@ async def test_ws_duplicate_session_replaces_old(inmanta_config: object, server_
         agent._ws_client.protocol.stream.close()
 
         # Wait for the agent to reconnect with a new session
-        async def wait_for_new_session() -> None:
-            while True:
-                if agent.session and agent.session.active and agent.session.id != agent_session_id_1:
-                    return
-                await asyncio.sleep(0.1)
-
-        await asyncio.wait_for(wait_for_new_session(), timeout=30)
+        await retry_limited(
+            lambda: agent.session is not None and agent.session.active and agent.session.id != agent_session_id_1, 30
+        )
 
         # Verify the spy saw: opened(first), closed(first), opened(second)
         actions = [e for e, _ in spy.events]
@@ -557,11 +496,7 @@ async def test_ws_old_session_closed_on_reconnect(inmanta_config: object, server
 
     try:
 
-        async def wait_for_active() -> None:
-            while not agent.session or not agent.session.active:
-                await asyncio.sleep(0.1)
-
-        await asyncio.wait_for(wait_for_active(), timeout=10)
+        await retry_limited(lambda: agent.session is not None and agent.session.active, TEST_TIMEOUT_S)
 
         old_session = agent.session
         assert old_session is not None
@@ -578,13 +513,7 @@ async def test_ws_old_session_closed_on_reconnect(inmanta_config: object, server
         agent._ws_client.protocol.stream.close()
 
         # Wait for reconnection
-        async def wait_for_new_session() -> None:
-            while True:
-                if agent.session and agent.session.active and agent.session is not old_session:
-                    return
-                await asyncio.sleep(0.1)
-
-        await asyncio.wait_for(wait_for_new_session(), timeout=30)
+        await retry_limited(lambda: agent.session is not None and agent.session.active and agent.session is not old_session, 30)
 
         # The old session should be closed
         assert old_session.is_closed(), "Old session was not closed during reconnect"
@@ -621,11 +550,7 @@ async def test_ws_close_connection_notifies_remote_before_local_teardown(inmanta
 
     try:
 
-        async def wait_for_active() -> None:
-            while not agent.session or not agent.session.active:
-                await asyncio.sleep(0.1)
-
-        await asyncio.wait_for(wait_for_active(), timeout=10)
+        await retry_limited(lambda: agent.session is not None and agent.session.active, TEST_TIMEOUT_S)
 
         # Track the order: was CloseSession sent while the session was still open?
         session_open_when_close_sent: list[bool] = []
@@ -636,9 +561,8 @@ async def test_ws_close_connection_notifies_remote_before_local_teardown(inmanta
                 session_open_when_close_sent.append(not agent.session.is_closed())
             await original_write(message, binary)
 
-        agent.write_message = tracking_write  # type: ignore[assignment]
-
-        await agent.close_connection()
+        with unittest.mock.patch.object(agent, "write_message", side_effect=tracking_write):
+            await agent.close_connection()
 
         assert len(session_open_when_close_sent) == 1, "CloseSession should have been sent exactly once"
         assert session_open_when_close_sent[0], "CloseSession should be sent before local session is closed"
@@ -663,11 +587,7 @@ async def test_ws_write_failure_resolves_future(inmanta_config: object, server_c
 
     try:
 
-        async def wait_for_active() -> None:
-            while not agent.session or not agent.session.active:
-                await asyncio.sleep(0.1)
-
-        await asyncio.wait_for(wait_for_active(), timeout=10)
+        await retry_limited(lambda: agent.session is not None and agent.session.active, TEST_TIMEOUT_S)
 
         # Close the underlying TCP stream so write_message will fail
         assert agent._ws_client is not None
@@ -823,11 +743,7 @@ async def test_ws_write_message_silent_drop_resolves_future(inmanta_config: obje
 
     try:
 
-        async def wait_for_active() -> None:
-            while not agent.session or not agent.session.active:
-                await asyncio.sleep(0.1)
-
-        await asyncio.wait_for(wait_for_active(), timeout=10)
+        await retry_limited(lambda: agent.session is not None and agent.session.active, TEST_TIMEOUT_S)
 
         # Close the websocket cleanly so _ws_client.closed becomes True.
         # This is different from test_ws_write_failure_resolves_future which closes the
@@ -874,11 +790,7 @@ async def test_ws_rpc_with_auth(inmanta_config: object, server_config: object) -
 
     try:
 
-        async def wait_for_active() -> None:
-            while not agent.session or not agent.session.active:
-                await asyncio.sleep(0.1)
-
-        await asyncio.wait_for(wait_for_active(), timeout=10)
+        await retry_limited(lambda: agent.session is not None and agent.session.active, TEST_TIMEOUT_S)
 
         # Agent→server RPC should succeed (agent token is valid, method allows agent client type)
         client_a2s = agent.session.get_typed_client()
@@ -968,11 +880,7 @@ async def test_ws_rpc_fails_without_token_in_headers(inmanta_config: object, ser
 
     try:
 
-        async def wait_for_active() -> None:
-            while not agent.session or not agent.session.active:
-                await asyncio.sleep(0.1)
-
-        await asyncio.wait_for(wait_for_active(), timeout=10)
+        await retry_limited(lambda: agent.session is not None and agent.session.active, TEST_TIMEOUT_S)
 
         # Now enable auth on the server side (simulating a config change)
         inmanta_config_mod.Config.set("server", "auth", "true")

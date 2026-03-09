@@ -19,7 +19,7 @@ Contact: code@inmanta.com
 import logging
 from asyncio import CancelledError
 from collections.abc import Mapping, Sequence
-from typing import TYPE_CHECKING, AnyStr, Optional
+from typing import TYPE_CHECKING, Optional
 
 import tornado.simple_httpclient
 from tornado.httpclient import AsyncHTTPClient, HTTPError, HTTPRequest, HTTPResponse
@@ -70,9 +70,9 @@ class RESTClient(RESTBase, AuthnzInterface):
         """
         return "%s_rest_transport" % self.__end_point.name
 
-    def match_call(self, url: str, method: str) -> tuple[Optional[dict[str, AnyStr]], Optional[common.UrlMethod]]:
+    def match_call(self, url: str, method: str) -> tuple[dict[str, str] | None, common.UrlMethod | None]:
         """
-        Get the method call for the given url and http method. This method is used for return calls over long poll
+        Match a URL and HTTP method against registered call targets, returning the matched parameters and method handler.
         """
         return match_call(self.endpoint.call_targets, url, method)
 

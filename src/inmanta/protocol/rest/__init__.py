@@ -23,7 +23,7 @@ import json
 import logging
 import re
 from collections.abc import Mapping, Sequence
-from typing import Any, AnyStr, Dict, List, Optional, Tuple, Type, cast, get_type_hints  # noqa: F401
+from typing import Any, Dict, List, Optional, Tuple, Type, cast, get_type_hints  # noqa: F401
 from urllib import parse
 
 import pydantic
@@ -697,10 +697,8 @@ async def execute_call(
 
 def match_call(
     call_targets: list[common.CallTarget], url: str, method: str
-) -> tuple[Optional[dict[str, AnyStr]], Optional[common.UrlMethod]]:
-    """
-    Get the method call for the given url and http method. This method is used for return calls over long poll
-    """
+) -> tuple[dict[str, str] | None, common.UrlMethod | None]:
+    """Match a URL and HTTP method against registered call targets, returning the matched parameters and method handler."""
     for target in call_targets:
         url_map = target.get_op_mapping()
         for url_re, handlers in url_map.items():

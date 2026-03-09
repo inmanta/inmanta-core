@@ -3310,6 +3310,7 @@ class SchedulerSession(BaseDocument):
     """
     A process in the infrastructure that has (had) a session as an agent.
 
+    :param sid: Scheduler ID
     :param hostname: The hostname of the device.
     :param environment: To what environment is this process bound
     """
@@ -3354,8 +3355,10 @@ class SchedulerSession(BaseDocument):
         now: datetime.datetime,
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> None:
-        """
-        Register a new scheduler session.
+        """Register a new scheduler session.
+
+        The caller must ensure uniqueness of the session ID. Calling this method
+        with a duplicate ``sid`` raises a database constraint violation.
         """
         proc = cls(hostname=hostname, environment=env, first_seen=now, sid=sid)
         await proc.insert(connection=connection)
@@ -3372,7 +3375,10 @@ class SchedulerSession(BaseDocument):
     async def clean_up_expired_for_env(
         cls, environment: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None
     ) -> None:
-        """Delete all expired session records for the given environment."""
+        """Delete all expired session records for the given environment.
+
+        Uses raw SQL because delete_all() does not support IS NOT NULL filters.
+        """
         query = f"DELETE FROM {cls.table_name()} WHERE environment=$1 AND expired IS NOT NULL"
         await cls._execute_query(query, cls._get_value(environment), connection=connection)
 
