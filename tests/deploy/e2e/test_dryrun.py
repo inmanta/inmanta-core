@@ -21,6 +21,7 @@ Contact: code@inmanta.com
 import json
 import logging
 import uuid
+from collections.abc import Mapping
 
 import pytest
 
@@ -190,7 +191,8 @@ async def test_dryrun_and_deploy(server, client, resource_container, environment
     assert not resource_container.Provider.isset("agent1", "key3")
 
 
-async def test_dryrun_failures(resource_container, server, agent, client, environment, clienthelper):
+async def test_dryrun_failures(resource_container, server, agent, client, environment, clienthelper, caplog):
+    caplog.set_level(logging.DEBUG)
     env_id = environment
 
     version = await clienthelper.get_version()
@@ -245,10 +247,10 @@ async def test_dryrun_failures(resource_container, server, agent, client, enviro
     result = await client.dryrun_report(env_id, dry_run_id)
     assert result.code == 200
 
-    resources = result.result["dryrun"]["resources"]
+    dryrun_resources = result.result["dryrun"]["resources"]
 
     def assert_handler_failed(resource, msg):
-        changes = resources[resource]
+        changes = dryrun_resources[resource]
         assert "changes" in changes
         changes = changes["changes"]
         assert "handler" in changes
@@ -270,6 +272,30 @@ async def test_dryrun_failures(resource_container, server, agent, client, enviro
     assert log_entry["status"] == "unavailable"
     assert "Unable to deserialize" in log_entry["messages"][0]["msg"]
 
+    def check_dry_run_logs(expected_error_messages, dry_run_id):
+
+        for rid, expected_error in expected_error_messages.items():
+            log_contains(
+                caplog,
+                "inmanta.resource_action.agent1",
+                logging.DEBUG,
+                f"Running dryrun for {rid} (dry_run_id={dry_run_id})",
+            )
+            log_contains(
+                caplog,
+                "inmanta.resource_action.agent1",
+                logging.DEBUG,
+                expected_error_messages[rid],
+            )
+
+    expected_error_messages: Mapping[str, str] = {
+        "test::Noprov[agent1,key=key1],v=1": f"Error during dryrun setup for test::Noprov[agent1,key=key1],v=1 "
+        f"(dry_run_id={dry_run_id}): unable to find a handler. (No resource handler "
+        f"registered for resource of type test::Noprov)",
+        "test::FailFast[agent1,key=key2],v=1": f"Error during dryrun execution for test::FailFast[agent1,key=key2],v=1 "
+        f"(dry_run_id={dry_run_id}).",
+    }
+    check_dry_run_logs(expected_error_messages, dry_run_id)
     await agent.stop()
 
 

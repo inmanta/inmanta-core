@@ -325,6 +325,12 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                             finished=datetime.datetime.now().astimezone(),
                             messages=ctx.logs,
                         )
+                        self.resource_action_logger.debug(
+                            "Error during dryrun setup for %s (dry_run_id=%s): unable to find a handler. (%s)",
+                            resource_id,
+                            dry_run_id,
+                            str(e),
+                        )
                     else:
                         try:
 
@@ -345,6 +351,13 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                                 changes = {}
                             if ctx.status == const.ResourceState.failed:
                                 changes["handler"] = AttributeStateChange(current="FAILED", desired="Handler failed")
+                                self.resource_action_logger.debug(
+                                    "Error during dryrun execution for %s (dry_run_id=%s).", resource_id, dry_run_id
+                                )
+                            else:
+                                self.resource_action_logger.debug(
+                                    "Finished dryrun for %s (dry_run_id=%s)", resource_id, dry_run_id
+                                )
                             dryrun_result = DryrunReport(
                                 rvid=resource_id,
                                 dryrun_id=dry_run_id,
@@ -353,7 +366,6 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                                 finished=datetime.datetime.now().astimezone(),
                                 messages=ctx.logs,
                             )
-                            self.resource_action_logger.debug("Finished dryrun for %s (dry_run_id=%s)", resource_id, dry_run_id)
 
                         except Exception as e:
                             ctx.exception(
@@ -373,6 +385,9 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                                 finished=datetime.datetime.now().astimezone(),
                                 messages=ctx.logs,
                             )
+                            self.resource_action_logger.debug(
+                                "Error during dryrun execution for %s (dry_run_id=%s): (%s)", resource_id, dry_run_id, str(e)
+                            )
 
                 except Exception as e:
                     ctx.exception(
@@ -383,10 +398,13 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                     dryrun_result = DryrunReport(
                         rvid=resource_id,
                         dryrun_id=dry_run_id,
-                        changes={"handler": AttributeStateChange(current="FAILED", desired="Resource Deserialization Failed")},
+                        changes={"handler": AttributeStateChange(current="FAILED", desired="Unexpected error during dryrun")},
                         started=started,
                         finished=datetime.datetime.now().astimezone(),
                         messages=ctx.logs,
+                    )
+                    self.resource_action_logger.debug(
+                        "Error during dryrun for %s (dry_run_id=%s). (%s)", resource_id, dry_run_id, str(e)
                     )
                 finally:
                     if provider is not None:
