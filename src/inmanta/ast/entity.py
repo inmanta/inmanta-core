@@ -291,13 +291,6 @@ class Entity(NamedType, WithComment):
         dvalues = dict(values)
         self._default_values_cache = {k: v for k, v in dvalues.items() if v is not None}
 
-    def get_all_attributes(self) -> Optional[Dict[str, "Attribute"]]:
-        """
-        Return a cached dict mapping attribute name to Attribute for this entity and all parents,
-        or None if the cache has not been built yet (i.e. before normalization).
-        """
-        return self._all_attributes_cache
-
     def get_all_attribute_names(self) -> "List[str]":
         """
         Return a list of all attribute names, including parents
