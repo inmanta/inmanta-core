@@ -489,18 +489,14 @@ class Environment(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
     project: Mapped[uuid.UUID] = mapped_column(UUID, nullable=False)
-    halted: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default=text("false"), doc="Whether the environment is halted"
-    )
+    halted: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     repo_url: Mapped[Optional[str]] = mapped_column(String, server_default=text("''::character varying"))
     repo_branch: Mapped[Optional[str]] = mapped_column(String, server_default=text("''::character varying"))
     settings: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
     last_version: Mapped[Optional[int]] = mapped_column(Integer, server_default=text("0"))
     description: Mapped[Optional[str]] = mapped_column(String(255), server_default=text("''::character varying"))
     icon: Mapped[Optional[str]] = mapped_column(String(65535), server_default=text("''::character varying"))
-    is_marked_for_deletion: Mapped[Optional[bool]] = mapped_column(
-        Boolean, server_default=text("false"), doc="Whether this environment is marked for deletion"
-    )
+    is_marked_for_deletion: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text("false"))
 
     project_: Mapped["Project"] = relationship("Project", back_populates="environment")
     agentprocess: Mapped[list["Agentprocess"]] = relationship("Agentprocess", back_populates="environment_")
@@ -538,14 +534,10 @@ class Agentprocess(Base):
 
     hostname: Mapped[str] = mapped_column(String, nullable=False)
     environment: Mapped[uuid.UUID] = mapped_column(UUID, nullable=False)
-    sid: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The session id of the agent process")
-    first_seen: Mapped[Optional[datetime.datetime]] = mapped_column(
-        DateTime(True), doc="When the server first received data from this process"
-    )
+    sid: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
+    first_seen: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     last_seen: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
-    expired: Mapped[Optional[datetime.datetime]] = mapped_column(
-        DateTime(True), doc="When this process expired"
-    )
+    expired: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
 
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="agentprocess")
     agentinstance: Mapped[list["Agentinstance"]] = relationship("Agentinstance", back_populates="agentprocess")
@@ -567,7 +559,7 @@ class Compile(Base):
         Index("compile_substitute_compile_id_index", "substitute_compile_id"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The id of this compile run")
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
     environment: Mapped[uuid.UUID] = mapped_column(UUID, nullable=False)
     requested_environment_variables: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     mergeable_environment_variables: Mapped[dict[str, Any]] = mapped_column(
@@ -623,22 +615,16 @@ class Configurationmodel(Base):
 
     version: Mapped[int] = mapped_column(Integer, primary_key=True)
     environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
-    undeployable: Mapped[list[str]] = mapped_column(
-        ARRAY(String()), nullable=False, doc="List of resource ids that are undeployable"
-    )
-    skipped_for_undeployable: Mapped[list[str]] = mapped_column(
-        ARRAY(String()), nullable=False, doc="List of resource ids that are skipped because of undeployable dependencies"
-    )
+    undeployable: Mapped[list[str]] = mapped_column(ARRAY(String()), nullable=False)
+    skipped_for_undeployable: Mapped[list[str]] = mapped_column(ARRAY(String()), nullable=False)
     is_suitable_for_partial_compiles: Mapped[bool] = mapped_column(Boolean, nullable=False)
     date: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     released: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text("false"))
     version_info: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB)
     total: Mapped[Optional[int]] = mapped_column(Integer, server_default=text("0"))
     partial_base: Mapped[Optional[int]] = mapped_column(Integer)
-    pip_config: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, doc="The pip configuration for this version")
-    project_constraints: Mapped[Optional[str]] = mapped_column(
-        String, doc="The project constraints for this version"
-    )
+    pip_config: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB)
+    project_constraints: Mapped[Optional[str]] = mapped_column(String)
 
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="configurationmodel")
     resource_set: Mapped[list["ResourceSet"]] = relationship(
@@ -666,9 +652,7 @@ class Discoveredresource(Base):
     environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
     discovered_resource_id: Mapped[str] = mapped_column(String, primary_key=True)
     values: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
-    discovered_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(True), nullable=False, doc="When this resource was discovered"
-    )
+    discovered_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False)
     discovery_resource_id: Mapped[Optional[str]] = mapped_column(String, nullable=False)
 
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="discoveredresource")
@@ -691,7 +675,6 @@ class Environmentmetricsgauge(Base):
         String,
         primary_key=True,
         server_default=text("'__None__'::character varying"),
-        doc="The name of the group/category this metric represents",
     )
 
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="environmentmetricsgauge")
@@ -715,7 +698,6 @@ class Environmentmetricstimer(Base):
         String,
         primary_key=True,
         server_default=text("'__None__'::character varying"),
-        doc="The name of the group/category this metric represents",
     )
 
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="environmentmetricstimer")
@@ -742,9 +724,7 @@ class Notification(Base):
         server_default=text("'message'::notificationseverity"),
     )
     uri: Mapped[Optional[str]] = mapped_column(String)
-    compile_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        UUID, doc="The id of the compile related to this notification, if any"
-    )
+    compile_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID)
 
     compile: Mapped[Optional["Compile"]] = relationship("Compile", back_populates="notification")
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="notification")
@@ -761,24 +741,14 @@ class Parameter(Base):
         Index("parameter_updated_index", "updated"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The id of the parameter")
-    name: Mapped[str] = mapped_column(String, nullable=False, doc="The name of the parameter")
-    value: Mapped[str] = mapped_column(
-        String, nullable=False, server_default=text("''::character varying"), doc="The value of the parameter"
-    )
-    environment: Mapped[uuid.UUID] = mapped_column(
-        UUID, nullable=False, doc="The environment this parameter belongs to"
-    )
-    source: Mapped[str] = mapped_column(String, nullable=False, doc="The source of the parameter")
-    expires: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default=text("true"), doc="Whether this parameter expires"
-    )
-    resource_id: Mapped[Optional[str]] = mapped_column(
-        String, server_default=text("''::character varying"), doc="An optional resource id"
-    )
-    updated: Mapped[Optional[datetime.datetime]] = mapped_column(
-        DateTime(True), doc="When the parameter was last updated"
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    value: Mapped[str] = mapped_column(String, nullable=False, server_default=text("''::character varying"))
+    environment: Mapped[uuid.UUID] = mapped_column(UUID, nullable=False)
+    source: Mapped[str] = mapped_column(String, nullable=False)
+    expires: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    resource_id: Mapped[Optional[str]] = mapped_column(String, server_default=text("''::character varying"))
+    updated: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     metadata_: Mapped[Optional[dict[str, Any]]] = mapped_column("metadata", JSONB, doc="Metadata for the parameter")
 
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="parameter")
@@ -799,10 +769,8 @@ class ResourcePersistentState(Base):
         Index("resource_persistent_state_environment_resource_type_resourc_idx", "environment", "resource_type", "resource_id"),
     )
 
-    environment: Mapped[uuid.UUID] = mapped_column(
-        UUID, primary_key=True, doc="The environment this resource belongs to"
-    )
-    resource_id: Mapped[str] = mapped_column(String, primary_key=True, doc="The id of the resource")
+    environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
+    resource_id: Mapped[str] = mapped_column(String, primary_key=True)
     last_non_deploying_status: Mapped[str] = mapped_column(
         Enum(
             "unavailable",
@@ -819,55 +787,23 @@ class ResourcePersistentState(Base):
         ),
         nullable=False,
         server_default=text("'available'::non_deploying_resource_state"),
-        doc="The last status of the resource that is not a deploying status",
     )
-    resource_type: Mapped[str] = mapped_column(String, nullable=False, doc="The type of the resource")
-    agent: Mapped[str] = mapped_column(
-        String, nullable=False, doc="The name of the agent responsible for deploying this resource"
-    )
-    resource_id_value: Mapped[str] = mapped_column(
-        String, nullable=False, doc="The attribute value from the resource id"
-    )
-    is_undefined: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, doc="Whether the desired state for this resource is undefined"
-    )
-    is_orphan: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, doc="Whether this resource is an orphan (no longer present in the latest model version)"
-    )
-    last_handler_run: Mapped[str] = mapped_column(
-        String, nullable=False, doc="The result of the last handler run for this resource"
-    )
-    blocked: Mapped[str] = mapped_column(
-        String, nullable=False, doc="The blocked state of this resource"
-    )
-    created: Mapped[datetime.datetime] = mapped_column(
-        DateTime(True), nullable=False, doc="When this resource was first created"
-    )
-    last_handler_run_at: Mapped[Optional[datetime.datetime]] = mapped_column(
-        DateTime(True), doc="The timestamp of the last handler run for this resource"
-    )
-    last_success: Mapped[Optional[datetime.datetime]] = mapped_column(
-        DateTime(True), doc="The start time of the last deployment that completed without failure"
-    )
-    last_produced_events: Mapped[Optional[datetime.datetime]] = mapped_column(
-        DateTime(True), doc="The end time of the last deployment where an effective change was produced"
-    )
-    last_deployed_attribute_hash: Mapped[Optional[str]] = mapped_column(
-        String, doc="The attribute hash of the last completed deployment"
-    )
-    last_deployed_version: Mapped[Optional[int]] = mapped_column(
-        Integer, doc="The model version of the last completed deployment"
-    )
-    current_intent_attribute_hash: Mapped[Optional[str]] = mapped_column(
-        String,
-        doc="The attribute hash that the scheduler considers the last released attribute hash for this resource",
-    )
-    is_deploying: Mapped[Optional[bool]] = mapped_column(
-        Boolean, server_default=text("false"), doc="Whether this resource is currently being deployed"
-    )
-    last_handler_run_compliant: Mapped[Optional[bool]] = mapped_column(
-        Boolean, doc="Whether the last handler run reported the resource as compliant"
-    )
+    resource_type: Mapped[str] = mapped_column(String, nullable=False)
+    agent: Mapped[str] = mapped_column(String, nullable=False)
+    resource_id_value: Mapped[str] = mapped_column(String, nullable=False)
+    is_undefined: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    is_orphan: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    last_handler_run: Mapped[str] = mapped_column(String, nullable=False)
+    blocked: Mapped[str] = mapped_column(String, nullable=False)
+    created: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False)
+    last_handler_run_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
+    last_success: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
+    last_produced_events: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
+    last_deployed_attribute_hash: Mapped[Optional[str]] = mapped_column(String)
+    last_deployed_version: Mapped[Optional[int]] = mapped_column(Integer)
+    current_intent_attribute_hash: Mapped[Optional[str]] = mapped_column(String)
+    is_deploying: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text("false"))
+    last_handler_run_compliant: Mapped[Optional[bool]] = mapped_column(Boolean)
 
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="resource_persistent_state")
 
@@ -960,15 +896,11 @@ class Agentinstance(Base):
         Index("agentinstance_process_index", "process"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The id of this agent instance")
-    process: Mapped[uuid.UUID] = mapped_column(
-        UUID, nullable=False, doc="The agent process this instance belongs to"
-    )
-    name: Mapped[str] = mapped_column(String, nullable=False, doc="The name of this agent instance")
-    tid: Mapped[uuid.UUID] = mapped_column(UUID, nullable=False, doc="The environment id")
-    expired: Mapped[Optional[datetime.datetime]] = mapped_column(
-        DateTime(True), doc="When this agent instance expired"
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
+    process: Mapped[uuid.UUID] = mapped_column(UUID, nullable=False)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    tid: Mapped[uuid.UUID] = mapped_column(UUID, nullable=False)
+    expired: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
 
     agentprocess: Mapped["Agentprocess"] = relationship("Agentprocess", back_populates="agentinstance")
     agent: Mapped[list["Agent"]] = relationship("Agent", back_populates="agentinstance")
@@ -991,12 +923,8 @@ class Dryrun(Base):
     environment: Mapped[uuid.UUID] = mapped_column(UUID, nullable=False)
     model: Mapped[int] = mapped_column(Integer, nullable=False)
     date: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
-    total: Mapped[Optional[int]] = mapped_column(
-        Integer, server_default=text("0"), doc="The number of resources that do a dryrun for"
-    )
-    todo: Mapped[Optional[int]] = mapped_column(
-        Integer, server_default=text("0"), doc="The number of resources left to do"
-    )
+    total: Mapped[Optional[int]] = mapped_column(Integer, server_default=text("0"))
+    todo: Mapped[Optional[int]] = mapped_column(Integer, server_default=text("0"))
     resources: Mapped[Optional[dict[str, Any]]] = mapped_column(
         JSONB, server_default=text("'{}'::jsonb")
     )
@@ -1013,17 +941,15 @@ class Report(Base):
         Index("report_started_compile_returncode", "compile", "returncode"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The id of this report")
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
     started: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False)
     command: Mapped[str] = mapped_column(String, nullable=False)
     name: Mapped[str] = mapped_column(String, nullable=False)
-    compile: Mapped[uuid.UUID] = mapped_column(
-        UUID, nullable=False, doc="The compile this report belongs to"
-    )
+    compile: Mapped[uuid.UUID] = mapped_column(UUID, nullable=False)
     completed: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     errstream: Mapped[Optional[str]] = mapped_column(String, server_default=text("''::character varying"))
     outstream: Mapped[Optional[str]] = mapped_column(String, server_default=text("''::character varying"))
-    returncode: Mapped[Optional[int]] = mapped_column(Integer, doc="The return code of the command")
+    returncode: Mapped[Optional[int]] = mapped_column(Integer)
 
     compile_: Mapped["Compile"] = relationship("Compile", back_populates="report")
 
@@ -1157,22 +1083,16 @@ class Unknownparameter(Base):
         Index("unknownparameter_resolved_index", "resolved"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The id of this unknown parameter")
-    name: Mapped[str] = mapped_column(String, nullable=False, doc="The name of the unknown parameter")
-    environment: Mapped[uuid.UUID] = mapped_column(
-        UUID, nullable=False, doc="The environment this unknown parameter belongs to"
-    )
-    source: Mapped[str] = mapped_column(String, nullable=False, doc="The source of the unknown parameter")
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    environment: Mapped[uuid.UUID] = mapped_column(UUID, nullable=False)
+    source: Mapped[str] = mapped_column(String, nullable=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False)
-    resource_id: Mapped[Optional[str]] = mapped_column(
-        String, server_default=text("''::character varying"), doc="An optional resource id"
-    )
+    resource_id: Mapped[Optional[str]] = mapped_column(String, server_default=text("''::character varying"))
     metadata_: Mapped[Optional[dict[str, Any]]] = mapped_column(
         "metadata", JSONB, doc="Metadata for the unknown parameter"
     )
-    resolved: Mapped[Optional[bool]] = mapped_column(
-        Boolean, server_default=text("false"), doc="Whether this unknown parameter has been resolved"
-    )
+    resolved: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text("false"))
 
     configurationmodel: Mapped["Configurationmodel"] = relationship(
         "Configurationmodel", back_populates="unknownparameter", viewonly=True
@@ -1193,9 +1113,7 @@ class Agent(Base):
     name: Mapped[str] = mapped_column(String, primary_key=True)
     last_failover: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     paused: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text("false"))
-    id_primary: Mapped[Optional[uuid.UUID]] = mapped_column(
-        UUID, doc="The current active instance, only relevant for the $__scheduler agent"
-    )
+    id_primary: Mapped[Optional[uuid.UUID]] = mapped_column(UUID)
     unpause_on_resume: Mapped[Optional[bool]] = mapped_column(Boolean)
 
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="agent")
