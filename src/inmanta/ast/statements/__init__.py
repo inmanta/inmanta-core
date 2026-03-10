@@ -96,19 +96,12 @@ class DynamicStatement(Statement):
     These are all statements that do not define typing.
     """
 
-    __slots__ = ("_own_eager_promises",)
+    __slots__ = ("own_eager_promises",)
 
     def __init__(self) -> None:
         Statement.__init__(self)
-        self._own_eager_promises: Sequence["StaticEagerPromise"] = []
-
-    def get_own_eager_promises(self) -> Sequence["StaticEagerPromise"]:
-        """
-        Returns all eager promises this statement itself is responsible for.
-
-        Should only be called after normalization.
-        """
-        return self._own_eager_promises
+        #: Eager promises this statement itself is responsible for. Set during normalization.
+        self.own_eager_promises: Sequence["StaticEagerPromise"] = []
 
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
         """
@@ -117,7 +110,7 @@ class DynamicStatement(Statement):
 
         Should only be called after normalization.
         """
-        return iter(self._own_eager_promises)
+        return iter(self.own_eager_promises)
 
     def normalize(self) -> None:
         raise NotImplementedError()
@@ -170,16 +163,12 @@ class RequiresEmitStatement(DynamicStatement):
         Returns an empty dict if no promises were acquired (for performance reasons).
         """
         # Fast path: most statements have no eager promises
-        if not self._own_eager_promises:
+        if not self.own_eager_promises:
             return {}
-        promises: Sequence["EagerPromise"] = self.schedule_eager_promises(resolver, queue)
+        promises: Sequence["EagerPromise"] = [
+            promise.schedule(self, resolver, queue) for promise in self.own_eager_promises
+        ]
         return {(self, EagerPromise): WrappedValueVariable(promises)} if promises else {}
-
-    def schedule_eager_promises(self, resolver: Resolver, queue: QueueScheduler) -> Sequence["EagerPromise"]:
-        """
-        Schedules this statement's eager promises to be acquired in the given dynamic context.
-        """
-        return [promise.schedule(self, resolver, queue) for promise in self._own_eager_promises]
 
     def execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         """
@@ -191,15 +180,13 @@ class RequiresEmitStatement(DynamicStatement):
 
     def _fulfill_promises(self, requires: dict[object, object]) -> None:
         """
-        Given a requires dict, fulfills this statements dynamic promises.
-
-        Uses an ``in`` check instead of try/except KeyError because most statements have no eager
-        promises, making the common-case miss cheaper (avoids exception allocation overhead).
+        Given a requires dict, fulfills this statement's dynamic promises.
         """
-        key = (self, EagerPromise)
-        if key not in requires:
+        # Use get() instead of try/except because most statements have no eager promises,
+        # making the common-case miss cheaper (avoids exception allocation overhead).
+        promises: Optional[Sequence["EagerPromise"]] = requires.get((self, EagerPromise))
+        if promises is None:
             return
-        promises: Sequence["EagerPromise"] = requires[key]
         for promise in promises:
             promise.fulfill()
 
