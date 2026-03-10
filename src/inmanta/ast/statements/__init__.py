@@ -165,9 +165,7 @@ class RequiresEmitStatement(DynamicStatement):
         # Fast path: most statements have no eager promises
         if not self.own_eager_promises:
             return {}
-        promises: Sequence["EagerPromise"] = [
-            promise.schedule(self, resolver, queue) for promise in self.own_eager_promises
-        ]
+        promises: Sequence["EagerPromise"] = [promise.schedule(self, resolver, queue) for promise in self.own_eager_promises]
         return {(self, EagerPromise): WrappedValueVariable(promises)} if promises else {}
 
     def execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
@@ -182,11 +180,12 @@ class RequiresEmitStatement(DynamicStatement):
         """
         Given a requires dict, fulfills this statement's dynamic promises.
         """
-        # Use get() instead of try/except because most statements have no eager promises,
+        # Use `in` instead of try/except because most statements have no eager promises,
         # making the common-case miss cheaper (avoids exception allocation overhead).
-        promises: Optional[Sequence["EagerPromise"]] = requires.get((self, EagerPromise))
-        if promises is None:
+        key = (self, EagerPromise)
+        if key not in requires:
             return
+        promises: Sequence["EagerPromise"] = requires[key]
         for promise in promises:
             promise.fulfill()
 
