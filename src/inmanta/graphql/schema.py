@@ -22,6 +22,7 @@ from enum import StrEnum
 from typing import Sequence, cast
 
 import docstring_parser
+
 import inmanta.data.sqlalchemy as models
 import strawberry
 from inmanta import data

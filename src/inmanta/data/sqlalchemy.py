@@ -70,9 +70,7 @@ class InmantaModule(Base):
 
     name: Mapped[str] = mapped_column(String, primary_key=True, doc="The name of the module")
     version: Mapped[str] = mapped_column(String, primary_key=True, doc="The version of the module")
-    environment: Mapped[uuid.UUID] = mapped_column(
-        UUID, primary_key=True, doc="The environment this module belongs to"
-    )
+    environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The environment this module belongs to")
     requirements: Mapped[list[str]] = mapped_column(
         ARRAY(String()),
         nullable=False,
@@ -210,18 +208,10 @@ class ModuleFiles(Base):
     inmanta_module_version: Mapped[str] = mapped_column(
         String, primary_key=True, doc="The version of the inmanta module this file belongs to"
     )
-    environment: Mapped[uuid.UUID] = mapped_column(
-        UUID, primary_key=True, doc="The environment this module file belongs to"
-    )
-    file_content_hash: Mapped[str] = mapped_column(
-        String, nullable=False, doc="The content hash of the file"
-    )
-    python_module_name: Mapped[str] = mapped_column(
-        String, primary_key=True, doc="The fully qualified python module name"
-    )
-    is_byte_code: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, doc="Whether this file contains byte code"
-    )
+    environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The environment this module file belongs to")
+    file_content_hash: Mapped[str] = mapped_column(String, nullable=False, doc="The content hash of the file")
+    python_module_name: Mapped[str] = mapped_column(String, primary_key=True, doc="The fully qualified python module name")
+    is_byte_code: Mapped[bool] = mapped_column(Boolean, nullable=False, doc="Whether this file contains byte code")
 
     inmanta_module: Mapped["InmantaModule"] = relationship("InmantaModule", back_populates="module_files")
     file: Mapped["File"] = relationship("File", back_populates="module_files")
@@ -276,19 +266,11 @@ class AgentModules(Base):
         ),
     )
 
-    cm_version: Mapped[int] = mapped_column(
-        Integer, primary_key=True, doc="The configuration model version"
-    )
+    cm_version: Mapped[int] = mapped_column(Integer, primary_key=True, doc="The configuration model version")
     agent_name: Mapped[str] = mapped_column(String, primary_key=True, doc="The name of the agent")
-    inmanta_module_name: Mapped[str] = mapped_column(
-        String, primary_key=True, doc="The name of the inmanta module"
-    )
-    inmanta_module_version: Mapped[str] = mapped_column(
-        String, nullable=False, doc="The version of the inmanta module"
-    )
-    environment: Mapped[uuid.UUID] = mapped_column(
-        UUID, primary_key=True, doc="The environment this record belongs to"
-    )
+    inmanta_module_name: Mapped[str] = mapped_column(String, primary_key=True, doc="The name of the inmanta module")
+    inmanta_module_version: Mapped[str] = mapped_column(String, nullable=False, doc="The version of the inmanta module")
+    environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The environment this record belongs to")
 
     agent: Mapped["Agent"] = relationship("Agent", back_populates="agent_modules", viewonly=True)
     configurationmodel: Mapped["Configurationmodel"] = relationship(
@@ -588,8 +570,7 @@ class Compile(Base):
     notify_failed_compile: Mapped[Optional[bool]] = mapped_column(Boolean)
     failed_compile_message: Mapped[Optional[str]] = mapped_column(String)
     exporter_plugin: Mapped[Optional[str]] = mapped_column(String)
-    used_environment_variables: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB
-    )
+    used_environment_variables: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB)
 
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="compile")
     substitute_compile: Mapped[Optional["Compile"]] = relationship(
@@ -925,9 +906,7 @@ class Dryrun(Base):
     date: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     total: Mapped[Optional[int]] = mapped_column(Integer, server_default=text("0"))
     todo: Mapped[Optional[int]] = mapped_column(Integer, server_default=text("0"))
-    resources: Mapped[Optional[dict[str, Any]]] = mapped_column(
-        JSONB, server_default=text("'{}'::jsonb")
-    )
+    resources: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
 
     configurationmodel: Mapped["Configurationmodel"] = relationship("Configurationmodel", back_populates="dryrun")
 
@@ -1089,9 +1068,7 @@ class Unknownparameter(Base):
     source: Mapped[str] = mapped_column(String, nullable=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False)
     resource_id: Mapped[Optional[str]] = mapped_column(String, server_default=text("''::character varying"))
-    metadata_: Mapped[Optional[dict[str, Any]]] = mapped_column(
-        "metadata", JSONB, doc="Metadata for the unknown parameter"
-    )
+    metadata_: Mapped[Optional[dict[str, Any]]] = mapped_column("metadata", JSONB, doc="Metadata for the unknown parameter")
     resolved: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text("false"))
 
     configurationmodel: Mapped["Configurationmodel"] = relationship(
@@ -1137,15 +1114,9 @@ class ResourceactionResource(Base):
         Index("resourceaction_resource_resource_action_id_index", "resource_action_id"),
     )
 
-    environment: Mapped[uuid.UUID] = mapped_column(
-        UUID, primary_key=True, doc="The environment this record belongs to"
-    )
-    resource_action_id: Mapped[uuid.UUID] = mapped_column(
-        UUID, primary_key=True, doc="The id of the resource action"
-    )
+    environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The environment this record belongs to")
+    resource_action_id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The id of the resource action")
     resource_id: Mapped[str] = mapped_column(String, primary_key=True, doc="The id of the resource")
-    resource_version: Mapped[int] = mapped_column(
-        Integer, primary_key=True, doc="The version of the resource"
-    )
+    resource_version: Mapped[int] = mapped_column(Integer, primary_key=True, doc="The version of the resource")
 
     resource_action: Mapped["Resourceaction"] = relationship("Resourceaction", back_populates="resourceaction_resource")
