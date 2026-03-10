@@ -32,6 +32,7 @@ from sqlakeyset.asyncio import select_page
 from sqlalchemy import Boolean, Select, UnaryExpression, and_, asc, case, desc, func, not_, select
 from strawberry import relay, scalars
 from strawberry.relay import NodeType
+from strawberry.scalars import JSON
 from strawberry.schema.config import StrawberryConfig
 from strawberry.types import Info
 from strawberry.types.field import field
@@ -648,6 +649,21 @@ class ResourcePersistentState:
     __exclude__ = ["resource_set_"]
 
 
+@strawberry.type
+class ComposedResourceSummary:
+    """
+    Modeled after inmanta.data.model.ComposedResourceSummary.
+
+    Summary of the composed status of all resources in an environment.
+    """
+
+    total_count: int
+    last_handler_run: JSON
+    blocked: JSON
+    compliance: JSON
+    is_deploying: JSON
+
+
 def add_filter_and_sort(
     stmt: Select[typing.Any],
     default_sorting: dict[str, UnaryExpression[typing.Any]],
@@ -938,5 +954,16 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
             stmt = add_filter_and_sort(stmt, ResourceOrder.default_order(), filter, order_by)
             stmt = do_required_resource_joins(stmt, filter, order_by)
             return await get_connection(stmt, info=info, model="Resource", first=first, after=after, last=last, before=before)
+
+        @strawberry.field
+        async def resource_summary(self, info: CustomInfo, environment: str) -> ComposedResourceSummary:
+            results = await data.Resource.get_composed_resource_summary(environment)
+            return ComposedResourceSummary(
+                total_count=results.total_count,
+                last_handler_run=cast(JSON, results.last_handler_run),
+                blocked=cast(JSON, results.blocked),
+                compliance=cast(JSON, results.compliance),
+                is_deploying=cast(JSON, results.is_deploying),
+            )
 
     return strawberry.Schema(query=Query, config=StrawberryConfig(info_class=CustomInfo))
