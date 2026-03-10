@@ -212,6 +212,63 @@ async def test_graphql_schema(server, client):
     assert result.result["data"]["__schema"]
 
 
+async def test_graphql_field_descriptions(server, client):
+    """
+    Verify that the GraphQL schema exposes field-level documentation sourced from SQLAlchemy column docs.
+    """
+    introspection_query = """
+    {
+        __schema {
+            types {
+                name
+                fields {
+                    name
+                    description
+                }
+            }
+        }
+    }
+    """
+    result = await client.graphql(query=introspection_query)
+    check_correct_graphql_response(result)
+    types_list = result.result["data"]["data"]["__schema"]["types"]
+    types_by_name: dict[str, list[dict[str, str | None]]] = {
+        t["name"]: t["fields"] for t in types_list if t["fields"]
+    }
+
+    # Fields that are sourced from SQLAlchemy columns (not custom resolvers or relationships) should have descriptions.
+    # Custom resolvers (is_expert_mode, is_compiling, settings, requires_length, purged) and
+    # relationships (state, environment_) are not expected to have descriptions.
+    expected_documented_fields: dict[str, list[str]] = {
+        "Environment": [
+            "id", "name", "project", "halted", "repoUrl", "repoBranch",
+            "lastVersion", "description", "icon", "isMarkedForDeletion",
+        ],
+        "Notification": [
+            "id", "environment", "created", "title", "message",
+            "read", "cleared", "severity", "uri", "compileId",
+        ],
+        "Resource": [
+            "environment", "resourceId", "agent", "resourceType",
+            "resourceIdValue", "resourceSet", "attributes", "attributeHash", "isUndefined",
+        ],
+        "ResourcePersistentState": [
+            "environment", "resourceId", "lastNonDeployingStatus", "resourceType",
+            "agent", "resourceIdValue", "isUndefined", "isOrphan", "lastHandlerRun",
+            "blocked", "created", "lastHandlerRunAt", "lastSuccess", "lastProducedEvents",
+            "lastDeployedAttributeHash", "lastDeployedVersion", "currentIntentAttributeHash",
+            "isDeploying", "lastHandlerRunCompliant",
+        ],
+    }
+
+    for type_name, field_names in expected_documented_fields.items():
+        assert type_name in types_by_name, f"Type {type_name} not found in GraphQL schema"
+        fields = {f["name"]: f["description"] for f in types_by_name[type_name]}
+        for field_name in field_names:
+            assert field_name in fields, f"Field {type_name}.{field_name} not found in GraphQL schema"
+            assert fields[field_name], f"Field {type_name}.{field_name} has no description"
+
+
 async def test_query_environment_settings(server, client, setup_database):
     """
     Assert that the settings returned are correct
