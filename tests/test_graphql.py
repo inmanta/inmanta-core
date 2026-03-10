@@ -217,9 +217,8 @@ def test_docstring_fallback_for_field_descriptions():
     Verify that the mapper resolves field descriptions from SQLAlchemy column ``doc`` first,
     and falls back to :param docstrings from the corresponding BaseDocument class.
     """
-    from strawberry_sqlalchemy_mapper.mapper import _GENERATED_FIELD_KEYS_KEY
-
     from inmanta.graphql.schema import _docstring_param_cache, mapper
+    from strawberry_sqlalchemy_mapper.mapper import _GENERATED_FIELD_KEYS_KEY
 
     for type_name, strawberry_type in mapper.mapped_types.items():
         type_def = strawberry_type.__strawberry_definition__
@@ -253,13 +252,11 @@ def test_docstring_fallback_for_field_descriptions():
             docstring_doc = docstring_params.get(snake_name)
 
             if col_doc:
-                assert f.description == col_doc, (
-                    f"{type_name}.{f.name}: expected column doc '{col_doc}', got '{f.description}'"
-                )
+                assert f.description == col_doc, f"{type_name}.{f.name}: expected column doc '{col_doc}', got '{f.description}'"
             elif docstring_doc:
-                assert f.description == docstring_doc, (
-                    f"{type_name}.{f.name}: expected docstring fallback '{docstring_doc}', got '{f.description}'"
-                )
+                assert (
+                    f.description == docstring_doc
+                ), f"{type_name}.{f.name}: expected docstring fallback '{docstring_doc}', got '{f.description}'"
 
 
 async def test_graphql_field_descriptions(server, client):
@@ -282,32 +279,67 @@ async def test_graphql_field_descriptions(server, client):
     result = await client.graphql(query=introspection_query)
     check_correct_graphql_response(result)
     types_list = result.result["data"]["data"]["__schema"]["types"]
-    types_by_name: dict[str, list[dict[str, str | None]]] = {
-        t["name"]: t["fields"] for t in types_list if t["fields"]
-    }
+    types_by_name: dict[str, list[dict[str, str | None]]] = {t["name"]: t["fields"] for t in types_list if t["fields"]}
 
     # Fields that are sourced from SQLAlchemy columns (not custom resolvers or relationships) should have descriptions.
     # Custom resolvers (is_expert_mode, is_compiling, settings, requires_length, purged) and
     # relationships (state, environment_) are not expected to have descriptions.
     expected_documented_fields: dict[str, list[str]] = {
         "Environment": [
-            "id", "name", "project", "halted", "repoUrl", "repoBranch",
-            "lastVersion", "description", "icon", "isMarkedForDeletion",
+            "id",
+            "name",
+            "project",
+            "halted",
+            "repoUrl",
+            "repoBranch",
+            "lastVersion",
+            "description",
+            "icon",
+            "isMarkedForDeletion",
         ],
         "Notification": [
-            "id", "environment", "created", "title", "message",
-            "read", "cleared", "severity", "uri", "compileId",
+            "id",
+            "environment",
+            "created",
+            "title",
+            "message",
+            "read",
+            "cleared",
+            "severity",
+            "uri",
+            "compileId",
         ],
         "Resource": [
-            "environment", "resourceId", "agent", "resourceType",
-            "resourceIdValue", "resourceSet", "attributes", "attributeHash", "isUndefined",
+            "environment",
+            "resourceId",
+            "agent",
+            "resourceType",
+            "resourceIdValue",
+            "resourceSet",
+            "attributes",
+            "attributeHash",
+            "isUndefined",
         ],
         "ResourcePersistentState": [
-            "environment", "resourceId", "lastNonDeployingStatus", "resourceType",
-            "agent", "resourceIdValue", "isUndefined", "isOrphan", "lastHandlerRun",
-            "blocked", "created", "lastHandlerRunAt", "lastSuccess", "lastProducedEvents",
-            "lastDeployedAttributeHash", "lastDeployedVersion", "currentIntentAttributeHash",
-            "isDeploying", "lastHandlerRunCompliant",
+            "environment",
+            "resourceId",
+            "lastNonDeployingStatus",
+            "resourceType",
+            "agent",
+            "resourceIdValue",
+            "isUndefined",
+            "isOrphan",
+            "lastHandlerRun",
+            "blocked",
+            "created",
+            "lastHandlerRunAt",
+            "lastSuccess",
+            "lastProducedEvents",
+            "lastDeployedAttributeHash",
+            "lastDeployedVersion",
+            "currentIntentAttributeHash",
+            "isDeploying",
+            "lastHandlerRunCompliant",
         ],
     }
 

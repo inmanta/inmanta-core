@@ -104,6 +104,7 @@ src/inmanta/ast/statements/__init__.py:0: error: Missing type parameters for gen
 src/inmanta/ast/statements/__init__.py:0: error: Missing type parameters for generic type "VariableABC"  [type-arg]
 src/inmanta/ast/statements/__init__.py:0: error: Need type annotation for "target"  [var-annotated]
 src/inmanta/ast/statements/__init__.py:0: error: Returning Any from function declared to return "Location"  [no-any-return]
+src/inmanta/ast/statements/__init__.py:0: note: See https://mypy.readthedocs.io/en/stable/running_mypy.html#missing-imports
 src/inmanta/ast/statements/__init__.py:0: note: Use "-> None" if function does not return a value
 src/inmanta/ast/statements/assign.py:0: error: "Type" has no attribute "lookup_index"  [attr-defined]
 src/inmanta/ast/statements/assign.py:0: error: "Type" has no attribute "lookup_index"  [attr-defined]
@@ -189,8 +190,8 @@ src/inmanta/ast/type.py:0: error: Item "None" of "Locatable | None" has no attri
 src/inmanta/ast/type.py:0: error: No overload variant of "reversed" matches argument type "inmanta.ast.type.List"  [call-overload]
 src/inmanta/ast/type.py:0: error: Return type "str | None" of "type_string" incompatible with return type "str" in supertype "List"  [override]
 src/inmanta/ast/type.py:0: note: Possible overload variants:
-src/inmanta/ast/type.py:0: note: def [_T] reversed(Reversible[_T], /) -> reversed[_T]
-src/inmanta/ast/type.py:0: note: def [_T] reversed(SupportsLenAndGetItem[_T], /) -> reversed[_T]
+src/inmanta/ast/type.py:0: note: def [_T] __new__(cls, Reversible[_T], /) -> reversed[_T]
+src/inmanta/ast/type.py:0: note: def [_T] __new__(cls, SupportsLenAndGetItem[_T], /) -> reversed[_T]
 src/inmanta/ast/variables.py:0: error: Argument 1 to "Reference" has incompatible type "str"; expected "LocatableString"  [arg-type]
 src/inmanta/ast/variables.py:0: error: Argument 1 to "set_value" of "ResultVariable" has incompatible type "bool | Unknown"; expected "bool"  [arg-type]
 src/inmanta/ast/variables.py:0: error: Argument 1 to "set_value" of "ResultVariable" has incompatible type "bool | Unknown"; expected "bool"  [arg-type]
@@ -383,19 +384,19 @@ src/inmanta/data/__init__.py:0: note: Superclass:
 src/inmanta/data/__init__.py:0: note: Superclass:
 src/inmanta/data/__init__.py:0: note: This violates the Liskov substitution principle
 src/inmanta/data/__init__.py:0: note: def [_S] __add__(self, list[_S], /) -> list[_S | tuple[str, ColumnType, PagingOrder]]
-src/inmanta/data/__init__.py:0: note: def [_T] list(self) -> list[_T]
-src/inmanta/data/__init__.py:0: note: def [_T] list(self) -> list[_T]
-src/inmanta/data/__init__.py:0: note: def [_T] list(self, Iterable[_T], /) -> list[_T]
-src/inmanta/data/__init__.py:0: note: def [_T] list(self, Iterable[_T], /) -> list[_T]
+src/inmanta/data/__init__.py:0: note: def [_T] __init__(self) -> list[_T]
+src/inmanta/data/__init__.py:0: note: def [_T] __init__(self) -> list[_T]
+src/inmanta/data/__init__.py:0: note: def [_T] __init__(self, Iterable[_T], /) -> list[_T]
+src/inmanta/data/__init__.py:0: note: def [_T] __init__(self, Iterable[_T], /) -> list[_T]
 src/inmanta/data/__init__.py:0: note: def __add__(self, list[tuple[str, ColumnType, PagingOrder]], /) -> list[tuple[str, ColumnType, PagingOrder]]
+src/inmanta/data/__init__.py:0: note: def __new__(cls, str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc = ..., /) -> int
+src/inmanta/data/__init__.py:0: note: def __new__(cls, str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc = ..., /) -> int
+src/inmanta/data/__init__.py:0: note: def __new__(cls, str | bytes | bytearray, /, base: SupportsIndex) -> int
+src/inmanta/data/__init__.py:0: note: def __new__(cls, str | bytes | bytearray, /, base: SupportsIndex) -> int
 src/inmanta/data/__init__.py:0: note: def _generate_next_value_(name, start: int, count: int, last_values: Sequence[object]) -> str
 src/inmanta/data/__init__.py:0: note: def _generate_next_value_(name: str, start: int, count: int, last_values: list[Any]) -> Any
 src/inmanta/data/__init__.py:0: note: def get_list(cls, *, order_by_column: str | None = ..., order: str | None = ..., limit: int | None = ..., offset: int | None = ..., no_obj: bool | None = ..., lock: RowLockMode | None = ..., connection: Connection | None = ..., **query: object) -> Coroutine[Any, Any, list[Environment]]
 src/inmanta/data/__init__.py:0: note: def get_list(cls, *, order_by_column: str | None = ..., order: str | None = ..., limit: int | None = ..., offset: int | None = ..., no_obj: bool | None = ..., lock: RowLockMode | None = ..., connection: Connection | None = ..., details: bool = ..., **query: object) -> Coroutine[Any, Any, list[Environment]]
-src/inmanta/data/__init__.py:0: note: def int(str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc = ..., /) -> int
-src/inmanta/data/__init__.py:0: note: def int(str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc = ..., /) -> int
-src/inmanta/data/__init__.py:0: note: def int(str | bytes | bytearray, /, base: SupportsIndex) -> int
-src/inmanta/data/__init__.py:0: note: def int(str | bytes | bytearray, /, base: SupportsIndex) -> int
 src/inmanta/data/dataview.py:0: error: "object" has no attribute "get"  [attr-defined]
 src/inmanta/data/dataview.py:0: error: "object" has no attribute "get"  [attr-defined]
 src/inmanta/data/dataview.py:0: error: "object" has no attribute "get"  [attr-defined]
@@ -488,8 +489,8 @@ src/inmanta/data/schema.py:0: error: No overload variant of "set" matches argume
 src/inmanta/data/schema.py:0: error: Returning Any from function declared to return "bool"  [no-any-return]
 src/inmanta/data/schema.py:0: error: Returning Any from function declared to return "set[int]"  [no-any-return]
 src/inmanta/data/schema.py:0: note: Possible overload variants:
-src/inmanta/data/schema.py:0: note: def [_T] set(self) -> set[_T]
-src/inmanta/data/schema.py:0: note: def [_T] set(self, Iterable[_T], /) -> set[_T]
+src/inmanta/data/schema.py:0: note: def [_T] __init__(self) -> set[_T]
+src/inmanta/data/schema.py:0: note: def [_T] __init__(self, Iterable[_T], /) -> set[_T]
 src/inmanta/deploy/scheduler.py:0: error: "object" has no attribute "__iter__"; maybe "__dir__" or "__str__"? (not iterable)  [attr-defined]
 src/inmanta/deploy/state.py:0: error: "object" has no attribute "__iter__"; maybe "__dir__" or "__str__"? (not iterable)  [attr-defined]
 src/inmanta/deploy/state.py:0: error: Argument "attribute_hash" to "ResourceIntent" has incompatible type "object"; expected "str"  [arg-type]
@@ -690,7 +691,6 @@ src/inmanta/moduletool.py:0: error: Missing type parameters for generic type Mod
 src/inmanta/moduletool.py:0: error: Missing type parameters for generic type Module  [type-arg]
 src/inmanta/moduletool.py:0: error: Missing type parameters for generic type Module  [type-arg]
 src/inmanta/moduletool.py:0: error: Skipping analyzing "cookiecutter.main": module is installed, but missing library stubs or py.typed marker  [import-untyped]
-src/inmanta/moduletool.py:0: note: See https://mypy.readthedocs.io/en/stable/running_mypy.html#missing-imports
 src/inmanta/parser/cache.py:0: error: Argument 1 to "ASTUnpickler" has incompatible type "BufferedReader[_BufferedReaderStream]"; expected "BytesIO"  [arg-type]
 src/inmanta/parser/parsetab.py:0: error: Need type annotation for "_lr_action" (hint: "_lr_action: dict[<type>, <type>] = ...")  [var-annotated]
 src/inmanta/parser/parsetab.py:0: error: Need type annotation for "_lr_goto" (hint: "_lr_goto: dict[<type>, <type>] = ...")  [var-annotated]
@@ -1020,8 +1020,8 @@ src/inmanta/server/agentmanager.py:0: error: Value of type variable "AnyStr" of 
 src/inmanta/server/bootloader.py:0: error: Incompatible return value type (got "Iterator[ModuleInfo]", expected "Generator[ModuleInfo, None, None]")  [return-value]
 src/inmanta/server/bootloader.py:0: error: No overload variant of "int" matches argument type "object"  [call-overload]
 src/inmanta/server/bootloader.py:0: note: Possible overload variants:
-src/inmanta/server/bootloader.py:0: note: def int(str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc = ..., /) -> int
-src/inmanta/server/bootloader.py:0: note: def int(str | bytes | bytearray, /, base: SupportsIndex) -> int
+src/inmanta/server/bootloader.py:0: note: def __new__(cls, str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc = ..., /) -> int
+src/inmanta/server/bootloader.py:0: note: def __new__(cls, str | bytes | bytearray, /, base: SupportsIndex) -> int
 src/inmanta/server/config.py:0: error: Cannot infer value of type parameter "T" of "Option"  [misc]
 src/inmanta/server/config.py:0: error: Cannot infer value of type parameter "T" of "Option"  [misc]
 src/inmanta/server/config.py:0: error: Cannot infer value of type parameter "T" of "Option"  [misc]
@@ -1031,8 +1031,8 @@ src/inmanta/server/config.py:0: error: Function is missing a return type annotat
 src/inmanta/server/config.py:0: error: No overload variant of "int" matches argument type "object"  [call-overload]
 src/inmanta/server/config.py:0: error: Returning Any from function declared to return "int"  [no-any-return]
 src/inmanta/server/config.py:0: note: Possible overload variants:
-src/inmanta/server/config.py:0: note: def int(str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc = ..., /) -> int
-src/inmanta/server/config.py:0: note: def int(str | bytes | bytearray, /, base: SupportsIndex) -> int
+src/inmanta/server/config.py:0: note: def __new__(cls, str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc = ..., /) -> int
+src/inmanta/server/config.py:0: note: def __new__(cls, str | bytes | bytearray, /, base: SupportsIndex) -> int
 src/inmanta/server/diff.py:0: error: "object" has no attribute "__iter__"; maybe "__dir__" or "__str__"? (not iterable)  [attr-defined]
 src/inmanta/server/diff.py:0: error: Incompatible return value type (got "str | None", expected "str")  [return-value]
 src/inmanta/server/extensions.py:0: error: Returning Any from function declared to return "bool"  [no-any-return]
