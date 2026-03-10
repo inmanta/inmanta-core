@@ -191,7 +191,10 @@ class RequiresEmitStatement(DynamicStatement):
 
     def _fulfill_promises(self, requires: dict[object, object]) -> None:
         """
-        Given a requires dict, fulfills this statements dynamic promises
+        Given a requires dict, fulfills this statements dynamic promises.
+
+        Uses an ``in`` check instead of try/except KeyError because most statements have no eager
+        promises, making the common-case miss cheaper (avoids exception allocation overhead).
         """
         key = (self, EagerPromise)
         if key not in requires:
