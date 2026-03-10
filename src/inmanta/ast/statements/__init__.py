@@ -169,6 +169,9 @@ class RequiresEmitStatement(DynamicStatement):
         Acquires eager promises this statement is responsible for and returns them, wrapped in a variable, in a requires dict.
         Returns an empty dict if no promises were acquired (for performance reasons).
         """
+        # Fast path: most statements have no eager promises
+        if not self._own_eager_promises:
+            return {}
         promises: Sequence["EagerPromise"] = self.schedule_eager_promises(resolver, queue)
         return {(self, EagerPromise): WrappedValueVariable(promises)} if promises else {}
 
@@ -176,7 +179,7 @@ class RequiresEmitStatement(DynamicStatement):
         """
         Schedules this statement's eager promises to be acquired in the given dynamic context.
         """
-        return [promise.schedule(self, resolver, queue) for promise in self.get_own_eager_promises()]
+        return [promise.schedule(self, resolver, queue) for promise in self._own_eager_promises]
 
     def execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         """
@@ -190,11 +193,10 @@ class RequiresEmitStatement(DynamicStatement):
         """
         Given a requires dict, fulfills this statements dynamic promises
         """
-        promises: Sequence["EagerPromise"]
-        try:
-            promises = requires[(self, EagerPromise)]
-        except KeyError:
+        key = (self, EagerPromise)
+        if key not in requires:
             return
+        promises: Sequence["EagerPromise"] = requires[key]
         for promise in promises:
             promise.fulfill()
 
