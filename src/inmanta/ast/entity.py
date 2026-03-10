@@ -250,9 +250,16 @@ class Entity(NamedType, WithComment):
             children.extend(entity.get_all_child_entities())
         return set(children)
 
+    def get_all_attributes(self) -> Optional[Dict[str, "Attribute"]]:
+        """
+        Return a cached dict mapping attribute name to Attribute for this entity and all parents,
+        or None if the cache has not been built yet (i.e. before normalization).
+        """
+        return self._all_attributes_cache
+
     def _build_attribute_cache(self) -> None:
         """
-        Build a flat dict mapping attribute name → Attribute for this entity and all parents.
+        Build a flat dict mapping attribute name -> Attribute for this entity and all parents.
         Called once after normalization to avoid repeated parent-chain walks.
         """
         cache: Dict[str, "Attribute"] = {}

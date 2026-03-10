@@ -1,0 +1,3 @@
+description: Improve compiler performance by caching entity attribute lookups and optimizing hot paths in the compiler execution engine
+change-type: patch
+destination-branches: [master]
