@@ -90,6 +90,7 @@ class Entity(NamedType, WithComment):
         self.__default_values = {}  # type: Dict[str, DefineAttribute]
 
         self._index_def = []  # type: List[List[str]]
+        self._index_def_sets: list[frozenset[str]] = []
         self._indexes = []  # type: list[DefineIndex]
         self._index = {}  # type: Dict[str,Instance]
         self.index_queue = {}  # type: Dict[str,List[Tuple[ResultVariable, Statement]]]
@@ -290,6 +291,13 @@ class Entity(NamedType, WithComment):
         dvalues = dict(values)
         self._default_values_cache = {k: v for k, v in dvalues.items() if v is not None}
 
+    def get_all_attributes(self) -> Optional[Dict[str, "Attribute"]]:
+        """
+        Return a cached dict mapping attribute name to Attribute for this entity and all parents,
+        or None if the cache has not been built yet (i.e. before normalization).
+        """
+        return self._all_attributes_cache
+
     def get_all_attribute_names(self) -> "List[str]":
         """
         Return a list of all attribute names, including parents
@@ -462,6 +470,7 @@ class Entity(NamedType, WithComment):
                 return
 
         self._index_def.append(sorted(attributes))
+        self._index_def_sets.append(frozenset(attributes))
         self._indexes.append(index_def)
         for child in self.child_entities:
             child.add_index(attributes, index_def)
@@ -474,29 +483,25 @@ class Entity(NamedType, WithComment):
         Update indexes based on the instance and the attribute that has
         been set
         """
-
-        def index_value_gate(key: str, value: object) -> str:
-            if isinstance(value, Reference):
-                raise TypingException(
-                    None,
-                    f"Invalid value `{value}` in index for attribute {key} on instance {instance}: "
-                    f"references can not be used in indexes.",
-                )
-            return repr(value)
-
-        attributes = {k: v for k, v in instance.slots.items() if v.is_ready()}
+        slots = instance.slots
 
         # check if an index entry can be added
         for index_attributes in self.get_indices():
-            index_ok = True
             key = []
             for attribute in index_attributes:
-                if attribute not in attributes:
-                    index_ok = False
-                else:
-                    key.append(f"{attribute}={index_value_gate(attribute, attributes[attribute].get_value())}")
-
-            if index_ok:
+                slot = slots[attribute]
+                if not slot.is_ready():
+                    break
+                value = slot.get_value()
+                if isinstance(value, Reference):
+                    raise TypingException(
+                        None,
+                        f"Invalid value `{value}` in index for attribute {attribute} on instance {instance}: "
+                        f"references can not be used in indexes.",
+                    )
+                key.append(f"{attribute}={value!r}")
+            else:
+                # all attributes ready
                 keys = ", ".join(key)
 
                 if keys in self._index and self._index[keys] is not instance:
@@ -523,8 +528,8 @@ class Entity(NamedType, WithComment):
             attributes.add(attr)
 
         found_index = False
-        for index_attributes in self.get_indices():
-            if set(index_attributes) == attributes:
+        for index_attr_set in self._index_def_sets:
+            if index_attr_set == attributes:
                 found_index = True
 
         if not found_index:
