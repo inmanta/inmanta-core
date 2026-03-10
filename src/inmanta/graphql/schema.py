@@ -21,6 +21,7 @@ from abc import ABC, abstractmethod
 from enum import StrEnum
 from typing import Sequence, cast
 
+import docstring_parser
 import inmanta.data.sqlalchemy as models
 import strawberry
 from inmanta import data
@@ -174,6 +175,33 @@ class CustomListConnection(relay.ListConnection[NodeType]):
     total_count: int | None = field(description="Total number of results for this connection")
 
 
+def _build_docstring_param_cache() -> dict[str, dict[str, str]]:
+    """
+    Build a mapping from table name to a dict of param name -> description, parsed from
+    :param docstrings on BaseDocument subclasses. Called once at import time.
+    """
+    import inspect
+
+    cache: dict[str, dict[str, str]] = {}
+    for _name, cls in inspect.getmembers(data, inspect.isclass):
+        if not issubclass(cls, data.BaseDocument) or cls is data.BaseDocument:
+            continue
+        doc = cls.__doc__
+        if not doc:
+            continue
+        try:
+            parsed = docstring_parser.parse(doc, style=docstring_parser.DocstringStyle.REST)
+        except docstring_parser.ParseError:
+            continue
+        param_map = {p.arg_name: p.description for p in parsed.params if p.description}
+        if param_map:
+            cache[cls.table_name()] = param_map
+    return cache
+
+
+_docstring_param_cache: dict[str, dict[str, str]] = _build_docstring_param_cache()
+
+
 class CustomStrawberrySQLAlchemyMapper(StrawberrySQLAlchemyMapper[BaseModelType]):
     """
     Custom StrawberrySQLAlchemyMapper used to overwrite specific methods.
@@ -191,14 +219,20 @@ class CustomStrawberrySQLAlchemyMapper(StrawberrySQLAlchemyMapper[BaseModelType]
     ) -> None:
         """
         Override to propagate SQLAlchemy column ``doc`` to GraphQL field descriptions.
+
+        Field descriptions are resolved in order of precedence:
+        1. The ``doc`` parameter on the SQLAlchemy ``mapped_column()`` definition
+        2. The ``:param`` docstring on the corresponding ``BaseDocument`` subclass
         """
+        table_name: str = mapper.entity.__tablename__
+        docstring_params = _docstring_param_cache.get(table_name, {})
         for key, column in mapper.columns.items():
             if key in excluded_keys or key in type_.__annotations__ or hasattr(type_, key):
                 continue
             type_annotation = self._convert_column_to_strawberry_type(column)
             if type_annotation is not SkipTypeSentinel:
                 type_.__annotations__[key] = type_annotation
-                doc = column.doc
+                doc = column.doc or docstring_params.get(key)
                 if doc:
                     setattr(type_, key, field(description=doc))
                 else:
