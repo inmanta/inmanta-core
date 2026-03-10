@@ -180,12 +180,11 @@ class RequiresEmitStatement(DynamicStatement):
         """
         Given a requires dict, fulfills this statement's dynamic promises.
         """
-        # Use `in` instead of try/except because most statements have no eager promises,
+        # Use get() instead of try/except because most statements have no eager promises,
         # making the common-case miss cheaper (avoids exception allocation overhead).
-        key = (self, EagerPromise)
-        if key not in requires:
+        promises: Sequence["EagerPromise"] = requires.get((self, EagerPromise))  # type: ignore[assignment]
+        if promises is None:
             return
-        promises: Sequence["EagerPromise"] = requires[key]
         for promise in promises:
             promise.fulfill()
 
