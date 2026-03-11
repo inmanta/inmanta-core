@@ -4720,19 +4720,18 @@ class ResourcePersistentState(BaseDocument):
     :param environment: The environment this resource belongs to
     :param resource_id: The id of the resource
     :param resource_type: The type of the resource
-    :param agent: The name of the agent responsible for deploying this resource
+    :param agent: The name of the agent responsible for running this resource
     :param resource_id_value: The attribute value from the resource id
     :param created: When this resource was first created
     :param last_handler_run_at: The timestamp of the last handler run for this resource
-    :param current_intent_attribute_hash: The attribute hash that the scheduler considers the last released
-        attribute hash for this resource
-    :param last_deployed_attribute_hash: The attribute hash of the last completed deployment
-    :param last_deployed_version: The model version of the last completed deployment
-    :param last_success: The start time of the last deployment that completed without failure
-    :param last_produced_events: The end time of the last deployment where an effective change was produced
+    :param current_intent_attribute_hash: The attribute hash of the latest released version
+    :param last_deployed_attribute_hash: The attribute hash of the last completed handler run
+    :param last_deployed_version: The model version of the last completed handler run
+    :param last_success: The start time of the last handler run that completed without failure
+    :param last_produced_events: The end time of the last handler run where an effective change was produced
     :param is_undefined: Whether the desired state for this resource is undefined
     :param is_orphan: Whether this resource is an orphan (no longer present in the latest model version)
-    :param is_deploying: Whether this resource is currently being deployed
+    :param is_deploying: Whether this resource is currently being run by the handler
     :param last_handler_run: The result of the last handler run for this resource
     :param last_handler_run_compliant: Whether the last handler run reported the resource as compliant
     :param blocked: The blocked state of this resource
@@ -5484,7 +5483,7 @@ class Resource(BaseDocument):
     :param resource_id: The id of the resource (without the version)
     :param resource_type: The type of the resource
     :param resource_id_value: The attribute value from the resource id
-    :param agent: The name of the agent responsible for deploying this resource
+    :param agent: The name of the agent responsible for running this resource
     :param attributes: The desired state for this version of the resource as a dict of attributes
     :param attribute_hash: hash of the attributes, excluding requires, provides and version,
                            used to determine if a resource describes the same state across versions
