@@ -100,7 +100,7 @@ class DynamicStatement(Statement):
 
     def __init__(self) -> None:
         Statement.__init__(self)
-        #: Eager promises this statement itself is responsible for. Set during normalization.
+        # All Eager promises this statement itself is responsible for. Set during normalization.
         self.own_eager_promises: Sequence["StaticEagerPromise"] = []
 
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
@@ -166,7 +166,7 @@ class RequiresEmitStatement(DynamicStatement):
         if not self.own_eager_promises:
             return {}
         promises: Sequence["EagerPromise"] = [promise.schedule(self, resolver, queue) for promise in self.own_eager_promises]
-        return {(self, EagerPromise): WrappedValueVariable(promises)} if promises else {}
+        return {(self, EagerPromise): WrappedValueVariable(promises)}
 
     def execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         """
@@ -182,7 +182,7 @@ class RequiresEmitStatement(DynamicStatement):
         """
         # Use get() instead of try/except because most statements have no eager promises,
         # making the common-case miss cheaper (avoids exception allocation overhead).
-        promises: Sequence["EagerPromise"] = requires.get((self, EagerPromise))  # type: ignore[assignment]
+        promises: Sequence["EagerPromise"] = requires.get((self, EagerPromise))
         if promises is None:
             return
         for promise in promises:
