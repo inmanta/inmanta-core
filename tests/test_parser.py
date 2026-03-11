@@ -1024,6 +1024,37 @@ def test_string_format_v2():
         statements = parse_code('f"hello {"')
 
 
+def test_string_with_escaped_quotes():
+    """Strings containing escaped quotes (backslash + quote) must parse as a single token."""
+    # Double-quoted string with escaped double quotes
+    statements = parse_code(r'a = "hello \"world\" end"')
+    assert len(statements) == 1
+    assert isinstance(statements[0], Assign)
+    assert isinstance(statements[0].value, Literal)
+    assert statements[0].value.value == 'hello "world" end'
+
+    # Single-quoted string with escaped single quotes
+    statements = parse_code(r"a = 'hello \'world\' end'")
+    assert len(statements) == 1
+    assert isinstance(statements[0], Assign)
+    assert isinstance(statements[0].value, Literal)
+    assert statements[0].value.value == "hello 'world' end"
+
+    # F-string with escaped quotes (regression: this failed when the lexer char class
+    # did not exclude backslash, causing the escaped quote to terminate the string early)
+    statements = parse_code(r'a = f"ifname = \"uplane{dn.vrf_table}\" done"')
+    assert len(statements) == 1
+    assert isinstance(statements[0], Assign)
+    assert isinstance(statements[0].value, StringFormatV2)
+    assert statements[0].value._format_string == 'ifname = "uplane{dn.vrf_table}" done'
+
+    # R-string with escaped quotes
+    statements = parse_code(r'a = r"hello \"world\" end"')
+    assert len(statements) == 1
+    assert isinstance(statements[0], Assign)
+    assert isinstance(statements[0].value, Literal)
+
+
 def test_attribute_reference():
     statements = parse_code("""
 a=a::b::c.d

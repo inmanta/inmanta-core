@@ -381,9 +381,9 @@ MLS.1: /"{3,5}[\s\S]*?"{3,5}/
 // Friedl-unrolled patterns: replace per-character alternation (A|B)* with
 // bulk-scan A*(BA*)* so the regex engine scans large non-backslash runs in
 // one stride instead of one character at a time.
-STRING: /"[^\\"\n]*(?:\\.[^\\"\n]*)*"|'[^\\'\n]*(?:\\.[^\\'\n]*)*'/
-RSTRING.1: /r"[^\\"\n]*(?:\\.[^\\"\n]*)*"|r'[^\\'\n]*(?:\\.[^\\'\n]*)*'/
-FSTRING.1: /f"[^\\"\n]*(?:\\.[^\\"\n]*)*"|f'[^\\'\n]*(?:\\.[^\\'\n]*)*'/
+STRING: /"[^"\\\\\n]*(?:\\.[^"\\\\\n]*)*"|'[^\\'\n]*(?:\\.[^\\'\n]*)*'/
+RSTRING.1: /r"[^"\\\\\n]*(?:\\.[^"\\\\\n]*)*"|r'[^\\'\n]*(?:\\.[^\\'\n]*)*'/
+FSTRING.1: /f"[^"\\\\\n]*(?:\\.[^"\\\\\n]*)*"|f'[^\\'\n]*(?:\\.[^\\'\n]*)*'/
 
 // Whitespace and comments (ignored)
 %ignore /[ \t\n\r]+/
