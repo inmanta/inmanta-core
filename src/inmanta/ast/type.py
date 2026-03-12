@@ -48,6 +48,10 @@ from inmanta.stable_api import stable_api
 if TYPE_CHECKING:
     from inmanta.ast.statements import ExpressionStatement
 
+# Exact types for which we can skip unwrap_reference() in TypeReferenceUnion.validate().
+# These Python builtins can never be or contain a Reference.
+_VALIDATE_FAST_PATH_TYPES: frozenset[type] = frozenset({str, int, float, bool})
+
 
 @stable_api
 class Type(Locatable):
@@ -319,6 +323,10 @@ class OrReferenceType(Type):
 
     def validate(self, value: Optional[object]) -> bool:
         # We validate that the value is either a reference of the base type or the base type
+        # Fast path: primitive Python types are never references, so skip the unwrap_reference() call.
+        # Uses exact type check (not isinstance) so Reference subclasses still take the normal path.
+        if type(value) in _VALIDATE_FAST_PATH_TYPES:
+            return self.element_type.validate(value)
         if references.unwrap_reference(value) is not None:
             # Validate that we are the reference
             return self.reference_type.validate(value)
@@ -756,10 +764,11 @@ class Bool(Primitive):
         Validate the given value to check if it satisfies the constraints
         associated with this type
         """
+        # Fast path: exact type check guarantees this is not a Reference, so skip super().validate()
+        if type(value) is bool:
+            return True
         super().validate(value)
         if isinstance(value, AnyType):
-            return True
-        if isinstance(value, bool):
             return True
         raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
 
@@ -795,6 +804,9 @@ class String(Primitive):
         Validate the given value to check if it satisfies the constraints
         associated with this type
         """
+        # Fast path: exact type check guarantees this is not a Reference, so skip super().validate()
+        if type(value) is str:
+            return True
         super().validate(value)
         if isinstance(value, AnyType):
             return True

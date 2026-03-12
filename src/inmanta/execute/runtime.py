@@ -1242,14 +1242,21 @@ class Instance(ExecutionContext, references.MaybeReference):
         self.resolver = resolver.get_root_resolver()
         self.type = mytype
         self.slots: dict[str, ResultVariable] = {}
-        for attr_name in mytype.get_all_attribute_names():
-            if attr_name in self.slots:
-                # prune duplicates because get_new_result_variable() has side effects
-                # don't use set for pruning because side effects drive control flow and set iteration is nondeterministic
-                continue
-            attribute = mytype.get_attribute(attr_name)
-            assert attribute is not None  # Make mypy happy
-            self.slots[attr_name] = attribute.get_new_result_variable(self, queue)
+        # Use cached all_attributes dict when available (after normalization) to avoid
+        # repeated parent-chain walks and per-name lookups
+        all_attrs = mytype.get_all_attributes()
+        if all_attrs is not None:
+            for attr_name, attribute in all_attrs.items():
+                self.slots[attr_name] = attribute.get_new_result_variable(self, queue)
+        else:
+            for attr_name in mytype.get_all_attribute_names():
+                if attr_name in self.slots:
+                    # prune duplicates because get_new_result_variable() has side effects
+                    # don't use set for pruning because side effects drive control flow and set iteration is nondeterministic
+                    continue
+                attr = mytype.get_attribute(attr_name)
+                assert attr is not None  # Make mypy happy
+                self.slots[attr_name] = attr.get_new_result_variable(self, queue)
         # TODO: this is somewhat ugly. Is there a cleaner way to enforce this constraint
         assert (resolver.dataflow_graph is None) == (node is None)
         self.dataflow_graph: Optional[DataflowGraph] = None
