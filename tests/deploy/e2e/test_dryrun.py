@@ -146,13 +146,13 @@ async def test_dryrun_and_deploy(server, client, resource_container, environment
                 caplog,
                 f"inmanta.resource_action.{agent_name}",
                 logging.DEBUG,
-                f'Running dryrun for {resource["id"]} (dry_run_id: {dry_run_id}).',
+                f'Running dryrun for {resource["id"]} dry_run_id: {dry_run_id}.',
             )
             log_contains(
                 caplog,
                 f"inmanta.resource_action.{agent_name}",
                 logging.DEBUG,
-                f'Finished dryrun for {resource["id"]}. (dry_run_id: {dry_run_id}) - duration ',
+                f'Finished dryrun for {resource["id"]}. dry_run_id: {dry_run_id} - duration ',
             )
 
     check_dry_run_logs(resources, dry_run_id)
@@ -279,7 +279,7 @@ async def test_dryrun_failures(resource_container, server, agent, client, enviro
                 caplog,
                 "inmanta.resource_action.agent1",
                 logging.DEBUG,
-                f"Running dryrun for {rid} (dry_run_id: {dry_run_id}).",
+                f"Running dryrun for {rid} dry_run_id: {dry_run_id}.",
             )
             log_contains(
                 caplog,
@@ -290,9 +290,9 @@ async def test_dryrun_failures(resource_container, server, agent, client, enviro
 
     expected_error_messages: Mapping[str, str] = {
         "test::Noprov[agent1,key=key1],v=1": f"Unable to find a handler for test::Noprov[agent1,key=key1],v=1"
-        f" (dry_run_id: {dry_run_id}) (exception: No resource handler registered for resource of type test::Noprov)",
+        f" dry_run_id: {dry_run_id} exception: No resource handler registered for resource of type test::Noprov",
         "test::FailFast[agent1,key=key2],v=1": f"Error during dryrun execution for test::FailFast[agent1,key=key2],v=1 "
-        f"(dry_run_id: {dry_run_id}).",
+        f"dry_run_id: {dry_run_id}.",
     }
     check_dry_run_logs(expected_error_messages, dry_run_id)
     await agent.stop()

@@ -206,7 +206,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                 ctx.exception(
                     "Cannot find the source code for reference resolution for resource %(resource_id)s. Make sure you"
                     "register the relevant code via the @reference decorator and that the relevant file(s) can be imported. "
-                    "(exception: %(exception)s",
+                    "exception: %(exception)s",
                     resource_id=resource.id,
                     exception=repr(e),
                 )
@@ -314,7 +314,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
 
                 try:
                     ctx.debug(
-                        "Running dryrun for %(resource_id)s (dry_run_id: %(dry_run_id)s).",
+                        "Running dryrun for %(resource_id)s dry_run_id: %(dry_run_id)s.",
                         resource_id=resource_id,
                         dry_run_id=dry_run_id,
                     )
@@ -324,8 +324,8 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                         provider = await self.get_provider(resource_obj)
                     except Exception as e:
                         ctx.exception(
-                            "Unable to find a handler for %(resource_id)s (dry_run_id: %(dry_run_id)s) "
-                            "(exception: %(exception)s)",
+                            "Unable to find a handler for %(resource_id)s dry_run_id: %(dry_run_id)s "
+                            "exception: %(exception)s",
                             resource_id=resource_id,
                             dry_run_id=dry_run_id,
                             exception=str(e),
@@ -359,7 +359,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                             if ctx.status == const.ResourceState.failed:
                                 changes["handler"] = AttributeStateChange(current="FAILED", desired="Handler failed")
                                 ctx.exception(
-                                    "Error during dryrun execution for %(resource_id)s (dry_run_id: %(dry_run_id)s).",
+                                    "Error during dryrun execution for %(resource_id)s dry_run_id: %(dry_run_id)s.",
                                     resource_id=resource_id,
                                     dry_run_id=dry_run_id,
                                 )
@@ -368,7 +368,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                                 dryrun_done = time.time()
                                 duration = dryrun_done - start
                                 ctx.debug(
-                                    "Finished dryrun for %(resource_id)s. (dry_run_id: %(dry_run_id)s)"
+                                    "Finished dryrun for %(resource_id)s. dry_run_id: %(dry_run_id)s"
                                     " - duration %(duration).4f s",
                                     resource_id=resource_id,
                                     dry_run_id=dry_run_id,
@@ -386,7 +386,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                         except Exception as e:
                             ctx.exception(
                                 "Exception during dryrun for %(resource_id)s. "
-                                "(dry_run_id: %(dry_run_id)s exception: %(exception)s",
+                                "dry_run_id: %(dry_run_id)s exception: %(exception)s",
                                 resource_id=resource.rvid,
                                 dry_run_id=dry_run_id,
                                 exception=str(e),
@@ -406,8 +406,8 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
 
                 except Exception as e:
                     ctx.exception(
-                        "Unable to process resource %(resource_id)s for dryrun "
-                        "(dry_run_id: %(dry_run_id)s exception: %(exception)s",
+                        "Unable to process resource %(resource_id)s for dryrun. "
+                        "dry_run_id: %(dry_run_id)s exception: %(exception)s",
                         resource_id=resource.rvid,
                         dry_run_id=dry_run_id,
                         exception=str(e),
