@@ -1,0 +1,5 @@
+description: Clarify in the HA PostgreSQL setup documentation that the prerequisites of the standby node are to only have PostgreSQL installed, i.e. no other configuration changes are required.
+change-type: patch
+destination-branches: [master, iso9]
+sections:
+  minor-improvement: "{{description}}"
