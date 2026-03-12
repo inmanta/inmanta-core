@@ -390,7 +390,7 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
 
         return None
 
-    async def create_and_install_environment(self, blueprint: EnvBlueprint) -> None:
+    async def _create_and_install_environment(self, blueprint: EnvBlueprint) -> None:
         """
         Creates and configures the virtual environment according to the provided blueprint.
 
@@ -410,8 +410,6 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
                 constraint_files=[constraint_file] if constraint_file else None,
             )
 
-        self.touch()
-
     def is_correctly_initialized(self) -> bool:
         """
         Was the venv correctly initialized: the inmanta status file exists
@@ -422,6 +420,7 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         """
         Touch the inmanta status file
         """
+        os.makedirs(self.inmanta_venv_status_file.parent, exist_ok=True)
         self.inmanta_venv_status_file.touch()
 
     @property
@@ -545,8 +544,7 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
         folders = [file for file in self.envs_dir.iterdir() if file.is_dir()]
         for folder in folders:
             # No lock here, singe shot prior to start
-            current_folder = self.envs_dir / folder
-            virtual_environment = ExecutorVirtualEnvironment(env_path=str(current_folder), io_threadpool=self.thread_pool)
+            virtual_environment = ExecutorVirtualEnvironment(env_path=str(folder), io_threadpool=self.thread_pool)
             virtual_environment.ensure_disk_layout_backwards_compatibility()
             if virtual_environment.is_correctly_initialized():
                 self.pool[folder.name] = virtual_environment
@@ -604,7 +602,9 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
 
         if is_new:
             LOGGER.info("Creating venv for content %s, content hash: %s", str(member_id), internal_id)
-            await process_environment.create_and_install_environment(member_id)
+            await process_environment._create_and_install_environment(member_id)
+
+        process_environment.touch()
         return process_environment
 
 
