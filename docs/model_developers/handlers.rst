@@ -115,7 +115,7 @@ ip to run a service, or used for reporting purposes.
 Retrieving a fact in the model is done with the `std::getfact() <../reference/modules/std.html#std.getfact>`_
 function.
 
-Example taken from the `openstack Inmanta module <https://github.com/inmanta/openstack>`_:
+Example taken from the `openstack Inmanta adapter <../reference/modules/openstack/README.html>`_:
 
 .. code-block:: inmanta
     :linenos:
