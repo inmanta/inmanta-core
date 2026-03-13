@@ -358,7 +358,7 @@ texinfo_documents = [
 # How to display URL addresses: 'footnote', 'no', or 'inline'.
 # texinfo_show_urls = 'footnote'
 
-# Ingnore link check of swagger.html because it's used in a toctree.
+# Ignore link check of swagger.html because it's used in a toctree.
 # A trick was required to include a non-sphinx document in a toctree.
 linkcheck_ignore = [
     r'http(s)?://localhost:\d+/',
