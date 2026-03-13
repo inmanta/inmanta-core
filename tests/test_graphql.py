@@ -212,6 +212,83 @@ async def test_graphql_schema(server, client):
     assert result.result["data"]["__schema"]
 
 
+async def test_graphql_field_descriptions(server, client):
+    """
+    Verify that field descriptions are resolved from SQLAlchemy column ``doc`` first, falling back to
+    :param docstrings, and that they are exposed via GraphQL introspection.
+    """
+    from inmanta.graphql.schema import _docstring_param_cache, mapper
+    from strawberry_sqlalchemy_mapper.mapper import _GENERATED_FIELD_KEYS_KEY
+
+    # 1) Check mapper-level resolution: doc= takes precedence over :param docstrings
+    graphql_type_to_sa_model: dict[str, type[models.Base]] = {
+        "Environment": models.Environment,
+        "Notification": models.Notification,
+        "Resource": models.Resource,
+        "ResourcePersistentState": models.ResourcePersistentState,
+    }
+    for type_name, strawberry_type in mapper.mapped_types.items():
+        sa_model = graphql_type_to_sa_model.get(type_name)
+        if sa_model is None:
+            continue
+
+        type_def = strawberry_type.__strawberry_definition__
+        table_name = sa_model.__tablename__
+        docstring_params = _docstring_param_cache.get(table_name, {})
+        generated_keys = set(getattr(strawberry_type, _GENERATED_FIELD_KEYS_KEY, []))
+
+        for f in type_def.fields:
+            snake_name = to_snake_case(f.name)
+            if snake_name not in generated_keys:
+                continue
+            column = getattr(sa_model, snake_name, None)
+            if column is None or not hasattr(column, "property"):
+                continue
+            try:
+                col_obj = column.property.columns[0]
+            except AttributeError:
+                continue
+            col_doc = col_obj.doc
+            docstring_doc = docstring_params.get(snake_name)
+
+            if col_doc:
+                assert f.description == col_doc, f"{type_name}.{f.name}: expected column doc '{col_doc}', got '{f.description}'"
+            elif docstring_doc:
+                assert (
+                    f.description == docstring_doc
+                ), f"{type_name}.{f.name}: expected docstring fallback '{docstring_doc}', got '{f.description}'"
+
+    # 2) Check that descriptions are visible via GraphQL introspection
+    introspection_query = """
+    {
+        __schema {
+            types {
+                name
+                fields {
+                    name
+                    description
+                }
+            }
+        }
+    }
+    """
+    result = await client.graphql(query=introspection_query)
+    check_correct_graphql_response(result)
+    types_list = result.result["data"]["data"]["__schema"]["types"]
+    types_by_name: dict[str, list[dict[str, str | None]]] = {t["name"]: t["fields"] for t in types_list if t["fields"]}
+
+    # Fields sourced from SQLAlchemy columns should have descriptions.
+    # Custom resolvers (is_expert_mode, is_compiling, settings, requires_length, purged) and
+    # relationships (state, environment_) are not expected to have descriptions.
+
+    for type_name, fields in types_by_name.items():
+        if type_name.startswith("__"):
+            # Skip internal types
+            continue
+        for field in fields:
+            assert field["description"], f"Field {type_name}.{field['name']} has no description"
+
+
 async def test_query_environment_settings(server, client, setup_database):
     """
     Assert that the settings returned are correct
