@@ -420,7 +420,6 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         """
         Touch the inmanta status file
         """
-        os.makedirs(self.inmanta_venv_status_file.parent, exist_ok=True)
         self.inmanta_venv_status_file.touch()
 
     @property
