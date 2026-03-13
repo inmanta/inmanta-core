@@ -1,4 +1,4 @@
 ---
-description: Fix small issue in the PostgreSQL installation documentation for the HA set.
+description: Fix small issue in the PostgreSQL installation documentation for the HA setup.
 change-type: patch
 destination-branches: [iso8]
