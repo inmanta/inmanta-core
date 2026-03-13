@@ -375,8 +375,8 @@ texinfo_documents = [
 # How to display URL addresses: 'footnote', 'no', or 'inline'.
 # texinfo_show_urls = 'footnote'
 
-# Ingnore link check of openapi.html because it's used in a toctree.
-# A trick was required to include a non-sphinx document in a toctee.
+# Ignore link check of openapi.html because it's used in a toctree.
+# A trick was required to include a non-sphinx document in a toctree.
 linkcheck_ignore = [
     r'http(s)?://localhost:\d+/',
     r'http://127.0.0.1:\d+',
@@ -386,8 +386,6 @@ linkcheck_ignore = [
     '../_specs/openapi.json',
     'extensions/inmanta-ui/index.html',
     '../extensions/inmanta-ui/index.html',
-    '../../reference/modules/std.html#std.validate_type',
-    '../reference/modules/std.html#std.getfact',
     r'https://github.com/inmanta/examples/tree/master/Networking/SR%20Linux#user-content-sr-linux-topology',
 ]
 
