@@ -14,6 +14,7 @@ Contact: code@inmanta.com
 
 import base64
 import dataclasses
+import inspect
 import re
 import typing
 import uuid
@@ -32,12 +33,14 @@ from inmanta.server.services.compilerservice import CompilerService
 from sqlakeyset import Marker, unserialize_bookmark
 from sqlakeyset.asyncio import select_page
 from sqlalchemy import Boolean, Select, UnaryExpression, and_, asc, case, desc, func, not_, select
+from sqlalchemy.ext.hybrid import hybrid_property
+from sqlalchemy.orm import RelationshipProperty
 from strawberry import relay, scalars
 from strawberry.relay import NodeType
 from strawberry.scalars import JSON
 from strawberry.schema.config import StrawberryConfig
 from strawberry.types import Info
-from strawberry.types.field import field
+from strawberry.types.field import StrawberryField, field
 from strawberry.types.info import ContextType
 from strawberry.types.nodes import SelectedField, Selection
 from strawberry_sqlalchemy_mapper import StrawberrySQLAlchemyLoader, StrawberrySQLAlchemyMapper
@@ -149,6 +152,8 @@ There are 4 important building blocks that we have to take into account:
             https://github.com/strawberry-graphql/strawberry-sqlalchemy/issues/236
         - Limited relationship (or secondary) table support i.e. resourceaction_resource:
             https://github.com/strawberry-graphql/strawberry-sqlalchemy/issues/220
+        - No support for sqlalchemy's column_property:
+            https://github.com/strawberry-graphql/strawberry-sqlalchemy/issues/125
 
     Useful documentation:
         - Strawberry documentation:
@@ -219,26 +224,86 @@ class CustomStrawberrySQLAlchemyMapper(StrawberrySQLAlchemyMapper[BaseModelType]
         generated_field_keys: typing.List[str],
     ) -> None:
         """
-        Override to propagate SQLAlchemy column ``doc`` to GraphQL field descriptions.
+        Override to propagate SQLAlchemy column and relationship ``doc`` to GraphQL field descriptions.
 
         Field descriptions are resolved in order of precedence:
-        1. The ``doc`` parameter on the SQLAlchemy ``mapped_column()`` definition
-        2. The ``:param`` docstring on the corresponding ``BaseDocument`` subclass
+        1. SQLAlchemy ``doc`` attribute
+        2. ``:param`` docstring on the corresponding ``BaseDocument`` subclass
         """
+
         table_name: str = mapper.entity.__tablename__
         docstring_params = _docstring_param_cache.get(table_name, {})
+
+        def _should_skip(attr_key: str) -> bool:
+            """
+            Checks if we should skip generating this attribute.
+            """
+            return attr_key in excluded_keys or attr_key in type_.__annotations__ or hasattr(type_, attr_key)
+
+        def _add_field(
+            attr_key: str,
+            annotation: typing.Any,
+            description: str | None = None,
+            connection_resolver: typing.Callable[..., typing.Awaitable[typing.Any]] | None = None,
+        ) -> None:
+            """
+            Creates the StrawberrySQLAlchemy field with the given description.
+            """
+            type_.__annotations__[attr_key] = annotation
+            f = (
+                field(description=description, resolver=connection_resolver)
+                if connection_resolver
+                else field(description=description)
+            )
+            setattr(type_, attr_key, f)
+            generated_field_keys.append(attr_key)
+
+        # Columns
         for key, column in mapper.columns.items():
-            if key in excluded_keys or key in type_.__annotations__ or hasattr(type_, key):
+            if _should_skip(key):
                 continue
-            type_annotation = self._convert_column_to_strawberry_type(column)
-            if type_annotation is not SkipTypeSentinel:
-                type_.__annotations__[key] = type_annotation
-                doc = column.doc or docstring_params.get(key)
-                if doc:
-                    setattr(type_, key, field(description=doc))
-                else:
-                    setattr(type_, key, field())
-                generated_field_keys.append(key)
+
+            item_type = self._convert_column_to_strawberry_type(column)
+            if item_type is SkipTypeSentinel:
+                continue
+
+            doc = column.doc or docstring_params.get(key)
+            _add_field(key, item_type, description=doc)
+
+        # Relationships
+        for key, relationship in mapper.relationships.items():
+            if _should_skip(key):
+                continue
+
+            relationship_type = self._convert_relationship_to_strawberry_type(
+                relationship,
+                True,
+            )
+
+            doc = relationship.doc or docstring_params.get(key)
+
+            resolver = self.connection_resolver_for(
+                relationship,
+                True,
+            )
+
+            _add_field(key, relationship_type, description=doc, connection_resolver=resolver)
+
+        # Hybrid Properties
+        # Currently only used for Resource.compliance_state
+        for key, descriptor in mapper.all_orm_descriptors.items():
+            if not isinstance(descriptor, hybrid_property) or _should_skip(key):
+                continue
+
+            func = descriptor.fget
+
+            return_type = typing.get_type_hints(func).get("return")
+            if return_type is None:
+                continue
+
+            doc = inspect.getdoc(func) or docstring_params.get(key)
+
+            _add_field(key, return_type, description=doc)
 
     def _connection_type_for(self, type_name: str) -> typing.Type[typing.Any]:
         """
@@ -545,9 +610,13 @@ class Environment:
         "role_assignment",
         "settings",
     ]
-    is_expert_mode: bool = strawberry.field(resolver=get_expert_mode)
-    is_compiling: bool = strawberry.field(resolver=get_is_compiling)
-    settings: scalars.JSON = strawberry.field(resolver=get_settings)
+    is_expert_mode: bool = strawberry.field(
+        resolver=get_expert_mode, description="Is the expert mode enabled on this environment?"
+    )
+    is_compiling: bool = strawberry.field(
+        resolver=get_is_compiling, description="Is there a compile running on this environment?"
+    )
+    settings: scalars.JSON = strawberry.field(resolver=get_settings, description="The settings for this environment.")
 
 
 @strawberry.input
@@ -606,7 +675,7 @@ def get_requires_length(root: "Resource") -> int:
 
 def get_purged(root: "Resource") -> bool:
     """
-    Checks the length of the requires of the resource
+    Checks the state of the purged attribute on this resource
     """
     assert hasattr(root, "attributes")  # Make mypy happy
     return bool(root.attributes.get("purged"))
@@ -615,8 +684,12 @@ def get_purged(root: "Resource") -> bool:
 @mapper.type(models.Resource)
 class Resource:
     __exclude__ = ["resource_set_"]
-    requires_length: int = strawberry.field(resolver=get_requires_length)
-    purged: bool = strawberry.field(resolver=get_purged)
+    requires_length: int = strawberry.field(
+        resolver=get_requires_length, description="The length of the requires of this resource."
+    )
+    purged: bool = strawberry.field(
+        resolver=get_purged, description="Checks the state of the purged attribute on this resource"
+    )
 
 
 @strawberry.input
@@ -705,7 +778,7 @@ class ResourceOrder(StrawberryOrder):
 @mapper.type(models.ResourcePersistentState)
 class ResourcePersistentState:
     __tablename__ = "resource_persistent_state"
-    __exclude__ = ["resource_set_"]
+    __exclude__ = ["resource_set_", "environment_"]
 
 
 @strawberry.type
@@ -716,11 +789,13 @@ class ComposedResourceSummary:
     Summary of the composed status of all resources in an environment.
     """
 
-    total_count: int
-    last_handler_run: JSON
-    blocked: JSON
-    compliance: JSON
-    is_deploying: JSON
+    total_count: int = strawberry.field(description="The total number of resources in the environment.")
+    last_handler_run: JSON = strawberry.field(
+        description="Summary of the last handler run for all resources in the environment."
+    )
+    blocked: JSON = strawberry.field(description="Summary of the blocked status of all resources in the environment.")
+    compliance: JSON = strawberry.field(description="Summary of the compliance status of all resources in the environment.")
+    is_deploying: JSON = strawberry.field(description="Summary of the execution status of all resources in the environment.")
 
 
 def add_filter_and_sort(
@@ -883,7 +958,7 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
 
     @strawberry.type
     class Query:
-        @strawberry.field
+        @strawberry.field(description="Fetches a paginated list of environments")
         async def environments(
             self,
             info: CustomInfo,
@@ -900,7 +975,7 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
                 stmt, info=info, model="Environment", first=first, after=after, last=last, before=before
             )
 
-        @strawberry.field
+        @strawberry.field(description="Fetches a paginated list of notifications")
         async def notifications(
             self,
             info: CustomInfo,
@@ -917,7 +992,7 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
                 stmt, info=info, model="Notification", first=first, after=after, last=last, before=before
             )
 
-        @strawberry.field
+        @strawberry.field(description="Fetches a paginated list of resources")
         async def resources(
             self,
             info: CustomInfo,
@@ -1014,7 +1089,7 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
             stmt = do_required_resource_joins(stmt, filter, order_by)
             return await get_connection(stmt, info=info, model="Resource", first=first, after=after, last=last, before=before)
 
-        @strawberry.field
+        @strawberry.field(description="Fetches a summary of the state of all resources in a specific environment")
         async def resource_summary(self, info: CustomInfo, environment: str) -> ComposedResourceSummary:
             results = await data.Resource.get_composed_resource_summary(environment)
             return ComposedResourceSummary(

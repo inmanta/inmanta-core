@@ -280,71 +280,13 @@ async def test_graphql_field_descriptions(server, client):
     # Fields sourced from SQLAlchemy columns should have descriptions.
     # Custom resolvers (is_expert_mode, is_compiling, settings, requires_length, purged) and
     # relationships (state, environment_) are not expected to have descriptions.
-    expected_documented_fields: dict[str, list[str]] = {
-        "Environment": [
-            "id",
-            "name",
-            "project",
-            "halted",
-            "repoUrl",
-            "repoBranch",
-            "lastVersion",
-            "description",
-            "icon",
-            "isMarkedForDeletion",
-        ],
-        "Notification": [
-            "id",
-            "environment",
-            "created",
-            "title",
-            "message",
-            "read",
-            "cleared",
-            "severity",
-            "uri",
-            "compileId",
-        ],
-        "Resource": [
-            "environment",
-            "resourceId",
-            "agent",
-            "resourceType",
-            "resourceIdValue",
-            "resourceSet",
-            "attributes",
-            "attributeHash",
-            "isUndefined",
-        ],
-        "ResourcePersistentState": [
-            "environment",
-            "resourceId",
-            "lastNonDeployingStatus",
-            "resourceType",
-            "agent",
-            "resourceIdValue",
-            "isUndefined",
-            "isOrphan",
-            "lastHandlerRun",
-            "blocked",
-            "created",
-            "lastHandlerRunAt",
-            "lastSuccess",
-            "lastProducedEvents",
-            "lastDeployedAttributeHash",
-            "lastDeployedVersion",
-            "currentIntentAttributeHash",
-            "isDeploying",
-            "lastHandlerRunCompliant",
-        ],
-    }
 
-    for type_name, field_names in expected_documented_fields.items():
-        assert type_name in types_by_name, f"Type {type_name} not found in GraphQL schema"
-        fields = {f["name"]: f["description"] for f in types_by_name[type_name]}
-        for field_name in field_names:
-            assert field_name in fields, f"Field {type_name}.{field_name} not found in GraphQL schema"
-            assert fields[field_name], f"Field {type_name}.{field_name} has no description"
+    for type_name, fields in types_by_name.items():
+        if type_name.startswith("__"):
+            # Skip internal types
+            continue
+        for field in fields:
+            assert field["description"], f"Field {type_name}.{field['name']} has no description"
 
 
 async def test_query_environment_settings(server, client, setup_database):

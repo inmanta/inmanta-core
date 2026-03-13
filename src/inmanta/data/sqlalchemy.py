@@ -790,6 +790,9 @@ class ResourcePersistentState(Base):
 
     @hybrid_property
     def compliance_state(self) -> state.Compliance | None:
+        """
+        Compliance status of this resource
+        """
         return state.get_compliance_status(
             self.is_orphan,
             self.is_undefined,
@@ -971,6 +974,7 @@ class Resource(Base):
             Resource.environment == foreign(ResourcePersistentState.environment),
         ),
         viewonly=True,
+        doc="The persistent state of this resource",
     )
 
 
