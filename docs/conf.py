@@ -401,6 +401,8 @@ linkcheck_ignore = [
     r'http://127.0.0.1:\d+',
     r'http(s)?://172(.\d{1,3}){3}(:\d+)?',  # Ignoring all docker ips links
     r'openapi.html',
+    r'../reference/modules/openstack/README.html',
+    r'../reference/modules/std/autodoc.html#std.getfact',
     r'https://twitter.com/inmanta_com',
     '../_specs/openapi.json',
     'extensions/inmanta-ui/index.html',

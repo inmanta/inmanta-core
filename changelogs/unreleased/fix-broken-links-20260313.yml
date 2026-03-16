@@ -1,0 +1,5 @@
+description: Fix broken link in docs and configure linkcheck to ignore relative links to the 'reference' section of the docs.
+change-type: patch
+destination-branches: [iso8]
+
+
