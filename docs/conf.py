@@ -358,19 +358,19 @@ texinfo_documents = [
 # How to display URL addresses: 'footnote', 'no', or 'inline'.
 # texinfo_show_urls = 'footnote'
 
-# Ingnore link check of swagger.html because it's used in a toctree.
-# A trick was required to include a non-sphinx document in a toctee.
+# Ignore link check of swagger.html because it's used in a toctree.
+# A trick was required to include a non-sphinx document in a toctree.
 linkcheck_ignore = [
     r'http(s)?://localhost:\d+/',
     r'http://127.0.0.1:\d+',
     r'http(s)?://172(.\d{1,3}){3}(:\d+)?',  # Ignoring all docker ips links
     r'swagger.html',
     r'../reference/swagger.html',
+    r'../reference/modules/openstack/README.html',
+    r'../reference/modules/std/autodoc.html#std.getfact',
     r'https://twitter.com/inmanta_com',
     'extensions/inmanta-ui/index.html',
     '../extensions/inmanta-ui/index.html',
-    '../../reference/modules/std.html#std.validate_type',
-    '../reference/modules/std.html#std.getfact',
     r'https://github.com/inmanta/examples/tree/master/Networking/SR%20Linux#user-content-sr-linux-topology',
 ]
 

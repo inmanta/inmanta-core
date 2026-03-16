@@ -1,0 +1,6 @@
+---
+description: "Improve documentation: fix typos, update module format to V2, add missing language features, expand architecture page, and add DSL cheat sheet."
+change-type: patch
+destination-branches: [master, iso9]
+sections:
+  minor-improvement: "{{description}}"
