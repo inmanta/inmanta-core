@@ -3,4 +3,5 @@ description: Include the CPU benchmark result in the core.metrics slice status, 
 destination-branches:
 - master
 - iso9
+- iso8
 sections: {}
