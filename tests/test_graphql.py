@@ -24,12 +24,13 @@ import inmanta.data.sqlalchemy as models
 from inmanta import const, data
 from inmanta.data import model
 from inmanta.deploy import state
-from inmanta.graphql.schema import to_snake_case
+from inmanta.graphql.schema import _docstring_param_cache, mapper, to_snake_case
 from inmanta.protocol import Result
 from inmanta.server import SLICE_COMPILER
 from inmanta.server.services.compilerservice import CompilerService
 from inmanta.util import retry_limited
 from strawberry_sqlalchemy_mapper import StrawberrySQLAlchemyMapper
+from strawberry_sqlalchemy_mapper.mapper import _GENERATED_FIELD_KEYS_KEY
 from utils import insert_with_link_to_configuration_model, run_compile_and_wait_until_compile_is_done
 
 env_1: typing.Final[str] = "11111111-1234-5678-1234-000000000001"
@@ -215,10 +216,8 @@ async def test_graphql_schema(server, client):
 async def test_graphql_field_descriptions(server, client):
     """
     Verify that field descriptions are resolved from SQLAlchemy column ``doc`` first, falling back to
-    :param docstrings, and that they are exposed via GraphQL introspection.
+    `:param` docstrings, and that they are exposed via GraphQL introspection.
     """
-    from inmanta.graphql.schema import _docstring_param_cache, mapper
-    from strawberry_sqlalchemy_mapper.mapper import _GENERATED_FIELD_KEYS_KEY
 
     # 1) Check mapper-level resolution: doc= takes precedence over :param docstrings
     graphql_type_to_sa_model: dict[str, type[models.Base]] = {
