@@ -44,6 +44,7 @@ from inmanta.ast.statements.generator import WrappedKwargs
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import QueueScheduler, Resolver, ResultVariable, VariableABC, Waiter
 from inmanta.execute.util import NoneValue, Unknown
+from inmanta.plugins import CheckedArgs
 
 LOGGER = logging.getLogger(__name__)
 
@@ -138,7 +139,7 @@ class FunctionCall(ReferenceStatement):
         queue: QueueScheduler,
         result: ResultVariable,
         *,
-        checked_args_cache: Optional[list[object]] = None,
+        checked_args_cache: Optional[list[Optional[CheckedArgs]]] = None,
     ) -> None:
         """
         Evaluate this statement, using the output of execute_args
@@ -195,7 +196,7 @@ class Function:
         queue: QueueScheduler,
         result: ResultVariable,
         *,
-        checked_args_cache: Optional[list[object]] = None,
+        checked_args_cache: Optional[list[Optional[CheckedArgs]]] = None,
     ) -> None:
         """
         Call this function in the supplied context and store the result in the supplied ResultVariable.
@@ -227,7 +228,7 @@ class Cast(Function):
         queue: QueueScheduler,
         result: ResultVariable,
         *,
-        checked_args_cache: Optional[list[object]] = None,
+        checked_args_cache: Optional[list[Optional[CheckedArgs]]] = None,
     ) -> None:
         result.set_value(self.call_direct(args, kwargs), self.ast_node.location)
 
@@ -274,15 +275,16 @@ class PluginFunction(Function):
         queue: QueueScheduler,
         result: ResultVariable,
         *,
-        checked_args_cache: Optional[list[object]] = None,
+        checked_args_cache: Optional[list[Optional[CheckedArgs]]] = None,
     ) -> None:
 
-        if checked_args_cache is not None and checked_args_cache[0] is not None:
+        cached = checked_args_cache[0] if checked_args_cache is not None else None
+        if cached is not None:
             # Reuse validated args from a previous call (reschedule after UnsetException).
             # Type validation and domain conversion are deterministic for the same inputs,
             # and the DynamicProxy wrappers remain valid since they read from the same
             # underlying entity instances.
-            processed_args = checked_args_cache[0]
+            processed_args = cached
         else:
             processed_args = self.plugin.check_args(args, kwargs)
             no_unknows = not processed_args.unknowns
@@ -359,7 +361,7 @@ class FunctionUnit(Waiter):
         # Cache for validated plugin arguments, reused across reschedules to avoid
         # redundant type validation when a plugin is retried after UnsetException.
         # Single-element list used as a mutable slot that can be written to by call_in_context.
-        self._checked_args_cache: list[object] = [None]
+        self._checked_args_cache: list[Optional[CheckedArgs]] = [None]
 
     def execute(self) -> None:
         # Execution in two stages to prevent re-execution of argument expressions
