@@ -1,0 +1,6 @@
+---
+description: "Fixed bug in the virtual environment management of executors that can cause a `No such file or directory` error on the `.inmanta_venv_status` file of a virtual environment. If this bug triggers, it can be worked around by starting a new deployment."
+change-type: patch
+destination-branches: [master, iso9, iso8]
+sections:
+  bugfix: "{{description}}"
