@@ -648,6 +648,9 @@ class Number(Primitive):
         Validate the given value to check if it satisfies the constraints
         associated with this type
         """
+        # Fast path: exact type check for the most common numeric types
+        if type(value) is int or type(value) is float:
+            return True
         super().validate(value)
         if isinstance(value, AnyType):
             return True
@@ -695,6 +698,9 @@ class Float(Primitive):
         Validate the given value to check if it satisfies the constraints
         associated with this type
         """
+        # Fast path: exact type check guarantees this is not a Reference, so skip super().validate()
+        if type(value) is float:
+            return True
         super().validate(value)
         if isinstance(value, AnyType):
             return True
@@ -731,6 +737,10 @@ class Integer(Primitive):
         Validate the given value to check if it satisfies the constraints
         associated with this type
         """
+        # Fast path: exact type check guarantees this is not a Reference, so skip super().validate()
+        # Note: bool is a subclass of int, but type(True) is bool, not int, so booleans are correctly excluded.
+        if type(value) is int:
+            return True
         super().validate(value)
         if isinstance(value, AnyType):
             return True
