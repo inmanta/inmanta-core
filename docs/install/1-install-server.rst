@@ -248,7 +248,7 @@ Optional step 2: Setup SSL and authentication
 Follow the instructions in :ref:`auth-setup` to configure both SSL and authentication.
 While not mandatory, it is highly recommended you do so.
 
-.. _install-step-2:
+.. _install-postgresql-software:
 
 Step 3: Install PostgreSQL |pg_version|
 ---------------------------------------
@@ -299,7 +299,7 @@ Step 3: Install PostgreSQL |pg_version|
                 .. note::
                     If your system uses a different locale, please install the corresponding langpack.
 
-.. _install-step-3:
+.. _configure-postgresql-server:
 
 Step 4: Setup a PostgreSQL database for the Inmanta server
 ----------------------------------------------------------
