@@ -1,5 +1,5 @@
 """
-Copyright 2017 Inmanta
+Copyright 2026 Inmanta
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,18 +16,15 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-OPA_VERSION = "1.3.0"
-# This version is managed by bumpversion. Should you ever update it manually, make sure to consistently update it everywhere
-# (See the bumpversion.cfg file for relevant locations).
-__version__ = "18.1.0"
+from asyncpg import Connection
 
-RUNNING_TESTS = False
-"""
-    This is enabled/disabled by the test suite when tests are run.
-    This variable is used to disable certain features that shouldn't run during tests.
-"""
 
-if __name__ == "__main__":
-    import inmanta.app
-
-    inmanta.app.app()
+async def update(connection: Connection) -> None:
+    """
+    Add index to rps table
+    """
+    schema = """
+    CREATE INDEX resource_persistent_state_environment_is_orphan_index
+        ON public.resource_persistent_state (environment, is_orphan) WHERE NOT is_orphan;
+    """
+    await connection.execute(schema)

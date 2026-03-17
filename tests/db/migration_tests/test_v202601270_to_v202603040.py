@@ -1,5 +1,5 @@
 """
-Copyright 2017 Inmanta
+Copyright 2026 Inmanta
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,18 +16,20 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-OPA_VERSION = "1.3.0"
-# This version is managed by bumpversion. Should you ever update it manually, make sure to consistently update it everywhere
-# (See the bumpversion.cfg file for relevant locations).
-__version__ = "18.1.0"
+import os
+import re
+from collections import abc
 
-RUNNING_TESTS = False
-"""
-    This is enabled/disabled by the test suite when tests are run.
-    This variable is used to disable certain features that shouldn't run during tests.
-"""
+import asyncpg
+import pytest
 
-if __name__ == "__main__":
-    import inmanta.app
+file_name_regex = re.compile("test_v([0-9]{9})_to_v[0-9]{9}")
+part = file_name_regex.match(__name__)[1]
 
-    inmanta.app.app()
+
+@pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), f"dumps/v{part}.sql"))
+async def test_add_index_to_rps_table(
+    postgresql_client: asyncpg.Connection, migrate_db_from: abc.Callable[[], abc.Awaitable[None]]
+) -> None:
+    # This migration just adds an index
+    await migrate_db_from()

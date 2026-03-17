@@ -1,0 +1,6 @@
+change-type: patch
+description: Bump cookiecutter from 2.7.0 to 2.7.1
+destination-branches:
+- master
+- iso9
+sections: {}
