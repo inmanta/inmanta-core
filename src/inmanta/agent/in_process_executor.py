@@ -15,6 +15,7 @@ Contact: code@inmanta.com
 import asyncio
 import datetime
 import logging
+import time
 import typing
 import uuid
 from asyncio import InvalidStateError, Lock
@@ -238,20 +239,25 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         ctx = handler.HandlerContext(resource, action_id=action_id, logger=self.resource_action_logger)
 
         ctx.debug(
-            "Start run because %(reason)s.",
+            "Start run because %(reason)s (deploy_id: %(deploy_id)s).",
             reason=reason,
             deploy_id=gid,
             resource=resource_details.id,
         )
+        start = time.time()
 
         async with self.activity_lock:
             with self._cache:
                 await self._execute(resource, ctx=ctx, requires=requires)
 
+        deploy_done = time.time()
+        duration = deploy_done - start
+
         ctx.debug(
-            "End run for resource %(r_id)s in deploy %(deploy_id)s",
+            "End run for resource %(r_id)s. (deploy_id: %(deploy_id)s) - duration: %(duration).4f s",
             r_id=resource_details.rvid,
             deploy_id=gid,
+            duration=duration,
         )
 
         if ctx.facts:
@@ -297,14 +303,21 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                 resource_id: ResourceVersionIdStr = resource.rvid
 
                 try:
-                    self.resource_action_logger.debug("Running dryrun for %s", resource_id)
+                    ctx.debug(
+                        "Running dryrun for %(resource_id)s dry_run_id: %(dry_run_id)s.",
+                        resource_id=resource_id,
+                        dry_run_id=dry_run_id,
+                    )
+                    start = time.time()
 
                     try:
                         provider = await self.get_provider(resource_obj)
                     except Exception as e:
                         ctx.exception(
-                            "Unable to find a handler for %(resource_id)s (exception: %(exception)s",
+                            "Unable to find a handler for %(resource_id)s dry_run_id: %(dry_run_id)s "
+                            "exception: %(exception)s",
                             resource_id=resource_id,
+                            dry_run_id=dry_run_id,
                             exception=str(e),
                         )
                         dryrun_result = DryrunReport(
@@ -335,6 +348,22 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                                 changes = {}
                             if ctx.status == const.ResourceState.failed:
                                 changes["handler"] = AttributeStateChange(current="FAILED", desired="Handler failed")
+                                ctx.exception(
+                                    "Error during dryrun execution for %(resource_id)s dry_run_id: %(dry_run_id)s.",
+                                    resource_id=resource_id,
+                                    dry_run_id=dry_run_id,
+                                )
+                            else:
+
+                                dryrun_done = time.time()
+                                duration = dryrun_done - start
+                                ctx.debug(
+                                    "Finished dryrun for %(resource_id)s. dry_run_id: %(dry_run_id)s"
+                                    " - duration %(duration).4f s",
+                                    resource_id=resource_id,
+                                    dry_run_id=dry_run_id,
+                                    duration=duration,
+                                )
                             dryrun_result = DryrunReport(
                                 rvid=resource_id,
                                 dryrun_id=dry_run_id,
@@ -343,10 +372,13 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                                 finished=datetime.datetime.now().astimezone(),
                                 messages=ctx.logs,
                             )
+
                         except Exception as e:
                             ctx.exception(
-                                "Exception during dryrun for %(resource_id)s (exception: %(exception)s",
+                                "Exception during dryrun for %(resource_id)s. "
+                                "dry_run_id: %(dry_run_id)s exception: %(exception)s",
                                 resource_id=resource.rvid,
+                                dry_run_id=dry_run_id,
                                 exception=str(e),
                             )
                             changes = ctx.changes
@@ -364,14 +396,16 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
 
                 except Exception as e:
                     ctx.exception(
-                        "Unable to process resource %(resource_id)s for dryrun (exception: %(exception)s",
+                        "Unable to process resource %(resource_id)s for dryrun. "
+                        "dry_run_id: %(dry_run_id)s exception: %(exception)s",
                         resource_id=resource.rvid,
+                        dry_run_id=dry_run_id,
                         exception=str(e),
                     )
                     dryrun_result = DryrunReport(
                         rvid=resource_id,
                         dryrun_id=dry_run_id,
-                        changes={"handler": AttributeStateChange(current="FAILED", desired="Resource Deserialization Failed")},
+                        changes={"handler": AttributeStateChange(current="FAILED", desired="Unexpected error during dryrun")},
                         started=started,
                         finished=datetime.datetime.now().astimezone(),
                         messages=ctx.logs,
