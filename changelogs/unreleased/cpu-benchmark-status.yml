@@ -1,4 +1,4 @@
-change-type: minor
+change-type: patch
 description: Include the CPU benchmark result in the core.metrics slice status, making it available via the /api/v1/serverstatus endpoint.
 destination-branches:
 - master
