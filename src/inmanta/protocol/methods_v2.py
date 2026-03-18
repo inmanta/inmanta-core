@@ -437,15 +437,24 @@ def reserve_version(tid: uuid.UUID) -> int:
 
 
 @auth(auth_label=const.CoreAuthorizationLabel.DOCS_READ, read_only=True)
-@typedmethod(path="/docs", operation="GET", client_types=[ClientType.api], api_version=2, token_param="token")
+@typedmethod(
+    path="/docs",
+    operation="GET",
+    client_types=[ClientType.api],
+    api_version=2,
+    token_param="token",
+    include_response_in_docs_swagger=False,
+)
 def get_api_docs(
-    format: Optional[ApiDocsFormat] = ApiDocsFormat.swagger, token: str | None = None
+    format: Optional[ApiDocsFormat] = ApiDocsFormat.swagger, token: str | None = None, swagger_description: str | None = None
 ) -> ReturnValue[Union[OpenAPI, str]]:
     """
     Get the OpenAPI definition of the API
 
     :param format: Use 'openapi' to get the schema in json format, leave empty or use 'swagger' to get the Swagger-UI view
     :param token: If provided, use this token to authorize the request instead of the value from the authorization header.
+    :param swagger_description: When using the 'swagger' format, the 'description' field of the returned swagger will be set
+    to the value of this parameter.
     """
 
 
@@ -1854,12 +1863,17 @@ def discovered_resource_delete_batch(tid: uuid.UUID, discovered_resource_ids: Se
     api_version=2,
     strict_typing=False,
 )
-def graphql(query: str) -> Any:  # Actual return type: strawberry.types.execution.HandlerResult
+def graphql(
+    query: str, variables: dict[str, Any] | None = None
+) -> Any:  # Actual return type: strawberry.types.execution.HandlerResult
     """
     GraphQL endpoint for Inmanta.
     Supports paging, filtering and sorting on certain attributes.
 
     To check which queries are enabled, use the 'GET /api/v2/graphql/schema' endpoint.
+
+    :param query: The GraphQL query to perform
+    :param variables: The GraphQL variables to apply to the query
     """
     pass
 

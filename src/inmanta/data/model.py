@@ -24,20 +24,21 @@ import os
 import typing
 import urllib
 import uuid
-from collections import abc
+from collections import abc, defaultdict
 from collections.abc import Sequence
 from enum import Enum, StrEnum
 from typing import ClassVar, Mapping, Optional, Self, Union, assert_never, cast
 
 import asyncpg
 import pydantic.schema
+from asyncpg import Record
 from pydantic import ConfigDict, Field, SerializationInfo, computed_field, field_serializer, field_validator
 
 import inmanta
 import inmanta.ast.export as ast_export
 import pydantic_core.core_schema
 from inmanta import const, data, protocol, resources
-from inmanta.deploy.state import Compliance, HandlerResult
+from inmanta.deploy.state import Blocked, Compliance, HandlerResult
 from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes
 from inmanta.types import BaseModel as BaseModel  # Keep in place for backwards compat with <=ISO8
@@ -433,6 +434,50 @@ class ResourceAction(BaseModel):
     changes: Optional[JsonType] = None
     change: Optional[const.Change] = None
     send_event: Optional[bool] = None  # Deprecated field
+
+
+class ComposedResourceSummary(BaseModel):
+    """
+    A summary of the composed status of all resources in an environment.
+
+    :param total_count: Total count of resources.
+    :param compliance:  Summary of the compliance status of resources
+    :param last_handler_run: Summary of the status of the last handler run of resources
+    :param blocked: Summary of the blocked status of resources
+    :param is_deploying: Summary of the status of the deployment status of resources
+    """
+
+    total_count: int
+    compliance: dict[Compliance, int]
+    last_handler_run: dict[HandlerResult, int]
+    blocked: dict[Blocked, int]
+    is_deploying: dict[bool, int]
+
+    @classmethod
+    def create_from_db_result(cls, summary_by_db_result: Sequence[Record]) -> "ComposedResourceSummary":
+        parsed_results: typing.DefaultDict[str, dict[str, int]] = defaultdict(dict)
+        for result in summary_by_db_result:
+            parsed_results[str(result["metric"])][str(result["value"]).lower()] = cast(int, result["count"])
+
+        expected_values = {
+            "is_deploying": ["true", "false"],
+            "blocked": [x.value for x in Blocked],
+            "compliance": [x.value for x in Compliance],
+            "last_handler_run": [x.value for x in HandlerResult],
+        }
+        for metric, values in expected_values.items():
+            for value in values:
+                if value not in parsed_results[metric]:
+                    parsed_results[metric][value] = 0
+
+        return ComposedResourceSummary(
+            # total_count is the same on every row
+            total_count=cast(int, summary_by_db_result[0]["total_count"]),
+            compliance={Compliance(k): v for k, v in parsed_results["compliance"].items()},
+            blocked={Blocked(k): v for k, v in parsed_results["blocked"].items()},
+            last_handler_run={HandlerResult(k): v for k, v in parsed_results["last_handler_run"].items()},
+            is_deploying={k == "true": v for k, v in parsed_results["is_deploying"].items()},
+        )
 
 
 class ResourceDeploySummary(BaseModel):

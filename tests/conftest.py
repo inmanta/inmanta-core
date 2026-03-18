@@ -110,10 +110,9 @@ from inmanta.server.services.compilerservice import CompilerService, CompileRun
 from inmanta.tornado import LoopResolverWithUnixSocketSuppport
 from inmanta.types import JsonType, ResourceIdStr, ResourceVersionIdStr
 from inmanta.util import ScheduledTask, Scheduler, TaskMethod, TaskSchedule
-from inmanta.vendor import pyformance
+from inmanta.vendor import libpip2pi, pyformance
 from inmanta.vendor.pyformance import MetricsRegistry
 from inmanta.warnings import WarningsManager
-from libpip2pi.commands import dir2pi
 from packaging.requirements import Requirement
 from packaging.version import Version
 from pytest_postgresql import factories
@@ -2031,7 +2030,7 @@ def create_empty_local_package_index_factory() -> Callable[[str], str]:
         """
         tmpdir = tempfile.mkdtemp(prefix=f"{prefix}-")
         created_directories.append(tmpdir)  # Keep track of the tempdir for cleanup
-        dir2pi(argv=["dir2pi", tmpdir])
+        libpip2pi.dir2pi(tmpdir)
         index_dir = os.path.join(tmpdir, "simple")  # The 'simple' directory is created inside the tmpdir by dir2pi
         return index_dir
 
@@ -2084,7 +2083,7 @@ def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
         )
 
         # Build python package repository
-        dir2pi(argv=["dir2pi", build_dir])
+        libpip2pi.dir2pi(build_dir)
         # Update timestamp file
         open(timestamp_file, "w").close()
     else:

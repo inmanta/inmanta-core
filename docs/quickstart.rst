@@ -21,7 +21,7 @@ In this guide we start simple and manage a 3-node CLOS network with a spine and 
 Prerequisites
 _________________________
 
-**Python version 3.12**, ``Docker``, ``Containerlab`` and ``Inmanta`` need to be installed on your machine and our ``SR Linux`` repository has to be cloned in order to proceed. Please make sure to follow the links below to that end.
+Python version |python_version|, ``Docker``, ``Containerlab`` and ``Inmanta`` need to be installed on your machine and our ``SR Linux`` repository has to be cloned in order to proceed. Please make sure to follow the links below to that end.
 
 1. `Install Docker <https://docs.docker.com/install/>`_.
 2. `Install Containerlab <https://containerlab.dev/install/>`_.
@@ -61,15 +61,15 @@ This folder contains a **project.yml**, which looks like this:
     modulepath: libs
     downloadpath: libs
     pip:
-      index_url: url: https://packages.inmanta.com/public/quickstart/python/simple/
+      index_url: https://packages.inmanta.com/public/quickstart/python/simple/
 
 
 
 
 
 - The ``modulepath`` setting defines that modules will be stored in ``libs`` directory.
-- The ``repo`` setting points to one or more Git repositories containing Inmanta modules.
-- The ``requires`` setting is used to pin versions of modules, otherwise the latest version is used.
+- The ``downloadpath`` setting defines the directory where downloaded modules are stored.
+- The ``pip.index_url`` setting points to a Python package index for resolving Inmanta module dependencies.
 
 1. Install the required modules inside the `SR Linux` folder:
 

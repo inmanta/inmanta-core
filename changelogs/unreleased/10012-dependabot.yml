@@ -1,0 +1,6 @@
+change-type: patch
+description: Bump setuptools from 80.10.2 to 82.0.0
+destination-branches:
+- master
+- iso9
+sections: {}

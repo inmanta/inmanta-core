@@ -1,0 +1,5 @@
+description: dropped old gpg variables from docs conf
+change-type: patch
+destination-branches:
+  - master
+  - iso9

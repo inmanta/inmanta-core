@@ -44,7 +44,7 @@ This guide assumes that you already finished the :ref:`quickstart <quickstart>`,
 
 **System requirements:**
 
-* Python version 3.12 needs to be installed on your machine.
+* Python version |python_version| needs to be installed on your machine.
 * Minimal 8GB of RAM.
 
 **Setup procedure:**

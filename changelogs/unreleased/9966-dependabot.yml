@@ -1,0 +1,6 @@
+change-type: patch
+description: Bump inmanta-dev-dependencies from 2.189.0 to 2.190.0
+destination-branches:
+- master
+- iso9
+sections: {}

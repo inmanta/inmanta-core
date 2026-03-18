@@ -26,7 +26,8 @@ requires = [
     "pynacl~=1.5",
     "python-dateutil~=2.0",
     "pyyaml~=6.0",
-    "setuptools",
+    # Version 82.0.0 and higher removed pkg_resources which breaks pip2pi that still depends on it.
+    "setuptools<83.0.0",
     "texttable~=1.0",
     # tornado>6.5 because of CVE https://github.com/advisories/GHSA-7cx3-6m66-7c5m
     "tornado>6.5",
@@ -38,6 +39,8 @@ requires = [
     "SQLAlchemy~=2.0",
     "strawberry-sqlalchemy-mapper==0.8.0",
     "jsonpath-ng~=1.7",
+    # cookiecutter requires requests and (via binaryornot) chardet. With this extra we ensure that it stays in the valid range for requests
+    "requests[use_chardet_on_py3]",
 ]
 
 
@@ -48,7 +51,7 @@ with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
 
 # This version is managed by bumpversion. Should you ever update it manually, make sure to consistently update it everywhere
 # (See the bumpversion.cfg file for relevant locations).
-version = "18.0.0"
+version = "18.1.0"
 
 setup(
     version=version,
@@ -113,7 +116,6 @@ setup(
             "sphinx-click",
             "sphinxcontrib-contentui",
             "sphinxcontrib.datatemplates",
-            "sphinxcontrib-redoc",
             "sphinxcontrib-serializinghtml",
             "sphinx-design",
             "Sphinx-Substitution-Extensions",

@@ -1,0 +1,8 @@
+---
+description: >
+    Added the resourceSummary query to the GraphQL endpoint.
+    This query returns a summary of the composed state of all resources in the latest processed model version of an environment.
+change-type: minor
+destination-branches: [master, iso9]
+sections:
+  minor-improvement: "{{description}}"

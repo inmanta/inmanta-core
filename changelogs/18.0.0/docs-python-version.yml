@@ -1,0 +1,5 @@
+description: parametrized python version in docs
+change-type: patch
+destination-branches:
+  - master
+  - iso8
