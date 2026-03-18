@@ -239,16 +239,35 @@ class ExpressionStatement(RequiresEmitStatement):
         """
         raise RuntimeException(None, "%s is not a constant" % self)
 
+    # TODO: check all child implementations to validate the contract
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector[object]
     ) -> dict[object, VariableABC]:
         """
         Returns a dict of the result variables required for execution. Behaves like requires_emit, but additionally may attach
         resultcollector as a listener to result variables.
+
         When this method is called, the caller must make sure to eventually call `execute` as well.
 
-        Composite statements (e.g. conditional expression) will pass result collectors to their children rather than
-        report to them themselves. Child implementations must take care to do one or the other, not both.
+        Gradual execution is an internal mechanism to optimize code flows where list results can be safely processed as they
+        become available, regardless of order. It must only be applied in those contexts. Gradual execution must not trim
+        duplicate values. That is left up to those few consumers (e.g. relations) that wish to apply uniqueness semantics.
+
+        The decision on whether or not to execute gradually, is always on the initial caller. In other words, links in the
+        gradual execution chain / pipe (e.g. conditional expression, list comprehension, ...) may (and in fact *must*) always
+        safely propagate the gradual execution mode to their children. After all, if the consumer at the start of the chain
+        (could be a lhs in assignment, but just as well a control flow statement, or a construct like `is defined`, ....) did
+        not support gradual execution, no resultcollector would have been passed down this chain.
+
+        Child implementations of this method must take care to either pass on the resultcollector to their children (most
+        composite statements, e.g. conditional expression, list comprehension), or report to them themselves (terminal
+        expressions, e.g. Literal inside a list), but never both. The default implementation covers the second option by
+        passing on the resultcollector over the requires dict so that `execute` may report to it before returning. Therefore,
+        any child implementation that uses a custom mechanism to report to the resultcollector, or passes it on to a child, must
+        not propagate the resultcollector over the requires dict, or must override `execute` behavior accordingly.
+
+        :param resultcollector: A collector for gradual results. Must be able to process results as they become available, in
+            any order.
         """
         return {**self.requires_emit(resolver, queue), (self, ResultCollector): WrappedValueVariable(resultcollector)}
 

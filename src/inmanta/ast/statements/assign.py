@@ -94,33 +94,23 @@ class CreateList(ReferenceStatement):
 
     # TODO: old branch issue/5720-for-loop-skip-values-test may contain something else useful
     #           -> git diff c1db41ef9...issue/5720-for-loop-skip-values-test
-    # TODO: uncomment & implement
-    #       STARTING POINT:
-    #       - define very clear semantics for normal mode and gradual mode and what it means for ordering
-    #           -> mention consumers, producers and things like list comprehension that are just a link in the chain.
-    #               lists can also be just a link in the chain. Main takeaway is that list comprehension is not a consumer, it's
-    #               lhs (or wrapping expression) *is*
+
+    # TODO: DOCUMENT CLEARLY (not necessarily here)
     #       - define very clear semantics for lists vs relations and what it means for duplicates
     #       => relations are set-like with respect to uniqueness *and* ordering
     #       => lists are sequences
-    #
+    #       This is a separate concept from gradual execution!!!
     #       => gradual execution retains all values, including duplicates, but loses ordering
     #       => list comprehensions and other linking constructs propagate the lhs' execution mode and ordering semantics
     #       => relations deduplicate. Like piping to `uniq`, this only deduplicates at this final stage
-    #
     #       => ALL expressions satisfy sorted(execute()) == sorted(sent_to_resultcollector)
     #
     #       Open question: do gradually executed lists need to execute? Perhaps we can simply never freeze them and leave it up
     #       to the consumer to freeze if appropriate (e.g. relation freezes, for loop doesn't)
     #       -> leave out of scope for now. Probably brings no value
-    #
-    #       GOOD CONCLUSION? gradual execution is a mechanism (internal) to optimize code flows where list results may be
-    #           processed as they come in and in any order. It must only be applied in those contexts. Concretely, this means
-    #           relations + control flow + constructs like `in`, `is defined`, ...
 
 
-
-
+    # TODO: uncomment & implement (to be reviewed, this is from a long time ago)
 
     #def requires_emit(
     #    self, resolver: Resolver, queue: QueueScheduler, *, lhs: Optional[ResultCollector[object]] = None

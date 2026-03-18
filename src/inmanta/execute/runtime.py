@@ -54,6 +54,8 @@ T_contra = TypeVar("T_contra", contravariant=True)
 
 
 class ResultCollector(Generic[T_contra]):
+    # TODO: mention order + review entire docstring (only mentions ResultVariable, which is an oversight). Also reference
+    #       requires_emit_gradual docstring for more details
     """
     Helper interface for gradual execution. Should be attached as a listener to a ResultVariable, which will then call
     receive_result whenever it receives a new value.
