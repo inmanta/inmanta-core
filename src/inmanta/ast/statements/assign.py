@@ -94,6 +94,7 @@ class CreateList(ReferenceStatement):
 
     # TODO: old branch issue/5720-for-loop-skip-values-test may contain something else useful
     #           -> git diff c1db41ef9...issue/5720-for-loop-skip-values-test
+    # => mostly implementation. Some minor docstring clarifications but nothing required until the implemetation stage
 
     # TODO: DOCUMENT CLEARLY (not necessarily here)
     #       - define very clear semantics for lists vs relations and what it means for duplicates
