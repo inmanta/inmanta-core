@@ -100,6 +100,10 @@ class Entity(NamedType, WithComment):
 
         self.normalized = False
 
+        # Caches built during normalize() to avoid repeated parent-chain walks
+        self._all_attributes_cache: Optional[Dict[str, "Attribute"]] = None
+        self._default_values_cache: Optional[Dict[str, "ExpressionStatement"]] = None
+
         self._paired_dataclass: type[DataclassProtocol] | None = None
         self._paired_dataclass_field_types: dict[str, Type] = {}
         # Entities can be paired up to python dataclasses
@@ -145,6 +149,10 @@ class Entity(NamedType, WithComment):
 
         if self._paired_dataclass:
             self.pair_dataclass()
+
+        # Build attribute and default value caches after all attributes are defined
+        self._build_attribute_cache()
+        self._build_default_values_cache()
 
     def get_sub_constructor(self) -> list[SubConstructor]:
         return self.subc
@@ -242,10 +250,52 @@ class Entity(NamedType, WithComment):
             children.extend(entity.get_all_child_entities())
         return set(children)
 
+    def get_all_attributes(self) -> Optional[Dict[str, "Attribute"]]:
+        """
+        Return a cached dict mapping attribute name to Attribute for this entity and all parents,
+        or None if the cache has not been built yet (i.e. before normalization).
+        """
+        return self._all_attributes_cache
+
+    def _build_attribute_cache(self) -> None:
+        """
+        Build a flat dict mapping attribute name -> Attribute for this entity and all parents.
+        Called once after normalization to avoid repeated parent-chain walks.
+        """
+        cache: Dict[str, "Attribute"] = {}
+        for parent in self.parent_entities:
+            if parent._all_attributes_cache is not None:
+                cache.update(parent._all_attributes_cache)
+            else:
+                # Parent not yet normalized — fall back to uncached walk
+                for name in parent.get_all_attribute_names():
+                    attr = parent.get_attribute(name)
+                    if attr is not None:
+                        cache[name] = attr
+        cache.update(self._attributes)
+        self._all_attributes_cache = cache
+
+    def _build_default_values_cache(self) -> None:
+        """
+        Build a cached dict of default values for this entity and all parents.
+        Called once after normalization to avoid repeated parent-chain walks.
+        """
+        values: list[tuple[str, Optional["ExpressionStatement"]]] = []
+        for parent in reversed(self.parent_entities):
+            if parent._default_values_cache is not None:
+                values.extend(parent._default_values_cache.items())
+            else:
+                values.extend(parent.get_default_values().items())
+        values.extend(self._get_own_defaults().items())
+        dvalues = dict(values)
+        self._default_values_cache = {k: v for k, v in dvalues.items() if v is not None}
+
     def get_all_attribute_names(self) -> "List[str]":
         """
         Return a list of all attribute names, including parents
         """
+        if self._all_attributes_cache is not None:
+            return list(self._all_attributes_cache.keys())
         names = list(self._attributes.keys())
 
         for parent in self.parent_entities:
@@ -270,6 +320,8 @@ class Entity(NamedType, WithComment):
         """
         Get the attribute with the given name
         """
+        if self._all_attributes_cache is not None:
+            return self._all_attributes_cache.get(name)
         if name in self._attributes:
             return self._attributes[name]
         else:
@@ -525,6 +577,8 @@ class Entity(NamedType, WithComment):
         """
         Return the dictionary with default values
         """
+        if self._default_values_cache is not None:
+            return self._default_values_cache
         values = []  # type: List[Tuple[str,Optional[ExpressionStatement]]]
 
         # left most parent takes precedence
