@@ -571,6 +571,8 @@ class DelayedResultVariable(ResultVariable[T]):
 ListValue = Union["Instance", list["Instance"]]
 
 
+# TODO: unifiy with ListVariable?
+# TODO: ordered set for values? Could be performance gain in deduplication
 class BaseListVariable(DelayedResultVariable[ListValue]):
     """
     List variable, but only the part that is independent of an instance

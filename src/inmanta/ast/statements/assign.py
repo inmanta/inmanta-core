@@ -110,10 +110,6 @@ class CreateList(ReferenceStatement):
     #       to the consumer to freeze if appropriate (e.g. relation freezes, for loop doesn't)
     #       -> leave out of scope for now. Probably brings no value
 
-
-    # TODO: double check that relations are still deduplicated.
-    # TODO: double check if all layers of list variables are still used and where
-
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector[object]
     ) -> dict[object, VariableABC]:
@@ -141,7 +137,7 @@ class CreateList(ReferenceStatement):
         """
         Create this list
         """
-        # TODO: BIG PROBLEM:
+        # TODO: BIG PROBLEM (worked around but still need to consider general contract, see bottom of note):
         #   - terminal expressions only report to resultcollector in execute
         #   - we only call execute once *all* expressions have become unblocked
         #   - previous implementation scheduled ExecutionUnit *per* expression, i.e. reporting eagerly
