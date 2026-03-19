@@ -1,0 +1,3 @@
+description: Replace runtime_checkable Protocol isinstance in unwrap_reference with getattr for 60x speedup on non-matching types
+change-type: patch
+destination-branches: [master]

@@ -24,6 +24,7 @@ import hashlib
 import json
 import typing
 import uuid
+from collections.abc import Callable
 from typing import Generic, Literal, Never, Optional, Tuple
 
 import pydantic
@@ -634,7 +635,15 @@ def unwrap_reference(value: object) -> Optional[Reference]:
     This includes DSL dataclass instances with reference attributes, if they were initially constructed in the Python
     domain as a reference to a dataclass instance (and converted on the boundary).
     """
-    return value if isinstance(value, Reference) else value.unwrap_reference() if isinstance(value, MaybeReference) else None
+    if isinstance(value, Reference):
+        return value
+    # Use getattr instead of isinstance(value, MaybeReference) because MaybeReference is a
+    # runtime_checkable Protocol and isinstance checks against those are ~60x slower than
+    # regular isinstance checks for non-matching types (the common case for primitive values).
+    unwrap: Optional[Callable[[], Optional[Reference]]] = getattr(value, "unwrap_reference", None)
+    if unwrap is not None:
+        return unwrap()
+    return None
 
 
 def is_reference_of(instance: typing.Optional[object], type_class: type[object]) -> bool:
