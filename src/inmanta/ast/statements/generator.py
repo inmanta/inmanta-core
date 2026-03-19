@@ -176,15 +176,11 @@ class GradualFor(ResultCollector[object]):
         self.resolver = resolver
         self.queue = queue
         self.stmt = stmt
-        self.seen: set[int] = set()
 
     def receive_result(self, value: object, location: Location) -> bool:
         if isinstance(value, Unknown):
             # skip unknowns
             return False
-        if id(value) in self.seen:
-            return False
-        self.seen.add(id(value))
 
         xc = ExecutionContext(self.stmt.module, self.resolver.for_namespace(self.stmt.module.namespace))
         loopvar = xc.lookup(self.stmt.loop_var)
