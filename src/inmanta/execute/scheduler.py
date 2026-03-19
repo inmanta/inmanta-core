@@ -315,12 +315,15 @@ class Scheduler:
         return range_to_range
 
     @staticmethod
-    def _resolve_proxy(variable: VariableABC[object]) -> VariableABC[object]:
-        """Iteratively unwrap ResultVariableProxy chains to the underlying variable."""
-        while isinstance(variable, ResultVariableProxy):
-            assert variable.variable is not None, "ResultVariableProxy not connected"
-            variable = variable.variable
-        return variable
+    def _resolve_proxy(variable: VariableABC[object]) -> Optional[VariableABC[object]]:
+        """Iteratively unwrap ResultVariableProxy chains to the underlying variable.
+
+        Returns None if a proxy in the chain is not yet connected.
+        """
+        result: Optional[VariableABC[object]] = variable
+        while isinstance(result, ResultVariableProxy):
+            result = result.variable
+        return result
 
     def find_wait_cycle(self, attributes_with_precedence_rule: list[RelationAttribute], allwaiters: WaiterSet) -> bool:
         """
@@ -347,7 +350,7 @@ class Scheduler:
         freeze_candidates: list[DelayedResultVariable[object]] = []
         for waiter in allwaiters:
             for rv in waiter.requires.values():
-                real_rv: VariableABC[object] = Scheduler._resolve_proxy(rv)
+                real_rv: Optional[VariableABC[object]] = Scheduler._resolve_proxy(rv)
                 if isinstance(real_rv, DelayedResultVariable):
                     if real_rv.hasValue:
                         # get_progress_potential fails when there is a value already
