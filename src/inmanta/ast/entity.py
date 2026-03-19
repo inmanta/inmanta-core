@@ -101,8 +101,8 @@ class Entity(NamedType, WithComment):
         self.normalized = False
 
         # Caches built during normalize() to avoid repeated parent-chain walks
-        self._all_attributes_cache: Optional[Dict[str, "Attribute"]] = None
-        self._default_values_cache: Optional[Dict[str, "ExpressionStatement"]] = None
+        self._all_attributes_cache: Optional[dict[str, "Attribute"]] = None
+        self._default_values_cache: Optional[dict[str, "ExpressionStatement"]] = None
 
         self._paired_dataclass: type[DataclassProtocol] | None = None
         self._paired_dataclass_field_types: dict[str, Type] = {}
@@ -250,11 +250,15 @@ class Entity(NamedType, WithComment):
             children.extend(entity.get_all_child_entities())
         return set(children)
 
-    def get_all_attributes(self) -> Optional[Dict[str, "Attribute"]]:
+    def get_all_attributes(self) -> dict[str, "Attribute"]:
         """
-        Return a cached dict mapping attribute name to Attribute for this entity and all parents,
-        or None if the cache has not been built yet (i.e. before normalization).
+        Return a cached dict mapping attribute name to Attribute for this entity and all parents.
+
+        This method should only be called after normalization. Raises RuntimeError if the cache
+        has not been built yet.
         """
+        if self._all_attributes_cache is None:
+            raise RuntimeError(f"get_all_attributes() called on {self} before normalization")
         return self._all_attributes_cache
 
     def _build_attribute_cache(self) -> None:
@@ -262,7 +266,7 @@ class Entity(NamedType, WithComment):
         Build a flat dict mapping attribute name -> Attribute for this entity and all parents.
         Called once after normalization to avoid repeated parent-chain walks.
         """
-        cache: Dict[str, "Attribute"] = {}
+        cache: dict[str, "Attribute"] = {}
         for parent in self.parent_entities:
             if parent._all_attributes_cache is not None:
                 cache.update(parent._all_attributes_cache)
