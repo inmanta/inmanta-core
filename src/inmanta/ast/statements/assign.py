@@ -111,106 +111,74 @@ class CreateList(ReferenceStatement):
     #       -> leave out of scope for now. Probably brings no value
 
 
-    # TODO: uncomment & implement (to be reviewed, this is from a long time ago)
+    # TODO: double check that relations are still deduplicated.
+    # TODO: double check if all layers of list variables are still used and where
 
-    #def requires_emit(
-    #    self, resolver: Resolver, queue: QueueScheduler, *, lhs: Optional[ResultCollector[object]] = None
-    #) -> dict[object, VariableABC[object]]:
-    #    # TODO: docstring
-    #    base_requires: dict[object, VariableABC[object]] = super().requires_emit(resolver, queue)
-
-    #    # TODO: below this line
-    #    if lhs is not None:
-    #    for item in self.items:
-    #        item.requires_emit_gradual(resolver, queue, resultcollector=self.lhs)
-
-    #    # set up gradual execution
-    #    collector_helper: ListComprehensionCollector = ListComprehensionCollector(
-    #        statement=self,
-    #        resolver=resolver,
-    #        queue=queue,
-    #        lhs=lhs,
-    #    )
-    #    self.copy_location(collector_helper)
-
-    #    iterable_requires: dict[object, VariableABC[object]] = (
-    #        # use helper strictly non-gradually when in a non-gradual context
-    #        # => propagates progress potential to iterable expression's requires
-    #        self.iterable.requires_emit(resolver, queue)
-    #        if lhs is None
-    #        else self.iterable.requires_emit_gradual(resolver, queue, collector_helper)
-    #    )
-
-    #    # non-gradual mode / finishing up: resume as soon as the iterable can be executed
-    #    # pass helper to the resumer via the requires object
-    #    wrapped_helper: VariableABC[ListComprehensionCollector] = WrappedValueVariable(collector_helper)
-    #    requires: dict[object, VariableABC[object]] = base_requires | iterable_requires | {self: wrapped_helper}
-    #    RawUnit(queue, resolver, requires, resumer=self)
-
-    #    # Wait for resumer and helper to populate result.
-    #    # No need to wait for iterable requires explicitly because resumer already does
-    #    return base_requires | {self: collector_helper.final_result}
-
-    # TODO: delegate instead
     def requires_emit_gradual(
-        self, resolver: Resolver, queue: QueueScheduler, resultcollector: Optional[ResultCollector]
+        self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector[object]
     ) -> dict[object, VariableABC]:
-        if resultcollector is None:
-            return self.requires_emit(resolver, queue)
+        # TODO: drop after first successful test run
+        assert resultcollector is not None
 
-        requires: dict[object, VariableABC] = self._requires_emit_promises(resolver, queue)
+        requires = self._requires_emit_promises(resolver, queue)
 
-        # if we are in gradual mode, transform to a list of assignments instead of assignment of a list
-        # to get more accurate gradual execution
-        # temp variable is required get all heuristics right
-
-        # ListVariable to hold all the stuff. Used as a proxy for gradual execution and to track promises.
-        # Freezes itself once all promises have been fulfilled, at which point it represents the full list literal created by
-        # this statement.
-        temp = ListLiteral(queue)
-
-        # add listener for gradual execution
-        temp.listener(resultcollector, self.location)
-
-        # Assignments, wired for gradual
-        for expr in self.items:
-            # artifact of the past. It should suffice now to discard the execution result, only relying on gradual execution,
-            # or to have a guard that both are identical. Reporting both, as we do here, only works because ListLiteral
-            # happens to trim duplicate values.
-            ExecutionUnit(queue, resolver, temp, expr.requires_emit_gradual(resolver, queue, temp), expr, self)
-
-        if not self.items:
-            # empty: just close
-            temp.freeze()
-
-        # pass temp
-        requires[self] = temp
+        for i, expr in enumerate(self.items):
+            expr_result = ResultVariable()
+            ExecutionUnit(
+                queue,
+                resolver,
+                result=expr_result,
+                requires=expr.requires_emit_gradual(resolver, queue, resultcollector),
+                expression=expr,
+                owner=self,
+            )
+            requires[(self, i)] = expr_result
         return requires
 
     def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         """
         Create this list
         """
-        # gradual case, everything is in placeholder
-        if self in requires:
-            return requires[self]
+        # TODO: BIG PROBLEM:
+        #   - terminal expressions only report to resultcollector in execute
+        #   - we only call execute once *all* expressions have become unblocked
+        #   - previous implementation scheduled ExecutionUnit *per* expression, i.e. reporting eagerly
+        #   => does this apply to other composed expressions as well? YES, e.g. list comprehension.
+        #   => EITHER
+        #       - terminal statements have to report earlier (tough, perhaps impossible)
+        #       - OR we need to call execute earlier, per child!
+        #   UNLESS!!! list is ALWAYS the bottom-most non-terminal producer (semi-terminal?). Then fixing it here
+        #       propagates the fix everywhere. Not the easiest to reason on though
+        #       => I think it is, at least until we add dict iteration
+        #
+        #   => start with list, then inspect other gradual intermediates and see what can be formalized
 
-        qlist = []
+        unflattened_results: abc.Iterator[object]
+        if (self, 0) in requires:
+            unflattened_results = (
+                # TODO: is there a safer approach?
+                requires[(self, i)]
+                for i in range(len(self.items))
+            )
+        else:
+            unflattened_results = (
+                expr.execute(requires, resolver, queue)
+                for expr in self.items
+            )
 
-        for i in range(len(self.items)):
-            value = self.items[i].execute(requires, resolver, queue)
+        result = []
+        for value in unflattened_results:
             if isinstance(value, list):
-                qlist.extend(value)
+                result.extend(value)
             else:
-                qlist.append(value)
+                result.append(value)
 
-        return qlist
+        return result
 
     def execute_direct(self, requires: abc.Mapping[str, object]) -> object:
         qlist = []
-        for i in range(len(self.items)):
-            value = self.items[i]
-            item = value.execute_direct(requires)
+        for expr in self.items:
+            item = expr.execute_direct(requires)
             if isinstance(item, list):
                 # flatten cfr BaseListVariable._set_value
                 qlist.extend(item)
