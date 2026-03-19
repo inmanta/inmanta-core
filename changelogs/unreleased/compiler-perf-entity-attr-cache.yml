@@ -1,3 +1,3 @@
 description: Cache entity attributes and eager promise fast-path to reduce parent-chain walks during instance creation
 change-type: patch
-destination-branches: [master]
+destination-branches: [master, iso9]
