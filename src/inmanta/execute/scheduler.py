@@ -315,9 +315,10 @@ class Scheduler:
         return range_to_range
 
     @staticmethod
-    def _resolve_proxy(variable: Optional[VariableABC]) -> Optional[VariableABC]:
+    def _resolve_proxy(variable: VariableABC[object]) -> VariableABC[object]:
         """Iteratively unwrap ResultVariableProxy chains to the underlying variable."""
         while isinstance(variable, ResultVariableProxy):
+            assert variable.variable is not None, "ResultVariableProxy not connected"
             variable = variable.variable
         return variable
 
@@ -346,7 +347,7 @@ class Scheduler:
         freeze_candidates: list[DelayedResultVariable[object]] = []
         for waiter in allwaiters:
             for rv in waiter.requires.values():
-                real_rv: Optional[VariableABC] = Scheduler._resolve_proxy(rv)
+                real_rv: VariableABC[object] = Scheduler._resolve_proxy(rv)
                 if isinstance(real_rv, DelayedResultVariable):
                     if real_rv.hasValue:
                         # get_progress_potential fails when there is a value already
