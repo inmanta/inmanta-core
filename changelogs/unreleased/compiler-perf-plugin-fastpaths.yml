@@ -1,0 +1,3 @@
+description: Add primitive fast-paths in DynamicProxy and plugin execution to skip unnecessary wrapping for str/int/float/bool
+change-type: patch
+destination-branches: [master]
