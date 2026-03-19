@@ -139,16 +139,15 @@ class FunctionCall(ReferenceStatement):
         queue: QueueScheduler,
         result: ResultVariable,
         *,
-        checked_args_cache: Optional[list[Optional[CheckedArgs]]] = None,
-    ) -> None:
+        checked_args: Optional[CheckedArgs] = None,
+    ) -> Optional[CheckedArgs]:
         """
         Evaluate this statement, using the output of execute_args
 
-        :param checked_args_cache: A mutable single-element list for caching validated plugin arguments across
-            reschedules. When provided, PluginFunction stores the result of check_args in checked_args_cache[0]
-            on the first call and reuses it on subsequent calls, avoiding redundant type validation.
+        :param checked_args: Previously validated plugin arguments to reuse across reschedules.
+        :return: The validated CheckedArgs for caching by the caller, or None if not applicable.
         """
-        self.function.call_in_context(arguments, kwargs, resolver, queue, result, checked_args_cache=checked_args_cache)
+        return self.function.call_in_context(arguments, kwargs, resolver, queue, result, checked_args=checked_args)
 
     def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
         return dataflow.NodeStub("FunctionCall.get_node() placeholder for %s" % self).reference()
@@ -196,12 +195,13 @@ class Function:
         queue: QueueScheduler,
         result: ResultVariable,
         *,
-        checked_args_cache: Optional[list[Optional[CheckedArgs]]] = None,
-    ) -> None:
+        checked_args: Optional[CheckedArgs] = None,
+    ) -> Optional[CheckedArgs]:
         """
         Call this function in the supplied context and store the result in the supplied ResultVariable.
 
-        :param checked_args_cache: Optional mutable cache for validated arguments. See FunctionCall.execute_call.
+        :param checked_args: Previously validated plugin arguments to reuse across reschedules.
+        :return: The validated CheckedArgs for caching by the caller, or None if not applicable.
         """
         raise NotImplementedError()
 
@@ -228,9 +228,10 @@ class Cast(Function):
         queue: QueueScheduler,
         result: ResultVariable,
         *,
-        checked_args_cache: Optional[list[Optional[CheckedArgs]]] = None,
-    ) -> None:
+        checked_args: Optional[CheckedArgs] = None,
+    ) -> Optional[CheckedArgs]:
         result.set_value(self.call_direct(args, kwargs), self.ast_node.location)
+        return None
 
 
 class PluginFunction(Function):
@@ -275,32 +276,28 @@ class PluginFunction(Function):
         queue: QueueScheduler,
         result: ResultVariable,
         *,
-        checked_args_cache: Optional[list[Optional[CheckedArgs]]] = None,
-    ) -> None:
+        checked_args: Optional[CheckedArgs] = None,
+    ) -> Optional[CheckedArgs]:
 
-        cached = checked_args_cache[0] if checked_args_cache is not None else None
-        if cached is not None:
+        if checked_args is not None:
             # Reuse validated args from a previous call (reschedule after UnsetException).
             # Type validation and domain conversion are deterministic for the same inputs,
             # and the DynamicProxy wrappers remain valid since they read from the same
             # underlying entity instances.
-            processed_args = cached
+            processed_args = checked_args
         else:
             processed_args = self.plugin.check_args(args, kwargs)
             no_unknows = not processed_args.unknowns
 
             if not no_unknows and not self.plugin.opts["allow_unknown"]:
                 result.set_value(Unknown(self), self.ast_node.location)
-                return
+                return None
 
             if self.plugin._context != -1:
                 # Don't mutate the arguments!
                 processed_args.args.insert(
                     self.plugin._context, plugins.Context(resolver, queue, self.ast_node, self.plugin, result)
                 )
-
-            if checked_args_cache is not None:
-                checked_args_cache[0] = processed_args
 
         if self.plugin.opts["emits_statements"]:
             self.plugin(*processed_args.args, **processed_args.kwargs)
@@ -330,6 +327,7 @@ class PluginFunction(Function):
                 raise ExplicitPluginException(self.ast_node, "PluginException in plugin %s" % self.ast_node.name, e)
             except Exception as e:
                 raise ExternalException(self.ast_node, "Exception in plugin %s" % self.ast_node.name, e)
+        return processed_args
 
 
 class FunctionUnit(Waiter):
@@ -360,8 +358,7 @@ class FunctionUnit(Waiter):
         self.kwargs: Optional[dict[str, object]] = None
         # Cache for validated plugin arguments, reused across reschedules to avoid
         # redundant type validation when a plugin is retried after UnsetException.
-        # Single-element list used as a mutable slot that can be written to by call_in_context.
-        self._checked_args_cache: list[Optional[CheckedArgs]] = [None]
+        self._checked_args_cache: Optional[CheckedArgs] = None
 
     def execute(self) -> None:
         # Execution in two stages to prevent re-execution of argument expressions
@@ -379,19 +376,19 @@ class FunctionUnit(Waiter):
         try:
             assert self.args is not None  # Mypy
             assert self.kwargs is not None  # Mypy
-            self.function.execute_call(
+            self._checked_args_cache = self.function.execute_call(
                 self.args,
                 self.kwargs,
                 self.resolver,
                 self.queue,
                 self.result,
-                checked_args_cache=self._checked_args_cache,
+                checked_args=self._checked_args_cache,
             )
             self.done = True
             # prevent memory leaks
             self.args = None
             self.kwargs = None
-            self._checked_args_cache = [None]
+            self._checked_args_cache = None
         except RuntimeException as e:
             e.set_statement(self.function)
             raise e
