@@ -314,6 +314,13 @@ class Scheduler:
 
         return range_to_range
 
+    @staticmethod
+    def _resolve_proxy(variable: Optional[VariableABC]) -> Optional[VariableABC]:
+        """Iteratively unwrap ResultVariableProxy chains to the underlying variable."""
+        while isinstance(variable, ResultVariableProxy):
+            variable = variable.variable
+        return variable
+
     def find_wait_cycle(self, attributes_with_precedence_rule: list[RelationAttribute], allwaiters: WaiterSet) -> bool:
         """
         Preconditions: no progress is made anymore
@@ -335,17 +342,11 @@ class Scheduler:
 
         For performance reasons, we keep progress potential local and instead detect this situation here.
         """
-
-        def resolve_proxies(variable: Optional[VariableABC]) -> Optional[VariableABC]:
-            if variable is None or not isinstance(variable, ResultVariableProxy):
-                return variable
-            return resolve_proxies(variable.variable)
-
         # Determine drvs that should be frozen to break the cycle
         freeze_candidates: list[DelayedResultVariable[object]] = []
         for waiter in allwaiters:
             for rv in waiter.requires.values():
-                real_rv: Optional[VariableABC] = resolve_proxies(rv)
+                real_rv: Optional[VariableABC] = Scheduler._resolve_proxy(rv)
                 if isinstance(real_rv, DelayedResultVariable):
                     if real_rv.hasValue:
                         # get_progress_potential fails when there is a value already
