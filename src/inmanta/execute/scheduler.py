@@ -319,7 +319,7 @@ class Scheduler:
         self,
         attributes_with_precedence_rule: list[RelationAttribute],
         allwaiters: WaiterSet,
-        speculation_data: Optional[list[dict]] = None,
+        speculation_data: Optional[list[dict[str, object]]] = None,
         iteration: int = 0,
     ) -> bool:
         """
@@ -368,7 +368,7 @@ class Scheduler:
         LOGGER.log(LOG_LEVEL_TRACE, "Waiting blocked on %s", drv_to_freeze)
 
         if speculation_data is not None:
-            frozen_info: dict = {
+            frozen_info: dict[str, object] = {
                 "type": "freeze",
                 "iteration": iteration,
                 "allwaiters": len(allwaiters),
@@ -383,7 +383,7 @@ class Scheduler:
                 frozen_info["waiting_providers"] = drv_to_freeze.get_waiting_providers()
                 frozen_info["progress_potential"] = drv_to_freeze.get_progress_potential()
                 frozen_info["num_waiters"] = len(drv_to_freeze.waiters)
-            candidate_attrs: Counter = Counter()
+            candidate_attrs: Counter[str] = Counter()
             for c in freeze_candidates:
                 if hasattr(c, "attribute"):
                     candidate_attrs[str(c.attribute)] += 1
@@ -437,7 +437,7 @@ class Scheduler:
 
         # Speculation instrumentation (enabled via INMANTA_SPECULATION_LOG env var)
         _speculation_log_path = os.getenv("INMANTA_SPECULATION_LOG")
-        _speculation_data: list[dict] = []
+        _speculation_data: list[dict[str, object]] = []
         _speculation_enabled = bool(_speculation_log_path)
 
         while i < max_iterations:
@@ -540,16 +540,18 @@ class Scheduler:
                     next_rv.freeze()
 
             if _speculation_enabled:
-                _speculation_data.append({
-                    "type": "iteration",
-                    "iteration": i,
-                    "stmts_executed": count - _count_before,
-                    "progress_source": _progress_source,
-                    "basequeue": len(basequeue),
-                    "waitqueue": len(waitqueue),
-                    "zerowaiters": len(zerowaiters),
-                    "allwaiters": len(queue.allwaiters),
-                })
+                _speculation_data.append(
+                    {
+                        "type": "iteration",
+                        "iteration": i,
+                        "stmts_executed": count - _count_before,
+                        "progress_source": _progress_source,
+                        "basequeue": len(basequeue),
+                        "waitqueue": len(waitqueue),
+                        "zerowaiters": len(zerowaiters),
+                        "allwaiters": len(queue.allwaiters),
+                    }
+                )
 
         now = time.time()
         LOGGER.log(
