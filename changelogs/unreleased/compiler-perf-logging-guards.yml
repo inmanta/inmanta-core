@@ -1,3 +1,3 @@
 description: Guard scheduler LOGGER.log(LOG_LEVEL_TRACE) calls with isEnabledFor to avoid argument evaluation when disabled
 change-type: patch
-destination-branches: [master]
+destination-branches: [master, iso9]
