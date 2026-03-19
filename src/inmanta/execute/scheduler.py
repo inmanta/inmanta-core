@@ -356,11 +356,34 @@ class Scheduler:
         if not freeze_candidates:
             return False
         # Use the relation precedence rules to determine which drv should be frozen
-        queue = PrioritisedDelayedResultVariableQueue(attributes_with_precedence_rule, freeze_candidates)
-        drv_to_freeze = queue.popleft()
-        LOGGER.log(LOG_LEVEL_TRACE, "Waiting blocked on %s", drv_to_freeze)
-        drv_to_freeze.freeze()
-        return True
+        pqueue = PrioritisedDelayedResultVariableQueue(attributes_with_precedence_rule, freeze_candidates)
+
+        # Batch freeze: freeze all candidates whose owner entity type matches the first candidate.
+        # Variables on the same entity type (e.g. all checkpoint::Rule.source and checkpoint::Rule.destination)
+        # are independent across instances and safe to freeze together. Variables on different entity types
+        # may have cross-dependencies, so we return to the main loop between entity types.
+        frozen_count = 0
+        batch_entity: object = None  # the entity type of the first candidate in this batch
+        while len(pqueue) > 0:
+            drv_to_freeze = pqueue.popleft()
+            if drv_to_freeze.hasValue:
+                # Resolved naturally by a side effect of a previous freeze in this batch
+                continue
+
+            # Determine the entity type for batching
+            freeze_entity = getattr(drv_to_freeze, "myself", None)
+            freeze_entity_type = freeze_entity.type if freeze_entity is not None and hasattr(freeze_entity, "type") else None
+            if batch_entity is None:
+                batch_entity = freeze_entity_type
+            elif freeze_entity_type is not batch_entity:
+                # Different entity type — stop this batch
+                break
+
+            LOGGER.log(LOG_LEVEL_TRACE, "Waiting blocked on %s", drv_to_freeze)
+            drv_to_freeze.freeze()
+            frozen_count += 1
+
+        return frozen_count > 0
 
     def run(self, compiler: "Compiler", statements: Sequence["Statement"], blocks: Sequence["BasicBlock"]) -> bool:
         """
