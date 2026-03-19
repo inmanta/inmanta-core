@@ -1244,8 +1244,17 @@ class Instance(ExecutionContext, references.MaybeReference):
         self.slots: dict[str, ResultVariable] = {}
         # Use cached all_attributes dict (built at normalization time) to avoid
         # repeated parent-chain walks and per-name lookups
-        for attr_name, attribute in mytype.get_all_attributes().items():
-            self.slots[attr_name] = attribute.get_new_result_variable(self, queue)
+        all_attrs = mytype._all_attributes_cache
+        if all_attrs is not None:
+            for attr_name, attribute in all_attrs.items():
+                self.slots[attr_name] = attribute.get_new_result_variable(self, queue)
+        else:
+            for attr_name in mytype.get_all_attribute_names():
+                if attr_name in self.slots:
+                    continue
+                attr = mytype.get_attribute(attr_name)
+                assert attr is not None
+                self.slots[attr_name] = attr.get_new_result_variable(self, queue)
         # TODO: this is somewhat ugly. Is there a cleaner way to enforce this constraint
         assert (resolver.dataflow_graph is None) == (node is None)
         self.dataflow_graph: Optional[DataflowGraph] = None
