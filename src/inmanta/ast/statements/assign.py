@@ -122,17 +122,19 @@ class CreateList(ReferenceStatement):
 
         requires = self._requires_emit_promises(resolver, queue)
 
-        for i, expr in enumerate(self.items):
-            expr_result = ResultVariable()
+        # Collect all item execution results in a single list variable for our own execute later on.
+        # All items gradually report straight to resultcollector though.
+        result: ResultVariable[object] = ListLiteral(queue)
+        for expr in self.items:
             ExecutionUnit(
                 queue,
                 resolver,
-                result=expr_result,
+                result=result,
                 requires=expr.requires_emit_gradual(resolver, queue, resultcollector),
                 expression=expr,
                 owner=self,
             )
-            requires[(self, i)] = expr_result
+        requires[self] = result
         return requires
 
     def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
@@ -153,26 +155,16 @@ class CreateList(ReferenceStatement):
         #
         #   => start with list, then inspect other gradual intermediates and see what can be formalized
 
-        unflattened_results: abc.Iterator[object]
-        if (self, 0) in requires:
-            unflattened_results = (
-                # TODO: is there a safer approach?
-                requires[(self, i)]
-                for i in range(len(self.items))
-            )
-        else:
-            unflattened_results = (
-                expr.execute(requires, resolver, queue)
-                for expr in self.items
-            )
+        if self in requires:
+            return requires[self]
 
         result = []
-        for value in unflattened_results:
+        for expr in self.items:
+            value = expr.execute(requires, resolver, queue)
             if isinstance(value, list):
                 result.extend(value)
             else:
                 result.append(value)
-
         return result
 
     def execute_direct(self, requires: abc.Mapping[str, object]) -> object:

@@ -699,7 +699,9 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
 
 
 # known issue: typed as ResultVariable[ListValue] but is actually ResultVariable[object]
-class ListLiteral(BaseListVariable):
+# TODO: no type checking, no deduplication, no listeners, no modified-after-freeze protection?
+# TODO: its promise invariant may not be required anymore
+class ListLiteral[T](DelayedResultVariable[list[T]]):
     """
     Transient variable to represent a list (of either constants or instances) literal (not a variable).
     Requires all providers to acquire a promise before the first gets fulfilled and in return provides accurate promise
@@ -707,6 +709,26 @@ class ListLiteral(BaseListVariable):
     """
 
     __slots__ = ()
+
+    def __init__(self, queue: "QueueScheduler") -> None:
+        super().__init__(queue, value=[])
+
+    def set_value(self, value: T | list[T], location: Location, recur: bool = True) -> None:
+        if self.hasValue:
+            if isinstance(value, list) and len(value) == 0:
+                # empty list terminates list addition
+                return
+            # TODO: drop? NO, can still be frozen externally in case of self-referencing statements. Those were previously
+            #       supported but not anymore
+            #       e.g. self.provides = [x, self.provides]
+            raise ModifiedAfterFreezeException(
+                self, instance=self.myself, attribute=self.attribute, value=value, location=location, reverse=not recur
+            )
+
+        if isinstance(value, list):
+            self.value.extend(value)
+        else:
+            self.value.append(value)
 
     def fulfill(self, promise: IPromise) -> None:
         """
