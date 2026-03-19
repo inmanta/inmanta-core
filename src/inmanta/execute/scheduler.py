@@ -17,10 +17,11 @@ Contact: code@inmanta.com
 """
 
 import itertools
+import json
 import logging
 import os
 import time
-from collections import deque
+from collections import Counter, deque
 from collections.abc import Iterable, Iterator, Sequence
 from typing import TYPE_CHECKING, Any, Deque, Optional
 
@@ -314,7 +315,13 @@ class Scheduler:
 
         return range_to_range
 
-    def find_wait_cycle(self, attributes_with_precedence_rule: list[RelationAttribute], allwaiters: WaiterSet) -> bool:
+    def find_wait_cycle(
+        self,
+        attributes_with_precedence_rule: list[RelationAttribute],
+        allwaiters: WaiterSet,
+        speculation_data: Optional[list[dict]] = None,
+        iteration: int = 0,
+    ) -> bool:
         """
         Preconditions: no progress is made anymore
 
@@ -359,6 +366,30 @@ class Scheduler:
         queue = PrioritisedDelayedResultVariableQueue(attributes_with_precedence_rule, freeze_candidates)
         drv_to_freeze = queue.popleft()
         LOGGER.log(LOG_LEVEL_TRACE, "Waiting blocked on %s", drv_to_freeze)
+
+        if speculation_data is not None:
+            frozen_info: dict = {
+                "type": "freeze",
+                "iteration": iteration,
+                "allwaiters": len(allwaiters),
+                "candidates": len(freeze_candidates),
+                "var_type": type(drv_to_freeze).__name__,
+            }
+            if hasattr(drv_to_freeze, "attribute") and hasattr(drv_to_freeze, "myself"):
+                entity = str(drv_to_freeze.myself.type) if hasattr(drv_to_freeze.myself, "type") else "?"
+                frozen_info["entity"] = entity
+                frozen_info["attribute"] = str(drv_to_freeze.attribute)
+                frozen_info["instance"] = str(drv_to_freeze.myself)[:120]
+                frozen_info["waiting_providers"] = drv_to_freeze.get_waiting_providers()
+                frozen_info["progress_potential"] = drv_to_freeze.get_progress_potential()
+                frozen_info["num_waiters"] = len(drv_to_freeze.waiters)
+            candidate_attrs: Counter = Counter()
+            for c in freeze_candidates:
+                if hasattr(c, "attribute"):
+                    candidate_attrs[str(c.attribute)] += 1
+            frozen_info["candidate_attrs"] = dict(candidate_attrs.most_common(10))
+            speculation_data.append(frozen_info)
+
         drv_to_freeze.freeze()
         return True
 
@@ -403,6 +434,12 @@ class Scheduler:
         i = 0
         count = 0
         max_iterations = int(os.getenv("INMANTA_MAX_ITERATIONS", MAX_ITERATIONS))
+
+        # Speculation instrumentation (enabled via INMANTA_SPECULATION_LOG env var)
+        _speculation_log_path = os.getenv("INMANTA_SPECULATION_LOG")
+        _speculation_data: list[dict] = []
+        _speculation_enabled = bool(_speculation_log_path)
+
         while i < max_iterations:
             now = time.time()
 
@@ -440,8 +477,10 @@ class Scheduler:
                         next.requeue_with_additional_requires(object(), rv)
 
             # all safe stmts are done
+            _count_before = count
             progress = False
             assert not basequeue
+            _progress_source = "none"
 
             # find a RV that has waiters, so freezing creates progress
             while len(waitqueue) > 0 and not progress:
@@ -461,6 +500,7 @@ class Scheduler:
                     LOGGER.log(LOG_LEVEL_TRACE, "Freezing %s", next_rv)
                     next_rv.freeze()
                     progress = True
+                    _progress_source = "waitqueue"
 
             # no waiters in waitqueue,...
             # see if any zerowaiters have become gotten waiters
@@ -477,18 +517,39 @@ class Scheduler:
                         LOGGER.log(LOG_LEVEL_TRACE, "Freezing %s", next_rv)
                         next_rv.freeze()
                         progress = True
+                        _progress_source = "zerowaiters_promoted"
 
             if not progress:
                 # nothing works anymore, attempt to unfreeze wait cycle
-                progress = self.find_wait_cycle(attributes_with_precedence_rule, queue.allwaiters)
+                progress = self.find_wait_cycle(
+                    attributes_with_precedence_rule,
+                    queue.allwaiters,
+                    _speculation_data if _speculation_enabled else None,
+                    i,
+                )
+                if progress:
+                    _progress_source = "find_wait_cycle"
 
             if not progress:
                 # no one waiting anymore, all done, freeze and finish
                 LOGGER.log(LOG_LEVEL_TRACE, "Finishing statements with no waiters")
+                _progress_source = "final_freeze"
 
                 while len(zerowaiters) > 0:
                     next_rv = zerowaiters.pop()
                     next_rv.freeze()
+
+            if _speculation_enabled:
+                _speculation_data.append({
+                    "type": "iteration",
+                    "iteration": i,
+                    "stmts_executed": count - _count_before,
+                    "progress_source": _progress_source,
+                    "basequeue": len(basequeue),
+                    "waitqueue": len(waitqueue),
+                    "zerowaiters": len(zerowaiters),
+                    "allwaiters": len(queue.allwaiters),
+                })
 
         now = time.time()
         LOGGER.log(
@@ -501,6 +562,12 @@ class Scheduler:
             count,
             now - prev,
         )
+
+        # Write speculation log if enabled
+        if _speculation_enabled and _speculation_log_path and _speculation_data:
+            with open(_speculation_log_path, "w") as f:
+                json.dump(_speculation_data, f, indent=2, default=str)
+            LOGGER.info("Speculation log written to %s (%d entries)", _speculation_log_path, len(_speculation_data))
 
         if i == max_iterations:
             raise CompilerException(f"Could not complete model, max_iterations {max_iterations} reached.")
