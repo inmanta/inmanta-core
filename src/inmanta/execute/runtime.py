@@ -699,8 +699,8 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
 
 
 # known issue: typed as ResultVariable[ListValue] but is actually ResultVariable[object]
-# TODO: no type checking, no deduplication, no listeners, no modified-after-freeze protection?
-# TODO: its promise invariant may not be required anymore
+# TODO: mention no type checking, no deduplication, no listeners, no modified-after-freeze protection?
+# TODO: Clean up this class and move it up. Do take into account that (hopefully) it will be dropped in the next PR
 class ListLiteral[T](DelayedResultVariable[list[T]]):
     """
     Transient variable to represent a list (of either constants or instances) literal (not a variable).
@@ -714,17 +714,6 @@ class ListLiteral[T](DelayedResultVariable[list[T]]):
         super().__init__(queue, value=[])
 
     def set_value(self, value: T | list[T], location: Location, recur: bool = True) -> None:
-        if self.hasValue:
-            if isinstance(value, list) and len(value) == 0:
-                # empty list terminates list addition
-                return
-            # TODO: drop? NO, can still be frozen externally in case of self-referencing statements. Those were previously
-            #       supported but not anymore
-            #       e.g. self.provides = [x, self.provides]
-            raise ModifiedAfterFreezeException(
-                self, instance=self.myself, attribute=self.attribute, value=value, location=location, reverse=not recur
-            )
-
         if isinstance(value, list):
             self.value.extend(value)
         else:
@@ -739,6 +728,9 @@ class ListLiteral[T](DelayedResultVariable[list[T]]):
         # 100% accurate promisse tracking
         if self.get_waiting_providers() == 0:
             self.freeze()
+
+    def get_progress_potential(self) -> int:
+        return 0
 
     def __str__(self) -> str:
         return "TempListVariable %s" % (self.value)
