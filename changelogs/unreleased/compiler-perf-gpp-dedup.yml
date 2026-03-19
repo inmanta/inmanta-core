@@ -1,0 +1,3 @@
+description: Avoid duplicate get_progress_potential calls in scheduler zerowaiters partitioning loop
+change-type: patch
+destination-branches: [master]
