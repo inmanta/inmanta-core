@@ -183,7 +183,7 @@ class RelationAttribute(Attribute):
         self.source_annotations = []
         self.target_annotations = []
         self.freeze_dependents: set[RelationAttribute] = set()
-        self._has_freeze_dependents: bool = False
+        self.has_freeze_dependents: bool = False
 
     def __str__(self) -> str:
         return f"{self.get_entity().get_full_name()}.{self.name}"
@@ -235,11 +235,11 @@ class RelationAttribute(Attribute):
         be frozen before `successor`.
         """
         self.freeze_dependents.add(successor)
-        self._has_freeze_dependents = True
+        self.has_freeze_dependents = True
 
     def has_relation_precedence_rules(self) -> bool:
         """
         Return true iff a relation precedence rule exists that defines that this Attribute should
         be frozen before another Attribute.
         """
-        return self._has_freeze_dependents
+        return self.has_freeze_dependents

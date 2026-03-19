@@ -1,3 +1,3 @@
 description: Cache has_relation_precedence_rules as bool flag to eliminate method call overhead in get_progress_potential
 change-type: patch
-destination-branches: [master, iso9]
+destination-branches: [master, iso8, iso9]
