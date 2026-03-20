@@ -25,6 +25,7 @@ import inmanta.ast
 import inmanta.ast.type as InmantaType
 import inmanta.execute.dataflow as dataflow
 from inmanta import plugins
+from inmanta.const import LOG_LEVEL_TRACE
 from inmanta.ast import (
     ExplicitPluginException,
     ExternalException,
@@ -278,8 +279,11 @@ class PluginFunction(Function):
             except (UnsetException, MultiUnsetException) as e:
                 call: str = str(self.plugin)
                 location: str = str(self.ast_node.location)
-                LOGGER.debug(
-                    "Unset value in python code in plugin at call: %s (%s) (Will be rescheduled by compiler)", call, location
+                LOGGER.log(
+                    LOG_LEVEL_TRACE,
+                    "Unset value in python code in plugin at call: %s (%s) (Will be rescheduled by compiler)",
+                    call,
+                    location,
                 )
                 # Don't handle it here!
                 # This exception is used by the scheduler to re-queue the unit

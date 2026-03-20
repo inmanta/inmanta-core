@@ -24,6 +24,7 @@ import typing
 import pytest
 
 import inmanta.ast.statements.define
+from inmanta.const import LOG_LEVEL_TRACE
 import inmanta.compiler as compiler
 import inmanta.plugins
 from inmanta.ast import (
@@ -298,7 +299,7 @@ def test_plugin_load_exception(snippetcompiler):
 
 
 def test_3457_helpful_string(snippetcompiler, caplog):
-    with caplog.at_level(logging.DEBUG):
+    with caplog.at_level(LOG_LEVEL_TRACE):
         snippetcompiler.setup_for_snippet(
             """
 entity A:
@@ -316,7 +317,7 @@ a.other = A()
     message: str = (
         "Unset value in python code in plugin at call: std::attr " f"({dir}/main.cf:7:1) (Will be rescheduled by compiler)"
     )
-    log_contains(caplog, "inmanta.ast.statements.call", logging.DEBUG, message)
+    log_contains(caplog, "inmanta.ast.statements.call", LOG_LEVEL_TRACE, message)
 
 
 def test_plugin_with_keyword_only_arguments(snippetcompiler) -> None:
