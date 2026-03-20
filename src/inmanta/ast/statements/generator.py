@@ -575,6 +575,7 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
                 # We must not set the final result to a *different* unknown for consistency => simply await the unknown result
                 # as for any other values
             elif len(self._results) != len(all_values):
+                # Gradual execution does not allow partial results: result collector should receive either all results or none
                 raise InvalidCompilerState(self, "list comprehension helper received some but not all values gradually")
             if self.lhs is None:
                 # We should only have received previous results in gradual mode, if any gradual results were received in

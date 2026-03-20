@@ -96,13 +96,6 @@ class CreateList(ReferenceStatement):
             item.normalize(lhs_attribute=lhs_attribute)
             self.anchors.extend(item.get_anchors())
 
-    # TODO: old branch issue/5720-for-loop-skip-values-test may contain something else useful
-    #           -> git diff c1db41ef9...issue/5720-for-loop-skip-values-test
-    # => mostly implementation. Some minor docstring clarifications but nothing required until the implemetation stage
-
-    # TODO: ask Claude to review changes
-    # TODO: ask Claude to update language docs for user-visible changes
-
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector[object]
     ) -> dict[object, VariableABC]:

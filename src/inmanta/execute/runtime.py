@@ -164,8 +164,11 @@ class VariableABC(Generic[T_co]):
 
     def listener(self, resultcollector: ResultCollector[T_co], location: Location) -> bool:
         """
-        Add a listener to report new values to. If the variable already has a value, this is reported immediately. Explicit
-        assignments of `null` will not be reported.
+        Add a listener to report new values to. It may return False and report no values at all but if it returns True, each
+        value (e.g. in case of a list in a gradual context) will be reported exactly once and as soon as it becomes available
+        (i.e.  immediately if the variable already has a value). In other words, if any values are reported to the listener,
+        these will be the exact same values (though possibly in a different order) as the ones the variable eventually resolves
+        to. Explicit assignments of `null` will never be reported.
 
         Each listener is expected to register one associated waiter to track completeness. The progress potential implementation
         is based on this invariant.
@@ -596,7 +599,7 @@ class ListLiteral[T](DelayedResultVariable[list[object]]):
         acquired before the first is fulfilled, the list can safely be frozen once all registered promises have been fulfilled.
         """
         super().fulfill(promise)
-        # 100% accurate promisse tracking
+        # 100% accurate promise tracking
         if self.get_waiting_providers() == 0:
             self.freeze()
 
