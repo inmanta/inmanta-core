@@ -25,7 +25,6 @@ import inmanta.ast
 import inmanta.ast.type as InmantaType
 import inmanta.execute.dataflow as dataflow
 from inmanta import plugins
-from inmanta.const import LOG_LEVEL_TRACE
 from inmanta.ast import (
     ExplicitPluginException,
     ExternalException,
@@ -42,6 +41,7 @@ from inmanta.ast import (
 )
 from inmanta.ast.statements import AttributeAssignmentLHS, ExpressionStatement, ReferenceStatement
 from inmanta.ast.statements.generator import WrappedKwargs
+from inmanta.const import LOG_LEVEL_TRACE
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import QueueScheduler, Resolver, ResultVariable, VariableABC, Waiter
 from inmanta.execute.util import NoneValue, Unknown

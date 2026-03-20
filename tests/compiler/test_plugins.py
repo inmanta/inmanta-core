@@ -24,7 +24,6 @@ import typing
 import pytest
 
 import inmanta.ast.statements.define
-from inmanta.const import LOG_LEVEL_TRACE
 import inmanta.compiler as compiler
 import inmanta.plugins
 from inmanta.ast import (
@@ -35,6 +34,7 @@ from inmanta.ast import (
     RuntimeException,
     WrappingRuntimeException,
 )
+from inmanta.const import LOG_LEVEL_TRACE
 from utils import log_contains
 
 if typing.TYPE_CHECKING:
