@@ -575,8 +575,6 @@ src/inmanta/execute/runtime.py:0: error: Incompatible types in assignment (expre
 src/inmanta/execute/runtime.py:0: error: Incompatible types in assignment (expression has type "None", variable has type "list[Waiter]")  [assignment]
 src/inmanta/execute/runtime.py:0: error: Incompatible types in assignment (expression has type "None", variable has type "list[Waiter]")  [assignment]
 src/inmanta/execute/runtime.py:0: error: Incompatible types in assignment (expression has type "object", variable has type "Instance | None")  [assignment]
-src/inmanta/execute/runtime.py:0: error: Item "None" of "list[object] | None" has no attribute "append"  [union-attr]
-src/inmanta/execute/runtime.py:0: error: Item "None" of "list[object] | None" has no attribute "extend"  [union-attr]
 src/inmanta/execute/runtime.py:0: error: Item "list[Instance]" of "Instance | list[Instance]" has no attribute "set_attribute"  [union-attr]
 src/inmanta/execute/runtime.py:0: error: Missing type parameters for generic type "DelayedResultVariable"  [type-arg]
 src/inmanta/execute/runtime.py:0: error: Missing type parameters for generic type "ResultVariable"  [type-arg]

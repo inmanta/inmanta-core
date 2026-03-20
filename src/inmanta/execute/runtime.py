@@ -585,7 +585,8 @@ class ListLiteral[T](DelayedResultVariable[list[object]]):
     __slots__ = ()
 
     def __init__(self, queue: "QueueScheduler") -> None:
-        super().__init__(queue, value=[])
+        super().__init__(queue)
+        self.value: list[object] = []
 
     def set_value(self, value: object | list[object], location: Location, recur: bool = True) -> None:
         if isinstance(value, list):
