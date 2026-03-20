@@ -75,6 +75,12 @@ T = TypeVar("T")
 class CreateList(ReferenceStatement):
     """
     Represents a list literal statement which might contain any type of value (constants and/or instances).
+
+    Inmanta lists, in contrast to relations, are an ordered sequence of values, in which duplicates may appear.
+    Two notes:
+    - consumers may not always *care* about ordering (gradual execution, e.g. relations / for loops / ...), in which case
+        lists report values in the order they become available.
+    - when a list is assigned to a relation, the relation does trim duplicate values, sort of like an automatic set cast.
     """
 
     __slots__ = ("items",)
@@ -113,9 +119,6 @@ class CreateList(ReferenceStatement):
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector[object]
     ) -> dict[object, VariableABC]:
-        # TODO: drop after first successful test run
-        assert resultcollector is not None
-
         requires = self._requires_emit_promises(resolver, queue)
 
         # Collect all item execution results in a single list variable for our own execute later on.
@@ -137,20 +140,6 @@ class CreateList(ReferenceStatement):
         """
         Create this list
         """
-        # TODO: BIG PROBLEM (worked around but still need to consider general contract, see bottom of note):
-        #   - terminal expressions only report to resultcollector in execute
-        #   - we only call execute once *all* expressions have become unblocked
-        #   - previous implementation scheduled ExecutionUnit *per* expression, i.e. reporting eagerly
-        #   => does this apply to other composed expressions as well? YES, e.g. list comprehension.
-        #   => EITHER
-        #       - terminal statements have to report earlier (tough, perhaps impossible)
-        #       - OR we need to call execute earlier, per child!
-        #   UNLESS!!! list is ALWAYS the bottom-most non-terminal producer (semi-terminal?). Then fixing it here
-        #       propagates the fix everywhere. Not the easiest to reason on though
-        #       => I think it is, at least until we add dict iteration
-        #
-        #   => start with list, then inspect other gradual intermediates and see what can be formalized
-
         if self in requires:
             # We executed in gradual mode. Must not execute children again.
             return requires[self]

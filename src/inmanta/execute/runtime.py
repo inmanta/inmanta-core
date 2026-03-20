@@ -568,6 +568,45 @@ class DelayedResultVariable(ResultVariable[T]):
         return len(self.waiters)
 
 
+class ListLiteral[T](DelayedResultVariable[list[object]]):
+    """
+    Transient variable to represent a list (of either constants or instances) literal (not a variable). Like any DSL list
+    (see CreateList), this is an ordered sequence of values, which may contain duplicates. Does not support listeners,
+    and due to its accurate promise tracking, does not provide list modified after freeze protection.
+
+    Requires all providers to acquire a promise before the first gets fulfilled and in return provides accurate promise
+    tracking and freezing. Instances of this class should never require forceful freezing.
+    """
+
+    __slots__ = ()
+
+    def __init__(self, queue: "QueueScheduler") -> None:
+        super().__init__(queue, value=[])
+
+    def set_value(self, value: object | list[object], location: Location, recur: bool = True) -> None:
+        if isinstance(value, list):
+            self.value.extend(value)
+        else:
+            self.value.append(value)
+
+    def fulfill(self, promise: IPromise) -> None:
+        """
+        Fulfill a promise with 100% accurate promise tracking. Because of this class' invariant that all promises are
+        acquired before the first is fulfilled, the list can safely be frozen once all registered promises have been fulfilled.
+        """
+        super().fulfill(promise)
+        # 100% accurate promisse tracking
+        if self.get_waiting_providers() == 0:
+            self.freeze()
+
+    def get_progress_potential(self) -> int:
+        # these must never be frozen externally because of its accurate promise tracking.
+        return 0
+
+    def __str__(self) -> str:
+        return "TempListVariable %s" % (self.value)
+
+
 ListValue = Union["Instance", list["Instance"]]
 
 
@@ -698,44 +737,6 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
 
     def __str__(self) -> str:
         return "BaseListVariable %s" % (self.value)
-
-
-# known issue: typed as ResultVariable[ListValue] but is actually ResultVariable[object]
-# TODO: mention no type checking, no deduplication, no listeners, no modified-after-freeze protection?
-# TODO: Clean up this class and move it up. Do take into account that (hopefully) it will be dropped in the next PR
-class ListLiteral[T](DelayedResultVariable[list[T]]):
-    """
-    Transient variable to represent a list (of either constants or instances) literal (not a variable).
-    Requires all providers to acquire a promise before the first gets fulfilled and in return provides accurate promise
-    tracking and freezing. Instances of this class should never require forceful freezing.
-    """
-
-    __slots__ = ()
-
-    def __init__(self, queue: "QueueScheduler") -> None:
-        super().__init__(queue, value=[])
-
-    def set_value(self, value: T | list[T], location: Location, recur: bool = True) -> None:
-        if isinstance(value, list):
-            self.value.extend(value)
-        else:
-            self.value.append(value)
-
-    def fulfill(self, promise: IPromise) -> None:
-        """
-        Fulfill a promise with 100% accurate promise tracking. Because of this class' invariant that all promises are
-        acquired before the first is fulfilled, the list can safely be frozen once all registered promises have been fulfilled.
-        """
-        super().fulfill(promise)
-        # 100% accurate promisse tracking
-        if self.get_waiting_providers() == 0:
-            self.freeze()
-
-    def get_progress_potential(self) -> int:
-        return 0
-
-    def __str__(self) -> str:
-        return "TempListVariable %s" % (self.value)
 
 
 class ListVariable(BaseListVariable, RelationAttributeVariable):
