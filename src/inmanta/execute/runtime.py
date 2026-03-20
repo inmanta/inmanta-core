@@ -610,24 +610,26 @@ class ListLiteral[T](DelayedResultVariable[list[object]]):
 ListValue = Union["Instance", list["Instance"]]
 
 
-# TODO: unifiy with ListVariable?
-# TODO: ordered set for values? Could be performance gain in deduplication
-class BaseListVariable(DelayedResultVariable[ListValue]):
+# TODO: use ordered set for values? Could be performance gain in deduplication path (`in` check)
+class ListVariable(DelayedResultVariable[ListValue], RelationAttributeVariable):
     """
-    List variable, but only the part that is independent of an instance
+    ResultVariable that represents a list of instances associated with a relation attribute.
+    Order independent and deduplicated.
     """
 
     value: "List[Instance]"
 
-    __slots__ = ("_listeners", "_nb_gradual_waiters")
+    __slots__ = ("_listeners", "_nb_gradual_waiters", "attribute", "myself")
 
-    def __init__(self, queue: "QueueScheduler") -> None:
+    def __init__(self, attribute: "ast.attribute.RelationAttribute", instance: "Instance", queue: "QueueScheduler") -> None:
+        self.attribute: ast.attribute.RelationAttribute = attribute
+        self.myself: "Instance" = instance
         # use dict for easy lookup with reliable ordering
         self._listeners: Optional[dict[ResultCollector["Instance"], None]] = {}
         # Cache count for waiters without progress potential. Meaning waiters associated with either a purely gradual
         # listener or with a listener that indicated it is done.
         self._nb_gradual_waiters: int = 0
-        super().__init__(queue, [])
+        DelayedResultVariable.__init__(self, queue, [])
 
     def _set_value(self, value: ListValue, location: Location, recur: bool = True) -> bool:
         """
@@ -696,64 +698,6 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
                 del self._listeners[listener]
 
     def set_value(self, value: ListValue, location: Location, recur: bool = True) -> None:
-        if not self._set_value(value, location, recur):
-            return
-        if self.can_get():
-            self.queue()
-
-    def can_get(self) -> bool:
-        return self.get_waiting_providers() == 0
-
-    def receive_result(self, value: ListValue, location: Location) -> bool:
-        self.set_value(value, location)
-        return False
-
-    def listener(self, resultcollector: ResultCollector["Instance"], location: Location) -> Literal[True]:
-        for value in self.value:
-            resultcollector.receive_result(value, location)
-        if not self.hasValue:
-            assert self._listeners is not None
-            if resultcollector in self._listeners:
-                # may happen in case of a duplicate assignment, e.g. `x.a = [y.a, y.a]`
-                # consider the new one to have no progress potential because we don't track it separately
-                self._nb_gradual_waiters += 1
-                return True
-            self._listeners[resultcollector] = None
-            if resultcollector.pure_gradual():
-                self._nb_gradual_waiters += 1
-        return True
-
-    def is_multi(self) -> bool:
-        return True
-
-    def get_progress_potential(self) -> int:
-        # purely gradual waiters aren't blocked on this variable being frozen
-        return len(self.waiters) - self._nb_gradual_waiters
-
-    def freeze(self) -> None:
-        super().freeze()
-        # prevent memory leaks
-        self._listeners = None
-
-    def __str__(self) -> str:
-        return "BaseListVariable %s" % (self.value)
-
-
-class ListVariable(BaseListVariable, RelationAttributeVariable):
-    """
-    ResultVariable that represents a list of instances associated with a relation attribute.
-    """
-
-    value: "List[Instance]"
-
-    __slots__ = ("attribute", "myself")
-
-    def __init__(self, attribute: "ast.attribute.RelationAttribute", instance: "Instance", queue: "QueueScheduler") -> None:
-        self.attribute: ast.attribute.RelationAttribute = attribute
-        self.myself: "Instance" = instance
-        BaseListVariable.__init__(self, queue)
-
-    def set_value(self, value: ListValue, location: Location, recur: bool = True) -> None:
         if isinstance(value, NoneValue):
             if len(self.value) > 0:
                 exception: CompilerException = RuntimeException(
@@ -795,13 +739,41 @@ class ListVariable(BaseListVariable, RelationAttributeVariable):
     def can_get(self) -> bool:
         return len(self.value) >= self.attribute.low and self.get_waiting_providers() == 0
 
-    def __str__(self) -> str:
-        return f"ListVariable {self.myself} {self.attribute} = {self.value}"
+    def receive_result(self, value: ListValue, location: Location) -> bool:
+        self.set_value(value, location)
+        return False
+
+    def listener(self, resultcollector: ResultCollector["Instance"], location: Location) -> Literal[True]:
+        for value in self.value:
+            resultcollector.receive_result(value, location)
+        if not self.hasValue:
+            assert self._listeners is not None
+            if resultcollector in self._listeners:
+                # may happen in case of a duplicate assignment, e.g. `x.a = [y.a, y.a]`
+                # consider the new one to have no progress potential because we don't track it separately
+                self._nb_gradual_waiters += 1
+                return True
+            self._listeners[resultcollector] = None
+            if resultcollector.pure_gradual():
+                self._nb_gradual_waiters += 1
+        return True
+
+    def is_multi(self) -> bool:
+        return True
 
     def get_progress_potential(self) -> int:
-        # Ensure that relationships with a relation precedence rule cannot end up in the zerowaiters queue
-        # of the scheduler. We know the order in which those types can be frozen safely.
-        return super().get_progress_potential() + int(self.attribute.has_relation_precedence_rules())
+        # 1. purely gradual waiters aren't blocked on this variable being frozen
+        # 2. Ensure that relationships with a relation precedence rule cannot end up in the zerowaiters queue
+        #    of the scheduler. We know the order in which those types can be frozen safely.
+        return len(self.waiters) - self._nb_gradual_waiters + int(self.attribute.has_relation_precedence_rules())
+
+    def freeze(self) -> None:
+        super().freeze()
+        # prevent memory leaks
+        self._listeners = None
+
+    def __str__(self) -> str:
+        return f"ListVariable {self.myself} {self.attribute} = {self.value}"
 
 
 class OptionVariable(DelayedResultVariable["Instance"], RelationAttributeVariable):
