@@ -1599,7 +1599,6 @@ class ResourceScheduler(TaskManager):
         state and that of the DB.
         """
 
-
         def _check_for_unreachable_resource_compliance(rid: ResourceIdStr) -> Discrepancy | None:
             """
             Check that this resource is either:
@@ -1634,7 +1633,7 @@ class ResourceScheduler(TaskManager):
                             "an active timer counting down to its next deployment."
                         ),
                         actual="Resource is both currently marked for deployment and has an active timer "
-                               "counting down to its next deployment.",
+                        "counting down to its next deployment.",
                     )
                 else:
                     if self._state.resource_state[rid].last_handler_run != HandlerResult.SUCCESSFUL:
@@ -1647,10 +1646,9 @@ class ResourceScheduler(TaskManager):
                                 "either be marked for imminent deployment or have an active timer or be compliant."
                             ),
                             actual="Resource is non-compliant and is neither marked for imminent redeployment "
-                                   "or has an active timer counting down to its next deployment.",
+                            "or has an active timer counting down to its next deployment.",
                         )
-
-
+            return None
 
         async def _build_discrepancy_map(
             resource_states_in_db: Mapping[ResourceIdStr, const.ResourceState],
