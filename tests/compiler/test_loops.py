@@ -17,6 +17,7 @@ Contact: code@inmanta.com
 """
 
 import textwrap
+from collections import Counter
 
 import inmanta.compiler as compiler
 
@@ -187,6 +188,72 @@ def test_resultcollector_receive_result_flatten(snippetcompiler) -> None:
             end
             """))
     compiler.do_compile()
+
+
+# TODO: created by Claude, needs review
+def test_5720_for_loop_no_duplicate_trimming(snippetcompiler, capsys):
+    """
+    Verify that the for loop does not trim duplicate values, regardless of the type of value
+    or whether the duplicates arise from literal list optimization, Python integer interning,
+    or other implementation details. All 8 cases below iterate over a 2-element list and
+    should each print twice.
+
+    See: https://github.com/inmanta/inmanta-core/issues/5720
+    """
+    snippetcompiler.setup_for_snippet(
+        textwrap.dedent("""\
+            one = 1
+            entity Number: int n end implement Number using std::none
+
+            # 1: for loop trims duplicate due to Python integer interning (low int -> same id())
+            l = [42*one, 42*one]
+            for n in l: std::print(n) end
+
+            # 2: no trimming (high int, not interned by Python -> different id())
+            ll = [420*one, 420*one]
+            for n in ll: std::print(n) end
+
+            # 3: list constructor trims duplicate due to Python integer interning
+            for n in [421*one, 421*one]: std::print(n) end
+
+            # 4: literal list, no trimming
+            for n in [422, 422]: std::print(n) end
+
+            # 5: two distinct instances with equal attribute value
+            nums = [Number(n=43), Number(n=43)]
+            for n in nums: std::print(n.n) end
+
+            # 6: two distinct instances in a literal list
+            for n in [Number(n=443), Number(n=443)]: std::print(n.n) end
+
+            # 7: same instance referenced via the same list variable twice; list constructor trims the duplicate
+            num = [Number(n=444)]
+            for n in [num, num]: std::print(n.n) end
+
+            # 8: same instance referenced directly twice; for loop trims the duplicate
+            num2 = Number(n=445)
+            nums2 = [num2, num2]
+            for n in nums2: std::print(n.n) end
+            """),
+        autostd=True,
+    )
+    capsys.readouterr()
+    compiler.do_compile()
+    out, _ = capsys.readouterr()
+    # The for loops are independent so execution order is not guaranteed.
+    # Check that each value is printed exactly twice (i.e. no duplicate trimming occurred).
+    assert Counter(out.split()) == Counter(
+        {
+            "42": 2,   # case 1
+            "420": 2,  # case 2
+            "421": 2,  # case 3
+            "422": 2,  # case 4
+            "43": 2,   # case 5
+            "443": 2,  # case 6
+            "444": 2,  # case 7
+            "445": 2,  # case 8
+        }
+    )
 
 
 def test_for_loop_fully_gradual(snippetcompiler):
