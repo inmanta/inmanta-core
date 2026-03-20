@@ -614,7 +614,6 @@ class ListLiteral[T](DelayedResultVariable[list[object]]):
 ListValue = Union["Instance", list["Instance"]]
 
 
-# TODO: use ordered set for values? Could be performance gain in deduplication path (`in` check)
 class ListVariable(DelayedResultVariable[ListValue], RelationAttributeVariable):
     """
     ResultVariable that represents a list of instances associated with a relation attribute.
