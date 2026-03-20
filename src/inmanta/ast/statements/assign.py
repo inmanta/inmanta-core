@@ -152,6 +152,7 @@ class CreateList(ReferenceStatement):
         #   => start with list, then inspect other gradual intermediates and see what can be formalized
 
         if self in requires:
+            # We executed in gradual mode. Must not execute children again.
             return requires[self]
 
         result = []

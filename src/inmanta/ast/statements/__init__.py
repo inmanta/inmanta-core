@@ -253,11 +253,11 @@ class ExpressionStatement(RequiresEmitStatement):
         become available, regardless of order. It must only be applied in those contexts. Gradual execution must not trim
         duplicate values. That is left up to those few consumers (e.g. relations) that wish to apply uniqueness semantics.
 
-        The decision on whether or not to execute gradually, is always on the initial caller. In other words, links in the
-        gradual execution chain / pipe (e.g. conditional expression, list comprehension, ...) may (and in fact *must*) always
-        safely propagate the gradual execution mode to their children. After all, if the consumer at the start of the chain
-        (could be a lhs in assignment, but just as well a control flow statement, or a construct like `is defined`, ....) did
-        not support gradual execution, no resultcollector would have been passed down this chain.
+        The decision on whether or not to execute gradually, is always on the initial caller. This is the gradual consumer,
+        which could be the lhs in an assignment, but just as well a for loop or a construct like `is defined`. Concretely,
+        links in the gradual execution chain / pipe (e.g. conditional expression, list comprehension, ...) may (and in fact
+        *must*) always safely propagate the gradual execution mode to their children. After all, if the consumer at the start
+        of the chain did not support gradual execution, no resultcollector would have been passed down this chain.
 
         Child implementations of this method must take care to either pass on the resultcollector to their children (most
         composite statements, e.g. conditional expression, list comprehension), or report to them themselves (terminal
@@ -265,6 +265,13 @@ class ExpressionStatement(RequiresEmitStatement):
         passing on the resultcollector over the requires dict so that `execute` may report to it before returning. Therefore,
         any child implementation that uses a custom mechanism to report to the resultcollector, or passes it on to a child, must
         not propagate the resultcollector over the requires dict, or must override `execute` behavior accordingly.
+
+        Finally, since statements may only report gradually during `execute` (terminal statements), a caller (gradual consumer
+        or an intermediate link in the gradual execution chain) with multiple children may need to schedule children's execute
+        independently rather than to delegate to them in its own execute, in order to improve responsiveness. Notably, this is
+        mostly relevant for collection AST nodes (e.g. CreateList), where many children are common. In contrast, e.g. a for
+        loop has only one direct child: the iterable, so it does not have the option for more fine-grained requires waiting
+        (and does not need it because the iterable itself takes that responsibility for its own children).
 
         :param resultcollector: A collector for gradual results. Must be able to process results as they become available, in
             any order.
@@ -311,6 +318,11 @@ class ExpressionStatement(RequiresEmitStatement):
 class Resumer(Locatable):
     """
     Resume on a set of requirement variables' values when they become ready (i.e. they are complete).
+
+    Resumers are a building block for staged AST nodes, where further, custom work is required when some variables become
+    available, but we are not yet ready to move on to execute. e.g. a list comprehension needs to wait for its iterable's
+    requires (assuming non-gradual mode for simplicity) in order to schedule the work for the value expressions, which may have
+    requires of their own that we need to wait on before we can move on to execute.
     """
 
     __slots__ = ()
@@ -321,7 +333,9 @@ class Resumer(Locatable):
 
 class RawResumer(Locatable):
     """
-    Resume on a set of requirement variables when they become ready (i.e. they are complete).
+    Resume on a set of requirement variables (as variable objects) when they become ready (i.e. they are complete).
+
+    RawResumers, like Resumers are a building block for staged AST nodes. See the Resumer docstring for more details.
     """
 
     __slots__ = ()
