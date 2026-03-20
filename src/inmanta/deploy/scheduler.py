@@ -1599,6 +1599,57 @@ class ResourceScheduler(TaskManager):
         state and that of the DB.
         """
 
+        def _check_for_unreachable_resource_compliance(rid: ResourceIdStr) -> Discrepancy | None:
+            """
+            Check that this resource is either:
+                being deployed
+                will be deployed soon
+                compliant
+
+            :param rid: The Resource id to check
+            :return: A Discrepancy if we detect that the scheduler is not actively working towards
+                making this resource compliant or if we detect an inconsistency in the deploy flow.
+            """
+            if self._timer_manager.global_periodic_deploy_task is not None:
+                # all resources with a known divergence will redeploy eventually
+                return None
+            else:
+                deploy = Deploy(resource=rid)
+                marked_for_deploy = (
+                    deploy in self._work.agent_queues
+                    or deploy in self._work.agent_queues.in_progress
+                    or rid in self._work._waiting
+                )
+
+                has_timer_running = self._timer_manager.resource_has_active_timer(rid)
+
+                if marked_for_deploy and has_timer_running:
+                    # Inconsistency in the deploy flow for this resource
+                    return Discrepancy(
+                        rid=rid,
+                        field=None,
+                        expected=(
+                            "Resource should either be marked for imminent deployment or have "
+                            "an active timer counting down to its next deployment."
+                        ),
+                        actual="Resource is both currently marked for deployment and has an active timer "
+                        "counting down to its next deployment.",
+                    )
+                else:
+                    if self._state.resource_state[rid].last_handler_run != HandlerResult.SUCCESSFUL:
+                        # The scheduler is not actively working towards making this resource compliant.
+                        return Discrepancy(
+                            rid=rid,
+                            field=None,
+                            expected=(
+                                "When deploy timers are set on a per-resource basis, at all times, resource should "
+                                "either be marked for imminent deployment or have an active timer or be compliant."
+                            ),
+                            actual="Resource is non-compliant and is neither marked for imminent redeployment "
+                            "or has an active timer counting down to its next deployment.",
+                        )
+            return None
+
         async def _build_discrepancy_map(
             resource_states_in_db: Mapping[ResourceIdStr, const.ResourceState],
         ) -> dict[ResourceIdStr, list[Discrepancy]]:
@@ -1665,6 +1716,10 @@ class ResourceScheduler(TaskManager):
 
                 db_resource_status = resource_states_in_db[rid]
                 db_deploy_result, db_blocked_status, db_compliance_status = state_translation_table[db_resource_status]
+
+                resource_eventual_compliance_discrepancy: Discrepancy | None = _check_for_unreachable_resource_compliance(rid)
+                if resource_eventual_compliance_discrepancy:
+                    resource_discrepancies.append(resource_eventual_compliance_discrepancy)
 
                 scheduler_resource_state: ResourceState = self._state.resource_state[rid]
                 if db_deploy_result:

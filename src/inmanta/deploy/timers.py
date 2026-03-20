@@ -410,3 +410,9 @@ class TimerManager:
         for resource in resources:
             with contextlib.suppress(KeyError):
                 del self.resource_timers[resource]
+
+    def resource_has_active_timer(self, resource: ResourceIdStr) -> bool:
+        """
+        Check if the given resource has an active timer.
+        """
+        return resource in self.resource_timers and self.resource_timers[resource].next_schedule_handle is not None
