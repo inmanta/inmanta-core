@@ -239,7 +239,8 @@ class ExpressionStatement(RequiresEmitStatement):
         """
         raise RuntimeException(None, "%s is not a constant" % self)
 
-    # TODO: ask Claude to review changes
+    # TODO: add test case from issue thread
+    # TODO: any other test cases required? Not unless something else changed and I don't think it did
     # TODO: ask Claude to update language docs for user-visible changes
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector[object]

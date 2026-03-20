@@ -101,19 +101,20 @@ class CreateList(ReferenceStatement):
     ) -> dict[object, VariableABC]:
         requires = self._requires_emit_promises(resolver, queue)
 
-        # Collect all item execution results in a single list variable for our own execute later on.
-        # All items gradually report straight to resultcollector though.
-        result: ResultVariable[object] = ListLiteral(queue)
-        for expr in self.items:
-            ExecutionUnit(
-                queue,
-                resolver,
-                result=result,
-                requires=expr.requires_emit_gradual(resolver, queue, resultcollector),
-                expression=expr,
-                owner=self,
-            )
-        requires[self] = result
+        if self.items:
+            # Collect all item execution results in a single list variable for our own execute later on.
+            # All items gradually report straight to resultcollector though.
+            result: ResultVariable[object] = ListLiteral(queue)
+            for expr in self.items:
+                ExecutionUnit(
+                    queue,
+                    resolver,
+                    result=result,
+                    requires=expr.requires_emit_gradual(resolver, queue, resultcollector),
+                    expression=expr,
+                    owner=self,
+                )
+            requires[self] = result
         return requires
 
     def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
@@ -138,7 +139,7 @@ class CreateList(ReferenceStatement):
         for expr in self.items:
             item = expr.execute_direct(requires)
             if isinstance(item, list):
-                # flatten cfr BaseListVariable._set_value
+                # flatten cfr ListVariable._set_value
                 qlist.extend(item)
             else:
                 qlist.append(item)
