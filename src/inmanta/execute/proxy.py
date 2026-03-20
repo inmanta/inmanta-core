@@ -85,6 +85,10 @@ class ExportContext(ContextManager[None]):
 
 exportcontext = ExportContext()
 
+# Exact types for which DynamicProxy.unwrap() can skip all isinstance checks and return the value directly.
+# These Python builtins are never DynamicProxy, list, dict, Reference, or dataclass.
+_UNWRAP_FAST_PATH_TYPES: frozenset[type] = frozenset({str, int, float, bool})
+
 
 class ProxyContext:
     """
@@ -194,6 +198,10 @@ class DynamicProxy:
 
         :param dynamic_context: a type resolver context. When passed in, dataclasses are converted as well.
         """
+        # Fast path: primitive types need no conversion
+        if type(item) in _UNWRAP_FAST_PATH_TYPES:
+            return item
+
         if item is None:
             return NoneValue()
 
@@ -291,7 +299,7 @@ class DynamicProxy:
             raise UnknownException(value)
 
         if isinstance(value, (str, tuple, int, float, bool)):
-            return copy(value)
+            return value
 
         if isinstance(value, references.Reference):
             # if a reference gets here, it has been validated, and we want to represent it as a reference, not a proxy
