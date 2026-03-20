@@ -247,7 +247,8 @@ class ExpressionStatement(RequiresEmitStatement):
         Returns a dict of the result variables required for execution. Behaves like requires_emit, but additionally may attach
         resultcollector as a listener to result variables.
 
-        When this method is called, the caller must make sure to eventually call `execute` as well.
+        When this method is called, the caller must make sure to eventually call `execute` as well, which will return the same
+        values that were reported to the result collector (though possibly in a different order).
 
         Gradual execution is an internal mechanism to optimize code flows where list results can be safely processed as they
         become available, regardless of order. It must only be applied in those contexts. Gradual execution must not trim

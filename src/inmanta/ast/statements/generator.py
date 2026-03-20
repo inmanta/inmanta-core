@@ -257,6 +257,8 @@ class For(RequiresEmitStatement):
 class ListComprehension(RawResumer, ExpressionStatement):
     """
     A list comprehension expression, e.g. `["hello {{world}}" for world in worlds if world != "exclude"]`.
+
+    Preserves list order (except in gradual execution where order is irrelevant by definition).
     """
 
     __slots__ = ("loop_var", "value_expression", "iterable", "guard")

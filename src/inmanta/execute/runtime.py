@@ -54,11 +54,12 @@ T_contra = TypeVar("T_contra", contravariant=True)
 
 
 class ResultCollector(Generic[T_contra]):
-    # TODO: mention order + review entire docstring (only mentions ResultVariable, which is an oversight). Also reference
-    #       requires_emit_gradual docstring for more details
     """
-    Helper interface for gradual execution. Should be attached as a listener to a ResultVariable, which will then call
-    receive_result whenever it receives a new value.
+    Helper interface for gradual execution. Can be passed as a result collector when scheduling an ExpressionStatement, or
+    less commonly may be attached directly as a listener to a DelayedResultVariable. Either option will then call receive_result
+    whenever a new value becomes available.
+
+    As detailed in `ExpressionStatement', gradual execution receives values in the order they become available.
     """
 
     __slots__ = ()

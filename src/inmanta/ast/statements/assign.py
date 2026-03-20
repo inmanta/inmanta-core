@@ -80,7 +80,8 @@ class CreateList(ReferenceStatement):
     Two notes:
     - consumers may not always *care* about ordering (gradual execution, e.g. relations / for loops / ...), in which case
         lists report values in the order they become available.
-    - when a list is assigned to a relation, the relation does trim duplicate values, sort of like an automatic set cast.
+    - when a list is assigned to a relation, the relation does trim duplicate values, sort of like an automatic set cast
+        (or piping to `uniq` in the gradual execution as pipes analogy).
     """
 
     __slots__ = ("items",)
@@ -95,26 +96,12 @@ class CreateList(ReferenceStatement):
             item.normalize(lhs_attribute=lhs_attribute)
             self.anchors.extend(item.get_anchors())
 
-
-
-
     # TODO: old branch issue/5720-for-loop-skip-values-test may contain something else useful
     #           -> git diff c1db41ef9...issue/5720-for-loop-skip-values-test
     # => mostly implementation. Some minor docstring clarifications but nothing required until the implemetation stage
 
-    # TODO: DOCUMENT CLEARLY (not necessarily here)
-    #       - define very clear semantics for lists vs relations and what it means for duplicates
-    #       => relations are set-like with respect to uniqueness *and* ordering
-    #       => lists are sequences
-    #       This is a separate concept from gradual execution!!!
-    #       => gradual execution retains all values, including duplicates, but loses ordering
-    #       => list comprehensions and other linking constructs propagate the lhs' execution mode and ordering semantics
-    #       => relations deduplicate. Like piping to `uniq`, this only deduplicates at this final stage
-    #       => ALL expressions satisfy sorted(execute()) == sorted(sent_to_resultcollector)
-    #
-    #       Open question: do gradually executed lists need to execute? Perhaps we can simply never freeze them and leave it up
-    #       to the consumer to freeze if appropriate (e.g. relation freezes, for loop doesn't)
-    #       -> leave out of scope for now. Probably brings no value
+    # TODO: ask Claude to review changes
+    # TODO: ask Claude to update language docs for user-visible changes
 
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector[object]
