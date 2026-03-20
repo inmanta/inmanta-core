@@ -239,10 +239,8 @@ class ExpressionStatement(RequiresEmitStatement):
         """
         raise RuntimeException(None, "%s is not a constant" % self)
 
-    # TODO: delete old branch issue/5720-for-loop-skip-values-test
     # TODO: ask Claude to review changes
     # TODO: ask Claude to update language docs for user-visible changes
-    # TODO: check all child implementations to validate the contract
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector[object]
     ) -> dict[object, VariableABC]:
