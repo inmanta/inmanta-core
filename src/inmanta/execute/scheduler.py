@@ -412,16 +412,17 @@ class Scheduler:
             else:
                 i += 1
 
-            LOGGER.log(
-                LOG_LEVEL_TRACE,
-                "Iteration %d (e: %d, w: %d, p: %d, done: %d, time: %f)",
-                i,
-                len(basequeue),
-                len(waitqueue),
-                len(zerowaiters),
-                count,
-                now - prev,
-            )
+            if LOGGER.isEnabledFor(LOG_LEVEL_TRACE):
+                LOGGER.log(
+                    LOG_LEVEL_TRACE,
+                    "Iteration %d (e: %d, w: %d, p: %d, done: %d, time: %f)",
+                    i,
+                    len(basequeue),
+                    len(waitqueue),
+                    len(zerowaiters),
+                    count,
+                    now - prev,
+                )
             prev = now
 
             # evaluate all that is ready
@@ -491,16 +492,17 @@ class Scheduler:
                     next_rv.freeze()
 
         now = time.time()
-        LOGGER.log(
-            LOG_LEVEL_TRACE,
-            "Iteration %d (e: %d, w: %d, p: %d, done: %d, time: %f)",
-            i,
-            len(basequeue),
-            len(waitqueue),
-            len(zerowaiters),
-            count,
-            now - prev,
-        )
+        if LOGGER.isEnabledFor(LOG_LEVEL_TRACE):
+            LOGGER.log(
+                LOG_LEVEL_TRACE,
+                "Iteration %d (e: %d, w: %d, p: %d, done: %d, time: %f)",
+                i,
+                len(basequeue),
+                len(waitqueue),
+                len(zerowaiters),
+                count,
+                now - prev,
+            )
 
         if i == max_iterations:
             raise CompilerException(f"Could not complete model, max_iterations {max_iterations} reached.")
