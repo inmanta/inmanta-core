@@ -103,9 +103,9 @@ class SubConstructor(RequiresEmitStatement):
         # order: implementation blocks have not normalized at this point, so with the current mechanism we can't fetch eager
         # promises yet. Normalization order can not just be reversed because implementation bodies might contain constructor
         # calls (even for the same type), which would require this instance to be normalized first, resulting in a loop.
-        self._own_eager_promises = []
+        self.own_eager_promises = []
         # injected_variables: Set[str] = {"self"}.union(self.type.get_all_attribute_names())
-        # self._own_eager_promises = [
+        # self.own_eager_promises = [
         #     # implementations live in the namespace's context rather than the constructor's context so for promises that cross
         #     # the boundary we translate references so that they are resolved correctly in any context wrapping the constructor
         #     dataclasses.replace(promise, instance=promise.instance.fully_qualified())
@@ -220,7 +220,7 @@ class For(RequiresEmitStatement):
         self.anchors.extend(self.base.get_anchors())
         self.anchors.extend(self.module.get_anchors())
         self.module.add_var(self.loop_var, self)
-        self._own_eager_promises = self.module.get_eager_promises()
+        self.own_eager_promises = self.module.get_eager_promises()
 
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
         return chain(super().get_all_eager_promises(), self.base.get_all_eager_promises())
@@ -626,7 +626,7 @@ class If(RequiresEmitStatement):
         self.anchors.extend(self.condition.get_anchors())
         self.anchors.extend(self.if_branch.get_anchors())
         self.anchors.extend(self.else_branch.get_anchors())
-        self._own_eager_promises = [*self.if_branch.get_eager_promises(), *self.else_branch.get_eager_promises()]
+        self.own_eager_promises = [*self.if_branch.get_eager_promises(), *self.else_branch.get_eager_promises()]
 
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
         return chain(super().get_all_eager_promises(), self.condition.get_all_eager_promises())
@@ -684,7 +684,7 @@ class ConditionalExpression(ExpressionStatement):
         self.anchors.extend(self.condition.get_anchors())
         self.anchors.extend(self.if_expression.get_anchors())
         self.anchors.extend(self.else_expression.get_anchors())
-        self._own_eager_promises = [
+        self.own_eager_promises = [
             *self.if_expression.get_all_eager_promises(),
             *self.else_expression.get_all_eager_promises(),
         ]
@@ -935,7 +935,7 @@ class Constructor(ExpressionStatement):
             else:
                 self._direct_attributes[k] = v
 
-        self._own_eager_promises = list(
+        self.own_eager_promises = list(
             chain.from_iterable(subconstructor.get_all_eager_promises() for subconstructor in self.type.get_sub_constructor())
         )
 
