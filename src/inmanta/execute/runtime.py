@@ -782,7 +782,7 @@ class ListVariable(BaseListVariable, RelationAttributeVariable):
     def get_progress_potential(self) -> int:
         # Ensure that relationships with a relation precedence rule cannot end up in the zerowaiters queue
         # of the scheduler. We know the order in which those types can be frozen safely.
-        return super().get_progress_potential() + int(self.attribute.has_relation_precedence_rules())
+        return super().get_progress_potential() + int(self.attribute.has_freeze_dependents)
 
 
 class OptionVariable(DelayedResultVariable["Instance"], RelationAttributeVariable):
@@ -851,7 +851,7 @@ class OptionVariable(DelayedResultVariable["Instance"], RelationAttributeVariabl
         return f"OptionVariable {self.myself} {self.attribute} = {self.value}"
 
     def get_progress_potential(self) -> int:
-        return super().get_progress_potential() + int(self.attribute.has_relation_precedence_rules())
+        return super().get_progress_potential() + int(self.attribute.has_freeze_dependents)
 
 
 WaiterSet = NewType("WaiterSet", Set["Waiter"])
