@@ -260,7 +260,7 @@ class ExpressionStatement(RequiresEmitStatement):
         of the chain did not support gradual execution, no resultcollector would have been passed down this chain.
 
         Child implementations of this method must take care to either pass on the resultcollector to their children (most
-        composite statements, e.g. conditional expression, list comprehension), or report to them themselves (terminal
+        composite statements, e.g. conditional expression, list comprehension), or report to it themselves (terminal
         expressions, e.g. Literal inside a list), but never both. The default implementation covers the second option by
         passing on the resultcollector over the requires dict so that `execute` may report to it before returning. Therefore,
         any child implementation that uses a custom mechanism to report to the resultcollector, or passes it on to a child, must
