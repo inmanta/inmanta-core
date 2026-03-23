@@ -1613,6 +1613,9 @@ class ResourceScheduler(TaskManager):
             if self._timer_manager.global_periodic_deploy_task is not None:
                 # all resources with a known divergence will redeploy eventually
                 return None
+            elif self._timer_manager.periodic_deploy_interval is None:
+                # Automatic deploys are disabled
+                return None
             else:
                 deploy = Deploy(resource=rid)
                 marked_for_deploy = (
@@ -1635,8 +1638,8 @@ class ResourceScheduler(TaskManager):
                         actual="Resource is both currently marked for deployment and has an active timer "
                         "counting down to its next deployment.",
                     )
-                else:
-                    if self._state.resource_state[rid].last_handler_run != HandlerResult.SUCCESSFUL:
+                if self._state.resource_state[rid].last_handler_run != HandlerResult.SUCCESSFUL:
+                    if not (marked_for_deploy or has_timer_running):
                         # The scheduler is not actively working towards making this resource compliant.
                         return Discrepancy(
                             rid=rid,
