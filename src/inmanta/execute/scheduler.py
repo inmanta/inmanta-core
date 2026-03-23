@@ -466,9 +466,17 @@ class Scheduler:
             # no waiters in waitqueue,...
             # see if any zerowaiters have become gotten waiters
             if not progress:
-                zerowaiters_tmp = [w for w in zerowaiters if not w.hasValue]
-                waitqueue.replace(w for w in zerowaiters_tmp if w.get_progress_potential() > 0)
-                zerowaiters = deque(w for w in zerowaiters_tmp if w.get_progress_potential() <= 0)
+                has_potential: list[DelayedResultVariable[object]] = []
+                new_zerowaiters: Deque[DelayedResultVariable[object]] = deque()
+                for w in zerowaiters:
+                    if w.hasValue:
+                        continue
+                    if w.get_progress_potential() > 0:
+                        has_potential.append(w)
+                    else:
+                        new_zerowaiters.append(w)
+                waitqueue.replace(has_potential)
+                zerowaiters = new_zerowaiters
                 while len(waitqueue) > 0 and not progress:
                     LOGGER.log(LOG_LEVEL_TRACE, "Moved zerowaiters to waiters")
                     next_rv = waitqueue.popleft()
