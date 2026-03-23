@@ -239,8 +239,6 @@ class ExpressionStatement(RequiresEmitStatement):
         """
         raise RuntimeException(None, "%s is not a constant" % self)
 
-    # TODO: add test case from issue thread
-    # TODO: any other test cases required? Not unless something else changed and I don't think it did
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector[object]
     ) -> dict[object, VariableABC]:
