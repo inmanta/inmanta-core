@@ -666,7 +666,7 @@ def test_5720_duplicate_trimming(snippetcompiler, capsys):
             num2 = Number(n=445)
             nums2 = [num2, num2]
             for n in nums2: std::print(n.n) end
-            """
+            """,
         ),
         autostd=True,
     )
@@ -677,11 +677,11 @@ def test_5720_duplicate_trimming(snippetcompiler, capsys):
     # Check that each value is printed exactly twice (i.e. no duplicate trimming occurred).
     assert Counter(out.split()) == Counter(
         {
-            "42": 2,   # case 1
+            "42": 2,  # case 1
             "420": 2,  # case 2
             "421": 2,  # case 3
             "422": 2,  # case 4
-            "43": 2,   # case 5
+            "43": 2,  # case 5
             "443": 2,  # case 6
             "444": 2,  # case 7
             "445": 2,  # case 8
