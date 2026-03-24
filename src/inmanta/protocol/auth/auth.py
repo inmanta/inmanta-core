@@ -173,8 +173,6 @@ class AuthJWTConfig:
     Auth JWT configuration manager.
 
     This class is thread-safe for concurrent access on its class variables.
-    Instance fields are read-only after construction, so returned AuthJWTConfig
-    instances may be used safely without holding the lock.
     """
 
     # RLock (not Lock) is required: _load_config_and_validate holds this lock and
