@@ -46,3 +46,19 @@ The model does not compile and exits with "could not complete model".
 There is an upperbound on the number of iterations used in the model transformation algorithm. For large models this might
 not be enough. This limit is controlled with the environment variable INMANTA_MAX_ITERATIONS The default value is set to
 10000 iterations.
+
+Shell command caching
+---------------------
+
+If you experience the issue that pytest doesn't find a package that is installed in your venv or if it picks up a package from an unexpected location, this might be caused by the shell command cache. You can resolve this issue by executing `hash -r`.
+
+**Explanation:**
+
+When you execute a command (like `pytest`) on the commandline, your shell looks up the path to the corresponding binary and caches it. As such you can get into the following scenario:
+
+* Create a new venv that will be used to run the test suite of an Inmanta project.
+* You execute the `pytest` command and notice that you forgot to install the Inmanta project into that venv. If `pytest` is installed in your global python environment, your shell will have resolved and cached the path to that binary.
+* You then install the Inmanta project into your venv. This install pytest into your venv with a different version than the one installed in the global python environment.
+* If you now run the `pytest` command again, it will execute the `pytest` binary from the global venv instead of the one from your new venv, because it's still present in the shell cache.
+
+Situations as mentioned above usually don't happen, because the shell cache is cleared automatically when a new venv is activated. In the above-mentioned scenario the cache is poisoned after the activation of the venv, which is the reason why it goes wrong.
