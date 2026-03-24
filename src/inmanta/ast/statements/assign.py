@@ -135,16 +135,16 @@ class CreateList(ReferenceStatement):
         return result
 
     def execute_direct(self, requires: abc.Mapping[str, object]) -> object:
-        qlist = []
+        result = []
         for expr in self.items:
             item = expr.execute_direct(requires)
             if isinstance(item, list):
                 # flatten cfr ListVariable._set_value
-                qlist.extend(item)
+                result.extend(item)
             else:
-                qlist.append(item)
+                result.append(item)
 
-        return qlist
+        return result
 
     def as_constant(self) -> list[object]:
         list_result = (v.as_constant() for v in self.items)
