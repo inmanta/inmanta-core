@@ -581,7 +581,7 @@ class ListLiteral[T](DelayedResultVariable[list[object]]):
     Requires all providers to acquire a promise before the first gets fulfilled and in return provides accurate promise
     tracking and freezing. Instances of this class should never require forceful freezing.
 
-    Thightly coupled with CreateList in how delicate it is to use (e.g. the promise tracking) and lack of listener support.
+    Tightly coupled with CreateList in how delicate it is to use (e.g. the promise tracking) and lack of listener support.
     It does not need to support listeners because this is used on the path that collects values for the non-gradual
     `CreateList.execute`.
     """
