@@ -773,7 +773,7 @@ class ListVariable(DelayedResultVariable[ListValue], RelationAttributeVariable):
         # 1. purely gradual waiters aren't blocked on this variable being frozen
         # 2. Ensure that relationships with a relation precedence rule cannot end up in the zerowaiters queue
         #    of the scheduler. We know the order in which those types can be frozen safely.
-        return len(self.waiters) - self._nb_gradual_waiters + int(self.attribute.has_relation_precedence_rules())
+        return len(self.waiters) - self._nb_gradual_waiters + int(self.attribute.has_freeze_dependents)
 
     def freeze(self) -> None:
         super().freeze()
@@ -850,7 +850,7 @@ class OptionVariable(DelayedResultVariable["Instance"], RelationAttributeVariabl
         return f"OptionVariable {self.myself} {self.attribute} = {self.value}"
 
     def get_progress_potential(self) -> int:
-        return super().get_progress_potential() + int(self.attribute.has_relation_precedence_rules())
+        return super().get_progress_potential() + int(self.attribute.has_freeze_dependents)
 
 
 WaiterSet = NewType("WaiterSet", Set["Waiter"])

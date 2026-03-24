@@ -618,9 +618,6 @@ class StringFormat(FormattedString):
 
 
 class FStringFormatter(Formatter):
-    def __init__(self) -> None:
-        Formatter.__init__(self)
-
     def get_field(self, key: str, args: abc.Sequence[object], kwargs: abc.Mapping[str, object]) -> tuple[object, str]:
         """
         Overrides Formatter.get_field. Composite variable names are expected to be resolved at this point and can be
@@ -632,6 +629,9 @@ class FStringFormatter(Formatter):
         """
         # may raise KeyError, which has to be handled by format caller
         return (kwargs[key], key)
+
+
+_FSTRING_FORMATTER = FStringFormatter()
 
 
 class StringFormatV2(FormattedString):
@@ -654,10 +654,7 @@ class StringFormatV2(FormattedString):
         self._variables: abc.Mapping[Reference, str] = {ref: full_name for (ref, full_name) in variables}
 
     def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
-        formatter: FStringFormatter = FStringFormatter()
-
-        # We can't cache the formatter because it has no ability to cache the parsed string
-
+        # vformat() re-parses the format string on every call; Python's Formatter has no ability to cache the parsed string
         kwargs = {}
         for _var, full_name in self._variables.items():
             value: object | Unknown = self._resolve_value(full_name, _var, requires, resolver, queue)
@@ -666,7 +663,7 @@ class StringFormatV2(FormattedString):
             kwargs[full_name] = value
 
         try:
-            result_string = formatter.vformat(self._format_string, args=[], kwargs=kwargs)
+            result_string = _FSTRING_FORMATTER.vformat(self._format_string, args=[], kwargs=kwargs)
         except KeyError as e:
             key: str = str(e)
             if key == "'0'":
