@@ -21,6 +21,7 @@ import json
 import logging
 import os
 import pathlib
+import threading
 import time
 from functools import partial
 
@@ -310,3 +311,35 @@ jwt_username_claim=name
     response.raise_for_status()
 
     assert response.json()["data"]["username"] == "test-user"
+
+
+def test_authjwtconfig_thread_safe(inmanta_config):
+    """
+    Verify that concurrent calls to AuthJWTConfig do not cause race conditions.
+    Reproduces the scenario described in issue #10165 where executor threads
+    call into auth config methods simultaneously.
+    """
+    errors: list[Exception] = []
+    n_threads = 5
+    barrier = threading.Barrier(n_threads)
+
+    def call() -> None:
+        try:
+            # Synchronise all threads to maximise the chance of a concurrent access
+            barrier.wait()
+            # This JWT config is set by the inmanta_config fixture
+            assert auth.AuthJWTConfig.get_issuer("https://localhost:8888/") is not None
+        except Exception as e:
+            errors.append(e)
+
+    threads = [threading.Thread(target=call) for _ in range(n_threads)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=5)
+    if any(t.is_alive() for t in threads):
+        raise Exception(
+            f"Some threads didn't stop after a timeout: {[(t.name, t.is_alive()) for t in threads]}"
+        )
+
+    assert not errors, errors

@@ -172,11 +172,14 @@ class AuthJWTConfig:
     """
     Auth JWT configuration manager.
 
-    This class is thread-safe.
+    This class is thread-safe for concurrent access on its class variables.
+    Instance fields are read-only after construction, so returned AuthJWTConfig
+    instances may be used safely without holding the lock.
     """
 
-    # A lock to make concurrent access on the class variables
-    # of this class thread-safe.
+    # RLock (not Lock) is required: _load_config_and_validate holds this lock and
+    # calls reset() on error, which also acquires it. An RLock allows the same
+    # thread to re-acquire without deadlocking.
     _lock = threading.RLock()
     sections: dict[str, "AuthJWTConfig"] = {}
     issuers: dict[str, "AuthJWTConfig"] = {}
@@ -222,6 +225,7 @@ class AuthJWTConfig:
 
     @classmethod
     def _load_config_and_validate(cls) -> None:
+        # Must be called with cls._lock held.
         if cls._config_successfully_loaded:
             return
 
