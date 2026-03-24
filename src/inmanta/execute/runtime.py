@@ -56,7 +56,7 @@ T_contra = TypeVar("T_contra", contravariant=True)
 class ResultCollector(Generic[T_contra]):
     """
     Helper interface for gradual execution. Can be passed as a result collector when scheduling an ExpressionStatement, or
-    less commonly may be attached directly as a listener to a DelayedResultVariable. Either option will then call receive_result
+    may be attached directly as a listener to a DelayedResultVariable. Either option will then call receive_result
     whenever a new value becomes available.
 
     As detailed in `ExpressionStatement', gradual execution receives values in the order they become available.
@@ -580,6 +580,10 @@ class ListLiteral[T](DelayedResultVariable[list[object]]):
 
     Requires all providers to acquire a promise before the first gets fulfilled and in return provides accurate promise
     tracking and freezing. Instances of this class should never require forceful freezing.
+
+    Thightly coupled with CreateList in how delicate it is to use (e.g. the promise tracking) and lack of listener support.
+    It does not need to support listeners because this is used on the path that collects values for the non-gradual
+    `CreateList.execute`.
     """
 
     __slots__ = ()
