@@ -628,8 +628,6 @@ src/inmanta/execute/scheduler.py:0: error: "Type" has no attribute "get_all_inst
 src/inmanta/execute/scheduler.py:0: error: Argument 2 to "requeue_with_additional_requires" of "Waiter" has incompatible type "Instance | None"; expected "ResultVariable[Any]"  [arg-type]
 src/inmanta/execute/scheduler.py:0: error: Incompatible return value type (got "list[tuple[Range, AnchorTarget | None]]", expected "Sequence[tuple[Location, AnchorTarget]]")  [return-value]
 src/inmanta/execute/scheduler.py:0: error: Missing type parameters for generic type "DelayedResultVariable"  [type-arg]
-src/inmanta/execute/scheduler.py:0: error: Missing type parameters for generic type "VariableABC"  [type-arg]
-src/inmanta/execute/scheduler.py:0: error: Missing type parameters for generic type "VariableABC"  [type-arg]
 src/inmanta/execute/scheduler.py:0: error: Module "inmanta.ast" does not explicitly export attribute "NamedType"  [attr-defined]
 src/inmanta/execute/scheduler.py:0: error: Module "inmanta.ast" does not explicitly export attribute "Statement"  [attr-defined]
 src/inmanta/execute/scheduler.py:0: error: Module "inmanta.ast" has no attribute "BasicBlock"  [attr-defined]
