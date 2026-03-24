@@ -338,8 +338,6 @@ def test_authjwtconfig_thread_safe(inmanta_config):
     for t in threads:
         t.join(timeout=5)
     if any(t.is_alive() for t in threads):
-        raise Exception(
-            f"Some threads didn't stop after a timeout: {[(t.name, t.is_alive()) for t in threads]}"
-        )
+        raise Exception(f"Some threads didn't stop after a timeout: {[(t.name, t.is_alive()) for t in threads]}")
 
     assert not errors, errors
