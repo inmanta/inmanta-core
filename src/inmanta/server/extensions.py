@@ -56,6 +56,7 @@ class Feature(Generic[T]):
         self,
         slice: str,
         name: str,
+        *,
         fully_enabled_factory: Callable[[], T],
         fully_disabled_factory: Callable[[], T],
         description: str = "",
