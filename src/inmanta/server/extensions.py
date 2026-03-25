@@ -56,6 +56,7 @@ class Feature(Generic[T]):
         self,
         slice: str,
         name: str,
+        *,
         fully_enabled_factory: Callable[[], T],
         fully_disabled_factory: Callable[[], T],
         description: str = "",
@@ -150,7 +151,7 @@ class FeatureManager:
     """
 
     def __init__(self) -> None:
-        # A dictionary that contains all the featured defined by the different slices of the server.
+        # A dictionary that contains all the features defined by the different slices of the server.
         # -> dict[slice_name, dict[feature_name, feature_object]]
         self._features: dict[str, dict[str, Feature[object]]] = defaultdict(dict)
         # A dictionary that contains the features as defined in the entitlements file.
