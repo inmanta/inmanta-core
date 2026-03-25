@@ -3,4 +3,4 @@ description: "Allow features to indicate which value should be used to entirely 
 issue-nr: 10187
 issue-repo: inmanta-core
 change-type: minor
-destination-branches: [master, iso9, iso8]
+destination-branches: [master, iso9]
