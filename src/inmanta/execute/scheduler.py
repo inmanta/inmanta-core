@@ -325,7 +325,7 @@ class Scheduler:
             result = result.variable
         return result
 
-    def find_wait_cycle(self, attributes_with_precedence_rule: list[RelationAttribute], allwaiters: WaiterSet) -> bool:
+    def find_wait_cycle(self, relation_precedence_graph: "RelationPrecedenceGraph", allwaiters: WaiterSet) -> bool:
         """
         Preconditions: no progress is made anymore
 
@@ -361,7 +361,7 @@ class Scheduler:
         if not freeze_candidates:
             return False
         # Use the relation precedence rules to determine which drv should be frozen
-        queue = PrioritisedDelayedResultVariableQueue(attributes_with_precedence_rule, freeze_candidates)
+        queue = PrioritisedDelayedResultVariableQueue(relation_precedence_graph, freeze_candidates)
         drv_to_freeze = queue.popleft()
         LOGGER.log(LOG_LEVEL_TRACE, "Waiting blocked on %s", drv_to_freeze)
         drv_to_freeze.freeze()
@@ -377,6 +377,7 @@ class Scheduler:
         # first evaluate all definitions, this should be done in one iteration
         self.define_types(compiler, statements, blocks)
         attributes_with_precedence_rule: list[RelationAttribute] = self._set_precedence_rules_on_relationship_attributes()
+        relation_precedence_graph = RelationPrecedenceGraph(attributes_with_precedence_rule)
 
         # give all loose blocks an empty XC
         # register the XC's as scopes
@@ -393,7 +394,7 @@ class Scheduler:
         # queue for runnable items
         basequeue: Deque[Waiter] = deque()
         # queue for RV's that are delayed
-        waitqueue = PrioritisedDelayedResultVariableQueue(attributes_with_precedence_rule)
+        waitqueue = PrioritisedDelayedResultVariableQueue(relation_precedence_graph)
         # queue for RV's that are delayed and had no effective waiters when they were first in the waitqueue
         zerowaiters: Deque[DelayedResultVariable[Any]] = deque()
 
@@ -494,7 +495,7 @@ class Scheduler:
 
             if not progress:
                 # nothing works anymore, attempt to unfreeze wait cycle
-                progress = self.find_wait_cycle(attributes_with_precedence_rule, queue.allwaiters)
+                progress = self.find_wait_cycle(relation_precedence_graph, queue.allwaiters)
 
             if not progress:
                 # no one waiting anymore, all done, freeze and finish
@@ -577,10 +578,9 @@ class PrioritisedDelayedResultVariableQueue:
 
     def __init__(
         self,
-        attributes_with_precedence_rule: list[RelationAttribute],
+        relation_precedence_graph: "RelationPrecedenceGraph",
         drvs: Optional[list[DelayedResultVariable[object]]] = None,
     ) -> None:
-        relation_precedence_graph = RelationPrecedenceGraph(attributes_with_precedence_rule)
         # A queue that indicates a valid order in which the self._constraint_variables have to be returned
         # This queue is never modified.
         self._freeze_order: Deque[RelationAttribute] = deque(relation_precedence_graph.get_freeze_order())
@@ -678,6 +678,7 @@ class CycleInRelationPrecedencePolicyError(CompilerException):
 class RelationPrecedenceGraph:
     """
     A graph representation of the relation precedence policy provided to the compiler.
+    This graph is read-only after construction.
     """
 
     def __init__(self, relation_attributes_with_precedence_rule: Optional[list[RelationAttribute]] = None) -> None:
@@ -689,9 +690,9 @@ class RelationPrecedenceGraph:
         # Creates nodes in graph
         for first_attribute in relation_attributes_with_precedence_rule:
             for then_attribute in first_attribute.freeze_dependents:
-                self.add_precedence_rule(first_attribute, then_attribute)
+                self._add_precedence_rule(first_attribute, then_attribute)
 
-    def add_precedence_rule(self, first_attribute: RelationAttribute, then_attribute: RelationAttribute) -> None:
+    def _add_precedence_rule(self, first_attribute: RelationAttribute, then_attribute: RelationAttribute) -> None:
         """
         Add a rule that `first_attribute` should be frozen before `then_attribute`.
         """
