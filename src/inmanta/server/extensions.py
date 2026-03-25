@@ -150,7 +150,7 @@ class FeatureManager:
     """
 
     def __init__(self) -> None:
-        # A dictionary that contains all the featured defined by the different slices of the server.
+        # A dictionary that contains all the features defined by the different slices of the server.
         # -> dict[slice_name, dict[feature_name, feature_object]]
         self._features: dict[str, dict[str, Feature[object]]] = defaultdict(dict)
         # A dictionary that contains the features as defined in the entitlements file.
