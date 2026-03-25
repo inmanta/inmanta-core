@@ -45,8 +45,8 @@ from inmanta.ast.statements.define import DefineEntity, DefineImplement, DefineI
 from inmanta.ast.statements.generator import ConditionalExpression, Constructor, If
 from inmanta.ast.variables import AttributeReference, Reference
 from inmanta.execute.util import NoneValue
-from inmanta.parser import InvalidNamespaceAccess, ParserException, lark_parser
-from inmanta.parser.lark_parser import base_parse
+from inmanta.parser import InvalidNamespaceAccess, ParserException
+from inmanta.parser.dispatch import base_parse
 from inmanta.parser.pickle import ASTPickler, ASTUnpickler
 from utils import log_contains, log_doesnt_contain
 
@@ -880,6 +880,7 @@ a='\\\\'
     assert stmt.value.value == "\\"
 
 
+@pytest.mark.lark_only
 def test_string_non_ascii_with_backslash():
     """
     Verify _safe_decode preserves non-ASCII strings containing backslashes.
@@ -895,6 +896,7 @@ def test_string_non_ascii_with_backslash():
     assert stmt.value.value == "café\n"
 
 
+@pytest.mark.lark_only
 def test_string_non_ascii_with_tab_escape():
     """
     Verify non-ASCII character with \\t escape is preserved correctly.
@@ -907,6 +909,7 @@ def test_string_non_ascii_with_tab_escape():
     assert stmt.value.value == "über\tcool"
 
 
+@pytest.mark.lark_only
 def test_mls_non_ascii_with_backslash():
     """
     Verify non-ASCII + backslash escape in multi-line strings.
@@ -2259,19 +2262,24 @@ std::print(s1)
     )
 
 
+@pytest.mark.lark_only
 def test_grammar_cache_in_module_dir() -> None:
     """The grammar cache file is stored next to the parser module. The file is created when
     inmanta is loaded.
     """
     from inmanta import app  # noqa: F401
+    from inmanta.parser import lark_parser
 
     assert os.path.exists(lark_parser._MODULE_CACHE_FILE), f"Expected grammar cache at {lark_parser._MODULE_CACHE_FILE}"
     assert os.path.dirname(lark_parser._MODULE_CACHE_FILE) == lark_parser._MODULE_DIR
 
 
+@pytest.mark.lark_only
 def test_grammar_cache_fallback_to_project_dir(tmp_path: "os.PathLike[str]") -> None:
     """When the module directory cache is missing, attach_to_project falls back to .cfcache."""
     from unittest.mock import patch
+
+    from inmanta.parser import lark_parser
 
     project_dir = str(tmp_path)
 

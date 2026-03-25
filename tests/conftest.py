@@ -96,7 +96,7 @@ from inmanta.export import ResourceDict, cfg_env, unknown_parameters
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
 from inmanta.moduletool import DefaultIsolatedEnvCached, ModuleTool, V2ModuleBuilder
-from inmanta.parser.lark_parser import detach_from_project
+from inmanta.parser.dispatch import detach_from_project
 from inmanta.protocol import VersionMatch
 from inmanta.protocol.auth import auth
 from inmanta.references import mutator, reference
@@ -271,7 +271,12 @@ def pytest_generate_tests(metafunc: "pytest.Metafunc") -> None:
 def pytest_runtest_setup(item: "pytest.Item"):
     """
     When in fast mode, skip test marked as slow and db_migration tests that are older than 30 days.
+    Skip lark_only tests unless INMANTA_PARSER=lark.
     """
+    if any(True for _ in item.iter_markers(name="lark_only")):
+        if os.environ.get("INMANTA_PARSER", "ply") != "lark":
+            pytest.skip("Lark-specific test (set INMANTA_PARSER=lark)")
+
     is_fast = item.config.getoption("fast")
     if not is_fast:
         return

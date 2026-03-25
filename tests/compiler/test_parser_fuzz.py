@@ -27,6 +27,7 @@ Example count is controlled via Hypothesis profiles registered in conftest.py:
 
 import os
 
+import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 from hypothesis.extra.lark import from_lark
@@ -34,7 +35,9 @@ from lark import Lark
 
 from inmanta.ast import CompilerException, Namespace
 from inmanta.parser import ParserException
-from inmanta.parser.lark_parser import base_parse
+from inmanta.parser.dispatch import base_parse
+
+pytestmark = pytest.mark.lark_only
 
 # Build a Lark instance from the grammar file for Hypothesis.
 # This must be a fresh Lark (not the serialised singleton) because
