@@ -1037,7 +1037,7 @@ src/inmanta/server/config.py:0: note: def __new__(cls, str | Buffer | SupportsIn
 src/inmanta/server/config.py:0: note: def __new__(cls, str | bytes | bytearray, /, base: SupportsIndex) -> int
 src/inmanta/server/diff.py:0: error: "object" has no attribute "__iter__"; maybe "__dir__" or "__str__"? (not iterable)  [attr-defined]
 src/inmanta/server/diff.py:0: error: Incompatible return value type (got "str | None", expected "str")  [return-value]
-src/inmanta/server/extensions.py:0: error: Returning Any from function declared to return "bool"  [no-any-return]
+src/inmanta/server/extensions.py:0: error: Incompatible return value type (got "bool | str | list[str]", expected "T")  [return-value]
 src/inmanta/server/protocol.py:0: error: Argument "result" to "Result" has incompatible type "BaseModel | UUID | int | float | datetime | Mapping[str, ArgumentTypes] | Mapping[ResourceIdStr, ArgumentTypes] | Mapping[ResourceVersionIdStr, ArgumentTypes] | Sequence[BaseModel | UUID | bool | int | float | datetime | str | None] | None"; expected "dict[str, Any] | None"  [arg-type]
 src/inmanta/server/protocol.py:0: error: Argument 1 to "RESTServer" has incompatible type "SessionManager"; expected "SessionManagerInterface"  [arg-type]
 src/inmanta/server/protocol.py:0: error: Argument 1 to "append" of "list" has incompatible type "tuple[str, type[RedirectHandler], dict[str, str]]"; expected "Rule"  [arg-type]

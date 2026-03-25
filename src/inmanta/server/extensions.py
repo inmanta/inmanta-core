@@ -20,7 +20,7 @@ import importlib.metadata
 import logging
 import os
 from collections import defaultdict
-from typing import Any, Generic, Optional, TypeVar
+from typing import Callable, Generic, Optional, TypeVar
 
 import yaml
 
@@ -52,11 +52,25 @@ T = TypeVar("T")
 class Feature(Generic[T]):
     """A feature offered by a slice"""
 
-    def __init__(self, slice: str, name: str, description: str = "", default_value: Optional[T] = None) -> None:
+    def __init__(
+        self,
+        slice: str,
+        name: str,
+        fully_enabled_factory: Callable[[], T],
+        fully_disabled_factory: Callable[[], T],
+        description: str = "",
+    ) -> None:
+        """
+        :param fully_enabled_factory: A factory method that generates the value for this feature
+                                      if this feature should be enabled entirely.
+        :param fully_disabled_factory: A factory method that generates the value for this feature
+                                       if this feature should be disabled entirely.
+        """
         self._name: str = name
         self._slice: str = slice
         self._description = description
-        self._default_value: Optional[T] = default_value
+        self._fully_enabled_factory: Callable[[], T] = fully_enabled_factory
+        self._fully_disabled_factory: Callable[[], T] = fully_disabled_factory
 
     @property
     def name(self) -> str:
@@ -67,8 +81,20 @@ class Feature(Generic[T]):
         return self._slice
 
     @property
-    def default_value(self) -> Optional[T]:
-        return self._default_value
+    def fully_enabled_value(self) -> T:
+        """
+        The value for this feature if this feature is supposed
+        to be enabled entirely.
+        """
+        return self._fully_enabled_factory()
+
+    @property
+    def fully_disabled_value(self) -> T:
+        """
+        The value for this feature if this feature is supposed
+        to be disabled entirely.
+        """
+        return self._fully_disabled_factory()
 
     def __str__(self) -> str:
         return f"{self._slice}:{self._name}"
@@ -78,14 +104,26 @@ class BoolFeature(Feature[bool]):
     """A feature that is on or off. When no value is given it is enabled."""
 
     def __init__(self, slice: str, name: str, description: str = "") -> None:
-        super().__init__(slice, name, description, True)
+        super().__init__(
+            slice,
+            name=name,
+            description=description,
+            fully_enabled_factory=lambda: True,
+            fully_disabled_factory=lambda: False,
+        )
 
 
 class StringListFeature(Feature[list[str]]):
     """A feature that holds a list of allowed values. When the list contains "*" it matches everything."""
 
     def __init__(self, slice: str, name: str, description: str = "") -> None:
-        super().__init__(slice, name, description, default_value=["*"])
+        super().__init__(
+            slice,
+            name=name,
+            description=description,
+            fully_enabled_factory=lambda: ["*"],
+            fully_disabled_factory=lambda: [],
+        )
 
 
 FeatureValueTypes = bool | str | list[str]
@@ -112,7 +150,11 @@ class FeatureManager:
     """
 
     def __init__(self) -> None:
+        # A dictionary that contains all the featured defined by the different slices of the server.
+        # -> dict[slice_name, dict[feature_name, feature_object]]
         self._features: dict[str, dict[str, Feature[object]]] = defaultdict(dict)
+        # A dictionary that contains the features as defined in the entitlements file.
+        # -> dict[slice_name, dict[feature_name, feature_value]]
         self._feature_config: dict[str, dict[str, FeatureValueTypes]] = self._load_feature_config()
 
     def get_features(self) -> list[Feature[object]]:
@@ -164,18 +206,36 @@ class FeatureManager:
             self._features[feature.slice][feature.name] = feature
         slice.feature_manager = self
 
-    def get_value(self, feature: Feature[T]) -> Any:
-        """Get the value of a feature"""
+    def ensure_feature_defined(self, feature: Feature[T]) -> None:
+        """
+        This method raises an exception if the given feature is not defined on the server.
+        """
         if feature.slice not in self._features or feature.name not in self._features[feature.slice]:
-            raise InvalidFeature("Feature should be defined be slices at boot time.")
+            raise InvalidFeature("Feature should be defined by slices at boot time.")
 
-        if feature.slice not in self._feature_config or feature.name not in self._feature_config[feature.slice]:
-            return feature.default_value
+    def has_feature_in_feature_config(self, feature: Feature[T]) -> bool:
+        """
+        Return True iff the given feature is defined in the feature configuration.
+        """
+        return feature.slice in self._feature_config and feature.name in self._feature_config[feature.slice]
+
+    def get_default_value_for(self, feature: Feature[T]) -> T:
+        """
+        Return the default value for this feature. This FeatureManager enables
+        the feature by default. This method can be overridden in a subclass
+        to disable features by default.
+        """
+        return feature.fully_enabled_value
+
+    def get_value(self, feature: Feature[T]) -> T:
+        """Get the value of a feature"""
+        self.ensure_feature_defined(feature)
+        if not self.has_feature_in_feature_config(feature):
+            return self.get_default_value_for(feature)
         return self._feature_config[feature.slice][feature.name]
 
     def enabled(self, feature: BoolFeature) -> bool:
-        value = self.get_value(feature)
-        return value
+        return self.get_value(feature)
 
     def contains(self, feature: StringListFeature, item: str) -> bool:
         """Check if the value is contained in the list."""
