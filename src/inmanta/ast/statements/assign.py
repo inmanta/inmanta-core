@@ -75,6 +75,13 @@ T = TypeVar("T")
 class CreateList(ReferenceStatement):
     """
     Represents a list literal statement which might contain any type of value (constants and/or instances).
+
+    Inmanta lists, in contrast to relations, are an ordered sequence of values, in which duplicates may appear.
+    Two notes:
+    - consumers may not always *care* about ordering (gradual execution, e.g. relations / for loops / ...), in which case
+        lists report values in the order they become available.
+    - when a list is assigned to a relation, the relation does trim duplicate values, sort of like an automatic set cast
+        (or piping to `uniq` in the gradual execution as pipes analogy).
     """
 
     __slots__ = ("items",)
@@ -90,71 +97,54 @@ class CreateList(ReferenceStatement):
             self.anchors.extend(item.get_anchors())
 
     def requires_emit_gradual(
-        self, resolver: Resolver, queue: QueueScheduler, resultcollector: Optional[ResultCollector]
+        self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector[object]
     ) -> dict[object, VariableABC]:
-        if resultcollector is None:
-            return self.requires_emit(resolver, queue)
+        requires = self._requires_emit_promises(resolver, queue)
 
-        requires: dict[object, VariableABC] = self._requires_emit_promises(resolver, queue)
-
-        # if we are in gradual mode, transform to a list of assignments instead of assignment of a list
-        # to get more accurate gradual execution
-        # temp variable is required get all heuristics right
-
-        # ListVariable to hold all the stuff. Used as a proxy for gradual execution and to track promises.
-        # Freezes itself once all promises have been fulfilled, at which point it represents the full list literal created by
-        # this statement.
-        temp = ListLiteral(queue)
-
-        # add listener for gradual execution
-        temp.listener(resultcollector, self.location)
-
-        # Assignments, wired for gradual
-        for expr in self.items:
-            # artifact of the past. It should suffice now to discard the execution result, only relying on gradual execution,
-            # or to have a guard that both are identical. Reporting both, as we do here, only works because ListLiteral
-            # happens to trim duplicate values.
-            ExecutionUnit(queue, resolver, temp, expr.requires_emit_gradual(resolver, queue, temp), expr, self)
-
-        if not self.items:
-            # empty: just close
-            temp.freeze()
-
-        # pass temp
-        requires[self] = temp
+        if self.items:
+            # Collect all item execution results in a single list variable for our own execute later on.
+            # All items gradually report straight to resultcollector though.
+            result: ResultVariable[object] = ListLiteral(queue)
+            for expr in self.items:
+                ExecutionUnit(
+                    queue,
+                    resolver,
+                    result=result,
+                    requires=expr.requires_emit_gradual(resolver, queue, resultcollector),
+                    expression=expr,
+                    owner=self,
+                )
+            requires[self] = result
         return requires
 
     def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         """
         Create this list
         """
-        # gradual case, everything is in placeholder
         if self in requires:
+            # We executed in gradual mode. Must not execute children again.
             return requires[self]
 
-        qlist = []
-
-        for i in range(len(self.items)):
-            value = self.items[i].execute(requires, resolver, queue)
+        result = []
+        for expr in self.items:
+            value = expr.execute(requires, resolver, queue)
             if isinstance(value, list):
-                qlist.extend(value)
+                result.extend(value)
             else:
-                qlist.append(value)
-
-        return qlist
+                result.append(value)
+        return result
 
     def execute_direct(self, requires: abc.Mapping[str, object]) -> object:
-        qlist = []
-        for i in range(len(self.items)):
-            value = self.items[i]
-            item = value.execute_direct(requires)
+        result = []
+        for expr in self.items:
+            item = expr.execute_direct(requires)
             if isinstance(item, list):
-                # flatten cfr BaseListVariable._set_value
-                qlist.extend(item)
+                # flatten cfr ListVariable._set_value
+                result.extend(item)
             else:
-                qlist.append(item)
+                result.append(item)
 
-        return qlist
+        return result
 
     def as_constant(self) -> list[object]:
         list_result = (v.as_constant() for v in self.items)
