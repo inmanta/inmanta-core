@@ -608,7 +608,7 @@ class MaybeReference(typing.Protocol):
         ...
 
 
-def maybe_reference(value: object) -> typing.TypeIs[MaybeReference]:
+def maybe_reference(value: object) -> typing.TypeGuard[MaybeReference]:
     """
     Returns true iff value implements the MaybeReference protocol. Due to performance reasons we can not do a proper isinstance
     check, but this is a best-effort alternative that keeps typing information unambiguous for callers.
