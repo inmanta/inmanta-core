@@ -24,7 +24,6 @@ import hashlib
 import json
 import typing
 import uuid
-from collections.abc import Callable
 from typing import Generic, Literal, Never, Optional, Tuple
 
 import pydantic
