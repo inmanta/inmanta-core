@@ -1243,6 +1243,5 @@ async def test_resource_summary_no_resources(server, environment, client):
         "environment": environment,
     }
     result = await client.graphql(query=query, variables=variables)
-    assert result.code == 200
-    assert not result.result["data"]["errors"], result.result["data"]
+    check_correct_graphql_response(result)
     assert result.result["data"]["data"]["resourceSummary"]["totalCount"] == 0, result.result["data"]
