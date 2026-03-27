@@ -1221,3 +1221,28 @@ async def test_connection_type_for_unchanged():
             setattr(connection_type, _IS_GENERATED_CONNECTION_TYPE_KEY, True)
         return self.connection_types[connection_name]
 """
+
+
+async def test_resource_summary_no_resources(server, environment, client):
+    """
+    Verify that the resourceSummary GraphQL query doesn't fail if there are no resources
+    in the given environment.
+    """
+    query = """
+        query ($environment: String!) {
+          resourceSummary(environment: $environment) {
+            totalCount
+            lastHandlerRun
+            blocked
+            compliance
+            isDeploying
+          }
+        }
+    """
+    variables = {
+      "environment": environment,
+    }
+    result = await client.graphql(query=query, variables=variables)
+    assert result.code == 200
+    assert not result.result["data"]["errors"], result.result["data"]
+    assert result.result["data"]["data"]["resourceSummary"]["totalCount"] == 0, result.result["data"]

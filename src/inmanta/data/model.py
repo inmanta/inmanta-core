@@ -472,7 +472,7 @@ class ComposedResourceSummary(BaseModel):
 
         return ComposedResourceSummary(
             # total_count is the same on every row
-            total_count=cast(int, summary_by_db_result[0]["total_count"]),
+            total_count=summary_by_db_result[0]["total_count"] if summary_by_db_result else 0,
             compliance={Compliance(k): v for k, v in parsed_results["compliance"].items()},
             blocked={Blocked(k): v for k, v in parsed_results["blocked"].items()},
             last_handler_run={HandlerResult(k): v for k, v in parsed_results["last_handler_run"].items()},
