@@ -1240,7 +1240,7 @@ async def test_resource_summary_no_resources(server, environment, client):
         }
     """
     variables = {
-      "environment": environment,
+        "environment": environment,
     }
     result = await client.graphql(query=query, variables=variables)
     assert result.code == 200
