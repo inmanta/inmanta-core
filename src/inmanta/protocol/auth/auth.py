@@ -22,6 +22,7 @@ import json
 import logging
 import os
 import ssl
+import threading
 import time
 from collections import defaultdict
 from typing import Any, Mapping, MutableMapping, Optional, Sequence
@@ -169,9 +170,15 @@ ENV_AUTH_JWT_SETTINGS = [
 
 class AuthJWTConfig:
     """
-    Auth JWT configuration manager
+    Auth JWT configuration manager.
+
+    This class is thread-safe for concurrent access on its class variables.
     """
 
+    # RLock (not Lock) is required: _load_config_and_validate holds this lock and
+    # calls reset() on error, which also acquires it. An RLock allows the same
+    # thread to re-acquire without deadlocking.
+    _lock = threading.RLock()
     sections: dict[str, "AuthJWTConfig"] = {}
     issuers: dict[str, "AuthJWTConfig"] = {}
     _config_successfully_loaded: bool = False
@@ -181,9 +188,10 @@ class AuthJWTConfig:
 
     @classmethod
     def reset(cls) -> None:
-        cls._config_successfully_loaded = False
-        cls.sections = {}
-        cls.issuers = {}
+        with cls._lock:
+            cls._config_successfully_loaded = False
+            cls.sections = {}
+            cls.issuers = {}
 
     @classmethod
     def _load_config_from_environment_variables(cls) -> dict[str, dict[str, str]]:
@@ -215,6 +223,7 @@ class AuthJWTConfig:
 
     @classmethod
     def _load_config_and_validate(cls) -> None:
+        # Must be called with cls._lock held.
         if cls._config_successfully_loaded:
             return
 
@@ -262,29 +271,32 @@ class AuthJWTConfig:
         Return a list of all defined auth jwt configurations. This method will load new sections if they were added
         since the last invocation.
         """
-        cls._load_config_and_validate()
-        return list(cls.sections.keys())
+        with cls._lock:
+            cls._load_config_and_validate()
+            return list(cls.sections.keys())
 
     @classmethod
     def get(cls, name: str) -> Optional["AuthJWTConfig"]:
         """
         Get the config with the given name
         """
-        cls._load_config_and_validate()
-        if name in cls.sections:
-            return cls.sections[name]
-        return None
+        with cls._lock:
+            cls._load_config_and_validate()
+            if name in cls.sections:
+                return cls.sections[name]
+            return None
 
     @classmethod
     def get_sign_config(cls) -> Optional["AuthJWTConfig"]:
         """
         Get the configuration with sign is true
         """
-        cls._load_config_and_validate()
-        for cfg in cls.sections.values():
-            if cfg.sign:
-                return cfg
-        return None
+        with cls._lock:
+            cls._load_config_and_validate()
+            for cfg in cls.sections.values():
+                if cfg.sign:
+                    return cfg
+            return None
 
     @classmethod
     def get_issuer(cls, issuer: str) -> Optional["AuthJWTConfig"]:
@@ -293,10 +305,11 @@ class AuthJWTConfig:
         again. For loading additional configuration, call list() first. This method is in the auth path for each API
         request.
         """
-        cls._load_config_and_validate()
-        if issuer in cls.issuers:
-            return cls.issuers[issuer]
-        return None
+        with cls._lock:
+            cls._load_config_and_validate()
+            if issuer in cls.issuers:
+                return cls.issuers[issuer]
+            return None
 
     def __init__(self, name: str, section: str, config: configparser.SectionProxy) -> None:
         self.name: str = name

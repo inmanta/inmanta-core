@@ -1,0 +1,4 @@
+---
+description: "Add field-level documentation to GraphQL schema by propagating SQLAlchemy column docs to strawberry field descriptions"
+change-type: minor
+destination-branches: [master, iso9]

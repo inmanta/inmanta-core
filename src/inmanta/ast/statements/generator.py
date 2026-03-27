@@ -176,15 +176,11 @@ class GradualFor(ResultCollector[object]):
         self.resolver = resolver
         self.queue = queue
         self.stmt = stmt
-        self.seen: set[int] = set()
 
     def receive_result(self, value: object, location: Location) -> bool:
         if isinstance(value, Unknown):
             # skip unknowns
             return False
-        if id(value) in self.seen:
-            return False
-        self.seen.add(id(value))
 
         xc = ExecutionContext(self.stmt.module, self.resolver.for_namespace(self.stmt.module.namespace))
         loopvar = xc.lookup(self.stmt.loop_var)
@@ -261,6 +257,8 @@ class For(RequiresEmitStatement):
 class ListComprehension(RawResumer, ExpressionStatement):
     """
     A list comprehension expression, e.g. `["hello {{world}}" for world in worlds if world != "exclude"]`.
+
+    Preserves list order (except in gradual execution where order is irrelevant by definition).
     """
 
     __slots__ = ("loop_var", "value_expression", "iterable", "guard")
@@ -577,6 +575,7 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
                 # We must not set the final result to a *different* unknown for consistency => simply await the unknown result
                 # as for any other values
             elif len(self._results) != len(all_values):
+                # Gradual execution does not allow partial results: result collector should receive either all results or none
                 raise InvalidCompilerState(self, "list comprehension helper received some but not all values gradually")
             if self.lhs is None:
                 # We should only have received previous results in gradual mode, if any gradual results were received in
