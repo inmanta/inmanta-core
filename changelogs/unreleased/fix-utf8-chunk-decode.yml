@@ -1,4 +1,6 @@
 ---
-description: "Fix UnicodeDecodeError when compiler output contains multi-byte UTF-8 characters split across read buffer boundaries"
+description: "Fix UnicodeDecodeError on server-side compiles when the compiler output contains multi-byte UTF-8 characters split across read buffer boundaries"
 change-type: patch
 destination-branches: [master, iso9, iso8]
+sections:
+  bugfix: "{{description}}"
