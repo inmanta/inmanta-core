@@ -2353,3 +2353,50 @@ async def test_reinstall_project_and_venv(
     assert os.path.exists(versioned_venv_dir)
     assert os.readlink(venv_dir) == os.path.basename(versioned_venv_dir)
     assert await does_removing_project_log_msg_exist()
+
+
+@pytest.mark.parametrize("drain_method,stream_kwarg", [("drain_out", "out"), ("drain_err", "err")])
+async def test_drain_multibyte_utf8_at_chunk_boundary(tmp_path, drain_method: str, stream_kwarg: str):
+    """
+    Verify that drain_out and drain_err correctly handle multi-byte UTF-8
+    characters that are split across read buffer boundaries (8192 bytes).
+    """
+    # We perform the import here, because compilerservice is the name of a fixture in this file.
+    from inmanta.server.services import compilerservice
+
+    class DummyCompileRequest:
+        def __init__(self) -> None:
+            self.id = uuid.uuid4()
+
+    class CapturingReport:
+        def __init__(self) -> None:
+            self.out: str = ""
+            self.err: str = ""
+
+        async def update_streams(self, out: str = "", err: str = "") -> None:
+            self.out += out
+            self.err += err
+
+    project = tmp_path / "project"
+    project.mkdir()
+    run = CompileRun(DummyCompileRequest(), str(project))
+    run.stage = CapturingReport()
+    run.tail_stdout = ""
+
+    # U+2026 HORIZONTAL ELLIPSIS = 3 bytes: 0xe2 0x80 0xa6
+    # Place it so it straddles the 8192-byte boundary
+    prefix = "a" * (compilerservice.BUFFER_SIZE - 1)  # 8191 ASCII bytes, then the 3-byte char starts at position 8191
+    suffix = " done"
+    payload = prefix + "\u2026" + suffix
+    encoded = payload.encode("utf-8")
+    # The first 8192 bytes end in the middle of the ellipsis character
+    assert encoded[compilerservice.BUFFER_SIZE - 1] == 0xE2
+
+    reader = asyncio.StreamReader()
+    reader.feed_data(encoded)
+    reader.feed_eof()
+
+    await getattr(run, drain_method)(reader)
+
+    assert getattr(run.stage, stream_kwarg) == payload
+    assert "\u2026" in getattr(run.stage, stream_kwarg)
