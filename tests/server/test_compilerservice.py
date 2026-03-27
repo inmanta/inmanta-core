@@ -50,6 +50,7 @@ from inmanta.protocol.common import Result
 from inmanta.server import SLICE_COMPILER, SLICE_SERVER, protocol
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.protocol import Server
+from inmanta.server.services import compilerservice as comp_service
 from inmanta.server.services.compilerservice import CompilerService, CompileRun, CompileStateListener
 from inmanta.server.services.notificationservice import NotificationService
 from inmanta.util import ensure_directory_exist
@@ -2350,6 +2351,10 @@ async def test_drain_multibyte_utf8_at_chunk_boundary(tmp_path, drain_method: st
     characters that are split across read buffer boundaries (8192 bytes).
     """
 
+    class DummyCompileRequest:
+        def __init__(self) -> None:
+            self.id = uuid.uuid4()
+
     class CapturingReport:
         def __init__(self) -> None:
             self.out: str = ""
@@ -2361,18 +2366,18 @@ async def test_drain_multibyte_utf8_at_chunk_boundary(tmp_path, drain_method: st
 
     project = tmp_path / "project"
     project.mkdir()
-    run = CompileRun(None, str(project))
+    run = CompileRun(DummyCompileRequest(), str(project))
     run.stage = CapturingReport()
     run.tail_stdout = ""
 
     # U+2026 HORIZONTAL ELLIPSIS = 3 bytes: 0xe2 0x80 0xa6
     # Place it so it straddles the 8192-byte boundary
-    prefix = "a" * 8191  # 8191 ASCII bytes, then the 3-byte char starts at position 8191
+    prefix = "a" * (comp_service.BUFFER_SIZE - 1)  # 8191 ASCII bytes, then the 3-byte char starts at position 8191
     suffix = " done"
     payload = prefix + "\u2026" + suffix
     encoded = payload.encode("utf-8")
     # The first 8192 bytes end in the middle of the ellipsis character
-    assert encoded[8191] == 0xE2
+    assert encoded[comp_service.BUFFER_SIZE - 1] == 0xE2
 
     reader = asyncio.StreamReader()
     reader.feed_data(encoded)
