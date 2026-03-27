@@ -17,6 +17,7 @@ Contact: code@inmanta.com
 """
 
 import textwrap
+from collections import Counter
 
 import pytest
 
@@ -623,3 +624,66 @@ def test_nested_list_on_execute_direct(snippetcompiler):
         end
         """)
     compiler.do_compile()
+
+
+def test_5720_duplicate_trimming(snippetcompiler, capsys):
+    """
+    Verify that non-relation lists do not perform duplicate trimming at construction or in the for loop.
+    All 8 cases below iterate over a 2-element list and should each print twice.
+    """
+    snippetcompiler.setup_for_snippet(
+        textwrap.dedent(
+            """\
+            one = 1
+            entity Number: int n end implement Number using std::none
+
+            # 1: non-gradual, non-literal list with interned int value
+            l = [42*one, 42*one]
+            for n in l: std::print(n) end
+
+            # 2: non-gradual, non-literal list with larger int value
+            ll = [420*one, 420*one]
+            for n in ll: std::print(n) end
+
+            # 3: gradual, non-literal list with larger int value
+            for n in [421*one, 421*one]: std::print(n) end
+
+            # 4: literal list, optimized in parser
+            for n in [422, 422]: std::print(n) end
+
+            # 5: non-gradual, instances with interned values
+            nums = [Number(n=43), Number(n=43)]
+            for n in nums: std::print(n.n) end
+
+            # 6: gradual, instances with larger values
+            for n in [Number(n=443), Number(n=443)]: std::print(n.n) end
+
+            # 7: gradual, same exact instance twice
+            num = [Number(n=444)]
+            for n in [num, num]: std::print(n.n) end
+
+            # 7: non-gradual, same exact instance twice
+            num2 = Number(n=445)
+            nums2 = [num2, num2]
+            for n in nums2: std::print(n.n) end
+            """,
+        ),
+        autostd=True,
+    )
+    capsys.readouterr()
+    compiler.do_compile()
+    out, _ = capsys.readouterr()
+    # The for loops are independent so execution order is not guaranteed.
+    # Check that each value is printed exactly twice (i.e. no duplicate trimming occurred).
+    assert Counter(out.split()) == Counter(
+        {
+            "42": 2,  # case 1
+            "420": 2,  # case 2
+            "421": 2,  # case 3
+            "422": 2,  # case 4
+            "43": 2,  # case 5
+            "443": 2,  # case 6
+            "444": 2,  # case 7
+            "445": 2,  # case 8
+        }
+    )

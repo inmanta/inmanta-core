@@ -18,6 +18,7 @@ Contact: code@inmanta.com
 
 import abc
 import asyncio
+import codecs
 import contextlib
 import datetime
 import json
@@ -35,7 +36,7 @@ from collections.abc import AsyncIterator, Awaitable, Hashable, Mapping, Sequenc
 from itertools import chain
 from logging import Logger
 from tempfile import NamedTemporaryFile
-from typing import Optional, cast
+from typing import Callable, Optional, cast
 
 import dateutil
 import dateutil.parser
@@ -61,6 +62,7 @@ from inmanta.types import Apireturn, ArgumentTypes, JsonType, Warnings
 from inmanta.util import TaskMethod, ensure_directory_exist
 
 RETURNCODE_INTERNAL_ERROR = -1
+BUFFER_SIZE: int = 8192
 
 LOGGER: Logger = logging.getLogger(__name__)
 COMPILER_LOGGER: Logger = LOGGER.getChild("report")
@@ -135,20 +137,44 @@ class CompileRun:
             self.tail_stdout += part
             self.tail_stdout = self.tail_stdout[-1024:]
 
-    async def drain_out(self, stream: asyncio.StreamReader) -> None:
-        assert self.stage is not None
+    async def _drain(self, stream: asyncio.StreamReader, log_fnc: Callable[[str], Awaitable[None]]) -> None:
+        decoder = codecs.getincrementaldecoder("utf-8")("replace")
         while not stream.at_eof():
-            part = (await stream.read(8192)).decode()
+            part = decoder.decode(await stream.read(BUFFER_SIZE))
+            if part:
+                await log_fnc(part)
+        part = decoder.decode(b"", final=True)
+        if part:
+            await log_fnc(part)
+
+    async def drain_out(self, stream: asyncio.StreamReader) -> None:
+        """Drain stdout from the subprocess and forward it to the stage.
+
+        Uses an incremental decoder because a multi-byte UTF-8 character may be split across
+        consecutive 8192-byte reads.
+        """
+
+        async def log_part(part: str) -> None:
             self._add_to_tail(part)
             COMPILER_LOGGER.log(const.LOG_LEVEL_TRACE, "%s %s Out:", self.request.id, part)
+            assert self.stage is not None
             await self.stage.update_streams(out=part)
 
+        await self._drain(stream, log_part)
+
     async def drain_err(self, stream: asyncio.StreamReader) -> None:
-        assert self.stage is not None
-        while not stream.at_eof():
-            part = (await stream.read(8192)).decode()
+        """Drain stderr from the subprocess and forward it to the stage.
+
+        Uses an incremental decoder because a multi-byte UTF-8 character may be split across
+        consecutive 8192-byte reads.
+        """
+
+        async def log_part(part: str) -> None:
             COMPILER_LOGGER.log(const.LOG_LEVEL_TRACE, "%s %s Err:", self.request.id, part)
+            assert self.stage is not None
             await self.stage.update_streams(err=part)
+
+        await self._drain(stream, log_part)
 
     async def drain(self, sub_process: asyncio.subprocess.Process) -> int:
         with tracing.span("drain"):
