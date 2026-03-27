@@ -720,7 +720,7 @@ When a development release is done using the \--dev option, this command:
             module_requirement = InmantaModuleRequirement.parse(module_req)
         except packaging.requirements.InvalidRequirement:
             raise CLIException(f"'{module_req}' is not a valid requirement", exitcode=1)
-        if not override and module_like.has_module_requirement(module_requirement.key):
+        if not override and module_like.has_module_requirement(module_requirement.name):
             raise CLIException(
                 "A dependency on the given module was already defined, use --override to override the version constraint",
                 exitcode=1,
