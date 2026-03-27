@@ -18,6 +18,7 @@ Contact: code@inmanta.com
 
 import abc
 import asyncio
+import codecs
 import contextlib
 import datetime
 import json
@@ -137,17 +138,28 @@ class CompileRun:
 
     async def drain_out(self, stream: asyncio.StreamReader) -> None:
         assert self.stage is not None
+        decoder = codecs.getincrementaldecoder("utf-8")("replace")
         while not stream.at_eof():
-            part = (await stream.read(8192)).decode()
+            part = decoder.decode(await stream.read(8192))
+            if part:
+                self._add_to_tail(part)
+                COMPILER_LOGGER.log(const.LOG_LEVEL_TRACE, "%s %s Out:", self.request.id, part)
+                await self.stage.update_streams(out=part)
+        part = decoder.decode(b"", final=True)
+        if part:
             self._add_to_tail(part)
-            COMPILER_LOGGER.log(const.LOG_LEVEL_TRACE, "%s %s Out:", self.request.id, part)
             await self.stage.update_streams(out=part)
 
     async def drain_err(self, stream: asyncio.StreamReader) -> None:
         assert self.stage is not None
+        decoder = codecs.getincrementaldecoder("utf-8")("replace")
         while not stream.at_eof():
-            part = (await stream.read(8192)).decode()
-            COMPILER_LOGGER.log(const.LOG_LEVEL_TRACE, "%s %s Err:", self.request.id, part)
+            part = decoder.decode(await stream.read(8192))
+            if part:
+                COMPILER_LOGGER.log(const.LOG_LEVEL_TRACE, "%s %s Err:", self.request.id, part)
+                await self.stage.update_streams(err=part)
+        part = decoder.decode(b"", final=True)
+        if part:
             await self.stage.update_streams(err=part)
 
     async def drain(self, sub_process: asyncio.subprocess.Process) -> int:
