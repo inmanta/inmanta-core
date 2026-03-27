@@ -137,6 +137,11 @@ class CompileRun:
             self.tail_stdout = self.tail_stdout[-1024:]
 
     async def drain_out(self, stream: asyncio.StreamReader) -> None:
+        """Drain stdout from the subprocess and forward it to the stage.
+
+        Uses an incremental decoder because a multi-byte UTF-8 character may be split across
+        consecutive 8192-byte reads.
+        """
         assert self.stage is not None
         decoder = codecs.getincrementaldecoder("utf-8")("replace")
         while not stream.at_eof():
@@ -151,6 +156,11 @@ class CompileRun:
             await self.stage.update_streams(out=part)
 
     async def drain_err(self, stream: asyncio.StreamReader) -> None:
+        """Drain stderr from the subprocess and forward it to the stage.
+
+        Uses an incremental decoder because a multi-byte UTF-8 character may be split across
+        consecutive 8192-byte reads.
+        """
         assert self.stage is not None
         decoder = codecs.getincrementaldecoder("utf-8")("replace")
         while not stream.at_eof():
