@@ -422,17 +422,16 @@ class Entity(NamedType, WithComment):
     def add_to_index(self, instance: Instance) -> None:
         """
         Update indexes based on the instance and the attribute that has
-        been set
+        been set. All index attributes are guaranteed to be set before this
+        method is called (enforced by Constructor.normalize and
+        _collect_required_dynamic_arguments).
         """
         slots = instance.slots
 
-        # check if an index entry can be added
         for index_attributes in self.get_indices():
             key = []
             for attribute in index_attributes:
                 slot = slots[attribute]
-                if not slot.is_ready():
-                    break
                 value = slot.get_value()
                 if isinstance(value, Reference):
                     raise TypingException(
@@ -441,19 +440,18 @@ class Entity(NamedType, WithComment):
                         f"references can not be used in indexes.",
                     )
                 key.append(f"{attribute}={value!r}")
-            else:
-                # all attributes ready
-                keys = ", ".join(key)
 
-                if keys in self._index and self._index[keys] is not instance:
-                    raise DuplicateException(instance, self._index[keys], "Duplicate key in index. %s" % keys)
+            keys = ", ".join(key)
 
-                self._index[keys] = instance
+            if keys in self._index and self._index[keys] is not instance:
+                raise DuplicateException(instance, self._index[keys], "Duplicate key in index. %s" % keys)
 
-                if keys in self.index_queue:
-                    for x, stmt in self.index_queue[keys]:
-                        x.set_value(instance, stmt.location)
-                    self.index_queue.pop(keys)
+            self._index[keys] = instance
+
+            if keys in self.index_queue:
+                for x, stmt in self.index_queue[keys]:
+                    x.set_value(instance, stmt.location)
+                self.index_queue.pop(keys)
 
     def lookup_index(
         self, params: "List[Tuple[str,object]]", stmt: "Statement", target: "Optional[ResultVariable]" = None
