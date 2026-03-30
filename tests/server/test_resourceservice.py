@@ -582,3 +582,5 @@ async def test_log_deploy_start(server, client, environment, clienthelper, agent
         (log_message for log_message in result.result["data"] if "Resource deploy started on agent" in log_message["msg"]), None
     )
     assert deploy_started_message
+
+async def test_compliance_reporting_feature() -> None:
