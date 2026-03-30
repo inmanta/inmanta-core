@@ -1,0 +1,6 @@
+description: "Optimized compiler: expected 10-40% performance improvement depending on the project."
+change-type: patch
+destination-branches:
+  - master
+  - iso9
+  - iso8
