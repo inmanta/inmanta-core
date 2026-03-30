@@ -26,6 +26,8 @@ requires = [
     "pynacl~=1.5",
     "python-dateutil~=2.0",
     "pyyaml~=6.0",
+    # no longer required as a dependency but kept on iso8 for stability reasons
+    "setuptools",
     "texttable~=1.0",
     # tornado>6.5 because of CVE https://github.com/advisories/GHSA-7cx3-6m66-7c5m
     "tornado>6.5",
