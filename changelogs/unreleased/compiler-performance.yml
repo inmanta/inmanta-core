@@ -1,5 +1,7 @@
 description: "Optimized compiler: expected 10-40% performance improvement depending on the project."
 change-type: patch
+sections:
+  minor-improvement: "{{description}}"
 destination-branches:
   - master
   - iso9
