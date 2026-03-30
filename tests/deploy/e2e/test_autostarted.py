@@ -45,6 +45,14 @@ from utils import ClientHelper, retry_limited, wait_until_deployment_finishes
 logger = logging.getLogger("inmanta.test.server_agent")
 
 
+@pytest.fixture
+def shortlived_executors(server_config):
+    """
+    Configures a short (1s) retention time for the executors. Should be used before the server fixture.
+    """
+    inmanta.agent.config.agent_executor_retention_time.set("1")
+
+
 async def wait_for_resources_in_state(client, environment: uuid.UUID, nr_of_resources: int, state: const.ResourceState) -> bool:
     """
     Wait until the given number of resources in environment have the given resource state (exact match).
@@ -687,18 +695,11 @@ async def test_halt_deploy(
     file_to_remove.unlink()
 
 
-# TODO: name
-# TODO: check if this needs to be used anywhere else
-@pytest.fixture
-def agent_config_executor_retention_time(server_config):
-    inmanta.agent.config.agent_executor_retention_time.set("1")
-
-
 @pytest.mark.slowtest
 @pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
 async def test_pause_agent_deploy(
     snippetcompiler,
-    agent_config_executor_retention_time,
+    shortlived_executors,
     server,
     ensure_resource_tracker_is_started,
     client,
@@ -790,7 +791,7 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent1", pat
         should_scheduler_be_defined=True,
         should_fork_server_be_defined=True,
         nb_executor_to_be_defined=0,
-        timeout=3,
+        timeout=2,
     )
 
     for f in [file_to_remove1, file_to_remove2, file_to_remove3]:
@@ -851,6 +852,7 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent1", pat
 @pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
 async def test_agent_paused_scheduler_server_restart(
     snippetcompiler,
+    shortlived_executors,
     server,
     ensure_resource_tracker_is_started,
     client,
@@ -942,6 +944,7 @@ agent2_file_1 = minimaldeployfailuremodule::FailBasedOnFileContent(name="test_fa
         should_scheduler_be_defined=False,
         should_fork_server_be_defined=False,
         nb_executor_to_be_defined=0,
+        timeout=2,
     )
 
     set_resource_deployable_state(fail_deploy=False, control_file=control_failure_file_1)
@@ -977,6 +980,7 @@ agent2_file_1 = minimaldeployfailuremodule::FailBasedOnFileContent(name="test_fa
 @pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
 async def test_agent_paused_should_remain_paused_after_environment_resume(
     snippetcompiler,
+    shortlived_executors,
     server,
     ensure_resource_tracker_is_started,
     client,
@@ -1116,6 +1120,7 @@ c = minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent1",
         should_scheduler_be_defined=True,
         should_fork_server_be_defined=False,
         nb_executor_to_be_defined=0,
+        timeout=2,
     )
 
     resumed_state = construct_scheduler_children(current_pid)
