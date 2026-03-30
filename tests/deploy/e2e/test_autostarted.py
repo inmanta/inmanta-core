@@ -34,6 +34,7 @@ import psutil
 import pytest
 from psutil import NoSuchProcess, Process
 
+import inmanta.agent.config
 from inmanta import config, const, data
 from inmanta.const import AgentAction
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER
@@ -501,6 +502,8 @@ async def wait_for_consistent_children(
     should_scheduler_be_defined: bool,
     should_fork_server_be_defined: bool,
     nb_executor_to_be_defined: int,
+    *,
+    timeout: float = 10.0,
 ) -> None:
     """
     Wait for consistent children for the Scheduler:
@@ -523,7 +526,7 @@ async def wait_for_consistent_children(
         )
 
     try:
-        await retry_limited(wait_consistent_scheduler, 10)
+        await retry_limited(wait_consistent_scheduler, timeout)
     except AssertionError:
         current = construct_scheduler_children(current_pid)
         logger.debug(
@@ -684,10 +687,18 @@ async def test_halt_deploy(
     file_to_remove.unlink()
 
 
+# TODO: name
+# TODO: check if this needs to be used anywhere else
+@pytest.fixture
+def agent_config_executor_retention_time(server_config):
+    inmanta.agent.config.agent_executor_retention_time.set("1")
+
+
 @pytest.mark.slowtest
 @pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
 async def test_pause_agent_deploy(
     snippetcompiler,
+    agent_config_executor_retention_time,
     server,
     ensure_resource_tracker_is_started,
     client,
@@ -779,6 +790,7 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent1", pat
         should_scheduler_be_defined=True,
         should_fork_server_be_defined=True,
         nb_executor_to_be_defined=0,
+        timeout=3,
     )
 
     for f in [file_to_remove1, file_to_remove2, file_to_remove3]:
