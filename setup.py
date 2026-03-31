@@ -26,7 +26,8 @@ requires = [
     "pynacl~=1.5",
     "python-dateutil~=2.0",
     "pyyaml~=6.0",
-    "setuptools",
+    # Version 82.0.0 and higher removed pkg_resources which breaks pip2pi that still depends on it.
+    "setuptools<82.0.0",
     "texttable~=1.0",
     # tornado>6.5 because of CVE https://github.com/advisories/GHSA-7cx3-6m66-7c5m
     "tornado>6.5",
@@ -48,7 +49,7 @@ with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
 
 # This version is managed by bumpversion. Should you ever update it manually, make sure to consistently update it everywhere
 # (See the bumpversion.cfg file for relevant locations).
-version = "15.5.0"
+version = "15.5.1"
 
 setup(
     version=version,

@@ -30,9 +30,9 @@ set :inmanta.config:option:`server.ssl-ca-cert-file` to the truststore.
 
     # The certificate chain that the compiler and agents should use to validate the server certificate
     ssl_ca_cert_file=/etc/inmanta/server.chain
-    # The address at which the compiler and agent should connect
-    # Must correspond to hostname the ssl certificate is bound to
-    server_address=localhost
+    # The address at which the compiler and agent should connect.
+    # Must correspond to the hostname in the ssl certificate
+    internal_server_address=localhost
 
 
 

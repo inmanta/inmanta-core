@@ -248,25 +248,26 @@ Optional step 2: Setup SSL and authentication
 Follow the instructions in :ref:`auth-setup` to configure both SSL and authentication.
 While not mandatory, it is highly recommended you do so.
 
-.. _install-step-2:
+.. _install-postgresql-software:
 
-Step 3: Install PostgreSQL 16
------------------------------
+Step 3: Install PostgreSQL |pg_version|
+---------------------------------------
 
 .. only:: oss
 
-    For most platforms you can install PostgreSQL 16 following the `installation guide <https://www.postgresql.org/download/>`_ for your
+    For most platforms you can install PostgreSQL |pg_version| following the `installation guide <https://www.postgresql.org/download/>`_ for your
     platform.
 
     For RHEL based systems you can also use the PostgreSQL that comes with the distribution.
 
     .. code-block:: sh
+        :substitutions:
 
-        sudo dnf module install postgresql:16/server
+        sudo dnf module install postgresql:|pg_version|/server
 
 .. only:: iso
 
-    Install the PostgreSQL 16 package included in RHEL. More info in the 'Included in Distribution' section
+    Install the PostgreSQL |pg_version| package included in RHEL. More info in the 'Included in Distribution' section
     of the `postgresql documentation <https://www.postgresql.org/download/linux/redhat/>`_.
 
     .. tab-set::
@@ -274,15 +275,17 @@ Step 3: Install PostgreSQL 16
         .. tab-item:: RHEL 8
 
             .. code-block:: sh
+                :substitutions:
 
-                sudo dnf module install postgresql:16/server
+                sudo dnf module install postgresql:|pg_version|/server
                 sudo systemctl enable postgresql
 
         .. tab-item:: RHEL 9
 
             .. code-block:: sh
+                :substitutions:
 
-                sudo dnf module install postgresql:16/server
+                sudo dnf module install postgresql:|pg_version|/server
                 sudo systemctl enable postgresql
 
             .. warning::
@@ -296,7 +299,7 @@ Step 3: Install PostgreSQL 16
                 .. note::
                     If your system uses a different locale, please install the corresponding langpack.
 
-.. _install-step-3:
+.. _configure-postgresql-server:
 
 Step 4: Setup a PostgreSQL database for the Inmanta server
 ----------------------------------------------------------

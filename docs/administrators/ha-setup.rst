@@ -71,9 +71,9 @@ node by performing a manual action.
 Prerequisites
 -------------
 
-* **Master node:** The master node has been setup according to :ref:`step 2<install-step-2>` and :ref:`step 3<install-step-3>`
+* **Master node:** The master node has been setup according to :ref:`step 3<install-postgresql-software>` and :ref:`step 4<configure-postgresql-server>`
   of the Inmanta installation documentation.
-* **Standby node:** The standby node should only have a PostgreSQL installation, so only :ref:`step 2<install-step-2>` of the
+* **Standby node:** The standby node should only have a PostgreSQL installation, so only :ref:`step 3<install-postgresql-software>` of the
   Inmanta installation documentation should be executed.
 
 Configure the master node

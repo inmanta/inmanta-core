@@ -1,0 +1,6 @@
+---
+description: "Resolve the deprecation warning 'The key property has been deprecated in favor of name' when running 'inmanta module add'."
+issue-nr: 10030
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso9, iso8]
