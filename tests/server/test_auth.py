@@ -23,6 +23,8 @@ from inmanta import config, const, data
 from inmanta.data.model import AuthMethod
 from inmanta.protocol import auth
 from inmanta.server import SLICE_USER, protocol
+from inmanta.server.protocol import Server, SliceStartupException
+from utils import configure_auth
 
 
 @pytest.fixture
@@ -128,3 +130,17 @@ async def test_login_failed(server, client) -> None:
     result = await client.login(username="admin", password="test")
     assert result.code == 401
     assert "Invalid username or password" == result.result["message"]
+
+
+async def test_ssl_key_encrypted(inmanta_config, server_config, postgres_db, database_name):
+    """
+    Test that the server produces a cleaner exception if something goes wrong when loading the certificate
+    """
+    configure_auth(auth=True, ca=False, ssl=True, use_encrypted_ssl_key=True)
+    rs = Server()
+    with pytest.raises(
+        SliceStartupException,
+        match="Failed to load ssl certificate. "
+        "Please check if you provided the correct certificate/key path and make sure that these files are not encrypted.",
+    ):
+        await rs.start()

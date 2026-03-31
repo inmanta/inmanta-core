@@ -569,10 +569,7 @@ import std::testing
 std::testing::NullResource(name="test")
     """.strip()
 
-    # Add .inmanta file with inverse SSL config as the server itself.
-    config_file = os.path.join(tmpdir, "auth.cfg")
-    with open(config_file, "w+", encoding="utf-8") as fd:
-        fd.write("""
+    original_config = """
 [server]
 auth=true
 auth_additional_header=Jwt-Assertion
@@ -586,7 +583,20 @@ expire=0
 issuer=https://localhost:8888/
 audience=https://localhost:8888/
 
-            """)
+[auth_jwt_test2]
+algorithm=HS256
+sign=false
+client_types=agent,compiler
+key=eciwliGyqECVmXtIkNpfVrtBLutZiITZKSKYhogeHMM
+expire=0
+issuer=https://localhost:8881/
+audience=https://localhost:8888/
+            """
+
+    # Add .inmanta file with inverse SSL config as the server itself.
+    config_file = os.path.join(tmpdir, "auth.cfg")
+    with open(config_file, "w+", encoding="utf-8") as fd:
+        fd.write(original_config)
 
     config.Config.load_config(config_file)
     env = await environment_factory.create_environment(main=main_cf)
@@ -603,7 +613,44 @@ audience=https://localhost:8888/
     await cr.run()
 
     c = await data.Compile.get_report(compile.id)
-    assert c["reports"][-1]["errstream"] == "One auth_jwt section should have sign set to true\n"
+    assert c["reports"][-1]["errstream"] == """One auth_jwt section should have sign set to true:
+auth_jwt_test -> sign=False
+auth_jwt_test2 -> sign=False
+"""
+
+    with open(config_file, "a+", encoding="utf-8") as fd:
+        fd.write("""
+[auth_jwt_test3]
+algorithm=HS256
+sign=true
+client_types=agent,compiler
+key=eciwliGyqECVmXtIkNpfVrtBLutZiITZKSKYhogeHMM
+expire=0
+issuer=https://localhost:8882/
+audience=https://localhost:8888/
+
+[auth_jwt_test4]
+algorithm=HS256
+sign=true
+client_types=agent,compiler
+key=eciwliGyqECVmXtIkNpfVrtBLutZiITZKSKYhogeHMM
+expire=0
+issuer=https://localhost:8883/
+audience=https://localhost:8888/
+
+                """)
+    config.Config.load_config(config_file)
+    # compile with export
+    cr = CompileRun(compile, project_work_dir)
+    await cr.run()
+
+    c = await data.Compile.get_report(compile.id)
+    assert c["reports"][-1]["errstream"] == """Only one auth_jwt section may have sign set to true, found 2 instances instead:
+auth_jwt_test -> sign=False
+auth_jwt_test2 -> sign=False
+auth_jwt_test3 -> sign=True
+auth_jwt_test4 -> sign=True
+"""
 
 
 @pytest.mark.slowtest
@@ -2306,3 +2353,50 @@ async def test_reinstall_project_and_venv(
     assert os.path.exists(versioned_venv_dir)
     assert os.readlink(venv_dir) == os.path.basename(versioned_venv_dir)
     assert await does_removing_project_log_msg_exist()
+
+
+@pytest.mark.parametrize("drain_method,stream_kwarg", [("drain_out", "out"), ("drain_err", "err")])
+async def test_drain_multibyte_utf8_at_chunk_boundary(tmp_path, drain_method: str, stream_kwarg: str):
+    """
+    Verify that drain_out and drain_err correctly handle multi-byte UTF-8
+    characters that are split across read buffer boundaries (8192 bytes).
+    """
+    # We perform the import here, because compilerservice is the name of a fixture in this file.
+    from inmanta.server.services import compilerservice
+
+    class DummyCompileRequest:
+        def __init__(self) -> None:
+            self.id = uuid.uuid4()
+
+    class CapturingReport:
+        def __init__(self) -> None:
+            self.out: str = ""
+            self.err: str = ""
+
+        async def update_streams(self, out: str = "", err: str = "") -> None:
+            self.out += out
+            self.err += err
+
+    project = tmp_path / "project"
+    project.mkdir()
+    run = CompileRun(DummyCompileRequest(), str(project))
+    run.stage = CapturingReport()
+    run.tail_stdout = ""
+
+    # U+2026 HORIZONTAL ELLIPSIS = 3 bytes: 0xe2 0x80 0xa6
+    # Place it so it straddles the 8192-byte boundary
+    prefix = "a" * (compilerservice.BUFFER_SIZE - 1)  # 8191 ASCII bytes, then the 3-byte char starts at position 8191
+    suffix = " done"
+    payload = prefix + "\u2026" + suffix
+    encoded = payload.encode("utf-8")
+    # The first 8192 bytes end in the middle of the ellipsis character
+    assert encoded[compilerservice.BUFFER_SIZE - 1] == 0xE2
+
+    reader = asyncio.StreamReader()
+    reader.feed_data(encoded)
+    reader.feed_eof()
+
+    await getattr(run, drain_method)(reader)
+
+    assert getattr(run.stage, stream_kwarg) == payload
+    assert "\u2026" in getattr(run.stage, stream_kwarg)
