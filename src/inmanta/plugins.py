@@ -72,9 +72,6 @@ if TYPE_CHECKING:
 
 LOGGER = logging.getLogger(__name__)
 
-# Exact types for which validate_and_convert_to_python_domain() can skip proxy/conversion steps.
-_VALIDATE_PRIMITIVE_FAST_PATH_TYPES: frozenset[type] = frozenset({str, int, float, bool})
-
 
 class PluginDeprecationWarning(InmantaWarning):
     pass
@@ -495,11 +492,6 @@ def validate_and_convert_to_python_domain(*, name: str, expected_type: inmanta_t
     Unknowns are not handled by this method!
     """
     expected_type.validate(value)
-
-    # Fast path: primitive values need no conversion or proxy wrapping.
-    # Skips NoneValue check, has_custom_to_python(), ProxyContext allocation, and DynamicProxy.return_value call.
-    if type(value) in _VALIDATE_PRIMITIVE_FAST_PATH_TYPES:
-        return value
 
     if isinstance(value, NoneValue):
         # if the type is not nullable, it will fail when validating
@@ -1193,17 +1185,15 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         kwargs = processed_args.kwargs
         value = self.call(*args, **kwargs)
 
-        # Fast path: primitive return values need no unwrapping or DynamicUnwrapContext construction
-        if type(value) not in (str, int, float, bool):
-            value = DynamicProxy.unwrap(
-                value,
-                dynamic_context=proxy.DynamicUnwrapContext(
-                    resolver=resolver,
-                    queue=queue,
-                    location=location,
-                    type_resolver=functools.partial(to_dsl_type, location=location, resolver=self.namespace),
-                ),
-            )
+        value = DynamicProxy.unwrap(
+            value,
+            dynamic_context=proxy.DynamicUnwrapContext(
+                resolver=resolver,
+                queue=queue,
+                location=location,
+                type_resolver=functools.partial(to_dsl_type, location=location, resolver=self.namespace),
+            ),
+        )
 
         try:
             # Validate the returned value
