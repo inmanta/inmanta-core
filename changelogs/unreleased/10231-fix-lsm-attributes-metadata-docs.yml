@@ -1,4 +1,4 @@
 ---
 description: "Fix syntax errors in LSM attributes metadata documentation code examples"
 change-type: patch
-destination-branches: [master, iso9, iso8]
+destination-branches: [iso8]
