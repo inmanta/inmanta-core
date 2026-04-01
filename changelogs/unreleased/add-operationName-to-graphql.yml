@@ -1,0 +1,6 @@
+change-type: patch
+description: Add operationName to graphql endpoint
+destination-branches:
+- master
+- iso9
+sections: {}

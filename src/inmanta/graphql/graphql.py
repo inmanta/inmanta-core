@@ -40,10 +40,10 @@ class GraphQLSlice(protocol.ServerSlice):
 
     @handle(methods_v2.graphql)
     async def graphql(
-        self, query: str, variables: dict[str, Any] | None = None
+        self, query: str, variables: dict[str, Any] | None = None, operationName: str | None = None
     ) -> Any:  # Actual return type: strawberry.types.execution.HandlerResult
         assert self.context is not None
-        return await get_schema(self.context).execute(query, variable_values=variables)
+        return await get_schema(self.context).execute(query, variable_values=variables, operation_name=operationName)
 
     @handle(methods_v2.graphql_schema)
     async def graphql_schema(self) -> dict[str, Any]:

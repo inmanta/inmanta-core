@@ -1864,7 +1864,7 @@ def discovered_resource_delete_batch(tid: uuid.UUID, discovered_resource_ids: Se
     strict_typing=False,
 )
 def graphql(
-    query: str, variables: dict[str, Any] | None = None
+    query: str, variables: dict[str, Any] | None = None, operationName: str | None = None
 ) -> Any:  # Actual return type: strawberry.types.execution.HandlerResult
     """
     GraphQL endpoint for Inmanta.
@@ -1874,6 +1874,7 @@ def graphql(
 
     :param query: The GraphQL query to perform
     :param variables: The GraphQL variables to apply to the query
+    :param operationName: The name of the operation to perform, for debugging/logging purposes only
     """
     pass
 
