@@ -409,10 +409,18 @@ class Entity(NamedType, WithComment):
             if len(index) == len(attributes) and all((a == b for a, b in zip(index, attributes))):
                 return
 
-        self._index_def.append(sorted(attributes))
-        self._indexes.append(index_def)
+        srtd = sorted(attributes)
+        self._add_index(srtd, index_def, check=False)
         for child in self.child_entities:
-            child.add_index(attributes, index_def)
+            child._add_index(srtd, index_def)
+
+    def _add_index(self, srtd_attrs, index_def, check=True):
+        # duplicate check
+        for index in self._index_def:
+            if len(index) == len(attributes) and all((a == b for a, b in zip(index, attributes))):
+                return
+        self._index_def.append(srtd_attrs)
+        self._indexes.append(index_def)
 
     def get_indices(self) -> list[list[str]]:
         return self._index_def
