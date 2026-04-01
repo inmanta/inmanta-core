@@ -301,7 +301,7 @@ class Entity(NamedType, WithComment):
 
     def add_instance(self, obj: "Instance") -> None:
         """
-        Register a new instance
+        Register a new instance. All index attributes must already be set on the instance.
         """
         self._instance_list.add(obj)
         self.add_to_index(obj)
@@ -318,8 +318,10 @@ class Entity(NamedType, WithComment):
         node: Optional[dataflow.InstanceNodeReference] = None,
     ) -> "Instance":
         """
-        Return an instance of the class defined in this entity.
+        Return a new instance of the class defined in this entity.
         If the corresponding node is not None, passes it on the instance.
+
+        :param attributes: Known attribute values of the instance. Must contain at least all index attributes.
         """
         out = Instance(self, resolver, queue, node)
         out.set_location(location)
@@ -422,9 +424,7 @@ class Entity(NamedType, WithComment):
     def add_to_index(self, instance: Instance) -> None:
         """
         Update indexes based on the instance and the attribute that has
-        been set. All index attributes are guaranteed to be set before this
-        method is called (enforced by Constructor.normalize and
-        _collect_required_dynamic_arguments).
+        been set. All index attributes must already be set on the instance.
         """
         slots = instance.slots
 
