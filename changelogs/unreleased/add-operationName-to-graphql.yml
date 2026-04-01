@@ -1,4 +1,4 @@
-change-type: patch
+change-type: minor
 description: Add operationName to graphql endpoint
 destination-branches:
 - master

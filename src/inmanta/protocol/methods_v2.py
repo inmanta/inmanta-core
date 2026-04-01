@@ -1866,6 +1866,8 @@ def discovered_resource_delete_batch(tid: uuid.UUID, discovered_resource_ids: Se
 def graphql(
     query: str, variables: dict[str, Any] | None = None, operationName: str | None = None
 ) -> Any:  # Actual return type: strawberry.types.execution.HandlerResult
+    # We break the convention and use camelCase here because this nomenclature is the standard in GraphQL
+    # and it is what the FE team needs for their test suite.
     """
     GraphQL endpoint for Inmanta.
     Supports paging, filtering and sorting on certain attributes.
@@ -1874,8 +1876,7 @@ def graphql(
 
     :param query: The GraphQL query to perform
     :param variables: The GraphQL variables to apply to the query
-    :param operationName: The name of the operation to perform, for debugging/logging purposes only.
-        We break the convention and use camelCase here to be compatible with the graphql framework used by the frontend team.
+    :param operationName: The name of the operation to perform.
     """
     pass
 
