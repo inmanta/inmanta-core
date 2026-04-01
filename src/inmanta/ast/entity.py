@@ -417,7 +417,7 @@ class Entity(NamedType, WithComment):
     def _add_index(self, srtd_attrs, index_def, check=True):
         # duplicate check
         for index in self._index_def:
-            if len(index) == len(attributes) and all((a == b for a, b in zip(index, attributes))):
+            if len(index) == len(srtd_attrs) and all((a == b for a, b in zip(index, srtd_attrs))):
                 return
         self._index_def.append(srtd_attrs)
         self._indexes.append(index_def)
