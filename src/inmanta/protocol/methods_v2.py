@@ -1874,7 +1874,8 @@ def graphql(
 
     :param query: The GraphQL query to perform
     :param variables: The GraphQL variables to apply to the query
-    :param operationName: The name of the operation to perform, for debugging/logging purposes only
+    :param operationName: The name of the operation to perform, for debugging/logging purposes only.
+        We break the convention and use camelCase here to be compatible with the graphql framework used by the frontend team.
     """
     pass
 
