@@ -465,8 +465,8 @@ class Entity(NamedType, WithComment):
             attributes.add(attr)
 
         found_index = False
-        for index_attr_set in self.get_indices():
-            if set(index_attr_set) == attributes:
+        for index in self._indexes:
+            if index.attributes_set == attributes:
                 found_index = True
 
         if not found_index:

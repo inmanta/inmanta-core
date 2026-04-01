@@ -603,6 +603,7 @@ class DefineIndex(DefinitionStatement):
         DefinitionStatement.__init__(self)
         self.type = entity_type
         self.attributes: Sequence[LocatableString] = attributes
+        self.attributes_set: frozenset[str] = frozenset((str(a) for a in self.attributes))
 
     def types(self, recursive: bool = False) -> list[tuple[str, LocatableString]]:
         """
