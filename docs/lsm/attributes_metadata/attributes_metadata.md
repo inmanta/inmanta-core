@@ -80,7 +80,8 @@ embedded entities in the same way.
 
 ```inmanta
 entity Interface extends lsm::ServiceEntity:
-    string interface_name dict __annotations = {"annotation": "value"}
+    string interface_name
+    dict __annotations = {"annotation": "value"}
 end
 ```
 
@@ -95,8 +96,8 @@ on simple attributes of embedded entities in the same way.
 
 ```inmanta
 entity Interface extends lsm::ServiceEntity:
-    string interface_name dict 
-    interface_name__annotations = {"annotation": "value"}
+    string interface_name
+    dict interface_name__annotations = {"annotation": "value"}
 end
 ```
 
