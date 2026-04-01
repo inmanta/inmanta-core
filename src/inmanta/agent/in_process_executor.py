@@ -689,4 +689,5 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
                 inmanta.util.parse_requirements(blueprint.requirements),
                 blueprint.pip_config,
             )
+            # TODO when installing in package mode, can do it in one swoop above in `install_for_config` and no need for deploy_version below
             await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, blueprint.sources)

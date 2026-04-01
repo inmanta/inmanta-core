@@ -136,6 +136,8 @@ class CodeManager:
         files_metadata = [module_source.metadata for module_source in module_sources]
         requirements = self.get_inmanta_module_requirements(inmanta_module_name)
 
+        # TODO in package mode, register PEP440 version to use (can use module.get_version() since v2 modules only) + a checksum to check on the read path
+
         module_version = self.get_module_version(requirements, files_metadata)
 
         self.module_version_info[inmanta_module_name] = InmantaModule(
