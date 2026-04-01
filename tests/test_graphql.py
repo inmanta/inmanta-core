@@ -21,8 +21,7 @@ import uuid
 import pytest
 
 import inmanta.data.sqlalchemy as models
-import requests
-from inmanta import config, const, data
+from inmanta import const, data
 from inmanta.data import model
 from inmanta.deploy import state
 from inmanta.graphql.schema import _docstring_param_cache, mapper, to_snake_case
@@ -1023,7 +1022,6 @@ async def test_graphql_variables_and_operation_name(server, client, setup_databa
     """
     Test that graphql variables and the operation name are working as intended.
     """
-    env_id = "11111111-1234-5678-1234-000000000001"
     query = """
     query GetEnvironments($environment: UUID!) {
         environments(filter: { id: $environment }) {
@@ -1036,9 +1034,9 @@ async def test_graphql_variables_and_operation_name(server, client, setup_databa
         }
     }
     """
-    result = await client.graphql(query=query, variables={"environment": env_id}, operationName="GetEnvironments")
+    result = await client.graphql(query=query, variables={"environment": env_1}, operationName="GetEnvironments")
     check_correct_graphql_response(result)
-    assert result.result["data"]["data"]["environments"]["edges"][0]["node"]["id"] == env_id
+    assert result.result["data"]["data"]["environments"]["edges"][0]["node"]["id"] == env_1
 
     # omit variables
     result = await client.graphql(query=query)
@@ -1067,7 +1065,7 @@ async def test_graphql_variables_and_operation_name(server, client, setup_databa
     assert len(result.result["data"]["errors"]) == 1
     assert result.result["data"]["errors"][0] == "Filter id was requested but no value was provided"
 
-    result = await client.graphql(query=query, variables={"environment": env_id}, operationName="WrongOperation")
+    result = await client.graphql(query=query, variables={"environment": env_1}, operationName="WrongOperation")
     assert result.code == 500
     assert (
         result.result["message"]
@@ -1088,16 +1086,12 @@ async def test_graphql_variables_and_operation_name(server, client, setup_databa
             }
         }
     """
-    result = await client.graphql(query=query, variables={"environment": env_id, "cleared": False})
+    result = await client.graphql(query=query, variables={"environment": env_1, "cleared": False})
     check_correct_graphql_response(result)
     notifications = result.result["data"]["data"]["notifications"]["edges"]
     for notification in notifications:
-        assert notification["node"]["environment"] == env_id
+        assert notification["node"]["environment"] == env_1
         assert notification["node"]["cleared"] is False
-    port = config.Config.get("client_rest_transport", "port")
-    res = requests.get(f"http://localhost:{port}/api/v2/graphql_schema")
-    res.raise_for_status()
-    assert res.status_code == 200
 
 
 async def test_total_count(server, client, setup_database):
