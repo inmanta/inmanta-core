@@ -90,7 +90,6 @@ class Entity(NamedType, WithComment):
         self.__default_values = {}  # type: Dict[str, DefineAttribute]
 
         self._index_def = []  # type: List[List[str]]
-        self._index_def_sets: list[frozenset[str]] = []
         self._indexes = []  # type: list[DefineIndex]
         self._index = {}  # type: Dict[str,Instance]
         self.index_queue = {}  # type: Dict[str,List[Tuple[ResultVariable, Statement]]]
@@ -413,7 +412,6 @@ class Entity(NamedType, WithComment):
                 return
 
         self._index_def.append(sorted(attributes))
-        self._index_def_sets.append(frozenset(attributes))
         self._indexes.append(index_def)
         for child in self.child_entities:
             child.add_index(attributes, index_def)
@@ -467,8 +465,8 @@ class Entity(NamedType, WithComment):
             attributes.add(attr)
 
         found_index = False
-        for index_attr_set in self._index_def_sets:
-            if index_attr_set == attributes:
+        for index_attr_set in self.get_indices():
+            if set(index_attr_set) == attributes:
                 found_index = True
 
         if not found_index:
