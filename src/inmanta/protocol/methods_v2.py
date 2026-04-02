@@ -28,6 +28,7 @@ from inmanta import const
 from inmanta.const import AgentAction, AllAgentAction, ApiDocsFormat, Change, ClientType, ParameterSource, ResourceState
 from inmanta.data import model
 from inmanta.data.model import DataBaseReport, PipConfig, ResourceComplianceDiff
+from inmanta.graphql.result import GraphQLResult
 from inmanta.protocol import methods
 from inmanta.protocol.auth.decorators import auth
 from inmanta.protocol.common import ReturnValue
@@ -1865,7 +1866,7 @@ def discovered_resource_delete_batch(tid: uuid.UUID, discovered_resource_ids: Se
 )
 def graphql(
     query: str, variables: dict[str, Any] | None = None, operationName: str | None = None
-) -> Any:  # Actual return type: strawberry.types.execution.HandlerResult
+) -> ReturnValue[GraphQLResult]:
     # We break the convention and use camelCase here because this nomenclature is the standard in GraphQL
     # and it is what the FE team needs for their test suite.
     """

@@ -512,48 +512,48 @@ async def test_query_environments_with_paging(server, client, setup_database):
 
     # last by itself
     result = await client.graphql(query=query % "last: 5")
-    assert result.code == 200
+    assert result.code == 400
     data = result.result["data"]
     assert data
     assert data["data"] is None
     assert len(data["errors"]) == 1
-    assert data["errors"][0] == "`last` is only allowed in conjunction with `before`"
+    assert data["errors"][0]["message"] == "`last` is only allowed in conjunction with `before`"
 
     # first + last
     result = await client.graphql(query=query % "first: 5, last: 5")
-    assert result.code == 200
+    assert result.code == 400
     data = result.result["data"]
     assert data
     assert data["data"] is None
     assert len(data["errors"]) == 1
-    assert data["errors"][0] == "`first` is not allowed in conjunction with `last` or `before`"
+    assert data["errors"][0]["message"] == "`first` is not allowed in conjunction with `last` or `before`"
 
     # first + before
     result = await client.graphql(query=query % f'first: 5, before: "{new_last_cursor}"')
-    assert result.code == 200
+    assert result.code == 400
     data = result.result["data"]
     assert data
     assert data["data"] is None
     assert len(data["errors"]) == 1
-    assert data["errors"][0] == "`first` is not allowed in conjunction with `last` or `before`"
+    assert data["errors"][0]["message"] == "`first` is not allowed in conjunction with `last` or `before`"
 
     # last + after
     result = await client.graphql(query=query % f'last: 5, after: "{first_cursor}"')
-    assert result.code == 200
+    assert result.code == 400
     data = result.result["data"]
     assert data
     assert data["data"] is None
     assert len(data["errors"]) == 1
-    assert data["errors"][0] == "`last` is only allowed in conjunction with `before`"
+    assert data["errors"][0]["message"] == "`last` is only allowed in conjunction with `before`"
 
     # before + after
     result = await client.graphql(query=query % f'before: "{new_last_cursor}", after: "{first_cursor}"')
-    assert result.code == 200
+    assert result.code == 400
     data = result.result["data"]
     assert data
     assert data["data"] is None
     assert len(data["errors"]) == 1
-    assert data["errors"][0] == "`after` is not allowed in conjunction with `before`"
+    assert data["errors"][0]["message"] == "`after` is not allowed in conjunction with `before`"
 
 
 async def test_is_environment_compiling(server, client, clienthelper, environment, mocked_compiler_service_block):
@@ -647,10 +647,10 @@ async def test_notifications(server, client, setup_database):
     """
     # Try to get the full list of notifications without filter
     result = await client.graphql(query=query % "")
-    assert result.code == 200
+    assert result.code == 400
     assert len(result.result["data"]["errors"]) == 1
     assert (
-        result.result["data"]["errors"][0]
+        result.result["data"]["errors"][0]["message"]
         == "Field 'notifications' argument 'filter' of type 'NotificationFilter!' is required, but it was not provided."
     )
     # Get list of notifications filtered by cleared
@@ -1057,14 +1057,15 @@ async def test_graphql_variables_and_operation_name(server, client, setup_databa
     # wrong operation
     result = await client.graphql(query=query, variables={"environment": env_1}, operationName="WrongOperation")
     assert result.code == 400
-    assert result.result["message"] == 'Invalid request: Unknown operation named "WrongOperation".'
+    assert len(result.result["data"]["errors"]) == 1
+    assert result.result["data"]["errors"][0]["message"] == 'Unknown operation named "WrongOperation".'
 
     # omit variables
     result = await client.graphql(query=query)
-    assert result.code == 200
+    assert result.code == 400
     assert result.result["data"]["data"] is None
     assert len(result.result["data"]["errors"]) == 1
-    assert result.result["data"]["errors"][0] == "Variable '$environment' of required type 'UUID!' was not provided."
+    assert result.result["data"]["errors"][0]["message"] == "Variable '$environment' of required type 'UUID!' was not provided."
 
     # $environment is now optional
     query = """
@@ -1081,10 +1082,10 @@ async def test_graphql_variables_and_operation_name(server, client, setup_databa
     """
     # omit variables
     result = await client.graphql(query=query)
-    assert result.code == 200
+    assert result.code == 400
     assert result.result["data"]["data"] is None
     assert len(result.result["data"]["errors"]) == 1
-    assert result.result["data"]["errors"][0] == "Filter id was requested but no value was provided"
+    assert result.result["data"]["errors"][0]["message"] == "Filter id was requested but no value was provided"
 
     # Test with multiple variables
     query = """
