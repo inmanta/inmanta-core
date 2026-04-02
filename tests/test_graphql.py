@@ -1047,12 +1047,17 @@ async def test_graphql_variables_and_operation_name(server, client, setup_databa
     result = await client.graphql(query=query, variables={"environment": env_1}, operationName="GetEnvironments")
     check_correct_graphql_response(result)
     assert "resources" not in result.result["data"]["data"]
-    assert result.result["data"]["data"]["environments"]["edges"][0]["node"]["id"] == env_1
+    assert result.result["data"]["data"]["environments"]["edges"][0]["node"]["id"] == env_1, result.result["data"]
 
     result = await client.graphql(query=query, variables={"environment": env_1}, operationName="GetResources")
     check_correct_graphql_response(result)
     assert "environments" not in result.result["data"]["data"]
     assert "resources" in result.result["data"]["data"]
+
+    # wrong operation
+    result = await client.graphql(query=query, variables={"environment": env_1}, operationName="WrongOperation")
+    assert result.code == 200
+    assert result.result["data"]["errors"][0] == 'Unknown operation named "WrongOperation".'
 
     # omit variables
     result = await client.graphql(query=query)
@@ -1080,10 +1085,6 @@ async def test_graphql_variables_and_operation_name(server, client, setup_databa
     assert result.result["data"]["data"] is None
     assert len(result.result["data"]["errors"]) == 1
     assert result.result["data"]["errors"][0] == "Filter id was requested but no value was provided"
-
-    result = await client.graphql(query=query, variables={"environment": env_1}, operationName="WrongOperation")
-    assert result.code == 400
-    assert result.result["message"] == 'Unknown operation named "WrongOperation".'
 
     # Test with multiple variables
     query = """
