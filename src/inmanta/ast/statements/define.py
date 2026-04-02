@@ -20,7 +20,7 @@ Contact: code@inmanta.com
 
 import logging
 import warnings
-from collections.abc import Iterator, Sequence, Set
+from collections.abc import Iterator, Sequence
 from typing import Optional
 
 from inmanta.ast import (
@@ -603,7 +603,7 @@ class DefineIndex(DefinitionStatement):
         DefinitionStatement.__init__(self)
         self.type = entity_type
         self.attributes: Sequence[LocatableString] = attributes
-        self.attributes_set: Set[str] = {str(attr) for attr in self.attributes}
+        self.attributes_set: frozenset[str] = frozenset(str(attr) for attr in self.attributes)
         self.attributes_sorted: Sequence[str] = sorted(self.attributes_set)
 
     def types(self, recursive: bool = False) -> list[tuple[str, LocatableString]]:

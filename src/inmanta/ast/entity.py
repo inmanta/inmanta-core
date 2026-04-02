@@ -91,7 +91,7 @@ class Entity(NamedType, WithComment):
         # default values
         self.__default_values = {}  # type: Dict[str, DefineAttribute]
 
-        self._indexes = []  # type: list[DefineIndex]
+        self._indexes: dict[frozenset[str], DefineIndex] = {}
         self._index = {}  # type: Dict[str,Instance]
         self.index_queue = {}  # type: Dict[str,List[tuple[ResultVariable, Statement]]]
 
@@ -408,16 +408,15 @@ class Entity(NamedType, WithComment):
         Add an index over the given attributes.
         """
         # duplicate check
-        for index in self._indexes:
-            if index_def.attributes_set == index.attributes_set:
-                return
+        if index_def.attributes_set in self._indexes:
+            return
 
-        self._indexes.append(index_def)
+        self._indexes[index_def.attributes_set] = index_def
         for child in self.child_entities:
             child.add_index(index_def)
 
     def get_indices(self) -> list[list[str]]:
-        return [index.attributes_sorted for index in self._indexes]
+        return [index.attributes_sorted for index in self._indexes.values()]
 
     def add_to_index(self, instance: Instance) -> None:
         """
@@ -458,19 +457,14 @@ class Entity(NamedType, WithComment):
         Search an instance in the index.
         """
         params_sorted: Sequence[tuple[str, object]] = sorted(params, key=lambda x: x[0])
-        attributes_set = {param[0] for param in params_sorted}
+        attributes_set = frozenset(param[0] for param in params_sorted)
 
         if len(attributes_set) != len(params_sorted):
             for param, next_param in itertools.pairwise(params_sorted):
                 if param[0] == next_param[0]:
                     raise RuntimeException(stmt, "Attribute %s provided twice in index lookup" % param[0])
 
-        found_index = False
-        for index in self._indexes:
-            if index.attributes_set == attributes_set:
-                found_index = True
-
-        if not found_index:
+        if attributes_set not in self._indexes:
             raise NotFoundException(
                 stmt, self.get_full_name(), "No index defined on %s for this lookup: " % self.get_full_name() + str(params)
             )
