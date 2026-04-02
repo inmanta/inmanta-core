@@ -423,18 +423,24 @@ class Entity(NamedType, WithComment):
         Update indexes based on the instance and the attribute that has
         been set. All index attributes must already be set on the instance.
         """
+        attribute_cache: dict[str, str] = {}
         for index_attributes in self.get_indices():
             key = []
             for attribute in index_attributes:
-                slot = instance.slots[attribute]
-                value = slot.get_value()
+                cached = attribute_cache.get(attribute)
+                if cached is not None:
+                    key.append(cached)
+                    continue
+                value = instance.slots[attribute].get_value()
                 if isinstance(value, Reference):
                     raise TypingException(
                         None,
                         f"Invalid value `{value}` in index for attribute {attribute} on instance {instance}: "
                         f"references can not be used in indexes.",
                     )
-                key.append(f"{attribute}={value!r}")
+                part = f"{attribute}={value!r}"
+                attribute_cache[attribute] = part
+                key.append(part)
 
             keys = ", ".join(key)
 
