@@ -22,7 +22,8 @@ import inspect
 import itertools
 import logging
 import typing
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple, Union  # noqa: F401
+from collections.abc import Sequence
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union  # noqa: F401
 
 import inmanta.ast.attribute
 from inmanta import plugins
@@ -92,9 +93,9 @@ class Entity(NamedType, WithComment):
 
         self._indexes = []  # type: list[DefineIndex]
         self._index = {}  # type: Dict[str,Instance]
-        self.index_queue = {}  # type: Dict[str,List[Tuple[ResultVariable, Statement]]]
+        self.index_queue = {}  # type: Dict[str,List[tuple[ResultVariable, Statement]]]
 
-        self._instance_list = set()  # type: Set[Instance]
+        self._instance_list = set()  # type: set[Instance]
 
         self.comment = comment
 
@@ -230,13 +231,13 @@ class Entity(NamedType, WithComment):
 
         return parents
 
-    def get_all_parent_entities(self) -> "Set[Entity]":
+    def get_all_parent_entities(self) -> "set[Entity]":
         parents = [x for x in self.parent_entities]
         for entity in self.parent_entities:
             parents.extend(entity.get_all_parent_entities())
         return set(parents)
 
-    def get_all_child_entities(self) -> "Set[Entity]":
+    def get_all_child_entities(self) -> "set[Entity]":
         children = [x for x in self.child_entities]
         for entity in self.child_entities:
             children.extend(entity.get_all_child_entities())
@@ -408,7 +409,7 @@ class Entity(NamedType, WithComment):
         """
         # duplicate check
         for index in self._indexes:
-            if index_def.attributes_sorted == index.attributes_sorted:
+            if index_def.attributes_set == index.attributes_set:
                 return
 
         self._indexes.append(index_def)
@@ -451,21 +452,22 @@ class Entity(NamedType, WithComment):
                 self.index_queue.pop(keys)
 
     def lookup_index(
-        self, params: "Sequence[Tuple[str,object]]", stmt: "Statement", target: "Optional[ResultVariable]" = None
+        self, params: Sequence[tuple[str,object]], stmt: "Statement", target: "Optional[ResultVariable]" = None
     ) -> "Optional[Instance]":
         """
         Search an instance in the index.
         """
         params_sorted: Sequence[tuple[str, object]] = sorted(params, key=lambda x: x[0])
-        attributes_sorted = [param[0] for param in params_sorted]
+        attributes_set = {param[0] for param in params_sorted}
 
-        for attr, next_attr in itertools.pairwise(attributes_sorted):
-            if attr == next_attr:
-                raise RuntimeException(stmt, "Attribute %s provided twice in index lookup" % attr)
+        if len(attributes_set) != len(params_sorted):
+            for param, next_param in itertools.pairwise(params_sorted):
+                if param[0] == next_param[0]:
+                    raise RuntimeException(stmt, "Attribute %s provided twice in index lookup" % param[0])
 
         found_index = False
         for index in self._indexes:
-            if index.attributes_sorted == attributes_sorted:
+            if index.attributes_set == attributes_set:
                 found_index = True
 
         if not found_index:
@@ -518,7 +520,7 @@ class Entity(NamedType, WithComment):
         """
         Return the dictionary with default values
         """
-        values = []  # type: List[Tuple[str,Optional[ExpressionStatement]]]
+        values = []  # type: List[tuple[str,Optional[ExpressionStatement]]]
 
         # left most parent takes precedence
         for parent in reversed(self.parent_entities):
