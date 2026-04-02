@@ -451,6 +451,7 @@ class IndexLookup(ReferenceStatement, Resumer):
         return requires
 
     def resume(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler, target: ResultVariable) -> None:
+        # TODO: why is type untyped?
         self.type.lookup_index(
             list(
                 chain(
@@ -529,6 +530,7 @@ class ShortIndexLookup(IndexLookup):
 
         self.type = relation.type_internal
 
+        # TODO same here
         self.type.lookup_index(
             list(
                 chain(

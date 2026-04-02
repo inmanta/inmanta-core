@@ -1120,53 +1120,12 @@ class Constructor(ExpressionStatement):
             k: v for k, v in self._indirect_attributes.items() if k not in late_args
         }
 
-        # check if the instance already exists in the index (if there is one)
-        instances: list[Instance] = []
-        # register any potential index collision
-        collisions: abc.MutableMapping[tuple[str, ...], Instance] = {}
-        for index in type_class.get_indices():
-            params = []
-            for attr in index:
-                params.append((attr, direct_attributes[attr]))
-
-            obj: Optional[Instance] = type_class.lookup_index(params, self)
-
-            if obj is not None:
-                if obj.get_type() != type_class:
-                    raise DuplicateException(self, obj, "Type found in index is not an exact match")
-                instances.append(obj)
-                collisions[tuple(index)] = obj
-
-        object_instance: Instance
         graph: Optional[DataflowGraph] = resolver.dataflow_graph
-        if len(instances) > 0:
-            if graph is not None:
-                graph.add_index_match(
-                    chain(
-                        [self.get_dataflow_node(graph)],
-                        (i.instance_node for i in instances if i.instance_node is not None),
-                    )
-                )
-
-            # ensure that instances are all the same objects
-            first = instances[0]
-            for i in instances[1:]:
-                if i != first:
-                    raise IndexCollisionException(
-                        msg=("Inconsistent indexes detected!\n"),
-                        constructor=self,
-                        collisions=collisions,
-                    )
-
-            object_instance = first
-            self.copy_location(object_instance)
-            for k, v in direct_attributes.items():
-                object_instance.set_attribute(k, v, self.location)
-        else:
-            # create the instance
-            object_instance = type_class.get_instance(
-                direct_attributes, resolver, queue, self.location, self.get_dataflow_node(graph) if graph is not None else None
-            )
+        object_instance: Instance = type_class.get_instance(
+            direct_attributes, resolver, queue, self.location, self.get_dataflow_node(graph) if graph is not None else None
+        )
+        if graph is not None and object_instance.instance_node is not None:
+            graph.add_index_match([self.get_dataflow_node(graph), object_instance.instance_node])
 
         # deferred execution for indirect attributes
         # inject implicit reference to this instance so attributes can resolve the lhs_attribute we promised in _normalize_rhs
