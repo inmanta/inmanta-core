@@ -423,12 +423,10 @@ class Entity(NamedType, WithComment):
         Update indexes based on the instance and the attribute that has
         been set. All index attributes must already be set on the instance.
         """
-        slots = instance.slots
-
         for index_attributes in self.get_indices():
             key = []
             for attribute in index_attributes:
-                slot = slots[attribute]
+                slot = instance.slots[attribute]
                 value = slot.get_value()
                 if isinstance(value, Reference):
                     raise TypingException(
