@@ -333,10 +333,8 @@ class Entity(NamedType, WithComment):
         attributes_cache: dict[str, object] = {}
         # collect indexes for this instance
         indexes: dict[frozenset[str], str] = {}
-        # check if the instance already exists in the index (if there is one)
-        instances: list["Instance"] = []
         # register any potential index collision
-        collisions: dict[frozenset[str], Instance] = {}
+        instances: dict[frozenset[str], Instance] = {}
         for index in self._indexes:
             parts = []
             for attr in index.attributes_sorted:
@@ -370,23 +368,20 @@ class Entity(NamedType, WithComment):
                 if instance.get_type() != self:
                     # TODO: pass constructor instead of self?
                     raise DuplicateException(self, instance, "Type found in index is not an exact match")
-                instances.append(instance)
-                collisions[index.attributes_set] = instance
+                instances[index.attributes_set] = instance
 
         result: "Instance"
         new: bool
         if instances:
             # ensure that instances are all the same objects
-            first = instances[0]
-            for i in instances[1:]:
-                if i != first:
-                    raise IndexCollisionException(
-                        msg=("Inconsistent indexes detected!\n"),
-                        constructor=self,
-                        collisions=collisions,
-                    )
+            if len(set(instances.values())) > 1:
+                raise IndexCollisionException(
+                    msg=("Inconsistent indexes detected!\n"),
+                    constructor=self,
+                    collisions=instances,
+                )
 
-            result = first
+            result = next(iter(instances.values()))
             new = False
         else:
             # create the instance
