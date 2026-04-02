@@ -15,7 +15,7 @@ requires = [
     "docstring-parser>=0.10,<0.18",
     "email-validator>=1,<3",
     "jinja2~=3.0",
-    "more-itertools>=8,<11",
+    "more-itertools>=8,<12",
     # upper bound on packaging because we use a non-public API that might change in any (non-SemVer) version
     "packaging>=21.3,<26.1",
     # pip>=21.3 required for editable pyproject.toml + setup.cfg based install support
