@@ -18,7 +18,6 @@ from graphql.error import GraphQLError
 from inmanta.graphql.schema import GraphQLContext, get_schema
 from inmanta.protocol import methods_v2
 from inmanta.protocol.decorators import handle
-from inmanta.protocol.exceptions import BaseHttpException
 from inmanta.server import SLICE_COMPILER, SLICE_GRAPHQL, protocol
 from inmanta.server.protocol import Server
 from inmanta.server.services.compilerservice import CompilerService
