@@ -486,12 +486,8 @@ class Entity(NamedType, WithComment):
 
         key = ", ".join(
             [
-                "%s=%s"
-                % (
-                    k,
-                    repr(coerce(k, self.get_attribute(k).type, v)),
-                )
-                for k, v in params_sorted
+                f"{attr}={repr(coerce(attr, self.get_attribute(attr).type, value))}"
+                for attr, value in params_sorted
             ]
         )
         if target is None:
