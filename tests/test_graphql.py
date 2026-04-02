@@ -1056,8 +1056,8 @@ async def test_graphql_variables_and_operation_name(server, client, setup_databa
 
     # wrong operation
     result = await client.graphql(query=query, variables={"environment": env_1}, operationName="WrongOperation")
-    assert result.code == 200
-    assert result.result["data"]["errors"][0] == 'Unknown operation named "WrongOperation".'
+    assert result.code == 400
+    assert result.result["message"] == 'Invalid request: Unknown operation named "WrongOperation".'
 
     # omit variables
     result = await client.graphql(query=query)

@@ -14,15 +14,14 @@ Contact: code@inmanta.com
 
 from typing import Any
 
-from graphql.error import GraphQLError
 from inmanta.graphql.schema import GraphQLContext, get_schema
 from inmanta.protocol import methods_v2
 from inmanta.protocol.decorators import handle
+from inmanta.protocol.exceptions import BadRequest
 from inmanta.server import SLICE_COMPILER, SLICE_GRAPHQL, protocol
 from inmanta.server.protocol import Server
 from inmanta.server.services.compilerservice import CompilerService
 from strawberry.schema.exceptions import CannotGetOperationTypeError
-from strawberry.types.execution import ExecutionResult
 
 
 class GraphQLSlice(protocol.ServerSlice):
@@ -49,7 +48,7 @@ class GraphQLSlice(protocol.ServerSlice):
         try:
             return await get_schema(self.context).execute(query, variable_values=variables, operation_name=operation_name)
         except CannotGetOperationTypeError as e:
-            return ExecutionResult(data=None, errors=[GraphQLError(e.as_http_error_reason())], extensions=None)
+            raise BadRequest(message=e.as_http_error_reason()) from e
 
     @handle(methods_v2.graphql_schema)
     async def graphql_schema(self) -> dict[str, Any]:
