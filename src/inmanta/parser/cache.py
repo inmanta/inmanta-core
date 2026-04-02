@@ -53,7 +53,7 @@ class CacheManager:
         """
         Returns the name for the cached file, based on the name of the original source file
 
-        Also ensures the cache folder exists.
+        Does not guarantee that the cache folder exists.
 
         :param namespace: The namespace this file is part of
         :param filename: the filename of the source file
@@ -63,8 +63,6 @@ class CacheManager:
         assert self.root_cache_dir is not None
         # Obtains directory where the cache file will be stored
         cache_folder = os.path.join(self.root_cache_dir, *namespace.to_path())
-        # create cache folder
-        os.makedirs(cache_folder, exist_ok=True)
 
         # get file name without extension
         filepart = os.path.basename(filename).rsplit(".", maxsplit=1)[0]
@@ -98,7 +96,7 @@ class CacheManager:
                 self.misses += 1
                 return None
             mtime = os.path.getmtime(filename)
-            if os.path.getmtime(filename) > os.path.getmtime(cache_filename):
+            if mtime > os.path.getmtime(cache_filename):
                 self.misses += 1
                 return None
             with open(cache_filename, "rb") as fh:
@@ -130,6 +128,7 @@ class CacheManager:
             return
         try:
             cache_filename = self._get_file_name(namespace, filename)
+            os.makedirs(os.path.dirname(cache_filename), exist_ok=True)
             mtime = os.path.getmtime(filename)
             cache_entry = CacheEnvelope(mtime, statements)
             with open(cache_filename, "wb") as fh:
