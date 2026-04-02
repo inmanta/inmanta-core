@@ -22,7 +22,7 @@ import inspect
 import itertools
 import logging
 import typing
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union  # noqa: F401
 
 import inmanta.ast.attribute
@@ -299,114 +299,19 @@ class Entity(NamedType, WithComment):
         """
         return list(self._instance_list)
 
-    def add_instance(self, instance: "Instance", *, indexes: Mapping[frozenset[str], str]) -> None:
-        # TODO: update docstring for new indexes param + this method does no validation on index correctness.
-        #       indexes may be superset of entity's indexes
+    def add_instance(self, obj: "Instance") -> None:
         """
         Register a new instance. All index attributes must already be set on the instance.
         """
-        self._instance_list.add(instance)
-
-        for index in self._indexes:
-            index_key: str = indexes[index.attributes_set]
-            if index_key in self._index and self._index[index_key] is not instance:
-                raise DuplicateException(instance, self._index[index_key], "Duplicate key in index. %s" % index_key)
-            self._index[index_key] = instance
-            if index_key in self.index_queue:
-                for x, stmt in self.index_queue[index_key]:
-                    x.set_value(instance, stmt.location)
-                self.index_queue.pop(index_key)
+        self._instance_list.add(obj)
+        self.add_to_index(obj)
 
         for parent in self.parent_entities:
-            parent.add_instance(instance, indexes=indexes)
+            parent.add_instance(obj)
 
     def get_instance(
         self,
-        attributes: Mapping[str, object],
-        resolver: Resolver,
-        queue: QueueScheduler,
-        location: Location,
-        node: Optional[dataflow.InstanceNodeReference] = None,
-    ) -> "Instance":
-        # TODO: docstring. Mention that it must contain all index attrs
-
-        attributes_cache: dict[str, object] = {}
-        # collect indexes for this instance
-        indexes: dict[frozenset[str], str] = {}
-        # check if the instance already exists in the index (if there is one)
-        instances: list["Instance"] = []
-        # register any potential index collision
-        collisions: dict[frozenset[str], Instance] = {}
-        for index in self._indexes:
-            parts = []
-            for attr in index.attributes_sorted:
-                value: object = attributes_cache.get(attr)
-                if value is None:  # safe because None is not a valid DSL value
-                    attr_lookup = self.get_attribute(attr)
-                    assert attr_lookup is not None, "Invalid compiler state: found index on non-existing attribute"
-                    # coerce attr value
-                    freeform: object = attributes[attr]
-                    if isinstance(freeform, Reference):
-                        raise TypingException(
-                            # TODO: pass constructor? Definitely update message because instance not available
-                            None,
-                            f"Invalid value `{freeform}` in index for attribute {attr} on instance {instance}: "
-                            f"references can not be used in indexes.",
-                        )
-                    match attr_lookup.type:
-                        case Float() as fl:
-                            value = fl.cast(freeform)
-                        case NullableType(element_type=Float() as fl):
-                            value = freeform if isinstance(freeform, NoneValue) else fl.cast(freeform)
-                        case _:
-                            value = freeform
-                    attributes_cache[attr] = value
-                parts.append(f"{attr}={value!r}")
-            index_key = ", ".join(parts)
-            instance: "Instance" | None = self._index.get(index_key)
-
-            indexes[index.attributes_set] = index_key
-            if instance is not None:
-                if instance.get_type() != self:
-                    # TODO: pass constructor instead of self?
-                    raise DuplicateException(self, instance, "Type found in index is not an exact match")
-                instances.append(instance)
-                collisions[index.attributes_set] = instance
-
-        result: "Instance"
-        new: bool
-        if instances:
-            # ensure that instances are all the same objects
-            first = instances[0]
-            for i in instances[1:]:
-                if i != first:
-                    raise IndexCollisionException(
-                        msg=("Inconsistent indexes detected!\n"),
-                        constructor=self,
-                        collisions=collisions,
-                    )
-
-            result = first
-            new = False
-        else:
-            # create the instance
-            # TODO: pass on index cache
-            result = Instance(self, resolver, queue, node)
-            new = True
-
-        result.set_location(location)
-        for k, v in attributes.items():
-            result.set_attribute(k, v, location)
-
-        # TODO: only if we create a new one???
-        if new:
-            self.add_instance(result, indexes=indexes)
-
-        return result
-
-    def get_instance_old(
-        self,
-        attributes: Mapping[str, object],
+        attributes: dict[str, object],
         resolver: Resolver,
         queue: QueueScheduler,
         location: Location,
