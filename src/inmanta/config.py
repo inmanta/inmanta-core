@@ -119,7 +119,8 @@ class Config:
             files = [main_cfg_file] + cfg_files_in_config_dir + local_dot_inmanta_cfg_files
 
         config = LenientConfigParser(interpolation=Interpolation())
-        config.read(files)
+        loaded_files = config.read(files)
+        LOGGER.debug("Configuration files loaded: %s", loaded_files)
         cls._save_loaded_config(config, config_dir, min_c_config_file)
 
     @classmethod
