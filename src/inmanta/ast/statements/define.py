@@ -603,7 +603,7 @@ class DefineIndex(DefinitionStatement):
         DefinitionStatement.__init__(self)
         self.type = entity_type
         self.attributes: Sequence[LocatableString] = attributes
-        self.attributes_set: frozenset[str] = frozenset((str(a) for a in self.attributes))
+        self.attributes_sorted: Sequence[str] = sorted({str(attr) for attr in self.attributes})
 
     def types(self, recursive: bool = False) -> list[tuple[str, LocatableString]]:
         """
@@ -645,7 +645,7 @@ class DefineIndex(DefinitionStatement):
                         self, f"Index can not contain list attributes, Attribute ' {attribute}.{entity_type}' is a list"
                     )
 
-        entity_type.add_index([str(a) for a in self.attributes], self)
+        entity_type.add_index(self)
 
 
 class PluginStatement(TypeDefinitionStatement):

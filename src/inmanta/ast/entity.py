@@ -19,6 +19,7 @@ Contact: code@inmanta.com
 import dataclasses
 import importlib
 import inspect
+import itertools
 import logging
 import typing
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple, Union  # noqa: F401
@@ -89,7 +90,6 @@ class Entity(NamedType, WithComment):
         # default values
         self.__default_values = {}  # type: Dict[str, DefineAttribute]
 
-        self._index_def = []  # type: List[List[str]]
         self._indexes = []  # type: list[DefineIndex]
         self._index = {}  # type: Dict[str,Instance]
         self.index_queue = {}  # type: Dict[str,List[Tuple[ResultVariable, Statement]]]
@@ -402,22 +402,21 @@ class Entity(NamedType, WithComment):
 
         return self.name == other.name and self.namespace == other.namespace
 
-    def add_index(self, attributes: list[str], index_def: "DefineIndex") -> None:
+    def add_index(self, index_def: "DefineIndex") -> None:
         """
         Add an index over the given attributes.
         """
         # duplicate check
-        for index in self._index_def:
-            if len(index) == len(attributes) and all((a == b for a, b in zip(index, attributes))):
+        for index in self._indexes:
+            if index_def.attributes_sorted == index.attributes_sorted:
                 return
 
-        self._index_def.append(sorted(attributes))
         self._indexes.append(index_def)
         for child in self.child_entities:
-            child.add_index(attributes, index_def)
+            child.add_index(index_def)
 
     def get_indices(self) -> list[list[str]]:
-        return self._index_def
+        return [index.attributes_sorted for index in self._indexes]
 
     def add_to_index(self, instance: Instance) -> None:
         """
@@ -452,21 +451,21 @@ class Entity(NamedType, WithComment):
                 self.index_queue.pop(keys)
 
     def lookup_index(
-        self, params: "List[Tuple[str,object]]", stmt: "Statement", target: "Optional[ResultVariable]" = None
+        self, params: "Sequence[Tuple[str,object]]", stmt: "Statement", target: "Optional[ResultVariable]" = None
     ) -> "Optional[Instance]":
         """
         Search an instance in the index.
         """
-        all_attributes: list[str] = [x[0] for x in params]
-        attributes: set[str] = set()
-        for attr in all_attributes:
-            if attr in attributes:
-                raise RuntimeException(stmt, "Attribute %s provided twice in index lookup" % attr)
-            attributes.add(attr)
+        params_sorted: Sequence[tuple[str, object]] = sorted(params, key=lambda x: x[0])
+        attributes_sorted = [param[0] for param in params_sorted]
+
+        for attr, next_attr in itertools.pairwise(attributes_sorted):
+            if attr[0] == next_attr[0]:
+                raise RuntimeException(stmt, "Attribute %s provided twice in index lookup" % attr[0])
 
         found_index = False
         for index in self._indexes:
-            if index.attributes_set == attributes:
+            if index.attributes_sorted == attributes_sorted:
                 found_index = True
 
         if not found_index:
@@ -498,7 +497,7 @@ class Entity(NamedType, WithComment):
                     k,
                     repr(coerce(k, self.get_attribute(k).type, v)),
                 )
-                for k, v in sorted(params, key=lambda x: x[0])
+                for k, v in params_sorted
             ]
         )
         if target is None:
