@@ -460,8 +460,8 @@ class Entity(NamedType, WithComment):
         attributes_sorted = [param[0] for param in params_sorted]
 
         for attr, next_attr in itertools.pairwise(attributes_sorted):
-            if attr[0] == next_attr[0]:
-                raise RuntimeException(stmt, "Attribute %s provided twice in index lookup" % attr[0])
+            if attr == next_attr:
+                raise RuntimeException(stmt, "Attribute %s provided twice in index lookup" % attr)
 
         found_index = False
         for index in self._indexes:
