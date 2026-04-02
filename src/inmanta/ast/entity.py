@@ -21,7 +21,6 @@ import importlib
 import inspect
 import itertools
 import logging
-import sys
 import typing
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple, Union  # noqa: F401
 
@@ -458,7 +457,7 @@ class Entity(NamedType, WithComment):
         Search an instance in the index.
         """
         params_sorted: Sequence[tuple[str, object]] = sorted(params, key=lambda x: x[0])
-        attributes_sorted = [sys.intern(param[0]) for param in params_sorted]
+        attributes_sorted = [param[0] for param in params_sorted]
 
         for attr, next_attr in itertools.pairwise(attributes_sorted):
             if attr == next_attr:

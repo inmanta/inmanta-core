@@ -19,7 +19,6 @@ Contact: code@inmanta.com
 # pylint: disable-msg=R0923,W0613
 
 import logging
-import sys
 import warnings
 from collections.abc import Iterator, Sequence
 from typing import Optional
@@ -604,7 +603,7 @@ class DefineIndex(DefinitionStatement):
         DefinitionStatement.__init__(self)
         self.type = entity_type
         self.attributes: Sequence[LocatableString] = attributes
-        self.attributes_sorted: Sequence[str] = sorted({sys.intern(str(attr)) for attr in self.attributes})
+        self.attributes_sorted: Sequence[str] = sorted({str(attr) for attr in self.attributes})
 
     def types(self, recursive: bool = False) -> list[tuple[str, LocatableString]]:
         """
