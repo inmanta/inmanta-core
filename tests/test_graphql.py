@@ -1266,3 +1266,29 @@ async def test_resource_summary_no_resources(server, environment, client):
     result = await client.graphql(query=query, variables=variables)
     check_correct_graphql_response(result)
     assert result.result["data"]["data"]["resourceSummary"]["totalCount"] == 0, result.result["data"]
+
+
+async def test_missing_query_exception(server, environment, client):
+    """
+    Test different cases of an incorrect query.
+    """
+    query = """
+    resourceSummary(environment: $environment) {
+        totalCount
+        lastHandlerRun
+        blocked
+        compliance
+        isDeploying
+      }
+    """
+    result = await client.graphql(query=query)
+    assert result.code == 400
+    assert result.result["data"]["data"] is None
+    assert len(result.result["data"]["errors"]) == 1
+    assert result.result["data"]["errors"][0]["message"] == "Syntax Error: Unexpected Name 'resourceSummary'."
+
+    result = await client.graphql(query="")
+    assert result.code == 400
+    assert result.result["data"]["data"] is None
+    assert len(result.result["data"]["errors"]) == 1
+    assert result.result["data"]["errors"][0]["message"] == 'Request data is missing a "query" value'

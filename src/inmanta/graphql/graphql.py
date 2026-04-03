@@ -53,7 +53,13 @@ class GraphQLSlice(protocol.ServerSlice):
                 query, variable_values=variables, operation_name=operation_name
             )
         except CannotGetOperationTypeError as e:
-            execution_result = ExecutionResult(data=None, errors=[GraphQLError(e.as_http_error_reason())], extensions=None)
+            execution_result = ExecutionResult(
+                data=None, errors=[GraphQLError(message=e.as_http_error_reason(), original_error=e)], extensions=None
+            )
+        except Exception as e:
+            execution_result = ExecutionResult(
+                data=None, errors=[GraphQLError(message=str(e), original_error=e)], extensions=None
+            )
         graphql_result = GraphQLResult.from_execution_result(execution_result)
         return ReturnValue(status_code=graphql_result.status_code, response=graphql_result)
 
