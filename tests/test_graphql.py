@@ -41,7 +41,7 @@ def check_correct_graphql_response(result: Result[object]) -> None:
     GraphQL still returns 200 even if errors occurred.
     This method asserts that no errors actually occured.
     """
-    assert result.code == 200
+    assert result.code == 200, result.result
     data = result.result["data"]
     assert data
     assert data["errors"] is None, data["errors"]
@@ -512,7 +512,7 @@ async def test_query_environments_with_paging(server, client, setup_database):
 
     # last by itself
     result = await client.graphql(query=query % "last: 5")
-    assert result.code == 200
+    assert result.code == 400
     data = result.result["data"]
     assert data
     assert data["data"] is None
@@ -521,7 +521,7 @@ async def test_query_environments_with_paging(server, client, setup_database):
 
     # first + last
     result = await client.graphql(query=query % "first: 5, last: 5")
-    assert result.code == 200
+    assert result.code == 400
     data = result.result["data"]
     assert data
     assert data["data"] is None
@@ -530,7 +530,7 @@ async def test_query_environments_with_paging(server, client, setup_database):
 
     # first + before
     result = await client.graphql(query=query % f'first: 5, before: "{new_last_cursor}"')
-    assert result.code == 200
+    assert result.code == 400
     data = result.result["data"]
     assert data
     assert data["data"] is None
@@ -539,7 +539,7 @@ async def test_query_environments_with_paging(server, client, setup_database):
 
     # last + after
     result = await client.graphql(query=query % f'last: 5, after: "{first_cursor}"')
-    assert result.code == 200
+    assert result.code == 400
     data = result.result["data"]
     assert data
     assert data["data"] is None
@@ -548,7 +548,7 @@ async def test_query_environments_with_paging(server, client, setup_database):
 
     # before + after
     result = await client.graphql(query=query % f'before: "{new_last_cursor}", after: "{first_cursor}"')
-    assert result.code == 200
+    assert result.code == 400
     data = result.result["data"]
     assert data
     assert data["data"] is None
@@ -647,7 +647,7 @@ async def test_notifications(server, client, setup_database):
     """
     # Try to get the full list of notifications without filter
     result = await client.graphql(query=query % "")
-    assert result.code == 200
+    assert result.code == 400
     assert len(result.result["data"]["errors"]) == 1
     assert (
         result.result["data"]["errors"][0]
@@ -1018,11 +1018,10 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
         assert result_resources[i]["node"]["state"]["isDeploying"] == (False if i < instances or i >= 2 * instances else True)
 
 
-async def test_graphql_variables(server, client, setup_database):
+async def test_graphql_variables_and_operation_name(server, client, setup_database):
     """
-    Test that graphql variables work as intended.
+    Test that graphql variables and the operation name are working as intended.
     """
-    env_id = "11111111-1234-5678-1234-000000000001"
     query = """
     query GetEnvironments($environment: UUID!) {
         environments(filter: { id: $environment }) {
@@ -1034,14 +1033,36 @@ async def test_graphql_variables(server, client, setup_database):
             }
         }
     }
+    query GetResources($environment: UUID!) {
+        resources(filter: { environment: $environment }) {
+            edges {
+                node {
+                    resourceId
+
+                }
+            }
+        }
+    }
     """
-    result = await client.graphql(query=query, variables={"environment": env_id})
+    result = await client.graphql(query=query, variables={"environment": env_1}, operationName="GetEnvironments")
     check_correct_graphql_response(result)
-    assert result.result["data"]["data"]["environments"]["edges"][0]["node"]["id"] == env_id
+    assert "resources" not in result.result["data"]["data"]
+    assert result.result["data"]["data"]["environments"]["edges"][0]["node"]["id"] == env_1, result.result["data"]
+
+    result = await client.graphql(query=query, variables={"environment": env_1}, operationName="GetResources")
+    check_correct_graphql_response(result)
+    assert "environments" not in result.result["data"]["data"]
+    assert "resources" in result.result["data"]["data"]
+
+    # wrong operation
+    result = await client.graphql(query=query, variables={"environment": env_1}, operationName="WrongOperation")
+    assert result.code == 400
+    assert len(result.result["data"]["errors"]) == 1
+    assert result.result["data"]["errors"][0] == 'Unknown operation named "WrongOperation".'
 
     # omit variables
     result = await client.graphql(query=query)
-    assert result.code == 200
+    assert result.code == 400
     assert result.result["data"]["data"] is None
     assert len(result.result["data"]["errors"]) == 1
     assert result.result["data"]["errors"][0] == "Variable '$environment' of required type 'UUID!' was not provided."
@@ -1061,7 +1082,7 @@ async def test_graphql_variables(server, client, setup_database):
     """
     # omit variables
     result = await client.graphql(query=query)
-    assert result.code == 200
+    assert result.code == 400
     assert result.result["data"]["data"] is None
     assert len(result.result["data"]["errors"]) == 1
     assert result.result["data"]["errors"][0] == "Filter id was requested but no value was provided"
@@ -1080,11 +1101,11 @@ async def test_graphql_variables(server, client, setup_database):
             }
         }
     """
-    result = await client.graphql(query=query, variables={"environment": env_id, "cleared": False})
+    result = await client.graphql(query=query, variables={"environment": env_1, "cleared": False})
     check_correct_graphql_response(result)
     notifications = result.result["data"]["data"]["notifications"]["edges"]
     for notification in notifications:
-        assert notification["node"]["environment"] == env_id
+        assert notification["node"]["environment"] == env_1
         assert notification["node"]["cleared"] is False
 
 
@@ -1245,3 +1266,29 @@ async def test_resource_summary_no_resources(server, environment, client):
     result = await client.graphql(query=query, variables=variables)
     check_correct_graphql_response(result)
     assert result.result["data"]["data"]["resourceSummary"]["totalCount"] == 0, result.result["data"]
+
+
+async def test_missing_query_exception(server, environment, client):
+    """
+    Test different cases of an incorrect query.
+    """
+    query = """
+    resourceSummary(environment: $environment) {
+        totalCount
+        lastHandlerRun
+        blocked
+        compliance
+        isDeploying
+      }
+    """
+    result = await client.graphql(query=query)
+    assert result.code == 400
+    assert result.result["data"]["data"] is None
+    assert len(result.result["data"]["errors"]) == 1
+    assert result.result["data"]["errors"][0] == "Syntax Error: Unexpected Name 'resourceSummary'."
+
+    result = await client.graphql(query="")
+    assert result.code == 400
+    assert result.result["data"]["data"] is None
+    assert len(result.result["data"]["errors"]) == 1
+    assert result.result["data"]["errors"][0] == 'Request data is missing a "query" value'
