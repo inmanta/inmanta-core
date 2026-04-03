@@ -54,9 +54,8 @@ class GraphQLSlice(protocol.ServerSlice):
             )
         except CannotGetOperationTypeError as e:
             execution_result = ExecutionResult(data=None, errors=[GraphQLError(e.as_http_error_reason())], extensions=None)
-        return ReturnValue(
-            status_code=(200 if execution_result.data else 400), response=GraphQLResult.from_execution_result(execution_result)
-        )
+        graphql_result = GraphQLResult.from_execution_result(execution_result)
+        return ReturnValue(status_code=graphql_result.status_code, response=graphql_result)
 
     @handle(methods_v2.graphql_schema)
     async def graphql_schema(self) -> dict[str, Any]:
