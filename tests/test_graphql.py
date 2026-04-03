@@ -762,7 +762,7 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
     await mixed_resource_generator(environment, instances, resources_per_version)
 
     # Quick way of simulating a non-compliant report
-    # It has to be non-orphan otherwise the complianceState returned will be None
+    # It has to be non-orphan otherwise the compliance returned will be None
     rps = await data.ResourcePersistentState.get_one(
         environment=environment, last_handler_run=state.HandlerResult.SUCCESSFUL, is_orphan=False
     )
@@ -845,11 +845,9 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
         {"query": "purged: false", "result": total_resources},
         # skipped for undefined
         {
-            "query": "complianceState: {eq: HAS_UPDATE} blocked: {eq: BLOCKED}",
+            "query": "compliance: {eq: HAS_UPDATE} blocked: {eq: BLOCKED}",
             "result": instances,
-            "assertion": {
-                "state": {"blocked": state.Blocked.BLOCKED.name, "complianceState": state.Compliance.HAS_UPDATE.name}
-            },
+            "assertion": {"state": {"blocked": state.Blocked.BLOCKED.name, "compliance": state.Compliance.HAS_UPDATE.name}},
         },
         # 1 undefined, 1 skipped for undefined, 1 still deploying
         {
@@ -871,25 +869,25 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
         },
         #  1 skipped for undefined
         {
-            "query": "lastHandlerRun: {eq: NEW} isDeploying: false complianceState: {neq: UNDEFINED}",
+            "query": "lastHandlerRun: {eq: NEW} isDeploying: false compliance: {neq: UNDEFINED}",
             "result": instances,
             "assertion": {
                 "state": {
                     "lastHandlerRun": state.HandlerResult.NEW.name,
                     "isDeploying": False,
-                    "complianceState": state.Compliance.HAS_UPDATE.name,
+                    "compliance": state.Compliance.HAS_UPDATE.name,
                 }
             },
         },
         # Non-compliant report
         {
-            "query": "lastHandlerRun: {eq: SUCCESSFUL} isDeploying: false complianceState: {eq: NON_COMPLIANT}",
+            "query": "lastHandlerRun: {eq: SUCCESSFUL} isDeploying: false compliance: {eq: NON_COMPLIANT}",
             "result": 1,
             "assertion": {
                 "state": {
                     "lastHandlerRun": state.HandlerResult.SUCCESSFUL.name,
                     "isDeploying": False,
-                    "complianceState": state.Compliance.NON_COMPLIANT.name,
+                    "compliance": state.Compliance.NON_COMPLIANT.name,
                 }
             },
         },
@@ -914,7 +912,7 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
                         isDeploying
                         lastHandlerRun
                         lastHandlerRunAt
-                        complianceState
+                        compliance
                         currentIntentAttributeHash
                       }
                       requiresLength
@@ -939,11 +937,11 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
     query = """
     {
         resources ( filter: {environment: "%s" lastHandlerRun: {eq: NEW}}
-            orderBy: [{key: "complianceState" order: "asc"}]) {
+            orderBy: [{key: "compliance" order: "asc"}]) {
             edges {
                 node {
                   state{
-                    complianceState
+                    compliance
                   }
                 }
             }
@@ -956,7 +954,7 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
     assert len(result_resources) == 3 * instances
     for i in range(0, len(result_resources)):
         assert (
-            result_resources[i]["node"]["state"]["complianceState"] == state.Compliance.HAS_UPDATE.name
+            result_resources[i]["node"]["state"]["compliance"] == state.Compliance.HAS_UPDATE.name
             if i < 2 * instances
             else state.Compliance.UNDEFINED.name
         )
@@ -964,11 +962,11 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
     query = """
     {
         resources (filter: {environment: "%s" lastHandlerRun: {eq: NEW}}
-            orderBy: [{key: "complianceState" order: "desc"}, {key: "isDeploying" order: "asc"}]) {
+            orderBy: [{key: "compliance" order: "desc"}, {key: "isDeploying" order: "asc"}]) {
             edges {
                 node {
                   state{
-                    complianceState
+                    compliance
                     isDeploying
                   }
                 }
@@ -983,7 +981,7 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
     for i in range(0, len(result_resources)):
         # [{UNDEFINED, False}, {HAS_UPDATE, False}, {HAS_UPDATE, True}]
         assert (
-            result_resources[i]["node"]["state"]["complianceState"] == state.Compliance.UNDEFINED.name
+            result_resources[i]["node"]["state"]["compliance"] == state.Compliance.UNDEFINED.name
             if i < instances
             else state.Compliance.HAS_UPDATE.name
         )
@@ -992,11 +990,11 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
     query = """
        {
            resources (filter: {environment: "%s" lastHandlerRun: {eq: NEW}}
-                    orderBy: [{key: "complianceState" order: "desc"}, {key: "isDeploying" order: "desc"}]) {
+                    orderBy: [{key: "compliance" order: "desc"}, {key: "isDeploying" order: "desc"}]) {
                edges {
                    node {
                      state{
-                       complianceState
+                       compliance
                        isDeploying
                      }
                    }
@@ -1011,7 +1009,7 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
     for i in range(0, len(result_resources)):
         # [{UNDEFINED, False}, {HAS_UPDATE, True}, {HAS_UPDATE, False}]
         assert (
-            result_resources[i]["node"]["state"]["complianceState"] == state.Compliance.UNDEFINED.name
+            result_resources[i]["node"]["state"]["compliance"] == state.Compliance.UNDEFINED.name
             if i < instances
             else state.Compliance.HAS_UPDATE.name
         )
