@@ -299,7 +299,7 @@ class CustomStrawberrySQLAlchemyMapper(StrawberrySQLAlchemyMapper[BaseModelType]
             _add_field(key, relationship_type, description=doc, connection_resolver=resolver)
 
         # Hybrid Properties
-        # Currently only used for Resource.compliance_state
+        # Currently only used for Resource.compliance
         for key, descriptor in mapper.all_orm_descriptors.items():
             if not isinstance(descriptor, hybrid_property) or _should_skip(key):
                 continue
@@ -709,7 +709,7 @@ class ResourceFilter(StrawberryFilter):
     agent: StrFilter | None = strawberry.UNSET
     purged: bool | None = strawberry.UNSET
     blocked: EnumFilter[state.Blocked] | None = strawberry.UNSET
-    compliance_state: EnumFilter[state.Compliance] | None = strawberry.UNSET
+    compliance: EnumFilter[state.Compliance] | None = strawberry.UNSET
     last_handler_run: EnumFilter[state.HandlerResult] | None = strawberry.UNSET
     is_deploying: bool | None = strawberry.UNSET
     is_orphan: bool | None = strawberry.UNSET
@@ -724,7 +724,7 @@ class ResourceFilter(StrawberryFilter):
 
     @property
     def get_models_to_join(self) -> set[type[models.Base]]:
-        rps_join = ["blocked", "compliance_state", "last_handler_run", "is_deploying", "is_orphan"]
+        rps_join = ["blocked", "compliance", "last_handler_run", "is_deploying", "is_orphan"]
         for attr in rps_join:
             if getattr(self, attr) is not strawberry.UNSET:
                 return {self.rps_model}
@@ -737,7 +737,7 @@ class ResourceFilter(StrawberryFilter):
             "resource_id_value": self.model,
             "agent": self.model,
             "blocked": self.rps_model,
-            "compliance_state": self.rps_model,
+            "compliance": self.rps_model,
             "last_handler_run": self.rps_model,
         }
         for key, model in key_to_model.items():
@@ -778,7 +778,7 @@ class ResourceOrder(StrawberryOrder):
             "resource_type": self.model,
             "resource_id_value": self.model,
             "blocked": self.rps_model,
-            "compliance_state": self.rps_model,
+            "compliance": self.rps_model,
             "last_handler_run": self.rps_model,
             "is_deploying": self.rps_model,
         }

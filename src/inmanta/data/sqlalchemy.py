@@ -789,7 +789,7 @@ class ResourcePersistentState(Base):
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="resource_persistent_state")
 
     @hybrid_property
-    def compliance_state(self) -> state.Compliance | None:
+    def compliance(self) -> state.Compliance | None:
         """
         Compliance status of this resource
         """
@@ -801,9 +801,9 @@ class ResourcePersistentState(Base):
             self.last_handler_run_compliant,
         )
 
-    @compliance_state.inplace.expression
+    @compliance.inplace.expression
     @classmethod
-    def _compliance_state_expression(cls) -> Case[Any]:
+    def _compliance_expression(cls) -> Case[Any]:
         return case(
             (cls.is_orphan, None),
             (cls.is_undefined, state.Compliance.UNDEFINED.name),
