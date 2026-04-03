@@ -73,6 +73,16 @@ class Entity(NamedType, WithComment):
         after this object has been created
     """
 
+    __slots__ = (
+        "_indexes",
+        "_index",
+        "index_queue",
+        "_attributes",
+        "_instance_list",
+        "parent_entities",
+        "child_entities",
+    )
+
     def __init__(self, name: str, namespace: Namespace, comment: Optional[str] = None) -> None:
         NamedType.__init__(self)
 
