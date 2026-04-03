@@ -39,7 +39,7 @@ class GraphQLResult(BaseModel):
     extensions: dict[str, typing.Any] | None = None
 
     @property
-    def status_code(self):
+    def status_code(self) -> int:
         """
         The status code to send in ReturnValue
         """
