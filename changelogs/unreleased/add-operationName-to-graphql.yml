@@ -1,5 +1,7 @@
 change-type: minor
-description: Add operationName to graphql endpoint
+description: |
+  Add operationName to graphql endpoint.
+  Changed response of the graphql endpoint in order to be more compliant with the GraphQL spec.
 destination-branches:
 - master
 - iso9
