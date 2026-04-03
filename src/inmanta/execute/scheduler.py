@@ -69,6 +69,76 @@ LOGGER = logging.getLogger(__name__)
 MAX_ITERATIONS = 100_000
 
 
+class DirtyTrackingZeroWaiters:
+    """
+    Tracks DelayedResultVariables that have zero progress potential (zerowaiters).
+    Instead of scanning all zerowaiters each iteration, only DRVs whose state has changed
+    since the last check are examined.
+    """
+
+    __slots__ = ("_all", "_dirty")
+
+    def __init__(self) -> None:
+        self._all: dict[int, DelayedResultVariable[Any]] = {}
+        self._dirty: dict[int, DelayedResultVariable[Any]] = {}
+
+    def append(self, drv: DelayedResultVariable[Any]) -> None:
+        key = id(drv)
+        self._all[key] = drv
+
+    def mark_dirty(self, drv: DelayedResultVariable[Any]) -> None:
+        """Called by DRV when its progress potential changes (e.g. new waiter added)."""
+        key = id(drv)
+        if key in self._all:
+            self._dirty[key] = drv
+
+    def remove(self, drv: DelayedResultVariable[Any]) -> None:
+        key = id(drv)
+        self._all.pop(key, None)
+        self._dirty.pop(key, None)
+
+    def drain_dirty(self) -> list[DelayedResultVariable[Any]]:
+        """
+        Check only DRVs that changed since last drain.
+        Returns those with progress potential > 0 for promotion to waitqueue.
+        """
+        has_potential: list[DelayedResultVariable[Any]] = []
+        for key, drv in list(self._dirty.items()):
+            del self._dirty[key]
+            if drv.hasValue:
+                self._all.pop(key, None)
+            elif drv.get_progress_potential() > 0:
+                self._all.pop(key, None)
+                has_potential.append(drv)
+            # else: still zero progress potential, stays in _all
+        return has_potential
+
+    def drain_all_remaining(self) -> list[DelayedResultVariable[Any]]:
+        """Full scan fallback — returns DRVs with progress potential, removes resolved ones."""
+        has_potential: list[DelayedResultVariable[Any]] = []
+        for key, drv in list(self._all.items()):
+            if drv.hasValue:
+                del self._all[key]
+            elif drv.get_progress_potential() > 0:
+                del self._all[key]
+                has_potential.append(drv)
+        return has_potential
+
+    def freeze_all(self) -> None:
+        """Freeze all remaining zerowaiters (terminal path)."""
+        for drv in list(self._all.values()):
+            drv._zerowaiters_tracker = None
+            drv.freeze()
+        self._all.clear()
+        self._dirty.clear()
+
+    def __len__(self) -> int:
+        return len(self._all)
+
+    def __bool__(self) -> bool:
+        return bool(self._all)
+
+
 class Scheduler:
     """
     This class schedules statements for execution
@@ -316,14 +386,35 @@ class Scheduler:
 
     @staticmethod
     def _resolve_proxy(variable: VariableABC[object]) -> Optional[VariableABC[object]]:
-        """Iteratively unwrap ResultVariableProxy chains to the underlying variable.
+        """Iteratively unwrap ResultVariableProxy chains with path compression.
 
         Returns None if a proxy in the chain is not yet connected.
+        After resolution, all intermediate proxies point directly to the final target (union-find style).
         """
         result: Optional[VariableABC[object]] = variable
+        chain: list[ResultVariableProxy] = []
         while isinstance(result, ResultVariableProxy):
+            chain.append(result)
             result = result.variable
+
+        # Path compression: point every proxy directly at the final target
+        if len(chain) > 1 and result is not None:
+            for proxy in chain:
+                proxy.variable = result
+
         return result
+
+    @staticmethod
+    def _freeze_one_candidate(
+        relation_precedence_graph: "RelationPrecedenceGraph",
+        freeze_candidates: list[DelayedResultVariable[object]],
+    ) -> bool:
+        """Given a non-empty list of freeze candidates, pick one using the relation precedence rules and freeze it."""
+        queue = PrioritisedDelayedResultVariableQueue(relation_precedence_graph, freeze_candidates)
+        drv_to_freeze = queue.popleft()
+        LOGGER.log(LOG_LEVEL_TRACE, "Waiting blocked on %s", drv_to_freeze)
+        drv_to_freeze.freeze()
+        return True
 
     def find_wait_cycle(self, relation_precedence_graph: "RelationPrecedenceGraph", allwaiters: WaiterSet) -> bool:
         """
@@ -360,12 +451,7 @@ class Scheduler:
 
         if not freeze_candidates:
             return False
-        # Use the relation precedence rules to determine which drv should be frozen
-        queue = PrioritisedDelayedResultVariableQueue(relation_precedence_graph, freeze_candidates)
-        drv_to_freeze = queue.popleft()
-        LOGGER.log(LOG_LEVEL_TRACE, "Waiting blocked on %s", drv_to_freeze)
-        drv_to_freeze.freeze()
-        return True
+        return self._freeze_one_candidate(relation_precedence_graph, freeze_candidates)
 
     def run(self, compiler: "Compiler", statements: Sequence["Statement"], blocks: Sequence["BasicBlock"]) -> bool:
         """
@@ -396,7 +482,7 @@ class Scheduler:
         # queue for RV's that are delayed
         waitqueue = PrioritisedDelayedResultVariableQueue(relation_precedence_graph)
         # queue for RV's that are delayed and had no effective waiters when they were first in the waitqueue
-        zerowaiters: Deque[DelayedResultVariable[Any]] = deque()
+        zerowaiters = DirtyTrackingZeroWaiters()
 
         # Wrap in object to pass around
         queue = QueueScheduler(compiler, basequeue, waitqueue, self.types)
@@ -432,12 +518,12 @@ class Scheduler:
             prev = now
 
             # evaluate all that is ready
-            while len(basequeue) > 0:
+            while basequeue:
                 next = basequeue.popleft()
                 try:
                     next.execute()
                     queue.remove_from_all(next)
-                    count = count + 1
+                    count += 1
                 except UnsetException as e:
                     # some statements don't know all their dependencies up front,...
                     next.requeue_with_additional_requires(object(), e.get_result_variable())
@@ -458,6 +544,7 @@ class Scheduler:
                     continue
                 if next_rv.get_progress_potential() <= 0:
                     zerowaiters.append(next_rv)
+                    next_rv._zerowaiters_tracker = zerowaiters
                 elif next_rv.get_waiting_providers() > 0:
                     # definitely not done
                     # drop from queue
@@ -470,28 +557,26 @@ class Scheduler:
                     progress = True
 
             # no waiters in waitqueue,...
-            # see if any zerowaiters have become gotten waiters
+            # see if any zerowaiters have gained waiters since last check
             if not progress:
-                has_potential: list[DelayedResultVariable[object]] = []
-                new_zerowaiters: Deque[DelayedResultVariable[object]] = deque()
-                for w in zerowaiters:
-                    if w.hasValue:
-                        continue
-                    if w.get_progress_potential() > 0:
-                        has_potential.append(w)
-                    else:
-                        new_zerowaiters.append(w)
-                waitqueue.replace(has_potential)
-                zerowaiters = new_zerowaiters
-                while len(waitqueue) > 0 and not progress:
-                    LOGGER.log(LOG_LEVEL_TRACE, "Moved zerowaiters to waiters")
-                    next_rv = waitqueue.popleft()
-                    if next_rv.get_waiting_providers() > 0:
-                        next_rv.unqueue()
-                    else:
-                        LOGGER.log(LOG_LEVEL_TRACE, "Freezing %s", next_rv)
-                        next_rv.freeze()
-                        progress = True
+                # Fast path: only check DRVs that changed
+                has_potential = zerowaiters.drain_dirty()
+                if not has_potential:
+                    # Fallback: full scan
+                    has_potential = zerowaiters.drain_all_remaining()
+                if has_potential:
+                    for drv in has_potential:
+                        drv._zerowaiters_tracker = None
+                    waitqueue.replace(has_potential)
+                    while len(waitqueue) > 0 and not progress:
+                        LOGGER.log(LOG_LEVEL_TRACE, "Moved zerowaiters to waiters")
+                        next_rv = waitqueue.popleft()
+                        if next_rv.get_waiting_providers() > 0:
+                            next_rv.unqueue()
+                        else:
+                            LOGGER.log(LOG_LEVEL_TRACE, "Freezing %s", next_rv)
+                            next_rv.freeze()
+                            progress = True
 
             if not progress:
                 # nothing works anymore, attempt to unfreeze wait cycle
@@ -500,10 +585,7 @@ class Scheduler:
             if not progress:
                 # no one waiting anymore, all done, freeze and finish
                 LOGGER.log(LOG_LEVEL_TRACE, "Finishing statements with no waiters")
-
-                while len(zerowaiters) > 0:
-                    next_rv = zerowaiters.pop()
-                    next_rv.freeze()
+                zerowaiters.freeze_all()
 
         now = time.time()
         if LOGGER.isEnabledFor(LOG_LEVEL_TRACE):
@@ -593,6 +675,7 @@ class PrioritisedDelayedResultVariableQueue:
             relation_attribute: deque() for relation_attribute in self._freeze_order
         }
         self._non_relation_variables: Deque[DelayedResultVariable] = deque()
+        self._total_count: int = 0
 
         # Populate queue with given DelayedResultVariables
         drvs = drvs if drvs else []
@@ -603,11 +686,7 @@ class PrioritisedDelayedResultVariableQueue:
         """
         Return the number of elements present in this queue.
         """
-        return (
-            len(self._unconstraint_variables)
-            + sum(len(v) for v in self._constraint_variables.values())
-            + len(self._non_relation_variables)
-        )
+        return self._total_count
 
     def append(self, drv: DelayedResultVariable[object], dont_reset_working_list: bool = False) -> None:
         """
@@ -616,6 +695,7 @@ class PrioritisedDelayedResultVariableQueue:
         :param dont_reset_working_list: This argument exists to increase performance by preventing
                                         unnecessary resets of the `self._freeze_order_working_list` queue.
         """
+        self._total_count += 1
         if not isinstance(drv, RelationAttributeVariable):
             self._non_relation_variables.append(drv)
         elif drv.attribute in self._constraint_variables:
@@ -631,16 +711,14 @@ class PrioritisedDelayedResultVariableQueue:
         Remove element from the left side of the queue and return it.
         """
         try:
-            return self._unconstraint_variables.popleft()
+            result = self._unconstraint_variables.popleft()
         except IndexError:
-            # Empty
-            pass
-        try:
-            return self._get_next_constraint_variable()
-        except IndexError:
-            # Empty
-            pass
-        return self._non_relation_variables.popleft()
+            try:
+                result = self._get_next_constraint_variable()
+            except IndexError:
+                result = self._non_relation_variables.popleft()
+        self._total_count -= 1
+        return result
 
     def _get_next_constraint_variable(self) -> DelayedResultVariable[object]:
         if not self._constraint_variables:
@@ -661,6 +739,7 @@ class PrioritisedDelayedResultVariableQueue:
         for queue in self._constraint_variables.values():
             queue.clear()
         self._non_relation_variables.clear()
+        self._total_count = 0
         for drv in drvs:
             self.append(drv, dont_reset_working_list=True)
         self._freeze_order_working_list = self._freeze_order.copy()

@@ -498,7 +498,7 @@ class DelayedResultVariable(ResultVariable[T]):
         (a queue variable can be dequeued by the scheduler when a provider is added)
     """
 
-    __slots__ = ("queued", "queues", "promises", "done_promises")
+    __slots__ = ("queued", "queues", "promises", "done_promises", "_zerowaiters_tracker")
 
     def __init__(self, queue: "QueueScheduler", value: Optional[T] = None) -> None:
         ResultVariable.__init__(self, value)
@@ -506,8 +506,19 @@ class DelayedResultVariable(ResultVariable[T]):
         self.done_promises: Optional[set[IPromise]] = set()
         self.queued = False
         self.queues = queue
+        self._zerowaiters_tracker: Optional[Any] = None
         if self.can_get():
             self.queue()
+
+    def waitfor(self, waiter: "Waiter") -> None:
+        # Inlined from ResultVariable.waitfor to avoid super() and is_ready() call overhead
+        if self.hasValue:
+            waiter.ready(self)
+        else:
+            self.waiters.append(waiter)
+            tracker = self._zerowaiters_tracker
+            if tracker is not None:
+                tracker.mark_dirty(self)
 
     def get_promise(self, provider: "Statement") -> ISetPromise[T]:
         promise: ISetPromise[T] = SetPromise(self, provider)
@@ -534,6 +545,9 @@ class DelayedResultVariable(ResultVariable[T]):
     def freeze(self) -> None:
         if self.hasValue:
             return
+        if self._zerowaiters_tracker is not None:
+            self._zerowaiters_tracker.remove(self)
+            self._zerowaiters_tracker = None
         self.queued = True
         self.hasValue = True
         for waiter in self.waiters:
@@ -702,6 +716,8 @@ class ListVariable(DelayedResultVariable[ListValue], RelationAttributeVariable):
                 if not listener.pure_gradual():
                     # listener used to have progress potential but not anymore
                     self._nb_gradual_waiters += 1
+                    if self._zerowaiters_tracker is not None:
+                        self._zerowaiters_tracker.mark_dirty(self)
                 # keep memory footprint minimal
                 del self._listeners[listener]
 
@@ -760,10 +776,14 @@ class ListVariable(DelayedResultVariable[ListValue], RelationAttributeVariable):
                 # may happen in case of a duplicate assignment, e.g. `x.a = [y.a, y.a]`
                 # consider the new one to have no progress potential because we don't track it separately
                 self._nb_gradual_waiters += 1
+                if self._zerowaiters_tracker is not None:
+                    self._zerowaiters_tracker.mark_dirty(self)
                 return True
             self._listeners[resultcollector] = None
             if resultcollector.pure_gradual():
                 self._nb_gradual_waiters += 1
+                if self._zerowaiters_tracker is not None:
+                    self._zerowaiters_tracker.mark_dirty(self)
         return True
 
     def is_multi(self) -> bool:
