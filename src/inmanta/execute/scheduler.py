@@ -69,76 +69,6 @@ LOGGER = logging.getLogger(__name__)
 MAX_ITERATIONS = 100_000
 
 
-class DirtyTrackingZeroWaiters:
-    """
-    Tracks DelayedResultVariables that have zero progress potential (zerowaiters).
-    Instead of scanning all zerowaiters each iteration, only DRVs whose state has changed
-    since the last check are examined.
-    """
-
-    __slots__ = ("_all", "_dirty")
-
-    def __init__(self) -> None:
-        self._all: dict[int, DelayedResultVariable[Any]] = {}
-        self._dirty: dict[int, DelayedResultVariable[Any]] = {}
-
-    def append(self, drv: DelayedResultVariable[Any]) -> None:
-        key = id(drv)
-        self._all[key] = drv
-
-    def mark_dirty(self, drv: DelayedResultVariable[Any]) -> None:
-        """Called by DRV when its progress potential changes (e.g. new waiter added)."""
-        key = id(drv)
-        if key in self._all:
-            self._dirty[key] = drv
-
-    def remove(self, drv: DelayedResultVariable[Any]) -> None:
-        key = id(drv)
-        self._all.pop(key, None)
-        self._dirty.pop(key, None)
-
-    def drain_dirty(self) -> list[DelayedResultVariable[Any]]:
-        """
-        Check only DRVs that changed since last drain.
-        Returns those with progress potential > 0 for promotion to waitqueue.
-        """
-        has_potential: list[DelayedResultVariable[Any]] = []
-        for key, drv in list(self._dirty.items()):
-            del self._dirty[key]
-            if drv.hasValue:
-                self._all.pop(key, None)
-            elif drv.get_progress_potential() > 0:
-                self._all.pop(key, None)
-                has_potential.append(drv)
-            # else: still zero progress potential, stays in _all
-        return has_potential
-
-    def drain_all_remaining(self) -> list[DelayedResultVariable[Any]]:
-        """Full scan fallback — returns DRVs with progress potential, removes resolved ones."""
-        has_potential: list[DelayedResultVariable[Any]] = []
-        for key, drv in list(self._all.items()):
-            if drv.hasValue:
-                del self._all[key]
-            elif drv.get_progress_potential() > 0:
-                del self._all[key]
-                has_potential.append(drv)
-        return has_potential
-
-    def freeze_all(self) -> None:
-        """Freeze all remaining zerowaiters (terminal path)."""
-        for drv in list(self._all.values()):
-            drv._zerowaiters_tracker = None
-            drv.freeze()
-        self._all.clear()
-        self._dirty.clear()
-
-    def __len__(self) -> int:
-        return len(self._all)
-
-    def __bool__(self) -> bool:
-        return bool(self._all)
-
-
 class Scheduler:
     """
     This class schedules statements for execution
@@ -482,7 +412,7 @@ class Scheduler:
         # queue for RV's that are delayed
         waitqueue = PrioritisedDelayedResultVariableQueue(relation_precedence_graph)
         # queue for RV's that are delayed and had no effective waiters when they were first in the waitqueue
-        zerowaiters = DirtyTrackingZeroWaiters()
+        zerowaiters: Deque[DelayedResultVariable[Any]] = deque()
 
         # Wrap in object to pass around
         queue = QueueScheduler(compiler, basequeue, waitqueue, self.types)
@@ -544,7 +474,6 @@ class Scheduler:
                     continue
                 if next_rv.get_progress_potential() <= 0:
                     zerowaiters.append(next_rv)
-                    next_rv._zerowaiters_tracker = zerowaiters
                 elif next_rv.get_waiting_providers() > 0:
                     # definitely not done
                     # drop from queue
@@ -557,26 +486,28 @@ class Scheduler:
                     progress = True
 
             # no waiters in waitqueue,...
-            # see if any zerowaiters have gained waiters since last check
+            # see if any zerowaiters have become gotten waiters
             if not progress:
-                # Fast path: only check DRVs that changed
-                has_potential = zerowaiters.drain_dirty()
-                if not has_potential:
-                    # Fallback: full scan
-                    has_potential = zerowaiters.drain_all_remaining()
-                if has_potential:
-                    for drv in has_potential:
-                        drv._zerowaiters_tracker = None
-                    waitqueue.replace(has_potential)
-                    while len(waitqueue) > 0 and not progress:
-                        LOGGER.log(LOG_LEVEL_TRACE, "Moved zerowaiters to waiters")
-                        next_rv = waitqueue.popleft()
-                        if next_rv.get_waiting_providers() > 0:
-                            next_rv.unqueue()
-                        else:
-                            LOGGER.log(LOG_LEVEL_TRACE, "Freezing %s", next_rv)
-                            next_rv.freeze()
-                            progress = True
+                has_potential: list[DelayedResultVariable[object]] = []
+                new_zerowaiters: Deque[DelayedResultVariable[object]] = deque()
+                for w in zerowaiters:
+                    if w.hasValue:
+                        continue
+                    if w.get_progress_potential() > 0:
+                        has_potential.append(w)
+                    else:
+                        new_zerowaiters.append(w)
+                waitqueue.replace(has_potential)
+                zerowaiters = new_zerowaiters
+                while len(waitqueue) > 0 and not progress:
+                    LOGGER.log(LOG_LEVEL_TRACE, "Moved zerowaiters to waiters")
+                    next_rv = waitqueue.popleft()
+                    if next_rv.get_waiting_providers() > 0:
+                        next_rv.unqueue()
+                    else:
+                        LOGGER.log(LOG_LEVEL_TRACE, "Freezing %s", next_rv)
+                        next_rv.freeze()
+                        progress = True
 
             if not progress:
                 # nothing works anymore, attempt to unfreeze wait cycle
@@ -585,7 +516,10 @@ class Scheduler:
             if not progress:
                 # no one waiting anymore, all done, freeze and finish
                 LOGGER.log(LOG_LEVEL_TRACE, "Finishing statements with no waiters")
-                zerowaiters.freeze_all()
+
+                while len(zerowaiters) > 0:
+                    next_rv = zerowaiters.pop()
+                    next_rv.freeze()
 
         now = time.time()
         if LOGGER.isEnabledFor(LOG_LEVEL_TRACE):
