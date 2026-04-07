@@ -1,0 +1,8 @@
+---
+description: "Added the `core.resource:compliance_reporting` feature flag"
+issue-nr: 10188
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [master, iso9]
+sections:
+  minor-improvement: "{{description}}"
