@@ -150,6 +150,9 @@ class RESTHandler(tornado.web.RequestHandler):
                     except CancelledError:
                         self.respond({"message": "Request is cancelled on the server"}, {}, 500)
 
+                    except Exception as e:
+                        LOGGER.exception("An exception occurred during the request.")
+                        self.respond({"message": str(e)}, {}, 500)
                     finally:
                         try:
                             await self.finish()
