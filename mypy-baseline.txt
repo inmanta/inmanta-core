@@ -555,6 +555,7 @@ src/inmanta/execute/runtime.py:0: error: Argument 1 to "RuntimeException" has in
 src/inmanta/execute/runtime.py:0: error: Argument 1 to "__init__" of "Locatable" has incompatible type "Instance"; expected "Locatable"  [arg-type]
 src/inmanta/execute/runtime.py:0: error: Argument 1 to "get_location" of "Locatable" has incompatible type "Instance"; expected "Locatable"  [arg-type]
 src/inmanta/execute/runtime.py:0: error: Argument 1 to "ready" of "Waiter" has incompatible type "WrappedValueVariable[T]"; expected "ResultVariable[Any] | Waiter"  [arg-type]
+src/inmanta/execute/runtime.py:0: error: Argument 1 to "receive_result" of "ResultCollector" has incompatible type "T_contra | Sequence[T_contra] | Any"; expected "T_contra"  [arg-type]
 src/inmanta/execute/runtime.py:0: error: Argument 1 to "set_location" of "Locatable" has incompatible type "Instance"; expected "Locatable"  [arg-type]
 src/inmanta/execute/runtime.py:0: error: Argument 2 to "UnsetException" has incompatible type "ResultVariable[T]"; expected "Instance | None"  [arg-type]
 src/inmanta/execute/runtime.py:0: error: Argument 2 to "assign" of "AssignableNodeReference" has incompatible type "Instance"; expected "Locatable"  [arg-type]
