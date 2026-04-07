@@ -1931,7 +1931,7 @@ def get_compliance_report(tid: uuid.UUID, resource_ids: Sequence[ResourceIdStr])
 @typedmethod(
     path="/feature/bool",
     operation="GET",
-    client_types=[ClientType.api, ClientType.agent],
+    client_types=[ClientType.agent],
     agent_server=True,
     api_version=2,
 )

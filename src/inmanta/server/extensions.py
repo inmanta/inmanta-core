@@ -145,7 +145,10 @@ class FeatureManager:
             return {}
 
         with open(feature_file, encoding="utf-8") as fd:
-            result: dict[str, dict[str, dict[str, FeatureValueTypes]]] = yaml.safe_load(fd)
+            result: dict[str, dict[str, dict[str, FeatureValueTypes]]] | None = yaml.safe_load(fd)
+
+        if result is None:
+            raise Exception(f"Feature file {feature_file} doesn't contain a valid yaml document.")
 
         if "slices" in result:
             return result["slices"]

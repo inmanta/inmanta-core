@@ -53,7 +53,7 @@ def content_features_file() -> str:
     return yaml.safe_dump(content_feature_file)
 
 
-async def test_is_bool_feature_enabled(server, client):
+async def test_is_bool_feature_enabled(server, client, agent):
     """
     Verify the behavior of the is_bool_feature_enabled endpoint.
     """
@@ -62,5 +62,5 @@ async def test_is_bool_feature_enabled(server, client):
     # Load features from TestSlice into the FeatureManager
     server_slice.feature_manager.add_slice(test_slice)
     server_slice.feature_manager._load_feature_config()
-    assert await client.is_bool_feature_enabled(slice_name=NAME_TEST_SLICE, feature_name="bool_feature1").value()
-    assert not await client.is_bool_feature_enabled(slice_name=NAME_TEST_SLICE, feature_name="bool_feature2").value()
+    assert await agent._client.is_bool_feature_enabled(slice_name=NAME_TEST_SLICE, feature_name="bool_feature1").value()
+    assert not await agent._client.is_bool_feature_enabled(slice_name=NAME_TEST_SLICE, feature_name="bool_feature2").value()

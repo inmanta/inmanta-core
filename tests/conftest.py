@@ -774,7 +774,9 @@ def content_features_file() -> str:
     A fixture that returns the content of the features file
     that should be configurd on the inmanta server.
     """
-    return ""
+    return """
+        slices:
+    """
 
 
 @pytest.fixture(scope="function")
