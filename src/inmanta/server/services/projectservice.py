@@ -91,6 +91,7 @@ class ProjectService(protocol.ServerSlice):
     # v2 handlers
     @handle(methods_v2.project_create)
     async def project_create(self, name: str, project_id: Optional[uuid.UUID]) -> model.Project:
+        # raise ZeroDivisionError
         if project_id is None:
             project_id = uuid.uuid4()
 
