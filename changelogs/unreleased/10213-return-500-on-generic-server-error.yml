@@ -1,5 +1,5 @@
 description: >
-  Catch all exceptions on the outermost layer of the server-side request processing. All otherwise uncaught exceptions
+  Catch all exceptions on the outermost layer of the server side request processing. All otherwise uncaught exceptions
   will now yield a 500 return code.
 change-type: patch
 destination-branches: [master, iso9, iso8]

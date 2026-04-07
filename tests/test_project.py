@@ -37,10 +37,16 @@ from utils import log_contains
 
 
 async def test_unexpected_server_error_handling(client, monkeypatch):
+    """
+    Test that the outermost layer of server side request processing correctly
+    catches otherwise unhandled exceptions and yields a 500 for this request.
+
+    """
 
     def patch(self, body: bytes) -> JsonType | None:
         raise Exception("Unexpected server error")
 
+    # Monkeypatch an exception in the "_decode" method to mimic an unexpected server side error
     monkeypatch.setattr(RESTServer, "_decode", patch, raising=True)
 
     result = await client.create_project("project-test")
