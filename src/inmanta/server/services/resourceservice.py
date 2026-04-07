@@ -69,7 +69,10 @@ resource_discovery = extensions.BoolFeature(
 compliance_reporting = extensions.BoolFeature(
     slice=SLICE_RESOURCE,
     name="compliance_reporting",
-    description="Enable compliance reporting. This feature controls whether the server has support for resources that only report about their compliance status, without deploying the desired state.",
+    description=(
+        "Enable compliance reporting. This feature controls whether the server has support for resources that"
+        " only report about their compliance status, without deploying the desired state."
+    ),
 )
 
 
@@ -139,7 +142,7 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
         return [SLICE_TRANSPORT]
 
     def define_features(self) -> list[extensions.Feature]:
-        return [resource_discovery]
+        return [resource_discovery, compliance_reporting]
 
     async def prestart(self, server: protocol.Server) -> None:
         await super().prestart(server)

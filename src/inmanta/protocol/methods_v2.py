@@ -1922,6 +1922,7 @@ def get_compliance_report(tid: uuid.UUID, resource_ids: Sequence[ResourceIdStr])
 
     :return: A dict of ResourceComplianceDiff objects representing the current state of each requested resource.
     :raises NotFound: When one or more resource_ids do not exist in the latest scheduled version for the environment.
+    :raises Forbidden: When the compliance_reporting feature is not enabled on the server.
     """
     pass
 
@@ -1931,6 +1932,7 @@ def get_compliance_report(tid: uuid.UUID, resource_ids: Sequence[ResourceIdStr])
     path="/feature/bool",
     operation="GET",
     client_types=[ClientType.api, ClientType.agent],
+    agent_server=True,
     api_version=2,
 )
 def is_bool_feature_enabled(slice_name: str, feature_name: str) -> bool:

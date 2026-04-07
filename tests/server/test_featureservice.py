@@ -15,16 +15,16 @@ limitations under the License.
 
 Contact: code@inmanta.com
 """
+
 import pytest
-import os.path
 import yaml
-from inmanta.server import extensions, protocol
-from inmanta.server import SLICE_SERVER, SLICE_TRANSPORT
-from inmanta import config
+
+from inmanta.server import SLICE_SERVER, SLICE_TRANSPORT, extensions, protocol
 
 NAME_TEST_SLICE = "test_slice"
 BOOL_FEATURE1 = extensions.BoolFeature(slice=NAME_TEST_SLICE, name="bool_feature1")
 BOOL_FEATURE2 = extensions.BoolFeature(slice=NAME_TEST_SLICE, name="bool_feature2")
+
 
 class TestSlice(protocol.ServerSlice):
     def __init__(self) -> None:
@@ -40,10 +40,8 @@ class TestSlice(protocol.ServerSlice):
         return [BOOL_FEATURE1, BOOL_FEATURE2]
 
 
-@pytest.fixture
-def server_pre_start(server_config, tmpdir):
-    # Set feature file
-    path_feature_file = os.path.join(tmpdir, "feature_file")
+@pytest.fixture(scope="function")
+def content_features_file() -> str:
     content_feature_file = {
         "slices": {
             NAME_TEST_SLICE: {
@@ -52,9 +50,7 @@ def server_pre_start(server_config, tmpdir):
             }
         }
     }
-    with open(path_feature_file, "w") as fh:
-        fh.write(yaml.safe_dump(content_feature_file))
-    config.feature_file_config.set(path_feature_file)
+    return yaml.safe_dump(content_feature_file)
 
 
 async def test_is_bool_feature_enabled(server, client):

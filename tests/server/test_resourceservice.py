@@ -22,9 +22,12 @@ from datetime import timezone
 
 import pytest
 
+import utils
 from inmanta import const, data, resources, util
 from inmanta.agent import executor
+from inmanta.data import model
 from inmanta.deploy import persistence, state
+from inmanta.server import SLICE_RESOURCE
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 
 
@@ -583,4 +586,79 @@ async def test_log_deploy_start(server, client, environment, clienthelper, agent
     )
     assert deploy_started_message
 
-async def test_compliance_reporting_feature() -> None:
+
+@pytest.mark.parametrize(
+    "compliance_reporting_enabled, content_features_file",
+    [
+        (
+            False,
+            f"""
+            slices:
+                {SLICE_RESOURCE}:
+                    compliance_reporting: False
+            """,
+        ),
+        (
+            True,
+            f"""
+            slices:
+                {SLICE_RESOURCE}:
+                    compliance_reporting: True
+            """,
+        ),
+    ],
+)
+async def test_compliance_reporting_feature(
+    agent, resource_container, server, client, environment, compliance_reporting_enabled: bool, clienthelper
+) -> None:
+    """
+    Verify that the deploy state of report_only resources is set to failed when the handler reports
+    non_compliance while the compliance_reporting feature is disabled.
+    """
+    result = await client.get_compliance_report(tid=environment, resource_ids=[])
+    if compliance_reporting_enabled:
+        assert result.code == 200
+    else:
+        assert result.code == 403
+        assert "The compliance reporting feature is not enabled" in result.result["message"]
+
+    version = await clienthelper.get_version()
+    rid_r1 = ResourceIdStr("test::Resource[agent1,name=file1]")
+    rvid_r1_v1 = ResourceVersionIdStr(f"{rid_r1},v={version}")
+    resources = [
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": rvid_r1_v1,
+            "send_event": False,
+            "receive_events": False,
+            "purged": False,
+            "report_only": True,
+            "requires": [],
+        },
+    ]
+    await clienthelper.put_version_simple(resources, version)
+    result = await client.release_version(
+        tid=environment, id=version, push=True, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
+    )
+    assert result.code == 200
+    await utils.wait_until_deployment_finishes(client, environment, version=version)
+
+    resource_details = await client.resource_details(tid=environment, rid=rid_r1).value()
+    expected_resource_state = (
+        model.ReleasedResourceState.non_compliant if compliance_reporting_enabled else model.ReleasedResourceState.failed
+    )
+    assert resource_details.status is expected_resource_state
+
+    resource_logs = await client.resource_logs(environment, rid_r1).value()
+    error_logs = [
+        log for log in resource_logs if log.level is const.LogLevel.ERROR and log.action is const.ResourceAction.deploy
+    ]
+    if compliance_reporting_enabled:
+        assert len(error_logs) == 0
+    else:
+        assert len(error_logs) == 1
+        assert (
+            "The handler reported the non_compliant state, but the compliance_reporting feature is not enabled."
+            " Please check your entitlements file."
+        ) in error_logs[0].msg

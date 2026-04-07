@@ -33,8 +33,6 @@ from typing import ClassVar, Optional, Self
 
 import asyncpg
 
-from inmanta.server.services import resourceservice
-from inmanta import server
 from inmanta import const, data, types
 from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
@@ -48,6 +46,8 @@ from inmanta.deploy.tasks import Deploy, DryRun, RefreshFact, Task
 from inmanta.deploy.work import TaskPriority
 from inmanta.protocol import Client
 from inmanta.resources import Id
+from inmanta.server.extensions import BoolFeature
+from inmanta.server.services import resourceservice
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 from inmanta.vendor import pyformance
 
@@ -1315,27 +1315,34 @@ class ResourceScheduler(TaskManager):
         """
         if report.status is const.ResourceState.non_compliant:
             # The resource reported the non_compliant status so compliance_reporting has to be enabled.
+            compliance_feature: BoolFeature = resourceservice.compliance_reporting
             try:
                 compliance_reporting_enabled: bool = await self.client.is_bool_feature_enabled(
-                    slice_name=server.SLICE_RESOURCE, feature_name="compliance_reporting",
-                )
+                    slice_name=compliance_feature.slice, feature_name=compliance_feature.name
+                ).value()
             except Exception:
                 # Only log error, we don't want to interrupt the deployment flow because of this.
-                LOGGER.exception(f"Failed to check whether feature {server.SLICE_RESOURCE}.{compliance_reporting} is enabled.")
+                LOGGER.exception(
+                    "Failed to check whether feature %s is enabled.", f"{compliance_feature.slice}.{compliance_feature.name}"
+                )
             else:
                 if not compliance_reporting_enabled:
                     # Compliance_reporting should have been enabled, but it's not.
                     # Mark the resource as failed.
-                    report.status = const.ResourceState.failed
+                    report.resource_state = const.HandlerResourceState.failed
                     report.messages.append(
                         data.LogLine.log(
                             level=const.LogLevel.ERROR,
-                            msg="The compliance_reporting feature is not enabled. Please check your entitlements file.",
+                            msg=(
+                                "The handler reported the non_compliant state,"
+                                " but the compliance_reporting feature is not enabled."
+                                " Please check your entitlements file."
+                            ),
                         )
                     )
 
     async def deploy_done(self, deploy_intent: DeployIntent, report: executor.DeployReport) -> None:
-        await self._enforce_compliance_reporting_entitlement()
+        await self._enforce_compliance_reporting_entitlement(report)
         finished = datetime.datetime.now().astimezone()
         try:
             state: Optional[ResourceState]

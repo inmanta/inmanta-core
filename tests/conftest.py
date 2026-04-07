@@ -769,6 +769,15 @@ def path_policy_engine_executable() -> str:
 
 
 @pytest.fixture(scope="function")
+def content_features_file() -> str:
+    """
+    A fixture that returns the content of the features file
+    that should be configurd on the inmanta server.
+    """
+    return ""
+
+
+@pytest.fixture(scope="function")
 async def server_config(
     inmanta_config,
     postgres_db,
@@ -782,6 +791,7 @@ async def server_config(
     authorization_provider: AuthorizationProviderName,
     access_policy: str,
     path_policy_engine_executable: str,
+    content_features_file: str,
 ):
     reset_metrics()
     agentmanager.assert_no_start_scheduler = not auto_start_agent
@@ -822,7 +832,11 @@ async def server_config(
             access_policy=access_policy,
             path_opa_executable=path_policy_engine_executable,
         )
-        yield config
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", delete=True, delete_on_close=True) as fh:
+            fh.write(content_features_file)
+            fh.flush()
+            config.feature_file_config.set(fh.name)
+            yield config
 
     agentmanager.assert_no_start_scheduler = False
     agentmanager.no_start_scheduler = False

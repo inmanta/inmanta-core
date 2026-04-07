@@ -17,20 +17,11 @@ Contact: code@inmanta.com
 """
 
 import logging
-import uuid
-from collections.abc import Mapping
 
-import asyncpg
-
-from inmanta import const, data, protocol
-from inmanta.const import MIN_PASSWORD_LENGTH
-from inmanta.data import AuthMethod, model
-from inmanta.protocol import common, exceptions
-from inmanta.protocol.auth import auth
-from inmanta.server import SLICE_DATABASE, SLICE_TRANSPORT, SLICE_FEATURE
-from inmanta.server import config as server_config
+from inmanta import protocol
+from inmanta.protocol import exceptions
+from inmanta.server import SLICE_FEATURE, SLICE_TRANSPORT, extensions
 from inmanta.server import protocol as server_protocol
-from inmanta.server import extensions
 
 LOGGER = logging.getLogger(__name__)
 
@@ -50,7 +41,7 @@ class FeatureService(server_protocol.ServerSlice):
     @protocol.handle(protocol.methods_v2.is_bool_feature_enabled)
     async def is_boolean_feature_enabled(self, slice_name: str, feature_name: str) -> bool:
         try:
-            feature: extensions.Feature = self.feature_manager.get_feature(slice_name=slice_name, feature_name=feature_name)
+            feature: extensions.BoolFeature = self.feature_manager.get_feature(slice_name=slice_name, feature_name=feature_name)
         except KeyError:
             raise exceptions.NotFound(message=f"Feature with name {feature_name} not found for slice {slice_name}.")
         else:

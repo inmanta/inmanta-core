@@ -26,6 +26,7 @@ from inmanta.server.services import (
     dryrunservice,
     environment_metrics_service,
     environmentservice,
+    featureservice,
     fileservice,
     metricservice,
     notificationservice,
@@ -34,7 +35,6 @@ from inmanta.server.services import (
     projectservice,
     resourceservice,
     userservice,
-    featureservice,
 )
 
 
