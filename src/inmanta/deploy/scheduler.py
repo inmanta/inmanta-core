@@ -1322,9 +1322,7 @@ class ResourceScheduler(TaskManager):
                 ).value()
             except Exception:
                 # Only log error, we don't want to interrupt the deployment flow because of this.
-                LOGGER.exception(
-                    "Failed to check whether feature %s is enabled.", f"{compliance_feature.slice}.{compliance_feature.name}"
-                )
+                LOGGER.exception("Failed to check whether feature %s is enabled.", str(compliance_feature))
             else:
                 if not compliance_reporting_enabled:
                     # Compliance_reporting should have been enabled, but it's not.
