@@ -27,7 +27,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 class FeatureService(server_protocol.ServerSlice):
-    """Slice to request information about features that enabled/disabled"""
+    """Slice to request information about features that are enabled/disabled"""
 
     def __init__(self) -> None:
         super().__init__(SLICE_FEATURE)

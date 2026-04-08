@@ -775,7 +775,7 @@ def content_features_file() -> str:
     that should be configurd on the inmanta server.
     """
     return """
-        slices:
+        slices: {}
     """
 
 
