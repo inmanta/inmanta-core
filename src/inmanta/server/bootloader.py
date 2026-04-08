@@ -189,7 +189,20 @@ class InmantaBootloader:
         conn: asyncpg.Connection | None = None
         try:
             conn = await self.get_db_connection()
-            result = await conn.fetch("SHOW server_version_num")
+            query = """
+            SELECT
+                pid,
+                client_addr,
+                state,
+                sync_state,
+                sent_lsn,
+                write_lsn,
+                flush_lsn,
+                replay_lsn,
+                pg_wal_lsn_diff(sent_lsn, replay_lsn) AS replay_lag_bytes
+            FROM pg_stat_replication;
+            """
+            result = await conn.fetch(query)
             LOGGER.info("Database replication status:\n%s", result)
         finally:
             if conn is not None:
