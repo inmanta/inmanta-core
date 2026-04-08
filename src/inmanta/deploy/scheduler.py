@@ -371,7 +371,7 @@ class ResourceScheduler(TaskManager):
         :param environment: the environment we work for
         :param executor_manager: the executor manager that will provide us with executors
         :param client: connection to the server
-        :param _compliance_reporting_enabled: True iff the compliance_reporting feature is enabled on the server.
+        :param _compliance_reporting_feature_enabled: True iff the compliance_reporting feature is enabled on the server.
         """
         # state and work may be reassigned during initialize
         self._state: ModelState = ModelState(version=0)
@@ -417,7 +417,7 @@ class ResourceScheduler(TaskManager):
         self._timer_manager = timers.TimerManager(self)
 
         self._deployment_suspended: bool = False
-        self._compliance_reporting_enabled: bool = False
+        self._compliance_reporting_feature_enabled: bool = False
 
     async def _reset(self) -> None:
         """
@@ -501,7 +501,7 @@ class ResourceScheduler(TaskManager):
         """
         # Check whether the compliance_reporting feature is enabled.
         compliance_feature: BoolFeature = resourceservice.compliance_reporting
-        self._compliance_reporting_enabled = await self.client.is_bool_feature_enabled(
+        self._compliance_reporting_feature_enabled = await self.client.is_bool_feature_enabled(
             slice_name=compliance_feature.slice, feature_name=compliance_feature.name
         ).value()
         await self._timer_manager.initialize()
@@ -1320,7 +1320,7 @@ class ResourceScheduler(TaskManager):
         If the given resource is using the compliance_reporting feature, verify that this feature
         is enabled in the entitlements file. If not, update the report to mark the resource as failed.
         """
-        if not compliance_reporting_enabled and report.status is const.ResourceState.non_compliant:
+        if not self._compliance_reporting_feature_enabled and report.status is const.ResourceState.non_compliant:
             report.resource_state = const.HandlerResourceState.failed
             report.messages.append(
                 data.LogLine.log(
