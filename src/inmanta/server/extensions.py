@@ -126,7 +126,7 @@ class FeatureManager:
         if slice_name not in self._features:
             raise KeyError(
                 f"Couldn't find feature {feature_name} for slice {slice_name}:"
-                f" No features are defined for slice {feature_name}."
+                f" No features are defined for slice {slice_name}."
             )
         if feature_name not in self._features[slice_name]:
             raise KeyError(
