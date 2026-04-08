@@ -239,18 +239,20 @@ class Agent(SessionEndpoint):
         if agent == const.AGENT_SCHEDULER_ID:
             agent = None
 
+        # slightly inaccurate in case resources list contains resources that don't exist (on the given agent), but we also
+        # want to keep it concise.
         nb_resources: str = str(len(resources)) if resources is not None else "all"
 
         if agent is None:
-            agent_id = "all agents"
+            agent_id = "All agents"
         else:
-            agent_id = f"agent {agent}"
+            agent_id = f"Agent {agent}"
 
         if incremental_deploy:
-            LOGGER.info("%s got a trigger to run deploy for %s resources on %s in environment %s", nb_resources, agent_id, env)
+            LOGGER.info("%s got a trigger to run deploy for %s resources in environment %s", agent_id, nb_resources, env)
             await self.scheduler.deploy(reason="user requested a deploy", agent=agent, resources=resources)
         else:
-            LOGGER.info("%s got a trigger to run repair for %s resources on %s in environment %s", nb_resources, agent_id, env)
+            LOGGER.info("%s got a trigger to run repair for %s resources in environment %s", agent_id, nb_resources, env)
             await self.scheduler.repair(reason="user requested a repair", agent=agent, resources=resources)
         return 200
 
