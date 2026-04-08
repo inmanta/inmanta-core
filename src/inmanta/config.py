@@ -119,7 +119,8 @@ class Config:
             files = [main_cfg_file] + cfg_files_in_config_dir + local_dot_inmanta_cfg_files
 
         config = LenientConfigParser(interpolation=Interpolation())
-        config.read(files)
+        loaded_files = config.read(files)
+        LOGGER.debug("Configuration files loaded: %s", loaded_files)
         cls._save_loaded_config(config, config_dir, min_c_config_file)
 
     @classmethod
@@ -374,7 +375,7 @@ def is_uuid_opt(value: Optional[str | uuid.UUID]) -> Optional[uuid.UUID]:
     return uuid.UUID(value)
 
 
-def is_int_opt(value: Optional[str]) -> Optional[int]:
+def is_int_opt(value: Optional[int | str]) -> Optional[int]:
     """optional int"""
     if value is None:
         return None
@@ -408,7 +409,7 @@ class Option(Generic[T]):
         default: Union[T, Callable[[], T]],
         documentation: str,
         validator: Callable[[str | T], T] = is_str,
-        predecessor_option: Optional["Option"] = None,
+        predecessor_option: Optional["Option[T]"] = None,
     ) -> None:
         self.section = section
         self.name = _normalize_name(name)
@@ -488,9 +489,11 @@ def option_as_default(opt: Option[T]) -> Callable[[], T]:
 # Global config options are defined here
 #############################
 # flake8: noqa: H904
-state_dir = Option("config", "state_dir", "/var/lib/inmanta", "The directory where the server stores its state", is_str)
+state_dir: Option[str] = Option(
+    "config", "state_dir", "/var/lib/inmanta", "The directory where the server stores its state", is_str
+)
 
-log_dir = Option(
+log_dir: Option[str] = Option(
     "config",
     "log_dir",
     "/var/log/inmanta",
@@ -498,7 +501,7 @@ log_dir = Option(
     is_str,
 )
 
-logging_config = Option(
+logging_config: Option[str | None] = Option(
     section="config",
     name="logging_config",
     default=None,
@@ -540,8 +543,12 @@ def get_default_nodename() -> str:
     return socket.gethostname()
 
 
-nodename = Option("config", "node-name", get_default_nodename, "Force the hostname of this machine to a specific value", is_str)
-feature_file_config = Option("config", "feature-file", None, "The location of the inmanta feature file.", is_str_opt)
+nodename: Option[str] = Option(
+    "config", "node-name", get_default_nodename, "Force the hostname of this machine to a specific value", is_str
+)
+feature_file_config: Option[str | None] = Option(
+    "config", "feature-file", None, "The location of the inmanta feature file.", is_str_opt
+)
 
 
 ###############################
@@ -554,17 +561,19 @@ class TransportConfig:
 
     def __init__(self, name: str, port: int = 8888) -> None:
         self.prefix = "%s_rest_transport" % name
-        self.host = Option(self.prefix, "host", "localhost", "IP address or hostname of the server", is_str)
-        self.port = Option(self.prefix, "port", port, "Server port", is_int)
-        self.ssl = Option(self.prefix, "ssl", False, "Connect using SSL?", is_bool)
-        self.ssl_ca_cert_file = Option(
+        self.host: Option[str] = Option(self.prefix, "host", "localhost", "IP address or hostname of the server", is_str)
+        self.port: Option[int] = Option(self.prefix, "port", port, "Server port", is_int)
+        self.ssl: Option[bool] = Option(self.prefix, "ssl", False, "Connect using SSL?", is_bool)
+        self.ssl_ca_cert_file: Option[str | None] = Option(
             self.prefix, "ssl_ca_cert_file", None, "CA cert file used to validate the server certificate against", is_str_opt
         )
-        self.token = Option(self.prefix, "token", None, "The bearer token to use to connect to the API", is_str_opt)
-        self.request_timeout = Option(
+        self.token: Option[str | None] = Option(
+            self.prefix, "token", None, "The bearer token to use to connect to the API", is_str_opt
+        )
+        self.request_timeout: Option[int] = Option(
             self.prefix, "request_timeout", 120, "The time before a request times out in seconds", is_int
         )
-        self.max_clients = Option(
+        self.max_clients: Option[int | None] = Option(
             self.prefix,
             "max_clients",
             None,

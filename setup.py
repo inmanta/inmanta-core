@@ -15,7 +15,7 @@ requires = [
     "docstring-parser>=0.10,<0.18",
     "email-validator>=1,<3",
     "jinja2~=3.0",
-    "more-itertools>=8,<11",
+    "more-itertools>=8,<12",
     # upper bound on packaging because we use a non-public API that might change in any (non-SemVer) version
     "packaging>=21.3,<26.1",
     # pip>=21.3 required for editable pyproject.toml + setup.cfg based install support
@@ -26,8 +26,6 @@ requires = [
     "pynacl~=1.5",
     "python-dateutil~=2.0",
     "pyyaml~=6.0",
-    # Version 82.0.0 and higher removed pkg_resources which breaks pip2pi that still depends on it.
-    "setuptools<83.0.0",
     "texttable~=1.0",
     # tornado>6.5 because of CVE https://github.com/advisories/GHSA-7cx3-6m66-7c5m
     "tornado>6.5",
@@ -55,7 +53,7 @@ version = "18.1.0"
 
 setup(
     version=version,
-    python_requires=">=3.12",  # also update classifiers
+    python_requires=">=3.13",  # also update classifiers
     # Meta data
     name="inmanta-core",
     description="Inmanta deployment tool",
@@ -72,7 +70,7 @@ setup(
         "Operating System :: POSIX :: Linux",
         "Topic :: System :: Systems Administration",
         "Topic :: Utilities",
-        "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
     ],
     keywords="orchestrator orchestration configurationmanagement",
     project_urls={
@@ -98,13 +96,11 @@ setup(
             "bumpversion",
             "openapi_spec_validator",
             "pep8-naming",
-            "pip2pi",
             "psutil",
             "time-machine",
             # types
             "types-python-dateutil",
             "types-PyYAML",
-            "types-setuptools",
             "types-toml",
             # doc dependencies
             "furo",
