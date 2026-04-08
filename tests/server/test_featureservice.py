@@ -24,6 +24,7 @@ from inmanta.server import SLICE_SERVER, SLICE_TRANSPORT, extensions, protocol
 NAME_TEST_SLICE = "test_slice"
 BOOL_FEATURE1 = extensions.BoolFeature(slice=NAME_TEST_SLICE, name="bool_feature1")
 BOOL_FEATURE2 = extensions.BoolFeature(slice=NAME_TEST_SLICE, name="bool_feature2")
+STR_LIST_FEATURE = extensions.StringListFeature(slice=NAME_TEST_SLICE, name="str_list_feature")
 
 
 class TestSlice(protocol.ServerSlice):
@@ -37,7 +38,7 @@ class TestSlice(protocol.ServerSlice):
         return [SLICE_TRANSPORT]
 
     def define_features(self) -> list[extensions.Feature[object]]:
-        return [BOOL_FEATURE1, BOOL_FEATURE2]
+        return [BOOL_FEATURE1, BOOL_FEATURE2, STR_LIST_FEATURE]
 
 
 @pytest.fixture(scope="function")
@@ -64,3 +65,7 @@ async def test_is_bool_feature_enabled(server, client, agent):
     server_slice.feature_manager._load_feature_config()
     assert await agent._client.is_bool_feature_enabled(slice_name=NAME_TEST_SLICE, feature_name="bool_feature1").value()
     assert not await agent._client.is_bool_feature_enabled(slice_name=NAME_TEST_SLICE, feature_name="bool_feature2").value()
+
+    result = await agent._client.is_bool_feature_enabled(slice_name=NAME_TEST_SLICE, feature_name="str_list_feature")
+    assert result.code == 400
+    assert result.result["message"] == "Feature test_slice:str_list_feature is not a BoolFeature"

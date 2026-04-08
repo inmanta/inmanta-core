@@ -38,11 +38,14 @@ class FeatureService(server_protocol.ServerSlice):
     def get_depended_by(self) -> list[str]:
         return [SLICE_TRANSPORT]
 
-    @protocol.handle(protocol.methods_v2.is_boolean_feature_enabled)
-    async def is_boolean_feature_enabled(self, slice_name: str, feature_name: str) -> bool:
+    @protocol.handle(protocol.methods_v2.is_bool_feature_enabled)
+    async def is_bool_feature_enabled(self, slice_name: str, feature_name: str) -> bool:
         try:
             feature: extensions.BoolFeature = self.feature_manager.get_feature(slice_name=slice_name, feature_name=feature_name)
         except KeyError:
             raise exceptions.NotFound(message=f"Feature with name {feature_name} not found for slice {slice_name}.")
-        else:
-            return self.feature_manager.enabled(feature)
+
+        if not isinstance(feature, extensions.BoolFeature):
+            raise exceptions.BadRequest(message=f"Feature {feature} is not a BoolFeature")
+
+        return self.feature_manager.enabled(feature)

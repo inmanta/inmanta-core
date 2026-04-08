@@ -1935,7 +1935,7 @@ def get_compliance_report(tid: uuid.UUID, resource_ids: Sequence[ResourceIdStr])
     agent_server=True,
     api_version=2,
 )
-def is_boolean_feature_enabled(slice_name: str, feature_name: str) -> bool:
+def is_bool_feature_enabled(slice_name: str, feature_name: str) -> bool:
     """
     Return True iff the given boolean feature is enabled.
 
