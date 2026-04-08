@@ -568,13 +568,16 @@ def deploy(
     tid: uuid.UUID,
     agent_trigger_method: const.AgentTriggerMethod = const.AgentTriggerMethod.push_full_deploy,
     agents: Optional[list] = None,
+    resources: Optional[Sequence[ResourceIdStr]] = None,
 ):
     """
     Notify agents to perform a deploy now.
 
     :param tid: The id of the environment.
     :param agent_trigger_method: Indicates whether the agents should perform a full or an incremental deploy.
-    :param agents: Optional, names of specific agents to trigger
+    :param agents: Optional, names of specific agents to trigger.
+    :param resources: Optional, specific resources to deploy. If both agents and resources are given, only resources
+        that match both filters are deployed.
     """
 
 
@@ -988,7 +991,7 @@ def set_state(agent: Optional[str], enabled: bool):
 )
 def trigger(tid: uuid.UUID, id: None | str, incremental_deploy: bool, resources: Sequence[ResourceIdStr] | None = None):
     """
-    Request the orchestrator to schedule resources for deploy. The agent and resources parameters may be used as filters
+    Request the resource scheduler to schedule resources for deploy. The agent and resources parameters may be used as filters
     to limit the set of resources to schedule for deploy. If both are given, only resources that match both filters are
     considered.
 
