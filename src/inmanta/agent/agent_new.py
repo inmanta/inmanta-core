@@ -20,6 +20,7 @@ import datetime
 import logging
 import os
 import uuid
+from collections.abc import Sequence
 from concurrent.futures.thread import ThreadPoolExecutor
 from typing import Optional
 
@@ -229,24 +230,28 @@ class Agent(SessionEndpoint):
         await self.stop_working()
 
     @protocol.handle(methods.trigger, env="tid", agent="id")
-    async def trigger_update(self, env: uuid.UUID, agent: None | str, incremental_deploy: bool) -> Apireturn:
+    async def trigger_update(
+        self, env: uuid.UUID, agent: None | str, incremental_deploy: bool, resources: Sequence[ResourceIdStr] | None = None
+    ) -> Apireturn:
         """
         Trigger an update for a specific agent, or for ALL agents in the environment when <agent> param is None.
         """
         if agent == const.AGENT_SCHEDULER_ID:
             agent = None
 
+        nb_resources: str = str(len(resources)) if resources is not None else "all"
+
         if agent is None:
-            agent_id = "All agents"
+            agent_id = "all agents"
         else:
-            agent_id = f"Agent {agent}"
+            agent_id = f"agent {agent}"
 
         if incremental_deploy:
-            LOGGER.info("%s got a trigger to run deploy in environment %s", agent_id, env)
-            await self.scheduler.deploy(reason="user requested a deploy", agent=agent)
+            LOGGER.info("%s got a trigger to run deploy for %s resources on %s in environment %s", nb_resources, agent_id, env)
+            await self.scheduler.deploy(reason="user requested a deploy", agent=agent, resources=resources)
         else:
-            LOGGER.info("%s got a trigger to run repair in environment %s", agent_id, env)
-            await self.scheduler.repair(reason="user requested a repair", agent=agent)
+            LOGGER.info("%s got a trigger to run repair for %s resources on %s in environment %s", nb_resources, agent_id, env)
+            await self.scheduler.repair(reason="user requested a repair", agent=agent, resources=resources)
         return 200
 
     @protocol.handle(methods.trigger_read_version, env="tid", agent="id")

@@ -986,14 +986,19 @@ def set_state(agent: Optional[str], enabled: bool):
     arg_options=AGENT_ENV_OPTS,
     client_types=[],
 )
-def trigger(tid: uuid.UUID, id: None | str, incremental_deploy: bool):
+def trigger(tid: uuid.UUID, id: None | str, incremental_deploy: bool, resources: Sequence[ResourceIdStr] | None = None):
     """
-    When the <id> parameter is set: request this specific agent to reload resources.
-    Otherwise, request ALL agents in the environment to reload resources.
+    Request the orchestrator to schedule resources for deploy. The agent and resources parameters may be used as filters
+    to limit the set of resources to schedule for deploy. If both are given, only resources that match both filters are
+    considered.
 
     :param tid: The environment this agent is defined in
-    :param id: The name of the agent
-    :param incremental_deploy: Indicates whether the agent should perform an incremental deploy or a full deploy
+    :param id: The name of the agent for which to deploy.
+    :param resources: The resources to deploy.
+    :param incremental_deploy: Indicates whether the agent should perform an incremental deploy or a full deploy.
+        For an incremental deploy, only non-compliant resources and resources with an outstanding update are triggered
+        for deploy (even if they are part of the `resources` list). A full deploy (repair) triggers a deploy for all
+        resources (for the given agent / in the given resources list).
     """
 
 
