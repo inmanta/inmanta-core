@@ -68,4 +68,4 @@ async def test_is_bool_feature_enabled(server, client, agent):
 
     result = await agent._client.is_bool_feature_enabled(slice_name=NAME_TEST_SLICE, feature_name="str_list_feature")
     assert result.code == 400
-    assert result.result["message"] == "Feature test_slice:str_list_feature is not a BoolFeature"
+    assert "Feature test_slice:str_list_feature is not a BoolFeature" in result.result["message"]

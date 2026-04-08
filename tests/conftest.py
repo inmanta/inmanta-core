@@ -2933,7 +2933,7 @@ async def mixed_resource_generator(
             raise Exception("resources_per_version cannot be less than 5")
         deploy_counter = 0
 
-        dummy_scheduler = scheduler.ResourceScheduler(uuid.UUID(environment), executor_manager=None, client=client)
+        dummy_scheduler = scheduler.ResourceScheduler(uuid.UUID(environment), executor_manager=None, client=null_agent._client)
 
         async def mock_run(self) -> None:
             """Mocks the call to TaskRunner._run."""
