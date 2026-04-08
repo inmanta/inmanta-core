@@ -1311,7 +1311,7 @@ class ResourceScheduler(TaskManager):
     async def _enforce_compliance_reporting_entitlement(self, report: executor.DeployReport) -> None:
         """
         If the given resource is using the compliance_reporting feature, verify that this feature
-        is enabled in the entitlements file. If not, mark the resource as failed.
+        is enabled in the entitlements file. If not, update the report to mark the resource as failed.
         """
         if report.status is const.ResourceState.non_compliant:
             # The resource reported the non_compliant status so compliance_reporting has to be enabled.
