@@ -608,14 +608,20 @@ async def test_bootloader_connect_running_db(
                 caplog,
                 "inmanta.server.bootloader",
                 logging.INFO,
-                "Successfully connected to the database.",
+                "Successfully reached database '%s' at %s:%s." % (config.Config.get("database", "name"), config.Config.get("database", "host"), config.Config.get("database", "port")),
+            )
+            log_contains(
+                caplog,
+                "inmanta.server.bootloader",
+                logging.INFO,
+                "Bypassing database connectivity check because database.wait_time option is set to 0."
             )
         else:
             log_contains(
                 caplog,
                 "inmanta.server.bootloader",
                 logging.INFO,
-                "Successfully connected to the database.",
+                "Successfully reached database '%s' at %s:%s." % (config.Config.get("database", "name"), config.Config.get("database", "host"), config.Config.get("database", "port"))
             )
 
     try:

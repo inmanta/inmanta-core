@@ -124,8 +124,13 @@ class InmantaBootloader:
         These checks are performed before starting any slice e.g. to bail before any database migration is attempted
         in case an incompatible PostgreSQL version is detected.
         """
+
+        LOGGER.info("Checking database before server start...")
+
+
         await self._database_connectivity_check()
         await self._database_version_compatibility_check()
+        await self._database_log_replication_status()
 
     async def _database_connectivity_check(self) -> None:
         """
@@ -140,6 +145,8 @@ class InmantaBootloader:
         if db_wait_time != 0:
             # Wait for the database to be up before starting the server
             await self.wait_for_db(db_wait_time=db_wait_time)
+        else:
+            LOGGER.info("Bypassing database connectivity check because database.wait_time option is set to 0.")
 
     async def _database_version_compatibility_check(self) -> None:
         """
@@ -160,8 +167,10 @@ class InmantaBootloader:
             database_postgresql_version = await PostgreSQLVersion.from_database(conn)
 
             if required_postgresql_version is None:
-                LOGGER.debug("No compatibility file is set. Bypassing minimal required postgres version check.")
+                LOGGER.info("Bypassing minimal required postgres version check because the 'server.compatibility_file' option is not set. ")
             else:
+                LOGGER.info("Checking database PostgreSQL version compatibility...")
+
                 if database_postgresql_version < required_postgresql_version:
                     raise ServerStartFailure(
                         f"The database at {config.db_host.get()} is using PostgreSQL version "
@@ -169,7 +178,19 @@ class InmantaBootloader:
                         "version of the Inmanta orchestrator. Please make sure to update to PostgreSQL "
                         f"{required_postgresql_version}."
                     )
-            LOGGER.info("Successfully connected to the database (PostgreSQL server version %s).", database_postgresql_version)
+            LOGGER.info("Database version is compatible (PostgreSQL server version %s).", database_postgresql_version)
+        finally:
+            if conn is not None:
+                await conn.close(timeout=5)  # close the connection
+
+    async def _database_log_replication_status(self) -> None:
+        """
+        """
+        conn: asyncpg.Connection | None = None
+        try:
+            conn = await self.get_db_connection()
+            result = await conn.fetch("SHOW server_version_num")
+            LOGGER.info("Database replication status:\n%s", result)
         finally:
             if conn is not None:
                 await conn.close(timeout=5)  # close the connection
@@ -358,13 +379,14 @@ class InmantaBootloader:
         :param db_wait_time: Maximum time to wait for the database to be up, in seconds.
         """
 
+        LOGGER.info("Checking database connectivity...")
         start_time = asyncio.get_event_loop().time()
 
         while True:
             try:
                 # Attempt to create a database connection
                 conn = await self.get_db_connection()
-                LOGGER.info("Successfully connected to the database.")
+                LOGGER.info("Successfully reached database '%s' at %s:%s.", config.db_name.get(), config.db_host.get(), config.db_port.get())
                 await conn.close(timeout=5)  # close the connection
                 return
             except asyncio.TimeoutError:
