@@ -371,6 +371,7 @@ class ResourceScheduler(TaskManager):
         :param environment: the environment we work for
         :param executor_manager: the executor manager that will provide us with executors
         :param client: connection to the server
+        :param _compliance_reporting_enabled: True iff the compliance_reporting feature is enabled on the server.
         """
         # state and work may be reassigned during initialize
         self._state: ModelState = ModelState(version=0)
@@ -416,6 +417,7 @@ class ResourceScheduler(TaskManager):
         self._timer_manager = timers.TimerManager(self)
 
         self._deployment_suspended: bool = False
+        self._compliance_reporting_enabled: bool = False
 
     async def _reset(self) -> None:
         """
@@ -497,6 +499,11 @@ class ResourceScheduler(TaskManager):
         Initialize the scheduler state and continue the deployment where we were before the server was shutdown.
         Marks scheduler as running and triggers first deploys.
         """
+        # Check whether the compliance_reporting feature is enabled.
+        compliance_feature: BoolFeature = resourceservice.compliance_reporting
+        self._compliance_reporting_enabled = await self.client.is_bool_feature_enabled(
+            slice_name=compliance_feature.slice, feature_name=compliance_feature.name
+        ).value()
         await self._timer_manager.initialize()
         # do not start a transaction because:
         # 1. nothing we do here before read_version is inherently transactional: the only write is atomic, and reads do not
@@ -1313,31 +1320,17 @@ class ResourceScheduler(TaskManager):
         If the given resource is using the compliance_reporting feature, verify that this feature
         is enabled in the entitlements file. If not, update the report to mark the resource as failed.
         """
-        if report.status is const.ResourceState.non_compliant:
-            # The resource reported the non_compliant status so compliance_reporting has to be enabled.
-            compliance_feature: BoolFeature = resourceservice.compliance_reporting
-            try:
-                compliance_reporting_enabled: bool = await self.client.is_bool_feature_enabled(
-                    slice_name=compliance_feature.slice, feature_name=compliance_feature.name
-                ).value()
-            except Exception:
-                # Only log error, we don't want to interrupt the deployment flow because of this.
-                LOGGER.exception("Failed to check whether feature %s is enabled.", str(compliance_feature))
-            else:
-                if not compliance_reporting_enabled:
-                    # Compliance_reporting should have been enabled, but it's not.
-                    # Mark the resource as failed.
-                    report.resource_state = const.HandlerResourceState.failed
-                    report.messages.append(
-                        data.LogLine.log(
-                            level=const.LogLevel.ERROR,
-                            msg=(
-                                "The handler reported the non_compliant state,"
-                                " but the compliance_reporting feature is not enabled."
-                                " Please check your entitlements file."
-                            ),
-                        )
-                    )
+        if not compliance_reporting_enabled and report.status is const.ResourceState.non_compliant:
+            report.resource_state = const.HandlerResourceState.failed
+            report.messages.append(
+                data.LogLine.log(
+                    level=const.LogLevel.ERROR,
+                    msg=(
+                        "The handler reported the non_compliant state, but the compliance_reporting feature"
+                        " is not enabled. Please check your entitlements file."
+                    ),
+                )
+            )
 
     async def deploy_done(self, deploy_intent: DeployIntent, report: executor.DeployReport) -> None:
         await self._enforce_compliance_reporting_entitlement(report)
