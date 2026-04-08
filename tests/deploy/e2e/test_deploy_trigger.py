@@ -74,7 +74,10 @@ async def test_deploy_trigger(server, client, clienthelper, resource_container, 
                 f"Agent agent1 got a trigger to run repair for all resources in environment {environment}",
             )
         log_doesnt_contain(
-            caplog, "inmanta.scheduler", logging.INFO, f"Agent agent5 got a trigger to run repair for all resources in environment {environment}"
+            caplog,
+            "inmanta.scheduler",
+            logging.INFO,
+            f"Agent agent5 got a trigger to run repair for all resources in environment {environment}",
         )
 
         assert result.result["agents"] == agents
@@ -186,9 +189,7 @@ async def test_spontaneous_repair(server, client, agent, resource_container, env
     await resource_action_consistency_check()
 
 
-async def test_deploy_trigger_specific_resources(
-    server, client, clienthelper, resource_container, environment, caplog, agent
-):
+async def test_deploy_trigger_specific_resources(server, client, clienthelper, resource_container, environment, caplog, agent):
     """
     Verify that the deploy endpoint correctly forwards a resource filter to the scheduler via the trigger method.
 
