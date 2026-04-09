@@ -127,10 +127,11 @@ class InmantaBootloader:
 
         LOGGER.info("Checking database before server start...")
 
-
         await self._database_connectivity_check()
         await self._database_version_compatibility_check()
         await self._database_log_replication_status()
+
+        LOGGER.info("Checking database before server start...")
 
     async def _database_connectivity_check(self) -> None:
         """
@@ -168,7 +169,10 @@ class InmantaBootloader:
             database_postgresql_version = await PostgreSQLVersion.from_database(conn)
 
             if required_postgresql_version is None:
-                LOGGER.info("Bypassing minimal required postgres version check because the 'server.compatibility_file' option is not set. ")
+                LOGGER.info(
+                    "Bypassing minimal required postgres version check because the "
+                    "'server.compatibility_file' option is not set."
+                )
             else:
                 LOGGER.info("Checking database PostgreSQL version compatibility...")
 
@@ -185,8 +189,7 @@ class InmantaBootloader:
                 await conn.close(timeout=5)  # close the connection
 
     async def _database_log_replication_status(self) -> None:
-        """
-        """
+        """ """
         conn: asyncpg.Connection | None = None
         LOGGER.info("Checking database replication status...")
         try:
@@ -403,17 +406,26 @@ class InmantaBootloader:
 
         while True:
             try:
-                LOGGER.info("Trying to establish a connection to database '%s' at %s:%s.", config.db_name.get(), config.db_host.get(), config.db_port.get())
+                LOGGER.info(
+                    "Trying to establish a connection to database '%s' at %s:%s.",
+                    config.db_name.get(),
+                    config.db_host.get(),
+                    config.db_port.get(),
+                )
                 # Attempt to create a database connection
                 conn = await self.get_db_connection()
-                LOGGER.info("Successfully reached database '%s' at %s:%s.", config.db_name.get(), config.db_host.get(), config.db_port.get())
+                LOGGER.info(
+                    "Successfully reached database '%s' at %s:%s.",
+                    config.db_name.get(),
+                    config.db_host.get(),
+                    config.db_port.get(),
+                )
                 await conn.close(timeout=5)  # close the connection
                 return
             except asyncio.TimeoutError:
                 LOGGER.info("Waiting for database to be up: Connection attempt timed out.")
-            except Exception as e:
-                LOGGER.info(f"EXCEPTION= {str(e)}")
-                LOGGER.info("Waiting for database to be up.", exc_info=True)
+            except Exception:
+              LOGGER.info("Waiting for database to be up.", exc_info=True)
             # Check if the maximum wait time has been exceeded
             if 0 < db_wait_time < asyncio.get_event_loop().time() - start_time:
                 LOGGER.error("Timed out waiting for the database to be up.")

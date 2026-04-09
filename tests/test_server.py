@@ -608,20 +608,30 @@ async def test_bootloader_connect_running_db(
                 caplog,
                 "inmanta.server.bootloader",
                 logging.INFO,
-                "Successfully reached database '%s' at %s:%s." % (config.Config.get("database", "name"), config.Config.get("database", "host"), config.Config.get("database", "port")),
+                "Successfully reached database '%s' at %s:%s."
+                % (
+                    config.Config.get("database", "name"),
+                    config.Config.get("database", "host"),
+                    config.Config.get("database", "port"),
+                ),
             )
             log_contains(
                 caplog,
                 "inmanta.server.bootloader",
                 logging.INFO,
-                "Bypassing database connectivity check because database.wait_time option is set to 0."
+                "Bypassing database connectivity check because database.wait_time option is set to 0.",
             )
         else:
             log_contains(
                 caplog,
                 "inmanta.server.bootloader",
                 logging.INFO,
-                "Successfully reached database '%s' at %s:%s." % (config.Config.get("database", "name"), config.Config.get("database", "host"), config.Config.get("database", "port"))
+                "Successfully reached database '%s' at %s:%s."
+                % (
+                    config.Config.get("database", "name"),
+                    config.Config.get("database", "host"),
+                    config.Config.get("database", "port"),
+                ),
             )
 
     try:
@@ -695,15 +705,15 @@ async def test_bootloader_start_no_compatibility_file(tmp_path, server_config, p
 
     ibl: InmantaBootloader = InmantaBootloader(configure_logging=True)
 
-    caplog.set_level(logging.DEBUG)
+    caplog.set_level(logging.INFO)
 
     try:
         await ibl.start()
         log_contains(
             caplog,
             "inmanta.server.bootloader",
-            logging.DEBUG,
-            "No compatibility file is set. Bypassing minimal required postgres version check.",
+            logging.INFO,
+            "Bypassing minimal required postgres version check because the 'server.compatibility_file' option is not set."
         )
 
         log_contains(
