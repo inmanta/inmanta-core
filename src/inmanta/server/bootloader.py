@@ -383,7 +383,6 @@ class InmantaBootloader:
         }
 
         # Attempt to create a database connection
-        LOGGER.info("Trying to establish a connection to database '%s' at %s:%s.", config.db_name.get(), config.db_host.get(), config.db_port.get())
         return await asyncpg.connect(**db_settings, timeout=5)  # raises TimeoutError after 5 seconds
 
     async def wait_for_db(self, db_wait_time: int) -> None:
@@ -397,6 +396,7 @@ class InmantaBootloader:
 
         while True:
             try:
+                LOGGER.info("Trying to establish a connection to database '%s' at %s:%s.", config.db_name.get(), config.db_host.get(), config.db_port.get())
                 # Attempt to create a database connection
                 conn = await self.get_db_connection()
                 LOGGER.info("Successfully reached database '%s' at %s:%s.", config.db_name.get(), config.db_host.get(), config.db_port.get())
