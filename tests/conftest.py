@@ -1067,10 +1067,9 @@ async def agent_factory(
                 await agent.start_working()
                 new_state = copy.deepcopy(dict(agent.scheduler._state.resource_state))
                 assert the_state == new_state
-
-        await asyncio.gather(*[agent.stop() for agent in agents])
     finally:
         DISABLE_STATE_CHECK = False
+        await asyncio.gather(*[agent.stop() for agent in agents])
 
 
 @pytest.fixture(scope="function")

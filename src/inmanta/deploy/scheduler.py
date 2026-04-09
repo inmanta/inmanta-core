@@ -470,11 +470,13 @@ class ResourceScheduler(TaskManager):
         Update resources in the latest released version of the model stuck in "deploying" state.
         This can occur when the Scheduler is killed in the middle of a deployment.
         """
-
         await data.Resource.reset_resource_state(self.environment)
 
     async def load_timer_settings(self) -> None:
         """Update the timer manager after an update of the timer config"""
+        if not self._running:
+            LOGGER.debug("Ignoring timer settings update for halted resource scheduler")
+            return
         await self._timer_manager.reload_config()
 
     async def reload_all_timers(self) -> None:
