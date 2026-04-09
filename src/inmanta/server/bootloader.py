@@ -383,7 +383,7 @@ class InmantaBootloader:
         }
 
         # Attempt to create a database connection
-        LOGGER.info("Trying to establish a connection to database '%s' at %s:%s.")
+        LOGGER.info("Trying to establish a connection to database '%s' at %s:%s.", config.db_name.get(), config.db_host.get(), config.db_port.get())
         return await asyncpg.connect(**db_settings, timeout=5)  # raises TimeoutError after 5 seconds
 
     async def wait_for_db(self, db_wait_time: int) -> None:
@@ -404,7 +404,8 @@ class InmantaBootloader:
                 return
             except asyncio.TimeoutError:
                 LOGGER.info("Waiting for database to be up: Connection attempt timed out.")
-            except Exception:
+            except Exception as e:
+                LOGGER.info(f"EXCEPTION= {str(e)}")
                 LOGGER.info("Waiting for database to be up.", exc_info=True)
             # Check if the maximum wait time has been exceeded
             if 0 < db_wait_time < asyncio.get_event_loop().time() - start_time:
