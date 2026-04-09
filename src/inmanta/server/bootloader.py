@@ -144,6 +144,7 @@ class InmantaBootloader:
 
         if db_wait_time != 0:
             # Wait for the database to be up before starting the server
+            LOGGER.info("Checking database connectivity...")
             await self.wait_for_db(db_wait_time=db_wait_time)
         else:
             LOGGER.info("Bypassing database connectivity check because database.wait_time option is set to 0.")
@@ -187,11 +188,12 @@ class InmantaBootloader:
         """
         """
         conn: asyncpg.Connection | None = None
+        LOGGER.info("Checking database replication status...")
         try:
             conn = await self.get_db_connection()
             query = """
             SELECT
-                pid,
+                pid,            -- pid of the WAL (Write Ahead Log) receiver process
                 client_addr,
                 state,
                 sync_state,
@@ -203,7 +205,13 @@ class InmantaBootloader:
             FROM pg_stat_replication;
             """
             result = await conn.fetch(query)
-            LOGGER.info("Database replication status:\n%s", result)
+            if len(result):
+                LOGGER.info("Database replication status:")
+                for row in result:
+                    LOGGER.info("%s", str(dict(row)))
+            else:
+                LOGGER.info("Database replication is disabled.")
+
         finally:
             if conn is not None:
                 await conn.close(timeout=5)  # close the connection
@@ -391,7 +399,6 @@ class InmantaBootloader:
         :param db_wait_time: Maximum time to wait for the database to be up, in seconds.
         """
 
-        LOGGER.info("Checking database connectivity...")
         start_time = asyncio.get_event_loop().time()
 
         while True:
