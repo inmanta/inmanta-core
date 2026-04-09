@@ -183,7 +183,7 @@ class InmantaBootloader:
                         "version of the Inmanta orchestrator. Please make sure to update to PostgreSQL "
                         f"{required_postgresql_version}."
                     )
-            LOGGER.info("Database version is compatible (PostgreSQL server version %s).", database_postgresql_version)
+                LOGGER.info("Database version is compatible (PostgreSQL server version %s).", database_postgresql_version)
         finally:
             if conn is not None:
                 await conn.close(timeout=5)  # close the connection
