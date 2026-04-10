@@ -138,8 +138,10 @@ class TimerManager:
                                   If both deploy and repair timers are set using an integer, only one timer
                                   will be configured for both actions. The one that would trigger first.
 
-    The configuration of the per-resource timer depends on the scheduler state so those
-    timers have to be updated under the scheduler lock.
+    The configuration of the per-resource timers depend on the scheduler state so those
+    timers have to be updated under the scheduler lock. This class delegates the responsibility of
+    acquiring these locks to the ResourceScheduler by calling into the scheduler's reload_all_timers()
+    method.
     """
 
     def __init__(self, resource_scheduler: "ResourceScheduler"):
