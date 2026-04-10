@@ -131,7 +131,7 @@ class InmantaBootloader:
         await self._database_version_compatibility_check()
         await self._database_log_replication_status()
 
-        LOGGER.info("Checking database before server start...")
+        LOGGER.info("Successfully checked database before server start.")
 
     async def _database_connectivity_check(self) -> None:
         """
@@ -189,29 +189,48 @@ class InmantaBootloader:
                 await conn.close(timeout=5)  # close the connection
 
     async def _database_log_replication_status(self) -> None:
-        """ """
+        """
+        Fetch and log the replication status. This method relies on the pg_stat_replication that holds information
+        about the standby servers, i.e. one row per replica. More info in the postgresql docs:
+        https://www.postgresql.org/docs/16/monitoring-stats.html#MONITORING-PG-STAT-REPLICATION-VIEW
+        """
         conn: asyncpg.Connection | None = None
         LOGGER.info("Checking database replication status...")
         try:
             conn = await self.get_db_connection()
             query = """
             SELECT
-                pid,            -- pid of the WAL (Write Ahead Log) receiver process
-                client_addr,
-                state,
-                sync_state,
-                sent_lsn,
-                write_lsn,
-                flush_lsn,
-                replay_lsn,
+                pid,                    -- pid of the WAL (Write Ahead Log) sender process
+                client_addr,            -- IP of the replica connected to this sender
+                state,                  -- WAL sender status
+                sync_state,             -- State of the replica
+                sent_lsn,               -- Last WAL LSN (Log Sequence Number) sent on this connection
+                write_lsn,              -- Last WAL LSN written to disk on the replica
+                flush_lsn,              -- Last WAL LSN flushed to disk on the replica
+                replay_lsn,             -- Last WAL LSN replayed into the database on the replica
                 pg_wal_lsn_diff(sent_lsn, replay_lsn) AS replay_lag_bytes
+                                        -- This diff represents how far behind this replica lags.
             FROM pg_stat_replication;
             """
             result = await conn.fetch(query)
             if len(result):
                 LOGGER.info("Database replication status:")
                 for row in result:
-                    LOGGER.info("%s", str(dict(row)))
+                    LOGGER.info(
+                        "Replica (ip=%s sync_state=%s lag_behind=%s) - "
+                        "Sender process (pid=%s, state=%s) - Log Sequence Numbers (sent=%s write=%s flush=%s replay=%s)",
+                        (
+                            row["client_addr"],
+                            row["sync_state"],
+                            row["replay_lag_bytes"],
+                            row["pid"],
+                            row["state"],
+                            row["sent_lsn"],
+                            row["write_lsn"],
+                            row["flush_lsn"],
+                            row["replay_lsn"],
+                        ),
+                    )
             else:
                 LOGGER.info("Database replication is disabled.")
 
@@ -425,7 +444,7 @@ class InmantaBootloader:
             except asyncio.TimeoutError:
                 LOGGER.info("Waiting for database to be up: Connection attempt timed out.")
             except Exception:
-              LOGGER.info("Waiting for database to be up.", exc_info=True)
+                LOGGER.info("Waiting for database to be up.", exc_info=True)
             # Check if the maximum wait time has been exceeded
             if 0 < db_wait_time < asyncio.get_event_loop().time() - start_time:
                 LOGGER.error("Timed out waiting for the database to be up.")
