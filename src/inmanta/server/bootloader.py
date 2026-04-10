@@ -219,21 +219,18 @@ class InmantaBootloader:
                     LOGGER.info(
                         "Replica (ip=%s sync_state=%s lag_behind=%s) - "
                         "Sender process (pid=%s, state=%s) - Log Sequence Numbers (sent=%s write=%s flush=%s replay=%s)",
-                        (
-                            row["client_addr"],
-                            row["sync_state"],
-                            row["replay_lag_bytes"],
-                            row["pid"],
-                            row["state"],
-                            row["sent_lsn"],
-                            row["write_lsn"],
-                            row["flush_lsn"],
-                            row["replay_lsn"],
-                        ),
+                        row["client_addr"],
+                        row["sync_state"],
+                        row["replay_lag_bytes"],
+                        row["pid"],
+                        row["state"],
+                        row["sent_lsn"],
+                        row["write_lsn"],
+                        row["flush_lsn"],
+                        row["replay_lsn"],
                     )
             else:
                 LOGGER.info("Database replication is disabled.")
-
         finally:
             if conn is not None:
                 await conn.close(timeout=5)  # close the connection
