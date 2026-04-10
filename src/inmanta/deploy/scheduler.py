@@ -494,7 +494,8 @@ class ResourceScheduler(TaskManager):
                     or resource in self._work._waiting
                 ):
                     self._timer_manager.stop_timer(resource)
-                self._timer_manager.update_timer(resource, state=state)
+                else:
+                    self._timer_manager.update_timer(resource, state=state)
 
     async def _initialize(self) -> None:
         """
@@ -549,10 +550,6 @@ class ResourceScheduler(TaskManager):
             LOGGER.debug("Scheduler initialization: resuming deploy operations and reading latest model version")
             self._running = True
             await self.read_version(connection=con)
-            # All resources get a timer
-            async with self._scheduler_lock:
-                LOGGER.debug("Scheduler initialization: setting up initial deploy timers")
-                self._timer_manager.update_timers(self._state.intent.keys() - self._state.dirty)
 
             if self._state.version == initialized_version:
                 # no new version was present. Simply trigger a deploy for everything that's not in a known good state
@@ -561,6 +558,15 @@ class ResourceScheduler(TaskManager):
                     reason="the resource scheduler was started",
                     priority=TaskPriority.INTERVAL_DEPLOY,
                 )
+            LOGGER.debug("Scheduler initialization: setting up initial deploy timers")
+            # We reload the timer configuration here because:
+            #  * Configuring per-resource timers requires the scheduler to be initialized
+            #    because the last deploy time of each resource needs to be known.
+            #  * It prevents the race condition where the timer configuration is updated
+            #    after the call to self._timer_manager.initialize(), but before self._running
+            #    is set to True. During this period notifications from the server about timer
+            #    updates are still blocked because the scheduler is not yet fully initialized.
+            await self._timer_manager.reload_config()
             LOGGER.debug("Scheduler initialization: finished initialization, scheduler is fully up and running")
 
     async def deploy(
