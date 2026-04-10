@@ -189,7 +189,10 @@ class TimerManager:
         await self.reload_config()
 
     async def reload_config(self) -> None:
-
+        """
+        Update the timer configuration iff the deploy and repair interval, defined by the user,
+        has changed.
+        """
         async with data.Environment.get_connection() as connection:
             assert self._resource_scheduler.environment is not None
             environment = await data.Environment.get_by_id(self._resource_scheduler.environment, connection=connection)
