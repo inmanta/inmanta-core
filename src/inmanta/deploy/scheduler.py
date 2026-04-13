@@ -507,7 +507,6 @@ class ResourceScheduler(TaskManager):
         self._compliance_reporting_feature_enabled = await self.client.is_bool_feature_enabled(
             slice_name=compliance_feature.slice, feature_name=compliance_feature.name
         ).value()
-        await self._timer_manager.initialize()
         # do not start a transaction because:
         # 1. nothing we do here before read_version is inherently transactional: the only write is atomic, and reads do not
         #   benefit from READ COMMITTED (default) isolation level.
@@ -559,14 +558,15 @@ class ResourceScheduler(TaskManager):
                     priority=TaskPriority.INTERVAL_DEPLOY,
                 )
             LOGGER.debug("Scheduler initialization: setting up initial deploy timers")
-            # We reload the timer configuration here because:
+            # Now that the scheduler state is initialized, we can set the timers:
             #  * Configuring per-resource timers requires the scheduler to be initialized
             #    because the last deploy time of each resource needs to be known.
-            #  * It prevents the race condition where the timer configuration is updated
-            #    after the call to self._timer_manager.initialize(), but before self._running
-            #    is set to True. During this period notifications from the server about timer
-            #    updates are still blocked because the scheduler is not yet fully initialized.
-            await self._timer_manager.reload_config()
+            #  * Initializing the TimerManager here prevents the race condition where the timer
+            #    configuration is updated after the call to self._timer_manager.initialize(),
+            #    but before self._running is set to True. During this period notifications
+            #    from the server about timer updates are still blocked because the scheduler
+            #    is not yet fully initialized.
+            await self._timer_manager.initialize()
             LOGGER.debug("Scheduler initialization: finished initialization, scheduler is fully up and running")
 
     async def deploy(

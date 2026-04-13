@@ -172,6 +172,7 @@ class TimerManager:
         self.global_periodic_deploy_task = None
         self.periodic_repair_interval = None
         self.periodic_deploy_interval = None
+        self.resource_timers = {}
 
     async def stop(self) -> None:
         for timer in self.resource_timers.values():
