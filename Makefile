@@ -45,7 +45,7 @@ endif
 
 .PHONY: install ci-install ci-install-check
 install:
-	$(bootstrap_pip_install) -U setuptools pip uv
+	$(bootstrap_pip_install) -U pip uv
 	$(pip_install_c) -U -e .[dev]
 
 ci-install-check:
