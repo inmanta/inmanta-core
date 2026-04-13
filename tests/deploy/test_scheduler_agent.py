@@ -891,6 +891,128 @@ async def test_deploy_single_agent(agent: TestAgent, make_resource_minimal) -> N
     assert agent.scheduler._state.resource_state[r3_fail].last_deployed > before_trigger
 
 
+async def test_deploy_specific_resources(agent: TestAgent, make_resource_minimal) -> None:
+    """
+    Verify the behavior of deploy and repair when a specific list of resources is given.
+    """
+    r1_success = ResourceIdStr("test::Resource[agent1,name=1]")
+    r1_fail = ResourceIdStr("test::Resource[agent1,name=2]")
+    r2_success = ResourceIdStr("test::Resource[agent2,name=1]")
+    r2_fail = ResourceIdStr("test::Resource[agent2,name=2]")
+
+    resources: Mapping[ResourceIdStr, state.ResourceDetails] = {
+        r1_success: make_resource_minimal(r1_success, values={FAIL_DEPLOY: False}, requires=[]),
+        r1_fail: make_resource_minimal(r1_fail, values={FAIL_DEPLOY: True}, requires=[]),
+        r2_success: make_resource_minimal(r2_success, values={FAIL_DEPLOY: False}, requires=[]),
+        r2_fail: make_resource_minimal(r2_fail, values={FAIL_DEPLOY: True}, requires=[]),
+    }
+    version: int = 1
+    await agent.scheduler._new_version([model_version(version=version, resources=resources, requires={})])
+
+    await wait_until_done(agent)
+    assert agent.executor_manager.executors["agent1"].execute_count == 2
+    assert agent.executor_manager.executors["agent2"].execute_count == 2
+
+    before_trigger: datetime.datetime
+
+    # deploy only r1_fail: only that resource should redeploy (it is dirty/non-compliant)
+    agent.executor_manager.reset_executor_counters()
+    before_trigger = datetime.datetime.now().astimezone()
+    await agent.scheduler.deploy(reason="Test deploy specific resource", resources=[r1_fail])
+    await wait_until_done(agent)
+
+    assert agent.executor_manager.executors["agent1"].execute_count == 1
+    assert agent.executor_manager.executors["agent2"].execute_count == 0
+    assert agent.scheduler._state.resource_state[r1_success].last_deployed < before_trigger
+    assert agent.scheduler._state.resource_state[r1_fail].last_deployed > before_trigger
+    assert agent.scheduler._state.resource_state[r2_success].last_deployed < before_trigger
+    assert agent.scheduler._state.resource_state[r2_fail].last_deployed < before_trigger
+
+    # deploy only r1_success: it is already compliant so nothing should redeploy
+    agent.executor_manager.reset_executor_counters()
+    before_trigger = datetime.datetime.now().astimezone()
+    await agent.scheduler.deploy(reason="Test deploy compliant resource", resources=[r1_success])
+    await wait_until_done(agent)
+
+    assert agent.executor_manager.executors["agent1"].execute_count == 0
+    assert agent.executor_manager.executors["agent2"].execute_count == 0
+    assert agent.scheduler._state.resource_state[r1_success].last_deployed < before_trigger
+    assert agent.scheduler._state.resource_state[r1_fail].last_deployed < before_trigger
+    assert agent.scheduler._state.resource_state[r2_success].last_deployed < before_trigger
+    assert agent.scheduler._state.resource_state[r2_fail].last_deployed < before_trigger
+
+    # deploy r1_fail and r2_fail: both should redeploy
+    agent.executor_manager.reset_executor_counters()
+    before_trigger = datetime.datetime.now().astimezone()
+    await agent.scheduler.deploy(reason="Test deploy specific resources across agents", resources=[r1_fail, r2_fail])
+    await wait_until_done(agent)
+
+    assert agent.executor_manager.executors["agent1"].execute_count == 1
+    assert agent.executor_manager.executors["agent2"].execute_count == 1
+    assert agent.scheduler._state.resource_state[r1_success].last_deployed < before_trigger
+    assert agent.scheduler._state.resource_state[r1_fail].last_deployed > before_trigger
+    assert agent.scheduler._state.resource_state[r2_success].last_deployed < before_trigger
+    assert agent.scheduler._state.resource_state[r2_fail].last_deployed > before_trigger
+
+    # repair only r1_success: that resource should redeploy even though it is compliant
+    agent.executor_manager.reset_executor_counters()
+    before_trigger = datetime.datetime.now().astimezone()
+    await agent.scheduler.repair(reason="Test repair specific resource", resources=[r1_success])
+    await wait_until_done(agent)
+
+    assert agent.executor_manager.executors["agent1"].execute_count == 1
+    assert agent.executor_manager.executors["agent2"].execute_count == 0
+    assert agent.scheduler._state.resource_state[r1_success].last_deployed > before_trigger
+    assert agent.scheduler._state.resource_state[r1_fail].last_deployed < before_trigger
+    assert agent.scheduler._state.resource_state[r2_success].last_deployed < before_trigger
+    assert agent.scheduler._state.resource_state[r2_fail].last_deployed < before_trigger
+
+    # repair r1_success and r2_success: both compliant resources should be re-deployed
+    agent.executor_manager.reset_executor_counters()
+    before_trigger = datetime.datetime.now().astimezone()
+    await agent.scheduler.repair(reason="Test repair specific resources across agents", resources=[r1_success, r2_success])
+    await wait_until_done(agent)
+
+    assert agent.executor_manager.executors["agent1"].execute_count == 1
+    assert agent.executor_manager.executors["agent2"].execute_count == 1
+    assert agent.scheduler._state.resource_state[r1_success].last_deployed > before_trigger
+    assert agent.scheduler._state.resource_state[r1_fail].last_deployed < before_trigger
+    assert agent.scheduler._state.resource_state[r2_success].last_deployed > before_trigger
+    assert agent.scheduler._state.resource_state[r2_fail].last_deployed < before_trigger
+
+    # deploy with both agent and resources filters: only the intersection should be deployed
+    agent.executor_manager.reset_executor_counters()
+    before_trigger = datetime.datetime.now().astimezone()
+    await agent.scheduler.deploy(
+        reason="Test deploy with agent and resource filter", agent="agent1", resources=[r1_fail, r2_fail]
+    )
+    await wait_until_done(agent)
+
+    # r2_fail is on agent2, so it should not be deployed (filtered out by agent filter)
+    assert agent.executor_manager.executors["agent1"].execute_count == 1
+    assert agent.executor_manager.executors["agent2"].execute_count == 0
+    assert agent.scheduler._state.resource_state[r1_success].last_deployed < before_trigger
+    assert agent.scheduler._state.resource_state[r1_fail].last_deployed > before_trigger
+    assert agent.scheduler._state.resource_state[r2_success].last_deployed < before_trigger
+    assert agent.scheduler._state.resource_state[r2_fail].last_deployed < before_trigger
+
+    # repair with both agent and resources filters
+    agent.executor_manager.reset_executor_counters()
+    before_trigger = datetime.datetime.now().astimezone()
+    await agent.scheduler.repair(
+        reason="Test repair with agent and resource filter", agent="agent1", resources=[r1_success, r2_success]
+    )
+    await wait_until_done(agent)
+
+    # r2_success is on agent2, so only r1_success should be repaired
+    assert agent.executor_manager.executors["agent1"].execute_count == 1
+    assert agent.executor_manager.executors["agent2"].execute_count == 0
+    assert agent.scheduler._state.resource_state[r1_success].last_deployed > before_trigger
+    assert agent.scheduler._state.resource_state[r1_fail].last_deployed < before_trigger
+    assert agent.scheduler._state.resource_state[r2_success].last_deployed < before_trigger
+    assert agent.scheduler._state.resource_state[r2_fail].last_deployed < before_trigger
+
+
 async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal):
     """
     Ensure that events are propagated when a deploy finishes
