@@ -90,6 +90,7 @@ class Entity(NamedType, WithComment):
         self.__default_values = {}  # type: Dict[str, DefineAttribute]
 
         self._index_def = []  # type: List[List[str]]
+        self._index_def_sets: list[frozenset[str]] = []
         self._indexes = []  # type: list[DefineIndex]
         self._index = {}  # type: Dict[str,Instance]
         self.index_queue = {}  # type: Dict[str,List[Tuple[ResultVariable, Statement]]]
@@ -300,7 +301,7 @@ class Entity(NamedType, WithComment):
 
     def add_instance(self, obj: "Instance") -> None:
         """
-        Register a new instance
+        Register a new instance. All index attributes must already be set on the instance.
         """
         self._instance_list.add(obj)
         self.add_to_index(obj)
@@ -317,8 +318,10 @@ class Entity(NamedType, WithComment):
         node: Optional[dataflow.InstanceNodeReference] = None,
     ) -> "Instance":
         """
-        Return an instance of the class defined in this entity.
+        Return a new instance of the class defined in this entity.
         If the corresponding node is not None, passes it on the instance.
+
+        :param attributes: Known attribute values of the instance. Must contain at least all index attributes.
         """
         out = Instance(self, resolver, queue, node)
         out.set_location(location)
@@ -410,6 +413,7 @@ class Entity(NamedType, WithComment):
                 return
 
         self._index_def.append(sorted(attributes))
+        self._index_def_sets.append(frozenset(attributes))
         self._indexes.append(index_def)
         for child in self.child_entities:
             child.add_index(attributes, index_def)
@@ -420,42 +424,34 @@ class Entity(NamedType, WithComment):
     def add_to_index(self, instance: Instance) -> None:
         """
         Update indexes based on the instance and the attribute that has
-        been set
+        been set. All index attributes must already be set on the instance.
         """
+        slots = instance.slots
 
-        def index_value_gate(key: str, value: object) -> str:
-            if isinstance(value, Reference):
-                raise TypingException(
-                    None,
-                    f"Invalid value `{value}` in index for attribute {key} on instance {instance}: "
-                    f"references can not be used in indexes.",
-                )
-            return repr(value)
-
-        attributes = {k: v for k, v in instance.slots.items() if v.is_ready()}
-
-        # check if an index entry can be added
         for index_attributes in self.get_indices():
-            index_ok = True
             key = []
             for attribute in index_attributes:
-                if attribute not in attributes:
-                    index_ok = False
-                else:
-                    key.append(f"{attribute}={index_value_gate(attribute, attributes[attribute].get_value())}")
+                slot = slots[attribute]
+                value = slot.get_value()
+                if isinstance(value, Reference):
+                    raise TypingException(
+                        None,
+                        f"Invalid value `{value}` in index for attribute {attribute} on instance {instance}: "
+                        f"references can not be used in indexes.",
+                    )
+                key.append(f"{attribute}={value!r}")
 
-            if index_ok:
-                keys = ", ".join(key)
+            keys = ", ".join(key)
 
-                if keys in self._index and self._index[keys] is not instance:
-                    raise DuplicateException(instance, self._index[keys], "Duplicate key in index. %s" % keys)
+            if keys in self._index and self._index[keys] is not instance:
+                raise DuplicateException(instance, self._index[keys], "Duplicate key in index. %s" % keys)
 
-                self._index[keys] = instance
+            self._index[keys] = instance
 
-                if keys in self.index_queue:
-                    for x, stmt in self.index_queue[keys]:
-                        x.set_value(instance, stmt.location)
-                    self.index_queue.pop(keys)
+            if keys in self.index_queue:
+                for x, stmt in self.index_queue[keys]:
+                    x.set_value(instance, stmt.location)
+                self.index_queue.pop(keys)
 
     def lookup_index(
         self, params: "List[Tuple[str,object]]", stmt: "Statement", target: "Optional[ResultVariable]" = None
@@ -471,8 +467,8 @@ class Entity(NamedType, WithComment):
             attributes.add(attr)
 
         found_index = False
-        for index_attributes in self.get_indices():
-            if set(index_attributes) == attributes:
+        for index_attr_set in self._index_def_sets:
+            if index_attr_set == attributes:
                 found_index = True
 
         if not found_index:
