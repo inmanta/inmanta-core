@@ -1,0 +1,6 @@
+change-type: patch
+description: Bump more-itertools from 11.0.1 to 11.0.2
+destination-branches:
+- master
+- iso9
+sections: {}
