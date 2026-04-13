@@ -124,8 +124,14 @@ class InmantaBootloader:
         These checks are performed before starting any slice e.g. to bail before any database migration is attempted
         in case an incompatible PostgreSQL version is detected.
         """
+
+        LOGGER.info("Checking database before server start...")
+
         await self._database_connectivity_check()
         await self._database_version_compatibility_check()
+        await self._database_log_replication_status()
+
+        LOGGER.info("Successfully checked database before server start.")
 
     async def _database_connectivity_check(self) -> None:
         """
@@ -139,7 +145,10 @@ class InmantaBootloader:
 
         if db_wait_time != 0:
             # Wait for the database to be up before starting the server
+            LOGGER.info("Checking database connectivity...")
             await self.wait_for_db(db_wait_time=db_wait_time)
+        else:
+            LOGGER.info("Bypassing database connectivity check because database.wait_time option is set to 0.")
 
     async def _database_version_compatibility_check(self) -> None:
         """
@@ -160,8 +169,13 @@ class InmantaBootloader:
             database_postgresql_version = await PostgreSQLVersion.from_database(conn)
 
             if required_postgresql_version is None:
-                LOGGER.debug("No compatibility file is set. Bypassing minimal required postgres version check.")
+                LOGGER.info(
+                    "Bypassing minimal required postgres version check because the "
+                    "'server.compatibility_file' option is not set."
+                )
             else:
+                LOGGER.info("Checking database PostgreSQL version compatibility...")
+
                 if database_postgresql_version < required_postgresql_version:
                     raise ServerStartFailure(
                         f"The database at {config.db_host.get()} is using PostgreSQL version "
@@ -169,7 +183,54 @@ class InmantaBootloader:
                         "version of the Inmanta orchestrator. Please make sure to update to PostgreSQL "
                         f"{required_postgresql_version}."
                     )
-            LOGGER.info("Successfully connected to the database (PostgreSQL server version %s).", database_postgresql_version)
+                LOGGER.info("Database version is compatible (PostgreSQL server version %s).", database_postgresql_version)
+        finally:
+            if conn is not None:
+                await conn.close(timeout=5)  # close the connection
+
+    async def _database_log_replication_status(self) -> None:
+        """
+        Fetch and log the replication status. This method relies on the pg_stat_replication that holds information
+        about the standby servers, i.e. one row per replica. More info in the postgresql docs:
+        https://www.postgresql.org/docs/16/monitoring-stats.html#MONITORING-PG-STAT-REPLICATION-VIEW
+        """
+        conn: asyncpg.Connection | None = None
+        LOGGER.info("Checking database replication status...")
+        try:
+            conn = await self.get_db_connection()
+            query = """
+            SELECT
+                pid,                    -- pid of the WAL (Write Ahead Log) sender process
+                client_addr,            -- IP of the replica connected to this sender
+                state,                  -- WAL sender status
+                sync_state,             -- State of the replica
+                sent_lsn,               -- Last WAL LSN (Log Sequence Number) sent on this connection
+                write_lsn,              -- Last WAL LSN written to disk on the replica
+                flush_lsn,              -- Last WAL LSN flushed to disk on the replica
+                replay_lsn,             -- Last WAL LSN replayed into the database on the replica
+                pg_wal_lsn_diff(sent_lsn, replay_lsn) AS replay_lag_bytes
+                                        -- This diff represents how far behind this replica lags.
+            FROM pg_stat_replication;
+            """
+            result = await conn.fetch(query)
+            if len(result):
+                LOGGER.info("Database replication status:")
+                for row in result:
+                    LOGGER.info(
+                        "Replica (ip=%s sync_state=%s lag_behind=%s) - "
+                        "Sender process (pid=%s, state=%s) - Log Sequence Numbers (sent=%s write=%s flush=%s replay=%s)",
+                        row["client_addr"],
+                        row["sync_state"],
+                        row["replay_lag_bytes"],
+                        row["pid"],
+                        row["state"],
+                        row["sent_lsn"],
+                        row["write_lsn"],
+                        row["flush_lsn"],
+                        row["replay_lsn"],
+                    )
+            else:
+                LOGGER.info("Database replication is disabled.")
         finally:
             if conn is not None:
                 await conn.close(timeout=5)  # close the connection
@@ -349,7 +410,6 @@ class InmantaBootloader:
         }
 
         # Attempt to create a database connection
-
         return await asyncpg.connect(**db_settings, timeout=5)  # raises TimeoutError after 5 seconds
 
     async def wait_for_db(self, db_wait_time: int) -> None:
@@ -362,9 +422,20 @@ class InmantaBootloader:
 
         while True:
             try:
+                LOGGER.info(
+                    "Trying to establish a connection to database '%s' at %s:%s.",
+                    config.db_name.get(),
+                    config.db_host.get(),
+                    config.db_port.get(),
+                )
                 # Attempt to create a database connection
                 conn = await self.get_db_connection()
-                LOGGER.info("Successfully connected to the database.")
+                LOGGER.info(
+                    "Successfully reached database '%s' at %s:%s.",
+                    config.db_name.get(),
+                    config.db_host.get(),
+                    config.db_port.get(),
+                )
                 await conn.close(timeout=5)  # close the connection
                 return
             except asyncio.TimeoutError:

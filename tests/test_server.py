@@ -601,6 +601,13 @@ async def test_bootloader_connect_running_db(
     caplog.set_level(logging.INFO)
 
     def _check_database_connectivity_logs():
+        log_contains(
+            caplog,
+            "inmanta.server.bootloader",
+            logging.INFO,
+            "Checking database before server start...",
+        )
+
         if db_wait_time == "0":
             # If db_wait_time is "0", the wait_for_db method is not called,
             # hence "Successfully connected to the database." log message will not appear.
@@ -608,15 +615,33 @@ async def test_bootloader_connect_running_db(
                 caplog,
                 "inmanta.server.bootloader",
                 logging.INFO,
-                "Successfully connected to the database.",
+                "Successfully reached database '%s' at %s:%s."
+                % (
+                    config.Config.get("database", "name"),
+                    config.Config.get("database", "host"),
+                    config.Config.get("database", "port"),
+                ),
+            )
+            log_contains(
+                caplog,
+                "inmanta.server.bootloader",
+                logging.INFO,
+                "Bypassing database connectivity check because database.wait_time option is set to 0.",
             )
         else:
             log_contains(
                 caplog,
                 "inmanta.server.bootloader",
                 logging.INFO,
-                "Successfully connected to the database.",
+                "Successfully reached database '%s' at %s:%s."
+                % (
+                    config.Config.get("database", "name"),
+                    config.Config.get("database", "host"),
+                    config.Config.get("database", "port"),
+                ),
             )
+        log_contains(caplog, "inmanta.server.bootloader", logging.INFO, "Checking database replication status...")
+        log_contains(caplog, "inmanta.server.bootloader", logging.INFO, "Database replication is disabled.")
 
     try:
         if minimal_pg_version == sys.maxsize:
@@ -641,9 +666,10 @@ async def test_bootloader_connect_running_db(
                 caplog,
                 "inmanta.server.bootloader",
                 logging.INFO,
-                f"Successfully connected to the database (PostgreSQL server version {postgresql_version_from_db}).",
+                f"Database version is compatible (PostgreSQL server version {postgresql_version_from_db}).",
             )
 
+        log_contains(caplog, "inmanta.server.bootloader", logging.INFO, "Successfully checked database before server start.")
         log_contains(caplog, "inmanta.server.server", logging.INFO, "Starting server endpoint")
 
     finally:
@@ -689,22 +715,15 @@ async def test_bootloader_start_no_compatibility_file(tmp_path, server_config, p
 
     ibl: InmantaBootloader = InmantaBootloader(configure_logging=True)
 
-    caplog.set_level(logging.DEBUG)
+    caplog.set_level(logging.INFO)
 
     try:
         await ibl.start()
         log_contains(
             caplog,
             "inmanta.server.bootloader",
-            logging.DEBUG,
-            "No compatibility file is set. Bypassing minimal required postgres version check.",
-        )
-
-        log_contains(
-            caplog,
-            "inmanta.server.bootloader",
             logging.INFO,
-            "Successfully connected to the database (PostgreSQL server version",
+            "Bypassing minimal required postgres version check because the 'server.compatibility_file' option is not set.",
         )
 
         log_contains(caplog, "inmanta.server.server", logging.INFO, "Starting server endpoint")
