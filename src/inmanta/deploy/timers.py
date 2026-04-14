@@ -142,6 +142,11 @@ class TimerManager:
     timers have to be updated under the scheduler lock. This class delegates the responsibility of
     acquiring these locks to the ResourceScheduler by calling into the scheduler's reload_all_timers()
     method.
+
+    The initialize() method of this class has to be called for all timers to be configured correctly.
+    However, this class supports starting, stopping and updating timers while the initialize() method
+    was not yet called. The initialize() method has to be called after the scheduler has been initialized
+    correctly.
     """
 
     def __init__(self, resource_scheduler: "ResourceScheduler"):
