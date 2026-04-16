@@ -1,0 +1,4 @@
+---
+description: "Improve the docstring of the undeployable and skipped_for_undeployable columns of the configurationmodel database table."
+change-type: patch
+destination-branches: [master, iso9, iso8]
