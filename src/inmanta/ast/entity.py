@@ -68,6 +68,8 @@ class Entity(NamedType, WithComment):
     Each entity can contain attributes that are either data types or
     relations and each entity can inherit from parent entities.
 
+    Most methods may only be called after the entity definition evaluation stage (DefineEntity.evaluate()).
+
     :param name: The name of this entity. This name can not be changed
         after this object has been created
     """
@@ -254,13 +256,14 @@ class Entity(NamedType, WithComment):
         """
         if self._all_attributes_cache is None:
             cache: dict[str, "Attribute"] = {}
-            for parent in self.parent_entities:
+            # make sure to include left-most parent's attribute in case of shadowing to be consistent with get_default_values()
+            for parent in reversed(self.parent_entities):
                 cache.update(parent.get_all_attributes())
             cache.update(self._attributes)
             self._all_attributes_cache = cache
         return self._all_attributes_cache
 
-    def get_all_attribute_names(self) -> "List[str]":
+    def get_all_attribute_names(self) -> list[str]:
         """
         Return a list of all attribute names, including parents.
         Delegates to get_all_attributes() to ensure consistent de-duplicated results.
@@ -284,16 +287,11 @@ class Entity(NamedType, WithComment):
         """
         Get the attribute with the given name
         """
-        if self._all_attributes_cache is not None:
-            return self._all_attributes_cache.get(name)
-        if name in self._attributes:
-            return self._attributes[name]
-        else:
-            for parent in self.parent_entities:
-                attr = parent.get_attribute(name)
-                if attr is not None:
-                    return attr
-        return None
+        cache = self._all_attributes_cache
+        if cache is None:
+            # also populates self._all_attributes_cache
+            cache = self.get_all_attributes()
+        return cache.get(name)
 
     def has_attribute(self, attribute: str) -> bool:
         """
@@ -639,8 +637,7 @@ class Entity(NamedType, WithComment):
         dc_types = typing.get_type_hints(dataclass)
         failures = []
 
-        for rel_or_attr_name in self.get_all_attribute_names():
-            rel_or_attr = self.get_attribute(rel_or_attr_name)
+        for rel_or_attr_name, rel_or_attr in self.get_all_attributes().items():
             match rel_or_attr:
                 case inmanta.ast.attribute.RelationAttribute() as rel:
                     # No relations except for requires and provides
