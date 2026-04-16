@@ -1,0 +1,8 @@
+---
+description: "Added support to the configuration framework to get the full active configuration."
+issue-nr: 960
+issue-repo: inmanta-support
+change-type: minor
+destination-branches: [master, iso9]
+sections:
+  minor-improvement: "{{description}}"
