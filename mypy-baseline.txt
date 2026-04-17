@@ -679,6 +679,7 @@ src/inmanta/moduletool.py:0: error: Missing type arguments for generic type Modu
 src/inmanta/moduletool.py:0: error: Missing type arguments for generic type Module  [type-arg]
 src/inmanta/moduletool.py:0: error: Missing type arguments for generic type Module  [type-arg]
 src/inmanta/moduletool.py:0: error: Missing type arguments for generic type Module  [type-arg]
+src/inmanta/moduletool.py:0: error: Return type "DefaultIsolatedEnv" of "__enter__" incompatible with return type "DefaultIsolatedEnvCached" in supertype "build.env.DefaultIsolatedEnv"  [override]
 src/inmanta/moduletool.py:0: error: Skipping analyzing "cookiecutter.main": module is installed, but missing library stubs or py.typed marker  [import-untyped]
 src/inmanta/parser/cache.py:0: error: Argument 1 to "ASTUnpickler" has incompatible type "BufferedReader[_BufferedReaderStream]"; expected "BytesIO"  [arg-type]
 src/inmanta/parser/parsetab.py:0: error: Need type annotation for "_lr_action" (hint: "_lr_action: dict[<type>, <type>] = ...")  [var-annotated]
