@@ -724,7 +724,16 @@ class ResourceFilter(StrawberryFilter):
 
     @property
     def get_models_to_join(self) -> set[type[models.Base]]:
-        rps_join = ["blocked", "compliance", "last_handler_run", "is_deploying", "is_orphan"]
+        rps_join = [
+            "resource_type",
+            "resource_id_value",
+            "agent",
+            "blocked",
+            "compliance",
+            "last_handler_run",
+            "is_deploying",
+            "is_orphan",
+        ]
         for attr in rps_join:
             if getattr(self, attr) is not strawberry.UNSET:
                 return {self.rps_model}
@@ -733,9 +742,9 @@ class ResourceFilter(StrawberryFilter):
     def apply_filters(self, stmt: Select[typing.Any]) -> Select[typing.Any]:
         # Every filter we apply to the resource is custom, so we don't use `get_filter_dict`
         key_to_model = {
-            "resource_type": self.model,
-            "resource_id_value": self.model,
-            "agent": self.model,
+            "resource_type": self.rps_model,
+            "resource_id_value": self.rps_model,
+            "agent": self.rps_model,
             "blocked": self.rps_model,
             "compliance": self.rps_model,
             "last_handler_run": self.rps_model,

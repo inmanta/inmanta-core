@@ -1,0 +1,5 @@
+---
+description: "Filter on agent, resource_id and resource_type on the rps table instead"
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso9]
