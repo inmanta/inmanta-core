@@ -1,0 +1,6 @@
+change-type: patch
+description: Bump click from 8.3.1 to 8.3.2
+destination-branches:
+- master
+- iso9
+sections: {}

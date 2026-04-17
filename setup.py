@@ -12,12 +12,12 @@ requires = [
     "crontab>=0.23,<2.0",
     "cryptography>=36,<47",
     # docstring-parser has been known to publish non-backwards compatible minors in the past
-    "docstring-parser>=0.10,<0.18",
+    "docstring-parser>=0.10,<0.19",
     "email-validator>=1,<3",
     "jinja2~=3.0",
     "more-itertools>=8,<12",
     # upper bound on packaging because we use a non-public API that might change in any (non-SemVer) version
-    "packaging>=21.3,<26.1",
+    "packaging>=21.3,<26.2",
     # pip>=21.3 required for editable pyproject.toml + setup.cfg based install support
     "pip>=21.3",
     "ply~=3.0",
