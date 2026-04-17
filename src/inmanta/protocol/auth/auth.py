@@ -154,7 +154,7 @@ def decode_token(token: str) -> tuple[claim_type, "AuthJWTConfig"]:
 AUTH_JWT_PREFIX = "auth_jwt_"
 ENV_AUTH_JWT_PREFIX = "INMANTA_AUTH_JWT_"
 
-ENV_AUTH_JWT_SETTINGS = {
+ENV_AUTH_JWT_SETTINGS = [
     "ALGORITHM",
     "SIGN",
     "EXPIRE",
@@ -166,7 +166,7 @@ ENV_AUTH_JWT_SETTINGS = {
     "VALIDATE_CERT",
     "JWKS_REQUEST_TIMEOUT",
     "KEY",
-}
+]
 
 ENV_AUTH_JWT_SETTING_REGEX = re.compile(
     rf"^{re.escape(ENV_AUTH_JWT_PREFIX)}(?P<section>[\S]+)_"
@@ -214,7 +214,7 @@ class AuthJWTConfig:
                     "but it doesn't match any available JWT settings: %s",
                     name,
                     ENV_AUTH_JWT_PREFIX,
-                    sorted(ENV_AUTH_JWT_SETTINGS),
+                    ENV_AUTH_JWT_SETTINGS,
                 )
         return env_config
 
@@ -398,7 +398,7 @@ class AuthJWTConfig:
         if "jwt_username_claim" in self._config:
             if self.sign:
                 raise ValueError(f"auth config {self.section} used for signing cannot use a custom claim.")
-            self.jwt_username_claim = self._config["jwt-username-claim"]
+            self.jwt_username_claim = self._config["jwt_username_claim"]
 
     def validate_hs265(self) -> None:
         """
