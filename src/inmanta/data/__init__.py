@@ -6359,8 +6359,17 @@ class ConfigurationModel(BaseDocument):
     :param is_suitable_for_partial_compiles: This boolean indicates whether the model can later on be updated using a
                                              partial compile. In other words, the value is True iff no cross resource set
                                              dependencies exist between the resources.
-    :param undeployable: List of resource ids that are undeployable
-    :param skipped_for_undeployable: List of resource ids that are skipped because of undeployable dependencies
+    :param undeployable: List of all the resource ids across the entire configurationmodel that are undeployable (undefined).
+                         This field is only used by the dryrun feature. The scheduler determines the undeployable resouces
+                         using the is_undefined column of the resource table.
+    :param skipped_for_undeployable: List of resource ids that are skipped because of undeployable (undefined) dependencies.
+                                     If this configurationmodel was created using a partial compile, this column does not
+                                     include skipped_for_undeployable resources for resources in resource sets that were
+                                     not part of the partial compile. This is not intentional, but a bug:
+                                     https://github.com/inmanta/inmanta-core/issues/10277. This column is only used by
+                                     the dryrun feature. The scheduler calculates the skipped_for_undeployable resources
+                                     by relying on the is_undefined column of the resource table and the fact that it has
+                                     a full view on the states of all the resources in the configurationmodel.
     :param pip_config: The pip configuration for this version
     :param project_constraints: The project constraints for this version
     """

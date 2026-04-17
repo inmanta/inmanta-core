@@ -66,6 +66,14 @@ resource_discovery = extensions.BoolFeature(
     name="resource_discovery",
     description="Enable resource discovery. This feature controls the APIs it does not affect the use of discovery resources.",
 )
+compliance_reporting = extensions.BoolFeature(
+    slice=SLICE_RESOURCE,
+    name="compliance_reporting",
+    description=(
+        "Enable compliance reporting. This feature controls whether the server has support for resources that"
+        " only report about their compliance status, without deploying the desired state."
+    ),
+)
 
 
 LOGGER = logging.getLogger(__name__)
@@ -134,7 +142,7 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
         return [SLICE_TRANSPORT]
 
     def define_features(self) -> list[extensions.Feature]:
-        return [resource_discovery]
+        return [resource_discovery, compliance_reporting]
 
     async def prestart(self, server: protocol.Server) -> None:
         await super().prestart(server)
@@ -565,4 +573,6 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
         """
         Get the compliance status report for a list of resources.
         """
+        if not self.feature_manager.enabled(compliance_reporting):
+            raise Forbidden(message="The compliance reporting feature is not enabled.")
         return await data.ResourcePersistentState.get_compliance_report(env.id, resource_ids)
