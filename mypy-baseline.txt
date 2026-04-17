@@ -84,7 +84,6 @@ src/inmanta/ast/entity.py:0: error: Returning Any from function declared to retu
 src/inmanta/ast/entity.py:0: error: Returning Any from function declared to return "bool"  [no-any-return]
 src/inmanta/ast/entity.py:0: note: ClassVar protocol member DataclassInstance.__dataclass_fields__ can never be matched by a class object
 src/inmanta/ast/statements/__init__.py:0: error: Cannot find implementation or library stub for module named "inmanta.ast.assign"  [import-not-found]
-src/inmanta/ast/statements/__init__.py:0: error: Exception type must be derived from BaseException (or be a tuple of exception classes)  [misc]
 src/inmanta/ast/statements/__init__.py:0: error: Function is missing a return type annotation  [no-untyped-def]
 src/inmanta/ast/statements/__init__.py:0: error: Incompatible types in assignment (expression has type "None", variable has type "NamedType")  [assignment]
 src/inmanta/ast/statements/__init__.py:0: error: Incompatible types in assignment (expression has type "None", variable has type "Namespace")  [assignment]
@@ -161,13 +160,16 @@ src/inmanta/ast/statements/generator.py:0: error: Missing type arguments for gen
 src/inmanta/ast/statements/generator.py:0: error: Name "Dict" is not defined  [name-defined]
 src/inmanta/ast/statements/generator.py:0: error: Name "Dict" is not defined  [name-defined]
 src/inmanta/ast/statements/generator.py:0: error: Name "Dict" is not defined  [name-defined]
+src/inmanta/ast/statements/generator.py:0: error: No overload variant of "__ror__" of "dict" matches argument type "Mapping[str, object]"  [operator]
 src/inmanta/ast/statements/generator.py:0: error: Returning Any from function declared to return "dict[str, ExpressionStatement]"  [no-any-return]
-src/inmanta/ast/statements/generator.py:0: error: Unsupported operand types for | ("Mapping[str, object]" and "dict[str, object]")  [operator]
 src/inmanta/ast/statements/generator.py:0: note: Did you forget to import it from "typing"? (Suggestion: "from typing import Dict")
 src/inmanta/ast/statements/generator.py:0: note: Did you forget to import it from "typing"? (Suggestion: "from typing import Dict")
 src/inmanta/ast/statements/generator.py:0: note: Did you forget to import it from "typing"? (Suggestion: "from typing import Dict")
+src/inmanta/ast/statements/generator.py:0: note: Possible overload variants:
 src/inmanta/ast/statements/generator.py:0: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#incompatible-overrides
 src/inmanta/ast/statements/generator.py:0: note: This violates the Liskov substitution principle
+src/inmanta/ast/statements/generator.py:0: note: def [_T1, _T2] __ror__(self, dict[_T1, _T2], /) -> dict[str | _T1, object]
+src/inmanta/ast/statements/generator.py:0: note: def __ror__(self, dict[str, object], /) -> dict[str, object]
 src/inmanta/ast/type.py:0: error: "List" expects no type arguments, but 1 given  [type-arg]
 src/inmanta/ast/type.py:0: error: "Type" has no attribute "get_paired_dataclass"  [attr-defined]
 src/inmanta/ast/type.py:0: error: "inmanta.ast.type.List" has no attribute "append"  [attr-defined]
