@@ -12,6 +12,7 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import logging
 import base64
 import dataclasses
 import inspect
@@ -34,7 +35,7 @@ from sqlakeyset import Marker, unserialize_bookmark
 from sqlakeyset.asyncio import select_page
 from sqlalchemy import Boolean, Select, UnaryExpression, and_, asc, case, desc, func, not_, select
 from sqlalchemy.ext.hybrid import hybrid_property
-from sqlalchemy.orm import Mapper
+from sqlalchemy.orm import Mapper, aliased
 from strawberry import relay, scalars
 from strawberry.relay import NodeType
 from strawberry.scalars import JSON
@@ -51,6 +52,8 @@ from strawberry_sqlalchemy_mapper.mapper import (
     SkipTypeSentinel,
     StrawberrySQLAlchemyLazy,
 )
+
+LOGGER = logging.getLogger(__name__)
 
 """
 The strawberry models in this file are mapped from the sqlalchemy models in inmanta.data.sqlalchemy.models.
@@ -741,18 +744,18 @@ class ResourceFilter(StrawberryFilter):
 
     def apply_filters(self, stmt: Select[typing.Any]) -> Select[typing.Any]:
         # Every filter we apply to the resource is custom, so we don't use `get_filter_dict`
-        key_to_model = {
-            "resource_type": self.rps_model,
-            "resource_id_value": self.rps_model,
-            "agent": self.rps_model,
-            "blocked": self.rps_model,
-            "compliance": self.rps_model,
-            "last_handler_run": self.rps_model,
-        }
-        for key, model in key_to_model.items():
+        rps_keys = [
+            "resource_type",
+            "resource_id_value",
+            "agent",
+            "blocked",
+            "compliance",
+            "last_handler_run",
+        ]
+        for key in rps_keys:
             attr = getattr(self, key)
             if attr is not None and attr is not strawberry.UNSET:
-                stmt = attr.apply_filter(stmt, model, key)
+                stmt = attr.apply_filter(stmt, self.rps_model, key)
         if self.purged is not None and self.purged is not strawberry.UNSET:
             stmt = stmt.filter(models.Resource.attributes["purged"].astext.cast(Boolean).is_(self.purged))
         if self.is_deploying is not None and self.is_deploying is not strawberry.UNSET:
@@ -767,9 +770,8 @@ class ResourceOrder(StrawberryOrder):
     @classmethod
     def default_order(cls) -> dict[str, UnaryExpression[typing.Any]]:
         return {
-            "environment": asc(models.Resource.environment),
-            "resource_set": asc(models.Resource.resource_set),
-            "resource_id": asc(models.Resource.resource_id),
+            # TODO
+            "resource_id": asc(models.ResourcePersistentState.resource_id),
         }
 
     @property
@@ -783,9 +785,9 @@ class ResourceOrder(StrawberryOrder):
     @property
     def key_to_model(self) -> dict[str, type[models.Base]]:
         return {
-            "agent": self.model,
-            "resource_type": self.model,
-            "resource_id_value": self.model,
+            "agent": self.rps_model,
+            "resource_type": self.rps_model,
+            "resource_id_value": self.rps_model,
             "blocked": self.rps_model,
             "compliance": self.rps_model,
             "last_handler_run": self.rps_model,
@@ -851,6 +853,7 @@ def do_required_resource_joins(
     """
     models_to_join: set[type[models.Base]] = set()
     if order_by is not None and order_by is not strawberry.UNSET:
+        # TODO: this should always include self table?
         models_to_join = models_to_join | {
             o.key_to_model[to_snake_case(o.key)] for o in order_by if o.key_to_model[to_snake_case(o.key)] != o.model
         }
@@ -1028,15 +1031,33 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
 
             # Only fetch resources in their latest version
             # Logic based on src/inmanta/data/dataview.py::ResourceView
-            stmt = select(models.Resource).where(models.Resource.environment == filter.environment)
-            # CTE that fetches the latest scheduled version
             latest_scheduled_version_cte = (
                 select(models.Scheduler.last_processed_model_version.label("version"))
                 .where(models.Scheduler.environment == filter.environment)
                 .cte()
             )
 
-            if include_orphans:
+            resource_subquery = aliased(models.Resource, select(models.Resource).join(
+                models.t_resource_set_configuration_model,
+                and_(
+                    models.t_resource_set_configuration_model.c.environment == models.Resource.environment,
+                    models.t_resource_set_configuration_model.c.resource_set == models.Resource.resource_set,
+                    models.t_resource_set_configuration_model.c.model
+                    == select(latest_scheduled_version_cte.c.version).scalar_subquery(),
+                ),
+            ).subquery("resource"))
+
+            stmt = select(resource_subquery).select_from(models.ResourcePersistentState).outerjoin(
+                resource_subquery,
+                and_(
+                    models.Resource.resource_id == models.ResourcePersistentState.resource_id,
+                    models.Resource.environment == models.ResourcePersistentState.environment,
+                ),
+            ).where(models.ResourcePersistentState.environment == filter.environment)
+            # CTE that fetches the latest scheduled version
+
+            #if include_orphans:
+            if False:
                 # CTE that checks if a resource is orphaned or not and returns the appropriate version
                 # - If it is not orphaned, return the resource in the latest released version
                 # - If it is orphaned, return the resource in the latest version that it was present in.
@@ -1094,17 +1115,9 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
                     ),
                 )
             else:
-                stmt = stmt.join(
-                    models.t_resource_set_configuration_model,
-                    and_(
-                        models.t_resource_set_configuration_model.c.environment == models.Resource.environment,
-                        models.t_resource_set_configuration_model.c.resource_set == models.Resource.resource_set,
-                        models.t_resource_set_configuration_model.c.model
-                        == select(latest_scheduled_version_cte.c.version).scalar_subquery(),
-                    ),
-                )
+                pass
             stmt = add_filter_and_sort(stmt, ResourceOrder.default_order(), filter, order_by)
-            stmt = do_required_resource_joins(stmt, filter, order_by)
+            LOGGER.error("graphql query: %s", stmt)
             return await get_connection(stmt, info=info, model="Resource", first=first, after=after, last=last, before=before)
 
         @strawberry.field(description="Fetches a summary of the state of all resources in a specific environment")
