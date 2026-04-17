@@ -749,7 +749,6 @@ src/inmanta/protocol/common.py:0: error: "Callable[..., R | ReturnValue[R]]" has
 src/inmanta/protocol/common.py:0: error: "Callable[..., R | ReturnValue[R]]" has no attribute "__method_properties__"  [attr-defined]
 src/inmanta/protocol/common.py:0: error: "Callable[[Result[R]], dict[str, Any] | None]" has no attribute "setter"  [attr-defined]
 src/inmanta/protocol/common.py:0: error: "type" has no attribute "__supertype__"  [attr-defined]
-src/inmanta/protocol/common.py:0: error: Argument "text" to "parse" has incompatible type "str | None"; expected "str"  [arg-type]
 src/inmanta/protocol/common.py:0: error: Argument 1 to "_get_http_status_code_for_exception" of "MethodProperties" has incompatible type "str | None"; expected "str"  [arg-type]
 src/inmanta/protocol/common.py:0: error: Argument 2 to "get_body" of "ReturnValue" has incompatible type "str | None"; expected "str"  [arg-type]
 src/inmanta/protocol/common.py:0: error: Incompatible return value type (got "dict[str, Any | list[Any]]", expected "dict[str, str]")  [return-value]
