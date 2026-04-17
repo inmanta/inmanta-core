@@ -84,7 +84,6 @@ src/inmanta/ast/entity.py:0: error: Returning Any from function declared to retu
 src/inmanta/ast/entity.py:0: error: Returning Any from function declared to return "bool"  [no-any-return]
 src/inmanta/ast/entity.py:0: note: ClassVar protocol member DataclassInstance.__dataclass_fields__ can never be matched by a class object
 src/inmanta/ast/statements/__init__.py:0: error: Cannot find implementation or library stub for module named "inmanta.ast.assign"  [import-not-found]
-src/inmanta/ast/statements/__init__.py:0: error: Exception type must be derived from BaseException (or be a tuple of exception classes)  [misc]
 src/inmanta/ast/statements/__init__.py:0: error: Function is missing a return type annotation  [no-untyped-def]
 src/inmanta/ast/statements/__init__.py:0: error: Incompatible types in assignment (expression has type "None", variable has type "NamedType")  [assignment]
 src/inmanta/ast/statements/__init__.py:0: error: Incompatible types in assignment (expression has type "None", variable has type "Namespace")  [assignment]
@@ -161,13 +160,16 @@ src/inmanta/ast/statements/generator.py:0: error: Missing type arguments for gen
 src/inmanta/ast/statements/generator.py:0: error: Name "Dict" is not defined  [name-defined]
 src/inmanta/ast/statements/generator.py:0: error: Name "Dict" is not defined  [name-defined]
 src/inmanta/ast/statements/generator.py:0: error: Name "Dict" is not defined  [name-defined]
+src/inmanta/ast/statements/generator.py:0: error: No overload variant of "__ror__" of "dict" matches argument type "Mapping[str, object]"  [operator]
 src/inmanta/ast/statements/generator.py:0: error: Returning Any from function declared to return "dict[str, ExpressionStatement]"  [no-any-return]
-src/inmanta/ast/statements/generator.py:0: error: Unsupported operand types for | ("Mapping[str, object]" and "dict[str, object]")  [operator]
 src/inmanta/ast/statements/generator.py:0: note: Did you forget to import it from "typing"? (Suggestion: "from typing import Dict")
 src/inmanta/ast/statements/generator.py:0: note: Did you forget to import it from "typing"? (Suggestion: "from typing import Dict")
 src/inmanta/ast/statements/generator.py:0: note: Did you forget to import it from "typing"? (Suggestion: "from typing import Dict")
+src/inmanta/ast/statements/generator.py:0: note: Possible overload variants:
 src/inmanta/ast/statements/generator.py:0: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#incompatible-overrides
 src/inmanta/ast/statements/generator.py:0: note: This violates the Liskov substitution principle
+src/inmanta/ast/statements/generator.py:0: note: def [_T1, _T2] __ror__(self, dict[_T1, _T2], /) -> dict[str | _T1, object]
+src/inmanta/ast/statements/generator.py:0: note: def __ror__(self, dict[str, object], /) -> dict[str, object]
 src/inmanta/ast/type.py:0: error: "List" expects no type arguments, but 1 given  [type-arg]
 src/inmanta/ast/type.py:0: error: "Type" has no attribute "get_paired_dataclass"  [attr-defined]
 src/inmanta/ast/type.py:0: error: "inmanta.ast.type.List" has no attribute "append"  [attr-defined]
@@ -679,6 +681,7 @@ src/inmanta/moduletool.py:0: error: Missing type arguments for generic type Modu
 src/inmanta/moduletool.py:0: error: Missing type arguments for generic type Module  [type-arg]
 src/inmanta/moduletool.py:0: error: Missing type arguments for generic type Module  [type-arg]
 src/inmanta/moduletool.py:0: error: Missing type arguments for generic type Module  [type-arg]
+src/inmanta/moduletool.py:0: error: Return type "DefaultIsolatedEnv" of "__enter__" incompatible with return type "DefaultIsolatedEnvCached" in supertype "build.env.DefaultIsolatedEnv"  [override]
 src/inmanta/moduletool.py:0: error: Skipping analyzing "cookiecutter.main": module is installed, but missing library stubs or py.typed marker  [import-untyped]
 src/inmanta/parser/cache.py:0: error: Argument 1 to "ASTUnpickler" has incompatible type "BufferedReader[_BufferedReaderStream]"; expected "BytesIO"  [arg-type]
 src/inmanta/parser/parsetab.py:0: error: Need type annotation for "_lr_action" (hint: "_lr_action: dict[<type>, <type>] = ...")  [var-annotated]
@@ -749,7 +752,6 @@ src/inmanta/protocol/common.py:0: error: "Callable[..., R | ReturnValue[R]]" has
 src/inmanta/protocol/common.py:0: error: "Callable[..., R | ReturnValue[R]]" has no attribute "__method_properties__"  [attr-defined]
 src/inmanta/protocol/common.py:0: error: "Callable[[Result[R]], dict[str, Any] | None]" has no attribute "setter"  [attr-defined]
 src/inmanta/protocol/common.py:0: error: "type" has no attribute "__supertype__"  [attr-defined]
-src/inmanta/protocol/common.py:0: error: Argument "text" to "parse" has incompatible type "str | None"; expected "str"  [arg-type]
 src/inmanta/protocol/common.py:0: error: Argument 1 to "_get_http_status_code_for_exception" of "MethodProperties" has incompatible type "str | None"; expected "str"  [arg-type]
 src/inmanta/protocol/common.py:0: error: Argument 2 to "get_body" of "ReturnValue" has incompatible type "str | None"; expected "str"  [arg-type]
 src/inmanta/protocol/common.py:0: error: Incompatible return value type (got "dict[str, Any | list[Any]]", expected "dict[str, str]")  [return-value]
@@ -760,8 +762,8 @@ src/inmanta/protocol/common.py:0: error: Returning Any from function declared to
 src/inmanta/protocol/common.py:0: error: Returning Any from function declared to return "type[BaseModel]"  [no-any-return]
 src/inmanta/protocol/common.py:0: error: Untyped decorator makes function "set_result" untyped  [untyped-decorator]
 src/inmanta/protocol/common.py:0: note: Possible overload variants:
-src/inmanta/protocol/common.py:0: note: def [ModelT: BaseModel] create_model(str, /, *, __config__: ConfigDict | None = ..., __doc__: str | None = ..., __base__: type[ModelT] | tuple[type[ModelT], ...], __module__: str = ..., __validators__: dict[str, Callable[..., Any]] | None = ..., __cls_kwargs__: dict[str, Any] | None = ..., __qualname__: str | None = ..., **field_definitions: Any | tuple[str, Any]) -> type[ModelT]
-src/inmanta/protocol/common.py:0: note: def create_model(str, /, *, __config__: ConfigDict | None = ..., __doc__: str | None = ..., __base__: None = ..., __module__: str = ..., __validators__: dict[str, Callable[..., Any]] | None = ..., __cls_kwargs__: dict[str, Any] | None = ..., __qualname__: str | None = ..., **field_definitions: Any | tuple[str, Any]) -> type[BaseModel]
+src/inmanta/protocol/common.py:0: note: def [ModelT: BaseModel] create_model(str, /, *, __config__: ConfigDict | None = ..., __doc__: str | None = ..., __base__: type[ModelT] | tuple[type[ModelT], ...], __module__: str = ..., __validators__: dict[str, Callable[..., Any]] | None = ..., __cls_kwargs__: dict[str, Any] | None = ..., __qualname__: str | None = ..., **field_definitions: Any | tuple[Any, Any]) -> type[ModelT]
+src/inmanta/protocol/common.py:0: note: def create_model(str, /, *, __config__: ConfigDict | None = ..., __doc__: str | None = ..., __base__: None = ..., __module__: str = ..., __validators__: dict[str, Callable[..., Any]] | None = ..., __cls_kwargs__: dict[str, Any] | None = ..., __qualname__: str | None = ..., **field_definitions: Any | tuple[Any, Any]) -> type[BaseModel]
 src/inmanta/protocol/decorators.py:0: error: "FuncT" has no attribute "__api_version__"  [attr-defined]
 src/inmanta/protocol/decorators.py:0: error: "FuncT" has no attribute "__protocol_mapping__"  [attr-defined]
 src/inmanta/protocol/decorators.py:0: error: "FuncT" has no attribute "__protocol_method__"  [attr-defined]
