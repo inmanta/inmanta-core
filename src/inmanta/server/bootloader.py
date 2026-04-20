@@ -127,17 +127,24 @@ class InmantaBootloader:
 
         LOGGER.info("Checking database before server start...")
 
-        await self._database_connectivity_check()
-        await self._database_version_compatibility_check()
-        await self._database_log_replication_status()
+        try:
+            conn = await self._database_connectivity_check()
+            await self._database_version_compatibility_check(conn)
+            await self._database_log_replication_status(conn)
+        finally:
+            if conn is not None:
+                await conn.close(timeout=5)  # close the connection
 
         LOGGER.info("Successfully checked database before server start.")
 
-    async def _database_connectivity_check(self) -> None:
+    async def _database_connectivity_check(self) -> asyncpg.connection:
         """
-        This method attempts to connect to the database.
+        This method attempts to connect to the database and returns the connection object.
 
-        The check is bypassed if the database.wait_time option is set to 0.
+        The database.wait_time option controls the retry behaviour for this method:
+            database.wait_time < 0 : keep retrying forever until a connection is established
+            database.wait_time = 0 : try only once to establish a connection
+            database.wait_time > 0 : keep retrying until this wait_time timeout is reached or a connection is established
 
         :raises Exception: If the connectivity cannot be established within the configured database.wait_time.
         """
@@ -145,12 +152,14 @@ class InmantaBootloader:
 
         if db_wait_time != 0:
             # Wait for the database to be up before starting the server
-            LOGGER.info("Checking database connectivity...")
-            await self.wait_for_db(db_wait_time=db_wait_time)
+            LOGGER.info("Waiting until database server is up.")
+            conn = await self.wait_for_db(db_wait_time=db_wait_time)
         else:
-            LOGGER.info("Bypassing database connectivity check because database.wait_time option is set to 0.")
+            LOGGER.debug("Not waiting until the database server is up because database.wait_time option is set to 0.")
+            conn = await self.get_db_connection()
+        return conn
 
-    async def _database_version_compatibility_check(self) -> None:
+    async def _database_version_compatibility_check(self, conn: asyncpg.connection) -> None:
         """
         This method looks for the required PostgreSQL version defined in the compatibility file (Whose path is configured by
         the server.compatibility_file option) and checks that the PostgreSQL version of the database meets this requirement.
@@ -163,77 +172,74 @@ class InmantaBootloader:
             the compatibility file.
         """
         required_postgresql_version = PostgreSQLVersion.from_compatibility_file()
-        conn: asyncpg.Connection | None = None
-        try:
-            conn = await self.get_db_connection()
-            database_postgresql_version = await PostgreSQLVersion.from_database(conn)
+        database_postgresql_version = await PostgreSQLVersion.from_database(conn)
 
-            if required_postgresql_version is None:
-                LOGGER.info(
-                    "Bypassing minimal required postgres version check because the "
-                    "'server.compatibility_file' option is not set."
+        if required_postgresql_version is None:
+            LOGGER.debug(
+                "Bypassing minimal required postgres version check because the "
+                "'server.compatibility_file' option is not set."
+            )
+        else:
+
+            if database_postgresql_version < required_postgresql_version:
+                raise ServerStartFailure(
+                    f"The database at {config.db_host.get()} is using PostgreSQL version "
+                    f"{database_postgresql_version}. This version is not supported by this "
+                    "version of the Inmanta orchestrator. Please make sure to update to PostgreSQL "
+                    f"{required_postgresql_version}."
                 )
-            else:
-                LOGGER.info("Checking database PostgreSQL version compatibility...")
+        LOGGER.info("Database is running PostgreSQL server version %s.", database_postgresql_version)
 
-                if database_postgresql_version < required_postgresql_version:
-                    raise ServerStartFailure(
-                        f"The database at {config.db_host.get()} is using PostgreSQL version "
-                        f"{database_postgresql_version}. This version is not supported by this "
-                        "version of the Inmanta orchestrator. Please make sure to update to PostgreSQL "
-                        f"{required_postgresql_version}."
-                    )
-                LOGGER.info("Database version is compatible (PostgreSQL server version %s).", database_postgresql_version)
-        finally:
-            if conn is not None:
-                await conn.close(timeout=5)  # close the connection
-
-    async def _database_log_replication_status(self) -> None:
+    async def _database_log_replication_status(self, conn: asyncpg.Connection) -> None:
         """
         Fetch and log the replication status. This method relies on the pg_stat_replication that holds information
         about the standby servers, i.e. one row per replica. More info in the postgresql docs:
         https://www.postgresql.org/docs/16/monitoring-stats.html#MONITORING-PG-STAT-REPLICATION-VIEW
         """
-        conn: asyncpg.Connection | None = None
-        LOGGER.info("Checking database replication status...")
-        try:
-            conn = await self.get_db_connection()
-            query = """
-            SELECT
-                pid,                    -- pid of the WAL (Write Ahead Log) sender process
-                client_addr,            -- IP of the replica connected to this sender
-                state,                  -- WAL sender status
-                sync_state,             -- State of the replica
-                sent_lsn,               -- Last WAL LSN (Log Sequence Number) sent on this connection
-                write_lsn,              -- Last WAL LSN written to disk on the replica
-                flush_lsn,              -- Last WAL LSN flushed to disk on the replica
-                replay_lsn,             -- Last WAL LSN replayed into the database on the replica
-                pg_wal_lsn_diff(sent_lsn, replay_lsn) AS replay_lag_bytes
-                                        -- This diff represents how far behind this replica lags.
-            FROM pg_stat_replication;
-            """
-            result = await conn.fetch(query)
-            if len(result):
-                LOGGER.info("Database replication status:")
-                for row in result:
+        query = """
+        SELECT
+            pid,                    -- pid of the WAL (Write Ahead Log) sender process
+            client_addr,            -- IP of the replica connected to this sender
+            client_port,            -- Port used by the replica to communicate with this sender
+            state,                  -- WAL sender status
+            sync_state,             -- State of the replica
+            sent_lsn,               -- Last WAL LSN (Log Sequence Number) sent on this connection
+            write_lsn,              -- Last WAL LSN written to disk on the replica
+            flush_lsn,              -- Last WAL LSN flushed to disk on the replica
+            replay_lsn,             -- Last WAL LSN replayed into the database on the replica
+            pg_wal_lsn_diff(sent_lsn, replay_lsn) AS replay_lag_bytes
+                                    -- This diff represents how far behind this replica lags.
+        FROM pg_stat_replication;
+        """
+        result = await conn.fetch(query)
+        if len(result):
+            LOGGER.info("Database replication status of directly connected standby servers:")
+            for row in result:
+                if row["client_port"] is None:
                     LOGGER.info(
-                        "Replica (ip=%s sync_state=%s lag_behind=%s) - "
-                        "Sender process (pid=%s, state=%s) - Log Sequence Numbers (sent=%s write=%s flush=%s replay=%s)",
-                        row["client_addr"],
-                        row["sync_state"],
-                        row["replay_lag_bytes"],
-                        row["pid"],
-                        row["state"],
-                        row["sent_lsn"],
-                        row["write_lsn"],
-                        row["flush_lsn"],
-                        row["replay_lsn"],
+                        "Cannot check database replication status: insufficient privileges for user %s. Please"
+                        "make sure the configured user has the `pg_monitor` role.",
+                        config.db_username.get(),
                     )
-            else:
-                LOGGER.info("Database replication is disabled.")
-        finally:
-            if conn is not None:
-                await conn.close(timeout=5)  # close the connection
+                    break
+
+                LOGGER.info(
+                    "Replica (ip=%s port =%s sync_state=%s) - "
+                    "Sender process (pid=%s, state=%s) - "
+                    "Log Sequence Numbers (sent=%s write=%s flush=%s replay=%s diff_send_replay=%s)",
+                    row["client_addr"],
+                    row["client_port"],
+                    row["sync_state"],
+                    row["pid"],
+                    row["state"],
+                    row["sent_lsn"],
+                    row["write_lsn"],
+                    row["flush_lsn"],
+                    row["replay_lsn"],
+                    row["replay_lag_bytes"],
+                )
+        else:
+            LOGGER.info("Database replication is disabled.")
 
     def start_loggers_for_extensions(self, on_config: InmantaLoggerConfig | None = None) -> FullLoggingConfig:
         ctx = self.load_slices()
@@ -412,8 +418,9 @@ class InmantaBootloader:
         # Attempt to create a database connection
         return await asyncpg.connect(**db_settings, timeout=5)  # raises TimeoutError after 5 seconds
 
-    async def wait_for_db(self, db_wait_time: int) -> None:
-        """Wait for the database to be up by attempting to connect at intervals.
+    async def wait_for_db(self, db_wait_time: int) -> asyncpg.connection:
+        """Wait for the database to be up by attempting to connect at intervals. Once a connection
+        is established, it is returned. The caller is responsible for closing it.
 
         :param db_wait_time: Maximum time to wait for the database to be up, in seconds.
         """
@@ -436,8 +443,7 @@ class InmantaBootloader:
                     config.db_host.get(),
                     config.db_port.get(),
                 )
-                await conn.close(timeout=5)  # close the connection
-                return
+                return conn
             except asyncio.TimeoutError:
                 LOGGER.info("Waiting for database to be up: Connection attempt timed out.")
             except Exception:

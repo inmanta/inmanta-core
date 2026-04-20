@@ -239,6 +239,13 @@ The file ``inmanta-db.container`` defines the database container. The data is st
 
 Replace ``<db_username>`` and ``<db_password>`` with respectively the username and password you want to use to authenticate to the database server.
 
+.. note::
+
+    During its boot sequence, the orchestrator will perform some checks on the database (e.g. checking that the
+    postgresql version is compatible and checking the status of the replica servers in a high-availability setup).
+    Please make sure the configured user holds the ``pg_monitor`` role to enable these checks during startup.
+
+
 The file ``inmanta-server.container`` defines the orchestrator container. Its state, log and config are persisted in
 their respective directories in ``/home/inmanta/mount/orchestrator``.
 
