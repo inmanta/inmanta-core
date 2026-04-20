@@ -899,6 +899,7 @@ async def get_connection(
     after: typing.Optional[str] = strawberry.UNSET,
     last: typing.Optional[int] = strawberry.UNSET,
     before: typing.Optional[str] = strawberry.UNSET,
+    count_stmt = None,
 ) -> CustomListConnection[NodeType]:
     """
     Build the connection object. Here we do all the pagination and fetching of results (edges) to return to the user.
@@ -920,11 +921,16 @@ async def get_connection(
         else:
             per_page = DEFAULT_PER_PAGE
 
+        import time
         # Check if we requested total_count
         total_count: int | None = None
         if is_field_selected(info, "totalCount"):
-            count_stmt = select(func.count()).select_from(stmt.subquery())
+            if count_stmt is None:
+                count_stmt = select(func.count()).select_from(stmt.subquery())
+            start = time.perf_counter()
             count_result = await session.execute(count_stmt)
+            LOGGER.error("Count query: %s", count_stmt)
+            LOGGER.error("Count execute took %s seconds", time.perf_counter() - start)
             total_count = count_result.scalar_one()
 
         # Get cursor and direction of results to fetch (forwards/backwards)
@@ -937,7 +943,9 @@ async def get_connection(
             page = unserialize_bookmark(f"<{decode_cursor(before)}")
 
         # Fetch the page using sqlakeyset
+        start = time.perf_counter()
         result = await select_page(session, stmt, per_page=per_page, page=page)
+        LOGGER.error("Page execute took %s seconds", time.perf_counter() - start)
         edges = []
         # We use the private methods for the mapper because their respective public attributes like `mapper.connection_types`
         # Are only filled when the private methods are called first. The private methods use the public attributes as cache so
@@ -1029,6 +1037,8 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
             else:
                 include_orphans = True
 
+            #stmt = select(models.Resource).select_from(models.Resource).where(models.Resource.environment == filter.environment)
+
             # Only fetch resources in their latest version
             # Logic based on src/inmanta/data/dataview.py::ResourceView
             latest_scheduled_version_cte = (
@@ -1116,9 +1126,24 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
                 )
             else:
                 pass
+            #    stmt = stmt.join(
+            #        models.t_resource_set_configuration_model,
+            #        and_(
+            #            models.t_resource_set_configuration_model.c.environment == models.Resource.environment,
+            #            models.t_resource_set_configuration_model.c.resource_set == models.Resource.resource_set,
+            #            models.t_resource_set_configuration_model.c.model
+            #            == select(latest_scheduled_version_cte.c.version).scalar_subquery(),
+            #        ),
+            #    )
+            #stmt = do_required_resource_joins(stmt, filter, order_by)
             stmt = add_filter_and_sort(stmt, ResourceOrder.default_order(), filter, order_by)
             LOGGER.error("graphql query: %s", stmt)
-            return await get_connection(stmt, info=info, model="Resource", first=first, after=after, last=last, before=before)
+            count_stmt: str
+            if filter is not None and filter.purged is not strawberry.UNSET:
+                count_stmt = stmt
+            else:
+                count_stmt = add_filter_and_sort(select(func.count()).select_from(models.ResourcePersistentState), {}, filter, strawberry.UNSET)
+            return await get_connection(stmt, info=info, model="Resource", first=first, after=after, last=last, before=before, count_stmt=count_stmt)
 
         @strawberry.field(description="Fetches a summary of the state of all resources in a specific environment")
         async def resource_summary(self, info: CustomInfo, environment: str) -> ComposedResourceSummary:
