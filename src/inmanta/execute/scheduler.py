@@ -474,21 +474,8 @@ class Scheduler:
             if not progress:
                 has_potential: list[DelayedResultVariable[object]] = []
                 new_zerowaiters: Deque[DelayedResultVariable[object]] = deque()
-                # Direct attribute checks to avoid hasValue + get_progress_potential() calls
-                # for the common case. The DRV lifecycle guarantees hasValue == True iff
-                # waiters is None (set_value and freeze both null waiters), so `waiters is None`
-                # replaces the hasValue check.
-                # - waiters is None → DRV was frozen/set since entering zerowaiters (skip)
-                # - not waiters → still zero waiters, definitely zero progress potential (keep)
-                # - waiters non-empty → gained waiters, check get_progress_potential() (rare path;
-                #   still needed for ListVariable/OptionVariable which subtract _nb_gradual_waiters
-                #   and/or add has_freeze_dependents)
                 for w in zerowaiters:
-                    waiters = w.waiters
-                    if waiters is None:
-                        continue
-                    if not waiters:
-                        new_zerowaiters.append(w)
+                    if w.hasValue:
                         continue
                     if w.get_progress_potential() > 0:
                         has_potential.append(w)
