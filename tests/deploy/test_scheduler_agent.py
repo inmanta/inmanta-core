@@ -730,7 +730,6 @@ async def test_deploy_single_agent(agent: TestAgent, make_resource_minimal) -> N
         r3_fail: make_resource_minimal(r3_fail, values={"report_only": True, FAIL_DEPLOY: True}, requires=[]),
     }
     version: int = 1
-    agent.scheduler._compliance_reporting_feature_enabled = True
     await agent.scheduler._new_version([model_version(version=version, resources=resources, requires={})])
 
     await wait_until_done(agent)

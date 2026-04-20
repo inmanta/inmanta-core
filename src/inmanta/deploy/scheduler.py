@@ -46,8 +46,6 @@ from inmanta.deploy.tasks import Deploy, DryRun, RefreshFact, Task
 from inmanta.deploy.work import TaskPriority
 from inmanta.protocol import Client
 from inmanta.resources import Id
-from inmanta.server.extensions import BoolFeature
-from inmanta.server.services import resourceservice
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 from inmanta.vendor import pyformance
 
@@ -371,7 +369,6 @@ class ResourceScheduler(TaskManager):
         :param environment: the environment we work for
         :param executor_manager: the executor manager that will provide us with executors
         :param client: connection to the server
-        :param _compliance_reporting_feature_enabled: True iff the compliance_reporting feature is enabled on the server.
         """
         # state and work may be reassigned during initialize
         self._state: ModelState = ModelState(version=0)
@@ -417,7 +414,6 @@ class ResourceScheduler(TaskManager):
         self._timer_manager = timers.TimerManager(self)
 
         self._deployment_suspended: bool = False
-        self._compliance_reporting_feature_enabled: bool = False
 
     async def _reset(self) -> None:
         """
@@ -470,13 +466,11 @@ class ResourceScheduler(TaskManager):
         Update resources in the latest released version of the model stuck in "deploying" state.
         This can occur when the Scheduler is killed in the middle of a deployment.
         """
+
         await data.Resource.reset_resource_state(self.environment)
 
     async def load_timer_settings(self) -> None:
         """Update the timer manager after an update of the timer config"""
-        if not self._running:
-            LOGGER.debug("Ignoring timer settings update for halted resource scheduler")
-            return
         await self._timer_manager.reload_config()
 
     async def reload_all_timers(self) -> None:
@@ -494,19 +488,14 @@ class ResourceScheduler(TaskManager):
                     or resource in self._work._waiting
                 ):
                     self._timer_manager.stop_timer(resource)
-                else:
-                    self._timer_manager.update_timer(resource, state=state)
+                self._timer_manager.update_timer(resource, state=state)
 
     async def _initialize(self) -> None:
         """
         Initialize the scheduler state and continue the deployment where we were before the server was shutdown.
         Marks scheduler as running and triggers first deploys.
         """
-        # Check whether the compliance_reporting feature is enabled.
-        compliance_feature: BoolFeature = resourceservice.compliance_reporting
-        self._compliance_reporting_feature_enabled = await self.client.is_bool_feature_enabled(
-            slice_name=compliance_feature.slice, feature_name=compliance_feature.name
-        ).value()
+        await self._timer_manager.initialize()
         # do not start a transaction because:
         # 1. nothing we do here before read_version is inherently transactional: the only write is atomic, and reads do not
         #   benefit from READ COMMITTED (default) isolation level.
@@ -549,6 +538,10 @@ class ResourceScheduler(TaskManager):
             LOGGER.debug("Scheduler initialization: resuming deploy operations and reading latest model version")
             self._running = True
             await self.read_version(connection=con)
+            # All resources get a timer
+            async with self._scheduler_lock:
+                LOGGER.debug("Scheduler initialization: setting up initial deploy timers")
+                self._timer_manager.update_timers(self._state.intent.keys() - self._state.dirty)
 
             if self._state.version == initialized_version:
                 # no new version was present. Simply trigger a deploy for everything that's not in a known good state
@@ -557,16 +550,6 @@ class ResourceScheduler(TaskManager):
                     reason="the resource scheduler was started",
                     priority=TaskPriority.INTERVAL_DEPLOY,
                 )
-            LOGGER.debug("Scheduler initialization: setting up initial deploy timers")
-            # Now that the scheduler state is initialized, we can set the timers:
-            #  * Configuring per-resource timers requires the scheduler to be initialized
-            #    because the last deploy time of each resource needs to be known.
-            #  * Initializing the TimerManager here prevents the race condition where the timer
-            #    configuration is updated after the call to self._timer_manager.initialize(),
-            #    but before self._running is set to True. During this period notifications
-            #    from the server about timer updates are still blocked because the scheduler
-            #    is not yet fully initialized.
-            await self._timer_manager.initialize()
             LOGGER.debug("Scheduler initialization: finished initialization, scheduler is fully up and running")
 
     async def deploy(
@@ -1323,25 +1306,7 @@ class ResourceScheduler(TaskManager):
             )
             return deploy_intent
 
-    async def _enforce_compliance_reporting_entitlement(self, report: executor.DeployReport) -> None:
-        """
-        If the given resource is using the compliance_reporting feature, verify that this feature
-        is enabled in the entitlements file. If not, update the report to mark the resource as failed.
-        """
-        if not self._compliance_reporting_feature_enabled and report.status is const.ResourceState.non_compliant:
-            report.resource_state = const.HandlerResourceState.failed
-            report.messages.append(
-                data.LogLine.log(
-                    level=const.LogLevel.ERROR,
-                    msg=(
-                        "The handler reported the non_compliant state, but the compliance_reporting feature"
-                        " is not enabled. Please check your entitlements file."
-                    ),
-                )
-            )
-
     async def deploy_done(self, deploy_intent: DeployIntent, report: executor.DeployReport) -> None:
-        await self._enforce_compliance_reporting_entitlement(report)
         finished = datetime.datetime.now().astimezone()
         try:
             state: Optional[ResourceState]

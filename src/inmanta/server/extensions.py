@@ -161,22 +161,6 @@ class FeatureManager:
     def get_features(self) -> list[Feature[object]]:
         return [feature for slice in self._features.values() for feature in slice.values()]
 
-    def get_feature(self, slice_name: str, feature_name: str) -> Feature[object]:
-        """
-        Returns the feature with the given name that belongs to the given slice.
-        A KeyError is raised if no such feature was defined.
-        """
-        if slice_name not in self._features:
-            raise KeyError(
-                f"Couldn't find feature {feature_name} for slice {slice_name}:"
-                f" No features are defined for slice {slice_name}."
-            )
-        if feature_name not in self._features[slice_name]:
-            raise KeyError(
-                f"Couldn't find feature {feature_name} for slice {slice_name}: Feature with name {feature_name} not found."
-            )
-        return self._features[slice_name][feature_name]
-
     def _load_feature_config(self) -> dict[str, dict[str, FeatureValueTypes]]:
         """Return the value of the slices key in the feature config file"""
         feature_file = feature_file_config.get()
@@ -188,10 +172,7 @@ class FeatureManager:
             return {}
 
         with open(feature_file, encoding="utf-8") as fd:
-            result: dict[str, dict[str, dict[str, FeatureValueTypes]]] | None = yaml.safe_load(fd)
-
-        if result is None:
-            raise Exception(f"Feature file {feature_file} doesn't contain a valid yaml document.")
+            result: dict[str, dict[str, dict[str, FeatureValueTypes]]] = yaml.safe_load(fd)
 
         if "slices" in result:
             return result["slices"]

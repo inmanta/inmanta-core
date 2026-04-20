@@ -516,7 +516,6 @@ class CoreAuthorizationLabel(AuthorizationLabel):
     ROLE_ASSIGNMENT_READ = "role-assignment.read"
     ROLE_ASSIGNMENT_WRITE = "role-assignment.write"
     ROLE_IS_ADMIN = "role.is-admin"
-    FEATURE_READ = "feature.read"
     # These labels should only be used in tests
     TEST = "test"
     TEST_2 = "test2"

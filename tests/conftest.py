@@ -769,17 +769,6 @@ def path_policy_engine_executable() -> str:
 
 
 @pytest.fixture(scope="function")
-def content_features_file() -> str:
-    """
-    A fixture that returns the content of the features file
-    that should be configured on the inmanta server.
-    """
-    return """
-        slices: {}
-    """
-
-
-@pytest.fixture(scope="function")
 async def server_config(
     inmanta_config,
     postgres_db,
@@ -793,7 +782,6 @@ async def server_config(
     authorization_provider: AuthorizationProviderName,
     access_policy: str,
     path_policy_engine_executable: str,
-    content_features_file: str,
 ):
     reset_metrics()
     agentmanager.assert_no_start_scheduler = not auto_start_agent
@@ -834,11 +822,7 @@ async def server_config(
             access_policy=access_policy,
             path_opa_executable=path_policy_engine_executable,
         )
-        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", delete=True, delete_on_close=True) as fh:
-            fh.write(content_features_file)
-            fh.flush()
-            config.feature_file_config.set(fh.name)
-            yield config
+        yield config
 
     agentmanager.assert_no_start_scheduler = False
     agentmanager.no_start_scheduler = False
@@ -1067,9 +1051,10 @@ async def agent_factory(
                 await agent.start_working()
                 new_state = copy.deepcopy(dict(agent.scheduler._state.resource_state))
                 assert the_state == new_state
+
+        await asyncio.gather(*[agent.stop() for agent in agents])
     finally:
         DISABLE_STATE_CHECK = False
-        await asyncio.gather(*[agent.stop() for agent in agents])
 
 
 @pytest.fixture(scope="function")
@@ -2932,7 +2917,7 @@ async def mixed_resource_generator(
             raise Exception("resources_per_version cannot be less than 5")
         deploy_counter = 0
 
-        dummy_scheduler = scheduler.ResourceScheduler(uuid.UUID(environment), executor_manager=None, client=null_agent._client)
+        dummy_scheduler = scheduler.ResourceScheduler(uuid.UUID(environment), executor_manager=None, client=client)
 
         async def mock_run(self) -> None:
             """Mocks the call to TaskRunner._run."""

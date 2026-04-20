@@ -26,7 +26,6 @@ from inmanta.server.services import (
     dryrunservice,
     environment_metrics_service,
     environmentservice,
-    featureservice,
     fileservice,
     metricservice,
     notificationservice,
@@ -57,4 +56,3 @@ def setup(application: ApplicationContext) -> None:
     application.register_slice(userservice.UserService())
     application.register_slice(environment_metrics_service.EnvironmentMetricsService())
     application.register_slice(GraphQLSlice())
-    application.register_slice(featureservice.FeatureService())
