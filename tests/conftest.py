@@ -1140,13 +1140,20 @@ async def null_agent_multi(server_multi, environment_multi):
 
 
 @pytest.fixture(scope="function")
-async def agent_multi(server_multi, environment_multi):
+async def agent_multi(server_multi, environment_multi, request):
     """Construct an agent that can execute using the resource container"""
     server = server_multi
     environment = environment_multi
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
-    a = Agent(environment)
+    token: str | None = None
+    if "Auth" in request.node.callspec.id:
+        # Agents, started by the server, always get a token that is scoped to its
+        # own environment. We do the same here to mimic the same behavior for in-process
+        # agents used by the test suite.
+        token = protocol.encode_token(client_types=["agent"], environment=environment)
+
+    a = Agent(environment, token=token)
 
     executor = InProcessExecutorManager(
         environment,
