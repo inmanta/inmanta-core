@@ -12,10 +12,10 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import logging
 import base64
 import dataclasses
 import inspect
+import logging
 import re
 import typing
 import uuid
@@ -52,8 +52,6 @@ from strawberry_sqlalchemy_mapper.mapper import (
     SkipTypeSentinel,
     StrawberrySQLAlchemyLazy,
 )
-
-LOGGER = logging.getLogger(__name__)
 
 """
 The strawberry models in this file are mapped from the sqlalchemy models in inmanta.data.sqlalchemy.models.
@@ -871,7 +869,7 @@ async def get_connection(
     after: typing.Optional[str] = strawberry.UNSET,
     last: typing.Optional[int] = strawberry.UNSET,
     before: typing.Optional[str] = strawberry.UNSET,
-    count_stmt = None,
+    count_stmt: Select[typing.Any] | None = None,
 ) -> CustomListConnection[NodeType]:
     """
     Build the connection object. Here we do all the pagination and fetching of results (edges) to return to the user.
@@ -893,16 +891,12 @@ async def get_connection(
         else:
             per_page = DEFAULT_PER_PAGE
 
-        import time
         # Check if we requested total_count
         total_count: int | None = None
         if is_field_selected(info, "totalCount"):
             if count_stmt is None:
                 count_stmt = select(func.count()).select_from(stmt.subquery())
-            start = time.perf_counter()
             count_result = await session.execute(count_stmt)
-            LOGGER.error("Count query: %s", count_stmt)
-            LOGGER.error("Count execute took %s seconds", time.perf_counter() - start)
             total_count = count_result.scalar_one()
 
         # Get cursor and direction of results to fetch (forwards/backwards)
@@ -915,9 +909,7 @@ async def get_connection(
             page = unserialize_bookmark(f"<{decode_cursor(before)}")
 
         # Fetch the page using sqlakeyset
-        start = time.perf_counter()
         result = await select_page(session, stmt, per_page=per_page, page=page)
-        LOGGER.error("Page execute took %s seconds", time.perf_counter() - start)
         edges = []
         # We use the private methods for the mapper because their respective public attributes like `mapper.connection_types`
         # Are only filled when the private methods are called first. The private methods use the public attributes as cache so
@@ -1011,13 +1003,17 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
 
             # Only fetch resources in their latest version
             # Logic based on src/inmanta/data/dataview.py::ResourceView
-            stmt = select(models.Resource).join(
-                models.ResourcePersistentState,
-                and_(
-                    models.Resource.resource_id == models.ResourcePersistentState.resource_id,
-                    models.Resource.environment == models.ResourcePersistentState.environment,
-                ),
-            ).where(models.ResourcePersistentState.environment == filter.environment)
+            stmt = (
+                select(models.Resource)
+                .join(
+                    models.ResourcePersistentState,
+                    and_(
+                        models.Resource.resource_id == models.ResourcePersistentState.resource_id,
+                        models.Resource.environment == models.ResourcePersistentState.environment,
+                    ),
+                )
+                .where(models.ResourcePersistentState.environment == filter.environment)
+            )
 
             # CTE that fetches the latest scheduled version
             latest_scheduled_version_cte = (
@@ -1094,13 +1090,14 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
                     ),
                 )
             stmt = add_filter_and_sort(stmt, ResourceOrder.default_order(), filter, order_by)
-            LOGGER.error("graphql query: %s", stmt)
-            count_stmt: str
+            count_stmt: Select[typing.Any] | None
             if filter is not None and filter.purged is not strawberry.UNSET:
                 count_stmt = None
             else:
-                count_stmt = add_filter_and_sort(select(func.count()).select_from(models.ResourcePersistentState), {}, filter, strawberry.UNSET)
-            return await get_connection(stmt, info=info, model="Resource", first=first, after=after, last=last, before=before, count_stmt=count_stmt)
+                count_stmt = add_filter_and_sort(select(func.count()).select_from(models.ResourcePersistentState), {}, filter)
+            return await get_connection(
+                stmt, info=info, model="Resource", first=first, after=after, last=last, before=before, count_stmt=count_stmt
+            )
 
         @strawberry.field(description="Fetches a summary of the state of all resources in a specific environment")
         async def resource_summary(self, info: CustomInfo, environment: str) -> ComposedResourceSummary:

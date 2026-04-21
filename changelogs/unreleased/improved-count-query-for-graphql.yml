@@ -1,0 +1,6 @@
+change-type: patch
+description: Improved count query for graphql
+destination-branches:
+- master
+- iso9
+sections: {}
