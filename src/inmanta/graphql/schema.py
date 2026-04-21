@@ -485,13 +485,6 @@ class StrawberryFilter:
         """
         return stmt.filter_by(**self.get_filter_dict())
 
-    @property
-    def get_models_to_join(self) -> set[type[models.Base]]:
-        """
-        When filtering or sorting on values in a different table, it is necessary to manually do the join.
-        This function returns the tables to join if necessary.
-        """
-        return set()
 
 
 @strawberry.input
@@ -723,22 +716,6 @@ class ResourceFilter(StrawberryFilter):
     def rps_model(self) -> type[models.Base]:
         return models.ResourcePersistentState
 
-    @property
-    def get_models_to_join(self) -> set[type[models.Base]]:
-        rps_join = [
-            "resource_type",
-            "resource_id_value",
-            "agent",
-            "blocked",
-            "compliance",
-            "last_handler_run",
-            "is_deploying",
-            "is_orphan",
-        ]
-        for attr in rps_join:
-            if getattr(self, attr) is not strawberry.UNSET:
-                return {self.rps_model}
-        return set()
 
     def apply_filters(self, stmt: Select[typing.Any]) -> Select[typing.Any]:
         # Every filter we apply to the resource is custom, so we don't use `get_filter_dict`
@@ -768,7 +745,6 @@ class ResourceOrder(StrawberryOrder):
     @classmethod
     def default_order(cls) -> dict[str, UnaryExpression[typing.Any]]:
         return {
-            # TODO
             "resource_id": asc(models.ResourcePersistentState.resource_id),
         }
 
