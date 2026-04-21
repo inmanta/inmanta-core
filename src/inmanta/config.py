@@ -68,7 +68,7 @@ def _get_from_env(section: str, name: str) -> Optional[str]:
 class LenientConfigParser(ConfigParser):
     def optionxform(self, name: str) -> str:
         """
-        This method transforms option names on every read, get or set operation.
+        This method transforms option names on every get or set operation.
         """
         name = normalize_name(name)
         return super().optionxform(name)
