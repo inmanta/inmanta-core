@@ -54,18 +54,20 @@ def content_features_file() -> str:
     return yaml.safe_dump(content_feature_file)
 
 
-async def test_is_bool_feature_enabled(server, client, agent):
+async def test_is_bool_feature_enabled(server_multi, agent_multi):
     """
     Verify the behavior of the is_bool_feature_enabled endpoint.
     """
-    server_slice = server.get_slice(SLICE_SERVER)
+    server_slice = server_multi.get_slice(SLICE_SERVER)
     test_slice = TestSlice()
     # Load features from TestSlice into the FeatureManager
     server_slice.feature_manager.add_slice(test_slice)
     server_slice.feature_manager._load_feature_config()
-    assert await agent._client.is_bool_feature_enabled(slice_name=NAME_TEST_SLICE, feature_name="bool_feature1").value()
-    assert not await agent._client.is_bool_feature_enabled(slice_name=NAME_TEST_SLICE, feature_name="bool_feature2").value()
+    assert await agent_multi._client.is_bool_feature_enabled(slice_name=NAME_TEST_SLICE, feature_name="bool_feature1").value()
+    assert not await agent_multi._client.is_bool_feature_enabled(
+        slice_name=NAME_TEST_SLICE, feature_name="bool_feature2"
+    ).value()
 
-    result = await agent._client.is_bool_feature_enabled(slice_name=NAME_TEST_SLICE, feature_name="str_list_feature")
+    result = await agent_multi._client.is_bool_feature_enabled(slice_name=NAME_TEST_SLICE, feature_name="str_list_feature")
     assert result.code == 400
     assert "Feature test_slice:str_list_feature is not a BoolFeature" in result.result["message"]

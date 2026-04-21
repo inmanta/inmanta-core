@@ -1938,6 +1938,7 @@ def get_compliance_report(tid: uuid.UUID, resource_ids: Sequence[ResourceIdStr])
     client_types=[ClientType.agent],
     agent_server=True,
     api_version=2,
+    allow_env_scoped_tokens=True,
 )
 def is_bool_feature_enabled(slice_name: str, feature_name: str) -> bool:
     """
