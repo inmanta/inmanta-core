@@ -537,7 +537,7 @@ async def check_database_before_server_start() -> None:
             else:
                 LOGGER.info(
                     "Database replication status (Only the healthy standby servers directly connected to the "
-                    "primary will appear below: downstream replicas or nodes that are down won't appear."
+                    "primary will appear below: downstream replicas or nodes that are down won't appear.)"
                 )
                 for row in result:
                     LOGGER.info(
