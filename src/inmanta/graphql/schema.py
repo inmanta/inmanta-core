@@ -842,34 +842,6 @@ def add_filter_and_sort(
     return stmt
 
 
-def do_required_resource_joins(
-    stmt: Select[typing.Any],
-    filter: typing.Optional[StrawberryFilter] = strawberry.UNSET,
-    order_by: typing.Optional[Sequence[StrawberryOrder]] = strawberry.UNSET,
-) -> Select[typing.Any]:
-    """
-    Checks the given filter and order_by to see if we need to join any external tables.
-    Only working for the Resource table
-    """
-    models_to_join: set[type[models.Base]] = set()
-    if order_by is not None and order_by is not strawberry.UNSET:
-        # TODO: this should always include self table?
-        models_to_join = models_to_join | {
-            o.key_to_model[to_snake_case(o.key)] for o in order_by if o.key_to_model[to_snake_case(o.key)] != o.model
-        }
-    if filter is not None and filter is not strawberry.UNSET:
-        models_to_join = models_to_join | filter.get_models_to_join
-    if models.ResourcePersistentState in models_to_join:
-        stmt = stmt.join(
-            models.ResourcePersistentState,
-            and_(
-                models.Resource.resource_id == models.ResourcePersistentState.resource_id,
-                models.Resource.environment == models.ResourcePersistentState.environment,
-            ),
-        )
-    return stmt
-
-
 def encode_cursor(cursor: str) -> str:
     """
     :param cursor: The cursor received from sqlakeyset without direction information ('<'/'>').
@@ -1037,37 +1009,24 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
             else:
                 include_orphans = True
 
-            #stmt = select(models.Resource).select_from(models.Resource).where(models.Resource.environment == filter.environment)
-
             # Only fetch resources in their latest version
             # Logic based on src/inmanta/data/dataview.py::ResourceView
+            stmt = select(models.Resource).join(
+                models.ResourcePersistentState,
+                and_(
+                    models.Resource.resource_id == models.ResourcePersistentState.resource_id,
+                    models.Resource.environment == models.ResourcePersistentState.environment,
+                ),
+            ).where(models.ResourcePersistentState.environment == filter.environment)
+
+            # CTE that fetches the latest scheduled version
             latest_scheduled_version_cte = (
                 select(models.Scheduler.last_processed_model_version.label("version"))
                 .where(models.Scheduler.environment == filter.environment)
                 .cte()
             )
 
-            resource_subquery = aliased(models.Resource, select(models.Resource).join(
-                models.t_resource_set_configuration_model,
-                and_(
-                    models.t_resource_set_configuration_model.c.environment == models.Resource.environment,
-                    models.t_resource_set_configuration_model.c.resource_set == models.Resource.resource_set,
-                    models.t_resource_set_configuration_model.c.model
-                    == select(latest_scheduled_version_cte.c.version).scalar_subquery(),
-                ),
-            ).subquery("resource"))
-
-            stmt = select(resource_subquery).select_from(models.ResourcePersistentState).outerjoin(
-                resource_subquery,
-                and_(
-                    models.Resource.resource_id == models.ResourcePersistentState.resource_id,
-                    models.Resource.environment == models.ResourcePersistentState.environment,
-                ),
-            ).where(models.ResourcePersistentState.environment == filter.environment)
-            # CTE that fetches the latest scheduled version
-
-            #if include_orphans:
-            if False:
+            if include_orphans:
                 # CTE that checks if a resource is orphaned or not and returns the appropriate version
                 # - If it is not orphaned, return the resource in the latest released version
                 # - If it is orphaned, return the resource in the latest version that it was present in.
@@ -1125,22 +1084,20 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
                     ),
                 )
             else:
-                pass
-            #    stmt = stmt.join(
-            #        models.t_resource_set_configuration_model,
-            #        and_(
-            #            models.t_resource_set_configuration_model.c.environment == models.Resource.environment,
-            #            models.t_resource_set_configuration_model.c.resource_set == models.Resource.resource_set,
-            #            models.t_resource_set_configuration_model.c.model
-            #            == select(latest_scheduled_version_cte.c.version).scalar_subquery(),
-            #        ),
-            #    )
-            #stmt = do_required_resource_joins(stmt, filter, order_by)
+                stmt = stmt.join(
+                    models.t_resource_set_configuration_model,
+                    and_(
+                        models.t_resource_set_configuration_model.c.environment == models.Resource.environment,
+                        models.t_resource_set_configuration_model.c.resource_set == models.Resource.resource_set,
+                        models.t_resource_set_configuration_model.c.model
+                        == select(latest_scheduled_version_cte.c.version).scalar_subquery(),
+                    ),
+                )
             stmt = add_filter_and_sort(stmt, ResourceOrder.default_order(), filter, order_by)
             LOGGER.error("graphql query: %s", stmt)
             count_stmt: str
             if filter is not None and filter.purged is not strawberry.UNSET:
-                count_stmt = stmt
+                count_stmt = None
             else:
                 count_stmt = add_filter_and_sort(select(func.count()).select_from(models.ResourcePersistentState), {}, filter, strawberry.UNSET)
             return await get_connection(stmt, info=info, model="Resource", first=first, after=after, last=last, before=before, count_stmt=count_stmt)
