@@ -15,7 +15,6 @@ Contact: code@inmanta.com
 import base64
 import dataclasses
 import inspect
-import logging
 import re
 import typing
 import uuid
@@ -35,7 +34,7 @@ from sqlakeyset import Marker, unserialize_bookmark
 from sqlakeyset.asyncio import select_page
 from sqlalchemy import Boolean, Select, UnaryExpression, and_, asc, case, desc, func, not_, select
 from sqlalchemy.ext.hybrid import hybrid_property
-from sqlalchemy.orm import Mapper, aliased
+from sqlalchemy.orm import Mapper
 from strawberry import relay, scalars
 from strawberry.relay import NodeType
 from strawberry.scalars import JSON
@@ -486,7 +485,6 @@ class StrawberryFilter:
         return stmt.filter_by(**self.get_filter_dict())
 
 
-
 @strawberry.input
 class StrawberryOrder:
     """
@@ -715,7 +713,6 @@ class ResourceFilter(StrawberryFilter):
     @property
     def rps_model(self) -> type[models.Base]:
         return models.ResourcePersistentState
-
 
     def apply_filters(self, stmt: Select[typing.Any]) -> Select[typing.Any]:
         # Every filter we apply to the resource is custom, so we don't use `get_filter_dict`
