@@ -41,8 +41,9 @@ from inmanta.protocol import Client
 from inmanta.resources import Id
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_SERVER
 from inmanta.server import config as opt
-from inmanta.server.bootloader import InmantaBootloader, PostgreSQLVersion
+from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.protocol import ServerStartFailure
+from inmanta.server.services.databaseservice import PostgreSQLVersion
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 from utils import insert_with_link_to_configuration_model, log_contains, log_doesnt_contain, retry_limited
 
@@ -603,7 +604,7 @@ async def test_bootloader_connect_running_db(
     def _check_database_connectivity_logs():
         log_contains(
             caplog,
-            "inmanta.server.bootloader",
+            "inmanta.server.services.databaseservice",
             logging.INFO,
             "Checking database before server start...",
         )
@@ -613,7 +614,7 @@ async def test_bootloader_connect_running_db(
             # hence "Successfully connected to the database." log message will not appear.
             log_doesnt_contain(
                 caplog,
-                "inmanta.server.bootloader",
+                "inmanta.server.services.databaseservice",
                 logging.INFO,
                 "Successfully reached database '%s' at %s:%s."
                 % (
@@ -624,14 +625,14 @@ async def test_bootloader_connect_running_db(
             )
             log_contains(
                 caplog,
-                "inmanta.server.bootloader",
+                "inmanta.server.services.databaseservice",
                 logging.DEBUG,
                 "Not waiting until the database server is up because database.wait_time option is set to 0.",
             )
         else:
             log_contains(
                 caplog,
-                "inmanta.server.bootloader",
+                "inmanta.server.services.databaseservice",
                 logging.INFO,
                 "Successfully reached database '%s' at %s:%s."
                 % (
@@ -642,7 +643,7 @@ async def test_bootloader_connect_running_db(
             )
         log_contains(
             caplog,
-            "inmanta.server.bootloader",
+            "inmanta.server.services.databaseservice",
             logging.INFO,
             "Database replication is not active: couldn't find any standby server directly connected to the primary. "
             "If you intend to use a high availability setup, please check the status and the configuration "
@@ -671,12 +672,17 @@ async def test_bootloader_connect_running_db(
             _check_database_connectivity_logs()
             log_contains(
                 caplog,
-                "inmanta.server.bootloader",
+                "inmanta.server.services.databaseservice",
                 logging.INFO,
                 f"Database is running PostgreSQL server version {postgresql_version_from_db}.",
             )
 
-        log_contains(caplog, "inmanta.server.bootloader", logging.INFO, "Successfully checked database before server start.")
+        log_contains(
+            caplog,
+            "inmanta.server.services.databaseservice",
+            logging.INFO,
+            "Successfully checked database before server start.",
+        )
         log_contains(caplog, "inmanta.server.server", logging.INFO, "Starting server endpoint")
 
     finally:
@@ -728,7 +734,7 @@ async def test_bootloader_start_no_compatibility_file(tmp_path, server_config, p
         await ibl.start()
         log_contains(
             caplog,
-            "inmanta.server.bootloader",
+            "inmanta.server.services.databaseservice",
             logging.DEBUG,
             "Not waiting until the database server is up because database.wait_time option is set to 0.",
         )

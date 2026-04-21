@@ -16,7 +16,11 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import asyncio
+import json
 import logging
+import os.path
+from functools import total_ordering
 from typing import Mapping, Optional
 
 import asyncpg
@@ -30,8 +34,83 @@ from inmanta.types import ArgumentTypes
 from inmanta.util import IntervalSchedule, Scheduler
 from inmanta.vendor.pyformance import gauge, global_registry
 from inmanta.vendor.pyformance.meters.gauge import AnyGauge, CallbackGauge
+from packaging import version
 
 LOGGER = logging.getLogger(__name__)
+
+
+@total_ordering
+class PostgreSQLVersion:
+    def __init__(self, version: int):
+        """
+        :param version: This method expects the machine-readable version as defined in
+            https://www.postgresql.org/docs/current/libpq-status.html#LIBPQ-PQSERVERVERSION.
+            e.g. "v17.6" should be passed as 170006
+        """
+
+        self.version = version
+
+    @classmethod
+    async def from_database(cls, conn: asyncpg.Connection) -> "PostgreSQLVersion":
+        """
+        Helper method to retrieve the postgreSQL version used in the database. This method queries
+        the database by using the conn parameter. The caller is responsible for closing this
+        connection.
+        """
+        result = await conn.fetch("SHOW server_version_num")
+        pg_server_version_machine_readable = int(result[0]["server_version_num"])
+
+        return PostgreSQLVersion(version=pg_server_version_machine_readable)
+
+    @classmethod
+    def from_compatibility_file(cls) -> "PostgreSQLVersion | None":
+        """
+        Helper method to retrieve the minimal required postgreSQL version configured under the
+        system_requirements->postgres_version section of the compatibility file. Returns None
+        if the server.compatibility_file option is set to None or to empty string.
+
+        :raises ServerStartFailure: If the compatibility file doesn't exist.
+        :raises ServerStartFailure: If the 'system_requirements->postgres_version' section is not present
+            in the compatibility file.
+        """
+        compatibility_data = {}
+        compatibility_file: str | None = opt.server_compatibility_file.get()
+        if not compatibility_file:
+            # Bypass the check if compatibility_file is None or ""
+            return None
+
+        if not os.path.exists(compatibility_file):
+            raise protocol.ServerStartFailure("The configured compatibility file doesn't exist: %s" % compatibility_file)
+
+        with open(compatibility_file) as fh:
+            compatibility_data = json.load(fh)
+
+        required_version: int | None = compatibility_data.get("system_requirements", {}).get("postgres_version")
+        if required_version is None:
+            raise protocol.ServerStartFailure(
+                "Invalid compatibility file schema. Missing 'system_requirements.postgres_version' section in file: %s"
+                % compatibility_file
+            )
+        human_readable_version = version.Version(str(required_version))
+        machine_readable_version = human_readable_version.major * 10_000 + human_readable_version.minor
+
+        return PostgreSQLVersion(version=machine_readable_version)
+
+    def __lt__(self, other: "PostgreSQLVersion") -> bool:
+        return self.version < other.version
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, PostgreSQLVersion):
+            return self.version == other.version
+        return False
+
+    def __str__(self) -> str:
+        """
+        Returns the human readable version of this PostgreSQLVersion.
+        """
+        major = self.version // 10_000
+        minor = self.version - major * 10_000
+        return f"{major}.{minor}"
 
 
 class DatabaseMonitor:
@@ -300,3 +379,190 @@ async def initialize_database_connection_pool(
 
     LOGGER.info("Connected to PostgreSQL database %s on %s:%d", database_name, database_host, database_port)
     return pool
+
+
+async def check_database_before_server_start() -> None:
+    """
+    Perform database connectivity and version compatibility check. These checks can be disabled by
+    respectively setting the database.wait_time option to 0 and the server.compatibility_file option
+    to None or to an empty string.
+
+    These checks are performed before starting any slice e.g. to bail before any database migration is attempted
+    in case an incompatible PostgreSQL version is detected.
+    """
+
+    async def get_db_connection() -> asyncpg.Connection:
+        # Retrieve database connection settings from the configuration
+        db_settings = {
+            "host": opt.db_host.get(),
+            "port": opt.db_port.get(),
+            "user": opt.db_username.get(),
+            "password": opt.db_password.get(),
+            "database": opt.db_name.get(),
+        }
+
+        # Attempt to create a database connection
+        return await asyncpg.connect(**db_settings, timeout=5)  # raises TimeoutError after 5 seconds
+
+    async def wait_for_db(db_wait_time: int) -> asyncpg.Connection:
+        """Wait for the database to be up by attempting to connect at intervals. Once a connection
+        is established, it is returned. The caller is responsible for closing it.
+
+        :param db_wait_time: Maximum time to wait for the database to be up, in seconds.
+        """
+
+        start_time = asyncio.get_event_loop().time()
+
+        while True:
+            try:
+                LOGGER.info(
+                    "Trying to establish a connection to database '%s' at %s:%s.",
+                    opt.db_name.get(),
+                    opt.db_host.get(),
+                    opt.db_port.get(),
+                )
+                # Attempt to create a database connection
+                conn = await get_db_connection()
+                LOGGER.info(
+                    "Successfully reached database '%s' at %s:%s.",
+                    opt.db_name.get(),
+                    opt.db_host.get(),
+                    opt.db_port.get(),
+                )
+                return conn
+            except asyncio.TimeoutError:
+                LOGGER.info("Waiting for database to be up: Connection attempt timed out.")
+            except Exception:
+                LOGGER.info("Waiting for database to be up.", exc_info=True)
+            # Check if the maximum wait time has been exceeded
+            if 0 < db_wait_time < asyncio.get_event_loop().time() - start_time:
+                LOGGER.error("Timed out waiting for the database to be up.")
+                raise Exception("Database connection timeout after %d seconds." % db_wait_time)
+            # Sleep for a second before retrying
+            await asyncio.sleep(1)
+
+    async def _database_connectivity_check() -> asyncpg.Connection:
+        """
+        This method attempts to connect to the database and returns the connection object.
+
+        The database.wait_time option controls the retry behaviour for this method:
+            database.wait_time < 0 : keep retrying forever until a connection is established
+            database.wait_time = 0 : try only once to establish a connection
+            database.wait_time > 0 : keep retrying until this wait_time timeout is reached or a connection is established
+
+        :raises Exception: If the connectivity cannot be established within the configured database.wait_time.
+        """
+        db_wait_time: int = opt.db_wait_time.get()
+
+        if db_wait_time != 0:
+            # Wait for the database to be up before starting the server
+            LOGGER.info("Waiting until database server is up.")
+            conn = await wait_for_db(db_wait_time=db_wait_time)
+        else:
+            LOGGER.debug("Not waiting until the database server is up because database.wait_time option is set to 0.")
+            conn = await get_db_connection()
+        return conn
+
+    async def _database_version_compatibility_check(conn: asyncpg.Connection) -> None:
+        """
+        This method looks for the required PostgreSQL version defined in the compatibility file (Whose path is configured by
+        the server.compatibility_file option) and checks that the PostgreSQL version of the database meets this requirement.
+
+        The check is bypassed if the server_compatibility_file option is set to None or to an empty string.
+
+        :raises ServerStartFailure: If the compatibility file doesn't exist or its schema is missing the
+            `system_requirements->postgres_version` section.
+        :raises ServerStartFailure: If the database version is lower than the required version defined in
+            the compatibility file.
+        """
+        required_postgresql_version = PostgreSQLVersion.from_compatibility_file()
+        database_postgresql_version = await PostgreSQLVersion.from_database(conn)
+
+        if required_postgresql_version is None:
+            LOGGER.debug(
+                "Bypassing minimal required postgres version check because the "
+                "'server.compatibility_file' option is not set."
+            )
+        else:
+
+            if database_postgresql_version < required_postgresql_version:
+                raise protocol.ServerStartFailure(
+                    f"The database at {opt.db_host.get()} is using PostgreSQL version "
+                    f"{database_postgresql_version}. This version is not supported by this "
+                    "version of the Inmanta orchestrator. Please make sure to update to PostgreSQL "
+                    f"{required_postgresql_version}."
+                )
+        LOGGER.info("Database is running PostgreSQL server version %s.", database_postgresql_version)
+
+    async def _database_log_replication_status(conn: asyncpg.Connection) -> None:
+        """
+        Fetch and log the replication status. This method relies on the pg_stat_replication that holds information
+        about the standby servers, i.e. one row per replica. More info in the postgresql docs:
+        https://www.postgresql.org/docs/16/monitoring-stats.html#MONITORING-PG-STAT-REPLICATION-VIEW
+        """
+        query = """
+        SELECT
+            pid,                    -- pid of the WAL (Write Ahead Log) sender process
+            client_addr,            -- IP of the replica connected to this sender
+            client_port,            -- Port used by the replica to communicate with this sender
+            state,                  -- WAL sender status
+            sync_state,             -- State of the replica
+            sent_lsn,               -- Last WAL LSN (Log Sequence Number) sent on this connection
+            write_lsn,              -- Last WAL LSN written to disk on the replica
+            flush_lsn,              -- Last WAL LSN flushed to disk on the replica
+            replay_lsn,             -- Last WAL LSN replayed into the database on the replica
+            pg_wal_lsn_diff(sent_lsn, replay_lsn) AS replay_lag_bytes
+                                    -- This diff represents how far behind this replica lags.
+        FROM pg_stat_replication;
+        """
+        result = await conn.fetch(query)
+        if len(result):
+            LOGGER.info(
+                "Database replication status (Only the healthy standby servers directly connected to the "
+                "primary will appear below: downstream replicas or nodes that are down won't appear."
+            )
+            for row in result:
+                if row["client_port"] is None:
+                    LOGGER.info(
+                        "Cannot check database replication status: insufficient privileges for user %s. Please"
+                        "make sure the configured user has the `pg_monitor` role.",
+                        opt.db_username.get(),
+                    )
+                    break
+
+                LOGGER.info(
+                    "Replica (ip=%s port =%s sync_state=%s) - "
+                    "Sender process (pid=%s, state=%s) - "
+                    "Log Sequence Numbers (sent=%s write=%s flush=%s replay=%s diff_send_replay=%s)",
+                    row["client_addr"],
+                    row["client_port"],
+                    row["sync_state"],
+                    row["pid"],
+                    row["state"],
+                    row["sent_lsn"],
+                    row["write_lsn"],
+                    row["flush_lsn"],
+                    row["replay_lsn"],
+                    row["replay_lag_bytes"],
+                )
+        else:
+            LOGGER.info(
+                "Database replication is not active: couldn't find any standby server directly connected to the primary. "
+                "If you intend to use a high availability setup, please check the status and the configuration "
+                "of the cluster before restarting the Inmanta server (More info in the 'HA setup' section of the "
+                "documentation)."
+            )
+
+    LOGGER.info("Checking database before server start...")
+
+    conn: asyncpg.Connection | None = None
+    try:
+        conn = await _database_connectivity_check()
+        # assert conn is not None
+        await _database_version_compatibility_check(conn)
+        await _database_log_replication_status(conn)
+    finally:
+        if conn is not None:
+            await conn.close(timeout=5)  # close the connection
+
+    LOGGER.info("Successfully checked database before server start.")
