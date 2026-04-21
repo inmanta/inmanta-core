@@ -1,5 +1,5 @@
 change-type: patch
-description: Improved count query for graphql
+description: Improved count query for graphql and filter on rps table when possible
 destination-branches:
 - master
 - iso9
