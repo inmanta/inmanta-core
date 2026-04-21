@@ -172,12 +172,12 @@ audience=https://localhost:8888/
     jwt_default_as_dict = {
         "algorithm": "HS256",
         "sign": True,
-        "client_types": ["agent", "compiler"],
+        "client-types": ["agent", "compiler"],
         "key": "eciwliGyqECVmXtIkNpfVrtBLutZiITZKSKYhogeHMM",
         "expire": 0,
         "issuer": "https://localhost:8888/",
         "audience": "https://localhost:8888/",
-        "jwt_username_claim": "sub",
+        "jwt-username-claim": "sub",
     }
     assert cfg.get_as_dict() == jwt_default_as_dict
 
@@ -194,13 +194,13 @@ audience=https://localhost:8888/
     jwt_my_config_as_dict = {
         "algorithm": "RS256",
         "sign": False,
-        "client_types": ["api"],
+        "client-types": ["api"],
         "issuer": f"https://localhost:{port}/auth/realms/inmanta",
         "audience": "sodev",
-        "jwks_uri": (f"http://localhost:{port}/auth/realms/inmanta/protocol/openid-connect/certs"),
-        "validate_cert": False,
-        "jwt_username_claim": "my-claim",
-        "jwks_request_timeout": 40.5,
+        "jwks-uri": (f"http://localhost:{port}/auth/realms/inmanta/protocol/openid-connect/certs"),
+        "validate-cert": False,
+        "jwt-username-claim": "my-claim",
+        "jwks-request-timeout": 40.5,
     }
     assert cfg.get_as_dict() == jwt_my_config_as_dict
 

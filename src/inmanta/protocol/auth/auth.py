@@ -354,19 +354,19 @@ class AuthJWTConfig:
         result = {
             "algorithm": self.algo,
             "sign": self.sign,
-            "client_types": list(self.client_types),
+            "client-types": list(self.client_types),
             "issuer": self.issuer,
             "audience": self.audience,
-            "jwt_username_claim": self.jwt_username_claim,
+            "jwt-username-claim": self.jwt_username_claim,
         }
         if self.sign:
             result["expire"] = self.expire
         if self.algo.lower() == "hs256":
             result["key"] = self.base64_encoded_key
         else:
-            result["jwks_uri"] = self.jwks_uri
-            result["validate_cert"] = self.validate_cert
-            result["jwks_request_timeout"] = self.jwks_timeout
+            result["jwks-uri"] = self.jwks_uri
+            result["validate-cert"] = self.validate_cert
+            result["jwks-request-timeout"] = self.jwks_timeout
         return result
 
     def validate_generic(self) -> None:
