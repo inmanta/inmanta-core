@@ -523,39 +523,38 @@ async def check_database_before_server_start() -> None:
         """
         result = await conn.fetch(query)
         if len(result):
-            LOGGER.info(
-                "Database replication status (Only the healthy standby servers directly connected to the "
-                "primary will appear below: downstream replicas or nodes that are down won't appear."
-            )
-            for row in result:
-                if row["client_port"] is None:
-                    # If a user that doesn't hold the 'pg_monitor' role tries to query the pg_stat_replication table, no error
-                    # is raised, but instead a 'censored' view is returned with most values filled with NULL.
-                    # If the returned value for the port is None, we assume that the user has insufficient privileges, since it
-                    # shouldn't be None (As per the docs: "TCP port number that the client is using for communication with this
-                    # WAL sender, or -1 if a Unix socket is used").
-                    LOGGER.info(
-                        "Cannot check database replication status: insufficient privileges for user %s. Please"
-                        "make sure the configured user has the `pg_monitor` role.",
-                        opt.db_username.get(),
-                    )
-                    break
-
+            if result[0]["client_port"] is None:
+                # If a user that doesn't hold the 'pg_monitor' role tries to query the pg_stat_replication table, no error
+                # is raised, but instead a 'censored' view is returned with most values filled with NULL.
+                # If the returned value for the port is None, we assume that the user has insufficient privileges, since it
+                # shouldn't be None (As per the docs: "TCP port number that the client is using for communication with this
+                # WAL sender, or -1 if a Unix socket is used").
                 LOGGER.info(
-                    "Replica (ip=%s port =%s sync_state=%s) - "
-                    "Sender process (pid=%s, state=%s) - "
-                    "Log Sequence Numbers (sent=%s write=%s flush=%s replay=%s diff_send_replay=%s)",
-                    row["client_addr"],
-                    row["client_port"],
-                    row["sync_state"],
-                    row["pid"],
-                    row["state"],
-                    row["sent_lsn"],
-                    row["write_lsn"],
-                    row["flush_lsn"],
-                    row["replay_lsn"],
-                    row["replay_lag_bytes"],
+                    "Cannot check database replication status: insufficient privileges for user %s. Please "
+                    "make sure the configured user has the `pg_monitor` role.",
+                    opt.db_username.get(),
                 )
+            else:
+                LOGGER.info(
+                    "Database replication status (Only the healthy standby servers directly connected to the "
+                    "primary will appear below: downstream replicas or nodes that are down won't appear."
+                )
+                for row in result:
+                    LOGGER.info(
+                        "Replica (ip=%s port =%s sync_state=%s) - "
+                        "Sender process (pid=%s, state=%s) - "
+                        "Log Sequence Numbers (sent=%s write=%s flush=%s replay=%s diff_send_replay=%s)",
+                        row["client_addr"],
+                        row["client_port"],
+                        row["sync_state"],
+                        row["pid"],
+                        row["state"],
+                        row["sent_lsn"],
+                        row["write_lsn"],
+                        row["flush_lsn"],
+                        row["replay_lsn"],
+                        row["replay_lag_bytes"],
+                    )
         else:
             LOGGER.info(
                 "Database replication is not active: couldn't find any standby server directly connected to the primary. "
