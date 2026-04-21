@@ -383,9 +383,12 @@ async def initialize_database_connection_pool(
 
 async def check_database_before_server_start() -> None:
     """
-    Perform database connectivity and version compatibility check. These checks can be disabled by
-    respectively setting the database.wait_time option to 0 and the server.compatibility_file option
-    to None or to an empty string.
+    Ensure database connectivity before starting the server and log information about the DB server
+    e.g. the PostgreSQL version of the db server and the status of the replica servers.
+
+    This method will check that the PostgreSQL version of the db server meets the required version if such a minimal required
+    postgres version is configured under system_requirements->postgres_version in the compatibility file
+    (server.compatibility_file option).
 
     These checks are performed before starting any slice e.g. to bail before any database migration is attempted
     in case an incompatible PostgreSQL version is detected.
@@ -444,6 +447,7 @@ async def check_database_before_server_start() -> None:
     async def _database_connectivity_check() -> asyncpg.Connection:
         """
         This method attempts to connect to the database and returns the connection object.
+        The caller is reponsible for closing the connection.
 
         The database.wait_time option controls the retry behaviour for this method:
             database.wait_time < 0 : keep retrying forever until a connection is established
@@ -470,6 +474,7 @@ async def check_database_before_server_start() -> None:
 
         The check is bypassed if the server_compatibility_file option is set to None or to an empty string.
 
+        :param conn: the connection to use to query the db
         :raises ServerStartFailure: If the compatibility file doesn't exist or its schema is missing the
             `system_requirements->postgres_version` section.
         :raises ServerStartFailure: If the database version is lower than the required version defined in
@@ -484,7 +489,6 @@ async def check_database_before_server_start() -> None:
                 "'server.compatibility_file' option is not set."
             )
         else:
-
             if database_postgresql_version < required_postgresql_version:
                 raise protocol.ServerStartFailure(
                     f"The database at {opt.db_host.get()} is using PostgreSQL version "
@@ -499,6 +503,8 @@ async def check_database_before_server_start() -> None:
         Fetch and log the replication status. This method relies on the pg_stat_replication that holds information
         about the standby servers, i.e. one row per replica. More info in the postgresql docs:
         https://www.postgresql.org/docs/16/monitoring-stats.html#MONITORING-PG-STAT-REPLICATION-VIEW
+
+        :param conn: the connection to use to query the db
         """
         query = """
         SELECT
@@ -523,6 +529,11 @@ async def check_database_before_server_start() -> None:
             )
             for row in result:
                 if row["client_port"] is None:
+                    # If a user that doesn't hold the 'pg_monitor' role tries to query the pg_stat_replication table, no error
+                    # is raised, but instead a 'censored' view is returned with most values filled with NULL.
+                    # If the returned value for the port is None, we assume that the user has insufficient privileges, since it
+                    # shouldn't be None (As per the docs: "TCP port number that the client is using for communication with this
+                    # WAL sender, or -1 if a Unix socket is used").
                     LOGGER.info(
                         "Cannot check database replication status: insufficient privileges for user %s. Please"
                         "make sure the configured user has the `pg_monitor` role.",
@@ -558,7 +569,6 @@ async def check_database_before_server_start() -> None:
     conn: asyncpg.Connection | None = None
     try:
         conn = await _database_connectivity_check()
-        # assert conn is not None
         await _database_version_compatibility_check(conn)
         await _database_log_replication_status(conn)
     finally:
