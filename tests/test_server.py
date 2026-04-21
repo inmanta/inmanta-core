@@ -640,7 +640,15 @@ async def test_bootloader_connect_running_db(
                     config.Config.get("database", "port"),
                 ),
             )
-        log_contains(caplog, "inmanta.server.bootloader", logging.INFO, "Database replication is disabled.")
+        log_contains(
+            caplog,
+            "inmanta.server.bootloader",
+            logging.INFO,
+            "Database replication is not active: couldn't find any standby server directly connected to the primary. "
+            "If you intend to use a high availability setup, please check the status and the configuration "
+            "of the cluster before restarting the Inmanta server (More info in the 'HA setup' section of the "
+            "documentation).",
+        )
 
     try:
         if minimal_pg_version == sys.maxsize:

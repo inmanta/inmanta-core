@@ -213,7 +213,10 @@ class InmantaBootloader:
         """
         result = await conn.fetch(query)
         if len(result):
-            LOGGER.info("Database replication status of directly connected standby servers:")
+            LOGGER.info(
+                "Database replication status (Only the healthy standby servers directly connected to the "
+                "primary will appear below: downstream replicas or nodes that are down won't appear."
+            )
             for row in result:
                 if row["client_port"] is None:
                     LOGGER.info(
@@ -239,7 +242,12 @@ class InmantaBootloader:
                     row["replay_lag_bytes"],
                 )
         else:
-            LOGGER.info("Database replication is disabled.")
+            LOGGER.info(
+                "Database replication is not active: couldn't find any standby server directly connected to the primary. "
+                "If you intend to use a high availability setup, please check the status and the configuration "
+                "of the cluster before restarting the Inmanta server (More info in the 'HA setup' section of the "
+                "documentation)."
+            )
 
     def start_loggers_for_extensions(self, on_config: InmantaLoggerConfig | None = None) -> FullLoggingConfig:
         ctx = self.load_slices()
