@@ -598,7 +598,7 @@ async def test_bootloader_connect_running_db(
     ibl: InmantaBootloader = InmantaBootloader(configure_logging=True)
 
     caplog.clear()
-    caplog.set_level(logging.INFO)
+    caplog.set_level(logging.DEBUG)
 
     def _check_database_connectivity_logs():
         log_contains(
@@ -625,8 +625,8 @@ async def test_bootloader_connect_running_db(
             log_contains(
                 caplog,
                 "inmanta.server.bootloader",
-                logging.INFO,
-                "Bypassing database connectivity check because database.wait_time option is set to 0.",
+                logging.DEBUG,
+                "Not waiting until the database server is up because database.wait_time option is set to 0.",
             )
         else:
             log_contains(
@@ -640,7 +640,6 @@ async def test_bootloader_connect_running_db(
                     config.Config.get("database", "port"),
                 ),
             )
-        log_contains(caplog, "inmanta.server.bootloader", logging.INFO, "Checking database replication status...")
         log_contains(caplog, "inmanta.server.bootloader", logging.INFO, "Database replication is disabled.")
 
     try:
@@ -666,7 +665,7 @@ async def test_bootloader_connect_running_db(
                 caplog,
                 "inmanta.server.bootloader",
                 logging.INFO,
-                f"Database version is compatible (PostgreSQL server version {postgresql_version_from_db}).",
+                f"Database is running PostgreSQL server version {postgresql_version_from_db}.",
             )
 
         log_contains(caplog, "inmanta.server.bootloader", logging.INFO, "Successfully checked database before server start.")
@@ -715,15 +714,15 @@ async def test_bootloader_start_no_compatibility_file(tmp_path, server_config, p
 
     ibl: InmantaBootloader = InmantaBootloader(configure_logging=True)
 
-    caplog.set_level(logging.INFO)
+    caplog.set_level(logging.DEBUG)
 
     try:
         await ibl.start()
         log_contains(
             caplog,
             "inmanta.server.bootloader",
-            logging.INFO,
-            "Bypassing minimal required postgres version check because the 'server.compatibility_file' option is not set.",
+            logging.DEBUG,
+            "Not waiting until the database server is up because database.wait_time option is set to 0.",
         )
 
         log_contains(caplog, "inmanta.server.server", logging.INFO, "Starting server endpoint")
