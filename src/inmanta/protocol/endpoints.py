@@ -147,7 +147,11 @@ class SessionEndpoint(Endpoint, CallTarget):
     _client: "SessionClient"
     _heartbeat_client: "SessionClient"
 
-    def __init__(self, name: str, timeout: int = 120, reconnect_delay: int = 5):
+    def __init__(self, name: str, timeout: int = 120, reconnect_delay: int = 5, token: str | None = None):
+        """
+        :param token: The token used to authenticate to the Inmanta server. If None, the token
+                      will be used that is configured in the configuration settings for this client.
+        """
         super().__init__(name)
         self._transport = client.RESTClient
         self._sched = util.Scheduler("session endpoint")
@@ -161,8 +165,10 @@ class SessionEndpoint(Endpoint, CallTarget):
         self.dispatch_delay = 0.01  # keep at least 10 ms between dispatches
         self.add_call_target(self)
 
-        self._client = SessionClient(self.name, self.sessionid, timeout=self.server_timeout)
-        self._heartbeat_client = SessionClient(self.name, self.sessionid, timeout=self.server_timeout, force_instance=True)
+        self._client = SessionClient(self.name, self.sessionid, timeout=self.server_timeout, token=token)
+        self._heartbeat_client = SessionClient(
+            self.name, self.sessionid, timeout=self.server_timeout, force_instance=True, token=token
+        )
 
     def get_environment(self) -> Optional[uuid.UUID]:
         return self._env_id
@@ -342,12 +348,15 @@ class Client(Endpoint):
         exact_version: int = 0,
         with_rest_client: bool = True,
         force_instance: bool = False,
+        token: str | None = None,
     ) -> None:
         super().__init__(name)
         assert isinstance(timeout, int), "Timeout needs to be an integer value."
         LOGGER.debug("Start transport for client %s", self.name)
         if with_rest_client:
-            self._transport_instance = client.RESTClient(self, connection_timout=timeout, force_instance=force_instance)
+            self._transport_instance = client.RESTClient(
+                self, connection_timout=timeout, force_instance=force_instance, token=token
+            )
         else:
             self._transport_instance = None
         self._version_match = version_match
@@ -446,8 +455,10 @@ class SessionClient(Client):
     A client that communicates with server endpoints over a session.
     """
 
-    def __init__(self, name: str, sid: uuid.UUID, timeout: int = 120, force_instance: bool = False) -> None:
-        super().__init__(name, timeout, force_instance=force_instance)
+    def __init__(
+        self, name: str, sid: uuid.UUID, timeout: int = 120, force_instance: bool = False, token: str | None = None
+    ) -> None:
+        super().__init__(name, timeout, force_instance=force_instance, token=token)
         self._sid = sid
 
     async def _call[R: types.ReturnTypes](
