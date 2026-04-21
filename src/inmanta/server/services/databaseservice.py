@@ -541,7 +541,7 @@ async def check_database_before_server_start() -> None:
                 )
                 for row in result:
                     LOGGER.info(
-                        "Replica (ip=%s port =%s sync_state=%s) - "
+                        "Replica (ip=%s port=%s sync_state=%s) - "
                         "Sender process (pid=%s, state=%s) - "
                         "Log Sequence Numbers (sent=%s write=%s flush=%s replay=%s diff_send_replay=%s)",
                         row["client_addr"],
