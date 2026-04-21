@@ -137,7 +137,7 @@ class InmantaBootloader:
 
         LOGGER.info("Successfully checked database before server start.")
 
-    async def _database_connectivity_check(self) -> asyncpg.connection:
+    async def _database_connectivity_check(self) -> asyncpg.Connection:
         """
         This method attempts to connect to the database and returns the connection object.
 
@@ -159,7 +159,7 @@ class InmantaBootloader:
             conn = await self.get_db_connection()
         return conn
 
-    async def _database_version_compatibility_check(self, conn: asyncpg.connection) -> None:
+    async def _database_version_compatibility_check(self, conn: asyncpg.Connection) -> None:
         """
         This method looks for the required PostgreSQL version defined in the compatibility file (Whose path is configured by
         the server.compatibility_file option) and checks that the PostgreSQL version of the database meets this requirement.
@@ -418,7 +418,7 @@ class InmantaBootloader:
         # Attempt to create a database connection
         return await asyncpg.connect(**db_settings, timeout=5)  # raises TimeoutError after 5 seconds
 
-    async def wait_for_db(self, db_wait_time: int) -> asyncpg.connection:
+    async def wait_for_db(self, db_wait_time: int) -> asyncpg.Connection:
         """Wait for the database to be up by attempting to connect at intervals. Once a connection
         is established, it is returned. The caller is responsible for closing it.
 
