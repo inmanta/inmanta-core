@@ -22,7 +22,6 @@ import configparser
 import dataclasses
 import json
 import logging
-import os
 import re
 import ssl
 import threading
@@ -434,6 +433,7 @@ class AuthJWTConfig:
             "issuer": self.issuer,
             "audience": self.audience,
             "jwt-username-claim": self.jwt_username_claim,
+            "claims": [str(c) for c in self.claims],
         }
         if self.sign:
             result["expire"] = self.expire

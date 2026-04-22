@@ -173,7 +173,7 @@ class Config:
                   active configuration exhaustively, i.e. values that were not explicitly set
                   will be present in this dictionary using their default value.
         """
-        from inmanta.protocol.auth import auth
+        from inmanta.protocol import auth
 
         # Collect the configuration for options that were defined using an instance of the Option class.
         config_definitions: dict[str, dict[str, Option[object]]] = cls.get_config_options()
