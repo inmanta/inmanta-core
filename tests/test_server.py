@@ -646,7 +646,7 @@ async def test_bootloader_connect_running_db(
             "inmanta.server.services.databaseservice",
             logging.INFO,
             "Database replication is not active: couldn't find any standby server directly connected to the primary. "
-            "If you intend to use a high availability setup, please check the status and the configuration "
+            "If you intend to use database replication, please check the status and the configuration "
             "of the cluster before restarting the Inmanta server (More info in the 'HA setup' section of the "
             "documentation).",
         )

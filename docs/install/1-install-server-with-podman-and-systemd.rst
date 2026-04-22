@@ -243,7 +243,7 @@ Replace ``<db_username>`` and ``<db_password>`` with respectively the username a
 
     During its boot sequence, the orchestrator will perform some checks on the database (e.g. checking that the
     postgresql version is compatible and checking the status of the replica servers in a high-availability setup).
-    Please make sure the configured user holds the ``pg_monitor`` role to enable these checks during startup.
+    Please make sure the configured postgresql user holds the ``pg_monitor`` role to enable these checks during startup.
 
 
 The file ``inmanta-server.container`` defines the orchestrator container. Its state, log and config are persisted in
