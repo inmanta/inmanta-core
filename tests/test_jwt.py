@@ -232,10 +232,37 @@ jwt_username_claim=name
 
     # load and parse
     cfg = auth.AuthJWTConfig.get("test")
-    assert cfg
+    auth_jwt_test_dct = {
+        "algorithm": "HS256",
+        "sign": True,
+        "client-types": ["agent", "compiler"],
+        "key": "eciwliGyqECVmXtIkNpfVrtBLutZiITZKSKYhogeHMM",
+        "expire": 0,
+        "issuer": "https://localhost:8888/",
+        "audience": "https://localhost:8888/",
+        "claims": [],
+        "jwt-username-claim": "sub",
+    }
+    assert auth_jwt_test_dct == cfg.get_as_dict()
 
     cfg = auth.AuthJWTConfig.get("name")
-    assert cfg
+    auth_jwt_name_dct = {
+        "algorithm": "HS256",
+        "sign": False,
+        "client-types": ["agent", "compiler"],
+        "key": "eciwliGyqECVmXtIkNpfVrtBLutZiITZKSKYhogeHMM",
+        "issuer": "https://example.com:8888/",
+        "audience": "abcdef",
+        "claims": [],
+        "jwt-username-claim": "name",
+    }
+    assert auth_jwt_name_dct == cfg.get_as_dict()
+
+    active_config = config.Config.get_active_configuration_as_dict()
+    assert "auth_jwt_name" in active_config
+    assert active_config["auth_jwt_name"] == auth_jwt_name_dct
+    assert "auth_jwt_test" in active_config
+    assert active_config["auth_jwt_test"] == auth_jwt_test_dct
 
     # Test authentication with custom token header
     payload: dict[str, object] = {
