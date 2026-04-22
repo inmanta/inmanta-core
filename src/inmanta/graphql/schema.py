@@ -484,14 +484,6 @@ class StrawberryFilter:
         """
         return stmt.filter_by(**self.get_filter_dict())
 
-    @property
-    def get_models_to_join(self) -> set[type[models.Base]]:
-        """
-        When filtering or sorting on values in a different table, it is necessary to manually do the join.
-        This function returns the tables to join if necessary.
-        """
-        return set()
-
 
 @strawberry.input
 class StrawberryOrder:
@@ -722,28 +714,20 @@ class ResourceFilter(StrawberryFilter):
     def rps_model(self) -> type[models.Base]:
         return models.ResourcePersistentState
 
-    @property
-    def get_models_to_join(self) -> set[type[models.Base]]:
-        rps_join = ["blocked", "compliance", "last_handler_run", "is_deploying", "is_orphan"]
-        for attr in rps_join:
-            if getattr(self, attr) is not strawberry.UNSET:
-                return {self.rps_model}
-        return set()
-
     def apply_filters(self, stmt: Select[typing.Any]) -> Select[typing.Any]:
         # Every filter we apply to the resource is custom, so we don't use `get_filter_dict`
-        key_to_model = {
-            "resource_type": self.model,
-            "resource_id_value": self.model,
-            "agent": self.model,
-            "blocked": self.rps_model,
-            "compliance": self.rps_model,
-            "last_handler_run": self.rps_model,
-        }
-        for key, model in key_to_model.items():
+        rps_keys = [
+            "resource_type",
+            "resource_id_value",
+            "agent",
+            "blocked",
+            "compliance",
+            "last_handler_run",
+        ]
+        for key in rps_keys:
             attr = getattr(self, key)
             if attr is not None and attr is not strawberry.UNSET:
-                stmt = attr.apply_filter(stmt, model, key)
+                stmt = attr.apply_filter(stmt, self.rps_model, key)
         if self.purged is not None and self.purged is not strawberry.UNSET:
             stmt = stmt.filter(models.Resource.attributes["purged"].astext.cast(Boolean).is_(self.purged))
         if self.is_deploying is not None and self.is_deploying is not strawberry.UNSET:
@@ -758,9 +742,7 @@ class ResourceOrder(StrawberryOrder):
     @classmethod
     def default_order(cls) -> dict[str, UnaryExpression[typing.Any]]:
         return {
-            "environment": asc(models.Resource.environment),
-            "resource_set": asc(models.Resource.resource_set),
-            "resource_id": asc(models.Resource.resource_id),
+            "resource_id": asc(models.ResourcePersistentState.resource_id),
         }
 
     @property
@@ -774,9 +756,9 @@ class ResourceOrder(StrawberryOrder):
     @property
     def key_to_model(self) -> dict[str, type[models.Base]]:
         return {
-            "agent": self.model,
-            "resource_type": self.model,
-            "resource_id_value": self.model,
+            "agent": self.rps_model,
+            "resource_type": self.rps_model,
+            "resource_id_value": self.rps_model,
             "blocked": self.rps_model,
             "compliance": self.rps_model,
             "last_handler_run": self.rps_model,
@@ -831,33 +813,6 @@ def add_filter_and_sort(
     return stmt
 
 
-def do_required_resource_joins(
-    stmt: Select[typing.Any],
-    filter: typing.Optional[StrawberryFilter] = strawberry.UNSET,
-    order_by: typing.Optional[Sequence[StrawberryOrder]] = strawberry.UNSET,
-) -> Select[typing.Any]:
-    """
-    Checks the given filter and order_by to see if we need to join any external tables.
-    Only working for the Resource table
-    """
-    models_to_join: set[type[models.Base]] = set()
-    if order_by is not None and order_by is not strawberry.UNSET:
-        models_to_join = models_to_join | {
-            o.key_to_model[to_snake_case(o.key)] for o in order_by if o.key_to_model[to_snake_case(o.key)] != o.model
-        }
-    if filter is not None and filter is not strawberry.UNSET:
-        models_to_join = models_to_join | filter.get_models_to_join
-    if models.ResourcePersistentState in models_to_join:
-        stmt = stmt.join(
-            models.ResourcePersistentState,
-            and_(
-                models.Resource.resource_id == models.ResourcePersistentState.resource_id,
-                models.Resource.environment == models.ResourcePersistentState.environment,
-            ),
-        )
-    return stmt
-
-
 def encode_cursor(cursor: str) -> str:
     """
     :param cursor: The cursor received from sqlakeyset without direction information ('<'/'>').
@@ -887,6 +842,7 @@ async def get_connection(
     after: typing.Optional[str] = strawberry.UNSET,
     last: typing.Optional[int] = strawberry.UNSET,
     before: typing.Optional[str] = strawberry.UNSET,
+    count_stmt: Select[tuple[int]] | None = None,
 ) -> CustomListConnection[NodeType]:
     """
     Build the connection object. Here we do all the pagination and fetching of results (edges) to return to the user.
@@ -911,7 +867,8 @@ async def get_connection(
         # Check if we requested total_count
         total_count: int | None = None
         if is_field_selected(info, "totalCount"):
-            count_stmt = select(func.count()).select_from(stmt.subquery())
+            if count_stmt is None:
+                count_stmt = select(func.count()).select_from(stmt.subquery())
             count_result = await session.execute(count_stmt)
             total_count = count_result.scalar_one()
 
@@ -1019,7 +976,18 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
 
             # Only fetch resources in their latest version
             # Logic based on src/inmanta/data/dataview.py::ResourceView
-            stmt = select(models.Resource).where(models.Resource.environment == filter.environment)
+            stmt = (
+                select(models.Resource)
+                .join(
+                    models.ResourcePersistentState,
+                    and_(
+                        models.Resource.resource_id == models.ResourcePersistentState.resource_id,
+                        models.Resource.environment == models.ResourcePersistentState.environment,
+                    ),
+                )
+                .where(models.ResourcePersistentState.environment == filter.environment)
+            )
+
             # CTE that fetches the latest scheduled version
             latest_scheduled_version_cte = (
                 select(models.Scheduler.last_processed_model_version.label("version"))
@@ -1095,8 +1063,15 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
                     ),
                 )
             stmt = add_filter_and_sort(stmt, ResourceOrder.default_order(), filter, order_by)
-            stmt = do_required_resource_joins(stmt, filter, order_by)
-            return await get_connection(stmt, info=info, model="Resource", first=first, after=after, last=last, before=before)
+            count_stmt: Select[tuple[int]] | None
+            if filter.purged is not strawberry.UNSET:
+                count_stmt = None
+            else:
+                # more efficient count statement that doesn't require joining on resource
+                count_stmt = add_filter_and_sort(select(func.count()).select_from(models.ResourcePersistentState), {}, filter)
+            return await get_connection(
+                stmt, info=info, model="Resource", first=first, after=after, last=last, before=before, count_stmt=count_stmt
+            )
 
         @strawberry.field(description="Fetches a summary of the state of all resources in a specific environment")
         async def resource_summary(self, info: CustomInfo, environment: str) -> ComposedResourceSummary:
