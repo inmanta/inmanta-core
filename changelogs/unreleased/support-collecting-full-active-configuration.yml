@@ -3,6 +3,6 @@ description: "Added support to the configuration framework to get the full activ
 issue-nr: 960
 issue-repo: inmanta-support
 change-type: patch
-destination-branches: [master, iso9, iso8]
+destination-branches: [iso8]
 sections:
   minor-improvement: "{{description}}"
