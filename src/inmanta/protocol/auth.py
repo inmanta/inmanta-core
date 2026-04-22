@@ -22,6 +22,7 @@ import configparser
 import dataclasses
 import json
 import logging
+import os
 import re
 import ssl
 import threading
@@ -319,7 +320,7 @@ class AuthJWTConfig:
             sign_true_found: int = 0
             sign_value_context: list[str] = []
             for section_name, section in cls.sections.items():
-                sign_value_context.append(f"auth_jwt_{section_name} -> sign={section.sign}")
+                sign_value_context.append(f"{AUTH_JWT_PREFIX}{section_name} -> sign={section.sign}")
                 if section.sign:
                     sign_true_found += 1
             if sign_true_found > 1:
@@ -358,6 +359,17 @@ class AuthJWTConfig:
             return None
 
     @classmethod
+    def get_all(cls) -> dict[str, "AuthJWTConfig"]:
+        """
+        Returns all the AuthJWTConfig configured on the server.
+        A dictionary is returned that maps the name of the configuration section
+        (without prefix) to the corresponding AuthJWTConfig object.
+        """
+        with cls._lock:
+            cls._load_config_and_validate()
+            return dict(cls.sections)
+
+    @classmethod
     def get_sign_config(cls) -> Optional["AuthJWTConfig"]:
         """
         Get the configuration with sign is true
@@ -394,6 +406,7 @@ class AuthJWTConfig:
         self.sign: bool = False
         self.issuer: str = "https://localhost:8888/"
         self.audience: str
+        self.client_types: list[str]
 
         if "algorithm" not in config:
             raise ValueError("algorithm is required in %s section" % self.section)
@@ -407,6 +420,30 @@ class AuthJWTConfig:
             self.validate_rs265()
         else:
             raise ValueError(f"Algorithm {self.algo} in {self.section} is not support ")
+
+    def get_as_dict(self) -> dict[str, object]:
+        """
+        Returns this AuthJWTConfig object in dictionary form.
+        The keys in the dictionary represent the config options
+        and the values the associated configuration values.
+        """
+        result = {
+            "algorithm": self.algo,
+            "sign": self.sign,
+            "client-types": list(self.client_types),
+            "issuer": self.issuer,
+            "audience": self.audience,
+            "jwt-username-claim": self.jwt_username_claim,
+        }
+        if self.sign:
+            result["expire"] = self.expire
+        if self.algo.lower() == "hs256":
+            result["key"] = self.base64_encoded_key
+        else:
+            result["jwks-uri"] = self.jwks_uri
+            result["validate-cert"] = self.validate_cert
+            result["jwks-request-timeout"] = self.jwks_timeout
+        return result
 
     def validate_generic(self) -> None:
         """
@@ -437,10 +474,10 @@ class AuthJWTConfig:
         if "claims" in self._config:
             self.parse_claim_matching(self._config["claims"])
 
-        if "jwt-username-claim" in self._config:
+        if "jwt_username_claim" in self._config:
             if self.sign:
                 raise ValueError(f"auth config {self.section} used for signing cannot use a custom claim.")
-            self.jwt_username_claim = self._config["jwt-username-claim"]
+            self.jwt_username_claim = self._config["jwt_username_claim"]
 
     def parse_claim_matching(self, claim_conf: str) -> None:
         """Parse claim matching expressions"""
@@ -461,7 +498,8 @@ class AuthJWTConfig:
         if "key" not in self._config:
             raise ValueError(f"key is required in {self.section} for algorithm {self.algo}")
 
-        self.key = base64.urlsafe_b64decode((self._config["key"] + "==").encode("ascii"))
+        self.base64_encoded_key = self._config["key"]
+        self.key = base64.urlsafe_b64decode((self.base64_encoded_key + "==").encode("ascii"))
         if len(self.key) < 32:
             raise ValueError("HS256 requires a key of 32 bytes (256 bits) or longer in " + self.section)
 
@@ -501,9 +539,9 @@ class AuthJWTConfig:
             ctx = ssl.create_default_context()
             ctx.check_hostname = False
             ctx.verify_mode = ssl.CERT_NONE
-        jwks_timeout = self._config.getfloat("jwks_request_timeout", 30.0)
+        self.jwks_timeout = self._config.getfloat("jwks_request_timeout", 30.0)
         try:
-            with request.urlopen(self.jwks_uri, timeout=jwks_timeout, context=ctx) as response:
+            with request.urlopen(self.jwks_uri, timeout=self.jwks_timeout, context=ctx) as response:
                 key_data = json.loads(response.read().decode("utf-8"))
         except error.URLError as e:
             # HTTPError is raised for non-200 responses; the response

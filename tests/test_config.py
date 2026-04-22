@@ -178,8 +178,24 @@ db-connection-pool-max-size=5
     assert Config.get("influxdb", "tags")["tag2"] == "value2"
     assert Config.get("database", "username") == "non-default-name-2"
     assert Config.get("server", "db_connection_pool_max_size") == 5
-    assert Config.get("server", "auth")
+    assert Config.get("server", "auth") is True
     assert Config.get("server", "agent-timeout") == 60
+
+    active_config = Config.get_active_configuration_as_dict()
+    assert active_config["config"]["log-dir"] == "/log"
+    assert active_config["database"]["host"] == "host3"
+    assert active_config["database"]["name"] == "db2"
+    assert active_config["database"]["port"] == 5678
+    assert active_config["influxdb"]["host"] == "host3"
+    assert active_config["influxdb"]["interval"] == 20
+    assert active_config["influxdb"]["tags"]["tag2"] == "value2"
+    assert active_config["database"]["username"] == "non-default-name-2"
+    assert active_config["server"]["db-connection-pool-max-size"] == 5
+    assert active_config["server"]["auth"] is True
+    assert active_config["server"]["agent-timeout"] == 60
+    # Verify that active_config also contains the configuration that
+    # was not explicitly set by the user.
+    assert active_config["compiler"]["cache"] is True
 
 
 async def test_bind_address_ipv4(async_finalizer):
