@@ -842,7 +842,7 @@ async def get_connection(
     after: typing.Optional[str] = strawberry.UNSET,
     last: typing.Optional[int] = strawberry.UNSET,
     before: typing.Optional[str] = strawberry.UNSET,
-    count_stmt: Select[typing.Any] | None = None,
+    count_stmt: Select[tuple[int]] | None = None,
 ) -> CustomListConnection[NodeType]:
     """
     Build the connection object. Here we do all the pagination and fetching of results (edges) to return to the user.
@@ -1063,10 +1063,11 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
                     ),
                 )
             stmt = add_filter_and_sort(stmt, ResourceOrder.default_order(), filter, order_by)
-            count_stmt: Select[typing.Any] | None
-            if filter is not None and filter.purged is not strawberry.UNSET:
+            count_stmt: Select[tuple[int]] | None
+            if filter.purged is not strawberry.UNSET:
                 count_stmt = None
             else:
+                # more efficient count statement that doesn't require joining on resource
                 count_stmt = add_filter_and_sort(select(func.count()).select_from(models.ResourcePersistentState), {}, filter)
             return await get_connection(
                 stmt, info=info, model="Resource", first=first, after=after, last=last, before=before, count_stmt=count_stmt
