@@ -36,7 +36,7 @@ from sqlalchemy import Boolean, Select, UnaryExpression, and_, asc, case, desc, 
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapper
 from strawberry import relay, scalars
-from strawberry.relay import Node
+from strawberry.relay import Node, NodeType
 from strawberry.scalars import JSON
 from strawberry.schema.config import StrawberryConfig
 from strawberry.types import Info
@@ -170,7 +170,8 @@ There are 4 important building blocks that we have to take into account:
 
 
 @strawberry.type(name="Connection", description="My connection to a list of items.")
-class CustomListConnection[N: Node](relay.ListConnection[N]):
+# use NodeType imported type var because strawberry does some fishy type var introspection
+class CustomListConnection(relay.ListConnection[NodeType]):
     """
     Custom implementation of relay.ListConnection.
 
