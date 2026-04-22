@@ -36,7 +36,7 @@ from sqlalchemy import Boolean, Select, UnaryExpression, and_, asc, case, desc, 
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapper
 from strawberry import relay, scalars
-from strawberry.relay import NodeType
+from strawberry.relay import Node
 from strawberry.scalars import JSON
 from strawberry.schema.config import StrawberryConfig
 from strawberry.types import Info
@@ -122,7 +122,7 @@ There are 4 important building blocks that we have to take into account:
                 eq: list[T] | None = strawberry.UNSET
                 neq: list[T] | None = strawberry.UNSET
 
-                def apply_filter(self, stmt: Select[typing.Any], model: type[models.Base], key: str) -> Select[typing.Any]:
+                def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]], model: type[models.Base], key: str) -> Select[tuple[*Ts]]:
                     # Enums are stored as a string of their name in the database and not of their value
                     if self.eq is not None and self.eq is not strawberry.UNSET:
                         stmt = stmt.where(getattr(model, key).in_([x.name for x in self.eq]))
@@ -170,7 +170,7 @@ There are 4 important building blocks that we have to take into account:
 
 
 @strawberry.type(name="Connection", description="My connection to a list of items.")
-class CustomListConnection(relay.ListConnection[NodeType]):
+class CustomListConnection[N: Node](relay.ListConnection[N]):
     """
     Custom implementation of relay.ListConnection.
 
@@ -405,7 +405,7 @@ class CustomFilter(ABC):
     """
 
     @abstractmethod
-    def apply_filter(self, stmt: Select[typing.Any], model: type[models.Base], key: str) -> Select[typing.Any]:
+    def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]], model: type[models.Base], key: str) -> Select[tuple[*Ts]]:
         """
         Applies the logic of this custom filter to the given statement.
         """
@@ -422,7 +422,7 @@ class EnumFilter[T: StrEnum](CustomFilter):
     eq: list[T] | None = strawberry.UNSET
     neq: list[T] | None = strawberry.UNSET
 
-    def apply_filter(self, stmt: Select[typing.Any], model: type[models.Base], key: str) -> Select[typing.Any]:
+    def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]], model: type[models.Base], key: str) -> Select[tuple[*Ts]]:
         # Enums are stored as a string of their name in the database and not of their value
         if self.eq is not None and self.eq is not strawberry.UNSET:
             stmt = stmt.where(getattr(model, key).in_([x.name for x in self.eq]))
@@ -444,7 +444,7 @@ class StrFilter(CustomFilter):
     contains: list[str] | None = strawberry.UNSET
     not_contains: list[str] | None = strawberry.UNSET
 
-    def apply_filter(self, stmt: Select[typing.Any], model: type[models.Base], key: str) -> Select[typing.Any]:
+    def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]], model: type[models.Base], key: str) -> Select[tuple[*Ts]]:
         if self.eq is not None and self.eq is not strawberry.UNSET:
             stmt = stmt.where(getattr(model, key).in_(self.eq))
         if self.neq is not None and self.neq is not strawberry.UNSET:
@@ -478,7 +478,7 @@ class StrawberryFilter:
             filter_dict[key] = value
         return filter_dict
 
-    def apply_filters(self, stmt: Select[typing.Any]) -> Select[typing.Any]:
+    def apply_filters[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
         """
         Applies the filters to the given query.
         """
@@ -714,8 +714,9 @@ class ResourceFilter(StrawberryFilter):
     def rps_model(self) -> type[models.Base]:
         return models.ResourcePersistentState
 
-    def apply_filters(self, stmt: Select[typing.Any]) -> Select[typing.Any]:
-        # Every filter we apply to the resource is custom, so we don't use `get_filter_dict`
+    def apply_filters[*Ts](
+        self, stmt: Select[tuple[*Ts]]
+    ) -> Select[tuple[*Ts]]:  # Every filter we apply to the resource is custom, so we don't use `get_filter_dict`
         rps_keys = [
             "resource_type",
             "resource_id_value",
@@ -789,12 +790,12 @@ class ComposedResourceSummary:
     is_deploying: JSON = strawberry.field(description="Summary of the execution status of all resources in the environment.")
 
 
-def add_filter_and_sort(
-    stmt: Select[typing.Any],
+def add_filter_and_sort[*Ts](
+    stmt: Select[tuple[*Ts]],
     default_sorting: dict[str, UnaryExpression[typing.Any]],
     filter: typing.Optional[StrawberryFilter] = strawberry.UNSET,
     order_by: typing.Optional[Sequence[StrawberryOrder]] = strawberry.UNSET,
-) -> Select[typing.Any]:
+) -> Select[tuple[*Ts]]:
     """
     Adds filter and sorting to the given statement.
     """
@@ -834,8 +835,8 @@ def decode_cursor(cursor: str) -> str:
     return decoded_cursor.split(prefix)[1]
 
 
-async def get_connection(
-    stmt: Select[typing.Any],
+async def get_connection[*Ts](
+    stmt: Select[tuple[*Ts]],
     model: str,
     info: Info,
     first: typing.Optional[int] = strawberry.UNSET,
@@ -843,7 +844,7 @@ async def get_connection(
     last: typing.Optional[int] = strawberry.UNSET,
     before: typing.Optional[str] = strawberry.UNSET,
     count_stmt: Select[tuple[int]] | None = None,
-) -> CustomListConnection[NodeType]:
+) -> CustomListConnection[Node]:
     """
     Build the connection object. Here we do all the pagination and fetching of results (edges) to return to the user.
     We do not call `ListConnection.resolve_connection` because:
@@ -887,7 +888,7 @@ async def get_connection(
         # We use the private methods for the mapper because their respective public attributes like `mapper.connection_types`
         # Are only filled when the private methods are called first. The private methods use the public attributes as cache so
         # it is fine to call them repeatedly
-        connection = cast(CustomListConnection[NodeType], mapper._connection_type_for(model))
+        connection = cast(type[CustomListConnection[Node]], mapper._connection_type_for(model))
 
         for cursor, value in result.paging.bookmark_items():
             formatted_cursor = str(cursor)[1:]
