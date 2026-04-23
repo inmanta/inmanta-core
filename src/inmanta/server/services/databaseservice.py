@@ -30,6 +30,7 @@ from inmanta.data.model import DataBaseReport, ReportedStatus
 from inmanta.server import SLICE_DATABASE
 from inmanta.server import config as opt
 from inmanta.server import protocol
+from inmanta.server.protocol import ServerStartFailure
 from inmanta.types import ArgumentTypes
 from inmanta.util import IntervalSchedule, Scheduler
 from inmanta.vendor.pyformance import gauge, global_registry
@@ -259,6 +260,8 @@ class DatabaseService(protocol.ServerSlice):
         self._db_monitor: Optional[DatabaseMonitor] = None
 
     async def start(self) -> None:
+        database_status_checker = DatabaseStatusChecker()
+        await database_status_checker.check_database_before_server_start()
         await super().start()
         await self.connect_database()
 
@@ -380,21 +383,32 @@ async def initialize_database_connection_pool(
     LOGGER.info("Connected to PostgreSQL database %s on %s:%d", database_name, database_host, database_port)
     return pool
 
+class DatabaseStatusChecker:
 
-async def check_database_before_server_start() -> None:
-    """
-    Ensure database connectivity before starting the server and log information about the DB server
-    e.g. the PostgreSQL version of the db server and the status of the replica servers.
+    async def check_database_before_server_start(self) -> None:
+        """
+        Ensure database connectivity before starting the server and log information about the DB server
+        e.g. the PostgreSQL version of the db server and the status of the standby servers.
 
-    This method will check that the PostgreSQL version of the db server meets the required version if such a minimal required
-    postgres version is configured under system_requirements->postgres_version in the compatibility file
-    (server.compatibility_file option).
+        This method will check that the PostgreSQL version of the db server meets the required version if such a minimal required
+        postgres version is configured under system_requirements->postgres_version in the compatibility file
+        (server.compatibility_file option).
 
-    These checks are performed before starting any slice e.g. to bail before any database migration is attempted
-    in case an incompatible PostgreSQL version is detected.
-    """
+        These checks are performed before starting any slice e.g. to bail before any database migration is attempted
+        in case an incompatible PostgreSQL version is detected.
+        """
+        conn: asyncpg.Connection | None = None
+        try:
+            conn = await self._database_connectivity_check()
+            await self._database_version_compatibility_check(conn)
+            await self._log_database_replication_status(conn)
+        finally:
+            if conn is not None:
+                await conn.close(timeout=5)  # close the connection
 
-    async def get_db_connection() -> asyncpg.Connection:
+        LOGGER.info("Successfully checked database before server start.")
+
+    async def _get_db_connection(self) -> asyncpg.Connection:
         # Retrieve database connection settings from the configuration
         db_settings = {
             "host": opt.db_host.get(),
@@ -407,7 +421,7 @@ async def check_database_before_server_start() -> None:
         # Attempt to create a database connection
         return await asyncpg.connect(**db_settings, timeout=5)  # raises TimeoutError after 5 seconds
 
-    async def wait_for_db(db_wait_time: int) -> asyncpg.Connection:
+    async def _wait_for_db(self, db_wait_time: int) -> asyncpg.Connection:
         """Wait for the database to be up by attempting to connect at intervals. Once a connection
         is established, it is returned. The caller is responsible for closing it.
 
@@ -425,7 +439,7 @@ async def check_database_before_server_start() -> None:
                     opt.db_port.get(),
                 )
                 # Attempt to create a database connection
-                conn = await get_db_connection()
+                conn = await self._get_db_connection()
                 LOGGER.info(
                     "Successfully reached database '%s' at %s:%s.",
                     opt.db_name.get(),
@@ -433,18 +447,18 @@ async def check_database_before_server_start() -> None:
                     opt.db_port.get(),
                 )
                 return conn
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 LOGGER.info("Waiting for database to be up: Connection attempt timed out.")
             except Exception:
                 LOGGER.info("Waiting for database to be up.", exc_info=True)
             # Check if the maximum wait time has been exceeded
             if 0 < db_wait_time < asyncio.get_event_loop().time() - start_time:
-                LOGGER.error("Timed out waiting for the database to be up.")
-                raise Exception("Database connection timeout after %d seconds." % db_wait_time)
+                LOGGER.error("Timeout: database server not up after %d seconds." % db_wait_time)
+                raise ServerStartFailure("Timeout: database server not up after %d seconds." % db_wait_time)
             # Sleep for a second before retrying
             await asyncio.sleep(1)
 
-    async def _database_connectivity_check() -> asyncpg.Connection:
+    async def _database_connectivity_check(self) -> asyncpg.Connection:
         """
         This method attempts to connect to the database and returns the connection object.
         The caller is reponsible for closing the connection.
@@ -461,13 +475,13 @@ async def check_database_before_server_start() -> None:
         if db_wait_time != 0:
             # Wait for the database to be up before starting the server
             LOGGER.info("Waiting until database server is up.")
-            conn = await wait_for_db(db_wait_time=db_wait_time)
+            conn = await self._wait_for_db(db_wait_time=db_wait_time)
         else:
             LOGGER.debug("Not waiting until the database server is up because database.wait_time option is set to 0.")
-            conn = await get_db_connection()
+            conn = await self._get_db_connection()
         return conn
 
-    async def _database_version_compatibility_check(conn: asyncpg.Connection) -> None:
+    async def _database_version_compatibility_check(self, conn: asyncpg.Connection) -> None:
         """
         This method looks for the required PostgreSQL version defined in the compatibility file (Whose path is configured by
         the server.compatibility_file option) and checks that the PostgreSQL version of the database meets this requirement.
@@ -498,7 +512,7 @@ async def check_database_before_server_start() -> None:
                 )
         LOGGER.info("Database is running PostgreSQL server version %s.", database_postgresql_version)
 
-    async def _database_log_replication_status(conn: asyncpg.Connection) -> None:
+    async def _log_database_replication_status(self, conn: asyncpg.Connection) -> None:
         """
         Fetch and log the replication status. This method relies on the pg_stat_replication that holds information
         about the standby servers, i.e. one row per replica. More info in the postgresql docs:
@@ -522,22 +536,22 @@ async def check_database_before_server_start() -> None:
         FROM pg_stat_replication;
         """
         result = await conn.fetch(query)
-        if len(result):
+        if result:
             if result[0]["client_port"] is None:
                 # If a user that doesn't hold the 'pg_monitor' role tries to query the pg_stat_replication table, no error
                 # is raised, but instead a 'censored' view is returned with most values filled with NULL.
                 # If the returned value for the port is None, we assume that the user has insufficient privileges, since it
                 # shouldn't be None (As per the docs: "TCP port number that the client is using for communication with this
                 # WAL sender, or -1 if a Unix socket is used").
-                LOGGER.info(
+                LOGGER.warning(
                     "Cannot check database replication status: insufficient privileges for user %s. Please "
                     "make sure the configured user has the `pg_monitor` role.",
                     opt.db_username.get(),
                 )
             else:
                 LOGGER.info(
-                    "Database replication status (Only the healthy standby servers directly connected to the "
-                    "primary will appear below: downstream replicas or nodes that are down won't appear.)"
+                    "Database replication status (Only the directly connected standby servers "
+                    "will appear below: downstream replicas or nodes that are down won't appear.)"
                 )
                 for row in result:
                     LOGGER.info(
@@ -558,20 +572,10 @@ async def check_database_before_server_start() -> None:
         else:
             LOGGER.info(
                 "Database replication is not active: couldn't find any standby server directly connected to the primary. "
-                "If you intend to use a high availability setup, please check the status and the configuration "
+                "If you intend to use database replication, please check the status and the configuration "
                 "of the cluster before restarting the Inmanta server (More info in the 'HA setup' section of the "
                 "documentation)."
             )
 
-    LOGGER.info("Checking database before server start...")
+        LOGGER.info("Checking database before server start...")
 
-    conn: asyncpg.Connection | None = None
-    try:
-        conn = await _database_connectivity_check()
-        await _database_version_compatibility_check(conn)
-        await _database_log_replication_status(conn)
-    finally:
-        if conn is not None:
-            await conn.close(timeout=5)  # close the connection
-
-    LOGGER.info("Successfully checked database before server start.")

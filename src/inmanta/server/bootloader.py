@@ -31,7 +31,6 @@ from inmanta.logging import FullLoggingConfig, InmantaLoggerConfig
 from inmanta.server import config
 from inmanta.server.extensions import ApplicationContext, FeatureManager, InvalidSliceNameException
 from inmanta.server.protocol import Server, ServerSlice
-from inmanta.server.services.databaseservice import check_database_before_server_start
 from inmanta.stable_api import stable_api
 
 LOGGER = logging.getLogger(__name__)
@@ -99,7 +98,6 @@ class InmantaBootloader:
     async def start(self) -> None:
         self.start_loggers_for_extensions()
 
-        await check_database_before_server_start()
 
         ctx = self.load_slices()
         version = ctx.get_feature_manager().get_product_metadata().version
