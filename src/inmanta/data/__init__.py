@@ -2360,6 +2360,7 @@ NOTIFICATION_RETENTION = "notification_retention"
 AVAILABLE_VERSIONS_TO_KEEP = "available_versions_to_keep"
 RECOMPILE_BACKOFF = "recompile_backoff"
 ENVIRONMENT_METRICS_RETENTION = "environment_metrics_retention"
+# TODO add new env setting
 
 
 class Setting:

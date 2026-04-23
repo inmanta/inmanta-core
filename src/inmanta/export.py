@@ -391,7 +391,7 @@ class Exporter:
 
         project = inmanta.module.Project.get()
         self.types = types
-        self.scopes = scopes
+        self.scopes = scopes  # TODO Where are scopes used ?
 
         self._version = self.get_version(no_commit, partial_compile)
 
@@ -529,6 +529,7 @@ class Exporter:
                 if not type_name.startswith("core::"):
                     code_manager.register_code(resource_type, obj)
 
+        # TODO this can be bypassed in package mode
         upload_code(self.client, code_manager)
 
     def _get_env_id(self) -> uuid.UUID:
