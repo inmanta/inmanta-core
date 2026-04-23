@@ -588,7 +588,17 @@ async def postgresql_version_from_db(postgresql_client) -> Awaitable[PostgreSQLV
 @pytest.mark.parametrize("db_wait_time", ["2", "0"])
 @pytest.mark.parametrize("minimal_pg_version", [0, sys.maxsize])
 async def test_bootloader_connect_running_db(
-    tmp_path, server_config, postgres_db, caplog, db_wait_time: str, minimal_pg_version: int, postgresql_version_from_db, postgresql_client, hard_clean_db, hard_clean_db_post, get_tables_in_db
+    tmp_path,
+    server_config,
+    postgres_db,
+    caplog,
+    db_wait_time: str,
+    minimal_pg_version: int,
+    postgresql_version_from_db,
+    postgresql_client,
+    hard_clean_db,
+    hard_clean_db_post,
+    get_tables_in_db,
 ):
     """
     Tests that the bootloader can connect to a database and can start for both wait_up values
@@ -758,7 +768,7 @@ async def test_bootloader_start_no_compatibility_file(tmp_path, server_config, p
             caplog,
             "inmanta.server.services.databaseservice",
             logging.INFO,
-        f"Database is running PostgreSQL server version {postgresql_version_from_db}",
+            f"Database is running PostgreSQL server version {postgresql_version_from_db}",
         )
 
         log_contains(caplog, "inmanta.server.server", logging.INFO, "Starting server endpoint")

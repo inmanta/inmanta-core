@@ -98,7 +98,6 @@ class InmantaBootloader:
     async def start(self) -> None:
         self.start_loggers_for_extensions()
 
-
         ctx = self.load_slices()
         version = ctx.get_feature_manager().get_product_metadata().version
         LOGGER.info("Starting inmanta-server version %s", version)

@@ -383,6 +383,7 @@ async def initialize_database_connection_pool(
     LOGGER.info("Connected to PostgreSQL database %s on %s:%d", database_name, database_host, database_port)
     return pool
 
+
 class DatabaseStatusChecker:
 
     async def check_database_before_server_start(self) -> None:
@@ -390,8 +391,8 @@ class DatabaseStatusChecker:
         Ensure database connectivity before starting the server and log information about the DB server
         e.g. the PostgreSQL version of the db server and the status of the standby servers.
 
-        This method will check that the PostgreSQL version of the db server meets the required version if such a minimal required
-        postgres version is configured under system_requirements->postgres_version in the compatibility file
+        This method will check that the PostgreSQL version of the db server meets the required version if such a minimal
+        required postgres version is configured under system_requirements->postgres_version in the compatibility file
         (server.compatibility_file option).
 
         These checks are performed before starting any slice e.g. to bail before any database migration is attempted
@@ -578,4 +579,3 @@ class DatabaseStatusChecker:
             )
 
         LOGGER.info("Checking database before server start...")
-
