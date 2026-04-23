@@ -552,7 +552,7 @@ class DatabaseStatusChecker:
             else:
                 LOGGER.info(
                     "Database replication status (Only the directly connected standby servers "
-                    "will appear below: downstream replicas or nodes that are down won't appear.)"
+                    "will appear below: downstream standby servers or nodes that are down won't appear.)"
                 )
                 for row in result:
                     LOGGER.info(
