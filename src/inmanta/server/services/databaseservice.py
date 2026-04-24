@@ -483,7 +483,7 @@ class DatabaseStatusChecker:
             try:
                 conn = await self._get_db_connection(timeout=timeout)
             except TimeoutError:
-                raise ServerStartFailure("Timeout: database server not up after %d seconds." % timeout)
+                raise ServerStartFailure("Timeout: Failed to connect to the database.")
         return conn
 
     async def _database_version_compatibility_check(self, conn: asyncpg.Connection) -> None:
