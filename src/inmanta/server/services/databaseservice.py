@@ -409,7 +409,7 @@ class DatabaseStatusChecker:
 
         LOGGER.info("Successfully checked database before server start.")
 
-    async def _get_db_connection(self) -> asyncpg.Connection:
+    async def _get_db_connection(self, timeout: int = 5) -> asyncpg.Connection:
         # Retrieve database connection settings from the configuration
         db_settings = {
             "host": opt.db_host.get(),
@@ -420,7 +420,7 @@ class DatabaseStatusChecker:
         }
 
         # Attempt to create a database connection
-        return await asyncpg.connect(**db_settings, timeout=5)  # raises TimeoutError after 5 seconds
+        return await asyncpg.connect(**db_settings, timeout=timeout)  # raises TimeoutError after 5 seconds
 
     async def _wait_for_db(self, db_wait_time: int) -> asyncpg.Connection:
         """Wait for the database to be up by attempting to connect at intervals. Once a connection
@@ -466,10 +466,10 @@ class DatabaseStatusChecker:
 
         The database.wait_time option controls the retry behaviour for this method:
             database.wait_time < 0 : keep retrying forever until a connection is established
-            database.wait_time = 0 : try only once to establish a connection
+            database.wait_time = 0 : try only once to establish a connection (default timeout of 5s)
             database.wait_time > 0 : keep retrying until this wait_time timeout is reached or a connection is established
 
-        :raises Exception: If the connectivity cannot be established within the configured database.wait_time.
+        :raises ServerStartFailure: If the connectivity cannot be established within the configured database.wait_time.
         """
         db_wait_time: int = opt.db_wait_time.get()
 
@@ -479,7 +479,11 @@ class DatabaseStatusChecker:
             conn = await self._wait_for_db(db_wait_time=db_wait_time)
         else:
             LOGGER.debug("Not waiting until the database server is up because database.wait_time option is set to 0.")
-            conn = await self._get_db_connection()
+            timeout = 5
+            try:
+                conn = await self._get_db_connection(timeout=timeout)
+            except TimeoutError:
+                raise ServerStartFailure("Timeout: database server not up after %d seconds." % timeout)
         return conn
 
     async def _database_version_compatibility_check(self, conn: asyncpg.Connection) -> None:
