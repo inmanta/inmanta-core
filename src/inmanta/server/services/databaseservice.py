@@ -420,7 +420,7 @@ class DatabaseStatusChecker:
         }
 
         # Attempt to create a database connection
-        return await asyncpg.connect(**db_settings, timeout=timeout)  # raises TimeoutError after 5 seconds
+        return await asyncpg.connect(**db_settings, timeout=timeout)  # raises a TimeoutError after <timeout> seconds
 
     async def _wait_for_db(self, db_wait_time: int) -> asyncpg.Connection:
         """Wait for the database to be up by attempting to connect at intervals. Once a connection
