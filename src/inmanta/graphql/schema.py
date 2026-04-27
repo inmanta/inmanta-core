@@ -390,6 +390,10 @@ def to_snake_case(name: str) -> str:
     return re.sub("([A-Z])", r"_\1", name).lower()
 
 
+if typing.TYPE_CHECKING:
+    from inmanta.graphql.graphql import GraphQLSlice
+
+
 @dataclasses.dataclass
 class GraphQLContext:
     """
@@ -397,6 +401,7 @@ class GraphQLContext:
     """
 
     compiler_service: CompilerService
+    graphql_service: "GraphQLSlice"
 
 
 class CustomFilter(ABC):
@@ -695,7 +700,7 @@ class Resource:
 
 
 @strawberry.input
-class ResourceFilter(StrawberryFilter):
+class BaseResourceFilter(StrawberryFilter):
     environment: uuid.UUID
     resource_type: StrFilter | None = strawberry.UNSET
     resource_id_value: StrFilter | None = strawberry.UNSET
@@ -918,6 +923,7 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
     """
 
     loader = StrawberrySQLAlchemyLoader(async_bind_factory=get_session_factory())
+    ResourceFilter: type = context.graphql_service.build_resource_filter()
 
     class CustomInfo(Info):
         @property
