@@ -25,7 +25,6 @@ openapi_spec_validator==0.7.2
 opentelemetry-instrumentation-asyncpg==0.60b1
 packaging==26.0
 pip==25.3
-pip2pi==0.8.2
 ply==3.11
 psutil==7.2.2
 pydantic==2.12.5
@@ -36,7 +35,8 @@ pyyaml==6.0.3
 rpdb==0.2.0
 ruamel.yaml==0.19.1
 setproctitle==1.3.7
-setuptools==80.10.2
+# latest version with pkg_resources, required for sphinxcontrib-redoc. Packaged dependency is unconstrained.
+setuptools==81.0.0
 sphinx==9.1.0
 sphinx-argparse==0.5.2
 sphinx-autodoc-annotation==1.0-1
@@ -53,7 +53,6 @@ toml==0.10.2
 tornado==6.5.4
 types-python-dateutil==2.9.0.20260124
 types-PyYAML==6.0.12.20250915
-types-setuptools==80.10.0.20260124
 types-toml==0.10.8.20240310
 typing_inspect==0.9.0
 jsonpath-ng==1.7.0
