@@ -1,0 +1,6 @@
+change-type: patch
+description: Bump pydantic from 2.13.2 to 2.13.3
+destination-branches:
+- master
+- iso9
+sections: {}

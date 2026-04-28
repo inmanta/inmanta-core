@@ -291,7 +291,7 @@ class DynamicProxy:
             raise UnknownException(value)
 
         if isinstance(value, (str, tuple, int, float, bool)):
-            return copy(value)
+            return value
 
         if isinstance(value, references.Reference):
             # if a reference gets here, it has been validated, and we want to represent it as a reference, not a proxy

@@ -13,7 +13,9 @@ Contact: code@inmanta.com
 """
 
 import datetime
+import inspect
 import logging
+import typing
 import uuid
 
 import pytest
@@ -22,16 +24,32 @@ import inmanta.data.sqlalchemy as models
 from inmanta import const, data
 from inmanta.data import model
 from inmanta.deploy import state
-from inmanta.graphql.schema import to_snake_case
+from inmanta.graphql.schema import _docstring_param_cache, mapper, to_snake_case
+from inmanta.protocol import Result
 from inmanta.server import SLICE_COMPILER
 from inmanta.server.services.compilerservice import CompilerService
 from inmanta.util import retry_limited
+from strawberry_sqlalchemy_mapper import StrawberrySQLAlchemyMapper
+from strawberry_sqlalchemy_mapper.mapper import _GENERATED_FIELD_KEYS_KEY
 from utils import insert_with_link_to_configuration_model, run_compile_and_wait_until_compile_is_done
+
+env_1: typing.Final[str] = "11111111-1234-5678-1234-000000000001"
+
+
+def check_correct_graphql_response(result: Result[object]) -> None:
+    """
+    GraphQL still returns 200 even if errors occurred.
+    This method asserts that no errors actually occured.
+    """
+    assert result.code == 200, result.result
+    data = result.result["data"]
+    assert data
+    assert data["errors"] is None, data["errors"]
 
 
 @pytest.fixture
 async def setup_database(project_default, server, client):
-    id_env_1 = uuid.UUID("11111111-1234-5678-1234-000000000001")
+    id_env_1 = uuid.UUID(env_1)
     result = await client.environment_create(
         project_id=project_default,
         name="test-env-b",
@@ -195,6 +213,81 @@ async def test_graphql_schema(server, client):
     assert result.result["data"]["__schema"]
 
 
+async def test_graphql_field_descriptions(server, client):
+    """
+    Verify that field descriptions are resolved from SQLAlchemy column ``doc`` first, falling back to
+    `:param` docstrings, and that they are exposed via GraphQL introspection.
+    """
+
+    # 1) Check mapper-level resolution: doc= takes precedence over :param docstrings
+    graphql_type_to_sa_model: dict[str, type[models.Base]] = {
+        "Environment": models.Environment,
+        "Notification": models.Notification,
+        "Resource": models.Resource,
+        "ResourcePersistentState": models.ResourcePersistentState,
+    }
+    for type_name, strawberry_type in mapper.mapped_types.items():
+        sa_model = graphql_type_to_sa_model.get(type_name)
+        if sa_model is None:
+            continue
+
+        type_def = strawberry_type.__strawberry_definition__
+        table_name = sa_model.__tablename__
+        docstring_params = _docstring_param_cache.get(table_name, {})
+        generated_keys = set(getattr(strawberry_type, _GENERATED_FIELD_KEYS_KEY, []))
+
+        for f in type_def.fields:
+            snake_name = to_snake_case(f.name)
+            if snake_name not in generated_keys:
+                continue
+            column = getattr(sa_model, snake_name, None)
+            if column is None or not hasattr(column, "property"):
+                continue
+            try:
+                col_obj = column.property.columns[0]
+            except AttributeError:
+                continue
+            col_doc = col_obj.doc
+            docstring_doc = docstring_params.get(snake_name)
+
+            if col_doc:
+                assert f.description == col_doc, f"{type_name}.{f.name}: expected column doc '{col_doc}', got '{f.description}'"
+            elif docstring_doc:
+                assert (
+                    f.description == docstring_doc
+                ), f"{type_name}.{f.name}: expected docstring fallback '{docstring_doc}', got '{f.description}'"
+
+    # 2) Check that descriptions are visible via GraphQL introspection
+    introspection_query = """
+    {
+        __schema {
+            types {
+                name
+                fields {
+                    name
+                    description
+                }
+            }
+        }
+    }
+    """
+    result = await client.graphql(query=introspection_query)
+    check_correct_graphql_response(result)
+    types_list = result.result["data"]["data"]["__schema"]["types"]
+    types_by_name: dict[str, list[dict[str, str | None]]] = {t["name"]: t["fields"] for t in types_list if t["fields"]}
+
+    # Fields sourced from SQLAlchemy columns should have descriptions.
+    # Custom resolvers (is_expert_mode, is_compiling, settings, requires_length, purged) and
+    # relationships (state, environment_) are not expected to have descriptions.
+
+    for type_name, fields in types_by_name.items():
+        if type_name.startswith("__"):
+            # Skip internal types
+            continue
+        for field in fields:
+            assert field["description"], f"Field {type_name}.{field['name']} has no description"
+
+
 async def test_query_environment_settings(server, client, setup_database):
     """
     Assert that the settings returned are correct
@@ -208,23 +301,24 @@ async def test_query_environment_settings(server, client, setup_database):
     )
     assert result.code == 200
     query = """
-{
-    environments(filter:{id: "%s"}) {
-        edges {
-            node {
-              id
-              settings
+    query GetEnvironments($environment: UUID!) {
+        environments(filter: { id: $environment }) {
+            edges {
+                node {
+                    id
+                    settings
+                }
             }
         }
     }
-}
+    """
 
-""" % env_id
-
-    result = await client.graphql(query=query)
-    assert result.code == 200
+    result = await client.graphql(query=query, variables={"environment": env_id})
+    check_correct_graphql_response(result)
     # Result settings
-    settings = result.result["data"]["data"]["environments"]["edges"][0]["node"]["settings"]
+    node = result.result["data"]["data"]["environments"]["edges"][0]["node"]
+    settings = node["settings"]
+    assert node["id"] == env_id
     # Expected settings
     api_result = await client.list_settings(tid=env_id)
     assert api_result.code == 200
@@ -259,7 +353,7 @@ async def test_query_environments_with_filtering(server, client, setup_database)
 }
 """
     result = await client.graphql(query=query)
-    assert result.code == 200
+    check_correct_graphql_response(result)
     assert result.result["data"] == {
         "data": {
             "environments": {
@@ -304,14 +398,15 @@ async def test_query_environments_with_sorting(server, client, setup_database):
 
     for test_case in test_cases:
         result = await client.graphql(query=query % test_case[0])
-        assert result.code == 200
+        check_correct_graphql_response(result)
         results = result.result["data"]["data"]["environments"]["edges"]
         assert [node["node"]["name"] for node in results] == test_case[1]
 
 
 async def test_query_environments_with_paging(server, client, setup_database):
     """
-    Display basic paging capabilities
+    Display basic paging capabilities.
+    Assert that the totalCount is the same regardless of where we are on the page.
     """
     # Create second project
     id_project_2 = uuid.UUID("00000000-1234-5678-1234-000000000002")
@@ -336,6 +431,7 @@ async def test_query_environments_with_paging(server, client, setup_database):
             hasPreviousPage,
             hasNextPage
         }
+        totalCount
         edges {
             cursor
             node {
@@ -353,14 +449,15 @@ async def test_query_environments_with_paging(server, client, setup_database):
 
     for test_case in test_cases:
         result = await client.graphql(query=query % test_case[0])
-        assert result.code == 200
+        check_correct_graphql_response(result)
         results = result.result["data"]["data"]["environments"]["edges"]
         assert [node["node"]["name"] for node in results] == test_case[1]
+        assert result.result["data"]["data"]["environments"]["totalCount"] == 9
 
     # Get the first 5 elements
     # [b, c, a, 0, 1]
     result = await client.graphql(query=query % "first: 5")
-    assert result.code == 200
+    check_correct_graphql_response(result)
     environments = result.result["data"]["data"]["environments"]
     results = environments["edges"]
     assert len(results) == 5
@@ -371,11 +468,12 @@ async def test_query_environments_with_paging(server, client, setup_database):
     assert environments["pageInfo"]["endCursor"] == last_cursor
     assert environments["pageInfo"]["hasNextPage"] is True
     assert environments["pageInfo"]["hasPreviousPage"] is False
+    assert result.result["data"]["data"]["environments"]["totalCount"] == 9
 
     # Get 5 environments starting from the second to last cursor of the previous result
     second_to_last_cursor = results[-2]["cursor"]
     result = await client.graphql(query=query % f'first: 5, after:"{second_to_last_cursor}"')
-    assert result.code == 200
+    check_correct_graphql_response(result)
     environments = result.result["data"]["data"]["environments"]
     results = environments["edges"]
     assert len(results) == 5
@@ -387,6 +485,7 @@ async def test_query_environments_with_paging(server, client, setup_database):
     assert environments["pageInfo"]["endCursor"] == new_last_cursor
     assert environments["pageInfo"]["hasNextPage"] is False
     assert environments["pageInfo"]["hasPreviousPage"] is True
+    assert result.result["data"]["data"]["environments"]["totalCount"] == 9
     expected_ids = [1, 2, 3, 4, 5]
     for i in range(len(results)):
         assert results[i]["node"]["name"] == f"test-env-{expected_ids[i]}"
@@ -395,7 +494,7 @@ async def test_query_environments_with_paging(server, client, setup_database):
     previous_second_to_last_cursor = results[3]["cursor"]
     previous_first_cursor = first_cursor
     result = await client.graphql(query=query % f'last: 5, before:"{new_last_cursor}"')
-    assert result.code == 200
+    check_correct_graphql_response(result)
     environments = result.result["data"]["data"]["environments"]
     results = environments["edges"]
     assert len(results) == 5
@@ -404,6 +503,7 @@ async def test_query_environments_with_paging(server, client, setup_database):
     assert environments["pageInfo"]["endCursor"] == previous_second_to_last_cursor
     assert environments["pageInfo"]["hasNextPage"] is True
     assert environments["pageInfo"]["hasPreviousPage"] is True
+    assert result.result["data"]["data"]["environments"]["totalCount"] == 9
     expected_ids = [0, 1, 2, 3, 4]
     for i in range(len(results)):
         assert results[i]["node"]["name"] == f"test-env-{expected_ids[i]}"
@@ -412,7 +512,7 @@ async def test_query_environments_with_paging(server, client, setup_database):
 
     # last by itself
     result = await client.graphql(query=query % "last: 5")
-    assert result.code == 200
+    assert result.code == 400
     data = result.result["data"]
     assert data
     assert data["data"] is None
@@ -421,7 +521,7 @@ async def test_query_environments_with_paging(server, client, setup_database):
 
     # first + last
     result = await client.graphql(query=query % "first: 5, last: 5")
-    assert result.code == 200
+    assert result.code == 400
     data = result.result["data"]
     assert data
     assert data["data"] is None
@@ -430,7 +530,7 @@ async def test_query_environments_with_paging(server, client, setup_database):
 
     # first + before
     result = await client.graphql(query=query % f'first: 5, before: "{new_last_cursor}"')
-    assert result.code == 200
+    assert result.code == 400
     data = result.result["data"]
     assert data
     assert data["data"] is None
@@ -439,7 +539,7 @@ async def test_query_environments_with_paging(server, client, setup_database):
 
     # last + after
     result = await client.graphql(query=query % f'last: 5, after: "{first_cursor}"')
-    assert result.code == 200
+    assert result.code == 400
     data = result.result["data"]
     assert data
     assert data["data"] is None
@@ -448,7 +548,7 @@ async def test_query_environments_with_paging(server, client, setup_database):
 
     # before + after
     result = await client.graphql(query=query % f'before: "{new_last_cursor}", after: "{first_cursor}"')
-    assert result.code == 200
+    assert result.code == 400
     data = result.result["data"]
     assert data
     assert data["data"] is None
@@ -494,7 +594,7 @@ async def test_is_environment_compiling(server, client, clienthelper, environmen
         }
 
     result = await client.graphql(query=query)
-    assert result.code == 200
+    check_correct_graphql_response(result)
     assert result.result["data"] == get_response(is_compiling=False)
 
     # Trigger compile
@@ -504,7 +604,7 @@ async def test_is_environment_compiling(server, client, clienthelper, environmen
 
     # Assert that GraphQL reports that environment is compiling
     result = await client.graphql(query=query)
-    assert result.code == 200
+    check_correct_graphql_response(result)
     # Check if regular endpoint confirms that it is compiling
     regular_check = await client.is_compiling(environment)
     assert regular_check.code == 200
@@ -515,7 +615,7 @@ async def test_is_environment_compiling(server, client, clienthelper, environmen
 
     # Assert that GraphQL reports that environment is no longer compiling
     result = await client.graphql(query=query)
-    assert result.code == 200
+    check_correct_graphql_response(result)
     assert result.result["data"] == get_response(is_compiling=False)
 
 
@@ -547,7 +647,7 @@ async def test_notifications(server, client, setup_database):
     """
     # Try to get the full list of notifications without filter
     result = await client.graphql(query=query % "")
-    assert result.code == 200
+    assert result.code == 400
     assert len(result.result["data"]["errors"]) == 1
     assert (
         result.result["data"]["errors"][0]
@@ -563,7 +663,7 @@ async def test_notifications(server, client, setup_database):
                 {key: "created" order: "desc"}
             ])
     """)
-    assert result.code == 200
+    check_correct_graphql_response(result)
     edges = result.result["data"]["data"]["notifications"]["edges"]
     # Environments 1 has 6 uncleared notifications
     assert len(edges) == 6
@@ -588,7 +688,7 @@ async def test_notifications(server, client, setup_database):
             ],
             first: 3)
     """)
-    assert result.code == 200
+    check_correct_graphql_response(result)
     notifications = result.result["data"]["data"]["notifications"]
     pageInfo = notifications["pageInfo"]
     assert pageInfo["hasPreviousPage"] is False
@@ -619,7 +719,7 @@ async def test_notifications(server, client, setup_database):
             first: 3, after: "%s")
     """ % pageInfo["endCursor"]
     result = await client.graphql(query=query % next_page_filter)
-    assert result.code == 200
+    check_correct_graphql_response(result)
     notifications = result.result["data"]["data"]["notifications"]
     pageInfo = notifications["pageInfo"]
     assert pageInfo["hasPreviousPage"] is True
@@ -662,12 +762,46 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
     await mixed_resource_generator(environment, instances, resources_per_version)
 
     # Quick way of simulating a non-compliant report
-    # It has to be non-orphan otherwise the complianceState returned will be None
+    # It has to be non-orphan otherwise the compliance returned will be None
     rps = await data.ResourcePersistentState.get_one(
         environment=environment, last_handler_run=state.HandlerResult.SUCCESSFUL, is_orphan=False
     )
     assert rps
     await rps.update_fields(last_handler_run_compliant=False)
+    query = """
+    {
+        resourceSummary(environment: "%s") {
+            totalCount
+            lastHandlerRun
+            blocked
+            compliance
+            isDeploying
+        }
+    }
+    """ % environment
+    composed_result = await client.graphql(query=query)
+    assert composed_result.code == 200
+    summary = composed_result.result["data"]["data"]["resourceSummary"]
+    assert summary["totalCount"] == total_resources_in_latest_version
+    ## Blocked
+    assert summary["blocked"]["blocked"] == instances * 2  # skipped_for_undefined / undefined
+    assert summary["blocked"]["not_blocked"] == instances * (resources_per_version - 2)
+    assert summary["blocked"]["temporarily_blocked"] == 0
+    ## is_deploying
+    assert summary["isDeploying"]["true"] == instances  # deploying
+    assert summary["isDeploying"]["false"] == instances * (resources_per_version - 1)
+    ## last_handler_run
+    assert summary["lastHandlerRun"]["new"] == instances * 3  # deploying / skipped_for_undefined / undefined
+    assert summary["lastHandlerRun"]["successful"] == instances * (resources_per_version - 5)
+    assert summary["lastHandlerRun"]["failed"] == instances  # failed
+    assert summary["lastHandlerRun"]["skipped"] == instances  # skipped
+    # compliance
+    assert summary["compliance"]["has_update"] == instances * 2  # deploying / skipped_for_undefined
+    # -1 is the reporting resource we manually set to fail
+    assert summary["compliance"]["compliant"] == instances * (resources_per_version - 5) - 1
+    # failed / skipped / +1 is the simulated non_compliant reporting resource
+    assert summary["compliance"]["non_compliant"] == instances * 2 + 1
+    assert summary["compliance"]["undefined"] == instances  # undefined
 
     filters = [
         # (1 undefined, 1 skipped for undefined) * <instances>
@@ -711,11 +845,9 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
         {"query": "purged: false", "result": total_resources},
         # skipped for undefined
         {
-            "query": "complianceState: {eq: HAS_UPDATE} blocked: {eq: BLOCKED}",
+            "query": "compliance: {eq: HAS_UPDATE} blocked: {eq: BLOCKED}",
             "result": instances,
-            "assertion": {
-                "state": {"blocked": state.Blocked.BLOCKED.name, "complianceState": state.Compliance.HAS_UPDATE.name}
-            },
+            "assertion": {"state": {"blocked": state.Blocked.BLOCKED.name, "compliance": state.Compliance.HAS_UPDATE.name}},
         },
         # 1 undefined, 1 skipped for undefined, 1 still deploying
         {
@@ -737,25 +869,25 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
         },
         #  1 skipped for undefined
         {
-            "query": "lastHandlerRun: {eq: NEW} isDeploying: false complianceState: {neq: UNDEFINED}",
+            "query": "lastHandlerRun: {eq: NEW} isDeploying: false compliance: {neq: UNDEFINED}",
             "result": instances,
             "assertion": {
                 "state": {
                     "lastHandlerRun": state.HandlerResult.NEW.name,
                     "isDeploying": False,
-                    "complianceState": state.Compliance.HAS_UPDATE.name,
+                    "compliance": state.Compliance.HAS_UPDATE.name,
                 }
             },
         },
         # Non-compliant report
         {
-            "query": "lastHandlerRun: {eq: SUCCESSFUL} isDeploying: false complianceState: {eq: NON_COMPLIANT}",
+            "query": "lastHandlerRun: {eq: SUCCESSFUL} isDeploying: false compliance: {eq: NON_COMPLIANT}",
             "result": 1,
             "assertion": {
                 "state": {
                     "lastHandlerRun": state.HandlerResult.SUCCESSFUL.name,
                     "isDeploying": False,
-                    "complianceState": state.Compliance.NON_COMPLIANT.name,
+                    "compliance": state.Compliance.NON_COMPLIANT.name,
                 }
             },
         },
@@ -764,6 +896,7 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
         query = """
         {
             resources (filter: {environment: "%s" %s}) {
+                totalCount
                 edges {
                     node {
                       resourceId
@@ -779,7 +912,7 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
                         isDeploying
                         lastHandlerRun
                         lastHandlerRunAt
-                        complianceState
+                        compliance
                         currentIntentAttributeHash
                       }
                       requiresLength
@@ -792,9 +925,10 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
             f["query"],
         )
         result = await client.graphql(query=query)
-        assert result.code == 200
-        assert result.result["data"]["errors"] is None
+        check_correct_graphql_response(result)
         assert len(result.result["data"]["data"]["resources"]["edges"]) == f["result"], f["query"]
+        # Assert that the totalCount takes the filter into account
+        assert result.result["data"]["data"]["resources"]["totalCount"] == f["result"], f["query"]
         assertion = f.get("assertion", None)
         if assertion:
             for res in result.result["data"]["data"]["resources"]["edges"]:
@@ -803,11 +937,11 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
     query = """
     {
         resources ( filter: {environment: "%s" lastHandlerRun: {eq: NEW}}
-            orderBy: [{key: "complianceState" order: "asc"}]) {
+            orderBy: [{key: "compliance" order: "asc"}]) {
             edges {
                 node {
                   state{
-                    complianceState
+                    compliance
                   }
                 }
             }
@@ -815,13 +949,12 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
     }
     """ % environment
     result = await client.graphql(query=query)
-    assert result.code == 200
-    assert result.result["data"]["errors"] is None
+    check_correct_graphql_response(result)
     result_resources = result.result["data"]["data"]["resources"]["edges"]
     assert len(result_resources) == 3 * instances
     for i in range(0, len(result_resources)):
         assert (
-            result_resources[i]["node"]["state"]["complianceState"] == state.Compliance.HAS_UPDATE.name
+            result_resources[i]["node"]["state"]["compliance"] == state.Compliance.HAS_UPDATE.name
             if i < 2 * instances
             else state.Compliance.UNDEFINED.name
         )
@@ -829,11 +962,11 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
     query = """
     {
         resources (filter: {environment: "%s" lastHandlerRun: {eq: NEW}}
-            orderBy: [{key: "complianceState" order: "desc"}, {key: "isDeploying" order: "asc"}]) {
+            orderBy: [{key: "compliance" order: "desc"}, {key: "isDeploying" order: "asc"}]) {
             edges {
                 node {
                   state{
-                    complianceState
+                    compliance
                     isDeploying
                   }
                 }
@@ -842,14 +975,13 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
     }
     """ % environment
     result = await client.graphql(query=query)
-    assert result.code == 200
-    assert result.result["data"]["errors"] is None
+    check_correct_graphql_response(result)
     result_resources = result.result["data"]["data"]["resources"]["edges"]
     assert len(result_resources) == 3 * instances
     for i in range(0, len(result_resources)):
         # [{UNDEFINED, False}, {HAS_UPDATE, False}, {HAS_UPDATE, True}]
         assert (
-            result_resources[i]["node"]["state"]["complianceState"] == state.Compliance.UNDEFINED.name
+            result_resources[i]["node"]["state"]["compliance"] == state.Compliance.UNDEFINED.name
             if i < instances
             else state.Compliance.HAS_UPDATE.name
         )
@@ -858,11 +990,11 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
     query = """
        {
            resources (filter: {environment: "%s" lastHandlerRun: {eq: NEW}}
-                    orderBy: [{key: "complianceState" order: "desc"}, {key: "isDeploying" order: "desc"}]) {
+                    orderBy: [{key: "compliance" order: "desc"}, {key: "isDeploying" order: "desc"}]) {
                edges {
                    node {
                      state{
-                       complianceState
+                       compliance
                        isDeploying
                      }
                    }
@@ -871,15 +1003,290 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
        }
        """ % environment
     result = await client.graphql(query=query)
-    assert result.code == 200
-    assert result.result["data"]["errors"] is None
+    check_correct_graphql_response(result)
     result_resources = result.result["data"]["data"]["resources"]["edges"]
     assert len(result_resources) == 3 * instances
     for i in range(0, len(result_resources)):
         # [{UNDEFINED, False}, {HAS_UPDATE, True}, {HAS_UPDATE, False}]
         assert (
-            result_resources[i]["node"]["state"]["complianceState"] == state.Compliance.UNDEFINED.name
+            result_resources[i]["node"]["state"]["compliance"] == state.Compliance.UNDEFINED.name
             if i < instances
             else state.Compliance.HAS_UPDATE.name
         )
         assert result_resources[i]["node"]["state"]["isDeploying"] == (False if i < instances or i >= 2 * instances else True)
+
+
+async def test_graphql_variables_and_operation_name(server, client, setup_database):
+    """
+    Test that graphql variables and the operation name are working as intended.
+    """
+    query = """
+    query GetEnvironments($environment: UUID!) {
+        environments(filter: { id: $environment }) {
+            edges {
+                node {
+                    id
+
+                }
+            }
+        }
+    }
+    query GetResources($environment: UUID!) {
+        resources(filter: { environment: $environment }) {
+            edges {
+                node {
+                    resourceId
+
+                }
+            }
+        }
+    }
+    """
+    result = await client.graphql(query=query, variables={"environment": env_1}, operationName="GetEnvironments")
+    check_correct_graphql_response(result)
+    assert "resources" not in result.result["data"]["data"]
+    assert result.result["data"]["data"]["environments"]["edges"][0]["node"]["id"] == env_1, result.result["data"]
+
+    result = await client.graphql(query=query, variables={"environment": env_1}, operationName="GetResources")
+    check_correct_graphql_response(result)
+    assert "environments" not in result.result["data"]["data"]
+    assert "resources" in result.result["data"]["data"]
+
+    # wrong operation
+    result = await client.graphql(query=query, variables={"environment": env_1}, operationName="WrongOperation")
+    assert result.code == 400
+    assert len(result.result["data"]["errors"]) == 1
+    assert result.result["data"]["errors"][0] == 'Unknown operation named "WrongOperation".'
+
+    # omit variables
+    result = await client.graphql(query=query)
+    assert result.code == 400
+    assert result.result["data"]["data"] is None
+    assert len(result.result["data"]["errors"]) == 1
+    assert result.result["data"]["errors"][0] == "Variable '$environment' of required type 'UUID!' was not provided."
+
+    # $environment is now optional
+    query = """
+    query GetEnvironments($environment: UUID) {
+        environments(filter: { id: $environment }) {
+            edges {
+                node {
+                    id
+
+                }
+            }
+        }
+    }
+    """
+    # omit variables
+    result = await client.graphql(query=query)
+    assert result.code == 400
+    assert result.result["data"]["data"] is None
+    assert len(result.result["data"]["errors"]) == 1
+    assert result.result["data"]["errors"][0] == "Filter id was requested but no value was provided"
+
+    # Test with multiple variables
+    query = """
+    query GetNotifications($environment: UUID!, $cleared: Boolean!){
+            notifications (filter: {environment: $environment, cleared: $cleared}) {
+                edges {
+                    node {
+                        id
+                        environment
+                        cleared
+                    }
+                }
+            }
+        }
+    """
+    result = await client.graphql(query=query, variables={"environment": env_1, "cleared": False})
+    check_correct_graphql_response(result)
+    notifications = result.result["data"]["data"]["notifications"]["edges"]
+    for notification in notifications:
+        assert notification["node"]["environment"] == env_1
+        assert notification["node"]["cleared"] is False
+
+
+async def test_total_count(server, client, setup_database):
+    """
+    Test the totalCount attribute.
+    Asserts that it works when multiple queries are requested and that the values are as expected.
+    Assumes that for each query the amount of results is different
+    """
+    query = """
+    query GetEnvironments($environment: UUID!, $cleared: Boolean!)
+    {
+        environments{
+            pageInfo{
+                startCursor,
+                endCursor,
+                hasPreviousPage,
+                hasNextPage
+            }
+            totalCount
+            edges {
+                cursor
+                node {
+                  id
+                  name
+                }
+            }
+        }
+        notifications(filter: {
+                  cleared: $cleared
+                  environment: $environment
+                }){
+            totalCount
+            edges {
+                cursor
+            }
+        }
+    }
+    """
+    result = await client.graphql(query=query, variables={"environment": env_1, "cleared": False})
+    assert result.code == 200
+    found_counts = {
+        "environments": 3,
+        "notifications": 6,
+    }
+    assert result.result["data"]["data"].items()
+    for name, res in result.result["data"]["data"].items():
+        count = res["totalCount"]
+        assert len(res["edges"]) == count
+        assert found_counts[name] == count
+
+    # Test on InlineFragment and FragmentSpread
+    query = """
+    query GetEnvironments($environment: UUID!, $cleared: Boolean!) {
+        environments{
+            ...EnvironmentFields
+        }
+        notifications(filter: {
+                  cleared: $cleared
+                  environment: $environment
+                }){
+            ... on NotificationConnection{
+                totalCount
+                edges {
+                    node {
+                        id
+                    }
+                }
+            }
+        }
+    }
+    fragment EnvironmentFields on EnvironmentConnection {
+        totalCount
+        edges {
+            node {
+                id
+            }
+        }
+    }
+    """
+    result = await client.graphql(query=query, variables={"environment": env_1, "cleared": False})
+    assert result.code == 200
+    assert result.result["data"]["data"].items()
+    for name, res in result.result["data"]["data"].items():
+        count = res["totalCount"]
+        assert len(res["edges"]) == count
+        assert found_counts[name] == count
+
+    # Test on nested fragments
+    query = """
+    {
+        environments{
+            ...NestedFragment
+        }
+    }
+    fragment NestedFragment on EnvironmentConnection {
+        ...EnvironmentFields
+    }
+    fragment EnvironmentFields on EnvironmentConnection {
+        totalCount
+    }
+    """
+    result = await client.graphql(query=query)
+    assert result.code == 200
+    assert result.result["data"]["data"]["environments"]["totalCount"] == found_counts["environments"]
+
+
+async def test_connection_type_for_unchanged():
+    """
+    This test makes sure that StrawberrySQLAlchemyMapper._connection_type_for is not updated without our knowledge.
+    This is because we have a CustomStrawberrySQLAlchemyMapper that overrides this method with some small changes
+    but any changes that they make to the original method will not be inherited into ours, and that could break our code.
+    """
+    code, line_no = inspect.getsourcelines(StrawberrySQLAlchemyMapper._connection_type_for)
+    assert "".join(code) == """    def _connection_type_for(self, type_name: str) -> Type[Any]:
+        \"\"\"
+        Get or create a corresponding Connection model for the given type
+        (to support future pagination)
+        \"\"\"
+        connection_name = f"{type_name}Connection"
+        if connection_name not in self.connection_types:
+            edge_type = self._edge_type_for(type_name)
+            lazy_type = StrawberrySQLAlchemyLazy(type_name=type_name, mapper=self)
+            self.connection_types[connection_name] = connection_type = strawberry.type(
+                dataclasses.make_dataclass(
+                    connection_name,
+                    [
+                        ("edges", List[edge_type]),  # type: ignore[valid-type]
+                    ],
+                    bases=(relay.ListConnection[lazy_type],),  # type: ignore[valid-type]
+                )
+            )
+            setattr(connection_type, _GENERATED_FIELD_KEYS_KEY, ["edges"])
+            setattr(connection_type, _IS_GENERATED_CONNECTION_TYPE_KEY, True)
+        return self.connection_types[connection_name]
+"""
+
+
+async def test_resource_summary_no_resources(server, environment, client):
+    """
+    Verify that the resourceSummary GraphQL query doesn't fail if there are no resources
+    in the given environment.
+    """
+    query = """
+        query ($environment: String!) {
+          resourceSummary(environment: $environment) {
+            totalCount
+            lastHandlerRun
+            blocked
+            compliance
+            isDeploying
+          }
+        }
+    """
+    variables = {
+        "environment": environment,
+    }
+    result = await client.graphql(query=query, variables=variables)
+    check_correct_graphql_response(result)
+    assert result.result["data"]["data"]["resourceSummary"]["totalCount"] == 0, result.result["data"]
+
+
+async def test_missing_query_exception(server, environment, client):
+    """
+    Test different cases of an incorrect query.
+    """
+    query = """
+    resourceSummary(environment: $environment) {
+        totalCount
+        lastHandlerRun
+        blocked
+        compliance
+        isDeploying
+      }
+    """
+    result = await client.graphql(query=query)
+    assert result.code == 400
+    assert result.result["data"]["data"] is None
+    assert len(result.result["data"]["errors"]) == 1
+    assert result.result["data"]["errors"][0] == "Syntax Error: Unexpected Name 'resourceSummary'."
+
+    result = await client.graphql(query="")
+    assert result.code == 400
+    assert result.result["data"]["data"] is None
+    assert len(result.result["data"]["errors"]) == 1
+    assert result.result["data"]["errors"][0] == 'Request data is missing a "query" value'

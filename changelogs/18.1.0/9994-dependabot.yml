@@ -1,0 +1,6 @@
+change-type: patch
+description: Bump types-setuptools from 80.10.0.20260124 to 81.0.0.20260209
+destination-branches:
+- master
+- iso9
+sections: {}

@@ -608,7 +608,7 @@ class ReplaceValue(Mutator):
         jsonpath_expr.update(self.resource, value)
 
 
-@typing.runtime_checkable
+# Not runtime-checkable because it is very expensive. See `maybe_reference` for a cheaper alternative.
 class MaybeReference(typing.Protocol):
     """
     DSL value that may represent a reference in the Python domain, while having a different value in the DSL domain.
@@ -626,6 +626,14 @@ class MaybeReference(typing.Protocol):
         ...
 
 
+def maybe_reference(value: object) -> typing.TypeIs[MaybeReference]:
+    """
+    Returns true iff value implements the MaybeReference protocol. Due to performance reasons we can not do a proper isinstance
+    check, but this is a best-effort alternative that keeps typing information unambiguous for callers.
+    """
+    return hasattr(value, "unwrap_reference")
+
+
 def unwrap_reference(value: object) -> Optional[Reference]:
     """
     Iff the given value is a reference or a DSL value that represents a reference, returns the associated reference.
@@ -634,7 +642,11 @@ def unwrap_reference(value: object) -> Optional[Reference]:
     This includes DSL dataclass instances with reference attributes, if they were initially constructed in the Python
     domain as a reference to a dataclass instance (and converted on the boundary).
     """
-    return value if isinstance(value, Reference) else value.unwrap_reference() if isinstance(value, MaybeReference) else None
+    if isinstance(value, Reference):
+        return value
+    if maybe_reference(value):
+        return value.unwrap_reference()
+    return None
 
 
 def is_reference_of(instance: typing.Optional[object], type_class: type[object]) -> bool:

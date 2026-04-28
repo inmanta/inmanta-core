@@ -769,6 +769,17 @@ def path_policy_engine_executable() -> str:
 
 
 @pytest.fixture(scope="function")
+def content_features_file() -> str:
+    """
+    A fixture that returns the content of the features file
+    that should be configured on the inmanta server.
+    """
+    return """
+        slices: {}
+    """
+
+
+@pytest.fixture(scope="function")
 async def server_config(
     inmanta_config,
     postgres_db,
@@ -782,6 +793,7 @@ async def server_config(
     authorization_provider: AuthorizationProviderName,
     access_policy: str,
     path_policy_engine_executable: str,
+    content_features_file: str,
 ):
     reset_metrics()
     agentmanager.assert_no_start_scheduler = not auto_start_agent
@@ -822,7 +834,11 @@ async def server_config(
             access_policy=access_policy,
             path_opa_executable=path_policy_engine_executable,
         )
-        yield config
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", delete=True, delete_on_close=True) as fh:
+            fh.write(content_features_file)
+            fh.flush()
+            config.feature_file_config.set(fh.name)
+            yield config
 
     agentmanager.assert_no_start_scheduler = False
     agentmanager.no_start_scheduler = False
@@ -1051,10 +1067,9 @@ async def agent_factory(
                 await agent.start_working()
                 new_state = copy.deepcopy(dict(agent.scheduler._state.resource_state))
                 assert the_state == new_state
-
-        await asyncio.gather(*[agent.stop() for agent in agents])
     finally:
         DISABLE_STATE_CHECK = False
+        await asyncio.gather(*[agent.stop() for agent in agents])
 
 
 @pytest.fixture(scope="function")
@@ -1125,13 +1140,20 @@ async def null_agent_multi(server_multi, environment_multi):
 
 
 @pytest.fixture(scope="function")
-async def agent_multi(server_multi, environment_multi):
+async def agent_multi(server_multi, environment_multi, request):
     """Construct an agent that can execute using the resource container"""
     server = server_multi
     environment = environment_multi
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
-    a = Agent(environment)
+    token: str | None = None
+    if "Auth" in request.node.callspec.id:
+        # Agents, started by the server, always get a token that is scoped to its
+        # own environment. We do the same here to mimic the same behavior for in-process
+        # agents used by the test suite.
+        token = protocol.encode_token(client_types=["agent"], environment=environment)
+
+    a = Agent(environment, token=token)
 
     executor = InProcessExecutorManager(
         environment,
@@ -2917,7 +2939,7 @@ async def mixed_resource_generator(
             raise Exception("resources_per_version cannot be less than 5")
         deploy_counter = 0
 
-        dummy_scheduler = scheduler.ResourceScheduler(uuid.UUID(environment), executor_manager=None, client=client)
+        dummy_scheduler = scheduler.ResourceScheduler(uuid.UUID(environment), executor_manager=None, client=null_agent._client)
 
         async def mock_run(self) -> None:
             """Mocks the call to TaskRunner._run."""

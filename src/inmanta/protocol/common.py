@@ -319,6 +319,14 @@ class UrlPath:
     def path(self) -> str:
         return self._path
 
+    @property
+    def openapi_path(self) -> str:
+        """Return the path with variables in OpenAPI {var} notation."""
+        path = self._path
+        for var in self._vars:
+            path = path.replace(f"<{var}>", f"{{{var}}}")
+        return path
+
     def generate_path(self, variables: dict[str, str]) -> str:
         """Create a path with all variables substituted"""
         path = self._path
@@ -405,6 +413,8 @@ class MethodProperties(Generic[R]):
         varkw: bool = False,
         token_param: str | None = None,
         document_in_service_swagger: bool = False,
+        include_response_in_docs_swagger: bool = True,
+        allow_env_scoped_tokens: bool = False,
     ) -> None:
         """
         Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
@@ -436,6 +446,11 @@ class MethodProperties(Generic[R]):
         :param document_in_service_swagger: (LSM extension only, ignored otherwise) This parameter controls whether this
             endpoint should be documented in the swagger served by the `lsm_services_openapi_docs` endpoint for each service
             of the catalog.
+        :param include_response_in_docs_swagger: This parameter controls whether the response for this endpoint should be
+            documented in the swagger served in the `REST API reference` section of the Inmanta documentation.
+        :param allow_env_scoped_tokens: If the API endpoint is not scoped to a specific environment and the legacy authorization
+                                       provider is used, indicates whether the API call should be allowed for environment-scoped
+                                       tokens.
         """
         if api is None:
             api = not server_agent and not agent_server
@@ -469,6 +484,7 @@ class MethodProperties(Generic[R]):
         self._return_type: Optional[type[R]] = None
         self.token_param = token_param
         self.document_in_service_swagger = document_in_service_swagger
+        self.include_response_in_docs_swagger = include_response_in_docs_swagger
 
         self._parsed_docstring = docstring_parser.parse(text=function.__doc__, style=docstring_parser.DocstringStyle.REST)
         self._docstring_parameter_map = {p.arg_name: p.description for p in self._parsed_docstring.params}
@@ -486,6 +502,7 @@ class MethodProperties(Generic[R]):
         self.function.__method_properties__.append(self)
 
         self.authorization_metadata: AuthorizationMetadata | None = None
+        self.allow_env_scoped_tokens: bool = allow_env_scoped_tokens
 
     @classmethod
     def get_open_policy_agent_data(cls) -> dict[str, object]:
@@ -925,6 +942,10 @@ class MethodProperties(Generic[R]):
         """
         return f"/{self._api_prefix}/v{self._api_version}{self._path.path}"
 
+    def get_openapi_path(self) -> str:
+        """Return the full path with OpenAPI {var} notation for path parameters."""
+        return f"/{self._api_prefix}/v{self._api_version}{self._path.openapi_path}"
+
     def get_call_url(self, msg: dict[str, str]) -> str:
         """
         Create a calling url for the client
@@ -1076,6 +1097,10 @@ class UrlMethod:
         Returns the path part of the URL. Parameters in this path are templated using the <param> notation.
         """
         return self._properties.get_full_path()
+
+    def get_openapi_path(self) -> str:
+        """Returns the path with OpenAPI {var} notation."""
+        return self._properties.get_openapi_path()
 
 
 # Util functions

@@ -30,9 +30,9 @@ set :inmanta.config:option:`server.ssl-ca-cert-file` to the truststore.
 
     # The certificate chain that the compiler and agents should use to validate the server certificate
     ssl_ca_cert_file=/etc/inmanta/server.chain
-    # The address at which the compiler and agent should connect
-    # Must correspond to hostname the ssl certificate is bound to
-    server_address=localhost
+    # The address at which the compiler and agent should connect.
+    # Must correspond to the hostname in the ssl certificate
+    internal_server_address=localhost
 
 
 
@@ -60,8 +60,8 @@ Authentication
 --------------
 Inmanta authentication uses JSON Web Tokens for authentication (bearer token). Inmanta issues tokens for service to service
 interaction (agent to server, compiler to server, cli to server and 3rd party API interactions). For user interaction through
-the web-console Inmanta can rely on its built-in authentication provider or on a 3rd party auth broker. Currently
-the web-console only supports Keycloak as 3rd party auth broker.
+the web-console Inmanta can rely on its built-in authentication provider or on any OpenID Connect (OIDC) compliant identity
+provider (Microsoft Entra ID, Authentik, Keycloak, Okta, Auth0, ...).
 
 Inmanta expects a token of which it can validate the signature. Inmanta can verify both symmetric signatures with
 HS256 and asymmetric signatures with RSA (RS256). Tokens it signs itself for other processes are always signed using HS256.
@@ -70,7 +70,8 @@ There are no key distribution issues because the server is both the signing and 
 
 Setup server auth
 ^^^^^^^^^^^^^^^^^
-The server requests authentication for all API calls (except for the `GET /api/v2/health` endpoint) when :inmanta.config:option:`server.auth` is set to true. In that case all other components require a valid token.
+The server requests authentication for all API calls (except for the `GET /api/v2/health` endpoint) when
+:inmanta.config:option:`server.auth` is set to true. In that case all other components require a valid token.
 
 .. warning:: When multiple servers are used in a HA setup, each server requires the same configuration (SSL enabled and
     private keys).
@@ -232,183 +233,225 @@ web-console will ask for your credentials.
 External authentication providers
 ---------------------------------
 
-Inmanta supports all external authentication providers that support JWT tokens with RS256 or HS256. These providers need to
-add a claim that indicates the allowed client type (``urn:inmanta:ct``). Currently, the web-console only has support for keycloak.
-However, each provider that can insert custom (private) claims should work. The web-console now relies on the keycloak js library
-to implement the OAuth2 implicit flow, required to obtain a JWT.
+Inmanta supports any OpenID Connect (OIDC) compliant identity provider. The web-console implements the authorization code
+flow with PKCE via `oidc-client-ts <https://github.com/authts/oidc-client-ts>`_. The server validates JWT access tokens signed
+with RS256 using the provider's JWKS endpoint.
 
-.. tip:: All patches to support additional providers such as Auth0 are welcome. Alternatively contact Inmanta NV for custom
-    integration services.
+The provider needs to issue JWT access tokens. A custom ``urn:inmanta:ct`` claim is no longer required — when the claim is
+absent, the server assumes client type ``api``, which is the correct default for tokens issued to the web-console.
 
-Keycloak configuration
-^^^^^^^^^^^^^^^^^^^^^^
-The web-console has out of the box support for authentication with `Keycloak <http://www.keycloak.org>`_. Install keycloak and
-create an initial login as described in the Keycloak documentation and login with admin credentials.
+The server setup (a ``[web-ui]`` section and an ``auth_jwt_*`` block) is identical for all providers and is described in
+:ref:`generic-oidc-config`. Provider-specific instructions are given afterwards for
+:ref:`entra-id-setup` and :ref:`authentik-setup`.
 
-This guide was made based on Keycloak 20.0
+Migrating from a Keycloak-specific setup
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-If inmanta is configured to use SSL, the authentication provider should also use SSL. Otherwise, the web-console will not be
-able to fetch user information from the authentication provider.
+Older versions of the web-console had a Keycloak-specific integration that used the OAuth2 implicit flow via the ``keycloak-js``
+library. This is now deprecated. Existing Keycloak deployments should migrate to the generic OIDC provider, which uses the
+authorization code flow with PKCE.
 
+To migrate, replace the legacy ``[web-ui]`` section:
 
-Step 1: Optionally create a new realm
-"""""""""""""""""""""""""""""""""""""
+.. code-block:: ini
 
-Create a new realm if you want to use keycloak for other purposes (it is an SSO solution) than Inmanta authentication. Another
-reason to create a new realm (or not) is that the master realm also provides the credentials to configure keycloak itself.
+    # Legacy Keycloak-specific configuration (deprecated)
+    [web-ui]
+    oidc_realm=inmanta
+    oidc_auth_url=http://keycloak.example.com:8080
+    oidc_client_id=inmantaso
 
-For example call the realm inmanta
+With the generic OIDC equivalent:
 
-.. figure:: /administrators/images/kc_realm.png
-   :width: 100%
-   :align: center
+.. code-block:: ini
 
-   Create a new realm
+    [web-ui]
+    oidc_authority=http://keycloak.example.com:8080/realms/inmanta
+    oidc_client_id=inmantaso
 
+The ``auth_jwt_*`` block that validates tokens on the server side does not change — it was already a generic JWT/OIDC block.
 
-.. figure:: /administrators/images/kc_add_realm.png
-   :width: 100%
-   :align: center
+On the Keycloak side, reconfigure the client:
 
-   Specify a name for the realm
+* Change the client's **Access Type** to ``public`` (or equivalent) so no client secret is required.
+* Enable **Standard Flow** (authorization code). You may disable **Implicit Flow**.
+* Ensure **PKCE** is enabled for the client (``pkce.code.challenge.method=S256`` in the client attributes).
+* Update **Valid Redirect URIs** and **Web Origins** to the web-console's origin (e.g. ``https://orchestrator.example.com``).
 
+The ``urn:inmanta:ct`` hardcoded claim mapper on the Keycloak client is no longer required and may be removed. The audience
+mapper that sets the ``aud`` claim to the client id is still required.
 
-Step 2: Add a new client to keycloak
-""""""""""""""""""""""""""""""""""""
+.. _generic-oidc-config:
 
-Make sure the correct realm is active (the name is shown in the realm selection dropdown) to which you want to add a new client.
+Generic OIDC configuration
+^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. figure:: /administrators/images/kc_start.png
-   :width: 100%
-   :align: center
+All OIDC providers require the same two configuration blocks on the orchestrator: a ``[web-ui]`` block that tells the web-console
+which IdP to redirect to, and an ``auth_jwt_*`` block that tells the server how to validate the JWT access tokens issued by that
+IdP.
 
-   The start page of your newly created realm.
+Add the configuration to a file like ``/etc/inmanta/inmanta.d/oidc.cfg``:
 
-Go to clients and click create on the right hand side of the screen.
+.. code-block:: ini
 
-.. figure:: /administrators/images/kc_clients.png
-   :width: 100%
-   :align: center
+    [server]
+    auth=true
 
-   Clients in the master realm. Click the create button to create an inmanta client.
+    [auth_jwt_oidc]
+    algorithm=RS256
+    sign=false
+    client_types=api
+    issuer=<IdP issuer URL, exactly as it appears in the token iss claim>
+    audience=<expected aud claim>
+    jwks_uri=<IdP JWKS URL>
+    jwt_username_claim=preferred_username
 
-Provide an id for the client and make sure that the client protocol is ``openid-connect`` and click save.
+    [web-ui]
+    oidc_authority=<IdP authority URL used by the web-console for discovery>
+    oidc_client_id=<OAuth2 client id>
+    # Optional: override the scopes requested by the web-console.
+    # Default: "openid profile email"
+    # oidc_scope=openid profile email <resource-scope>
 
-.. figure:: /administrators/images/kc_new_client.png
-   :width: 100%
-   :align: center
+The four unknowns (``issuer``, ``audience``, ``jwks_uri``, and the ``oidc_authority``) can almost always be found in the IdP's
+OpenID Connect discovery document at ``<authority>/.well-known/openid-configuration``.
 
-   Create client screen
+On the IdP side, register a new OAuth2 client/application with:
 
-After clicking save, keycloak opens the configuration of the client. Modify the client to allow implicit flows and add valid redirect URIs and valid post logout redirect URIs. As a best practice, also add the allowed web origins. See the screenshot below as an example.
+* **Client type**: public / single-page application (PKCE is used instead of a client secret).
+* **Redirect URI**: the origin of the web-console (no path), e.g. ``https://orchestrator.example.com``.
+* **Grant type**: authorization code (with PKCE).
 
-.. figure:: /administrators/images/kc_client_details.png
-   :width: 100%
-   :align: center
+.. note:: The ``jwt_username_claim`` option tells the server which claim to use for the user's display name. For most IdPs this
+    is ``preferred_username``. For IdPs that only issue ``email``, set it to ``email``.
 
+.. _entra-id-setup:
 
-.. figure:: /administrators/images/kc_client_details2.png
-   :width: 100%
-   :align: center
+Setup for Microsoft Entra ID (Azure AD)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-   Allow implicit flows (others may be disabled) and configure allowed callback urls of the web-console.
-
-Go to the client scopes in your Client details.
-
-.. figure:: /administrators/images/kc_client_scopes.png
-   :width: 100%
-   :align: center
-
-   Click on inmantaso-dedicated to edit the dedicated scope and mappers.
-
-Add a mapper to add custom claims to the issued tokens for the API client type. Click on adding a new mapper and select By Configuration.
-
-.. figure:: /administrators/images/kc_mappers.png
-   :width: 100%
-   :align: center
-
-   Add a custom mapper to the client to include ``:urn:inmanta:ct``
-
-Select hardcoded claim, enter ``:urn:inmanta:ct`` as claim name and `api` as claim value and string as type. It should only be
-added to the access token.
-
-.. figure:: /administrators/images/kc_ct_mapper.png
-   :width: 100%
-   :align: center
-
-   Add the ct claim to all access tokens for this client.
-
-Add a second mapper to add inmanta to the audience (only required for Keycloak 4.6 and higher). Click `add` again as in the previous step.
-
-.. figure:: /administrators/images/kc_audience_mapper.png
-   :width: 100%
-   :align: center
-
-Fill in the following values:
-
-* Name: inmanta-audience
-* Mapper type: Audience
-* Included Client Audience: inmanta
-* Add to access token: on
-
-Click save.
-
-Step 3: Configure inmanta server
+Step 1: Register the application
 """"""""""""""""""""""""""""""""
 
-.. figure:: /administrators/images/kc_install.png
-   :width: 100%
-   :align: center
+In the Azure portal, open **Microsoft Entra ID → App registrations → New registration**:
 
-   Show the correct configuration parameters in JSON format. (Click on the top right dropdown 'Action' and pick 'Download adapter config'.)
+* Name: e.g. ``inmanta-orchestrator``.
+* Supported account types: typically "Accounts in this organizational directory only (single tenant)".
+* Redirect URI: platform **Single-page application (SPA)**, URI = the origin of the web-console (e.g. ``http://localhost:8888``
+  for a local test setup or ``https://orchestrator.example.com`` for production). Entra ID requires SPA redirect URIs to be
+  either HTTPS or use the ``localhost`` hostname.
 
-Select JSON format in the select box. This JSON string provides you with the details to
-configure the server correctly to redirect web-console users to this keycloak instance and to validate the tokens
-issued by keycloak.
+After registration, note the **Application (client) ID** and **Directory (tenant) ID** from the Overview blade.
 
-Add the keycloak configuration parameters to the web-ui section of the server configuration file. Add a configuration
-file called `/etc/inmanta/inmanta.d/keycloak.cfg`. Add the oidc_realm, oidc_auth_url and oidc_client_id to the web-ui section. Use
-the parameters from the installation json file created by keycloak.
+Step 2: Expose an API
+"""""""""""""""""""""
+
+Entra ID does not issue JWT access tokens for the default ``openid profile email`` scopes — those return an opaque token
+intended for Microsoft Graph. To obtain a JWT validated by the orchestrator, the application must expose a scope of its own.
+
+In **App registration → Expose an API**:
+
+* Click **Add** next to "Application ID URI" and accept the default ``api://<client-id>``. This URI becomes the ``audience``
+  value in ``oidc.cfg``.
+* Click **Add a scope**: name ``access``, admin display name ``Access Inmanta``, admin description ``Access the Inmanta
+  orchestrator API``, state Enabled.
+
+Step 3: Configure token version and optional claims
+"""""""""""""""""""""""""""""""""""""""""""""""""""
+
+By default Entra ID issues v1 access tokens. You can either keep v1 and use the v1 issuer format, or switch to v2 tokens:
+
+* **v2 tokens (recommended)**: In **App registration → Manifest**, set ``api.requestedAccessTokenVersion`` from ``null`` to
+  ``2`` and save. The ``iss`` claim becomes ``https://login.microsoftonline.com/<tenant-id>/v2.0``.
+* **v1 tokens**: Leave the manifest as-is. The ``iss`` claim is ``https://sts.windows.net/<tenant-id>/``.
+
+In **App registration → Token configuration**, add the optional claim ``preferred_username`` to the access token so the
+web-console can show the user's name.
+
+Step 4: Configure the orchestrator
+""""""""""""""""""""""""""""""""""
+
+Using the values from the Azure portal, fill in ``oidc.cfg`` as follows (example for v2 tokens):
 
 .. code-block:: ini
 
-   [web-ui]
-   # generic OpenID connect configuration
-   oidc_realm=inmanta
-   oidc_auth_url=http://localhost:8080
-   oidc_client_id=inmantaso
+    [server]
+    auth=true
 
-.. warning:: In a real setup, the url should contain public names instead of localhost, otherwise logins will only work
-   on the machine that hosts inmanta server.
+    [auth_jwt_oidc]
+    algorithm=RS256
+    sign=false
+    client_types=api
+    issuer=https://login.microsoftonline.com/<tenant-id>/v2.0
+    audience=api://<client-id>
+    jwks_uri=https://login.microsoftonline.com/<tenant-id>/discovery/v2.0/keys
+    jwt_username_claim=preferred_username
 
-Configure a ``auth_jwt_`` block (for example ``auth_jwt_keycloak``) and configure it to validate the tokens keycloak issues.
+    [web-ui]
+    oidc_authority=https://login.microsoftonline.com/<tenant-id>/v2.0
+    oidc_client_id=<client-id>
+    oidc_scope=openid profile email api://<client-id>/access
+
+For v1 tokens, replace the ``issuer`` with ``https://sts.windows.net/<tenant-id>/``. The ``jwks_uri`` is the same in both
+cases — keys are served from the v2 discovery endpoint.
+
+.. _authentik-setup:
+
+Setup for Authentik
+^^^^^^^^^^^^^^^^^^^
+
+Step 1: Create an OAuth2/OpenID provider
+""""""""""""""""""""""""""""""""""""""""
+
+In the Authentik admin interface, go to **Applications → Providers → Create** and pick
+**OAuth2/OpenID Provider**.
+
+* Name: ``Provider for inmanta``.
+* Client type: **Public** (PKCE is used instead of a client secret).
+* Redirect URIs: list each origin the web-console may be accessed from, one per line, as **Strict** matches. Include both the
+  value with and without a trailing slash if needed, e.g.::
+
+      http://127.0.0.1:8888
+      http://localhost:8888
+
+* Signing key: select an RSA signing key.
+* Leave the rest at its defaults.
+
+Note the auto-generated **Client ID**.
+
+Step 2: Link the provider to an application
+"""""""""""""""""""""""""""""""""""""""""""
+
+In **Applications → Applications → Create**, create an application named ``inmanta`` (or similar) and assign it the provider
+you just created. The slug you choose for the application becomes part of the issuer URL (e.g.
+``https://auth.example.com/application/o/inmanta/``).
+
+Step 3: Configure the orchestrator
+""""""""""""""""""""""""""""""""""
+
+Fetch the discovery document at ``<authority>/.well-known/openid-configuration`` to confirm the issuer and ``jwks_uri``, then
+fill in ``oidc.cfg``:
 
 .. code-block:: ini
 
-   [server]
-   auth=true
+    [server]
+    auth=true
 
-   [auth_jwt_keycloak]
-   algorithm=RS256
-   sign=false
-   client_types=api
-   issuer=http://localhost:8080/realms/inmanta
-   audience=inmantaso
-   jwks_uri=http://keycloak:8080/realms/inmanta/protocol/openid-connect/certs
-   validate_cert=false
+    [auth_jwt_oidc]
+    algorithm=RS256
+    sign=false
+    client_types=api
+    issuer=https://auth.example.com/application/o/inmanta/
+    audience=<client-id>
+    jwks_uri=https://auth.example.com/application/o/inmanta/jwks/
+    jwt_username_claim=preferred_username
 
+    [web-ui]
+    oidc_authority=https://auth.example.com/application/o/inmanta/
+    oidc_client_id=<client-id>
 
-Set the algorithm to RS256, sign should be false and client_types should be limited to api only. Next set the issuer to the
-correct value (watch out for the realm). Set the audience to the value of the resource key in the json file. Finally, set the
-jwks_uri so the server knows how to fetch the public keys to verify the signature on the tokens. (inmanta server needs to be
-able to access this url).
-
-Both the correct url for the issuer and the jwks_uri is also defined in the openid-configuration endpoint of keycloack. For
-the examples above this url is http://localhost:8080/realms/inmanta/.well-known/openid-configuration
-(https://www.keycloak.org/securing-apps/oidc-layers#_endpoints)
-
-.. warning:: When the certificate of keycloak is not trusted by the system on which inmanta is installed, set ``validate_cert``
-    to false in the ``auth_jwt_keycloak`` block for keycloak.
+.. note:: Authentik by default sets the ``aud`` claim to the client id. If you customize the audience via a property mapper,
+    the ``audience`` value in ``oidc.cfg`` must match whatever appears in the token.
 
 
 Reverse proxy with JWT validation

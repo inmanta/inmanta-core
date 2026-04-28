@@ -1,0 +1,6 @@
+change-type: patch
+description: Bump openapi-spec-validator from 0.7.2 to 0.8.0
+destination-branches:
+- master
+- iso9
+sections: {}

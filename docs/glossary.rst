@@ -100,7 +100,7 @@ Glossary
         but can also delegate tasks to other (existing) tools.
 
     plugin
-        A plugin is a python function that can be used in the :term:`DSL`. This function recieves
+        A plugin is a python function that can be used in the :term:`DSL`. This function receives
         arguments from the configuration model and navigate relations and read attributes in the
         runtime model. Each function can also return a value to the model. Plugins are used for
         complex transformation based on data in the configuration model or to query external systems
@@ -148,7 +148,7 @@ Glossary
         any servers (e.g. "serverless")
 
     infrastructure-as-code
-        Wikepedia defines "Infrastructure as code" as *the process of managing and provisioning
+        Wikipedia defines "Infrastructure as code" as *the process of managing and provisioning
         computer data centers through machine-readable definition files, rather than physical
         hardware configuration or interactive configuration tools.* Inmanta achieves this by using a
         desired state configuration model that is entirely expressed in code.

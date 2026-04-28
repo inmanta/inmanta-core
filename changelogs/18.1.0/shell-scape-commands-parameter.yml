@@ -1,0 +1,4 @@
+---
+description: "Shell escape the commands parameter on the plugin decorator to prevent command injection."
+change-type: patch
+destination-branches: [master, iso9, iso8]

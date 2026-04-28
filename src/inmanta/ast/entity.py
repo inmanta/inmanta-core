@@ -21,6 +21,7 @@ import importlib
 import inspect
 import logging
 import typing
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple, Union  # noqa: F401
 
 import inmanta.ast.attribute
@@ -67,6 +68,8 @@ class Entity(NamedType, WithComment):
     Each entity can contain attributes that are either data types or
     relations and each entity can inherit from parent entities.
 
+    Most methods may only be called after the entity definition evaluation stage (DefineEntity.evaluate()).
+
     :param name: The name of this entity. This name can not be changed
         after this object has been created
     """
@@ -99,6 +102,10 @@ class Entity(NamedType, WithComment):
         self.comment = comment
 
         self.normalized = False
+
+        # Lazy caches to avoid repeated parent-chain walks. Built on first access.
+        self._all_attributes_cache: Optional[Mapping[str, "Attribute"]] = None
+        self._default_values_cache: Optional[Mapping[str, "ExpressionStatement"]] = None
 
         self._paired_dataclass: type[DataclassProtocol] | None = None
         self._paired_dataclass_field_types: dict[str, Type] = {}
@@ -242,16 +249,26 @@ class Entity(NamedType, WithComment):
             children.extend(entity.get_all_child_entities())
         return set(children)
 
-    def get_all_attribute_names(self) -> "List[str]":
+    def get_all_attributes(self) -> Mapping[str, "Attribute"]:
         """
-        Return a list of all attribute names, including parents
+        Return a cached mapping of attribute name to Attribute for this entity and all parents.
+        The cache is built lazily on first access.
         """
-        names = list(self._attributes.keys())
+        if self._all_attributes_cache is None:
+            cache: dict[str, "Attribute"] = {}
+            # make sure to include left-most parent's attribute in case of shadowing to be consistent with get_default_values()
+            for parent in reversed(self.parent_entities):
+                cache.update(parent.get_all_attributes())
+            cache.update(self._attributes)
+            self._all_attributes_cache = cache
+        return self._all_attributes_cache
 
-        for parent in self.parent_entities:
-            names.extend(parent.get_all_attribute_names())
-
-        return names
+    def get_all_attribute_names(self) -> list[str]:
+        """
+        Return a list of all attribute names, including parents.
+        Delegates to get_all_attributes() to ensure consistent de-duplicated results.
+        """
+        return list(self.get_all_attributes().keys())
 
     def add_attribute(self, attribute: "Attribute") -> None:
         """
@@ -270,14 +287,11 @@ class Entity(NamedType, WithComment):
         """
         Get the attribute with the given name
         """
-        if name in self._attributes:
-            return self._attributes[name]
-        else:
-            for parent in self.parent_entities:
-                attr = parent.get_attribute(name)
-                if attr is not None:
-                    return attr
-        return None
+        cache = self._all_attributes_cache
+        if cache is None:
+            # also populates self._all_attributes_cache
+            cache = self.get_all_attributes()
+        return cache.get(name)
 
     def has_attribute(self, attribute: str) -> bool:
         """
@@ -521,22 +535,19 @@ class Entity(NamedType, WithComment):
                 self.index_queue[key] = [(target, stmt)]
         return None
 
-    def get_default_values(self) -> "Dict[str,ExpressionStatement]":
+    def get_default_values(self) -> Mapping[str, "ExpressionStatement"]:
         """
-        Return the dictionary with default values
+        Return the dictionary with default values. Uses a lazy cache to avoid
+        repeated parent-chain walks.
         """
-        values = []  # type: List[Tuple[str,Optional[ExpressionStatement]]]
-
-        # left most parent takes precedence
-        for parent in reversed(self.parent_entities):
-            values.extend(parent.get_default_values().items())
-
-        # self takes precedence
-        values.extend(self._get_own_defaults().items())
-        # make dict, remove doubles
-        dvalues = dict(values)
-        # remove erased defaults
-        return {k: v for k, v in dvalues.items() if v is not None}
+        if self._default_values_cache is None:
+            values: list[tuple[str, Optional["ExpressionStatement"]]] = []
+            for parent in reversed(self.parent_entities):
+                values.extend(parent.get_default_values().items())
+            values.extend(self._get_own_defaults().items())
+            dvalues = dict(values)
+            self._default_values_cache = {k: v for k, v in dvalues.items() if v is not None}
+        return self._default_values_cache
 
     def get_default(self, name: str) -> "ExpressionStatement":
         """
@@ -626,8 +637,7 @@ class Entity(NamedType, WithComment):
         dc_types = typing.get_type_hints(dataclass)
         failures = []
 
-        for rel_or_attr_name in self.get_all_attribute_names():
-            rel_or_attr = self.get_attribute(rel_or_attr_name)
+        for rel_or_attr_name, rel_or_attr in self.get_all_attributes().items():
             match rel_or_attr:
                 case inmanta.ast.attribute.RelationAttribute() as rel:
                     # No relations except for requires and provides

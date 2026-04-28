@@ -1,0 +1,4 @@
+---
+description: "Use swagger-ui instead of sphinx-redoc for core API documentation."
+change-type: patch
+destination-branches: [master, iso9]
