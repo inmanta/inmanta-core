@@ -35,7 +35,10 @@ LOGGER = logging.getLogger(__name__)
 T = TypeVar("T")
 
 
-def _normalize_name(name: str) -> str:
+def normalize_name(name: str) -> str:
+    """
+    Normalize the name of a configuration option.
+    """
     return name.replace("_", "-")
 
 
@@ -64,7 +67,10 @@ def _get_from_env(section: str, name: str) -> Optional[str]:
 
 class LenientConfigParser(ConfigParser):
     def optionxform(self, name: str) -> str:
-        name = _normalize_name(name)
+        """
+        This method transforms option names on every get or set operation.
+        """
+        name = normalize_name(name)
         return super().optionxform(name)
 
     def _validate_value_types(self, *, section: str = "", option: str = "", value: str = "") -> None:
@@ -148,9 +154,39 @@ class Config:
     def config_as_dict(cls) -> typing.Mapping[str, typing.Mapping[str, typing.Any]]:
         """
         Return the config as a dict, to be used with load_config_from_dict
+
+        This method only returns the configuration options that were actively
+        set by the user using a configuration file. This means:
+            * Configuration options set using environment variables are not included in the result.
+            * Configuration options that are left to their default values are not included in the result.
         """
         assert cls.__instance is not None
         return dict(cls.__instance.items())
+
+    @classmethod
+    def get_active_configuration_as_dict(cls) -> typing.Mapping[str, typing.Mapping[str, object]]:
+        """
+        Returns the values of the configuration options that are currently used (active configuration).
+
+        :returns: A dictionary that maps the configuration section name to a dictionary that maps
+                  the name of a configuration option to its value. This dictionary contains the
+                  active configuration exhaustively, i.e. values that were not explicitly set
+                  will be present in this dictionary using their default value.
+        """
+        from inmanta.protocol import auth
+
+        # Collect the configuration for options that were defined using an instance of the Option class.
+        config_definitions: dict[str, dict[str, Option[object]]] = cls.get_config_options()
+        result = {
+            section: {config_name: option.get() for config_name, option in options.items()}
+            for section, options in config_definitions.items()
+        }
+        # Collect the JWT configuration. Those configuration options have a more free format and
+        # don't have an associated instance of the Option class.
+        jwt_configuration: dict[str, auth.AuthJWTConfig] = auth.AuthJWTConfig.get_all()
+        for section_name, jwt_config in jwt_configuration.items():
+            result[f"{auth.AUTH_JWT_PREFIX}{section_name}"] = jwt_config.get_as_dict()
+        return result
 
     @classmethod
     def _get_instance(cls) -> ConfigParser:
@@ -201,7 +237,7 @@ class Config:
             return cls.get_instance()
 
         assert name is not None
-        name = _normalize_name(name)
+        name = normalize_name(name)
 
         option: Optional[Option[object]] = cls.validate_option_request(section, name, default_value)
         return cls.get_for_option(option) if option is not None else cls._get_value(section, name, default_value)
@@ -243,7 +279,7 @@ class Config:
         """
         Override a value
         """
-        name = _normalize_name(name)
+        name = normalize_name(name)
 
         if section not in cls.get_instance():
             cls.get_instance().add_section(section)
@@ -411,7 +447,7 @@ class Option(Generic[T]):
         predecessor_option: Optional["Option"] = None,
     ) -> None:
         self.section = section
-        self.name = _normalize_name(name)
+        self.name = normalize_name(name)
         self.validator = validator
         self.documentation = documentation
         self.default = default
