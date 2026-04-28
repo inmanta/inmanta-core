@@ -28,6 +28,7 @@ from inmanta import const
 from inmanta.const import AgentAction, AllAgentAction, ApiDocsFormat, Change, ClientType, ParameterSource, ResourceState
 from inmanta.data import model
 from inmanta.data.model import DataBaseReport, PipConfig, ResourceComplianceDiff
+from inmanta.graphql.result import GraphQLResult
 from inmanta.protocol import methods
 from inmanta.protocol.auth.decorators import auth
 from inmanta.protocol.common import ReturnValue
@@ -437,15 +438,24 @@ def reserve_version(tid: uuid.UUID) -> int:
 
 
 @auth(auth_label=const.CoreAuthorizationLabel.DOCS_READ, read_only=True)
-@typedmethod(path="/docs", operation="GET", client_types=[ClientType.api], api_version=2, token_param="token")
+@typedmethod(
+    path="/docs",
+    operation="GET",
+    client_types=[ClientType.api],
+    api_version=2,
+    token_param="token",
+    include_response_in_docs_swagger=False,
+)
 def get_api_docs(
-    format: Optional[ApiDocsFormat] = ApiDocsFormat.swagger, token: str | None = None
+    format: Optional[ApiDocsFormat] = ApiDocsFormat.swagger, token: str | None = None, swagger_description: str | None = None
 ) -> ReturnValue[Union[OpenAPI, str]]:
     """
     Get the OpenAPI definition of the API
 
     :param format: Use 'openapi' to get the schema in json format, leave empty or use 'swagger' to get the Swagger-UI view
     :param token: If provided, use this token to authorize the request instead of the value from the authorization header.
+    :param swagger_description: When using the 'swagger' format, the 'description' field of the returned swagger will be set
+    to the value of this parameter.
     """
 
 
@@ -1854,12 +1864,20 @@ def discovered_resource_delete_batch(tid: uuid.UUID, discovered_resource_ids: Se
     api_version=2,
     strict_typing=False,
 )
-def graphql(query: str) -> Any:  # Actual return type: strawberry.types.execution.HandlerResult
+def graphql(
+    query: str, variables: dict[str, Any] | None = None, operationName: str | None = None
+) -> ReturnValue[GraphQLResult]:
+    # We break the convention and use camelCase here because this nomenclature is the standard in GraphQL
+    # and it is what the FE team needs for their test suite.
     """
     GraphQL endpoint for Inmanta.
     Supports paging, filtering and sorting on certain attributes.
 
     To check which queries are enabled, use the 'GET /api/v2/graphql/schema' endpoint.
+
+    :param query: The GraphQL query to perform
+    :param variables: The GraphQL variables to apply to the query
+    :param operationName: The name of the operation to perform.
     """
     pass
 
@@ -1908,5 +1926,25 @@ def get_compliance_report(tid: uuid.UUID, resource_ids: Sequence[ResourceIdStr])
 
     :return: A dict of ResourceComplianceDiff objects representing the current state of each requested resource.
     :raises NotFound: When one or more resource_ids do not exist in the latest scheduled version for the environment.
+    :raises Forbidden: When the compliance_reporting feature is not enabled on the server.
+    """
+    pass
+
+
+@auth(auth_label=const.CoreAuthorizationLabel.FEATURE_READ, read_only=True)
+@typedmethod(
+    path="/feature/bool",
+    operation="GET",
+    client_types=[ClientType.agent],
+    agent_server=True,
+    api_version=2,
+    allow_env_scoped_tokens=True,
+)
+def is_bool_feature_enabled(slice_name: str, feature_name: str) -> bool:
+    """
+    Return True iff the given boolean feature is enabled.
+
+    :param slice_name: The name of the slice the feature belongs to.
+    :param feature_name: The name of the feature.
     """
     pass

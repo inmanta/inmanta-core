@@ -2583,6 +2583,8 @@ class Environment(BaseDocument):
     :param last_version: The last version number that was reserved for this environment
     :param description: The description of the environment
     :param icon: An icon for the environment
+    :param halted: Whether the environment is halted
+    :param is_marked_for_deletion: Whether this environment is marked for deletion
     """
 
     __primary_key__ = ("id",)
@@ -3089,6 +3091,7 @@ class Parameter(BaseDocument):
     """
     A parameter that can be used in the configuration model
 
+    :param id: The id of the parameter
     :param name: The name of the parameter
     :param value: The value of the parameter
     :param environment: The environment this parameter belongs to
@@ -3096,8 +3099,7 @@ class Parameter(BaseDocument):
     :param resource_id: An optional resource id
     :param updated: When was the parameter updated last
     :param expires: Boolean denoting whether this parameter expires.
-
-    :todo Add history
+    :param metadata: Metadata for the parameter
     """
 
     __primary_key__ = ("id", "name", "environment")
@@ -3200,11 +3202,14 @@ class UnknownParameter(BaseDocument):
     A parameter that the compiler indicated that was unknown. This parameter causes the configuration model to be
     incomplete for a specific environment.
 
-    :param name:
-    :param resource_id:
-    :param source:
-    :param environment:
+    :param id: The id of this unknown parameter
+    :param name: The name of the unknown parameter
+    :param resource_id: An optional resource id
+    :param source: The source of the unknown parameter
+    :param environment: The environment this unknown parameter belongs to
     :param version: The version id of the configuration model on which this parameter was reported
+    :param metadata: Metadata for the unknown parameter
+    :param resolved: Whether this unknown parameter has been resolved
     """
 
     __primary_key__ = ("id",)
@@ -3312,9 +3317,12 @@ class AgentProcess(BaseDocument):
     """
     A process in the infrastructure that has (had) a session as an agent.
 
+    :param sid: The session id of the agent process
     :param hostname: The hostname of the device.
     :param environment: To what environment is this process bound
+    :param first_seen: When the server first received data from this process
     :param last_seen: When did the server receive data from the node for the last time.
+    :param expired: When this process expired
     """
 
     __primary_key__ = ("sid",)
@@ -3447,8 +3455,13 @@ class AgentInstance(BaseDocument):
     """
     A physical server/node in the infrastructure that reports to the management server.
 
+    :param id: The id of this agent instance
+    :param process: The agent process this instance belongs to
+    :param name: The name of this agent instance
     :param hostname: The hostname of the device.
     :param last_seen: When did the server receive data from the node for the last time.
+    :param expired: When this agent instance expired
+    :param tid: The environment id
     """
 
     __primary_key__ = ("id",)
@@ -3543,6 +3556,7 @@ class Agent(BaseDocument):
     :param last_failover: Moment at which the primary was last changed
     :param paused: is this agent paused (if so, skip it)
     :param primary: what is the current active instance (if none, state is down). Only relevant for the $__scheduler agent.
+    :param id_primary: The current active instance, only relevant for the $__scheduler agent
     :param unpause_on_resume: whether this agent should be unpaused when resuming from environment-wide halt. Used to
         persist paused state when halting.
     """
@@ -3777,6 +3791,9 @@ class Report(BaseDocument):
     :param name: The name of this step
     :param errstream: what was reported on system err
     :param outstream: what was reported on system out
+    :param id: The id of this report
+    :param compile: The compile this report belongs to
+    :param returncode: The return code of the command
     """
 
     __primary_key__ = ("id",)
@@ -3807,6 +3824,7 @@ class Compile(BaseDocument):
     """
     A run of the compiler
 
+    :param id: The id of this compile run
     :param environment: The environment this resource is defined in
     :param requested: Time the compile was requested
     :param started: Time the compile started
@@ -4698,6 +4716,26 @@ class ResourcePersistentState(BaseDocument):
     """
     To avoid write contention, the `Compliance` is split up in different fields that are written from different code
     paths. See get_compliance_status() for the associated logic.
+
+    :param environment: The environment this resource belongs to
+    :param resource_id: The id of the resource
+    :param resource_type: The type of the resource
+    :param agent: The name of the agent responsible for running this resource
+    :param resource_id_value: The attribute value from the resource id
+    :param created: When this resource was first created
+    :param last_handler_run_at: The timestamp of the last handler run for this resource
+    :param current_intent_attribute_hash: The attribute hash of the latest released version
+    :param last_deployed_attribute_hash: The attribute hash of the last completed handler run
+    :param last_deployed_version: The model version of the last completed handler run
+    :param last_success: The start time of the last handler run that completed without failure
+    :param last_produced_events: The end time of the last handler run where an effective change was produced
+    :param is_undefined: Whether the desired state for this resource is undefined
+    :param is_orphan: Whether this resource is an orphan (no longer present in the latest model version)
+    :param is_deploying: Whether this resource is currently being run by the handler
+    :param last_handler_run: The result of the last handler run for this resource
+    :param last_handler_run_compliant: Whether the last handler run reported the resource as compliant
+    :param blocked: The blocked state of this resource
+    :param last_non_deploying_status: The last status of the resource that is not a deploying status
     """
 
     @classmethod
@@ -5445,7 +5483,7 @@ class Resource(BaseDocument):
     :param resource_id: The id of the resource (without the version)
     :param resource_type: The type of the resource
     :param resource_id_value: The attribute value from the resource id
-    :param agent: The name of the agent responsible for deploying this resource
+    :param agent: The name of the agent responsible for running this resource
     :param attributes: The desired state for this version of the resource as a dict of attributes
     :param attribute_hash: hash of the attributes, excluding requires, provides and version,
                            used to determine if a resource describes the same state across versions
@@ -6137,6 +6175,88 @@ class Resource(BaseDocument):
         )
 
     @classmethod
+    async def get_composed_resource_summary(cls, environment: str) -> m.ComposedResourceSummary:
+        """
+        Returns a summary containing the composed (scheduler) status of every resource
+        in the latest processed model version of an environment.
+
+        :param environment: The environment we want the summary for.
+        """
+        query = """
+        -- Group information from the rps table
+        WITH grouped_metrics AS (
+            SELECT
+                is_deploying::text AS is_deploying,
+                blocked::text AS blocked,
+                last_handler_run::text AS last_handler_run,
+                CASE
+                    WHEN is_undefined
+                        THEN 'undefined'
+                    WHEN
+                        last_handler_run='NEW'
+                        OR current_intent_attribute_hash <> last_deployed_attribute_hash
+                        OR last_deployed_attribute_hash IS NULL
+                        THEN 'has_update'
+                    WHEN last_handler_run_compliant
+                        THEN 'compliant'
+                    ELSE
+                        'non_compliant'
+                END AS compliance,
+                COUNT(*) AS row_count
+            FROM resource_persistent_state
+            WHERE environment=$1 AND NOT is_orphan
+            GROUP BY is_deploying, blocked, last_handler_run, compliance
+        ),
+        total AS (
+            SELECT SUM(row_count) AS total_count
+            FROM grouped_metrics
+        )
+
+        -- Query to calculate total_count
+        SELECT
+            metric,
+            value,
+            count,
+            total_count
+        FROM (
+            -- Calculate each value
+            SELECT
+                'is_deploying' AS metric,
+                is_deploying AS value,
+                SUM(row_count) AS count
+            FROM grouped_metrics
+            GROUP BY is_deploying
+
+            UNION ALL
+
+            SELECT 'blocked' AS metric,
+                    blocked AS value,
+                    SUM(row_count) AS count
+            FROM grouped_metrics
+            GROUP BY blocked
+
+            UNION ALL
+
+            SELECT 'last_handler_run' AS metric,
+                    last_handler_run AS value,
+                    SUM(row_count) AS count
+            FROM grouped_metrics
+            GROUP BY last_handler_run
+
+            UNION ALL
+
+            SELECT 'compliance' AS metric,
+                    compliance AS value,
+                    SUM(row_count) AS count
+            FROM grouped_metrics
+            GROUP BY compliance
+        ) CROSS JOIN total;
+        """
+
+        raw_results = await cls._fetch_query(query, cls._get_value(environment))
+        return m.ComposedResourceSummary.create_from_db_result(raw_results)
+
+    @classmethod
     async def get_resource_deploy_summary(cls, environment: uuid.UUID) -> m.ResourceDeploySummary:
         inner_query = f"""
         SELECT rps.resource_id as resource_id,
@@ -6239,6 +6359,19 @@ class ConfigurationModel(BaseDocument):
     :param is_suitable_for_partial_compiles: This boolean indicates whether the model can later on be updated using a
                                              partial compile. In other words, the value is True iff no cross resource set
                                              dependencies exist between the resources.
+    :param undeployable: List of all the resource ids across the entire configurationmodel that are undeployable (undefined).
+                         This field is only used by the dryrun feature. The scheduler determines the undeployable resouces
+                         using the is_undefined column of the resource table.
+    :param skipped_for_undeployable: List of resource ids that are skipped because of undeployable (undefined) dependencies.
+                                     If this configurationmodel was created using a partial compile, this column does not
+                                     include skipped_for_undeployable resources for resources in resource sets that were
+                                     not part of the partial compile. This is not intentional, but a bug:
+                                     https://github.com/inmanta/inmanta-core/issues/10277. This column is only used by
+                                     the dryrun feature. The scheduler calculates the skipped_for_undeployable resources
+                                     by relying on the is_undefined column of the resource table and the fact that it has
+                                     a full view on the states of all the resources in the configurationmodel.
+    :param pip_config: The pip configuration for this version
+    :param project_constraints: The project constraints for this version
     """
 
     __primary_key__ = ("version", "environment")
@@ -6690,8 +6823,8 @@ class DryRun(BaseDocument):
     :param environment: The environment this code belongs to
     :param model: The configuration model
     :param date: The date the run was requested
-    :param resource_total: The number of resources that do a dryrun for
-    :param resource_todo: The number of resources left to do
+    :param total: The number of resources that do a dryrun for
+    :param todo: The number of resources left to do
     :param resources: Changes for each of the resources in the version
     """
 
@@ -6801,6 +6934,7 @@ class Notification(BaseDocument):
                 For example a compile related problem should have the uri: `/api/v2/compilereport/<compile_id>`
     :param read: Whether the notification was read or not
     :param cleared: Whether the notification was cleared or not
+    :param compile_id: The id of the compile related to this notification, if any
     """
 
     __primary_key__ = ("id", "environment")
@@ -6859,8 +6993,8 @@ class EnvironmentMetricsGauge(BaseDocument):
     :param environment: the environment to which this metric is related
     :param metric_name: The name of the metric
     :param timestamp: The timestamps at which a new record is created
-    :category: The name of the group/category this metric represents (e.g. red if grouped by color).
-               __None__ iff metrics of this type are not divided in groups.
+    :param category: The name of the group/category this metric represents (e.g. red if grouped by color).
+                     __None__ iff metrics of this type are not divided in groups.
     :param count: the counter for the metric for the given timestamp
     """
 
@@ -6879,8 +7013,8 @@ class EnvironmentMetricsTimer(BaseDocument):
 
     :param environment: the environment to which this metric is related
     :param metric_name: The name of the metric
-    :category: The name of the group/category this metric represents (e.g. red if grouped by color).
-               __None__ iff metrics of this type are not divided in groups.
+    :param category: The name of the group/category this metric represents (e.g. red if grouped by color).
+                     __None__ iff metrics of this type are not divided in groups.
     :param timestamp: The timestamps at which a new record is created
     :param count: the number of occurrences of the monitored event in the interval [previous.timestamp, self.timestamp[
     :param value: the sum of the values of the metric for each occurrence in the interval [previous.timestamp, self.timestamp[
@@ -7070,6 +7204,7 @@ class DiscoveredResource(BaseDocument):
     :param discovered_resource_id: The id of the resource
     :param discovery_resource_id: The id of the discovery resource responsible for discovering this resource
     :param values: The values associated with the discovered_resource
+    :param discovered_at: When this resource was discovered
     """
 
     environment: uuid.UUID

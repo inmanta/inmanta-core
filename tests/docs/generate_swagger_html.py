@@ -16,17 +16,13 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import json
 import os
 
 
-async def test_extract_openapi_for_docs(server, client):
-    result = await client.get_api_docs("openapi")
+async def test_generate_swagger_html(server, client):
+    result = await client.get_api_docs("swagger", swagger_description="Back to <a href='./index.html'>main documentation</a>")
     assert result.code == 200
-    content = result.result["data"]
-    content["servers"] = [{"url": "http://<inmanta-server-address>"}]
-    content["info"]["description"] = "Back to <a href='./index.html'>Main documentation</a> for more information"
-    json_content = json.dumps(content)
-    output_file = os.path.abspath(os.path.join(os.path.dirname(__file__), "../..", "docs", "openapi.json"))
-    with open(output_file, "w") as json_file:
-        json_file.write(json_content)
+    content = result.result
+    output_file = os.path.abspath(os.path.join(os.path.dirname(__file__), "../..", "docs", "swagger.html"))
+    with open(output_file, "w") as html_file:
+        html_file.write(content)

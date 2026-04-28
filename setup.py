@@ -10,14 +10,14 @@ requires = [
     "colorlog~=6.4",
     "cookiecutter>=1,<3",
     "crontab>=0.23,<2.0",
-    "cryptography>=36,<47",
+    "cryptography>=36,<48",
     # docstring-parser has been known to publish non-backwards compatible minors in the past
-    "docstring-parser>=0.10,<0.18",
+    "docstring-parser>=0.10,<0.19",
     "email-validator>=1,<3",
     "jinja2~=3.0",
-    "more-itertools>=8,<11",
+    "more-itertools>=8,<12",
     # upper bound on packaging because we use a non-public API that might change in any (non-SemVer) version
-    "packaging>=21.3,<26.1",
+    "packaging>=21.3,<26.3",
     # pip>=21.3 required for editable pyproject.toml + setup.cfg based install support
     "pip>=21.3",
     "ply~=3.0",
@@ -26,7 +26,6 @@ requires = [
     "pynacl~=1.5",
     "python-dateutil~=2.0",
     "pyyaml~=6.0",
-    "setuptools",
     "texttable~=1.0",
     # tornado>6.5 because of CVE https://github.com/advisories/GHSA-7cx3-6m66-7c5m
     "tornado>6.5",
@@ -38,6 +37,8 @@ requires = [
     "SQLAlchemy~=2.0",
     "strawberry-sqlalchemy-mapper==0.8.0",
     "jsonpath-ng~=1.7",
+    # cookiecutter requires requests and (via binaryornot) chardet. With this extra we ensure that it stays in the valid range for requests
+    "requests[use_chardet_on_py3]",
 ]
 
 
@@ -48,11 +49,11 @@ with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
 
 # This version is managed by bumpversion. Should you ever update it manually, make sure to consistently update it everywhere
 # (See the bumpversion.cfg file for relevant locations).
-version = "18.0.1"
+version = "18.1.0"
 
 setup(
     version=version,
-    python_requires=">=3.12",  # also update classifiers
+    python_requires=">=3.13",  # also update classifiers
     # Meta data
     name="inmanta-core",
     description="Inmanta deployment tool",
@@ -69,7 +70,7 @@ setup(
         "Operating System :: POSIX :: Linux",
         "Topic :: System :: Systems Administration",
         "Topic :: Utilities",
-        "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
     ],
     keywords="orchestrator orchestration configurationmanagement",
     project_urls={
@@ -95,13 +96,11 @@ setup(
             "bumpversion",
             "openapi_spec_validator",
             "pep8-naming",
-            "pip2pi",
             "psutil",
             "time-machine",
             # types
             "types-python-dateutil",
             "types-PyYAML",
-            "types-setuptools",
             "types-toml",
             # doc dependencies
             "furo",
@@ -113,7 +112,6 @@ setup(
             "sphinx-click",
             "sphinxcontrib-contentui",
             "sphinxcontrib.datatemplates",
-            "sphinxcontrib-redoc",
             "sphinxcontrib-serializinghtml",
             "sphinx-design",
             "Sphinx-Substitution-Extensions",

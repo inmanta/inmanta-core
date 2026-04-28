@@ -1,0 +1,4 @@
+---
+description: "Fix bug in the resourceSummary GraphQL query where we get a list index out of range error if there are no resources in the given environment."
+change-type: patch
+destination-branches: [master, iso9]

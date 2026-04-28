@@ -148,6 +148,8 @@ def typedmethod[C: Callable](
     varkw: bool = False,
     token_param: str | None = None,
     document_in_service_swagger: bool = False,
+    include_response_in_docs_swagger: bool = True,
+    allow_env_scoped_tokens: bool = False,
 ) -> Callable[[C], C]:
     """
     Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
@@ -180,6 +182,14 @@ def typedmethod[C: Callable](
     :param varkw: If true, additional arguments are allowed and will be dispatched to the handler. The handler is
                   responsible for the validation.
     :param token_param: Use the authentication token in this parameter instead of using the Authorization header.
+    :param document_in_service_swagger: (LSM extension only, ignored otherwise) This parameter controls whether this
+    endpoint should be documented in the swagger served by the `lsm_services_openapi_docs` endpoint for each service
+    of the catalog.
+    :param include_response_in_docs_swagger: This parameter controls whether the response for this endpoint should be
+    documented in the swagger served in the `REST API reference` section of the Inmanta documentation.
+    :param allow_env_scoped_tokens: If the API endpoint is not scoped to a specific environment and the legacy authorization
+                                    provider is used, indicates whether the API call should be allowed for environment-scoped
+                                    tokens.
     """
 
     def wrapper(func: MethodT) -> MethodT:
@@ -207,6 +217,8 @@ def typedmethod[C: Callable](
                 varkw=varkw,
                 token_param=token_param,
                 document_in_service_swagger=document_in_service_swagger,
+                include_response_in_docs_swagger=include_response_in_docs_swagger,
+                allow_env_scoped_tokens=allow_env_scoped_tokens,
             )
             common.MethodProperties.register_method(properties)
         return func

@@ -1,0 +1,5 @@
+description: "Compiler optimization: instantiate RelationPrecedenceGraph only once"
+change-type: patch
+destination-branches:
+  - master
+  - iso9

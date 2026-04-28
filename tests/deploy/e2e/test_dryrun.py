@@ -21,23 +21,27 @@ Contact: code@inmanta.com
 import json
 import logging
 import uuid
+from collections.abc import Mapping
 
 import pytest
 
 from inmanta import const, data, execute
 from inmanta.const import AgentAction
-from utils import ClientHelper, retry_limited, wait_until_deployment_finishes
+from inmanta.resources import Id
+from utils import ClientHelper, log_contains, retry_limited, wait_until_deployment_finishes
 
 logger = logging.getLogger("inmanta.test.dryrun")
 
 
-async def test_dryrun_and_deploy(server, client, resource_container, environment, agent):
+async def test_dryrun_and_deploy(server, client, resource_container, environment, agent, caplog):
     """
     dryrun and deploy a configuration model
 
     There is a second agent with an undefined resource. The server will shortcut the dryrun and deploy for this resource
     without an agent being present.
     """
+    caplog.set_level(logging.DEBUG)
+
     resource_container.Provider.set("agent1", "key2", "incorrect_value")
     resource_container.Provider.set("agent1", "key3", "value")
 
@@ -109,17 +113,18 @@ async def test_dryrun_and_deploy(server, client, resource_container, environment
     assert result.code == 200
 
     mod_db = await data.ConfigurationModel.get_version(uuid.UUID(environment), version)
-    undep = mod_db.get_undeployable()
-    assert undep == ["test::Resource[agent2,key=key4]"]
+    undeployable = mod_db.get_undeployable()
+    assert undeployable == ["test::Resource[agent2,key=key4]"]
 
-    undep = mod_db.get_skipped_for_undeployable()
-    assert undep == ["test::Resource[agent2,key=key5]", "test::Resource[agent2,key=key6]"]
+    skipped_for_undeployable = mod_db.get_skipped_for_undeployable()
+    assert skipped_for_undeployable == ["test::Resource[agent2,key=key5]", "test::Resource[agent2,key=key6]"]
 
     # request a dryrun
     result = await client.dryrun_request(environment, version)
     assert result.code == 200
     assert result.result["dryrun"]["total"] == len(resources)
     assert result.result["dryrun"]["todo"] == len(resources)
+    dry_run_id: uuid.UUID = result.result["dryrun"]["id"]
 
     # get the dryrun results
     result = await client.dryrun_list(environment, version)
@@ -131,6 +136,26 @@ async def test_dryrun_and_deploy(server, client, resource_container, environment
         return result.result["dryruns"][0]["todo"] == 0
 
     await retry_limited(dryrun_finished, 10)
+
+    def check_dry_run_logs(resources, dry_run_id):
+        for idx, resource in enumerate(resources):
+            if Id.parse_resource_version_id(resource["id"]).resource_str() in [*undeployable, *skipped_for_undeployable]:
+                continue
+            agent_name = "agent1" if idx < 3 else "agent2"
+            log_contains(
+                caplog,
+                f"inmanta.resource_action.{agent_name}",
+                logging.DEBUG,
+                f'Running dryrun for {resource["id"]} dry_run_id: {dry_run_id}.',
+            )
+            log_contains(
+                caplog,
+                f"inmanta.resource_action.{agent_name}",
+                logging.DEBUG,
+                f'Finished dryrun for {resource["id"]}. dry_run_id: {dry_run_id} - duration ',
+            )
+
+    check_dry_run_logs(resources, dry_run_id)
 
     dry_run_id = result.result["dryruns"][0]["id"]
     result = await client.dryrun_report(environment, dry_run_id)
@@ -166,7 +191,8 @@ async def test_dryrun_and_deploy(server, client, resource_container, environment
     assert not resource_container.Provider.isset("agent1", "key3")
 
 
-async def test_dryrun_failures(resource_container, server, agent, client, environment, clienthelper):
+async def test_dryrun_failures(resource_container, server, agent, client, environment, clienthelper, caplog):
+    caplog.set_level(logging.DEBUG)
     env_id = environment
 
     version = await clienthelper.get_version()
@@ -221,10 +247,10 @@ async def test_dryrun_failures(resource_container, server, agent, client, enviro
     result = await client.dryrun_report(env_id, dry_run_id)
     assert result.code == 200
 
-    resources = result.result["dryrun"]["resources"]
+    dryrun_resources = result.result["dryrun"]["resources"]
 
     def assert_handler_failed(resource, msg):
-        changes = resources[resource]
+        changes = dryrun_resources[resource]
         assert "changes" in changes
         changes = changes["changes"]
         assert "handler" in changes
@@ -246,7 +272,29 @@ async def test_dryrun_failures(resource_container, server, agent, client, enviro
     assert log_entry["status"] == "unavailable"
     assert "Unable to deserialize" in log_entry["messages"][0]["msg"]
 
-    await agent.stop()
+    def check_dry_run_logs(expected_error_messages, dry_run_id):
+
+        for rid, expected_error in expected_error_messages.items():
+            log_contains(
+                caplog,
+                "inmanta.resource_action.agent1",
+                logging.DEBUG,
+                f"Running dryrun for {rid} dry_run_id: {dry_run_id}.",
+            )
+            log_contains(
+                caplog,
+                "inmanta.resource_action.agent1",
+                logging.ERROR,
+                expected_error_messages[rid],
+            )
+
+    expected_error_messages: Mapping[str, str] = {
+        "test::Noprov[agent1,key=key1],v=1": f"Unable to find a handler for test::Noprov[agent1,key=key1],v=1"
+        f" dry_run_id: {dry_run_id} exception: No resource handler registered for resource of type test::Noprov",
+        "test::FailFast[agent1,key=key2],v=1": f"Error during dryrun execution for test::FailFast[agent1,key=key2],v=1 "
+        f"dry_run_id: {dry_run_id}.",
+    }
+    check_dry_run_logs(expected_error_messages, dry_run_id)
 
 
 async def test_dryrun_scale(resource_container, server, client, environment, agent, clienthelper):
@@ -291,8 +339,6 @@ async def test_dryrun_scale(resource_container, server, client, environment, age
     dry_run_id = result.result["dryruns"][0]["id"]
     result = await client.dryrun_report(env_id, dry_run_id)
     assert result.code == 200
-
-    await agent.stop()
 
 
 @pytest.mark.parametrize("auto_start_agent", (True,))  # this overrides a fixture to allow the agent to fork!

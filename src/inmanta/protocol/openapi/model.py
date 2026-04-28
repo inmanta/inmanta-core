@@ -237,12 +237,6 @@ class Response(BaseModel):
     content: Optional[dict[str, MediaType]] = None
 
 
-class CodeSample(BaseModel):
-    lang: str | None = None
-    label: str | None = None
-    source: str | None = None
-
-
 class Operation(BaseModel):
     operationId: str
     summary: Optional[str] = None
@@ -252,7 +246,6 @@ class Operation(BaseModel):
     responses: dict[str, Response]
     deprecated: Optional[bool] = None
     tags: Optional[list[str]] = None
-    code_samples: Optional[list[CodeSample]] = Field(serialization_alias="x-codeSamples", default=None)
 
 
 class PathItem(BaseModel):

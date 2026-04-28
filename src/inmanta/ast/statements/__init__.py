@@ -96,19 +96,12 @@ class DynamicStatement(Statement):
     These are all statements that do not define typing.
     """
 
-    __slots__ = ("_own_eager_promises",)
+    __slots__ = ("own_eager_promises",)
 
     def __init__(self) -> None:
         Statement.__init__(self)
-        self._own_eager_promises: Sequence["StaticEagerPromise"] = []
-
-    def get_own_eager_promises(self) -> Sequence["StaticEagerPromise"]:
-        """
-        Returns all eager promises this statement itself is responsible for.
-
-        Should only be called after normalization.
-        """
-        return self._own_eager_promises
+        # All Eager promises this statement itself is responsible for. Set during normalization.
+        self.own_eager_promises: Sequence["StaticEagerPromise"] = []
 
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
         """
@@ -117,7 +110,7 @@ class DynamicStatement(Statement):
 
         Should only be called after normalization.
         """
-        return iter(self._own_eager_promises)
+        return iter(self.own_eager_promises)
 
     def normalize(self) -> None:
         raise NotImplementedError()
@@ -169,14 +162,11 @@ class RequiresEmitStatement(DynamicStatement):
         Acquires eager promises this statement is responsible for and returns them, wrapped in a variable, in a requires dict.
         Returns an empty dict if no promises were acquired (for performance reasons).
         """
-        promises: Sequence["EagerPromise"] = self.schedule_eager_promises(resolver, queue)
-        return {(self, EagerPromise): WrappedValueVariable(promises)} if promises else {}
-
-    def schedule_eager_promises(self, resolver: Resolver, queue: QueueScheduler) -> Sequence["EagerPromise"]:
-        """
-        Schedules this statement's eager promises to be acquired in the given dynamic context.
-        """
-        return [promise.schedule(self, resolver, queue) for promise in self.get_own_eager_promises()]
+        # Fast path: most statements have no eager promises
+        if not self.own_eager_promises:
+            return {}
+        promises: Sequence["EagerPromise"] = [promise.schedule(self, resolver, queue) for promise in self.own_eager_promises]
+        return {(self, EagerPromise): WrappedValueVariable(promises)}
 
     def execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         """
@@ -188,12 +178,12 @@ class RequiresEmitStatement(DynamicStatement):
 
     def _fulfill_promises(self, requires: dict[object, object]) -> None:
         """
-        Given a requires dict, fulfills this statements dynamic promises
+        Given a requires dict, fulfills this statement's dynamic promises.
         """
-        promises: Sequence["EagerPromise"]
-        try:
-            promises = requires[(self, EagerPromise)]
-        except KeyError:
+        # Use get() instead of try/except because most statements have no eager promises,
+        # making the common-case miss cheaper (avoids exception allocation overhead).
+        promises: Sequence["EagerPromise"] = requires.get((self, EagerPromise))
+        if promises is None:
             return
         for promise in promises:
             promise.fulfill()
@@ -245,10 +235,36 @@ class ExpressionStatement(RequiresEmitStatement):
         """
         Returns a dict of the result variables required for execution. Behaves like requires_emit, but additionally may attach
         resultcollector as a listener to result variables.
-        When this method is called, the caller must make sure to eventually call `execute` as well.
 
-        Composite statements (e.g. conditional expression) will pass result collectors to their children rather than
-        report to them themselves. Child implementations must take care to do one or the other, not both.
+        When this method is called, the caller must make sure to eventually call `execute` as well, which will return the same
+        values that were reported to the result collector (though possibly in a different order).
+
+        Gradual execution is an internal mechanism to optimize code flows where list results can be safely processed as they
+        become available, regardless of order. It must only be applied in those contexts. Gradual execution must not trim
+        duplicate values. That is left up to those few consumers (e.g. relations) that wish to apply uniqueness semantics.
+
+        The decision on whether or not to execute gradually, is always on the initial caller. This is the gradual consumer,
+        which could be the lhs in an assignment, but just as well a for loop or a construct like `is defined`. Concretely,
+        links in the gradual execution chain / pipe (e.g. conditional expression, list comprehension, ...) may (and in fact
+        *must*) always safely propagate the gradual execution mode to their children. After all, if the consumer at the start
+        of the chain did not support gradual execution, no resultcollector would have been passed down this chain.
+
+        Child implementations of this method must take care to either pass on the resultcollector to their children (most
+        composite statements, e.g. conditional expression, list comprehension), or report to it themselves (terminal
+        expressions, e.g. Literal inside a list), but never both. The default implementation covers the second option by
+        passing on the resultcollector over the requires dict so that `execute` may report to it before returning. Therefore,
+        any child implementation that uses a custom mechanism to report to the resultcollector, or passes it on to a child, must
+        not propagate the resultcollector over the requires dict, or must override `execute` behavior accordingly.
+
+        Finally, since statements may only report gradually during `execute` (terminal statements), a caller (gradual consumer
+        or an intermediate link in the gradual execution chain) with multiple children may need to schedule children's execute
+        independently rather than to delegate to them in its own execute, in order to improve responsiveness. Notably, this is
+        mostly relevant for collection AST nodes (e.g. CreateList), where many children are common. In contrast, e.g. a for
+        loop has only one direct child: the iterable, so it does not have the option for more fine-grained requires waiting
+        (and does not need it because the iterable itself takes that responsibility for its own children).
+
+        :param resultcollector: A collector for gradual results. Must be able to process results as they become available, in
+            any order.
         """
         return {**self.requires_emit(resolver, queue), (self, ResultCollector): WrappedValueVariable(resultcollector)}
 
@@ -292,6 +308,11 @@ class ExpressionStatement(RequiresEmitStatement):
 class Resumer(Locatable):
     """
     Resume on a set of requirement variables' values when they become ready (i.e. they are complete).
+
+    Resumers are a building block for staged AST nodes, where further, custom work is required when some variables become
+    available, but we are not yet ready to move on to execute. e.g. a list comprehension needs to wait for its iterable's
+    requires (assuming non-gradual mode for simplicity) in order to schedule the work for the value expressions, which may have
+    requires of their own that we need to wait on before we can move on to execute.
     """
 
     __slots__ = ()
@@ -302,7 +323,9 @@ class Resumer(Locatable):
 
 class RawResumer(Locatable):
     """
-    Resume on a set of requirement variables when they become ready (i.e. they are complete).
+    Resume on a set of requirement variables (as variable objects) when they become ready (i.e. they are complete).
+
+    RawResumers, like Resumers are a building block for staged AST nodes. See the Resumer docstring for more details.
     """
 
     __slots__ = ()

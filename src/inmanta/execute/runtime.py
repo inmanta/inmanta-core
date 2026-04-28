@@ -55,8 +55,11 @@ T_contra = TypeVar("T_contra", contravariant=True)
 
 class ResultCollector(Generic[T_contra]):
     """
-    Helper interface for gradual execution. Should be attached as a listener to a ResultVariable, which will then call
-    receive_result whenever it receives a new value.
+    Helper interface for gradual execution. Can be passed as a result collector when scheduling an ExpressionStatement, or
+    may be attached directly as a listener to a DelayedResultVariable. Either option will then call receive_result
+    whenever a new value becomes available.
+
+    As detailed in `ExpressionStatement', gradual execution receives values in the order they become available.
     """
 
     __slots__ = ()
@@ -161,8 +164,11 @@ class VariableABC(Generic[T_co]):
 
     def listener(self, resultcollector: ResultCollector[T_co], location: Location) -> bool:
         """
-        Add a listener to report new values to. If the variable already has a value, this is reported immediately. Explicit
-        assignments of `null` will not be reported.
+        Add a listener to report new values to. It may return False and report no values at all but if it returns True, each
+        value (e.g. in case of a list in a gradual context) will be reported exactly once and as soon as it becomes available
+        (i.e.  immediately if the variable already has a value). In other words, if any values are reported to the listener,
+        these will be the exact same values (though possibly in a different order) as the ones the variable eventually resolves
+        to. Explicit assignments of `null` will never be reported.
 
         Each listener is expected to register one associated waiter to track completeness. The progress potential implementation
         is based on this invariant.
@@ -566,25 +572,72 @@ class DelayedResultVariable(ResultVariable[T]):
         return len(self.waiters)
 
 
+class ListLiteral[T](DelayedResultVariable[list[object]]):
+    """
+    Transient variable to represent a list (of either constants or instances) literal (not a variable). Like any DSL list
+    (see CreateList), this is an ordered sequence of values, which may contain duplicates. Does not support listeners,
+    and due to its accurate promise tracking, does not provide list modified after freeze protection.
+
+    Requires all providers to acquire a promise before the first gets fulfilled and in return provides accurate promise
+    tracking and freezing. Instances of this class should never require forceful freezing.
+
+    Tightly coupled with CreateList in how delicate it is to use (e.g. the promise tracking) and lack of listener support.
+    It does not need to support listeners because this is used on the path that collects values for the non-gradual
+    `CreateList.execute`.
+    """
+
+    __slots__ = ()
+
+    def __init__(self, queue: "QueueScheduler") -> None:
+        super().__init__(queue)
+        self.value: list[object] = []
+
+    def set_value(self, value: object | list[object], location: Location, recur: bool = True) -> None:
+        if isinstance(value, list):
+            self.value.extend(value)
+        else:
+            self.value.append(value)
+
+    def fulfill(self, promise: IPromise) -> None:
+        """
+        Fulfill a promise with 100% accurate promise tracking. Because of this class' invariant that all promises are
+        acquired before the first is fulfilled, the list can safely be frozen once all registered promises have been fulfilled.
+        """
+        super().fulfill(promise)
+        # 100% accurate promise tracking
+        if self.get_waiting_providers() == 0:
+            self.freeze()
+
+    def get_progress_potential(self) -> int:
+        # these must never be frozen externally because of its accurate promise tracking.
+        return 0
+
+    def __str__(self) -> str:
+        return "TempListVariable %s" % (self.value)
+
+
 ListValue = Union["Instance", list["Instance"]]
 
 
-class BaseListVariable(DelayedResultVariable[ListValue]):
+class ListVariable(DelayedResultVariable[ListValue], RelationAttributeVariable):
     """
-    List variable, but only the part that is independent of an instance
+    ResultVariable that represents a list of instances associated with a relation attribute.
+    Order independent and deduplicated.
     """
 
     value: "List[Instance]"
 
-    __slots__ = ("_listeners", "_nb_gradual_waiters")
+    __slots__ = ("_listeners", "_nb_gradual_waiters", "attribute", "myself")
 
-    def __init__(self, queue: "QueueScheduler") -> None:
+    def __init__(self, attribute: "ast.attribute.RelationAttribute", instance: "Instance", queue: "QueueScheduler") -> None:
+        self.attribute: ast.attribute.RelationAttribute = attribute
+        self.myself: "Instance" = instance
         # use dict for easy lookup with reliable ordering
         self._listeners: Optional[dict[ResultCollector["Instance"], None]] = {}
         # Cache count for waiters without progress potential. Meaning waiters associated with either a purely gradual
         # listener or with a listener that indicated it is done.
         self._nb_gradual_waiters: int = 0
-        super().__init__(queue, [])
+        DelayedResultVariable.__init__(self, queue, [])
 
     def _set_value(self, value: ListValue, location: Location, recur: bool = True) -> bool:
         """
@@ -653,88 +706,6 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
                 del self._listeners[listener]
 
     def set_value(self, value: ListValue, location: Location, recur: bool = True) -> None:
-        if not self._set_value(value, location, recur):
-            return
-        if self.can_get():
-            self.queue()
-
-    def can_get(self) -> bool:
-        return self.get_waiting_providers() == 0
-
-    def receive_result(self, value: ListValue, location: Location) -> bool:
-        self.set_value(value, location)
-        return False
-
-    def listener(self, resultcollector: ResultCollector["Instance"], location: Location) -> Literal[True]:
-        for value in self.value:
-            resultcollector.receive_result(value, location)
-        if not self.hasValue:
-            assert self._listeners is not None
-            if resultcollector in self._listeners:
-                # may happen in case of a duplicate assignment, e.g. `x.a = [y.a, y.a]`
-                # consider the new one to have no progress potential because we don't track it separately
-                self._nb_gradual_waiters += 1
-                return True
-            self._listeners[resultcollector] = None
-            if resultcollector.pure_gradual():
-                self._nb_gradual_waiters += 1
-        return True
-
-    def is_multi(self) -> bool:
-        return True
-
-    def get_progress_potential(self) -> int:
-        # purely gradual waiters aren't blocked on this variable being frozen
-        return len(self.waiters) - self._nb_gradual_waiters
-
-    def freeze(self) -> None:
-        super().freeze()
-        # prevent memory leaks
-        self._listeners = None
-
-    def __str__(self) -> str:
-        return "BaseListVariable %s" % (self.value)
-
-
-# known issue: typed as ResultVariable[ListValue] but is actually ResultVariable[object]
-class ListLiteral(BaseListVariable):
-    """
-    Transient variable to represent a list (of either constants or instances) literal (not a variable).
-    Requires all providers to acquire a promise before the first gets fulfilled and in return provides accurate promise
-    tracking and freezing. Instances of this class should never require forceful freezing.
-    """
-
-    __slots__ = ()
-
-    def fulfill(self, promise: IPromise) -> None:
-        """
-        Fulfill a promise with 100% accurate promise tracking. Because of this class' invariant that all promises are
-        acquired before the first is fulfilled, the list can safely be frozen once all registered promises have been fulfilled.
-        """
-        super().fulfill(promise)
-        # 100% accurate promisse tracking
-        if self.get_waiting_providers() == 0:
-            self.freeze()
-
-    def __str__(self) -> str:
-        return "TempListVariable %s" % (self.value)
-
-
-class ListVariable(BaseListVariable, RelationAttributeVariable):
-    """
-    ResultVariable that represents a list of instances associated with a relation attribute.
-    """
-
-    value: "List[Instance]"
-
-    __slots__ = ("attribute", "myself")
-
-    def __init__(self, attribute: "ast.attribute.RelationAttribute", instance: "Instance", queue: "QueueScheduler") -> None:
-        self.attribute: ast.attribute.RelationAttribute = attribute
-        self.myself: "Instance" = instance
-        BaseListVariable.__init__(self, queue)
-
-    def set_value(self, value: ListValue, location: Location, recur: bool = True) -> None:
         if isinstance(value, NoneValue):
             if len(self.value) > 0:
                 exception: CompilerException = RuntimeException(
@@ -776,13 +747,41 @@ class ListVariable(BaseListVariable, RelationAttributeVariable):
     def can_get(self) -> bool:
         return len(self.value) >= self.attribute.low and self.get_waiting_providers() == 0
 
-    def __str__(self) -> str:
-        return f"ListVariable {self.myself} {self.attribute} = {self.value}"
+    def receive_result(self, value: ListValue, location: Location) -> bool:
+        self.set_value(value, location)
+        return False
+
+    def listener(self, resultcollector: ResultCollector["Instance"], location: Location) -> Literal[True]:
+        for value in self.value:
+            resultcollector.receive_result(value, location)
+        if not self.hasValue:
+            assert self._listeners is not None
+            if resultcollector in self._listeners:
+                # may happen in case of a duplicate assignment, e.g. `x.a = [y.a, y.a]`
+                # consider the new one to have no progress potential because we don't track it separately
+                self._nb_gradual_waiters += 1
+                return True
+            self._listeners[resultcollector] = None
+            if resultcollector.pure_gradual():
+                self._nb_gradual_waiters += 1
+        return True
+
+    def is_multi(self) -> bool:
+        return True
 
     def get_progress_potential(self) -> int:
-        # Ensure that relationships with a relation precedence rule cannot end up in the zerowaiters queue
-        # of the scheduler. We know the order in which those types can be frozen safely.
-        return super().get_progress_potential() + int(self.attribute.has_relation_precedence_rules())
+        # 1. purely gradual waiters aren't blocked on this variable being frozen
+        # 2. Ensure that relationships with a relation precedence rule cannot end up in the zerowaiters queue
+        #    of the scheduler. We know the order in which those types can be frozen safely.
+        return len(self.waiters) - self._nb_gradual_waiters + int(self.attribute.has_freeze_dependents)
+
+    def freeze(self) -> None:
+        super().freeze()
+        # prevent memory leaks
+        self._listeners = None
+
+    def __str__(self) -> str:
+        return f"ListVariable {self.myself} {self.attribute} = {self.value}"
 
 
 class OptionVariable(DelayedResultVariable["Instance"], RelationAttributeVariable):
@@ -851,7 +850,7 @@ class OptionVariable(DelayedResultVariable["Instance"], RelationAttributeVariabl
         return f"OptionVariable {self.myself} {self.attribute} = {self.value}"
 
     def get_progress_potential(self) -> int:
-        return super().get_progress_potential() + int(self.attribute.has_relation_precedence_rules())
+        return super().get_progress_potential() + int(self.attribute.has_freeze_dependents)
 
 
 WaiterSet = NewType("WaiterSet", Set["Waiter"])
@@ -1242,13 +1241,8 @@ class Instance(ExecutionContext, references.MaybeReference):
         self.resolver = resolver.get_root_resolver()
         self.type = mytype
         self.slots: dict[str, ResultVariable] = {}
-        for attr_name in mytype.get_all_attribute_names():
-            if attr_name in self.slots:
-                # prune duplicates because get_new_result_variable() has side effects
-                # don't use set for pruning because side effects drive control flow and set iteration is nondeterministic
-                continue
-            attribute = mytype.get_attribute(attr_name)
-            assert attribute is not None  # Make mypy happy
+        # Use cached all_attributes mapping to avoid repeated parent-chain walks
+        for attr_name, attribute in mytype.get_all_attributes().items():
             self.slots[attr_name] = attribute.get_new_result_variable(self, queue)
         # TODO: this is somewhat ugly. Is there a cleaner way to enforce this constraint
         assert (resolver.dataflow_graph is None) == (node is None)

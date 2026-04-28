@@ -29,9 +29,29 @@ import pytest
 import inmanta.server.services.environmentlistener
 from inmanta.data import model
 from inmanta.module import ModuleLoadingException, Project
+from inmanta.protocol.rest.server import RESTServer
 from inmanta.server import SLICE_ENVIRONMENT
 from inmanta.server.services import environmentservice
+from inmanta.types import JsonType
 from utils import log_contains
+
+
+async def test_unexpected_server_error_handling(client, monkeypatch):
+    """
+    Test that the outermost layer of server side request processing correctly
+    catches otherwise unhandled exceptions and yields a 500 for this request.
+
+    """
+
+    def patch(self, body: bytes) -> JsonType | None:
+        raise Exception("Unexpected server error")
+
+    # Monkeypatch an exception in the "_decode" method to mimic an unexpected server side error
+    monkeypatch.setattr(RESTServer, "_decode", patch, raising=True)
+
+    result = await client.create_project("project-test")
+    assert result.code == 500
+    assert result.result["message"] == "Unexpected server error"
 
 
 async def test_project_api_v1(client):
