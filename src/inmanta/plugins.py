@@ -23,6 +23,7 @@ import inspect
 import logging
 import numbers
 import os
+import shlex
 import subprocess
 import typing
 import warnings
@@ -1102,7 +1103,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         """
         if "bin" in self.opts and self.opts["bin"] is not None:
             for _bin in self.opts["bin"]:
-                p = subprocess.Popen(["bash", "-c", "type -p %s" % _bin], stdout=subprocess.PIPE)
+                p = subprocess.Popen(["bash", "-c", "type -p %s" % shlex.quote(_bin)], stdout=subprocess.PIPE)
                 result = p.communicate()
 
                 if len(result[0]) == 0:
