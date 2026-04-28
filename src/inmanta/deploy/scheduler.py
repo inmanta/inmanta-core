@@ -26,7 +26,7 @@ import logging
 import typing
 import uuid
 from abc import abstractmethod
-from collections.abc import Mapping, Sequence, Set
+from collections.abc import Collection, Mapping, Sequence, Set
 from dataclasses import dataclass
 from enum import Enum
 from typing import ClassVar, Optional, Self
@@ -575,19 +575,24 @@ class ResourceScheduler(TaskManager):
         reason: str,
         priority: TaskPriority = TaskPriority.USER_DEPLOY,
         agent: Optional[str] = None,
+        resources: Optional[Collection[ResourceIdStr]] = None,
     ) -> None:
         """
         Trigger a deploy
 
         :param agent: If given, deploy resources only for this agent. Otherwise deploy for all agents.
+        :param resources: If given, deploy only resources in this list. Otherwise deploy all resources (on the agent if given).
         """
         if not self._running:
             LOGGER.debug("Ignoring deploy request for halted resource scheduler")
             return
         async with self._scheduler_lock:
-            to_deploy: Set[ResourceIdStr] = (
-                self._state.dirty if agent is None else self._state.dirty & self._state.resources_by_agent.get(agent, set())
-            )
+            intersection_filters: list[Collection[ResourceIdStr]] = []
+            if resources is not None:
+                intersection_filters.append(resources)
+            if agent is not None:
+                intersection_filters.append(self._state.resources_by_agent.get(agent, set()))
+            to_deploy: Set[ResourceIdStr] = set.intersection(self._state.dirty, *intersection_filters)
             if agent is not None:
                 LOGGER.debug("Triggering deploy for %d resources on agent %s because %s", len(to_deploy), agent, reason)
             else:
@@ -601,11 +606,13 @@ class ResourceScheduler(TaskManager):
         reason: str,
         priority: TaskPriority = TaskPriority.USER_REPAIR,
         agent: Optional[str] = None,
+        resources: Optional[Collection[ResourceIdStr]] = None,
     ) -> None:
         """
         Trigger a repair, i.e. mark all unblocked resources as dirty, then trigger a deploy.
 
         :param agent: If given, repair resources only for this agent. Otherwise repair for all agents.
+        :param resources: If given, repair only resources in this list. Otherwise repair all resources (on the agent if given).
         """
 
         def should_deploy_resource(resource: ResourceIdStr) -> bool:
@@ -621,9 +628,10 @@ class ResourceScheduler(TaskManager):
             LOGGER.debug("Ignoring repair request for halted resource scheduler")
             return
         async with self._scheduler_lock:
-            in_scope: Set[ResourceIdStr] = (
+            base_in_scope: Set[ResourceIdStr] = (
                 self._state.intent.keys() if agent is None else self._state.resources_by_agent.get(agent, set())
             )
+            in_scope: Set[ResourceIdStr] = base_in_scope & set(resources) if resources is not None else base_in_scope
 
             to_deploy: Set[ResourceIdStr] = {resource for resource in in_scope if should_deploy_resource(resource)}
             if agent is not None:
