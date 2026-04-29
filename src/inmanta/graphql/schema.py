@@ -19,6 +19,7 @@ import re
 import typing
 import uuid
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from enum import StrEnum
 from typing import Sequence, cast
 
@@ -702,6 +703,11 @@ class Resource:
 @strawberry.input
 class BaseResourceFilter(StrawberryFilter):
     environment: uuid.UUID
+    is_orphan: bool | None = strawberry.UNSET
+
+
+@strawberry.input
+class CoreResourceFilter(BaseResourceFilter):
     resource_type: StrFilter | None = strawberry.UNSET
     resource_id_value: StrFilter | None = strawberry.UNSET
     agent: StrFilter | None = strawberry.UNSET
@@ -710,7 +716,6 @@ class BaseResourceFilter(StrawberryFilter):
     compliance: EnumFilter[state.Compliance] | None = strawberry.UNSET
     last_handler_run: EnumFilter[state.HandlerResult] | None = strawberry.UNSET
     is_deploying: bool | None = strawberry.UNSET
-    is_orphan: bool | None = strawberry.UNSET
 
     @property
     def model(self) -> type[models.Base]:
@@ -923,7 +928,7 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
     """
 
     loader = StrawberrySQLAlchemyLoader(async_bind_factory=get_session_factory())
-    ResourceFilter: type = context.graphql_service.build_resource_filter()
+    ResourceFilter: typing.Type[StrawberryFilter] = context.graphql_service.build_resource_filter()
 
     class CustomInfo(Info):
         @property

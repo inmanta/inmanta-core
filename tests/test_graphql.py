@@ -989,7 +989,7 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
 
     query = """
        {
-           resources (filter: {environment: "%s" lastHandlerRun: {eq: NEW}}
+           resources (filter: {environment: "%s" lastHandlerRun: {eq: NEW} myAttr: {eq: "something"}}
                     orderBy: [{key: "compliance" order: "desc"}, {key: "isDeploying" order: "desc"}]) {
                edges {
                    node {

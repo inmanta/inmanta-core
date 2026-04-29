@@ -18,7 +18,14 @@ from typing import Any
 import strawberry
 from graphql.error import GraphQLError
 from inmanta.graphql.result import GraphQLResult
-from inmanta.graphql.schema import BaseResourceFilter, GraphQLContext, StrawberryFilter, StrFilter, get_schema
+from inmanta.graphql.schema import (
+    BaseResourceFilter,
+    CoreResourceFilter,
+    GraphQLContext,
+    StrawberryFilter,
+    StrFilter,
+    get_schema,
+)
 from inmanta.protocol import methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.decorators import handle
@@ -32,8 +39,10 @@ from strawberry.types.execution import ExecutionResult
 LOGGER = logging.getLogger(__name__)
 
 
-class ExampleResourceFilter(StrawberryFilter):
-    my_attr: StrFilter | None = None
+@strawberry.input
+class ExampleResourceFilter(BaseResourceFilter):
+    my_attr: StrFilter | None = strawberry.UNSET
+    another_attr: StrFilter | None = strawberry.UNSET
 
     def apply_filters[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
         LOGGER.error("EXAMPLE FILTERS")
@@ -57,8 +66,8 @@ class GraphQLSlice(protocol.ServerSlice):
     async def prestart(self, server: Server) -> None:
         compiler_service = server.get_slice(SLICE_COMPILER)
         assert isinstance(compiler_service, CompilerService)
-        self.update_resource_filter(BaseResourceFilter)
         self.update_resource_filter(ExampleResourceFilter)
+        self.update_resource_filter(CoreResourceFilter)
         self.context = GraphQLContext(compiler_service=compiler_service, graphql_service=self)
         await super().prestart(server)
 
@@ -71,7 +80,7 @@ class GraphQLSlice(protocol.ServerSlice):
             bases = tuple(self.resource_filters)
 
             class ResourceFilter(*bases):
-                def apply_filters(self, stmt):
+                def apply_filters[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
                     for base in bases:
                         # Call each extension's apply_filters independently
                         if hasattr(base, "apply_filters"):
