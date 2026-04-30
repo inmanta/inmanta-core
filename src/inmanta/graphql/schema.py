@@ -41,7 +41,6 @@ from strawberry.scalars import JSON
 from strawberry.schema.config import StrawberryConfig
 from strawberry.types import Info
 from strawberry.types.field import field
-from strawberry.types.info import ContextType
 from strawberry.types.nodes import SelectedField, Selection
 from strawberry_sqlalchemy_mapper import StrawberrySQLAlchemyLoader, StrawberrySQLAlchemyMapper
 from strawberry_sqlalchemy_mapper.mapper import (
@@ -213,6 +212,7 @@ _docstring_param_cache: dict[str, dict[str, str]] = _build_docstring_param_cache
 class BaseResourceFilter(ABC):
     environment: uuid.UUID | None = strawberry.UNSET
     is_orphan: bool | None = strawberry.UNSET
+    purged: bool | None = strawberry.UNSET
 
     @classmethod
     @abstractmethod
@@ -401,7 +401,7 @@ def to_snake_case(name: str) -> str:
 
 
 if typing.TYPE_CHECKING:
-    from inmanta.graphql.graphql import GraphQLSlice
+    from inmanta.graphql.graphql import GraphQLSlice, ResourceFilterEngine
 
 
 @dataclasses.dataclass
@@ -714,7 +714,6 @@ class CoreResourceFilter(BaseResourceFilter):
     resource_type: StrFilter | None = strawberry.UNSET
     resource_id_value: StrFilter | None = strawberry.UNSET
     agent: StrFilter | None = strawberry.UNSET
-    purged: bool | None = strawberry.UNSET
     blocked: EnumFilter[state.Blocked] | None = strawberry.UNSET
     compliance: EnumFilter[state.Compliance] | None = strawberry.UNSET
     last_handler_run: EnumFilter[state.HandlerResult] | None = strawberry.UNSET
@@ -929,6 +928,17 @@ async def get_connection[*Ts](
         )
 
 
+class StrawberryInfoContextDict(typing.TypedDict):
+    """
+    TypedDict containing information on the current execution to pass to the CustomInfo class.
+    This context is used in our queries and field resolvers
+    """
+
+    sqlalchemy_loader: StrawberrySQLAlchemyLoader
+    compiler_service: CompilerService
+    resource_filter_engine: "ResourceFilterEngine"
+
+
 def get_schema(context: GraphQLContext) -> strawberry.Schema:
     """
     Initializes the Strawberry GraphQL schema.
@@ -937,19 +947,17 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
     """
 
     loader = StrawberrySQLAlchemyLoader(async_bind_factory=get_session_factory())
-    ResourceFilter = context.graphql_service.build_resource_filter()
 
-    class CustomInfo(Info):
+    ResourceFilter: typing.Any = context.graphql_service.build_resource_filter()
+
+    class CustomInfo(Info[StrawberryInfoContextDict, object]):
         @property
-        def context(self) -> ContextType:  # type: ignore[type-var]
-            return typing.cast(
-                ContextType,
-                {
-                    "sqlalchemy_loader": loader,
-                    "compiler_service": context.compiler_service,
-                    "resource_filter_engine": context.graphql_service.resource_filter_engine,
-                },
-            )
+        def context(self) -> StrawberryInfoContextDict:
+            return {
+                "sqlalchemy_loader": loader,
+                "compiler_service": context.compiler_service,
+                "resource_filter_engine": context.graphql_service.resource_filter_engine,
+            }
 
     @strawberry.type
     class Query:
