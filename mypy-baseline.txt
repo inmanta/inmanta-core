@@ -1056,7 +1056,6 @@ src/inmanta/server/services/paramservice.py:0: error: Unsupported operand types 
 src/inmanta/server/services/paramservice.py:0: error: Unsupported operand types for > ("timedelta" and "datetime")  [operator]
 src/inmanta/server/services/paramservice.py:0: note: Left operand is of type "datetime | None"
 src/inmanta/server/services/paramservice.py:0: note: Left operand is of type "datetime | timedelta"
-src/inmanta/server/services/resourceservice.py:0: error: "ServerSlice" has no attribute "register_listener_for_multiple_actions"  [attr-defined]
 src/inmanta/server/services/resourceservice.py:0: error: Argument "args" to "__init__" of "LogRecord" has incompatible type "list[Never]"; expected "tuple[object, ...] | Mapping[str, object] | None"  [arg-type]
 src/inmanta/server/services/resourceservice.py:0: error: Missing type arguments for generic type "Feature"  [type-arg]
 src/inmanta/server/services/resourceservice.py:0: error: Module "inmanta.server.protocol" does not explicitly export attribute "handle"  [attr-defined]

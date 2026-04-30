@@ -16,12 +16,10 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import asyncio
 import datetime
 import logging
 import typing
 import uuid
-from collections import abc, defaultdict
 from collections.abc import Sequence
 from typing import Any, Optional, cast
 
@@ -54,10 +52,9 @@ from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound
 from inmanta.protocol.return_value_meta import ReturnValueWithMeta
 from inmanta.resources import Id
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_ENVIRONMENT, SLICE_RESOURCE, SLICE_TRANSPORT, agentmanager
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_RESOURCE, SLICE_TRANSPORT, agentmanager
 from inmanta.server import config as opt
 from inmanta.server import extensions, protocol
-from inmanta.server.services.environmentlistener import EnvironmentAction, EnvironmentListener
 from inmanta.server.validate_filter import InvalidFilter
 from inmanta.types import Apireturn, JsonType, PrimitiveTypes, ResourceIdStr, ResourceType, ResourceVersionIdStr
 
@@ -110,29 +107,13 @@ class ResourceActionLogLine(logging.LogRecord):
         self.relativeCreated = (self.created - logging._startTime) * 1000
 
 
-class ResourceService(protocol.ServerSlice, EnvironmentListener):
+class ResourceService(protocol.ServerSlice):
     """Resource Manager service"""
 
     agentmanager_service: "agentmanager.AgentManager"
 
     def __init__(self) -> None:
         super().__init__(SLICE_RESOURCE)
-
-        # Dict: environment_id: (model_version, increment, negative_increment, negative_increment_per_agent, run_ahead_lock)
-        self._increment_cache: dict[
-            uuid.UUID,
-            Optional[
-                tuple[
-                    int,
-                    abc.Set[ResourceIdStr],
-                    abc.Set[ResourceIdStr],
-                    abc.Mapping[str, abc.Set[ResourceIdStr]],
-                    Optional[asyncio.Event],
-                ]
-            ],
-        ] = {}
-        # lock to ensure only one inflight request
-        self._increment_cache_locks: dict[uuid.UUID, asyncio.Lock] = defaultdict(lambda: asyncio.Lock())
         self._resource_action_logger = logging.getLogger(const.NAME_RESOURCE_ACTION_LOGGER)
 
     def get_dependencies(self) -> list[str]:
@@ -147,11 +128,6 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
     async def prestart(self, server: protocol.Server) -> None:
         await super().prestart(server)
         self.agentmanager_service = cast("agentmanager.AgentManager", server.get_slice(SLICE_AGENT_MANAGER))
-        # This is difficult to type without import loop
-        # The type is EnvironmentService
-        server.get_slice(SLICE_ENVIRONMENT).register_listener_for_multiple_actions(
-            self, [EnvironmentAction.deleted, EnvironmentAction.cleared]
-        )
 
     async def start(self) -> None:
         self.schedule(
@@ -166,24 +142,6 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
 
     async def stop(self) -> None:
         await super().stop()
-
-    def clear_env_cache(self, env: data.Environment | model.Environment) -> None:
-        LOGGER.log(const.LOG_LEVEL_TRACE, "Clearing cache for %s", env.id)
-        self._increment_cache[env.id] = None
-
-    async def environment_action_cleared(self, env: model.Environment) -> None:
-        """
-        Will be called when the environment is cleared
-        :param env: The environment that is cleared
-        """
-        self.clear_env_cache(env)
-
-    async def environment_action_deleted(self, env: model.Environment) -> None:
-        """
-        Will be called when the environment is deleted
-        :param env: The environment that is deleted
-        """
-        self.clear_env_cache(env)
 
     def get_resource_action_logger(self, environment: uuid.UUID) -> logging.Logger:
         """Get the resource action logger for the given environment.
