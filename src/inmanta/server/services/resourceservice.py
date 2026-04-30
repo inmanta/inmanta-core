@@ -117,22 +117,6 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
 
     def __init__(self) -> None:
         super().__init__(SLICE_RESOURCE)
-
-        # Dict: environment_id: (model_version, increment, negative_increment, negative_increment_per_agent, run_ahead_lock)
-        self._increment_cache: dict[
-            uuid.UUID,
-            Optional[
-                tuple[
-                    int,
-                    abc.Set[ResourceIdStr],
-                    abc.Set[ResourceIdStr],
-                    abc.Mapping[str, abc.Set[ResourceIdStr]],
-                    Optional[asyncio.Event],
-                ]
-            ],
-        ] = {}
-        # lock to ensure only one inflight request
-        self._increment_cache_locks: dict[uuid.UUID, asyncio.Lock] = defaultdict(lambda: asyncio.Lock())
         self._resource_action_logger = logging.getLogger(const.NAME_RESOURCE_ACTION_LOGGER)
 
     def get_dependencies(self) -> list[str]:
@@ -166,24 +150,6 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
 
     async def stop(self) -> None:
         await super().stop()
-
-    def clear_env_cache(self, env: data.Environment | model.Environment) -> None:
-        LOGGER.log(const.LOG_LEVEL_TRACE, "Clearing cache for %s", env.id)
-        self._increment_cache[env.id] = None
-
-    async def environment_action_cleared(self, env: model.Environment) -> None:
-        """
-        Will be called when the environment is cleared
-        :param env: The environment that is cleared
-        """
-        self.clear_env_cache(env)
-
-    async def environment_action_deleted(self, env: model.Environment) -> None:
-        """
-        Will be called when the environment is deleted
-        :param env: The environment that is deleted
-        """
-        self.clear_env_cache(env)
 
     def get_resource_action_logger(self, environment: uuid.UUID) -> logging.Logger:
         """Get the resource action logger for the given environment.

@@ -1,0 +1,4 @@
+description: Drop unused increment cache from ResourceService
+change-type: patch
+issue-nr: 10059
+destination-branches: [master, iso9]
