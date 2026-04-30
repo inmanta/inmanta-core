@@ -16,12 +16,10 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import asyncio
 import datetime
 import logging
 import typing
 import uuid
-from collections import abc, defaultdict
 from collections.abc import Sequence
 from typing import Any, Optional, cast
 
