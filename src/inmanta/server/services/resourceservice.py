@@ -55,7 +55,7 @@ from inmanta.resources import Id
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_ENVIRONMENT, SLICE_RESOURCE, SLICE_TRANSPORT, agentmanager
 from inmanta.server import config as opt
 from inmanta.server import extensions, protocol
-from inmanta.server.services.environmentlistener import EnvironmentAction, EnvironmentListener
+from inmanta.server.services.environmentlistener import EnvironmentAction
 from inmanta.server.validate_filter import InvalidFilter
 from inmanta.types import Apireturn, JsonType, PrimitiveTypes, ResourceIdStr, ResourceType, ResourceVersionIdStr
 
@@ -108,7 +108,7 @@ class ResourceActionLogLine(logging.LogRecord):
         self.relativeCreated = (self.created - logging._startTime) * 1000
 
 
-class ResourceService(protocol.ServerSlice, EnvironmentListener):
+class ResourceService(protocol.ServerSlice):
     """Resource Manager service"""
 
     agentmanager_service: "agentmanager.AgentManager"
