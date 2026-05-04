@@ -41,7 +41,6 @@ from strawberry.scalars import JSON
 from strawberry.schema.config import StrawberryConfig
 from strawberry.types import Info
 from strawberry.types.field import field
-from strawberry.types.info import ContextType
 from strawberry.types.nodes import SelectedField, Selection
 from strawberry_sqlalchemy_mapper import StrawberrySQLAlchemyLoader, StrawberrySQLAlchemyMapper
 from strawberry_sqlalchemy_mapper.mapper import (
@@ -207,6 +206,17 @@ def _build_docstring_param_cache() -> dict[str, dict[str, str]]:
 
 
 _docstring_param_cache: dict[str, dict[str, str]] = _build_docstring_param_cache()
+
+
+@strawberry.input
+class BaseResourceFilter(ABC):
+    environment: uuid.UUID | None = strawberry.UNSET
+    is_orphan: bool | None = strawberry.UNSET
+    purged: bool | None = strawberry.UNSET
+
+    @classmethod
+    @abstractmethod
+    def apply_filter[*Ts](cls, stmt: Select[tuple[*Ts]], filter_instance: typing.Self) -> Select[tuple[*Ts]]: ...
 
 
 class CustomStrawberrySQLAlchemyMapper(StrawberrySQLAlchemyMapper[BaseModelType]):
@@ -390,6 +400,10 @@ def to_snake_case(name: str) -> str:
     return re.sub("([A-Z])", r"_\1", name).lower()
 
 
+if typing.TYPE_CHECKING:
+    from inmanta.graphql.graphql import GraphQLSlice, ResourceFilterEngine
+
+
 @dataclasses.dataclass
 class GraphQLContext:
     """
@@ -397,6 +411,7 @@ class GraphQLContext:
     """
 
     compiler_service: CompilerService
+    graphql_service: "GraphQLSlice"
 
 
 class CustomFilter(ABC):
@@ -479,7 +494,7 @@ class StrawberryFilter:
             filter_dict[key] = value
         return filter_dict
 
-    def apply_filters[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
+    def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
         """
         Applies the filters to the given query.
         """
@@ -695,17 +710,14 @@ class Resource:
 
 
 @strawberry.input
-class ResourceFilter(StrawberryFilter):
-    environment: uuid.UUID
+class CoreResourceFilter(BaseResourceFilter):
     resource_type: StrFilter | None = strawberry.UNSET
     resource_id_value: StrFilter | None = strawberry.UNSET
     agent: StrFilter | None = strawberry.UNSET
-    purged: bool | None = strawberry.UNSET
     blocked: EnumFilter[state.Blocked] | None = strawberry.UNSET
     compliance: EnumFilter[state.Compliance] | None = strawberry.UNSET
     last_handler_run: EnumFilter[state.HandlerResult] | None = strawberry.UNSET
     is_deploying: bool | None = strawberry.UNSET
-    is_orphan: bool | None = strawberry.UNSET
 
     @property
     def model(self) -> type[models.Base]:
@@ -715,8 +727,9 @@ class ResourceFilter(StrawberryFilter):
     def rps_model(self) -> type[models.Base]:
         return models.ResourcePersistentState
 
-    def apply_filters[*Ts](
-        self, stmt: Select[tuple[*Ts]]
+    @classmethod
+    def apply_filter[*Ts](
+        cls, stmt: Select[tuple[*Ts]], filter_instance: typing.Self
     ) -> Select[tuple[*Ts]]:  # Every filter we apply to the resource is custom, so we don't use `get_filter_dict`
         rps_keys = [
             "resource_type",
@@ -727,15 +740,15 @@ class ResourceFilter(StrawberryFilter):
             "last_handler_run",
         ]
         for key in rps_keys:
-            attr = getattr(self, key)
+            attr = getattr(filter_instance, key)
             if attr is not None and attr is not strawberry.UNSET:
-                stmt = attr.apply_filter(stmt, self.rps_model, key)
-        if self.purged is not None and self.purged is not strawberry.UNSET:
-            stmt = stmt.filter(models.Resource.attributes["purged"].astext.cast(Boolean).is_(self.purged))
-        if self.is_deploying is not None and self.is_deploying is not strawberry.UNSET:
-            stmt = stmt.filter(models.ResourcePersistentState.is_deploying == self.is_deploying)
-        if self.is_orphan is not None and self.is_orphan is not strawberry.UNSET:
-            stmt = stmt.filter(models.ResourcePersistentState.is_orphan == self.is_orphan)
+                stmt = attr.apply_filter(stmt, filter_instance.rps_model, key)
+        if filter_instance.purged is not None and filter_instance.purged is not strawberry.UNSET:
+            stmt = stmt.filter(models.Resource.attributes["purged"].astext.cast(Boolean).is_(filter_instance.purged))
+        if filter_instance.is_deploying is not None and filter_instance.is_deploying is not strawberry.UNSET:
+            stmt = stmt.filter(models.ResourcePersistentState.is_deploying == filter_instance.is_deploying)
+        if filter_instance.is_orphan is not None and filter_instance.is_orphan is not strawberry.UNSET:
+            stmt = stmt.filter(models.ResourcePersistentState.is_orphan == filter_instance.is_orphan)
         return stmt
 
 
@@ -794,14 +807,19 @@ class ComposedResourceSummary:
 def add_filter_and_sort[*Ts](
     stmt: Select[tuple[*Ts]],
     default_sorting: dict[str, UnaryExpression[typing.Any]],
-    filter: typing.Optional[StrawberryFilter] = strawberry.UNSET,
+    filter: typing.Optional[StrawberryFilter | BaseResourceFilter] = strawberry.UNSET,
     order_by: typing.Optional[Sequence[StrawberryOrder]] = strawberry.UNSET,
+    resource_filter_engine: typing.Any | None = None,
 ) -> Select[tuple[*Ts]]:
     """
     Adds filter and sorting to the given statement.
     """
     if filter is not None and filter is not strawberry.UNSET:
-        stmt = filter.apply_filters(stmt)
+        if isinstance(filter, BaseResourceFilter):
+            assert resource_filter_engine is not None
+            stmt = resource_filter_engine.apply_resource_filters(stmt, filter)
+        else:
+            stmt = filter.apply_filter(stmt)
     order_expressions: dict[str, UnaryExpression[typing.Any]] = {}
     if order_by is not None and order_by is not strawberry.UNSET:
         for order in order_by:
@@ -910,6 +928,17 @@ async def get_connection[*Ts](
         )
 
 
+class StrawberryInfoContextDict(typing.TypedDict):
+    """
+    TypedDict containing information on the current execution to pass to the CustomInfo class.
+    This context is used in our queries and field resolvers
+    """
+
+    sqlalchemy_loader: StrawberrySQLAlchemyLoader
+    compiler_service: CompilerService
+    resource_filter_engine: "ResourceFilterEngine"
+
+
 def get_schema(context: GraphQLContext) -> strawberry.Schema:
     """
     Initializes the Strawberry GraphQL schema.
@@ -919,10 +948,16 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
 
     loader = StrawberrySQLAlchemyLoader(async_bind_factory=get_session_factory())
 
-    class CustomInfo(Info):
+    ResourceFilter: typing.Any = context.graphql_service.build_resource_filter()
+
+    class CustomInfo(Info[StrawberryInfoContextDict, object]):
         @property
-        def context(self) -> ContextType:  # type: ignore[type-var]
-            return typing.cast(ContextType, {"sqlalchemy_loader": loader, "compiler_service": context.compiler_service})
+        def context(self) -> StrawberryInfoContextDict:
+            return {
+                "sqlalchemy_loader": loader,
+                "compiler_service": context.compiler_service,
+                "resource_filter_engine": context.graphql_service.resource_filter_engine,
+            }
 
     @strawberry.type
     class Query:
@@ -1064,13 +1099,24 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
                         == select(latest_scheduled_version_cte.c.version).scalar_subquery(),
                     ),
                 )
-            stmt = add_filter_and_sort(stmt, ResourceOrder.default_order(), filter, order_by)
+            stmt = add_filter_and_sort(
+                stmt,
+                ResourceOrder.default_order(),
+                filter,
+                order_by,
+                resource_filter_engine=info.context.get("resource_filter_engine", None),
+            )
             count_stmt: Select[tuple[int]] | None
             if filter.purged is not strawberry.UNSET:
                 count_stmt = None
             else:
                 # more efficient count statement that doesn't require joining on resource
-                count_stmt = add_filter_and_sort(select(func.count()).select_from(models.ResourcePersistentState), {}, filter)
+                count_stmt = add_filter_and_sort(
+                    select(func.count()).select_from(models.ResourcePersistentState),
+                    {},
+                    filter,
+                    resource_filter_engine=info.context.get("resource_filter_engine", None),
+                )
             return await get_connection(
                 stmt, info=info, model="Resource", first=first, after=after, last=last, before=before, count_stmt=count_stmt
             )
