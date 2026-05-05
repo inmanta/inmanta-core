@@ -1,0 +1,4 @@
+description: >
+  Enables extensions to create their own implementation of ResourceFilterABC and use it on the `resources` query on GraphQL
+change-type: minor
+destination-branches: [master, iso9]

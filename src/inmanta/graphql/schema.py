@@ -209,8 +209,16 @@ _docstring_param_cache: dict[str, dict[str, str]] = _build_docstring_param_cache
 
 
 @strawberry.input
-class BaseResourceFilter(ABC):
-    environment: uuid.UUID | None = strawberry.UNSET
+class ResourceFilterABC(ABC):
+    """
+    Abstract base class that defines the shared attributes/behaviour of each extension's ResourceFilter.
+
+    :param environment: The environment the resources belong to.
+    :param is_orphan: If we want to filter on orphans or not.
+    :param purged: If we want to filter on the "purged" attribute or not.
+    """
+
+    environment: uuid.UUID
     is_orphan: bool | None = strawberry.UNSET
     purged: bool | None = strawberry.UNSET
 
@@ -710,7 +718,7 @@ class Resource:
 
 
 @strawberry.input
-class CoreResourceFilter(BaseResourceFilter):
+class CoreResourceFilter(ResourceFilterABC):
     resource_type: StrFilter | None = strawberry.UNSET
     resource_id_value: StrFilter | None = strawberry.UNSET
     agent: StrFilter | None = strawberry.UNSET
@@ -807,7 +815,7 @@ class ComposedResourceSummary:
 def add_filter_and_sort[*Ts](
     stmt: Select[tuple[*Ts]],
     default_sorting: dict[str, UnaryExpression[typing.Any]],
-    filter: typing.Optional[StrawberryFilter | BaseResourceFilter] = strawberry.UNSET,
+    filter: typing.Optional[StrawberryFilter | ResourceFilterABC] = strawberry.UNSET,
     order_by: typing.Optional[Sequence[StrawberryOrder]] = strawberry.UNSET,
     resource_filter_engine: typing.Any | None = None,
 ) -> Select[tuple[*Ts]]:
@@ -815,7 +823,7 @@ def add_filter_and_sort[*Ts](
     Adds filter and sorting to the given statement.
     """
     if filter is not None and filter is not strawberry.UNSET:
-        if isinstance(filter, BaseResourceFilter):
+        if isinstance(filter, ResourceFilterABC):
             assert resource_filter_engine is not None
             stmt = resource_filter_engine.apply_resource_filters(stmt, filter)
         else:

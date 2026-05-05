@@ -12,14 +12,12 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import logging
-import typing
 from typing import Any
 
 import strawberry
 from graphql.error import GraphQLError
 from inmanta.graphql.result import GraphQLResult
-from inmanta.graphql.schema import BaseResourceFilter, CoreResourceFilter, GraphQLContext, get_schema
+from inmanta.graphql.schema import CoreResourceFilter, GraphQLContext, ResourceFilterABC, get_schema
 from inmanta.protocol import methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.decorators import handle
@@ -30,34 +28,22 @@ from sqlalchemy import Select
 from strawberry.schema.exceptions import CannotGetOperationTypeError
 from strawberry.types.execution import ExecutionResult
 
-LOGGER = logging.getLogger(__name__)
-
-
-@strawberry.input
-class ExampleFilter(BaseResourceFilter):
-    my_attr: str | None = strawberry.UNSET
-
-    @classmethod
-    def apply_filter[*Ts](cls, stmt: Select[tuple[*Ts]], filter_instance: typing.Self) -> Select[tuple[*Ts]]:
-        LOGGER.error(f"Applied filter {filter_instance.my_attr}")
-        return stmt
-
 
 class ResourceFilterEngine:
     def __init__(self) -> None:
-        self.all_filters: list[type[BaseResourceFilter]] = []
-        self.filter_fields: dict[str, type[BaseResourceFilter]] = {}
+        self.all_filters: list[type[ResourceFilterABC]] = []
+        self.filter_fields: dict[str, type[ResourceFilterABC]] = {}
 
-    def register_extension_filter(self, filter_cls: type[BaseResourceFilter]) -> None:
+    def register_extension_filter(self, filter_cls: type[ResourceFilterABC]) -> None:
         self.all_filters.append(filter_cls)
 
-    def build_strawberry_filter(self) -> type[BaseResourceFilter]:
+    def build_strawberry_filter(self) -> type[ResourceFilterABC]:
         """
         Builds resource filter for use with Strawberry.
         """
         return strawberry.input(type("ResourceFilter", tuple(self.all_filters), {}), name="ResourceFilter")
 
-    def apply_resource_filters[*Ts](self, stmt: Select[tuple[*Ts]], filter_instance: BaseResourceFilter) -> Select[tuple[*Ts]]:
+    def apply_resource_filters[*Ts](self, stmt: Select[tuple[*Ts]], filter_instance: ResourceFilterABC) -> Select[tuple[*Ts]]:
         for filter_cls in self.all_filters:
             stmt = filter_cls.apply_filter(stmt=stmt, filter_instance=filter_instance)
         return stmt
@@ -65,7 +51,7 @@ class ResourceFilterEngine:
 
 class GraphQLSlice(protocol.ServerSlice):
     context: GraphQLContext | None
-    _composed_resource_filter_cls: type[BaseResourceFilter] | None
+    _composed_resource_filter_cls: type[ResourceFilterABC] | None
     resource_filter_engine: ResourceFilterEngine
 
     def __init__(self) -> None:
@@ -80,16 +66,21 @@ class GraphQLSlice(protocol.ServerSlice):
     async def prestart(self, server: Server) -> None:
         compiler_service = server.get_slice(SLICE_COMPILER)
         assert isinstance(compiler_service, CompilerService)
-        self.resource_filter_engine.register_extension_filter(ExampleFilter)
         self.resource_filter_engine.register_extension_filter(CoreResourceFilter)
         self.context = GraphQLContext(compiler_service=compiler_service, graphql_service=self)
         await super().prestart(server)
 
-    def update_resource_filter(self, ext_filter: type[BaseResourceFilter]) -> None:
+    def update_resource_filter(self, ext_filter: type[ResourceFilterABC]) -> None:
+        """
+        Adds an extension's ResourceFilterABC implementation to be composed into the ResourceFilter that is exposed to the user
+        """
         self.resource_filter_engine.register_extension_filter(ext_filter)
         self._composed_resource_filter_cls = None
 
-    def build_resource_filter(self) -> type[BaseResourceFilter]:
+    def build_resource_filter(self) -> type[ResourceFilterABC]:
+        """
+        Builds the composed ResourceFilter that is exposed to the user.
+        """
         if self._composed_resource_filter_cls is None:
             self._composed_resource_filter_cls = self.resource_filter_engine.build_strawberry_filter()
         return self._composed_resource_filter_cls
