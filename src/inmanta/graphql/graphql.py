@@ -30,20 +30,34 @@ from strawberry.types.execution import ExecutionResult
 
 
 class ResourceFilterEngine:
+    """
+    Helper class to manage all the registered ResourceFilterABC instances and build the composed ResourceFilter
+    """
+
+    all_filters: list[type[ResourceFilterABC]]
+
     def __init__(self) -> None:
         self.all_filters: list[type[ResourceFilterABC]] = []
-        self.filter_fields: dict[str, type[ResourceFilterABC]] = {}
 
     def register_extension_filter(self, filter_cls: type[ResourceFilterABC]) -> None:
+        """
+        Adds an extension's ResourceFilterABC implementation to be composed into the ResourceFilter that is exposed to the user
+        """
         self.all_filters.append(filter_cls)
 
     def build_strawberry_filter(self) -> type[ResourceFilterABC]:
         """
-        Builds resource filter for use with Strawberry.
+        Builds ResourceFilter class based on the provided filters to use with Strawberry.
         """
         return strawberry.input(type("ResourceFilter", tuple(self.all_filters), {}), name="ResourceFilter")
 
     def apply_resource_filters[*Ts](self, stmt: Select[tuple[*Ts]], filter_instance: ResourceFilterABC) -> Select[tuple[*Ts]]:
+        """
+        Applies each registered ResourceFilterABC implementation's `apply_filter` to the provided Select statement.
+
+        :param stmt: The Select statement that fetches the requested resources.
+        :param filter_instance: The composed ResourceFilter instance that contains the requested filters.
+        """
         for filter_cls in self.all_filters:
             stmt = filter_cls.apply_filter(stmt=stmt, filter_instance=filter_instance)
         return stmt
