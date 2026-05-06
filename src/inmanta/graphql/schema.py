@@ -730,6 +730,8 @@ class ResourceFilter(StrawberryFilter):
             attr = getattr(self, key)
             if attr is not None and attr is not strawberry.UNSET:
                 stmt = attr.apply_filter(stmt, self.rps_model, key)
+        if self.environment is not None and self.environment is not strawberry.UNSET:
+            stmt = stmt.filter(models.ResourcePersistentState.environment == self.environment)
         if self.purged is not None and self.purged is not strawberry.UNSET:
             stmt = stmt.filter(models.Resource.attributes["purged"].astext.cast(Boolean).is_(self.purged))
         if self.is_deploying is not None and self.is_deploying is not strawberry.UNSET:
