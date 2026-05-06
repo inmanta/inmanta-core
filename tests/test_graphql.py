@@ -745,6 +745,7 @@ async def test_query_resources(server, client, environment, setup_database, mixe
     We include setup_database to have some resources in other envs
     to make sure that we are not leaking resources from other envs on totalCount with different filters
     """
+
     def is_subset_dict(expected: dict, actual: dict) -> bool:
         """
         Checks if a dict is a subset of another dict.
