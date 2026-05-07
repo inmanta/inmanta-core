@@ -730,6 +730,8 @@ class ResourceFilter(StrawberryFilter):
             attr = getattr(self, key)
             if attr is not None and attr is not strawberry.UNSET:
                 stmt = attr.apply_filter(stmt, self.rps_model, key)
+        if self.environment is not None and self.environment is not strawberry.UNSET:
+            stmt = stmt.filter(models.ResourcePersistentState.environment == self.environment)
         if self.purged is not None and self.purged is not strawberry.UNSET:
             stmt = stmt.filter(models.Resource.attributes["purged"].astext.cast(Boolean).is_(self.purged))
         if self.is_deploying is not None and self.is_deploying is not strawberry.UNSET:
@@ -978,16 +980,12 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
 
             # Only fetch resources in their latest version
             # Logic based on src/inmanta/data/dataview.py::ResourceView
-            stmt = (
-                select(models.Resource)
-                .join(
-                    models.ResourcePersistentState,
-                    and_(
-                        models.Resource.resource_id == models.ResourcePersistentState.resource_id,
-                        models.Resource.environment == models.ResourcePersistentState.environment,
-                    ),
-                )
-                .where(models.ResourcePersistentState.environment == filter.environment)
+            stmt = select(models.Resource).join(
+                models.ResourcePersistentState,
+                and_(
+                    models.Resource.resource_id == models.ResourcePersistentState.resource_id,
+                    models.Resource.environment == models.ResourcePersistentState.environment,
+                ),
             )
 
             # CTE that fetches the latest scheduled version
