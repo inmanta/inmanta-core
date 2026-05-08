@@ -1215,7 +1215,7 @@ class AgentView(DataView[AgentOrder, model.Agent]):
         self,
         environment: data.Environment,
         limit: Optional[int] = None,
-        sort: str = "resource_type.desc",
+        sort: str = "name.desc",
         start: Optional[Union[datetime, bool, str]] = None,
         end: Optional[Union[datetime, bool, str]] = None,
         first_id: Optional[str] = None,
@@ -1255,7 +1255,6 @@ class AgentView(DataView[AgentOrder, model.Agent]):
         base = SimpleQueryBuilder(
             select_clause=f"""SELECT a.name,
                                      a.environment,
-                                     a.last_failover,
                                      a.paused,
                                      a.unpause_on_resume,
                                      NULL AS process_name,
@@ -1266,10 +1265,9 @@ class AgentView(DataView[AgentOrder, model.Agent]):
                                                  THEN 'paused'
                                              WHEN EXISTS(
                                                  SELECT 1
-                                                 FROM {data.Agent.table_name()} AS a_inner
+                                                 FROM {data.SchedulerSession.table_name()} AS a_inner
                                                  WHERE a_inner.environment=$1
-                                                       AND a_inner.name=$2
-                                                       AND a_inner.id_primary IS NOT NULL
+                                                       AND a_inner.expired IS NULL
                                              )
                                                  THEN 'up'
                                                  ELSE 'down'
@@ -1299,7 +1297,6 @@ class AgentView(DataView[AgentOrder, model.Agent]):
             model.Agent(
                 name=agent["name"],
                 environment=agent["environment"],
-                last_failover=agent["last_failover"],
                 paused=agent["paused"],
                 unpause_on_resume=agent["unpause_on_resume"],
                 process_id=agent["process_id"],
