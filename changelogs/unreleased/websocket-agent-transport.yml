@@ -1,0 +1,15 @@
+---
+description: >
+  Replace the longpoll/heartbeat-based agent communication channel with a persistent
+  bidirectional websocket connection. This removes the heartbeat API endpoints and the
+  agent primary selection mechanism.
+change-type: major
+destination-branches: [master]
+sections:
+  major-feature: >
+    Agent-server communication now uses a persistent websocket connection instead of
+    longpoll/heartbeat, reducing latency and resource usage.
+  deprecation-removed: >
+    Removed the ``last_failover`` field from the Agent API model. Removed the ``sid``
+    parameter from the ``get_state`` and ``get_resource`` API methods. Removed the
+    ``heartbeat`` and ``heartbeat_reply`` API endpoints.

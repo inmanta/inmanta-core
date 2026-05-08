@@ -822,6 +822,10 @@ async def server_config(
         config.Config.set("server", "agent-process-purge-interval", "0")
         config.Config.set("config", "executable", os.path.abspath(inmanta.app.__file__))
         config.Config.set("server", "agent-timeout", "2")
+        config.Config.set("server", "ws-ping-interval", "1")
+        config.Config.set("server", "ws-ping-timeout", "1")
+        config.Config.set("client", "ws-ping-interval", "1")
+        config.Config.set("client", "ws-ping-timeout", "1")
         config.Config.set("agent", "agent-repair-interval", "0")
         config.Config.set("agent", "executor-venv-retention-time", "60")
         config.Config.set("agent", "executor-retention-time", "10")
@@ -929,6 +933,10 @@ async def server_multi(
         config.Config.set("server", "bind-address", "127.0.0.1")
         config.Config.set("config", "executable", os.path.abspath(inmanta.app.__file__))
         config.Config.set("server", "agent-timeout", "2")
+        config.Config.set("server", "ws-ping-interval", "1")
+        config.Config.set("server", "ws-ping-timeout", "1")
+        config.Config.set("client", "ws-ping-interval", "1")
+        config.Config.set("client", "ws-ping-timeout", "1")
         config.Config.set("agent", "agent-repair-interval", "0")
         config.Config.set("agent", "executor-venv-retention-time", "60")
         config.Config.set("agent", "executor-retention-time", "10")
@@ -978,7 +986,7 @@ def executor_factory():
 
     def default_executor(
         environment: uuid.UUID,
-        client: inmanta.protocol.SessionClient,
+        client: inmanta.protocol.Client,
         eventloop: asyncio.AbstractEventLoop,
         parent_logger: logging.Logger,
         thread_pool: ThreadPoolExecutor,
@@ -1006,10 +1014,11 @@ def executor_factory():
 async def agent_factory(
     server, client, monkeypatch, executor_factory
 ) -> AsyncIterator[Callable[[uuid.UUID], Awaitable[Agent]]]:
-    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     agents: list[Agent] = []
 
-    async def create(environment: uuid.UUID) -> Agent:
+    async def create(environment: uuid.UUID | str) -> Agent:
+        if isinstance(environment, str):
+            environment = uuid.UUID(environment)
         # Mock scheduler state-dir: outside of tests this happens
         # when the scheduler config is loaded, before starting the scheduler
         server_state_dir = config.Config.get("config", "state-dir")
@@ -1034,9 +1043,13 @@ async def agent_factory(
         a.scheduler.executor_manager = executor
         a.scheduler.code_manager = utils.DummyCodeManager()
         await a.start()
+
+        def _is_session_established() -> bool:
+            """Wait until this agent's session has completed the handshake (SESSION_OPENED received)."""
+            return a.session is not None and a.session.active
+
         await utils.retry_limited(
-            lambda: agentmanager.get_agent_client(tid=environment, endpoint=const.AGENT_SCHEDULER_ID, live_agent_only=True)
-            is not None,
+            _is_session_established,
             timeout=10,
         )
         return a
@@ -1057,6 +1070,12 @@ async def agent_factory(
                 assert result.code == 200, result.result
             for agent in agents:
                 await agent.stop_working()
+                if not agent.active():
+                    # Session is no longer active (e.g. environment was halted during the test, or another
+                    # SessionEndpoint with the same name displaced this one). Restarting the scheduler
+                    # requires an RPC to the server (compliance_reporting feature lookup), which would
+                    # fail on a closed websocket. Skip the state-preservation check in that case.
+                    continue
                 the_state = copy.deepcopy(dict(agent.scheduler._state.resource_state))
                 for r, state in the_state.items():
                     if state.blocked is inmanta.deploy.state.Blocked.TEMPORARILY_BLOCKED:

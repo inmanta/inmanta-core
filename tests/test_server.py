@@ -512,20 +512,6 @@ async def test_resource_action_log(server, client, environment, clienthelper, sn
         parser.parse(f"{parts[0]} {parts[1]}")
 
 
-async def test_invalid_sid(server, client, environment):
-    """
-    Verify that API endpoints, that should only be called by an agent, return an HTTP 400
-    if they are called without a session id.
-    """
-    res = await client.discovered_resource_create(
-        tid=environment,
-        discovered_resource_id="test::Test[agent1,attr=val]",
-        discovery_resource_id="test::Test[agent1,attr=other_val]",
-    )
-    assert res.code == 400
-    assert res.result["message"] == "Invalid request: this is an agent to server call, it should contain an agent session id"
-
-
 @pytest.mark.parametrize("tz_aware_timestamp", [True, False])
 async def test_get_param(server, client, environment, tz_aware_timestamp: bool):
     config.Config.set("server", "tz-aware-timestamps", str(tz_aware_timestamp).lower())
@@ -1382,12 +1368,6 @@ async def test_cleanup_old_agents(server, client, env1_halted, env2_halted):
         result = await client.halt_environment(env2.id)
         assert result.code == 200
 
-    process_sid = uuid.uuid4()
-    await data.AgentProcess(hostname="localhost-dummy", environment=env1.id, sid=process_sid, last_seen=datetime.now()).insert()
-
-    id_primary = uuid.uuid4()
-    await data.AgentInstance(id=id_primary, process=process_sid, name="dummy-instance", tid=env1.id).insert()
-
     version = 1
     await data.ConfigurationModel(
         environment=env1.id,
@@ -1411,35 +1391,31 @@ async def test_cleanup_old_agents(server, client, env1_halted, env2_halted):
         attributes={"name": name},
     ).insert()
 
-    # should get purged
+    # should get purged: not used by any resource
     await data.Agent(
         environment=env1.id,
         name="agent1",
         paused=False,
-        id_primary=None,
     ).insert()
-    # should not get purged as the id_primary is set -> not down
-    await data.Agent(environment=env1.id, name="agent2", paused=False, id_primary=id_primary).insert()
+    # should get purged: not used by any resource
+    await data.Agent(environment=env1.id, name="agent2", paused=False).insert()
     # should not get purged as it is used in a version of the ConfigurationModel
     await data.Agent(
         environment=env1.id,
         name="agent4",
         paused=False,
-        id_primary=None,
     ).insert()
     # agent with "agent2" as name but in another env will get purged:
     await data.Agent(
         environment=env2.id,
         name="agent2",
         paused=False,
-        id_primary=None,
     ).insert()
     # agent with "agent1" as name but in another env will get purged:
     await data.Agent(
         environment=env2.id,
         name="agent1",
         paused=False,
-        id_primary=None,
     ).insert()
 
     agents_before_purge = await data.Agent.get_list()
@@ -1448,12 +1424,13 @@ async def test_cleanup_old_agents(server, client, env1_halted, env2_halted):
     await server.get_slice(SLICE_ORCHESTRATION)._purge_versions()
 
     agents_after_purge = [(agent.environment, agent.name) for agent in await data.Agent.get_list()]
-    number_agents_env1_after_purge = 3 if env1_halted else 2
+    # In env1: agent1 and agent2 are not used by resources -> purged (unless halted)
+    # In env1: agent4 is used by resources -> kept
+    number_agents_env1_after_purge = 3 if env1_halted else 1
     number_agents_env2_after_purge = 2 if env2_halted else 0
     assert len(agents_after_purge) == number_agents_env1_after_purge + number_agents_env2_after_purge
     if not (env1_halted or env2_halted):
         expected_agents_after_purge = [
-            (env1.id, "agent2"),
             (env1.id, "agent4"),
         ]
         assert sorted(agents_after_purge) == sorted(expected_agents_after_purge)
