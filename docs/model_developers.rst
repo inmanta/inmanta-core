@@ -21,3 +21,4 @@ Model developer documentation
     model_developers/finalizers.rst
     model_developers/dictpath.rst
     model_developers/references.rst
+    model_developers/formatter.rst
