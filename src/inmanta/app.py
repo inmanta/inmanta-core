@@ -71,6 +71,7 @@ from inmanta.server.services.databaseservice import initialize_database_connecti
 from inmanta.server.services.metricservice import MetricsService
 from inmanta.signals import safe_shutdown, setup_signal_handlers
 from inmanta.warnings import WarningsManager
+import inmanta.formatter.cli  # noqa: F401 — registers @command("format")
 
 LOGGER = logging.getLogger("inmanta")
 
