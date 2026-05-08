@@ -691,13 +691,8 @@ class ResourceFilterABC(StrawberryFilter):
     Abstract base class that defines the shared attributes/behaviour of each extension's ResourceFilter.
 
     :param environment: The environment the resources belong to.
-    :param is_orphan: If we want to filter on orphans or not.
-    :param purged: If we want to filter on the "purged" attribute or not.
     """
-
     environment: uuid.UUID
-    is_orphan: bool | None = strawberry.UNSET
-    purged: bool | None = strawberry.UNSET
 
 
 @dataclasses.dataclass(kw_only=True)
@@ -710,6 +705,8 @@ class CoreResourceFilter(ResourceFilterABC):
     compliance: EnumFilter[state.Compliance] | None = strawberry.UNSET
     last_handler_run: EnumFilter[state.HandlerResult] | None = strawberry.UNSET
     is_deploying: bool | None = strawberry.UNSET
+    is_orphan: bool | None = strawberry.UNSET
+    purged: bool | None = strawberry.UNSET
 
     @property
     def model(self) -> type[models.Base]:
@@ -945,7 +942,7 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
 
     loader = StrawberrySQLAlchemyLoader(async_bind_factory=get_session_factory())
 
-    ResourceFilter: typing.Any = strawberry.input(
+    composed_resource_filter: type = strawberry.input(
         dataclasses.dataclass(kw_only=True)(type("ResourceFilter", tuple(context.resource_filter_components), {}))
     )
 
@@ -999,7 +996,7 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
         async def resources(
             self,
             info: CustomInfo,
-            filter: ResourceFilter,
+            filter: typing.Annotated[CoreResourceFilter, strawberry.argument(graphql_type=composed_resource_filter)],
             first: typing.Optional[int] = strawberry.UNSET,
             after: typing.Optional[str] = strawberry.UNSET,
             last: typing.Optional[int] = strawberry.UNSET,
