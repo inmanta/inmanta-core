@@ -72,7 +72,7 @@ Prerequisites
 -------------
 
 * **Master node:** The master node has been setup according to the :ref:`Inmanta installation documentation<install-server>` and a PostgreSQL database according to the :ref:`PostgreSQL installation documentation<postgresql-install-doc>`.
-* **Standby node:** The standby node should only have a PostgreSQL installation, so only the :ref:`PostgreSQL installation documentation<postgresql-install-doc>` should be executed.
+* **Standby node:** The standby node should only have a PostgreSQL installation, so only step 1 of the :ref:`PostgreSQL installation documentation<postgresql-install-doc>` should be executed.
 
 Configure the master node
 -------------------------

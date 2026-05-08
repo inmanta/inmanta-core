@@ -68,11 +68,14 @@ class InmantaModule(Base):
         PrimaryKeyConstraint("environment", "name", "version", name="inmanta_module_pkey"),
     )
 
-    name: Mapped[str] = mapped_column(String, primary_key=True)
-    version: Mapped[str] = mapped_column(String, primary_key=True)
-    environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
+    name: Mapped[str] = mapped_column(String, primary_key=True, doc="The name of the module")
+    version: Mapped[str] = mapped_column(String, primary_key=True, doc="The version of the module")
+    environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The environment this module belongs to")
     requirements: Mapped[list[str]] = mapped_column(
-        ARRAY(String()), nullable=False, server_default=text("ARRAY[]::character varying[]")
+        ARRAY(String()),
+        nullable=False,
+        server_default=text("ARRAY[]::character varying[]"),
+        doc="The pip requirements for this module version",
     )
 
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="inmanta_module", viewonly=True)
@@ -199,12 +202,16 @@ class ModuleFiles(Base):
         ),
     )
 
-    inmanta_module_name: Mapped[str] = mapped_column(String, primary_key=True)
-    inmanta_module_version: Mapped[str] = mapped_column(String, primary_key=True)
-    environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
-    file_content_hash: Mapped[str] = mapped_column(String, nullable=False)
-    python_module_name: Mapped[str] = mapped_column(String, primary_key=True)
-    is_byte_code: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    inmanta_module_name: Mapped[str] = mapped_column(
+        String, primary_key=True, doc="The name of the inmanta module this file belongs to"
+    )
+    inmanta_module_version: Mapped[str] = mapped_column(
+        String, primary_key=True, doc="The version of the inmanta module this file belongs to"
+    )
+    environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The environment this module file belongs to")
+    file_content_hash: Mapped[str] = mapped_column(String, nullable=False, doc="The content hash of the file")
+    python_module_name: Mapped[str] = mapped_column(String, primary_key=True, doc="The fully qualified python module name")
+    is_byte_code: Mapped[bool] = mapped_column(Boolean, nullable=False, doc="Whether this file contains byte code")
 
     inmanta_module: Mapped["InmantaModule"] = relationship("InmantaModule", back_populates="module_files")
     file: Mapped["File"] = relationship("File", back_populates="module_files")
@@ -259,11 +266,11 @@ class AgentModules(Base):
         ),
     )
 
-    cm_version: Mapped[int] = mapped_column(Integer, primary_key=True)
-    agent_name: Mapped[str] = mapped_column(String, primary_key=True)
-    inmanta_module_name: Mapped[str] = mapped_column(String, primary_key=True)
-    inmanta_module_version: Mapped[str] = mapped_column(String, nullable=False)
-    environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
+    cm_version: Mapped[int] = mapped_column(Integer, primary_key=True, doc="The configuration model version")
+    agent_name: Mapped[str] = mapped_column(String, primary_key=True, doc="The name of the agent")
+    inmanta_module_name: Mapped[str] = mapped_column(String, primary_key=True, doc="The name of the inmanta module")
+    inmanta_module_version: Mapped[str] = mapped_column(String, nullable=False, doc="The version of the inmanta module")
+    environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The environment this record belongs to")
 
     agent: Mapped["Agent"] = relationship("Agent", back_populates="agent_modules", viewonly=True)
     configurationmodel: Mapped["Configurationmodel"] = relationship(
@@ -400,8 +407,8 @@ class File(Base):
     __tablename__ = "file"
     __table_args__ = (PrimaryKeyConstraint("content_hash", name="file_pkey"),)
 
-    content_hash: Mapped[str] = mapped_column(String, primary_key=True)
-    content: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String, primary_key=True, doc="The SHA1 hash of the file content")
+    content: Mapped[bytes] = mapped_column(LargeBinary, nullable=False, doc="The content of the file")
 
     module_files: Mapped[list["ModuleFiles"]] = relationship("ModuleFiles", back_populates="file")
 
@@ -410,11 +417,15 @@ class InmantaUser(Base):
     __tablename__ = "inmanta_user"
     __table_args__ = (PrimaryKeyConstraint("id", name="user_pkey"), UniqueConstraint("username", name="user_username_key"))
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
-    username: Mapped[str] = mapped_column(String, nullable=False)
-    password_hash: Mapped[str] = mapped_column(String, nullable=False)
-    auth_method: Mapped[str] = mapped_column(Enum("database", "oidc", name="auth_method"), nullable=False)
-    is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The id of the user")
+    username: Mapped[str] = mapped_column(String, nullable=False, doc="The username")
+    password_hash: Mapped[str] = mapped_column(String, nullable=False, doc="The hashed password")
+    auth_method: Mapped[str] = mapped_column(
+        Enum("database", "oidc", name="auth_method"), nullable=False, doc="The authentication method used by this user"
+    )
+    is_admin: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false"), doc="Whether this user has admin privileges"
+    )
 
     role_assignment: Mapped[list["RoleAssignment"]] = relationship("RoleAssignment", back_populates="user")
 
@@ -423,7 +434,7 @@ class Project(Base):
     __tablename__ = "project"
     __table_args__ = (PrimaryKeyConstraint("id", name="project_pkey"), UniqueConstraint("name", name="project_name_key"))
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The id of the project")
     name: Mapped[str] = mapped_column(String, nullable=False)
 
     environment: Mapped[list["Environment"]] = relationship("Environment", back_populates="project_")
@@ -433,8 +444,8 @@ class Role(Base):
     __tablename__ = "role"
     __table_args__ = (PrimaryKeyConstraint("id", name="role_pkey"), UniqueConstraint("name", name="role_name_key"))
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
-    name: Mapped[str] = mapped_column(String, nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The id of the role")
+    name: Mapped[str] = mapped_column(String, nullable=False, doc="The name of the role")
 
     role_assignment: Mapped[list["RoleAssignment"]] = relationship("RoleAssignment", back_populates="role")
 
@@ -443,8 +454,10 @@ class Schemamanager(Base):
     __tablename__ = "schemamanager"
     __table_args__ = (PrimaryKeyConstraint("name", name="schemamanager_pkey"),)
 
-    name: Mapped[str] = mapped_column(String, primary_key=True)
-    installed_versions: Mapped[Optional[list[int]]] = mapped_column(ARRAY(Integer()))
+    name: Mapped[str] = mapped_column(String, primary_key=True, doc="The name of the schema component")
+    installed_versions: Mapped[Optional[list[int]]] = mapped_column(
+        ARRAY(Integer()), doc="The list of installed schema versions"
+    )
 
 
 class Environment(Base):
@@ -539,7 +552,9 @@ class Compile(Base):
     started: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     completed: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     requested: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
-    metadata_: Mapped[Optional[dict[str, Any]]] = mapped_column("metadata", JSONB)
+    metadata_: Mapped[Optional[dict[str, Any]]] = mapped_column(
+        "metadata", JSONB, doc="Exporter metadata to be passed to the compiler"
+    )
     do_export: Mapped[Optional[bool]] = mapped_column(Boolean)
     force_update: Mapped[Optional[bool]] = mapped_column(Boolean)
     success: Mapped[Optional[bool]] = mapped_column(Boolean)
@@ -637,7 +652,11 @@ class Environmentmetricsgauge(Base):
     metric_name: Mapped[str] = mapped_column(String, primary_key=True)
     timestamp: Mapped[datetime.datetime] = mapped_column(DateTime(True), primary_key=True)
     count: Mapped[int] = mapped_column(Integer, nullable=False)
-    category: Mapped[str] = mapped_column(String, primary_key=True, server_default=text("'__None__'::character varying"))
+    category: Mapped[str] = mapped_column(
+        String,
+        primary_key=True,
+        server_default=text("'__None__'::character varying"),
+    )
 
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="environmentmetricsgauge")
 
@@ -656,7 +675,11 @@ class Environmentmetricstimer(Base):
     timestamp: Mapped[datetime.datetime] = mapped_column(DateTime(True), primary_key=True)
     count: Mapped[int] = mapped_column(Integer, nullable=False)
     value: Mapped[float] = mapped_column(Double(53), nullable=False)
-    category: Mapped[str] = mapped_column(String, primary_key=True, server_default=text("'__None__'::character varying"))
+    category: Mapped[str] = mapped_column(
+        String,
+        primary_key=True,
+        server_default=text("'__None__'::character varying"),
+    )
 
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="environmentmetricstimer")
 
@@ -707,7 +730,7 @@ class Parameter(Base):
     expires: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
     resource_id: Mapped[Optional[str]] = mapped_column(String, server_default=text("''::character varying"))
     updated: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
-    metadata_: Mapped[Optional[dict[str, Any]]] = mapped_column("metadata", JSONB)
+    metadata_: Mapped[Optional[dict[str, Any]]] = mapped_column("metadata", JSONB, doc="Metadata for the parameter")
 
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="parameter")
 
@@ -766,7 +789,10 @@ class ResourcePersistentState(Base):
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="resource_persistent_state")
 
     @hybrid_property
-    def compliance_state(self) -> state.Compliance | None:
+    def compliance(self) -> state.Compliance | None:
+        """
+        Compliance status of this resource
+        """
         return state.get_compliance_status(
             self.is_orphan,
             self.is_undefined,
@@ -775,9 +801,9 @@ class ResourcePersistentState(Base):
             self.last_handler_run_compliant,
         )
 
-    @compliance_state.inplace.expression
+    @compliance.inplace.expression
     @classmethod
-    def _compliance_state_expression(cls) -> Case[Any]:
+    def _compliance_expression(cls) -> Case[Any]:
         return case(
             (cls.is_orphan, None),
             (cls.is_undefined, state.Compliance.UNDEFINED.name),
@@ -821,9 +847,11 @@ class RoleAssignment(Base):
         PrimaryKeyConstraint("user_id", "environment", "role_id", name="role_assignment_pkey"),
     )
 
-    user_id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
-    environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
-    role_id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The id of the user")
+    environment: Mapped[uuid.UUID] = mapped_column(
+        UUID, primary_key=True, doc="The environment this role assignment belongs to"
+    )
+    role_id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The id of the assigned role")
 
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="role_assignment")
     role: Mapped["Role"] = relationship("Role", back_populates="role_assignment")
@@ -946,6 +974,7 @@ class Resource(Base):
             Resource.environment == foreign(ResourcePersistentState.environment),
         ),
         viewonly=True,
+        doc="The persistent state of this resource",
     )
 
 
@@ -1043,7 +1072,7 @@ class Unknownparameter(Base):
     source: Mapped[str] = mapped_column(String, nullable=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False)
     resource_id: Mapped[Optional[str]] = mapped_column(String, server_default=text("''::character varying"))
-    metadata_: Mapped[Optional[dict[str, Any]]] = mapped_column("metadata", JSONB)
+    metadata_: Mapped[Optional[dict[str, Any]]] = mapped_column("metadata", JSONB, doc="Metadata for the unknown parameter")
     resolved: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text("false"))
 
     configurationmodel: Mapped["Configurationmodel"] = relationship(
@@ -1089,9 +1118,9 @@ class ResourceactionResource(Base):
         Index("resourceaction_resource_resource_action_id_index", "resource_action_id"),
     )
 
-    environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
-    resource_action_id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
-    resource_id: Mapped[str] = mapped_column(String, primary_key=True)
-    resource_version: Mapped[int] = mapped_column(Integer, primary_key=True)
+    environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The environment this record belongs to")
+    resource_action_id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The id of the resource action")
+    resource_id: Mapped[str] = mapped_column(String, primary_key=True, doc="The id of the resource")
+    resource_version: Mapped[int] = mapped_column(Integer, primary_key=True, doc="The version of the resource")
 
     resource_action: Mapped["Resourceaction"] = relationship("Resourceaction", back_populates="resourceaction_resource")

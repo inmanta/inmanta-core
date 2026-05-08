@@ -39,6 +39,11 @@ async def test_server_status(server, client, agent, environment, postgresql_clie
 
     assert len([x for x in status["slices"] if x["name"] == "core.server"]) == 1
 
+    metrics_status = [x for x in status["slices"] if x["name"] == "core.metrics"]
+    assert len(metrics_status) == 1
+    assert isinstance(metrics_status[0]["status"]["cpu_benchmark_ns"], int)
+    assert metrics_status[0]["status"]["cpu_benchmark_ns"] > 0
+
     db_status = [x for x in status["slices"] if x["name"] == "core.database"]
     assert len([x for x in status["slices"] if x["name"] == "core.database"]) == 1
     assert db_status[0]["status"]["connected"] is True

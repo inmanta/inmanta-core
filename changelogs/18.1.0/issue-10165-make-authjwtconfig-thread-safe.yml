@@ -1,0 +1,8 @@
+---
+description: "Make the AuthJWTConfig class thread-safe."
+issue-nr: 10165
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso9, iso8]
+sections:
+  bugfix: "{{description}}"

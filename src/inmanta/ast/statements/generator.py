@@ -103,9 +103,9 @@ class SubConstructor(RequiresEmitStatement):
         # order: implementation blocks have not normalized at this point, so with the current mechanism we can't fetch eager
         # promises yet. Normalization order can not just be reversed because implementation bodies might contain constructor
         # calls (even for the same type), which would require this instance to be normalized first, resulting in a loop.
-        self._own_eager_promises = []
+        self.own_eager_promises = []
         # injected_variables: Set[str] = {"self"}.union(self.type.get_all_attribute_names())
-        # self._own_eager_promises = [
+        # self.own_eager_promises = [
         #     # implementations live in the namespace's context rather than the constructor's context so for promises that cross
         #     # the boundary we translate references so that they are resolved correctly in any context wrapping the constructor
         #     dataclasses.replace(promise, instance=promise.instance.fully_qualified())
@@ -176,15 +176,11 @@ class GradualFor(ResultCollector[object]):
         self.resolver = resolver
         self.queue = queue
         self.stmt = stmt
-        self.seen: set[int] = set()
 
     def receive_result(self, value: object, location: Location) -> bool:
         if isinstance(value, Unknown):
             # skip unknowns
             return False
-        if id(value) in self.seen:
-            return False
-        self.seen.add(id(value))
 
         xc = ExecutionContext(self.stmt.module, self.resolver.for_namespace(self.stmt.module.namespace))
         loopvar = xc.lookup(self.stmt.loop_var)
@@ -220,7 +216,7 @@ class For(RequiresEmitStatement):
         self.anchors.extend(self.base.get_anchors())
         self.anchors.extend(self.module.get_anchors())
         self.module.add_var(self.loop_var, self)
-        self._own_eager_promises = self.module.get_eager_promises()
+        self.own_eager_promises = self.module.get_eager_promises()
 
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
         return chain(super().get_all_eager_promises(), self.base.get_all_eager_promises())
@@ -261,6 +257,8 @@ class For(RequiresEmitStatement):
 class ListComprehension(RawResumer, ExpressionStatement):
     """
     A list comprehension expression, e.g. `["hello {{world}}" for world in worlds if world != "exclude"]`.
+
+    Preserves list order (except in gradual execution where order is irrelevant by definition).
     """
 
     __slots__ = ("loop_var", "value_expression", "iterable", "guard")
@@ -577,6 +575,7 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
                 # We must not set the final result to a *different* unknown for consistency => simply await the unknown result
                 # as for any other values
             elif len(self._results) != len(all_values):
+                # Gradual execution does not allow partial results: result collector should receive either all results or none
                 raise InvalidCompilerState(self, "list comprehension helper received some but not all values gradually")
             if self.lhs is None:
                 # We should only have received previous results in gradual mode, if any gradual results were received in
@@ -626,7 +625,7 @@ class If(RequiresEmitStatement):
         self.anchors.extend(self.condition.get_anchors())
         self.anchors.extend(self.if_branch.get_anchors())
         self.anchors.extend(self.else_branch.get_anchors())
-        self._own_eager_promises = [*self.if_branch.get_eager_promises(), *self.else_branch.get_eager_promises()]
+        self.own_eager_promises = [*self.if_branch.get_eager_promises(), *self.else_branch.get_eager_promises()]
 
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
         return chain(super().get_all_eager_promises(), self.condition.get_all_eager_promises())
@@ -684,7 +683,7 @@ class ConditionalExpression(ExpressionStatement):
         self.anchors.extend(self.condition.get_anchors())
         self.anchors.extend(self.if_expression.get_anchors())
         self.anchors.extend(self.else_expression.get_anchors())
-        self._own_eager_promises = [
+        self.own_eager_promises = [
             *self.if_expression.get_all_eager_promises(),
             *self.else_expression.get_all_eager_promises(),
         ]
@@ -935,7 +934,7 @@ class Constructor(ExpressionStatement):
             else:
                 self._direct_attributes[k] = v
 
-        self._own_eager_promises = list(
+        self.own_eager_promises = list(
             chain.from_iterable(subconstructor.get_all_eager_promises() for subconstructor in self.type.get_sub_constructor())
         )
 

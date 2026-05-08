@@ -20,6 +20,7 @@ import logging
 from time import perf_counter, time
 from typing import Mapping, Optional
 
+from inmanta import types
 from inmanta.reporter import InfluxReporter
 from inmanta.server import SLICE_METRICS
 from inmanta.server import config as opt
@@ -73,9 +74,13 @@ class MetricsService(protocol.ServerSlice):
             )
             self._influx_db_reporter.start()
 
+    async def get_status(self) -> Mapping[str, types.ArgumentTypes]:
+        return {"cpu_benchmark_ns": self._cpu_benchmark.get_value()}
+
     def start_auto_benchmark(self) -> None:
         """Add all auto benchmarking to pyformance"""
-        gauge("self.spec.cpu", CPUMicroBenchMark())
+        self._cpu_benchmark = CPUMicroBenchMark()
+        gauge("self.spec.cpu", self._cpu_benchmark)
 
 
 class CachingCallbackGuage(Gauge[int]):

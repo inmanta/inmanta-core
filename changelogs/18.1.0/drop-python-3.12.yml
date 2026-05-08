@@ -1,0 +1,4 @@
+---
+description: "Drop support for Python 3.12, Python 3.13 is now the minimum required version."
+change-type: minor
+destination-branches: [master, iso9]

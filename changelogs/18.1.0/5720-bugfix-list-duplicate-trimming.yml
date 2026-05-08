@@ -1,0 +1,7 @@
+description: >
+  Fix inconsistent duplicate handling in DSL lists: for loops and list constructors no longer
+  incorrectly trim duplicate values.
+change-type: patch
+destination-branches: [master, iso9]
+sections:
+  bugfix: "Fix inconsistent duplicate handling in DSL lists: for loops and list constructors no longer incorrectly trim duplicate values."

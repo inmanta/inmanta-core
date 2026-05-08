@@ -1,0 +1,6 @@
+description: Reduce the log level of the "Unset value in python code in plugin at call" message from debug to trace.
+change-type: patch
+destination-branches:
+- master
+- iso9
+- iso8

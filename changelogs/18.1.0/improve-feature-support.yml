@@ -1,0 +1,6 @@
+---
+description: "Allow features to indicate which value should be used to entirely enable/disable the feature."
+issue-nr: 10187
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [master, iso9]

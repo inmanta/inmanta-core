@@ -50,11 +50,17 @@ class Agent(SessionEndpoint):
     def __init__(
         self,
         environment: Optional[uuid.UUID] = None,
+        token: str | None = None,
     ):
         """
         :param environment: environment id
+        :param token: The token used to authenticate to the Inmanta server. If None,
+                      the token will be used that is configured in the agent_rest_transport
+                      section of the configuration.
         """
-        super().__init__(name="agent", timeout=cfg.server_timeout.get(), reconnect_delay=cfg.agent_reconnect_delay.get())
+        super().__init__(
+            name="agent", timeout=cfg.server_timeout.get(), reconnect_delay=cfg.agent_reconnect_delay.get(), token=token
+        )
 
         self.thread_pool = ThreadPoolExecutor(1, thread_name_prefix="mainpool")
         self._storage = self.check_storage()

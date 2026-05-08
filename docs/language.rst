@@ -219,6 +219,9 @@ For example
 
 Lists of primitive types are also primitive types: ``string[]``, ``float[]``, ``bool[]`` or ``mac_addr[]``
 
+Lists are ordered sequences and may contain duplicate values. This is in contrast to :ref:`relations <lang-relation>`,
+which are unordered and deduplicate their values: assigning the same instance to a relation twice has no effect.
+
 ``dict`` is the primitive type that represents a dictionary, with string keys. Dict values can be accessed using the ``[]`` operator. All members of a dict have to be set when the dict is constructed. e.g.
 
 .. code-block:: inmanta

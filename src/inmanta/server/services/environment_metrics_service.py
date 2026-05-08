@@ -246,7 +246,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         async with EnvironmentMetricsGauge.get_connection() as con:
             metrics_collector: MetricsCollector
             for metrics_collector in self.metrics_collectors.values():
-                metric_type: str = metrics_collector.get_metric_type()
+                metric_type: MetricType = metrics_collector.get_metric_type()
                 metric_values: Sequence[MetricValue] = await metrics_collector.get_metric_value(
                     old_previous_timestamp, now, connection=con
                 )

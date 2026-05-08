@@ -1,0 +1,4 @@
+---
+description: Add documentation about the shell cache issue to the documentation.
+change-type: patch
+destination-branches: [master, iso9, iso8]
