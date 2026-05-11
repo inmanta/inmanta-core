@@ -37,7 +37,6 @@ from yaml import Dumper, Node
 from inmanta import config, const
 from inmanta.config import Option, component_log_configs, logging_config
 from inmanta.const import LOG_CONTEXT_VAR_ENVIRONMENT, NAME_RESOURCE_ACTION_LOGGER
-from inmanta.protocol.auth import policy_engine
 from inmanta.server import config as server_config
 from inmanta.stable_api import stable_api
 
@@ -734,7 +733,6 @@ class InmantaLoggerConfig:
             raise Exception("get_all_log_files() is only supported on the server component")
         # Server log files
         result: set[str] = self._loaded_config.get_all_log_files()
-        result.add(policy_engine.PolicyEngine.get_path_policy_engine_log_file())
 
         def add_agent_out_and_err_files(env_id: uuid.UUID) -> None:
             log_dir = config.log_dir.get()

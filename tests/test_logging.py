@@ -663,14 +663,12 @@ async def test_get_all_log_files_logging_config(tmp_path, monkeypatch, set_sched
             path_log_file_three,
             f"/var/log/inmanta/agent-{env_id}.err",
             f"/var/log/inmanta/agent-{env_id}.out",
-            "/var/log/inmanta/policy_engine.log",
         ]
         if set_scheduler_logging_config
         else [
             f"/var/log/inmanta/agent-{env_id}.err",
             f"/var/log/inmanta/agent-{env_id}.log",
             f"/var/log/inmanta/agent-{env_id}.out",
-            "/var/log/inmanta/policy_engine.log",
             f"/var/log/inmanta/resource-actions-{env_id}.log",
         ]
     )
@@ -695,6 +693,5 @@ async def test_get_all_log_files_no_logging_config(tmp_path):
         f"/var/log/inmanta/agent-{env_id}.log",
         f"/var/log/inmanta/agent-{env_id}.out",
         f"/var/log/inmanta/resource-actions-{env_id}.log",
-        "/var/log/inmanta/policy_engine.log",
     ]
     assert sorted(inmanta_logging_config.get_all_log_files(env_ids=[env_id])) == sorted(expected_log_files)
