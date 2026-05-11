@@ -692,6 +692,7 @@ class ResourceFilterABC(StrawberryFilter):
 
     :param environment: The environment the resources belong to.
     """
+
     environment: uuid.UUID
 
 
@@ -802,8 +803,7 @@ def add_filter_and_sort[*Ts](
     Adds filter and sorting to the given statement.
     """
     for filter_instance in filter:
-        if filter_instance is not strawberry.UNSET:
-            stmt = filter_instance.apply_filter(stmt)
+        stmt = filter_instance.apply_filter(stmt)
     order_expressions: dict[str, UnaryExpression[typing.Any]] = {}
     if order_by is not None and order_by is not strawberry.UNSET:
         for order in order_by:
@@ -912,16 +912,6 @@ async def get_connection[*Ts](
         )
 
 
-@dataclasses.dataclass
-class GraphQLContext:
-    """
-    Context passed down by the GraphQL slice, to be used by the Strawberry models.
-    """
-
-    compiler_service: CompilerService
-    resource_filter_components: Sequence[type[ResourceFilterABC]]
-
-
 class StrawberryInfoContextDict(typing.TypedDict):
     """
     TypedDict containing information on the current execution to pass to the CustomInfo class.
@@ -930,10 +920,11 @@ class StrawberryInfoContextDict(typing.TypedDict):
 
     sqlalchemy_loader: StrawberrySQLAlchemyLoader
     compiler_service: CompilerService
-    resource_filter_components: Sequence[type[ResourceFilterABC]]
 
 
-def get_schema(context: GraphQLContext) -> strawberry.Schema:
+def get_schema(
+    compiler_service: CompilerService, extension_filter_components: list[type[ResourceFilterABC]]
+) -> strawberry.Schema:
     """
     Initializes the Strawberry GraphQL schema.
     It is initiated in a function instead of being declared at the module level, because we have to do this
@@ -942,8 +933,12 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
 
     loader = StrawberrySQLAlchemyLoader(async_bind_factory=get_session_factory())
 
+    resource_filter_components: tuple[type[ResourceFilterABC], ...] = (
+        CoreResourceFilter,
+        *extension_filter_components,
+    )
     composed_resource_filter: type = strawberry.input(
-        dataclasses.dataclass(kw_only=True)(type("ResourceFilter", tuple(context.resource_filter_components), {}))
+        dataclasses.dataclass(kw_only=True)(type("ResourceFilter", resource_filter_components, {}))
     )
 
     class CustomInfo(Info[StrawberryInfoContextDict, object]):
@@ -951,8 +946,7 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
         def context(self) -> StrawberryInfoContextDict:
             return {
                 "sqlalchemy_loader": loader,
-                "compiler_service": context.compiler_service,
-                "resource_filter_components": context.resource_filter_components,
+                "compiler_service": compiler_service,
             }
 
     @strawberry.type
@@ -1099,10 +1093,8 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
 
             # Decompose ResourceFilter into its parts
             resource_filter_instances: list[ResourceFilterABC] = []
-            for filter_type in info.context.get("resource_filter_components"):
-                filter_fields = {
-                    field.name: getattr(filter, field.name, strawberry.UNSET) for field in dataclasses.fields(filter_type)
-                }
+            for filter_type in resource_filter_components:
+                filter_fields = {field.name: getattr(filter, field.name) for field in dataclasses.fields(filter_type)}
                 resource_filter_instances.append(filter_type(**filter_fields))
 
             stmt = add_filter_and_sort(

@@ -16,7 +16,7 @@ from typing import Any
 
 from graphql.error import GraphQLError
 from inmanta.graphql.result import GraphQLResult
-from inmanta.graphql.schema import CoreResourceFilter, GraphQLContext, ResourceFilterABC, get_schema
+from inmanta.graphql.schema import ResourceFilterABC, get_schema
 from inmanta.protocol import methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.decorators import handle
@@ -31,13 +31,13 @@ from strawberry.types.execution import ExecutionResult
 class GraphQLSlice(protocol.ServerSlice):
     compiler_service: CompilerService | None
     schema: Schema | None
-    all_filters: dict[str, type[ResourceFilterABC]]
+    extension_filter_components: dict[str, type[ResourceFilterABC]]
 
     def __init__(self) -> None:
         super().__init__(name=SLICE_GRAPHQL)
         self.compiler_service = None
         self.schema = None
-        self.all_filters = {}
+        self.extension_filter_components = {}
 
     def get_dependencies(self) -> list[str]:
         return [SLICE_COMPILER]
@@ -45,13 +45,13 @@ class GraphQLSlice(protocol.ServerSlice):
     def register_extension_filter(self, extension_name: str, filter_cls: type[ResourceFilterABC]) -> None:
         """
         Register an extension filter.
-        This is only possible if the composed ResourceFilter has yet to be generated
+        This is only possible if before the slice starts, during the `prestart` stage
         and if the extension name has not already been registered.
         """
         if self.schema is None:
-            if extension_name in self.all_filters:
+            if extension_name in self.extension_filter_components:
                 raise Exception(f"Extension {extension_name} already registered.")
-            self.all_filters[extension_name] = filter_cls
+            self.extension_filter_components[extension_name] = filter_cls
         else:
             raise Exception(
                 f"Can't register extension filter for {extension_name} because the GraphQL schema has already been generated"
@@ -61,13 +61,12 @@ class GraphQLSlice(protocol.ServerSlice):
         compiler_service = server.get_slice(SLICE_COMPILER)
         assert isinstance(compiler_service, CompilerService)
         self.compiler_service = compiler_service
-        self.all_filters[SLICE_GRAPHQL] = CoreResourceFilter
         await super().prestart(server)
 
     async def start(self) -> None:
         assert self.compiler_service is not None
         self.schema = get_schema(
-            GraphQLContext(compiler_service=self.compiler_service, resource_filter_components=list(self.all_filters.values()))
+            compiler_service=self.compiler_service, extension_filter_components=list(self.extension_filter_components.values())
         )
         await super().start()
 
