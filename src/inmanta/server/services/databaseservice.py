@@ -387,17 +387,13 @@ class DatabaseStatusChecker:
         Ensure database connectivity before starting the server and log information about the DB server
         e.g. the PostgreSQL version of the db server and the status of the standby servers.
 
-        This method will check that the PostgreSQL version of the db server meets the required version if such a minimal
-        required postgres version is configured under system_requirements->postgres_version in the compatibility file
-        (server.compatibility_file option).
-
         These checks are performed before starting any slice e.g. to bail before any database migration is attempted
         in case an incompatible PostgreSQL version is detected.
         """
         conn: asyncpg.Connection | None = None
         try:
             conn = await self._database_connectivity_check()
-            await self._database_version_compatibility_check(conn)
+            await self._log_database_version(conn)
             await self._log_database_replication_status(conn)
         finally:
             if conn is not None:
@@ -482,35 +478,15 @@ class DatabaseStatusChecker:
                 raise ServerStartFailure("Timeout: Failed to connect to the database.")
         return conn
 
-    async def _database_version_compatibility_check(self, conn: asyncpg.Connection) -> None:
+    async def _log_database_version(self, conn: asyncpg.Connection) -> None:
         """
-        This method looks for the required PostgreSQL version defined in the compatibility file (Whose path is configured by
-        the server.compatibility_file option) and checks that the PostgreSQL version of the database meets this requirement.
+        This method logs the PostgreSQL version of the database.
 
-        The check is bypassed if the server_compatibility_file option is set to None or to an empty string.
 
         :param conn: the connection to use to query the db
-        :raises ServerStartFailure: If the compatibility file doesn't exist or its schema is missing the
-            `system_requirements->postgres_version` section.
-        :raises ServerStartFailure: If the database version is lower than the required version defined in
-            the compatibility file.
         """
-        required_postgresql_version = PostgreSQLVersion.from_compatibility_file()
         database_postgresql_version = await PostgreSQLVersion.from_database(conn)
 
-        if required_postgresql_version is None:
-            LOGGER.debug(
-                "Bypassing minimal required postgres version check because the "
-                "'server.compatibility_file' option is not set."
-            )
-        else:
-            if database_postgresql_version < required_postgresql_version:
-                raise protocol.ServerStartFailure(
-                    f"The database at {opt.db_host.get()} is using PostgreSQL version "
-                    f"{database_postgresql_version}. This version is not supported by this "
-                    "version of the Inmanta orchestrator. Please make sure to update to PostgreSQL "
-                    f"{required_postgresql_version}."
-                )
         LOGGER.info("Database is running PostgreSQL server version %s.", database_postgresql_version)
 
     async def _log_database_replication_status(self, conn: asyncpg.Connection) -> None:

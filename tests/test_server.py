@@ -22,7 +22,6 @@ import functools
 import json
 import logging
 import os
-import sys
 import uuid
 from datetime import UTC, datetime, timedelta, timezone
 from functools import partial
@@ -43,7 +42,7 @@ from inmanta.server import SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_SERVE
 from inmanta.server import config as opt
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.protocol import ServerStartFailure
-
+from inmanta.server.services.databaseservice import PostgreSQLVersion
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 from inmanta.util import get_compiler_version
 from utils import log_contains, log_doesnt_contain, retry_limited
@@ -844,7 +843,6 @@ async def test_bootloader_connect_running_db(
     config.Config.set("database", "wait_time", db_wait_time)
     ibl: InmantaBootloader = InmantaBootloader(configure_logging=True)
     caplog.clear()
-
     caplog.set_level(logging.DEBUG)
 
     async def check_db_schema(check_empty: bool = False):
