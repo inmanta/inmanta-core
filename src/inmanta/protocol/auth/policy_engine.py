@@ -71,9 +71,11 @@ class PolicyEngine:
     The implementation of this class assumes only one instance of this class exists at any point in time.
     """
 
+    FILENAME_POLICY_ENGINE_LOG = "policy_engine.log"
+
     def __init__(self) -> None:
         self._state_dir: str = self._initialize_storage()
-        self._policy_engine_log = os.path.join(config.log_dir.get(), "policy_engine.log")
+        self._policy_engine_log = self.get_path_policy_engine_log_file()
         self._process: asyncio.subprocess.Process | None = None
         self.running = False
         # The OPA server will listen on this unix socket.
@@ -82,6 +84,10 @@ class PolicyEngine:
         self._hostname = "policy_engine"
         inmanta_tornado.LoopResolverWithUnixSocketSuppport.register_unix_socket(self._hostname, self._socket_file)
         self._client = httpclient.AsyncHTTPClient()
+
+    @classmethod
+    def get_path_policy_engine_log_file(cls) -> str:
+        return os.path.join(config.log_dir.get(), cls.FILENAME_POLICY_ENGINE_LOG)
 
     def _initialize_storage(self) -> str:
         """
