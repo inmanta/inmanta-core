@@ -17,6 +17,7 @@ Contact: code@inmanta.com
 """
 
 import asyncio
+import sys
 import base64
 import functools
 import json
@@ -54,6 +55,7 @@ LOGGER = logging.getLogger(__name__)
 @pytest.fixture
 async def postgresql_version_from_db(postgresql_client) -> Awaitable[PostgreSQLVersion]:
     yield await PostgreSQLVersion.from_database(postgresql_client)
+
 
 @pytest.mark.parametrize("no_agent", [True])
 @pytest.mark.parametrize(
