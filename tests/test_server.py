@@ -22,6 +22,7 @@ import functools
 import json
 import logging
 import os
+import sys
 import uuid
 from datetime import UTC, datetime, timedelta, timezone
 from functools import partial
@@ -42,11 +43,10 @@ from inmanta.server import SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_SERVE
 from inmanta.server import config as opt
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.protocol import ServerStartFailure
-from inmanta.server.services.databaseservice import PostgreSQLVersion
+
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 from inmanta.util import get_compiler_version
 from utils import log_contains, log_doesnt_contain, retry_limited
-import sys
 
 LOGGER = logging.getLogger(__name__)
 
