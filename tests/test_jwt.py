@@ -161,29 +161,57 @@ audience=https://localhost:8888/
         f"http://localhost:{port}/auth/realms/inmanta/protocol/openid-connect/certs",
     )
     monkeypatch.setenv(f"{auth.ENV_AUTH_JWT_PREFIX}{new_config}VALIDATE_CERT", "false")
-    monkeypatch.setenv(f"{auth.ENV_AUTH_JWT_PREFIX}{new_config}EXPIRE", "20")
     monkeypatch.setenv(f"{auth.ENV_AUTH_JWT_PREFIX}{new_config}JWT_USERNAME_CLAIM", "my-claim")
     monkeypatch.setenv(f"{auth.ENV_AUTH_JWT_PREFIX}{new_config}JWKS_REQUEST_TIMEOUT", "40.5")
-    monkeypatch.setenv(f"{auth.ENV_AUTH_JWT_PREFIX}{new_config}KEY", "my-key")
 
     cfg_list = await asyncio.get_event_loop().run_in_executor(None, auth.AuthJWTConfig.list)
     assert len(cfg_list) == 2
     cfg = auth.AuthJWTConfig.get("default")
     assert cfg.algo == "HS256"
     assert cfg.sign is True
+    jwt_default_as_dict = {
+        "algorithm": "HS256",
+        "sign": True,
+        "client-types": ["agent", "compiler"],
+        "key": "eciwliGyqECVmXtIkNpfVrtBLutZiITZKSKYhogeHMM",
+        "expire": 0,
+        "issuer": "https://localhost:8888/",
+        "audience": "https://localhost:8888/",
+        "jwt-username-claim": "sub",
+    }
+    assert cfg.get_as_dict() == jwt_default_as_dict
 
     cfg = auth.AuthJWTConfig.get("my_config")
     assert cfg.algo == "RS256"
     assert cfg.audience == "sodev"
     assert cfg.client_types == ["api"]
-    assert cfg.expire == 20
     assert cfg.issuer == "https://localhost:{0}/auth/realms/inmanta".format(port)
     assert cfg.jwks_uri == "http://localhost:{0}/auth/realms/inmanta/protocol/openid-connect/certs".format(port)
     assert cfg.jwt_username_claim == "my-claim"
     assert cfg.sign is False
     assert cfg.validate_cert is False
     assert cfg._config.getfloat("jwks_request_timeout") == 40.5
-    assert cfg._config["key"] == "my-key"
+    jwt_my_config_as_dict = {
+        "algorithm": "RS256",
+        "sign": False,
+        "client-types": ["api"],
+        "issuer": f"https://localhost:{port}/auth/realms/inmanta",
+        "audience": "sodev",
+        "jwks-uri": (f"http://localhost:{port}/auth/realms/inmanta/protocol/openid-connect/certs"),
+        "validate-cert": False,
+        "jwt-username-claim": "my-claim",
+        "jwks-request-timeout": 40.5,
+    }
+    assert cfg.get_as_dict() == jwt_my_config_as_dict
+
+    all_sections = auth.AuthJWTConfig.get_all()
+    assert sorted(all_sections) == ["default", "my_config"]
+
+    active_config = config.Config.get_active_configuration_as_dict()
+    assert "auth_jwt_default" in active_config
+    assert active_config["auth_jwt_default"] == jwt_default_as_dict
+    assert "auth_jwt_my_config" in active_config
+    assert active_config["auth_jwt_my_config"] == jwt_my_config_as_dict
 
     # Test what happens when you submit a wrong option
     config.Config.load_config(config_file)

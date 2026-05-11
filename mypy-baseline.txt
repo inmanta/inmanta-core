@@ -618,10 +618,11 @@ src/inmanta/export.py:0: error: Value of type "dict[str, Any] | None" is not ind
 src/inmanta/export.py:0: error: Value of type "dict[str, Any] | None" is not indexable  [index]
 src/inmanta/export.py:0: error: Value of type "dict[str, Any] | None" is not indexable  [index]
 src/inmanta/export.py:0: error: Value of type "dict[str, Any] | None" is not indexable  [index]
-src/inmanta/graphql/schema.py:0: error: "CustomListConnection[NodeType]" not callable  [operator]
 src/inmanta/graphql/schema.py:0: error: Call to untyped function "bookmark_items" in typed context  [no-untyped-call]
+src/inmanta/graphql/schema.py:0: error: Incompatible return value type (got "CustomListConnection[Node]", expected "CustomListConnection[Environment]")  [return-value]
+src/inmanta/graphql/schema.py:0: error: Incompatible return value type (got "CustomListConnection[Node]", expected "CustomListConnection[Notification]")  [return-value]
+src/inmanta/graphql/schema.py:0: error: Incompatible return value type (got "CustomListConnection[Node]", expected "CustomListConnection[Resource]")  [return-value]
 src/inmanta/graphql/schema.py:0: error: Missing type arguments for generic type "Edge"  [type-arg]
-src/inmanta/graphql/schema.py:0: error: Returning Any from function declared to return "CustomListConnection[NodeType]"  [no-any-return]
 src/inmanta/graphql/schema.py:0: error: Type argument "Environment" of "CustomListConnection" must be a subtype of "Node"  [type-var]
 src/inmanta/graphql/schema.py:0: error: Type argument "Notification" of "CustomListConnection" must be a subtype of "Node"  [type-var]
 src/inmanta/graphql/schema.py:0: error: Type argument "Resource" of "CustomListConnection" must be a subtype of "Node"  [type-var]
@@ -1055,7 +1056,6 @@ src/inmanta/server/services/paramservice.py:0: error: Unsupported operand types 
 src/inmanta/server/services/paramservice.py:0: error: Unsupported operand types for > ("timedelta" and "datetime")  [operator]
 src/inmanta/server/services/paramservice.py:0: note: Left operand is of type "datetime | None"
 src/inmanta/server/services/paramservice.py:0: note: Left operand is of type "datetime | timedelta"
-src/inmanta/server/services/resourceservice.py:0: error: "ServerSlice" has no attribute "register_listener_for_multiple_actions"  [attr-defined]
 src/inmanta/server/services/resourceservice.py:0: error: Argument "args" to "__init__" of "LogRecord" has incompatible type "list[Never]"; expected "tuple[object, ...] | Mapping[str, object] | None"  [arg-type]
 src/inmanta/server/services/resourceservice.py:0: error: Missing type arguments for generic type "Feature"  [type-arg]
 src/inmanta/server/services/resourceservice.py:0: error: Module "inmanta.server.protocol" does not explicitly export attribute "handle"  [attr-defined]

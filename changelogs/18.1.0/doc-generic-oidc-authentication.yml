@@ -1,0 +1,6 @@
+---
+description: "Updated the authentication documentation to cover the generic OIDC provider, including migration guidance from Keycloak and provider-specific setup for Microsoft Entra ID and Authentik."
+change-type: minor
+destination-branches: [master, iso9]
+sections:
+  feature: "{{description}}"
