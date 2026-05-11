@@ -587,3 +587,114 @@ async def test_output_default_logging_cmd(inmanta_config, tmp_path):
         "The config being generated will be a template, but the given filename doesn't end with the .tmpl suffix."
         in stderr.decode()
     )
+
+
+@pytest.mark.parametrize("set_scheduler_logging_config", [True, False])
+async def test_get_all_log_files_logging_config(tmp_path, monkeypatch, set_scheduler_logging_config: bool):
+    """
+    Verify the behavior of the get_all_log_files() method when a logging
+    config is configured.
+    """
+    env_id = uuid.uuid4()
+    path_log_file_one = str(tmp_path / "one.log")
+    path_log_file_two = str(tmp_path / "two.log")
+    server_logging_config = f"""
+        disable_existing_loggers: false
+        formatters:
+          custom_formatter:
+            format: "%(message)s"
+        handlers:
+          handler_one:
+            class: logging.handlers.WatchedFileHandler
+            level: INFO
+            formatter: custom_formatter
+            filename: {path_log_file_one}
+            mode: a+
+          handler_two:
+            class: logging.FileHandler
+            level: ERROR
+            formatter: custom_formatter
+            filename: {path_log_file_two}
+            mode: a+
+          console_handler:
+            class: logging.StreamHandler
+            formatter: custom_formatter
+            level: INFO
+            stream: ext://sys.stdout
+        root:
+          handlers:
+          - handler_one
+          level: INFO
+        version: 1
+    """
+    monkeypatch.setenv("INMANTA_LOGGING_SERVER_CONTENT", server_logging_config)
+    if set_scheduler_logging_config:
+        path_log_file_three = str(tmp_path / "three.log")
+        scheduler_logging_config = f"""
+            disable_existing_loggers: false
+            formatters:
+              custom_formatter:
+                format: "%(message)s"
+            handlers:
+              handler_three:
+                class: logging.handlers.WatchedFileHandler
+                level: INFO
+                formatter: custom_formatter
+                filename: {path_log_file_three}
+                mode: a+
+              console_handler:
+                class: logging.StreamHandler
+                formatter: custom_formatter
+                level: INFO
+                stream: ext://sys.stdout
+            root:
+              handlers:
+              - handler_three
+              level: INFO
+            version: 1
+        """
+        monkeypatch.setenv("INMANTA_LOGGING_SCHEDULER_CONTENT", scheduler_logging_config)
+
+    inmanta_logging_config = InmantaLoggerConfig.get_instance(stream=sys.stdout)
+    inmanta_logging_config.apply_options(options=Options(), component="server", context={"environment": env_id})
+    expected_server_log_files = [path_log_file_one, path_log_file_two]
+    expected_scheduler_log_files = (
+        [
+            path_log_file_three,
+            f"/var/log/inmanta/agent-{env_id}.err",
+            f"/var/log/inmanta/agent-{env_id}.out",
+            "/var/log/inmanta/policy_engine.log",
+        ]
+        if set_scheduler_logging_config
+        else [
+            f"/var/log/inmanta/agent-{env_id}.err",
+            f"/var/log/inmanta/agent-{env_id}.log",
+            f"/var/log/inmanta/agent-{env_id}.out",
+            "/var/log/inmanta/policy_engine.log",
+            f"/var/log/inmanta/resource-actions-{env_id}.log",
+        ]
+    )
+    expected_log_files = [*expected_server_log_files, *expected_scheduler_log_files]
+    assert sorted(inmanta_logging_config.get_all_log_files(env_ids=[env_id])) == sorted(expected_log_files)
+
+
+async def test_get_all_log_files_no_logging_config(tmp_path):
+    """
+    Verify the behavior of the get_all_log_files() method when no logging config
+    has been configured.
+    """
+    env_id = uuid.uuid4()
+    log_file = str(tmp_path / "test.log")
+    inmanta_logging_config = InmantaLoggerConfig.get_instance(stream=sys.stdout)
+    inmanta_logging_config.apply_options(
+        options=Options(log_file=log_file), component="server", context={"environment": env_id}
+    )
+    expected_log_files = [
+        log_file,
+        f"/var/log/inmanta/agent-{env_id}.err",
+        f"/var/log/inmanta/agent-{env_id}.log",
+        f"/var/log/inmanta/agent-{env_id}.out",
+        f"/var/log/inmanta/resource-actions-{env_id}.log",
+        "/var/log/inmanta/policy_engine.log",
+    ]
+    assert sorted(inmanta_logging_config.get_all_log_files(env_ids=[env_id])) == sorted(expected_log_files)

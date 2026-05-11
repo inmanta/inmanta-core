@@ -22,6 +22,7 @@ import logging.config
 import os
 import re
 import sys
+import uuid
 from argparse import Namespace
 from collections.abc import Mapping, Sequence, Set
 from io import TextIOWrapper
@@ -36,6 +37,7 @@ from yaml import Dumper, Node
 from inmanta import config, const
 from inmanta.config import Option, component_log_configs, logging_config
 from inmanta.const import LOG_CONTEXT_VAR_ENVIRONMENT, NAME_RESOURCE_ACTION_LOGGER
+from inmanta.protocol.auth import policy_engine
 from inmanta.server import config as server_config
 from inmanta.stable_api import stable_api
 
@@ -159,6 +161,22 @@ class LoggingConfigExtension:
         for directory in self.log_dirs_to_create:
             os.makedirs(directory, exist_ok=True)
 
+    def get_all_log_files(self) -> set[str]:
+        """
+        Returns all the log files this logging configuration will log to.
+        """
+        cls_names_file_based_handlers = {
+            "logging.handlers.WatchedFileHandler",
+            "logging.FileHandler",
+            "logging.handlers.RotatingFileHandler",
+            "logging.handlers.TimedRotatingFileHandler",
+        }
+        return {
+            handler_spec["filename"]
+            for handler_spec in self.handlers.values()
+            if "class" in handler_spec and handler_spec["class"] in cls_names_file_based_handlers and "filename" in handler_spec
+        }
+
 
 class FullLoggingConfig(LoggingConfigExtension):
     """
@@ -263,6 +281,24 @@ class FullLoggingConfig(LoggingConfigExtension):
 
     def to_string(self) -> str:
         return yaml.dump(self._to_dict_config(), Dumper=LogConfigDumper)
+
+    @classmethod
+    def from_dict(self, dict_config: dict[str, object]) -> "FullLoggingConfig":
+
+        def as_dict(inp: dict[str, object], key: str) -> dict[str, object]:
+            root = inp.get(key, {})
+            if not isinstance(root, dict):
+                raise Exception(f"{key!r} entry should be a dict, got {root!r}")
+            return root
+
+        root = as_dict(dict_config, "root")
+        return FullLoggingConfig(
+            formatters=as_dict(dict_config, "formatters"),
+            handlers=as_dict(dict_config, "handlers"),
+            loggers=as_dict(dict_config, "loggers"),
+            root_handlers=root.get("handlers", []),
+            root_log_level=root.get("level", None),
+        )
 
 
 class Options(Namespace):
@@ -561,6 +597,10 @@ class LoggingConfigSource(abc.ABC):
         """
         raise NotImplementedError()
 
+    def to_full_logging_config(self, context: Mapping[str, str]) -> FullLoggingConfig:
+        dict_config = self.read_logging_config(context)
+        return FullLoggingConfig.from_dict(dict_config)
+
     def render_logging_config_template(self, template: str, context: Mapping[str, str]) -> str:
         """
         This method fills in the template variables present in the given logging configuration template.
@@ -585,6 +625,7 @@ class LoggingConfigFromFile(LoggingConfigSource):
     """
 
     def __init__(self, file_name: str) -> None:
+        super().__init__()
         self.file_name = os.path.abspath(file_name)
 
     def read_logging_config(self, context: Mapping[str, str]) -> dict[str, object]:
@@ -617,6 +658,7 @@ class LoggingConfigFromEnvVar(LoggingConfigSource):
     """
 
     def __init__(self, env_var_name: str) -> None:
+        super().__init__()
         self.env_var_name = env_var_name
 
     def read_logging_config(self, context: Mapping[str, str]) -> dict[str, object]:
@@ -669,9 +711,9 @@ class InmantaLoggerConfig:
 
         log_config: FullLoggingConfig = LoggingConfigBuilder().get_bootstrap_logging_config(stream)
         self._stream = stream
+        self._loaded_config: FullLoggingConfig
         self._handlers: Sequence[logging.Handler] = self._apply_logging_config(log_config)
 
-        self._loaded_config: FullLoggingConfig | None = None
         if logfire_enabled:
             logging.root.addHandler(LogfireLoggingHandler())
 
@@ -681,6 +723,49 @@ class InmantaLoggerConfig:
         self._context: Mapping[str, str] | None = None
 
         self.logging_config_source: LoggingConfigSource | None = None
+
+    def get_all_log_files(self, env_ids: Sequence[uuid.UUID]) -> set[str]:
+        """
+        Returns a list of all the log files used by the server and scheduler.
+
+        :param env_ids: Include the scheduler logs files for these environments in the result.
+        """
+        if self._component != "server":
+            raise Exception("get_all_log_files() is only supported on the server component")
+        # Server log files
+        result: set[str] = self._loaded_config.get_all_log_files()
+        result.add(policy_engine.PolicyEngine.get_path_policy_engine_log_file())
+
+        def add_agent_out_and_err_files(env_id: uuid.UUID) -> None:
+            log_dir = config.log_dir.get()
+            result.add(f"{log_dir}/agent-{env_id}.out")
+            result.add(f"{log_dir}/agent-{env_id}.err")
+
+        # Scheduler log files
+        try:
+            scheduler_logging_config_source: LoggingConfigSource = self._get_logging_config_source(
+                options=Options(), component="scheduler"
+            )
+        except NoLoggingConfigFound:
+            # No logging config file was defined for the scheduler.
+            # Fall back to the default configuration for the scheduler.
+            for env_id in env_ids:
+                logging_config: FullLoggingConfig = LoggingConfigBuilder().get_logging_config_from_options(
+                    stream=sys.stdout,
+                    options=Options(),
+                    component="scheduler",
+                    context={LOG_CONTEXT_VAR_ENVIRONMENT: str(env_id)},
+                )
+                result |= logging_config.get_all_log_files()
+                add_agent_out_and_err_files(env_id)
+        else:
+            for env_id in env_ids:
+                logging_config = scheduler_logging_config_source.to_full_logging_config(
+                    context={LOG_CONTEXT_VAR_ENVIRONMENT: str(env_id)}
+                )
+                result |= logging_config.get_all_log_files()
+                add_agent_out_and_err_files(env_id)
+        return result
 
     @classmethod
     def get_current_instance(cls) -> "InmantaLoggerConfig":
@@ -863,7 +948,6 @@ class InmantaLoggerConfig:
         if not self._options_applied:
             raise Exception("Extenders can only be added after loading the initial config")
         assert self._context is not None  # make mypy happy
-        assert self._loaded_config is not None  # make mypy happy
 
         if not extenders:
             # No extensions, easy
@@ -898,22 +982,7 @@ class InmantaLoggerConfig:
         except Exception:
             raise Exception(f"Failed to apply the logging config defined in {dict_config}.")
         self._handlers = [handler for handler in logging.root.handlers if handler not in handlers_before]
-
-        def as_dict(inp: dict[str, object], key: str) -> dict[str, object]:
-            root = inp.get(key, {})
-            if not isinstance(root, dict):
-                raise Exception(f"{key} entry should be a dict, got {root}")
-            return root
-
-        root = as_dict(dict_config, "root")
-        # Build config for later merges
-        self._loaded_config = FullLoggingConfig(
-            formatters=as_dict(dict_config, "formatters"),
-            handlers=as_dict(dict_config, "handlers"),
-            loggers=as_dict(dict_config, "loggers"),
-            root_handlers=root.get("handlers", []),
-            root_log_level=root.get("level", None),
-        )
+        self._loaded_config = FullLoggingConfig.from_dict(dict_config)
 
     def _apply_logging_config_from_options(self, options: Options, component: str | None, context: Mapping[str, str]) -> None:
         """
@@ -943,7 +1012,6 @@ class InmantaLoggerConfig:
         """
         Register the default logging config for a certain extension.
         """
-        assert self._loaded_config is not None
         complete_config = self._loaded_config.join(logging_config, allow_overwrite=True)
         self._apply_logging_config(complete_config)
 

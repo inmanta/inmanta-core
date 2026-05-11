@@ -1,0 +1,6 @@
+---
+description: "Added support to get all the log files used by the server and scheduler processes."
+issue-nr: 989
+issue-repo: inmanta-support
+change-type: patch
+destination-branches: [master, iso9, iso8]
