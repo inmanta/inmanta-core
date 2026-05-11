@@ -288,7 +288,7 @@ class FullLoggingConfig(LoggingConfigExtension):
         def as_dict(inp: dict[str, object], key: str) -> dict[str, object]:
             root = inp.get(key, {})
             if not isinstance(root, dict):
-                raise Exception(f"{key} entry should be a dict, got {root}")
+                raise Exception(f"{key!r} entry should be a dict, got {root!r}")
             return root
 
         root = as_dict(dict_config, "root")
