@@ -23,6 +23,7 @@ import json
 import logging
 import os
 import uuid
+from collections.abc import Awaitable
 from datetime import UTC, datetime, timedelta, timezone
 from functools import partial
 
@@ -49,6 +50,10 @@ from utils import log_contains, log_doesnt_contain, retry_limited
 
 LOGGER = logging.getLogger(__name__)
 
+
+@pytest.fixture
+async def postgresql_version_from_db(postgresql_client) -> Awaitable[PostgreSQLVersion]:
+    yield await PostgreSQLVersion.from_database(postgresql_client)
 
 @pytest.mark.parametrize("no_agent", [True])
 @pytest.mark.parametrize(
