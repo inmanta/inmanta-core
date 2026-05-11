@@ -739,7 +739,6 @@ class InmantaLoggerConfig:
 
         :param env_ids: Include the scheduler logs files for these environments in the result.
         """
-        assert self._loaded_config is not None
         if self._component != "server":
             raise Exception("get_all_log_files() is only supported on the server component")
         # Server log files
@@ -958,7 +957,6 @@ class InmantaLoggerConfig:
         if not self._options_applied:
             raise Exception("Extenders can only be added after loading the initial config")
         assert self._context is not None  # make mypy happy
-        assert self._loaded_config is not None  # make mypy happy
 
         if not extenders:
             # No extensions, easy
@@ -1023,7 +1021,6 @@ class InmantaLoggerConfig:
         """
         Register the default logging config for a certain extension.
         """
-        assert self._loaded_config is not None
         complete_config = self._loaded_config.join(logging_config, allow_overwrite=True)
         self._apply_logging_config(complete_config)
 
