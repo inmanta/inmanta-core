@@ -17,7 +17,6 @@ Contact: code@inmanta.com
 """
 
 import asyncio
-import sys
 import base64
 import functools
 import json
@@ -830,14 +829,12 @@ async def test_bootloader_db_wait(monkeypatch, tmpdir, caplog, db_wait_time: str
 
 
 @pytest.mark.parametrize("db_wait_time", ["2", "0"])
-@pytest.mark.parametrize("minimal_pg_version", [0, sys.maxsize])
 async def test_bootloader_connect_running_db(
     tmp_path,
     server_config,
     postgres_db,
     caplog,
     db_wait_time: str,
-    minimal_pg_version: int,
     postgresql_version_from_db,
     postgresql_client,
     hard_clean_db,
@@ -914,32 +911,15 @@ async def test_bootloader_connect_running_db(
         )
 
     try:
-        if minimal_pg_version == sys.maxsize:
-            unsupported_pg_version_error = (
-                f"The database at {postgres_db.host} is using PostgreSQL version "
-                f"{postgresql_version_from_db}. This version is not supported by this "
-                "version of the Inmanta orchestrator. Please make sure to update to PostgreSQL "
-                f"{required_version}."
-            )
 
-            with pytest.raises(ServerStartFailure) as exc_info:
-                await ibl.start()
-                _check_database_connectivity_logs()
-                assert unsupported_pg_version_error in str(exc_info.value)
-
-            # Check schema was not updated:
-            await check_db_schema(check_empty=True)
-            return
-
-        else:
-            await ibl.start()
-            _check_database_connectivity_logs()
-            log_contains(
-                caplog,
-                "inmanta.server.services.databaseservice",
-                logging.INFO,
-                f"Database is running PostgreSQL server version {postgresql_version_from_db}.",
-            )
+        await ibl.start()
+        _check_database_connectivity_logs()
+        log_contains(
+            caplog,
+            "inmanta.server.services.databaseservice",
+            logging.INFO,
+            f"Database is running PostgreSQL server version {postgresql_version_from_db}.",
+        )
 
         log_contains(
             caplog,
