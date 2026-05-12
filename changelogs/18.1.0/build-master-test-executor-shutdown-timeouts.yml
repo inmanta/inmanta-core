@@ -1,0 +1,6 @@
+description: Fixed timeouts in tests waiting for agent executor shutdown
+change-type: patch
+destination-branches:
+  - master
+  - iso9
+  - iso8

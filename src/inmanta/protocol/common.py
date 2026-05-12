@@ -414,6 +414,7 @@ class MethodProperties(Generic[R]):
         token_param: str | None = None,
         document_in_service_swagger: bool = False,
         include_response_in_docs_swagger: bool = True,
+        allow_env_scoped_tokens: bool = False,
     ) -> None:
         """
         Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
@@ -447,6 +448,9 @@ class MethodProperties(Generic[R]):
             of the catalog.
         :param include_response_in_docs_swagger: This parameter controls whether the response for this endpoint should be
             documented in the swagger served in the `REST API reference` section of the Inmanta documentation.
+        :param allow_env_scoped_tokens: If the API endpoint is not scoped to a specific environment and the legacy authorization
+                                       provider is used, indicates whether the API call should be allowed for environment-scoped
+                                       tokens.
         """
         if api is None:
             api = not server_agent and not agent_server
@@ -498,6 +502,7 @@ class MethodProperties(Generic[R]):
         self.function.__method_properties__.append(self)
 
         self.authorization_metadata: AuthorizationMetadata | None = None
+        self.allow_env_scoped_tokens: bool = allow_env_scoped_tokens
 
     @classmethod
     def get_open_policy_agent_data(cls) -> dict[str, object]:

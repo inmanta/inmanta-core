@@ -104,7 +104,10 @@ class LegacyAuthorizationProvider(AuthorizationProvider):
         env_key: str = const.INMANTA_URN + "env"
         if env_key in call_arguments.auth_token:
             if env_key not in call_arguments.metadata:
-                raise exceptions.Forbidden("The authorization token is scoped to a specific environment.")
+                if call_arguments.method_properties.allow_env_scoped_tokens:
+                    return
+                else:
+                    raise exceptions.Forbidden("The authorization token is scoped to a specific environment.")
 
             if (
                 call_arguments.metadata[env_key] != "all"
