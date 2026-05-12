@@ -42,7 +42,6 @@ from inmanta.protocol import Client
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_SERVER
 from inmanta.server import config as opt
 from inmanta.server.bootloader import InmantaBootloader
-from inmanta.server.protocol import ServerStartFailure
 from inmanta.server.services.databaseservice import PostgreSQLVersion
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 from inmanta.util import get_compiler_version
@@ -883,37 +882,6 @@ async def test_bootloader_connect_running_db(
 
         # Check schema was populated:
         await check_db_schema(check_empty=False)
-
-    finally:
-        await ibl.stop(timeout=20)
-
-
-async def test_bootloader_start_invalid_compatibility_file(tmp_path, server_config, postgres_db, caplog):
-    """
-    Make sure a proper exception is raised when an invalid compatibility file is
-    being used during server startup.
-    """
-
-    # Write an invalid compatibility file (i.e. no 'system_requirements->postgres_version' section)
-    json_data = {}
-    compatibility_file = os.path.join(tmp_path, "compatibility.json")
-    with open(compatibility_file, "w", encoding="utf-8") as fh:
-        json.dump(json_data, fh)
-    config.Config.set("server", "compatibility_file", compatibility_file)
-
-    ibl: InmantaBootloader = InmantaBootloader(configure_logging=True)
-
-    caplog.set_level(logging.INFO)
-
-    try:
-        invalid_compatibility_file_error = (
-            "Invalid compatibility file schema. Missing 'system_requirements.postgres_version' section in file: %s"
-            % compatibility_file
-        )
-
-        with pytest.raises(ServerStartFailure) as exc_info:
-            await ibl.start()
-            assert invalid_compatibility_file_error in str(exc_info.value)
 
     finally:
         await ibl.stop(timeout=20)

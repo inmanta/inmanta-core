@@ -17,10 +17,7 @@ Contact: code@inmanta.com
 """
 
 import asyncio
-import json
 import logging
-import os.path
-from functools import total_ordering
 from typing import Mapping, Optional
 
 import asyncpg
@@ -35,12 +32,10 @@ from inmanta.types import ArgumentTypes
 from inmanta.util import IntervalSchedule, Scheduler
 from inmanta.vendor.pyformance import gauge, global_registry
 from inmanta.vendor.pyformance.meters.gauge import AnyGauge, CallbackGauge
-from packaging import version
 
 LOGGER = logging.getLogger(__name__)
 
 
-@total_ordering
 class PostgreSQLVersion:
     def __init__(self, version: int):
         """
@@ -62,48 +57,6 @@ class PostgreSQLVersion:
         pg_server_version_machine_readable = int(result[0]["server_version_num"])
 
         return PostgreSQLVersion(version=pg_server_version_machine_readable)
-
-    @classmethod
-    def from_compatibility_file(cls) -> "PostgreSQLVersion | None":
-        """
-        Helper method to retrieve the minimal required postgreSQL version configured under the
-        system_requirements->postgres_version section of the compatibility file. Returns None
-        if the server.compatibility_file option is set to None or to empty string.
-
-        :raises ServerStartFailure: If the compatibility file doesn't exist.
-        :raises ServerStartFailure: If the 'system_requirements->postgres_version' section is not present
-            in the compatibility file.
-        """
-        compatibility_data = {}
-        compatibility_file: str | None = opt.server_compatibility_file.get()
-        if not compatibility_file:
-            # Bypass the check if compatibility_file is None or ""
-            return None
-
-        if not os.path.exists(compatibility_file):
-            raise protocol.ServerStartFailure("The configured compatibility file doesn't exist: %s" % compatibility_file)
-
-        with open(compatibility_file) as fh:
-            compatibility_data = json.load(fh)
-
-        required_version: int | None = compatibility_data.get("system_requirements", {}).get("postgres_version")
-        if required_version is None:
-            raise protocol.ServerStartFailure(
-                "Invalid compatibility file schema. Missing 'system_requirements.postgres_version' section in file: %s"
-                % compatibility_file
-            )
-        human_readable_version = version.Version(str(required_version))
-        machine_readable_version = human_readable_version.major * 10_000 + human_readable_version.minor
-
-        return PostgreSQLVersion(version=machine_readable_version)
-
-    def __lt__(self, other: "PostgreSQLVersion") -> bool:
-        return self.version < other.version
-
-    def __eq__(self, other: object) -> bool:
-        if isinstance(other, PostgreSQLVersion):
-            return self.version == other.version
-        return False
 
     def __str__(self) -> str:
         """
