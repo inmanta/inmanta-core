@@ -1240,6 +1240,7 @@ class OrchestrationService(protocol.ServerSlice):
         env: data.Environment,
         agent_trigger_method: const.AgentTriggerMethod = const.AgentTriggerMethod.push_full_deploy,
         agents: Optional[list[str]] = None,
+        resources: Optional[Sequence[ResourceIdStr]] = None,
     ) -> Apireturn:
         warnings: list[str] = []
 
@@ -1276,10 +1277,10 @@ class OrchestrationService(protocol.ServerSlice):
         incremental_deploy = agent_trigger_method is const.AgentTriggerMethod.push_incremental_deploy
 
         if agents is None:
-            self.add_background_task(client.trigger(env.id, None, incremental_deploy))
+            self.add_background_task(client.trigger(env.id, None, incremental_deploy, resources=resources))
         else:
             for agent in agents_to_call:
-                self.add_background_task(client.trigger(env.id, agent, incremental_deploy))
+                self.add_background_task(client.trigger(env.id, agent, incremental_deploy, resources=resources))
 
         return attach_warnings(200, {"agents": sorted(allagents)}, warnings)
 
