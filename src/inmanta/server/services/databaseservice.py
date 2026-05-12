@@ -581,5 +581,3 @@ class DatabaseStatusChecker:
                 "of the cluster before restarting the Inmanta server (More info in the 'HA setup' section of the "
                 "documentation)."
             )
-
-        LOGGER.info("Checking database before server start...")
