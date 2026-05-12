@@ -793,7 +793,7 @@ async def test_bootloader_connect_running_db(
     get_tables_in_db,
 ):
     """
-    Tests that the bootloader can connect to a database and can start for both wait_up values
+    Tests that the bootloader can connect to a database and can start for both db_wait_time values
     """
     config.Config.set("database", "wait_time", db_wait_time)
     ibl: InmantaBootloader = InmantaBootloader(configure_logging=True)
