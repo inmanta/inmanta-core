@@ -14,12 +14,17 @@ Contact: code@inmanta.com
 
 from typing import Any
 
+from graphql.error import GraphQLError
+from inmanta.graphql.result import GraphQLResult
 from inmanta.graphql.schema import GraphQLContext, get_schema
 from inmanta.protocol import methods_v2
+from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.decorators import handle
 from inmanta.server import SLICE_COMPILER, SLICE_GRAPHQL, protocol
 from inmanta.server.protocol import Server
 from inmanta.server.services.compilerservice import CompilerService
+from strawberry.schema.exceptions import CannotGetOperationTypeError
+from strawberry.types.execution import ExecutionResult
 
 
 class GraphQLSlice(protocol.ServerSlice):
@@ -38,12 +43,25 @@ class GraphQLSlice(protocol.ServerSlice):
         self.context = GraphQLContext(compiler_service=compiler_service)
         await super().prestart(server)
 
-    @handle(methods_v2.graphql)
+    @handle(methods_v2.graphql, operation_name="operationName")
     async def graphql(
-        self, query: str, variables: dict[str, Any] | None = None
-    ) -> Any:  # Actual return type: strawberry.types.execution.HandlerResult
+        self, query: str, variables: dict[str, Any] | None = None, operation_name: str | None = None
+    ) -> ReturnValue[GraphQLResult]:
         assert self.context is not None
-        return await get_schema(self.context).execute(query, variable_values=variables)
+        try:
+            execution_result = await get_schema(self.context).execute(
+                query, variable_values=variables, operation_name=operation_name
+            )
+        except CannotGetOperationTypeError as e:
+            execution_result = ExecutionResult(
+                data=None, errors=[GraphQLError(message=e.as_http_error_reason(), original_error=e)], extensions=None
+            )
+        except Exception as e:
+            execution_result = ExecutionResult(
+                data=None, errors=[GraphQLError(message=str(e), original_error=e)], extensions=None
+            )
+        graphql_result = GraphQLResult.from_execution_result(execution_result)
+        return ReturnValue(status_code=graphql_result.status_code, response=graphql_result)
 
     @handle(methods_v2.graphql_schema)
     async def graphql_schema(self) -> dict[str, Any]:

@@ -240,10 +240,10 @@ class LazyBooleanOperator(BinaryOperator, Resumer):
     def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         super().normalize()
         # lazy execution: we don't immediately emit the second operator so we need to hold its promises until we do
-        self._own_eager_promises = list(self.children[1].get_all_eager_promises())
+        self.own_eager_promises = list(self.children[1].get_all_eager_promises())
 
     def get_all_eager_promises(self) -> abc.Iterator["StaticEagerPromise"]:
-        return chain(self._own_eager_promises, self.children[0].get_all_eager_promises())
+        return chain(self.own_eager_promises, self.children[0].get_all_eager_promises())
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> dict[object, VariableABC]:
         requires: dict[object, VariableABC] = self._requires_emit_promises(resolver, queue)

@@ -1,0 +1,6 @@
+change-type: minor
+description: Change complianceState on the GraphQL API to compliance to match the resourceSummary attribute.
+destination-branches:
+- master
+- iso9
+sections: {}

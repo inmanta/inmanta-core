@@ -69,6 +69,8 @@ class Entity(NamedType, WithComment):
     Each entity can contain attributes that are either data types or
     relations and each entity can inherit from parent entities.
 
+    Most methods may only be called after the entity definition evaluation stage (DefineEntity.evaluate()).
+
     :param name: The name of this entity. This name can not be changed
         after this object has been created
     """
@@ -91,7 +93,7 @@ class Entity(NamedType, WithComment):
         # default values
         self.__default_values = {}  # type: Dict[str, DefineAttribute]
 
-        self._indexes = []  # type: list[DefineIndex]
+        self._indexes: dict[frozenset[str], DefineIndex] = {}
         self._index = {}  # type: Dict[str,Instance]
         self.index_queue = {}  # type: Dict[str,List[tuple[ResultVariable, Statement]]]
 
@@ -100,6 +102,10 @@ class Entity(NamedType, WithComment):
         self.comment = comment
 
         self.normalized = False
+
+        # Lazy caches to avoid repeated parent-chain walks. Built on first access.
+        self._all_attributes_cache: Optional[Mapping[str, "Attribute"]] = None
+        self._default_values_cache: Optional[Mapping[str, "ExpressionStatement"]] = None
 
         self._paired_dataclass: type[DataclassProtocol] | None = None
         self._paired_dataclass_field_types: dict[str, Type] = {}
@@ -243,16 +249,26 @@ class Entity(NamedType, WithComment):
             children.extend(entity.get_all_child_entities())
         return set(children)
 
-    def get_all_attribute_names(self) -> "List[str]":
+    def get_all_attributes(self) -> Mapping[str, "Attribute"]:
         """
-        Return a list of all attribute names, including parents
+        Return a cached mapping of attribute name to Attribute for this entity and all parents.
+        The cache is built lazily on first access.
         """
-        names = list(self._attributes.keys())
+        if self._all_attributes_cache is None:
+            cache: dict[str, "Attribute"] = {}
+            # make sure to include left-most parent's attribute in case of shadowing to be consistent with get_default_values()
+            for parent in reversed(self.parent_entities):
+                cache.update(parent.get_all_attributes())
+            cache.update(self._attributes)
+            self._all_attributes_cache = cache
+        return self._all_attributes_cache
 
-        for parent in self.parent_entities:
-            names.extend(parent.get_all_attribute_names())
-
-        return names
+    def get_all_attribute_names(self) -> list[str]:
+        """
+        Return a list of all attribute names, including parents.
+        Delegates to get_all_attributes() to ensure consistent de-duplicated results.
+        """
+        return list(self.get_all_attributes().keys())
 
     def add_attribute(self, attribute: "Attribute") -> None:
         """
@@ -271,14 +287,11 @@ class Entity(NamedType, WithComment):
         """
         Get the attribute with the given name
         """
-        if name in self._attributes:
-            return self._attributes[name]
-        else:
-            for parent in self.parent_entities:
-                attr = parent.get_attribute(name)
-                if attr is not None:
-                    return attr
-        return None
+        cache = self._all_attributes_cache
+        if cache is None:
+            # also populates self._all_attributes_cache
+            cache = self.get_all_attributes()
+        return cache.get(name)
 
     def has_attribute(self, attribute: str) -> bool:
         """
@@ -299,26 +312,15 @@ class Entity(NamedType, WithComment):
         """
         return list(self._instance_list)
 
-    def add_instance(self, instance: "Instance", *, indexes: Mapping[frozenset[str], str]) -> None:
-        # TODO: update docstring for new indexes param + this method does no validation on index correctness.
-        #       indexes may be superset of entity's indexes
+    def add_instance(self, obj: "Instance") -> None:
         """
         Register a new instance. All index attributes must already be set on the instance.
         """
-        self._instance_list.add(instance)
-
-        for index in self._indexes:
-            index_key: str = indexes[index.attributes_set]
-            if index_key in self._index and self._index[index_key] is not instance:
-                raise DuplicateException(instance, self._index[index_key], "Duplicate key in index. %s" % index_key)
-            self._index[index_key] = instance
-            if index_key in self.index_queue:
-                for x, stmt in self.index_queue[index_key]:
-                    x.set_value(instance, stmt.location)
-                self.index_queue.pop(index_key)
+        self._instance_list.add(obj)
+        self.add_to_index(obj)
 
         for parent in self.parent_entities:
-            parent.add_instance(instance, indexes=indexes)
+            parent.add_instance(obj)
 
     def get_instance(
         self,
@@ -498,28 +500,25 @@ class Entity(NamedType, WithComment):
         Add an index over the given attributes.
         """
         # duplicate check
-        for index in self._indexes:
-            if index_def.attributes_set == index.attributes_set:
-                return
+        if index_def.attributes_set in self._indexes:
+            return
 
-        self._indexes.append(index_def)
+        self._indexes[index_def.attributes_set] = index_def
         for child in self.child_entities:
             child.add_index(index_def)
 
     def get_indices(self) -> list[list[str]]:
-        return [index.attributes_sorted for index in self._indexes]
+        return [index.attributes_sorted for index in self._indexes.values()]
 
     def add_to_index(self, instance: Instance) -> None:
         """
         Update indexes based on the instance and the attribute that has
         been set. All index attributes must already be set on the instance.
         """
-        slots = instance.slots
-
         for index_attributes in self.get_indices():
             key = []
             for attribute in index_attributes:
-                slot = slots[attribute]
+                slot = instance.slots[attribute]
                 value = slot.get_value()
                 if isinstance(value, Reference):
                     raise TypingException(
@@ -548,19 +547,14 @@ class Entity(NamedType, WithComment):
         Search an instance in the index.
         """
         params_sorted: Sequence[tuple[str, object]] = sorted(params, key=lambda x: x[0])
-        attributes_set = {param[0] for param in params_sorted}
+        attributes_set = frozenset(param[0] for param in params_sorted)
 
         if len(attributes_set) != len(params_sorted):
             for param, next_param in itertools.pairwise(params_sorted):
                 if param[0] == next_param[0]:
                     raise RuntimeException(stmt, "Attribute %s provided twice in index lookup" % param[0])
 
-        found_index = False
-        for index in self._indexes:
-            if index.attributes_set == attributes_set:
-                found_index = True
-
-        if not found_index:
+        if attributes_set not in self._indexes:
             raise NotFoundException(
                 stmt, self.get_full_name(), "No index defined on %s for this lookup: " % self.get_full_name() + str(params)
             )
@@ -584,12 +578,8 @@ class Entity(NamedType, WithComment):
 
         key = ", ".join(
             [
-                "%s=%s"
-                % (
-                    k,
-                    repr(coerce(k, self.get_attribute(k).type, v)),
-                )
-                for k, v in params_sorted
+                f"{attr}={repr(coerce(attr, self.get_attribute(attr).type, value))}"
+                for attr, value in params_sorted
             ]
         )
         if target is None:
@@ -606,22 +596,19 @@ class Entity(NamedType, WithComment):
                 self.index_queue[key] = [(target, stmt)]
         return None
 
-    def get_default_values(self) -> "Dict[str,ExpressionStatement]":
+    def get_default_values(self) -> Mapping[str, "ExpressionStatement"]:
         """
-        Return the dictionary with default values
+        Return the dictionary with default values. Uses a lazy cache to avoid
+        repeated parent-chain walks.
         """
-        values = []  # type: List[tuple[str,Optional[ExpressionStatement]]]
-
-        # left most parent takes precedence
-        for parent in reversed(self.parent_entities):
-            values.extend(parent.get_default_values().items())
-
-        # self takes precedence
-        values.extend(self._get_own_defaults().items())
-        # make dict, remove doubles
-        dvalues = dict(values)
-        # remove erased defaults
-        return {k: v for k, v in dvalues.items() if v is not None}
+        if self._default_values_cache is None:
+            values: list[tuple[str, Optional["ExpressionStatement"]]] = []
+            for parent in reversed(self.parent_entities):
+                values.extend(parent.get_default_values().items())
+            values.extend(self._get_own_defaults().items())
+            dvalues = dict(values)
+            self._default_values_cache = {k: v for k, v in dvalues.items() if v is not None}
+        return self._default_values_cache
 
     def get_default(self, name: str) -> "ExpressionStatement":
         """
@@ -711,8 +698,7 @@ class Entity(NamedType, WithComment):
         dc_types = typing.get_type_hints(dataclass)
         failures = []
 
-        for rel_or_attr_name in self.get_all_attribute_names():
-            rel_or_attr = self.get_attribute(rel_or_attr_name)
+        for rel_or_attr_name, rel_or_attr in self.get_all_attributes().items():
             match rel_or_attr:
                 case inmanta.ast.attribute.RelationAttribute() as rel:
                     # No relations except for requires and provides

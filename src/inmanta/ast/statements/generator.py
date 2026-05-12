@@ -103,9 +103,9 @@ class SubConstructor(RequiresEmitStatement):
         # order: implementation blocks have not normalized at this point, so with the current mechanism we can't fetch eager
         # promises yet. Normalization order can not just be reversed because implementation bodies might contain constructor
         # calls (even for the same type), which would require this instance to be normalized first, resulting in a loop.
-        self._own_eager_promises = []
+        self.own_eager_promises = []
         # injected_variables: Set[str] = {"self"}.union(self.type.get_all_attribute_names())
-        # self._own_eager_promises = [
+        # self.own_eager_promises = [
         #     # implementations live in the namespace's context rather than the constructor's context so for promises that cross
         #     # the boundary we translate references so that they are resolved correctly in any context wrapping the constructor
         #     dataclasses.replace(promise, instance=promise.instance.fully_qualified())
@@ -216,7 +216,7 @@ class For(RequiresEmitStatement):
         self.anchors.extend(self.base.get_anchors())
         self.anchors.extend(self.module.get_anchors())
         self.module.add_var(self.loop_var, self)
-        self._own_eager_promises = self.module.get_eager_promises()
+        self.own_eager_promises = self.module.get_eager_promises()
 
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
         return chain(super().get_all_eager_promises(), self.base.get_all_eager_promises())
@@ -625,7 +625,7 @@ class If(RequiresEmitStatement):
         self.anchors.extend(self.condition.get_anchors())
         self.anchors.extend(self.if_branch.get_anchors())
         self.anchors.extend(self.else_branch.get_anchors())
-        self._own_eager_promises = [*self.if_branch.get_eager_promises(), *self.else_branch.get_eager_promises()]
+        self.own_eager_promises = [*self.if_branch.get_eager_promises(), *self.else_branch.get_eager_promises()]
 
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
         return chain(super().get_all_eager_promises(), self.condition.get_all_eager_promises())
@@ -683,7 +683,7 @@ class ConditionalExpression(ExpressionStatement):
         self.anchors.extend(self.condition.get_anchors())
         self.anchors.extend(self.if_expression.get_anchors())
         self.anchors.extend(self.else_expression.get_anchors())
-        self._own_eager_promises = [
+        self.own_eager_promises = [
             *self.if_expression.get_all_eager_promises(),
             *self.else_expression.get_all_eager_promises(),
         ]
@@ -934,7 +934,7 @@ class Constructor(ExpressionStatement):
             else:
                 self._direct_attributes[k] = v
 
-        self._own_eager_promises = list(
+        self.own_eager_promises = list(
             chain.from_iterable(subconstructor.get_all_eager_promises() for subconstructor in self.type.get_sub_constructor())
         )
 
@@ -1120,12 +1120,53 @@ class Constructor(ExpressionStatement):
             k: v for k, v in self._indirect_attributes.items() if k not in late_args
         }
 
+        # check if the instance already exists in the index (if there is one)
+        instances: list[Instance] = []
+        # register any potential index collision
+        collisions: abc.MutableMapping[tuple[str, ...], Instance] = {}
+        for index in type_class.get_indices():
+            params = []
+            for attr in index:
+                params.append((attr, direct_attributes[attr]))
+
+            obj: Optional[Instance] = type_class.lookup_index(params, self)
+
+            if obj is not None:
+                if obj.get_type() != type_class:
+                    raise DuplicateException(self, obj, "Type found in index is not an exact match")
+                instances.append(obj)
+                collisions[tuple(index)] = obj
+
+        object_instance: Instance
         graph: Optional[DataflowGraph] = resolver.dataflow_graph
-        object_instance: Instance = type_class.get_instance(
-            direct_attributes, resolver, queue, self.location, self.get_dataflow_node(graph) if graph is not None else None
-        )
-        if graph is not None and object_instance.instance_node is not None:
-            graph.add_index_match([self.get_dataflow_node(graph), object_instance.instance_node])
+        if len(instances) > 0:
+            if graph is not None:
+                graph.add_index_match(
+                    chain(
+                        [self.get_dataflow_node(graph)],
+                        (i.instance_node for i in instances if i.instance_node is not None),
+                    )
+                )
+
+            # ensure that instances are all the same objects
+            first = instances[0]
+            for i in instances[1:]:
+                if i != first:
+                    raise IndexCollisionException(
+                        msg=("Inconsistent indexes detected!\n"),
+                        constructor=self,
+                        collisions=collisions,
+                    )
+
+            object_instance = first
+            self.copy_location(object_instance)
+            for k, v in direct_attributes.items():
+                object_instance.set_attribute(k, v, self.location)
+        else:
+            # create the instance
+            object_instance = type_class.get_instance(
+                direct_attributes, resolver, queue, self.location, self.get_dataflow_node(graph) if graph is not None else None
+            )
 
         # deferred execution for indirect attributes
         # inject implicit reference to this instance so attributes can resolve the lhs_attribute we promised in _normalize_rhs

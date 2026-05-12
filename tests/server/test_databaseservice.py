@@ -29,11 +29,11 @@ from inmanta.server.services import databaseservice
 from utils import log_contains, retry_limited
 
 
-async def test_agent_process_cleanup(server, environment, agent_factory):
+async def test_agent_process_cleanup(server, environment, agent_factory_no_state_check):
     opt.agent_processes_to_keep.set("1")
-    a1 = await agent_factory(environment)
+    a1 = await agent_factory_no_state_check(environment)
     await a1.stop()
-    a2 = await agent_factory(environment)
+    a2 = await agent_factory_no_state_check(environment)
     await a2.stop()
 
     async def _wait_until_expire_is_finished():

@@ -603,7 +603,6 @@ class DefineIndex(DefinitionStatement):
         DefinitionStatement.__init__(self)
         self.type = entity_type
         self.attributes: Sequence[LocatableString] = attributes
-        # TODO: see if we can get rid of this. I expect small performance regression if we do
         self.attributes_set: frozenset[str] = frozenset(str(attr) for attr in self.attributes)
         self.attributes_sorted: Sequence[str] = sorted(self.attributes_set)
 

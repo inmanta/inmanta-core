@@ -45,11 +45,13 @@ class RESTClient(RESTBase):
     HTTP verbs. For other methods the POST verb is used.
     """
 
-    def __init__(self, endpoint: "Endpoint", connection_timout: int = 120, force_instance: bool = False) -> None:
+    def __init__(
+        self, endpoint: "Endpoint", connection_timout: int = 120, force_instance: bool = False, token: str | None = None
+    ) -> None:
         super().__init__()
         self.__end_point: "Endpoint" = endpoint
         self.daemon: bool = True
-        self.token: Optional[str] = inmanta_config.Config.get(self.id, "token", None)
+        self.token: Optional[str] = token if token else inmanta_config.Config.get(self.id, "token", None)
         self.connection_timout: int = connection_timout
         self.headers: set[str] = set()
         self.request_timeout: int = inmanta_config.Config.get(self.id, "request_timeout", 120)

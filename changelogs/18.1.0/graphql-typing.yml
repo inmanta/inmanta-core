@@ -1,0 +1,5 @@
+description: graphql minor typing improvements
+change-type: patch
+destination-branches:
+  - master
+  - iso9
