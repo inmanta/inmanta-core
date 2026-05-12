@@ -508,7 +508,7 @@ class Entity(NamedType, WithComment):
         """
         Return the dictionary with default values
         """
-        values = []  # type: List[tuple[str,Optional[ExpressionStatement]]]
+        values = []  # type: List[Tuple[str,Optional[ExpressionStatement]]]
 
         # left most parent takes precedence
         for parent in reversed(self.parent_entities):
