@@ -47,10 +47,9 @@ src/inmanta/ast/blocks.py:0: error: Returning Any from function declared to retu
 src/inmanta/ast/blocks.py:0: note: Did you forget to import it from "typing"? (Suggestion: "from typing import List")
 src/inmanta/ast/blocks.py:0: note: Did you forget to import it from "typing"? (Suggestion: "from typing import List")
 src/inmanta/ast/blocks.py:0: note: Did you forget to import it from "typing"? (Suggestion: "from typing import List")
-src/inmanta/ast/constraint/expression.py:0: error: Argument 1 to "create_function" has incompatible type "Operator"; expected "ConstraintType"  [arg-type]
 src/inmanta/ast/constraint/expression.py:0: error: Argument 2 to "register_operator" of "Operator" has incompatible type "OpMetaClass"; expected "type[Operator]"  [arg-type]
-src/inmanta/ast/constraint/expression.py:0: error: Call to untyped function "_op" in typed context  [no-untyped-call]
-src/inmanta/ast/constraint/expression.py:0: error: Call to untyped function "_op" in typed context  [no-untyped-call]
+src/inmanta/ast/constraint/expression.py:0: error: Call to untyped function "_op" of "Operator" in typed context  [no-untyped-call]
+src/inmanta/ast/constraint/expression.py:0: error: Call to untyped function "_op" of "Operator" in typed context  [no-untyped-call]
 src/inmanta/ast/constraint/expression.py:0: error: Function is missing a return type annotation  [no-untyped-def]
 src/inmanta/ast/constraint/expression.py:0: error: Function is missing a type annotation  [no-untyped-def]
 src/inmanta/ast/constraint/expression.py:0: error: Function is missing a type annotation  [no-untyped-def]
@@ -58,7 +57,7 @@ src/inmanta/ast/constraint/expression.py:0: error: Function is missing a type an
 src/inmanta/ast/constraint/expression.py:0: error: Function is missing a type annotation  [no-untyped-def]
 src/inmanta/ast/constraint/expression.py:0: error: Function is missing a type annotation  [no-untyped-def]
 src/inmanta/ast/constraint/expression.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
-src/inmanta/ast/constraint/expression.py:0: error: Missing positional argument "expression" in call to "create_function"  [call-arg]
+src/inmanta/ast/constraint/expression.py:0: error: Missing positional argument "tp" in call to "create_function"  [call-arg]
 src/inmanta/ast/constraint/expression.py:0: error: Missing type arguments for generic type "ResultVariable"  [type-arg]
 src/inmanta/ast/constraint/expression.py:0: error: Missing type arguments for generic type "ResultVariable"  [type-arg]
 src/inmanta/ast/constraint/expression.py:0: error: Missing type arguments for generic type "VariableABC"  [type-arg]
