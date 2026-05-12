@@ -1,0 +1,6 @@
+description: Remove redundant log line.
+change-type: patch
+destination-branches:
+  - master
+  - iso9
+
