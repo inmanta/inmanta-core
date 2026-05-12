@@ -1,0 +1,3 @@
+description: Remove redundant copy of immutable primitive values in DynamicProxy.return_value
+change-type: patch
+destination-branches: [master, iso9]

@@ -104,6 +104,7 @@ class ResourceTimer:
 
         # convert time to ioloop mono time
         time_delta = asyncio.get_running_loop().time() - time.time()
+        # If the call_at timestamp is located in the past, self._activate will be called immediately.
         self.next_schedule_handle = asyncio.get_running_loop().call_at(when.timestamp() + time_delta, self._activate)
 
     def cancel(self) -> None:
@@ -124,6 +125,30 @@ class ResourceTimer:
 
 
 class TimerManager:
+    """
+    This class manages the deploy and repair timers for resources. Two types of timers can be used for each
+    use case (deploy or repair) depending on the values of the data.AUTOSTART_AGENT_DEPLOY_INTERVAL
+    and data.AUTOSTART_AGENT_REPAIR_INTERVAL environment settings:
+
+    * If a cron expression was provided: Set one timer for all resources at the moment defined
+                                         by the cron expression.
+    * If an integer was provided: The integer defines the lowest frequency by which the action must be
+                                  executed. This timer is set per resource individually. The moment the
+                                  timer will fire is defined by 'last_deploy_time + <configured-frequency>'.
+                                  If both deploy and repair timers are set using an integer, only one timer
+                                  will be configured for both actions. The one that would trigger first.
+
+    The configuration of the per-resource timers depend on the scheduler state so those
+    timers have to be updated under the scheduler lock. This class delegates the responsibility of
+    acquiring these locks to the ResourceScheduler by calling into the scheduler's reload_all_timers()
+    method.
+
+    The initialize() method of this class has to be called for all timers to be configured correctly.
+    However, this class supports starting, stopping and updating timers while the initialize() method
+    was not yet called. The initialize() method has to be called after the scheduler has been initialized
+    correctly.
+    """
+
     def __init__(self, resource_scheduler: "ResourceScheduler"):
         """
         :param resource_scheduler: Back reference to the ResourceScheduler that was responsible for
@@ -152,6 +177,7 @@ class TimerManager:
         self.global_periodic_deploy_task = None
         self.periodic_repair_interval = None
         self.periodic_deploy_interval = None
+        self.resource_timers = {}
 
     async def stop(self) -> None:
         for timer in self.resource_timers.values():
@@ -171,7 +197,10 @@ class TimerManager:
         await self.reload_config()
 
     async def reload_config(self) -> None:
-
+        """
+        Update the timer configuration iff the deploy and repair interval, defined by the user,
+        has changed.
+        """
         async with data.Environment.get_connection() as connection:
             assert self._resource_scheduler.environment is not None
             environment = await data.Environment.get_by_id(self._resource_scheduler.environment, connection=connection)
@@ -191,6 +220,7 @@ class TimerManager:
             new_deploy_cron = None
             new_periodic_deploy_interval = deploy_timer if deploy_timer > 0 else None
         except ValueError:
+            # deploy_timer is a cron expression
             assert isinstance(deploy_timer, str)  # make mypy happy
             new_deploy_cron = deploy_timer
             new_periodic_deploy_interval = None
@@ -200,6 +230,7 @@ class TimerManager:
             new_repair_cron = None
             new_periodic_repair_interval = repair_timer if repair_timer > 0 else None
         except ValueError:
+            # repair_timer is a cron-expression
             assert isinstance(repair_timer, str)  # make mypy happy
             new_repair_cron = repair_timer
             new_periodic_repair_interval = None

@@ -295,7 +295,6 @@ async def test_dryrun_failures(resource_container, server, agent, client, enviro
         f"dry_run_id: {dry_run_id}.",
     }
     check_dry_run_logs(expected_error_messages, dry_run_id)
-    await agent.stop()
 
 
 async def test_dryrun_scale(resource_container, server, client, environment, agent, clienthelper):
@@ -340,8 +339,6 @@ async def test_dryrun_scale(resource_container, server, client, environment, age
     dry_run_id = result.result["dryruns"][0]["id"]
     result = await client.dryrun_report(env_id, dry_run_id)
     assert result.code == 200
-
-    await agent.stop()
 
 
 @pytest.mark.parametrize("auto_start_agent", (True,))  # this overrides a fixture to allow the agent to fork!

@@ -1241,13 +1241,8 @@ class Instance(ExecutionContext, references.MaybeReference):
         self.resolver = resolver.get_root_resolver()
         self.type = mytype
         self.slots: dict[str, ResultVariable] = {}
-        for attr_name in mytype.get_all_attribute_names():
-            if attr_name in self.slots:
-                # prune duplicates because get_new_result_variable() has side effects
-                # don't use set for pruning because side effects drive control flow and set iteration is nondeterministic
-                continue
-            attribute = mytype.get_attribute(attr_name)
-            assert attribute is not None  # Make mypy happy
+        # Use cached all_attributes mapping to avoid repeated parent-chain walks
+        for attr_name, attribute in mytype.get_all_attributes().items():
             self.slots[attr_name] = attribute.get_new_result_variable(self, queue)
         # TODO: this is somewhat ugly. Is there a cleaner way to enforce this constraint
         assert (resolver.dataflow_graph is None) == (node is None)

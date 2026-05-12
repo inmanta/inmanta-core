@@ -241,7 +241,7 @@ server_ssl_ca_cert = Option(
     is_str_opt,
 )
 
-server_fact_expire = Option(
+server_fact_expire: Option[int] = Option(
     "server", "fact-expire", 3600, "After how many seconds will discovered facts/parameters expire.", is_time
 )
 
@@ -251,19 +251,21 @@ def default_fact_renew() -> int:
     return int(server_fact_expire.get() / 3)
 
 
-def validate_fact_renew(value: object) -> int:
+def validate_fact_renew(value: str | int) -> int:
     """time; < :inmanta.config:option:`server.fact-expire`"""
     out = int(value)
     if not out < server_fact_expire.get():
         LOGGER.warn(
-            "can not set fact_renew to %d, must be smaller than fact-expire (%d), using %d instead"
-            % (out, server_fact_expire.get(), default_fact_renew())
+            "can not set fact_renew to %d, must be smaller than fact-expire (%d), using %d instead",
+            out,
+            server_fact_expire.get(),
+            default_fact_renew(),
         )
         out = default_fact_renew()
     return out
 
 
-server_fact_renew = Option(
+server_fact_renew: Option[int] = Option(
     "server",
     "fact-renew",
     default_fact_renew,
