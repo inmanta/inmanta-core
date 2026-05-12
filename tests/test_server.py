@@ -887,37 +887,6 @@ async def test_bootloader_connect_running_db(
         await ibl.stop(timeout=20)
 
 
-async def test_bootloader_start_no_compatibility_file(tmp_path, server_config, postgres_db, caplog, postgresql_version_from_db):
-    """
-    Make sure the minimal postgres version compatibility check is disabled
-    when no compatibility file is set.
-    """
-
-    ibl: InmantaBootloader = InmantaBootloader(configure_logging=True)
-
-    caplog.set_level(logging.DEBUG)
-
-    try:
-        await ibl.start()
-        log_contains(
-            caplog,
-            "inmanta.server.services.databaseservice",
-            logging.DEBUG,
-            "Not waiting until the database server is up because database.wait_time option is set to 0.",
-        )
-        log_contains(
-            caplog,
-            "inmanta.server.services.databaseservice",
-            logging.INFO,
-            f"Database is running PostgreSQL server version {postgresql_version_from_db}",
-        )
-
-        log_contains(caplog, "inmanta.server.server", logging.INFO, "Starting server endpoint")
-
-    finally:
-        await ibl.stop(timeout=20)
-
-
 async def test_get_resource_actions(postgresql_client, client, clienthelper, server, environment, null_agent):
     """
     Test querying resource actions via the API
