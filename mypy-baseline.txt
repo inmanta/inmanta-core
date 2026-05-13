@@ -47,10 +47,9 @@ src/inmanta/ast/blocks.py:0: error: Returning Any from function declared to retu
 src/inmanta/ast/blocks.py:0: note: Did you forget to import it from "typing"? (Suggestion: "from typing import List")
 src/inmanta/ast/blocks.py:0: note: Did you forget to import it from "typing"? (Suggestion: "from typing import List")
 src/inmanta/ast/blocks.py:0: note: Did you forget to import it from "typing"? (Suggestion: "from typing import List")
-src/inmanta/ast/constraint/expression.py:0: error: Argument 1 to "create_function" has incompatible type "Operator"; expected "ConstraintType"  [arg-type]
 src/inmanta/ast/constraint/expression.py:0: error: Argument 2 to "register_operator" of "Operator" has incompatible type "OpMetaClass"; expected "type[Operator]"  [arg-type]
-src/inmanta/ast/constraint/expression.py:0: error: Call to untyped function "_op" in typed context  [no-untyped-call]
-src/inmanta/ast/constraint/expression.py:0: error: Call to untyped function "_op" in typed context  [no-untyped-call]
+src/inmanta/ast/constraint/expression.py:0: error: Call to untyped function "_op" of "Operator" in typed context  [no-untyped-call]
+src/inmanta/ast/constraint/expression.py:0: error: Call to untyped function "_op" of "Operator" in typed context  [no-untyped-call]
 src/inmanta/ast/constraint/expression.py:0: error: Function is missing a return type annotation  [no-untyped-def]
 src/inmanta/ast/constraint/expression.py:0: error: Function is missing a type annotation  [no-untyped-def]
 src/inmanta/ast/constraint/expression.py:0: error: Function is missing a type annotation  [no-untyped-def]
@@ -58,7 +57,7 @@ src/inmanta/ast/constraint/expression.py:0: error: Function is missing a type an
 src/inmanta/ast/constraint/expression.py:0: error: Function is missing a type annotation  [no-untyped-def]
 src/inmanta/ast/constraint/expression.py:0: error: Function is missing a type annotation  [no-untyped-def]
 src/inmanta/ast/constraint/expression.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
-src/inmanta/ast/constraint/expression.py:0: error: Missing positional argument "expression" in call to "create_function"  [call-arg]
+src/inmanta/ast/constraint/expression.py:0: error: Missing positional argument "tp" in call to "create_function"  [call-arg]
 src/inmanta/ast/constraint/expression.py:0: error: Missing type arguments for generic type "ResultVariable"  [type-arg]
 src/inmanta/ast/constraint/expression.py:0: error: Missing type arguments for generic type "ResultVariable"  [type-arg]
 src/inmanta/ast/constraint/expression.py:0: error: Missing type arguments for generic type "VariableABC"  [type-arg]
@@ -641,6 +640,9 @@ src/inmanta/logging.py:0: error: Argument "root_handlers" to "FullLoggingConfig"
 src/inmanta/logging.py:0: error: Argument "root_log_level" to "FullLoggingConfig" has incompatible type "object"; expected "int | str | None"  [arg-type]
 src/inmanta/logging.py:0: error: Returning Any from function declared to return "dict[str, object]"  [no-any-return]
 src/inmanta/logging.py:0: error: Returning Any from function declared to return "dict[str, object]"  [no-any-return]
+src/inmanta/logging.py:0: error: Unsupported right operand type for in ("object")  [operator]
+src/inmanta/logging.py:0: error: Value of type "object" is not indexable  [index]
+src/inmanta/logging.py:0: error: Value of type "object" is not indexable  [index]
 src/inmanta/main.py:0: error: Argument 1 to "len" has incompatible type "object"; expected "Sized"  [arg-type]
 src/inmanta/main.py:0: error: Argument 1 to "len" has incompatible type "object"; expected "Sized"  [arg-type]
 src/inmanta/main.py:0: error: Argument 1 to "parse_id" of "Id" has incompatible type "object"; expected "ResourceVersionIdStr | ResourceIdStr"  [arg-type]
@@ -1008,10 +1010,6 @@ src/inmanta/server/agentmanager.py:0: error: Item "None" of "Sequence[Agent] | N
 src/inmanta/server/agentmanager.py:0: error: Value of type "dict[str, Any] | None" is not indexable  [index]
 src/inmanta/server/agentmanager.py:0: error: Value of type variable "AnyStr" of "abspath" cannot be "str | None"  [type-var]
 src/inmanta/server/bootloader.py:0: error: Incompatible return value type (got "Iterator[ModuleInfo]", expected "Generator[ModuleInfo, None, None]")  [return-value]
-src/inmanta/server/bootloader.py:0: error: No overload variant of "int" matches argument type "object"  [call-overload]
-src/inmanta/server/bootloader.py:0: note: Possible overload variants:
-src/inmanta/server/bootloader.py:0: note: def int(str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc = ..., /) -> int
-src/inmanta/server/bootloader.py:0: note: def int(str | bytes | bytearray, /, base: SupportsIndex) -> int
 src/inmanta/server/config.py:0: error: Cannot infer value of type parameter "T" of "Option"  [misc]
 src/inmanta/server/config.py:0: error: Cannot infer value of type parameter "T" of "Option"  [misc]
 src/inmanta/server/config.py:0: error: Cannot infer value of type parameter "T" of "Option"  [misc]
@@ -1037,6 +1035,10 @@ src/inmanta/server/protocol.py:0: error: Missing type arguments for generic type
 src/inmanta/server/protocol.py:0: error: Module "tornado.gen" does not explicitly export attribute "TimeoutError"  [attr-defined]
 src/inmanta/server/protocol.py:0: error: Need type annotation for "future"  [var-annotated]
 src/inmanta/server/server.py:0: error: Argument 1 to "get_global_url_map" of "RESTServer" has incompatible type "dict_values[str, ServerSlice]"; expected "list[CallTarget]"  [arg-type]
+src/inmanta/server/services/databaseservice.py:0: error: No overload variant of "int" matches argument type "object"  [call-overload]
+src/inmanta/server/services/databaseservice.py:0: note: Possible overload variants:
+src/inmanta/server/services/databaseservice.py:0: note: def int(str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc = ..., /) -> int
+src/inmanta/server/services/databaseservice.py:0: note: def int(str | bytes | bytearray, /, base: SupportsIndex) -> int
 src/inmanta/server/services/environment_metrics_service.py:0: error: "Sequence[EnvironmentMetricsGauge]" has no attribute "append"  [attr-defined]
 src/inmanta/server/services/environment_metrics_service.py:0: error: "Sequence[EnvironmentMetricsTimer]" has no attribute "append"  [attr-defined]
 src/inmanta/server/services/environment_metrics_service.py:0: error: Argument 1 to "create_metrics_timer" has incompatible type "Sequence[MetricValue]"; expected "Sequence[MetricValueTimer]"  [arg-type]
@@ -1056,7 +1058,6 @@ src/inmanta/server/services/paramservice.py:0: error: Unsupported operand types 
 src/inmanta/server/services/paramservice.py:0: error: Unsupported operand types for > ("timedelta" and "datetime")  [operator]
 src/inmanta/server/services/paramservice.py:0: note: Left operand is of type "datetime | None"
 src/inmanta/server/services/paramservice.py:0: note: Left operand is of type "datetime | timedelta"
-src/inmanta/server/services/resourceservice.py:0: error: "ServerSlice" has no attribute "register_listener_for_multiple_actions"  [attr-defined]
 src/inmanta/server/services/resourceservice.py:0: error: Argument "args" to "__init__" of "LogRecord" has incompatible type "list[Never]"; expected "tuple[object, ...] | Mapping[str, object] | None"  [arg-type]
 src/inmanta/server/services/resourceservice.py:0: error: Missing type arguments for generic type "Feature"  [type-arg]
 src/inmanta/server/services/resourceservice.py:0: error: Module "inmanta.server.protocol" does not explicitly export attribute "handle"  [attr-defined]

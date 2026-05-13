@@ -1,0 +1,6 @@
+description: Fix bug where the totalCount field on the resources query of GraphQL was not filtering on environment.
+change-type: patch
+issue-nr: 10352
+sections:
+  bugfix: "{{description}}"
+destination-branches: [master, iso9]
