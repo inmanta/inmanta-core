@@ -1,0 +1,6 @@
+change-type: patch
+description: Bump myst-parser from 5.0.0 to 5.1.0 in the sphinx group
+destination-branches:
+- master
+- iso9
+sections: {}
