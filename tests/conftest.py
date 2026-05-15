@@ -2950,7 +2950,7 @@ async def mixed_resource_generator(
         monkeypatch.setattr("inmanta.deploy.scheduler.TaskRunner._run", mock_run)
         await dummy_scheduler._initialize()
 
-        async def make_resource_set(agent_index: int, iteration: int) -> list[dict[str, object]]:
+        async def make_resource_set(agent_index: int, iteration: int) -> tuple[list[dict[str, object]], int]:
             is_full = agent_index == 0 and iteration == 0
             if is_full:
                 version = await clienthelper.get_version()
@@ -3047,12 +3047,12 @@ async def mixed_resource_generator(
                     )
 
             await asyncio.gather(*(deploy(resource) for resource in resources_in_dirty_set))
-            return resources_in_dirty_set
+            return resources_in_dirty_set, version
 
         first_iteration_resources = {}
         for agent in range(instances):
             for iteration in [0, 1]:
-                resources = await make_resource_set(agent, iteration)
+                resources, version = await make_resource_set(agent, iteration)
                 logger.warning("deploys: %d, agent: %d, iteration: %d", deploy_counter, agent, iteration)
                 # Since we are using null_agent we need to manually mark orphans
                 if iteration == 0:
@@ -3060,6 +3060,8 @@ async def mixed_resource_generator(
                 elif iteration == 1:
                     new_rids = {Id.parse_id(res["resource_id"]).resource_str() for res in resources}
                     orphans = first_iteration_resources[agent] - new_rids
-                    await dummy_scheduler.state_update_manager.mark_as_orphan(environment=environment, resource_ids=orphans)
+                    await dummy_scheduler.state_update_manager.mark_as_orphan(
+                        environment=environment, resource_ids={rid: version - 1 for rid in orphans}
+                    )
 
     yield _mixed_resource_generator

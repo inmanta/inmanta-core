@@ -743,7 +743,7 @@ class ResourcePersistentState(Base):
         ),
         PrimaryKeyConstraint("environment", "resource_id", name="resource_persistent_state_pkey"),
         Index("resource_persistent_state_environment_agent_resource_id_idx", "environment", "agent", "resource_id"),
-        Index("resource_persistent_state_environment_resource_id_is_orphan", "environment", "resource_id", "is_orphan"),
+        Index("resource_persistent_state_environment_resource_id_orphaned_at", "environment", "resource_id", "orphaned_at"),
         Index(
             "resource_persistent_state_environment_resource_id_value_res_idx", "environment", "resource_id_value", "resource_id"
         ),
@@ -773,7 +773,7 @@ class ResourcePersistentState(Base):
     agent: Mapped[str] = mapped_column(String, nullable=False)
     resource_id_value: Mapped[str] = mapped_column(String, nullable=False)
     is_undefined: Mapped[bool] = mapped_column(Boolean, nullable=False)
-    is_orphan: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    orphaned_at: Mapped[int] = mapped_column(Boolean, nullable=True)
     last_handler_run: Mapped[str] = mapped_column(String, nullable=False)
     blocked: Mapped[str] = mapped_column(String, nullable=False)
     created: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False)
@@ -794,7 +794,7 @@ class ResourcePersistentState(Base):
         Compliance status of this resource
         """
         return state.get_compliance_status(
-            self.is_orphan,
+            self.orphaned_at,
             self.is_undefined,
             self.last_deployed_attribute_hash,
             self.current_intent_attribute_hash,
@@ -805,7 +805,7 @@ class ResourcePersistentState(Base):
     @classmethod
     def _compliance_expression(cls) -> Case[Any]:
         return case(
-            (cls.is_orphan, None),
+            (cls.orphaned_at.is_not(None), None),
             (cls.is_undefined, state.Compliance.UNDEFINED.name),
             (
                 or_(

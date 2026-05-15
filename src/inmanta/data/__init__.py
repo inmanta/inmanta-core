@@ -4730,7 +4730,7 @@ class ResourcePersistentState(BaseDocument):
     :param last_success: The start time of the last handler run that completed without failure
     :param last_produced_events: The end time of the last handler run where an effective change was produced
     :param is_undefined: Whether the desired state for this resource is undefined
-    :param is_orphan: Whether this resource is an orphan (no longer present in the latest model version)
+    :param orphaned_at: The last version where this resource was seen
     :param is_deploying: Whether this resource is currently being run by the handler
     :param last_handler_run: The result of the last handler run for this resource
     :param last_handler_run_compliant: Whether the last handler run reported the resource as compliant
@@ -4774,7 +4774,7 @@ class ResourcePersistentState(BaseDocument):
     # Written at version release time
     is_undefined: bool
     # Written when a new version is processed by the scheduler
-    is_orphan: bool
+    orphaned_at: int | None = None
     # Set to true when a version starts its deployment, set to false when it finishes
     is_deploying: bool
     # Written at deploy time (except for NEW -> no race condition possible with deploy path)
@@ -4796,17 +4796,18 @@ class ResourcePersistentState(BaseDocument):
 
     @classmethod
     async def mark_as_orphan(
-        cls, environment: UUID, resource_ids: Set[ResourceIdStr], connection: Optional[Connection] = None
+        cls, environment: UUID, orphaned_resources: typing.Mapping[ResourceIdStr, int], connection: Optional[Connection] = None
     ) -> None:
         """
-        Set the is_orphan column to True on all given resources
+        Set the orphaned_at column to the last seen version of the given resources
         """
         query = f"""
-            UPDATE {cls.table_name()}
-            SET is_orphan=TRUE
-            WHERE environment=$1 AND resource_id=ANY($2)
+        UPDATE {cls.table_name()}
+        SET orphaned_at = v.value::int
+        FROM jsonb_each_text($2::jsonb) AS v(id, value)
+        WHERE environment=$1 AND resource_id=v.resource_id
         """
-        await cls._execute_query(query, environment, resource_ids, connection=connection)
+        await cls._execute_query(query, environment, orphaned_resources, connection=connection)
 
     @classmethod
     async def update_resource_intent(
@@ -4829,7 +4830,6 @@ class ResourcePersistentState(BaseDocument):
                 resource_id,
                 resource_details.attribute_hash,
                 resource_state.compliance is state.Compliance.UNDEFINED,
-                False,
                 *([resource_state.blocked.db_value().name] if update_blocked_state else []),
             )
             for resource_id, (resource_state, resource_details) in intent.items()
@@ -4841,8 +4841,8 @@ class ResourcePersistentState(BaseDocument):
                     SET
                         current_intent_attribute_hash=$3,
                         is_undefined=$4,
-                        is_orphan=$5
-                        {", blocked=$6" if update_blocked_state else ""}
+                        orphaned_at=NULL
+                        {", blocked=$5" if update_blocked_state else ""}
                     WHERE environment=$1 AND resource_id=$2
                 """,
                 values,
@@ -4888,7 +4888,7 @@ class ResourcePersistentState(BaseDocument):
                 resource_id_value,
                 current_intent_attribute_hash,
                 is_undefined,
-                is_orphan,
+                orphaned_at,
                 is_deploying,
                 last_handler_run,
                 blocked,
@@ -4902,7 +4902,7 @@ class ResourcePersistentState(BaseDocument):
                 r.resource_id_value,
                 r.attribute_hash,
                 r.is_undefined,
-                FALSE,
+                NULL,
                 FALSE,
                 'NEW',
                 CASE
@@ -5044,7 +5044,7 @@ class ResourcePersistentState(BaseDocument):
         Return the Compliance associated with this resource_persistent_state. Returns None for orphaned resources.
         """
         return state.get_compliance_status(
-            self.is_orphan,
+            self.orphaned_at,
             self.is_undefined,
             self.last_deployed_attribute_hash,
             self.current_intent_attribute_hash,
@@ -5082,7 +5082,7 @@ class ResourcePersistentState(BaseDocument):
             LEFT JOIN public.resource_diff AS rd
                 ON rps.non_compliant_diff=rd.id
             WHERE
-                NOT rps.is_orphan
+                rps.orphaned_at IS NULL
                 AND rps.environment=$1
             """
             result = await cls.select_query(query, [env, resource_ids], no_obj=True, connection=connection)
@@ -5092,7 +5092,7 @@ class ResourcePersistentState(BaseDocument):
             diff: dict[ResourceIdStr, m.ResourceComplianceDiff] = {}
             for record in result:
                 compliance_status = state.get_compliance_status(
-                    is_orphan=False,  # We filter out orphan resources in the query
+                    orphaned_at=None,  # We filter out orphan resources in the query
                     is_undefined=cast(bool, record["is_undefined"]),
                     last_deployed_attribute_hash=cast(str | None, record["last_deployed_attribute_hash"]),
                     current_intent_attribute_hash=cast(str | None, record["current_intent_attribute_hash"]),
@@ -5575,7 +5575,7 @@ class Resource(BaseDocument):
             FROM {ResourcePersistentState.table_name()} AS rps
             INNER JOIN {Scheduler.table_name()} AS s
                 ON rps.environment=s.environment
-            WHERE rps.environment=$1 AND NOT rps.is_orphan
+            WHERE rps.environment=$1 AND rps.orphaned_at IS NULL
         """
         results = await cls.select_query(query, [env], no_obj=True, connection=connection)
         if not results:
@@ -5593,7 +5593,7 @@ class Resource(BaseDocument):
             SELECT
             {const.SQL_RESOURCE_STATUS_SELECTOR} AS status
             FROM resource_persistent_state AS rps
-            WHERE rps.environment=$1 AND rps.resource_id=$2 AND NOT rps.is_orphan
+            WHERE rps.environment=$1 AND rps.resource_id=$2 AND rps.orphaned_at IS NULL
             """
         results = await cls.select_query(query, [env, rid], no_obj=True)
         if not results:
@@ -6204,7 +6204,7 @@ class Resource(BaseDocument):
                 END AS compliance,
                 COUNT(*) AS row_count
             FROM resource_persistent_state
-            WHERE environment=$1 AND NOT is_orphan
+            WHERE environment=$1 AND orphaned_at IS NULL
             GROUP BY is_deploying, blocked, last_handler_run, compliance
         ),
         total AS (
@@ -6262,7 +6262,7 @@ class Resource(BaseDocument):
         SELECT rps.resource_id as resource_id,
             {const.SQL_RESOURCE_STATUS_SELECTOR} AS status
         FROM resource_persistent_state as rps
-        WHERE rps.environment=$1 AND NOT rps.is_orphan
+        WHERE rps.environment=$1 AND rps.orphaned_at IS NULL
         """
 
         query = f"""

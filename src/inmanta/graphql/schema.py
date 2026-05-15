@@ -32,7 +32,7 @@ from inmanta.deploy import state
 from inmanta.server.services.compilerservice import CompilerService
 from sqlakeyset import Marker, unserialize_bookmark
 from sqlakeyset.asyncio import select_page
-from sqlalchemy import Boolean, Select, UnaryExpression, and_, asc, case, desc, func, not_, select
+from sqlalchemy import Boolean, Select, UnaryExpression, and_, asc, desc, func, not_, select
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapper
 from strawberry import relay, scalars
@@ -737,7 +737,11 @@ class ResourceFilter(StrawberryFilter):
         if self.is_deploying is not None and self.is_deploying is not strawberry.UNSET:
             stmt = stmt.filter(models.ResourcePersistentState.is_deploying == self.is_deploying)
         if self.is_orphan is not None and self.is_orphan is not strawberry.UNSET:
-            stmt = stmt.filter(models.ResourcePersistentState.is_orphan == self.is_orphan)
+            stmt = stmt.filter(
+                models.ResourcePersistentState.orphaned_at.is_(None)
+                if self.is_orphan
+                else models.ResourcePersistentState.orphaned_at.is_not(None)
+            )
         return stmt
 
 
@@ -996,62 +1000,63 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
             )
 
             if include_orphans:
+                pass
                 # CTE that checks if a resource is orphaned or not and returns the appropriate version
                 # - If it is not orphaned, return the resource in the latest released version
                 # - If it is orphaned, return the resource in the latest version that it was present in.
-                included_orphans_cte = (
-                    select(
-                        models.ResourcePersistentState.environment,
-                        models.ResourcePersistentState.resource_id,
-                        case(
-                            # Simple case where we are dealing with non-orphans
-                            (
-                                not_(models.ResourcePersistentState.is_orphan),
-                                select(latest_scheduled_version_cte.c.version).scalar_subquery(),
-                            ),
-                            else_=select(func.max(models.t_resource_set_configuration_model.c.model))
-                            .join(
-                                models.Resource,
-                                and_(
-                                    models.Resource.environment == models.t_resource_set_configuration_model.c.environment,
-                                    models.Resource.resource_set == models.t_resource_set_configuration_model.c.resource_set,
-                                ),
-                            )
-                            .join(
-                                models.Configurationmodel,
-                                and_(
-                                    models.t_resource_set_configuration_model.c.environment
-                                    == models.Configurationmodel.environment,
-                                    models.t_resource_set_configuration_model.c.model == models.Configurationmodel.version,
-                                ),
-                            )
-                            .where(
-                                models.Resource.environment == models.ResourcePersistentState.environment,
-                                models.Resource.resource_id == models.ResourcePersistentState.resource_id,
-                                models.Configurationmodel.released.is_(True),
-                            )
-                            .scalar_subquery(),
-                        ).label("version"),
-                    )
-                    .where(
-                        models.ResourcePersistentState.environment == filter.environment,
-                    )
-                    .cte()
-                )
-                stmt = stmt.join(
-                    models.t_resource_set_configuration_model,
-                    and_(
-                        models.t_resource_set_configuration_model.c.environment == models.Resource.environment,
-                        models.t_resource_set_configuration_model.c.resource_set == models.Resource.resource_set,
-                    ),
-                ).join(
-                    included_orphans_cte,
-                    and_(
-                        models.Resource.environment == included_orphans_cte.c.environment,
-                        models.Resource.resource_id == included_orphans_cte.c.resource_id,
-                        models.t_resource_set_configuration_model.c.model == included_orphans_cte.c.version,
-                    ),
-                )
+                # included_orphans_cte = (
+                #     select(
+                #         models.ResourcePersistentState.environment,
+                #         models.ResourcePersistentState.resource_id,
+                #         case(
+                #             # Simple case where we are dealing with non-orphans
+                #             (
+                #                 not_(models.ResourcePersistentState.is_orphan),
+                #                 select(latest_scheduled_version_cte.c.version).scalar_subquery(),
+                #             ),
+                #             else_=select(func.max(models.t_resource_set_configuration_model.c.model))
+                #             .join(
+                #                 models.Resource,
+                #                 and_(
+                #                     models.Resource.environment == models.t_resource_set_configuration_model.c.environment,
+                #                     models.Resource.resource_set == models.t_resource_set_configuration_model.c.resource_set,
+                #                 ),
+                #             )
+                #             .join(
+                #                 models.Configurationmodel,
+                #                 and_(
+                #                     models.t_resource_set_configuration_model.c.environment
+                #                     == models.Configurationmodel.environment,
+                #                     models.t_resource_set_configuration_model.c.model == models.Configurationmodel.version,
+                #                 ),
+                #             )
+                #             .where(
+                #                 models.Resource.environment == models.ResourcePersistentState.environment,
+                #                 models.Resource.resource_id == models.ResourcePersistentState.resource_id,
+                #                 models.Configurationmodel.released.is_(True),
+                #             )
+                #             .scalar_subquery(),
+                #         ).label("version"),
+                #     )
+                #     .where(
+                #         models.ResourcePersistentState.environment == filter.environment,
+                #     )
+                #     .cte()
+                # )
+                # stmt = stmt.join(
+                #     models.t_resource_set_configuration_model,
+                #     and_(
+                #         models.t_resource_set_configuration_model.c.environment == models.Resource.environment,
+                #         models.t_resource_set_configuration_model.c.resource_set == models.Resource.resource_set,
+                #     ),
+                # ).join(
+                #     included_orphans_cte,
+                #     and_(
+                #         models.Resource.environment == included_orphans_cte.c.environment,
+                #         models.Resource.resource_id == included_orphans_cte.c.resource_id,
+                #         models.t_resource_set_configuration_model.c.model == included_orphans_cte.c.version,
+                #     ),
+                # )
             else:
                 stmt = stmt.join(
                     models.t_resource_set_configuration_model,
