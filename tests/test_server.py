@@ -23,7 +23,7 @@ import json
 import logging
 import os
 import uuid
-from collections.abc import Awaitable
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta, timezone
 from functools import partial
 
@@ -51,7 +51,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 @pytest.fixture
-async def postgresql_version_from_db(postgresql_client) -> Awaitable[PostgreSQLVersion]:
+async def postgresql_version_from_db(postgresql_client) -> AsyncIterator[PostgreSQLVersion]:
     yield await PostgreSQLVersion.from_database(postgresql_client)
 
 
@@ -812,13 +812,6 @@ async def test_bootloader_connect_running_db(
     await check_db_schema(check_empty=True)
 
     def _check_database_connectivity_logs():
-        log_contains(
-            caplog,
-            "inmanta.server.services.databaseservice",
-            logging.INFO,
-            "Checking database before server start...",
-        )
-
         if db_wait_time == "0":
             # If db_wait_time is "0", the wait_for_db method is not called,
             # hence "Successfully connected to the database." log message will not appear.

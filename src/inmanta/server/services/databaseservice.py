@@ -399,7 +399,7 @@ class DatabaseStatusChecker:
                 LOGGER.info("Waiting for database to be up.", exc_info=True)
             # Check if the maximum wait time has been exceeded
             if 0 < db_wait_time < asyncio.get_event_loop().time() - start_time:
-                LOGGER.error("Timeout: database server not up after %d seconds." % db_wait_time)
+                LOGGER.error("Timeout: database server not up after %d seconds.", db_wait_time)
                 raise ServerStartFailure("Timeout: database server not up after %d seconds." % db_wait_time)
             # Sleep for a second before retrying
             await asyncio.sleep(1)
@@ -506,5 +506,3 @@ class DatabaseStatusChecker:
                 "of the cluster before restarting the Inmanta server (More info in the 'HA setup' section of the "
                 "documentation)."
             )
-
-        LOGGER.info("Checking database before server start...")
