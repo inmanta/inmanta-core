@@ -158,7 +158,7 @@ def get_compliance_status(
     current_intent_attribute_hash: str | None,
     last_handler_run_compliant: bool | None,
 ) -> Compliance | None:
-    if orphaned_at is None:
+    if orphaned_at is not None:
         return None
     elif is_undefined:
         return Compliance.UNDEFINED

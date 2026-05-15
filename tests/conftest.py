@@ -3061,7 +3061,7 @@ async def mixed_resource_generator(
                     new_rids = {Id.parse_id(res["resource_id"]).resource_str() for res in resources}
                     orphans = first_iteration_resources[agent] - new_rids
                     await dummy_scheduler.state_update_manager.mark_as_orphan(
-                        environment=environment, resource_ids={rid: version - 1 for rid in orphans}
+                        environment=environment, orphaned_resources={rid: version - 1 for rid in orphans}
                     )
 
     yield _mixed_resource_generator

@@ -789,6 +789,21 @@ class ResourcePersistentState(Base):
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="resource_persistent_state")
 
     @hybrid_property
+    def is_orphan(self) -> bool:
+        """
+        Is this resource orphaned?
+        """
+        return self.orphaned_at is not None
+
+    @is_orphan.inplace.expression
+    @classmethod
+    def _is_orphan_expression(cls) -> Case[Any]:
+        return case(
+            (cls.orphaned_at.is_not(None), True),
+            else_=False,
+        )
+
+    @hybrid_property
     def compliance(self) -> state.Compliance | None:
         """
         Compliance status of this resource
