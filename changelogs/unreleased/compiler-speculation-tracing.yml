@@ -1,0 +1,3 @@
+description: Add opt-in speculation tracing to the compiler scheduler (INMANTA_SPECULATION_LOG)
+change-type: minor
+destination-branches: [master, iso9]
