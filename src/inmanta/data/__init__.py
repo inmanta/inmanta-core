@@ -4730,7 +4730,7 @@ class ResourcePersistentState(BaseDocument):
     :param last_success: The start time of the last handler run that completed without failure
     :param last_produced_events: The end time of the last handler run where an effective change was produced
     :param is_undefined: Whether the desired state for this resource is undefined
-    :param orphaned_after: The last version where this resource was seen
+    :param orphaned_after: The last version where this resource was seen before being orphaned
     :param is_deploying: Whether this resource is currently being run by the handler
     :param last_handler_run: The result of the last handler run for this resource
     :param last_handler_run_compliant: Whether the last handler run reported the resource as compliant

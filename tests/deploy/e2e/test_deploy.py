@@ -1292,10 +1292,10 @@ async def test_resource_status(resource_container, server, client, clienthelper,
         assert actual_states == expected_states
 
     resource_container.Provider.set_fail("agent1", "key2", 1)
-    version = await clienthelper.get_version()
+    first_version = await clienthelper.get_version()
     await deploy_resources(
-        version=version,
-        resources=get_resources(version),
+        version=first_version,
+        resources=get_resources(first_version),
         resource_state={
             ResourceIdStr("test::Resource[agent1,key=key1]"): const.ResourceState.available,
             ResourceIdStr("test::Resource[agent1,key=key2]"): const.ResourceState.available,
@@ -1390,7 +1390,7 @@ async def test_resource_status(resource_container, server, client, clienthelper,
         assert_resource_persistent_state(
             resource_persistent_state=result_per_resource_id[ResourceIdStr(f"test::Resource[agent1,key=key{i}]")],
             is_undefined=False,
-            orphaned_after=version - 1 if i == 1 else None,
+            orphaned_after=first_version if i == 1 else None,
             last_handler_run=HandlerResult.SUCCESSFUL,
             blocked=Blocked.NOT_BLOCKED,
             expected_compliance=None if i == 1 else Compliance.COMPLIANT,
@@ -1475,6 +1475,8 @@ async def test_resource_status(resource_container, server, client, clienthelper,
         }
     )
 
+    rps = await data.ResourcePersistentState.get_one(environment=environment, resource_id="test::Resource[agent1,key=key5]")
+    assert rps.orphaned_after == version - 1
     # Add resource 5 again
     version = await clienthelper.get_version()
     await deploy_resources(
@@ -1497,6 +1499,8 @@ async def test_resource_status(resource_container, server, client, clienthelper,
             ResourceIdStr("test::Resource[agent1,key=key5]"): ReleasedResourceState.deployed,
         }
     )
+    rps = await data.ResourcePersistentState.get_one(environment=environment, resource_id="test::Resource[agent1,key=key5]")
+    assert rps.orphaned_after is None
 
     # Add a never-before-seen resource, but delete it before the scheduler got the chance to start managing it
     version = await clienthelper.get_version()
@@ -1551,6 +1555,9 @@ async def test_resource_status(resource_container, server, client, clienthelper,
             ResourceIdStr("test::Resource[agent1,key=key6]"): ReleasedResourceState.orphaned,
         }
     )
+
+    rps = await data.ResourcePersistentState.get_one(environment=environment, resource_id="test::Resource[agent1,key=key6]")
+    assert rps.orphaned_after == version - 1
 
 
 async def test_lsm_states(resource_container, server, client, clienthelper, environment, agent):

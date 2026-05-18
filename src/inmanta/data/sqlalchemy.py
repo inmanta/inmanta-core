@@ -746,6 +746,7 @@ class ResourcePersistentState(Base):
         Index(
             "resource_persistent_state_environment_resource_id_orphaned_after", "environment", "resource_id", "orphaned_after"
         ),
+        Index("resource_persistent_state_environment_orphaned_after_index", "environment", "orphaned_after"),
         Index(
             "resource_persistent_state_environment_resource_id_value_res_idx", "environment", "resource_id_value", "resource_id"
         ),
