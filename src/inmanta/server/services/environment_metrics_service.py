@@ -446,7 +446,7 @@ class ResourceCountMetricsCollector(MetricsCollector):
                 SELECT rps.environment,
                 {const.SQL_RESOURCE_STATUS_SELECTOR} AS status
                 FROM public.resource_persistent_state AS rps
-                WHERE NOT rps.is_orphan
+                WHERE rps.orphaned_after IS NULL
             ),
             nonzero_statuses AS (
                 SELECT environment, status, COUNT(*) AS count

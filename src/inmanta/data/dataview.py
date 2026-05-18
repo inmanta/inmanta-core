@@ -564,7 +564,7 @@ class ResourceView(DataView[ResourceStatusOrder, model.LatestReleasedResource]):
                         ON r.environment=rscm.environment
                         AND r.resource_set=rscm.resource_set
                         AND rscm.model=(SELECT version FROM latest_version)
-                    WHERE rps.environment=$1 AND NOT rps.is_orphan
+                    WHERE rps.environment=$1 AND rps.orphaned_after IS NULL
                 )
         """
         else:
@@ -578,7 +578,7 @@ class ResourceView(DataView[ResourceStatusOrder, model.LatestReleasedResource]):
                         rps.*,
                         CASE
                             -- try the cheap, trivial option first because the lookup has a big performance impact
-                            WHEN NOT rps.is_orphan
+                            WHEN rps.orphaned_after IS NULL
                                 THEN (SELECT version FROM latest_version)
                             -- only if the resource does not exist in the latest released version, search for the latest
                             -- version it does exist in
