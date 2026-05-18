@@ -1,0 +1,6 @@
+change-type: patch
+description: Bump types-python-dateutil from 2.9.0.20260508 to 2.9.0.20260518
+destination-branches:
+- master
+- iso9
+sections: {}
