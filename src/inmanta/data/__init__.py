@@ -3476,24 +3476,17 @@ class Agent(BaseDocument):
                 result[agent_name] = None
         return result
 
-    def get_status(self, has_active_session: bool = False) -> AgentStatus:
-        # TODO: Consider removing this method entirely. The authoritative agent status is now computed
-        # by AgentView.get_base_query() via a SQL EXISTS on SchedulerSession. This method cannot
-        # accurately determine connectivity without a database query, and callers that need accurate
-        # status should use AgentView or check SchedulerSession directly.
+    def get_status(self, *, has_active_session: bool) -> AgentStatus:
+        """Compute the agent status given live-session knowledge.
+
+        ``has_active_session`` must be supplied by the caller (typically by querying
+        :class:`SchedulerSession`). The authoritative version-of-truth for agent status
+        on the API surface is :class:`AgentView`, which performs the equivalent check in
+        SQL — prefer it when the data is paged or filtered.
+        """
         if self.paused:
             return AgentStatus.paused
         return AgentStatus.up if has_active_session else AgentStatus.down
-
-    def to_dict(self) -> JsonType:
-        base = BaseDocument.to_dict(self)
-
-        # Note: get_status() without has_active_session always reports "down" for non-paused agents.
-        # This is a known limitation: to_dict() is sync and cannot query SchedulerSession.
-        # Callers that need accurate status should use AgentView or get_statuses() instead.
-        base["state"] = self.get_status().value
-
-        return base
 
     @classmethod
     async def get(

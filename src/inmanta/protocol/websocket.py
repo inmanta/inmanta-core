@@ -66,6 +66,16 @@ class Session:
         hostname: str,
         websocket_protocol: "WebsocketFrameDecoder",
     ) -> None:
+        """
+        :param environment_id: The environment this session belongs to.
+        :param session_name: A name that uniquely identifies the session within the environment
+            (e.g. ``"agent"`` for the scheduler agent).
+        :param hostname: The hostname of the machine on the other end of the connection. Used
+            for diagnostics and logging.
+        :param websocket_protocol: The WebsocketFrameDecoder this session uses as its transport.
+            All RPC calls made via :meth:`get_client` / :meth:`get_typed_client` are serialized
+            and dispatched through this decoder.
+        """
         self._environment_id = environment_id
         self._session_name = session_name
         self._hostname = hostname
@@ -340,6 +350,11 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
 
     Subclasses must implement `write_message` to provide the actual transport. Override
     `on_open_session` and `on_close_session` for session lifecycle hooks.
+
+    Before the decoder can process incoming messages, :meth:`set_call_targets` and
+    :meth:`set_authnz_context` must be called to wire in the RPC handlers and the
+    authentication/authorization context, respectively. Constructing a decoder without
+    invoking both will result in `None` lookups when an `RPC_CALL` arrives.
     """
 
     def __init__(self) -> None:

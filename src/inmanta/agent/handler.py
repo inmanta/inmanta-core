@@ -762,7 +762,10 @@ class HandlerAPI(ABC, Generic[TResource]):
         :return: A client that is associated with the session of the agent that executes this handler.
         """
         if self._client is None:
-            # TODO: use the correct client
+            # Handlers currently get a REST client that re-authenticates against the server.
+            # Once handlers run inside the executor process with a known websocket session,
+            # this should switch to the session-bound client owned by the agent so that
+            # outbound calls reuse the existing websocket transport.
             self._client = protocol.Client("agent")
         return self._client
 

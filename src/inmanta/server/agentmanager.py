@@ -569,10 +569,10 @@ class AgentManager(ServerSlice, websocket.SessionListener):
 
     async def expire_sessions_for_environment(self, env_id: uuid.UUID) -> None:
         """
-        Expire all sessions for any of the requested agent endpoints.
+        Close the scheduler session for the given environment, if any.
         """
         async with self.session_lock:
-            session_to_expire = self.get_session_for(env_id)
+            session_to_expire = self.scheduler_for_env.get(env_id)
             if session_to_expire is not None:
                 await session_to_expire.close_connection()
 
@@ -581,10 +581,6 @@ class AgentManager(ServerSlice, websocket.SessionListener):
         Return true iff all the given agents are in the up or the paused state.
         """
         return tid in self.scheduler_for_env
-
-    async def expire_all_sessions_for_environment(self, env_id: uuid.UUID) -> None:
-        async with self.session_lock:
-            await asyncio.gather(*[s.close_connection() for s in self.sessions.values() if s.environment == env_id])
 
     async def expire_all_sessions(self) -> None:
         async with self.session_lock:
@@ -910,8 +906,8 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
             if delete_venv:
                 self._remove_venv_for_agent_in_env(env.id)
 
-            LOGGER.debug("Expiring all sessions for %s", env.id)
-            await self._agent_manager.expire_all_sessions_for_environment(env.id)
+            LOGGER.debug("Expiring session for %s", env.id)
+            await self._agent_manager.expire_sessions_for_environment(env.id)
 
     async def _stop_scheduler(
         self,
@@ -997,7 +993,6 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
             #       process, this one brings it back because it reads the agent as unpaused)
             raise Exception("_ensure_scheduler should not be called in a transaction context")
 
-        autostart_scheduler = {const.AGENT_SCHEDULER_ID}
         async with data.Agent.get_connection(connection) as connection:
             async with self.agent_lock:
                 # silently ignore requests if this environment is halted
@@ -1007,21 +1002,18 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
                 if refreshed_env.halted:
                     return False
 
-                are_active = await self._agent_manager.is_scheduler_active(env)
-                if are_active:
-                    # do not start a new agent process if the agents are already active, regardless of whether their session
-                    # is with an autostarted process or not.
+                if await self._agent_manager.is_scheduler_active(env):
+                    # do not start a new agent process if the scheduler is already active.
                     return False
 
                 start_new_process: bool
                 if env not in self._agent_procs or not self._agent_procs[env].is_running():
-                    # Start new process if none is currently running for this environment.
-                    LOGGER.info("%s matches agents managed by server, ensuring they are started.", autostart_scheduler)
+                    LOGGER.info("Ensuring scheduler is started for environment %s.", env)
                     start_new_process = True
                 elif restart:
                     LOGGER.info(
-                        "%s matches agents managed by server, forcing restart: stopping process with PID %s.",
-                        autostart_scheduler,
+                        "Forcing scheduler restart for environment %s: stopping process with PID %s.",
+                        env,
                         self._agent_procs[env].process,
                     )
                     await self._stop_scheduler(refreshed_env)
@@ -1032,11 +1024,11 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
                 if start_new_process:
                     self._agent_procs[env] = await self.__do_start_agent(refreshed_env, connection=connection)
 
-                # Wait for all agents to start
+                # Wait for the scheduler to come up
                 try:
-                    await self._wait_for_agents(refreshed_env, autostart_scheduler, connection=connection)
+                    await self._wait_for_agents(refreshed_env, {const.AGENT_SCHEDULER_ID}, connection=connection)
                 except asyncio.TimeoutError:
-                    LOGGER.warning("Not all agent instances started successfully")
+                    LOGGER.warning("Scheduler did not become active before the timeout expired")
                 return start_new_process
 
     async def __do_start_agent(

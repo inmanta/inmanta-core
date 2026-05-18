@@ -682,7 +682,7 @@ async def execute_call(
 
         return await arguments.process_return(result)
     except pydantic.ValidationError:
-        LOGGER.exception(f"The handler {config.handler} caused a validation error in a data model (pydantic).")
+        LOGGER.exception("The handler %s caused a validation error in a data model (pydantic).", config.handler)
         raise exceptions.ServerError("data validation error.")
 
     except exceptions.BaseHttpException:

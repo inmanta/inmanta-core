@@ -395,7 +395,10 @@ server_ws_ping_timeout = Option(
     "server",
     "ws-ping-timeout",
     2,
-    "Time in seconds to wait for a WebSocket pong response before closing the connection. " "Must not exceed ws-ping-interval.",
+    (
+        "Time in seconds to wait for a WebSocket pong response before closing the connection."
+        " Must not exceed :inmanta.config:option:`server.ws-ping-interval`."
+    ),
     is_lower_bounded_int(1),
 )
 

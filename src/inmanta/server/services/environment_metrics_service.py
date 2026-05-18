@@ -36,6 +36,7 @@ from inmanta.data import (
     Environment,
     EnvironmentMetricsGauge,
     EnvironmentMetricsTimer,
+    SchedulerSession,
 )
 from inmanta.data.model import EnvironmentMetricsResult, EnvSettingType
 from inmanta.protocol import methods_v2
@@ -495,9 +496,9 @@ WITH agent_counts AS (
                 THEN 'paused'
             WHEN EXISTS(
                 SELECT 1
-                FROM {Agent.table_name()} AS a_inner
-                WHERE a_inner.environment=a.environment
-                    AND a_inner.name=$1
+                FROM {SchedulerSession.table_name()} AS s
+                WHERE s.environment=a.environment
+                    AND s.expired IS NULL
             )
                 THEN 'up'
                 ELSE 'down'

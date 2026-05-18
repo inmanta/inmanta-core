@@ -412,6 +412,20 @@ class RESTServer(RESTBase, AuthnzInterface):
     def add_session_listener(self, session_listener: websocket.SessionListener) -> None:
         self.listeners.append(session_listener)
 
+    async def _notify_session_opened(self, session: websocket.Session) -> None:
+        for listener in self.listeners:
+            try:
+                await listener.session_opened(session)
+            except Exception:
+                LOGGER.exception("Session listener %s failed to handle session_opened for %s", listener, session)
+
+    async def _notify_session_closed(self, session: websocket.Session) -> None:
+        for listener in self.listeners:
+            try:
+                await listener.session_closed(session)
+            except Exception:
+                LOGGER.exception("Session listener %s failed to handle session_closed for %s", listener, session)
+
     async def register_session(self, session: websocket.Session) -> None:
         """Register a session with the server"""
         if session.session_key in self._sessions:
@@ -421,15 +435,13 @@ class RESTServer(RESTBase, AuthnzInterface):
             # websocket. Because we remove from _sessions first, the close_session() ->
             # on_close_session() -> notify_close_session() path returns early (identity check
             # fails), so we notify listeners explicitly below.
-            del self._sessions[session.session_key]
+            self._sessions.pop(session.session_key, None)
             await old_session.close_connection()
-            for listener in self.listeners:
-                await listener.session_closed(old_session)
+            await self._notify_session_closed(old_session)
 
         self._sessions[session.session_key] = session
 
-        for listener in self.listeners:
-            await listener.session_opened(session)
+        await self._notify_session_opened(session)
 
     async def notify_close_session(self, session: websocket.Session) -> None:
         # Check identity, not just key existence: a new session with the same key
@@ -437,10 +449,9 @@ class RESTServer(RESTBase, AuthnzInterface):
         if self._sessions.get(session.session_key) is not session:
             return
 
-        del self._sessions[session.session_key]
+        self._sessions.pop(session.session_key, None)
 
-        for listener in self.listeners:
-            await listener.session_closed(session)
+        await self._notify_session_closed(session)
 
     def get_session(self, environment_id: uuid.UUID, session_name: str) -> websocket.Session:
         """Get the requested session"""

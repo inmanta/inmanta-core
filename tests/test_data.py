@@ -588,22 +588,19 @@ async def test_agent(init_dataclasses_and_load_schema):
         assert retrieved_agent.name == agent.name
 
     # Without an active session, non-paused agents report as down
-    assert agent1.get_status() == AgentStatus.down
-    assert agent2.get_status() == AgentStatus.down
-    assert agent3.get_status() == AgentStatus.paused
+    assert agent1.get_status(has_active_session=False) == AgentStatus.down
+    assert agent2.get_status(has_active_session=False) == AgentStatus.down
+    assert agent3.get_status(has_active_session=False) == AgentStatus.paused
 
     # With an active session, non-paused agents report as up
     assert agent1.get_status(has_active_session=True) == AgentStatus.up
     assert agent3.get_status(has_active_session=True) == AgentStatus.paused
 
-    for agent in [agent1, agent2, agent3]:
-        assert AgentStatus(agent.to_dict()["state"]) == agent.get_status()
-
     await agent1.update_fields(paused=True)
-    assert agent1.get_status() == AgentStatus.paused
+    assert agent1.get_status(has_active_session=True) == AgentStatus.paused
 
     await agent3.update_fields(paused=False)
-    assert agent3.get_status() == AgentStatus.down
+    assert agent3.get_status(has_active_session=False) == AgentStatus.down
 
 
 async def test_pause_agent_endpoint_set(environment):

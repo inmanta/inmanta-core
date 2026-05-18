@@ -797,6 +797,49 @@ async def test_agent_count_metric(clienthelper, client, server):
     assert sum(abs(gauge.count) for gauge in result_gauge) == 3
 
 
+async def test_agent_count_metric_up_vs_down(client, server):
+    """
+    Verify that AgentCountMetricsCollector reports 'up' for unpaused agents iff a live
+    SchedulerSession exists for the environment, and 'down' otherwise.
+    """
+    project = data.Project(name="test")
+    await project.insert()
+
+    env_up = data.Environment(name="env_up", project=project.id)
+    await env_up.insert()
+    env_down = data.Environment(name="env_down", project=project.id)
+    await env_down.insert()
+
+    # One unpaused agent per env.
+    await data.Agent(environment=env_up.id, name="agent1", paused=False).insert()
+    await data.Agent(environment=env_down.id, name="agent2", paused=False).insert()
+
+    # env_up has a live scheduler session; env_down has an expired one.
+    now = datetime.now().astimezone()
+    await data.SchedulerSession.register(env=env_up.id, hostname="host_up", sid=uuid.uuid4(), now=now)
+    expired_sid = uuid.uuid4()
+    await data.SchedulerSession.register(env=env_down.id, hostname="host_down", sid=expired_sid, now=now)
+    async with data.SchedulerSession.get_connection() as conn:
+        await data.SchedulerSession.expire_process(expired_sid, now, conn)
+
+    metrics_service = EnvironmentMetricsService()
+    metrics_service.register_metric_collector(metrics_collector=AgentCountMetricsCollector())
+
+    await metrics_service.flush_metrics()
+    result_gauge = await data.EnvironmentMetricsGauge.get_list()
+    by_env: dict[uuid.UUID, dict[str, int]] = defaultdict(dict)
+    for gauge in result_gauge:
+        by_env[gauge.environment][gauge.category] = gauge.count
+
+    assert by_env[env_up.id]["up"] == 1
+    assert by_env[env_up.id]["down"] == 0
+    assert by_env[env_up.id]["paused"] == 0
+
+    assert by_env[env_down.id]["up"] == 0
+    assert by_env[env_down.id]["down"] == 1
+    assert by_env[env_down.id]["paused"] == 0
+
+
 async def test_agent_count_metric_empty_datapoint(client, server):
     project = data.Project(name="test")
     await project.insert()

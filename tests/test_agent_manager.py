@@ -169,12 +169,10 @@ async def test_api(init_dataclasses_and_load_schema):
     am.add_background_task = futures
     am.running = True
 
-    # one session
+    # one session per env: the multi-endpoint session model is gone, so we cannot register a
+    # second session for env.id any more (it would be rejected by _register_session).
     ts1 = MockSession(env.id, "agent1", "localhost")
     await am._register_session(ts1, datetime.datetime.now())
-    # # second session: no allow anymore
-    # ts2 = MockSession(uuid4(), env.id, ["agent3", "agent2"], "ts2")
-    # await am._register_session(ts2,  datetime.datetime.now())
     # third session
     ts3 = MockSession(env3.id, "agentx", "localhost")
     await am._register_session(ts3, datetime.datetime.now())
