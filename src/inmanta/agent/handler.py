@@ -757,15 +757,14 @@ class HandlerAPI(ABC, Generic[TResource]):
 
     def get_client(self) -> protocol.Client:
         """
-        Get the client instance that identifies itself with the agent session.
+        Get a REST client for handler-initiated calls to the server.
 
-        :return: A client that is associated with the session of the agent that executes this handler.
+        Handlers run in executor processes that do not share the scheduler's websocket
+        connection, so this is a standalone REST client rather than a session-bound one.
+
+        :return: A client that authenticates as the "agent" endpoint.
         """
         if self._client is None:
-            # Handlers currently get a REST client that re-authenticates against the server.
-            # Once handlers run inside the executor process with a known websocket session,
-            # this should switch to the session-bound client owned by the agent so that
-            # outbound calls reuse the existing websocket transport.
             self._client = protocol.Client("agent")
         return self._client
 
