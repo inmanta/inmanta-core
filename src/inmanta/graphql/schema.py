@@ -738,9 +738,9 @@ class ResourceFilter(StrawberryFilter):
             stmt = stmt.filter(models.ResourcePersistentState.is_deploying == self.is_deploying)
         if self.is_orphan is not None and self.is_orphan is not strawberry.UNSET:
             if self.is_orphan:
-                stmt = stmt.filter(models.ResourcePersistentState.orphaned_at.is_not(None))
+                stmt = stmt.filter(models.ResourcePersistentState.orphaned_after.is_not(None))
             else:
-                stmt = stmt.filter(models.ResourcePersistentState.orphaned_at.is_(None))
+                stmt = stmt.filter(models.ResourcePersistentState.orphaned_after.is_(None))
         return stmt
 
 
@@ -1007,7 +1007,7 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
                         models.ResourcePersistentState.environment,
                         models.ResourcePersistentState.resource_id,
                         func.coalesce(
-                            models.ResourcePersistentState.orphaned_at,
+                            models.ResourcePersistentState.orphaned_after,
                             latest_scheduled_version_cte.c.version,
                         ).label("version"),
                     )

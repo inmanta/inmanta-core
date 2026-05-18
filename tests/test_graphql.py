@@ -771,7 +771,7 @@ async def test_query_resources(server, client, environment, setup_database, mixe
     # Quick way of simulating a non-compliant report
     # It has to be non-orphan otherwise the compliance returned will be None
     rps = await data.ResourcePersistentState.get_one(
-        environment=environment, last_handler_run=state.HandlerResult.SUCCESSFUL, orphaned_at=None
+        environment=environment, last_handler_run=state.HandlerResult.SUCCESSFUL, orphaned_after=None
     )
     assert rps
     await rps.update_fields(last_handler_run_compliant=False)
@@ -1297,27 +1297,3 @@ async def test_missing_query_exception(server, environment, client):
     assert result.result["data"]["data"] is None
     assert len(result.result["data"]["errors"]) == 1
     assert result.result["data"]["errors"][0] == 'Request data is missing a "query" value'
-
-
-(
-    {"state": {"blocked": "BLOCKED", "compliance": "HAS_UPDATE"}},
-    {
-        "resourceId": "test::XResource0[agent0,sub=1]",
-        "agent": "agent0",
-        "resourceIdValue": "1",
-        "resourceType": "test::XResource0",
-        "attributes": {"purged": False, "requires": ["test::XResource0[agent0,sub=0]"], "send_event": False, "my_attribute": 1},
-        "purged": False,
-        "state": {
-            "isOrphan": False,
-            "isUndefined": False,
-            "blocked": "BLOCKED",
-            "isDeploying": False,
-            "lastHandlerRun": "NEW",
-            "lastHandlerRunAt": None,
-            "compliance": None,
-            "currentIntentAttributeHash": "ad6941400d3510d4b536b1091e7a0921",
-        },
-        "requiresLength": 1,
-    },
-)

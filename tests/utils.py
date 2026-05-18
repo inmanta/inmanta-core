@@ -1100,7 +1100,7 @@ async def is_agent_done(scheduler: ResourceScheduler, agent_name: str) -> bool:
 def assert_resource_persistent_state(
     resource_persistent_state: data.ResourcePersistentState,
     is_undefined: bool,
-    orphaned_at: int | None,
+    orphaned_after: int | None,
     last_handler_run: state.HandlerResult,
     blocked: state.Blocked,
     expected_compliance: Optional[state.Compliance],
@@ -1113,8 +1113,8 @@ def assert_resource_persistent_state(
         resource_persistent_state.is_undefined == is_undefined
     ), f"{resource_persistent_state.resource_id} ({resource_persistent_state.is_undefined} != {is_undefined})"
     assert (
-        resource_persistent_state.orphaned_at == orphaned_at
-    ), f"{resource_persistent_state.resource_id} ({resource_persistent_state.orphaned_at} != {orphaned_at})"
+        resource_persistent_state.orphaned_after == orphaned_after
+    ), f"{resource_persistent_state.resource_id} ({resource_persistent_state.orphaned_after} != {orphaned_after})"
     assert (
         resource_persistent_state.last_handler_run is last_handler_run
     ), f"{resource_persistent_state.resource_id} ({resource_persistent_state.last_handler_run} != {last_handler_run})"

@@ -387,7 +387,7 @@ class ToDbUpdateManager(StateUpdateManager):
                 r.resource_id
         )
         UPDATE {data.ResourcePersistentState.table_name()} AS rps
-        SET orphaned_at=lrv.max_version
+        SET orphaned_after=lrv.max_version
         FROM latest_resource_version AS lrv
         WHERE
             rps.environment=$1

@@ -21,13 +21,13 @@ from asyncpg import Connection
 
 async def update(connection: Connection) -> None:
     """
-    Add the orphaned_at field to the rps table, populate it and drop is_orphan
+    Add the orphaned_after field to the rps table, populate it and drop is_orphan
     """
     schema = """
-     ALTER TABLE public.resource_persistent_state ADD COLUMN orphaned_at integer;
+     ALTER TABLE public.resource_persistent_state ADD COLUMN orphaned_after integer;
 
      UPDATE public.resource_persistent_state AS rps
-     SET orphaned_at=(
+     SET orphaned_after=(
         SELECT MAX(rscm.model)
         FROM public.resource AS r
         INNER JOIN public.resource_set_configuration_model AS rscm
@@ -37,11 +37,11 @@ async def update(connection: Connection) -> None:
         WHERE r.environment=rps.environment AND r.resource_id=rps.resource_id AND m.released
     ) WHERE NOT rps.is_orphan;
 
-    CREATE INDEX resource_persistent_state_environment_orphaned_at_index ON public.resource_persistent_state
-        USING btree (environment, orphaned_at) WHERE orphaned_at IS NULL;
+    CREATE INDEX resource_persistent_state_environment_orphaned_after_index ON public.resource_persistent_state
+        USING btree (environment, orphaned_after) WHERE orphaned_after IS NULL;
 
-    CREATE INDEX resource_persistent_state_environment_resource_id_orphaned_at_index ON public.resource_persistent_state
-        USING btree (environment, resource_id, orphaned_at);
+    CREATE INDEX resource_persistent_state_environment_resource_id_orphaned_after_index ON public.resource_persistent_state
+        USING btree (environment, resource_id, orphaned_after);
 
     DROP INDEX resource_persistent_state_environment_is_orphan_index;
     DROP INDEX resource_persistent_state_environment_resource_id_is_orphan;

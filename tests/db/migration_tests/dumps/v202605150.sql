@@ -478,7 +478,7 @@ CREATE TABLE public.resource_persistent_state (
     created timestamp with time zone NOT NULL,
     last_handler_run_compliant boolean,
     non_compliant_diff uuid,
-    orphaned_at integer
+    orphaned_after integer
 );
 
 
@@ -944,7 +944,7 @@ dbf00bea-727e-4e2d-9b0e-7690658b9483	5db7c08f-cfcf-4c7f-b17b-26285acb325e	test::
 -- Data for Name: resource_persistent_state; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.resource_persistent_state (environment, resource_id, last_handler_run_at, last_success, last_produced_events, last_deployed_attribute_hash, last_deployed_version, last_non_deploying_status, resource_type, agent, resource_id_value, current_intent_attribute_hash, is_undefined, last_handler_run, blocked, is_deploying, created, last_handler_run_compliant, non_compliant_diff, orphaned_at) FROM stdin;
+COPY public.resource_persistent_state (environment, resource_id, last_handler_run_at, last_success, last_produced_events, last_deployed_attribute_hash, last_deployed_version, last_non_deploying_status, resource_type, agent, resource_id_value, current_intent_attribute_hash, is_undefined, last_handler_run, blocked, is_deploying, created, last_handler_run_compliant, non_compliant_diff, orphaned_after) FROM stdin;
 5db7c08f-cfcf-4c7f-b17b-26285acb325e	test::Resource[agent1,key=key9]	2026-05-15 14:28:58.483319+01	2026-05-15 14:28:58.478172+01	2026-05-15 14:28:58.483319+01	a2101e55beec503a0c2501581a60b24e	2	deployed	test::Resource	agent1	key9	a2101e55beec503a0c2501581a60b24e	f	SUCCESSFUL	NOT_BLOCKED	f	2026-05-15 14:28:58.440236+01	t	\N	\N
 5db7c08f-cfcf-4c7f-b17b-26285acb325e	test::Resource[agent1,key=key3]	2026-05-15 14:28:58.302961+01	\N	2026-05-15 14:28:58.302961+01	c455b56fd58fef5ebaa9bb23407c7776	1	skipped	test::Resource	agent1	key3	c455b56fd58fef5ebaa9bb23407c7776	f	SKIPPED	NOT_BLOCKED	f	2026-05-15 14:28:58.270774+01	f	\N	\N
 164b334c-91f3-4d11-918c-29f8852a75cd	test::Resource[agent3,key=key3]	2026-05-15 14:28:57.834385+01	\N	2026-05-15 14:28:57.834385+01	15902cc7b9aabf14eb50594bc15db266	7	unavailable	test::Resource	agent3	key3	15902cc7b9aabf14eb50594bc15db266	f	FAILED	NOT_BLOCKED	f	2026-05-15 14:28:57.810715+01	f	\N	\N
@@ -1727,17 +1727,17 @@ CREATE INDEX resource_persistent_state_environment_agent_resource_id_idx ON publ
 
 
 --
--- Name: resource_persistent_state_environment_orphaned_at_index; Type: INDEX; Schema: public; Owner: -
+-- Name: resource_persistent_state_environment_orphaned_after_index; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX resource_persistent_state_environment_orphaned_at_index ON public.resource_persistent_state USING btree (environment, orphaned_at) WHERE (orphaned_at IS NULL);
+CREATE INDEX resource_persistent_state_environment_orphaned_after_index ON public.resource_persistent_state USING btree (environment, orphaned_after) WHERE (orphaned_after IS NULL);
 
 
 --
--- Name: resource_persistent_state_environment_resource_id_orphaned_at_i; Type: INDEX; Schema: public; Owner: -
+-- Name: resource_persistent_state_environment_resource_id_orphaned_after_i; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX resource_persistent_state_environment_resource_id_orphaned_at_i ON public.resource_persistent_state USING btree (environment, resource_id, orphaned_at);
+CREATE INDEX resource_persistent_state_environment_resource_id_orphaned_after_i ON public.resource_persistent_state USING btree (environment, resource_id, orphaned_after);
 
 
 --

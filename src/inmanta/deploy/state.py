@@ -123,7 +123,7 @@ class HandlerResult(StrEnum):
 
 @typing.overload
 def get_compliance_status(
-    orphaned_at: None,
+    orphaned_after: None,
     is_undefined: bool,
     last_deployed_attribute_hash: str | None,
     current_intent_attribute_hash: str | None,
@@ -133,7 +133,7 @@ def get_compliance_status(
 
 @typing.overload
 def get_compliance_status(
-    orphaned_at: int,
+    orphaned_after: int,
     is_undefined: bool,
     last_deployed_attribute_hash: str | None,
     current_intent_attribute_hash: str | None,
@@ -143,7 +143,7 @@ def get_compliance_status(
 
 @typing.overload
 def get_compliance_status(
-    orphaned_at: int | None,
+    orphaned_after: int | None,
     is_undefined: bool,
     last_deployed_attribute_hash: str | None,
     current_intent_attribute_hash: str | None,
@@ -152,13 +152,13 @@ def get_compliance_status(
 
 
 def get_compliance_status(
-    orphaned_at: int | None,
+    orphaned_after: int | None,
     is_undefined: bool,
     last_deployed_attribute_hash: str | None,
     current_intent_attribute_hash: str | None,
     last_handler_run_compliant: bool | None,
 ) -> Compliance | None:
-    if orphaned_at is not None:
+    if orphaned_after is not None:
         return None
     elif is_undefined:
         return Compliance.UNDEFINED
@@ -301,7 +301,7 @@ class ModelState:
                 version=last_processed_model_version,
                 projection=("resource_id", "attributes", "attribute_hash"),
                 projection_persistent=(
-                    "orphaned_at",
+                    "orphaned_after",
                     "is_undefined",
                     "current_intent_attribute_hash",
                     "last_deployed_attribute_hash",
@@ -337,7 +337,7 @@ class ModelState:
 
             compliance_status: Compliance
             last_deployed = cast(datetime.datetime, res["last_handler_run_at"])
-            if res["orphaned_at"] is not None:
+            if res["orphaned_after"] is not None:
                 # it was marked as an orphan by the scheduler when (or sometime before) it read the version we're currently
                 # processing => exclude it from the model
                 continue

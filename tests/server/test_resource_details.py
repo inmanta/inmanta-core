@@ -160,7 +160,7 @@ async def env_with_resources(server, client):
         await rps.update(
             is_undefined=is_undefined,
             blocked=blocked,
-            orphaned_at=version if version < latest_released_version[environment] else None,
+            orphaned_after=version if version < latest_released_version[environment] else None,
         )
 
         return res, rps.created
