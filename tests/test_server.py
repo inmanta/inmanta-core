@@ -23,9 +23,9 @@ import logging
 import os
 import sys
 import uuid
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta, timezone
 from functools import partial
-from typing import Awaitable
 
 import pytest
 from dateutil import parser
@@ -581,7 +581,7 @@ async def test_server_logs_address(server_config, caplog, async_finalizer):
 
 
 @pytest.fixture
-async def postgresql_version_from_db(postgresql_client) -> Awaitable[PostgreSQLVersion]:
+async def postgresql_version_from_db(postgresql_client) -> AsyncIterator[PostgreSQLVersion]:
     yield await PostgreSQLVersion.from_database(postgresql_client)
 
 
