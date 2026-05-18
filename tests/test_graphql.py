@@ -21,19 +21,23 @@ import uuid
 import pytest
 
 import inmanta.data.sqlalchemy as models
+import strawberry
 from inmanta import const, data
 from inmanta.data import model
 from inmanta.deploy import state
-from inmanta.graphql.schema import _docstring_param_cache, mapper, to_snake_case
+from inmanta.graphql.graphql import GraphQLSlice
+from inmanta.graphql.schema import ResourceFilterABC, _docstring_param_cache, mapper, to_snake_case
 from inmanta.protocol import Result
-from inmanta.server import SLICE_COMPILER
+from inmanta.server import SLICE_COMPILER, SLICE_GRAPHQL
 from inmanta.server.services.compilerservice import CompilerService
 from inmanta.util import retry_limited
+from sqlalchemy import Select
 from strawberry_sqlalchemy_mapper import StrawberrySQLAlchemyMapper
 from strawberry_sqlalchemy_mapper.mapper import _GENERATED_FIELD_KEYS_KEY
-from utils import insert_with_link_to_configuration_model, run_compile_and_wait_until_compile_is_done
+from utils import insert_with_link_to_configuration_model, log_contains, run_compile_and_wait_until_compile_is_done
 
 env_1: typing.Final[str] = "11111111-1234-5678-1234-000000000001"
+LOGGER = logging.getLogger(__name__)
 
 
 def check_correct_graphql_response(result: Result[object]) -> None:
@@ -1297,3 +1301,51 @@ async def test_missing_query_exception(server, environment, client):
     assert result.result["data"]["data"] is None
     assert len(result.result["data"]["errors"]) == 1
     assert result.result["data"]["errors"][0] == 'Request data is missing a "query" value'
+
+
+async def test_custom_resource_filter_resolvers(server, environment, client, caplog):
+    """
+    Test to see if we can register custom resource filters and that apply_filter works as intended.
+    """
+
+    @strawberry.input
+    class ExampleFilter(ResourceFilterABC):
+        my_attr: str | None = strawberry.UNSET
+        other_attr: str | None = strawberry.UNSET
+
+        def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
+            LOGGER.info("Applied filter %s %s", self.my_attr, self.other_attr)
+            return stmt
+
+    graphql_slice = server.get_slice(SLICE_GRAPHQL)
+    assert isinstance(graphql_slice, GraphQLSlice)
+    with pytest.raises(
+        Exception, match="Can't register extension filter for example because the GraphQL schema has already been generated"
+    ):
+        graphql_slice.register_extension_filter("example", ExampleFilter)
+
+    # GraphQLSlice has already started so we need to hack it to make registering possible
+    graphql_slice.schema = None
+    graphql_slice.register_extension_filter("example", ExampleFilter)
+    with pytest.raises(Exception, match="Extension example already registered."):
+        graphql_slice.register_extension_filter("example", ExampleFilter)
+    await graphql_slice.start()
+
+    query = """
+        {
+            resources ( filter: {environment: "%s" myAttr: "my_value"}
+                orderBy: [{key: "compliance" order: "asc"}]) {
+                edges {
+                    node {
+                      state{
+                        compliance
+                      }
+                    }
+                }
+            }
+        }
+        """ % environment
+    with caplog.at_level(logging.INFO):
+        result = await client.graphql(query=query)
+        check_correct_graphql_response(result)
+        log_contains(caplog, __name__, logging.INFO, "Applied filter my_value")
