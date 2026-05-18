@@ -35,7 +35,7 @@ async def update(connection: Connection) -> None:
         INNER JOIN public.configurationmodel AS m
             ON rscm.environment=m.environment AND rscm.model=m.version
         WHERE r.environment=rps.environment AND r.resource_id=rps.resource_id AND m.released
-    ) WHERE NOT rps.is_orphan;
+    ) WHERE rps.is_orphan;
 
     CREATE INDEX resource_persistent_state_environment_orphaned_after_index ON public.resource_persistent_state
         USING btree (environment, orphaned_after) WHERE orphaned_after IS NULL;
