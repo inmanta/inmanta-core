@@ -6,7 +6,7 @@ requires = [
     "build~=1.0",
     "click-plugins~=1.0",
     # click has been known to publish non-backwards compatible minors in the past (removed deprecated code in 8.1.0)
-    "click>=8.0,<8.4",
+    "click>=8.0,<8.5",
     "colorlog~=6.4",
     "cookiecutter>=1,<3",
     "crontab>=0.23,<2.0",
@@ -49,7 +49,7 @@ with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
 
 # This version is managed by bumpversion. Should you ever update it manually, make sure to consistently update it everywhere
 # (See the bumpversion.cfg file for relevant locations).
-version = "18.1.1"
+version = "18.1.2"
 
 setup(
     version=version,

@@ -103,7 +103,6 @@ src/inmanta/ast/statements/__init__.py:0: error: Missing type arguments for gene
 src/inmanta/ast/statements/__init__.py:0: error: Missing type arguments for generic type "VariableABC"  [type-arg]
 src/inmanta/ast/statements/__init__.py:0: error: Need type annotation for "target"  [var-annotated]
 src/inmanta/ast/statements/__init__.py:0: error: Returning Any from function declared to return "Location"  [no-any-return]
-src/inmanta/ast/statements/__init__.py:0: note: See https://mypy.readthedocs.io/en/stable/running_mypy.html#missing-imports
 src/inmanta/ast/statements/__init__.py:0: note: Use "-> None" if function does not return a value
 src/inmanta/ast/statements/assign.py:0: error: "Type" has no attribute "lookup_index"  [attr-defined]
 src/inmanta/ast/statements/assign.py:0: error: "Type" has no attribute "lookup_index"  [attr-defined]
@@ -639,6 +638,9 @@ src/inmanta/logging.py:0: error: Argument "root_handlers" to "FullLoggingConfig"
 src/inmanta/logging.py:0: error: Argument "root_log_level" to "FullLoggingConfig" has incompatible type "object"; expected "int | str | None"  [arg-type]
 src/inmanta/logging.py:0: error: Returning Any from function declared to return "dict[str, object]"  [no-any-return]
 src/inmanta/logging.py:0: error: Returning Any from function declared to return "dict[str, object]"  [no-any-return]
+src/inmanta/logging.py:0: error: Unsupported right operand type for in ("object")  [operator]
+src/inmanta/logging.py:0: error: Value of type "object" is not indexable  [index]
+src/inmanta/logging.py:0: error: Value of type "object" is not indexable  [index]
 src/inmanta/main.py:0: error: Argument 1 to "len" has incompatible type "object"; expected "Sized"  [arg-type]
 src/inmanta/main.py:0: error: Argument 1 to "len" has incompatible type "object"; expected "Sized"  [arg-type]
 src/inmanta/main.py:0: error: Argument 1 to "parse_id" of "Id" has incompatible type "object"; expected "ResourceVersionIdStr | ResourceIdStr"  [arg-type]
@@ -982,10 +984,6 @@ src/inmanta/server/agentmanager.py:0: error: Item "None" of "Sequence[Agent] | N
 src/inmanta/server/agentmanager.py:0: error: Value of type "dict[str, Any] | None" is not indexable  [index]
 src/inmanta/server/agentmanager.py:0: error: Value of type variable "AnyStr" of "abspath" cannot be "str | None"  [type-var]
 src/inmanta/server/bootloader.py:0: error: Incompatible return value type (got "Iterator[ModuleInfo]", expected "Generator[ModuleInfo, None, None]")  [return-value]
-src/inmanta/server/bootloader.py:0: error: No overload variant of "int" matches argument type "object"  [call-overload]
-src/inmanta/server/bootloader.py:0: note: Possible overload variants:
-src/inmanta/server/bootloader.py:0: note: def int(str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc = ..., /) -> int
-src/inmanta/server/bootloader.py:0: note: def int(str | bytes | bytearray, /, base: SupportsIndex) -> int
 src/inmanta/server/config.py:0: error: Cannot infer value of type parameter "T" of "Option"  [misc]
 src/inmanta/server/config.py:0: error: Cannot infer value of type parameter "T" of "Option"  [misc]
 src/inmanta/server/config.py:0: error: Cannot infer value of type parameter "T" of "Option"  [misc]
@@ -1000,6 +998,10 @@ src/inmanta/server/protocol.py:0: error: Argument 1 to "append" of "list" has in
 src/inmanta/server/protocol.py:0: error: Argument 1 to "start" of "RESTServer" has incompatible type "dict_values[str, ServerSlice]"; expected "Sequence[CallTarget]"  [arg-type]
 src/inmanta/server/protocol.py:0: error: Item "None" of "HTTPServer | None" has no attribute "_sockets"  [union-attr]
 src/inmanta/server/protocol.py:0: error: Item "None" of "HTTPServer | None" has no attribute "_sockets"  [union-attr]
+src/inmanta/server/services/databaseservice.py:0: error: No overload variant of "int" matches argument type "object"  [call-overload]
+src/inmanta/server/services/databaseservice.py:0: note: Possible overload variants:
+src/inmanta/server/services/databaseservice.py:0: note: def int(str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc = ..., /) -> int
+src/inmanta/server/services/databaseservice.py:0: note: def int(str | bytes | bytearray, /, base: SupportsIndex) -> int
 src/inmanta/server/services/environment_metrics_service.py:0: error: "Sequence[EnvironmentMetricsGauge]" has no attribute "append"  [attr-defined]
 src/inmanta/server/services/environment_metrics_service.py:0: error: "Sequence[EnvironmentMetricsTimer]" has no attribute "append"  [attr-defined]
 src/inmanta/server/services/environment_metrics_service.py:0: error: Argument 1 to "create_metrics_timer" has incompatible type "Sequence[MetricValue]"; expected "Sequence[MetricValueTimer]"  [arg-type]
@@ -1034,6 +1036,7 @@ src/inmanta/signals.py:0: error: Argument 2 to "signal" has incompatible type "C
 src/inmanta/signals.py:0: error: Argument 2 to "signal" has incompatible type "Callable[[Signals, FrameType | None], None]"; expected "Callable[[int, FrameType | None], Any] | int | Handlers | None"  [arg-type]
 src/inmanta/signals.py:0: error: Argument 2 to "signal" has incompatible type "Callable[[Signals, FrameType | None], None]"; expected "Callable[[int, FrameType | None], Any] | int | Handlers | None"  [arg-type]
 src/inmanta/signals.py:0: error: Skipping analyzing "rpdb": module is installed, but missing library stubs or py.typed marker  [import-untyped]
+src/inmanta/signals.py:0: note: See https://mypy.readthedocs.io/en/stable/running_mypy.html#missing-imports
 src/inmanta/stable_api.py:0: error: Missing type arguments for generic type "Callable"  [type-arg]
 src/inmanta/tracing.py:0: error: Call to untyped function "AsyncPGInstrumentor" in typed context  [no-untyped-call]
 src/inmanta/types.py:0: error: "type" has no attribute "__supertype__"  [attr-defined]
