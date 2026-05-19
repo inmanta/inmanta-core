@@ -6,10 +6,10 @@ description: >
 change-type: major
 destination-branches: [master]
 sections:
-  major-feature: >
+  feature: >
     Agent-server communication now uses a persistent websocket connection instead of
     longpoll/heartbeat, reducing latency and resource usage.
-  deprecation-removed: >
+  deprecation-note: >
     Removed the ``last_failover`` field from the Agent API model. Removed the ``sid``
     parameter from the ``get_state`` and ``get_resource`` API methods. Removed the
     ``heartbeat`` and ``heartbeat_reply`` API endpoints.
