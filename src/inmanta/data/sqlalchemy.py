@@ -794,7 +794,7 @@ class ResourcePersistentState(Base):
     @hybrid_property
     def is_orphan(self) -> bool:
         """
-        Is this resource orphaned?
+        Is this resource not present in the latest released version of the model?
         """
         return self.orphaned_after is not None
 

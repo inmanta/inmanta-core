@@ -369,19 +369,22 @@ class ToDbUpdateManager(StateUpdateManager):
     ) -> None:
         await data.Scheduler._execute_query(
             f"""
-            WITH latest_resource_version AS (
+        WITH latest_resource_version AS (
             SELECT
                 r.environment,
                 r.resource_id,
                 MAX(cm.version) AS max_version
-            FROM {data.Resource.table_name()} AS r
+            FROM {data.ConfigurationModel.table_name()} AS cm
             INNER JOIN resource_set_configuration_model AS rscm
+                ON cm.environment=rscm.environment
+                AND cm.version=rscm.version
+            INNER JOIN {data.Resource.table_name()} AS r
                 ON rscm.environment=r.environment
                 AND rscm.resource_set=r.resource_set
-            INNER JOIN {data.ConfigurationModel.table_name()} AS cm
-                ON cm.environment=rscm.environment
-                AND cm.version=rscm.model
-            WHERE cm.released
+            WHERE
+                cm.environment=$1
+                AND cm.released
+                AND cm.version < $2
             GROUP BY
                 r.environment,
                 r.resource_id
@@ -390,10 +393,8 @@ class ToDbUpdateManager(StateUpdateManager):
         SET orphaned_after=lrv.max_version
         FROM latest_resource_version AS lrv
         WHERE
-            rps.environment=$1
-            AND rps.environment=lrv.environment
+            rps.environment=lrv.environment
             AND rps.resource_id=lrv.resource_id
-            AND lrv.max_version < $2
             """,
             environment,
             current_version,
