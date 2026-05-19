@@ -46,10 +46,9 @@ src/inmanta/ast/blocks.py:0: error: Returning Any from function declared to retu
 src/inmanta/ast/blocks.py:0: note: Did you forget to import it from "typing"? (Suggestion: "from typing import List")
 src/inmanta/ast/blocks.py:0: note: Did you forget to import it from "typing"? (Suggestion: "from typing import List")
 src/inmanta/ast/blocks.py:0: note: Did you forget to import it from "typing"? (Suggestion: "from typing import List")
-src/inmanta/ast/constraint/expression.py:0: error: Argument 1 to "create_function" has incompatible type "Operator"; expected "ConstraintType"  [arg-type]
 src/inmanta/ast/constraint/expression.py:0: error: Argument 2 to "register_operator" of "Operator" has incompatible type "OpMetaClass"; expected "type[Operator]"  [arg-type]
-src/inmanta/ast/constraint/expression.py:0: error: Call to untyped function "_op" in typed context  [no-untyped-call]
-src/inmanta/ast/constraint/expression.py:0: error: Call to untyped function "_op" in typed context  [no-untyped-call]
+src/inmanta/ast/constraint/expression.py:0: error: Call to untyped function "_op" of "Operator" in typed context  [no-untyped-call]
+src/inmanta/ast/constraint/expression.py:0: error: Call to untyped function "_op" of "Operator" in typed context  [no-untyped-call]
 src/inmanta/ast/constraint/expression.py:0: error: Function is missing a return type annotation  [no-untyped-def]
 src/inmanta/ast/constraint/expression.py:0: error: Function is missing a type annotation  [no-untyped-def]
 src/inmanta/ast/constraint/expression.py:0: error: Function is missing a type annotation  [no-untyped-def]
@@ -57,7 +56,7 @@ src/inmanta/ast/constraint/expression.py:0: error: Function is missing a type an
 src/inmanta/ast/constraint/expression.py:0: error: Function is missing a type annotation  [no-untyped-def]
 src/inmanta/ast/constraint/expression.py:0: error: Function is missing a type annotation  [no-untyped-def]
 src/inmanta/ast/constraint/expression.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
-src/inmanta/ast/constraint/expression.py:0: error: Missing positional argument "expression" in call to "create_function"  [call-arg]
+src/inmanta/ast/constraint/expression.py:0: error: Missing positional argument "tp" in call to "create_function"  [call-arg]
 src/inmanta/ast/constraint/expression.py:0: error: Missing type arguments for generic type "ResultVariable"  [type-arg]
 src/inmanta/ast/constraint/expression.py:0: error: Missing type arguments for generic type "ResultVariable"  [type-arg]
 src/inmanta/ast/constraint/expression.py:0: error: Missing type arguments for generic type "VariableABC"  [type-arg]
@@ -103,6 +102,7 @@ src/inmanta/ast/statements/__init__.py:0: error: Missing type arguments for gene
 src/inmanta/ast/statements/__init__.py:0: error: Missing type arguments for generic type "VariableABC"  [type-arg]
 src/inmanta/ast/statements/__init__.py:0: error: Need type annotation for "target"  [var-annotated]
 src/inmanta/ast/statements/__init__.py:0: error: Returning Any from function declared to return "Location"  [no-any-return]
+src/inmanta/ast/statements/__init__.py:0: note: See https://mypy.readthedocs.io/en/stable/running_mypy.html#missing-imports
 src/inmanta/ast/statements/__init__.py:0: note: Use "-> None" if function does not return a value
 src/inmanta/ast/statements/assign.py:0: error: "Type" has no attribute "lookup_index"  [attr-defined]
 src/inmanta/ast/statements/assign.py:0: error: "Type" has no attribute "lookup_index"  [attr-defined]
@@ -1036,7 +1036,6 @@ src/inmanta/signals.py:0: error: Argument 2 to "signal" has incompatible type "C
 src/inmanta/signals.py:0: error: Argument 2 to "signal" has incompatible type "Callable[[Signals, FrameType | None], None]"; expected "Callable[[int, FrameType | None], Any] | int | Handlers | None"  [arg-type]
 src/inmanta/signals.py:0: error: Argument 2 to "signal" has incompatible type "Callable[[Signals, FrameType | None], None]"; expected "Callable[[int, FrameType | None], Any] | int | Handlers | None"  [arg-type]
 src/inmanta/signals.py:0: error: Skipping analyzing "rpdb": module is installed, but missing library stubs or py.typed marker  [import-untyped]
-src/inmanta/signals.py:0: note: See https://mypy.readthedocs.io/en/stable/running_mypy.html#missing-imports
 src/inmanta/stable_api.py:0: error: Missing type arguments for generic type "Callable"  [type-arg]
 src/inmanta/tracing.py:0: error: Call to untyped function "AsyncPGInstrumentor" in typed context  [no-untyped-call]
 src/inmanta/types.py:0: error: "type" has no attribute "__supertype__"  [attr-defined]
