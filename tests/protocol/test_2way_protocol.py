@@ -31,9 +31,9 @@ from inmanta import const, data
 from inmanta.protocol import method
 from inmanta.protocol.auth.decorators import auth
 from inmanta.protocol.methods import ENV_OPTS
-from inmanta.server import SLICE_SESSION_MANAGER
+from inmanta.protocol.websocket import Session, SessionListener
 from inmanta.server.config import AuthorizationProviderName
-from inmanta.server.protocol import Server, ServerSlice, SessionListener
+from inmanta.server.protocol import Server, ServerSlice
 from utils import configure_auth, retry_limited
 
 LOGGER = logging.getLogger(__name__)
@@ -59,9 +59,9 @@ class SessionSpy(SessionListener, ServerSlice):
     def __init__(self):
         ServerSlice.__init__(self, "sessionspy")
         self.expires = 0
-        self._sessions = []
+        self._sessions: list[Session] = []
 
-    async def new_session(self, session, endpoint_names_snapshot: set[str]):
+    async def session_opened(self, session: Session) -> None:
         self._sessions.append(session)
 
     @protocol.handle(get_status_x)
@@ -75,9 +75,8 @@ class SessionSpy(SessionListener, ServerSlice):
 
         return 200, {"agents": status_list}
 
-    async def expire(self, session, endpoint_names_snapshot: set[str]):
+    async def session_closed(self, session: Session) -> None:
         self._sessions.remove(session)
-        print(session._sid)
         self.expires += 1
 
     def get_sessions(self):
@@ -85,15 +84,15 @@ class SessionSpy(SessionListener, ServerSlice):
 
 
 class Agent(protocol.SessionEndpoint):
-    def __init__(self, name: str, timeout: int = 120, reconnect_delay: int = 5):
-        super().__init__(name, timeout, reconnect_delay)
+    def __init__(self, name: str, environment: uuid.UUID, timeout: int = 120, reconnect_delay: int = 5):
+        super().__init__(name, environment, timeout, reconnect_delay)
         self.reconnect = 0
         self.disconnect = 0
         self.pushes = 0
 
     @protocol.handle(get_agent_status_x)
     async def get_agent_status_x(self, id):
-        return 200, {"status": "ok", "agents": list(self.end_point_names)}
+        return 200, {"status": "ok"}
 
     @protocol.handle(get_agent_push)
     async def get_agent_push(self, id):
@@ -102,13 +101,15 @@ class Agent(protocol.SessionEndpoint):
         await asyncio.sleep(1)
 
     async def on_reconnect(self) -> None:
+        await super().on_reconnect()
         self.reconnect += 1
 
     async def on_disconnect(self) -> None:
+        await super().on_disconnect()
         self.disconnect += 1
 
 
-async def get_environment(env: uuid.UUID, metadata: dict):
+async def get_environment(env: uuid.UUID, metadata: dict) -> data.Environment:
     return data.Environment(from_postgres=True, id=env, name="test", project=env, repo_url="xx", repo_branch="xx")
 
 
@@ -122,24 +123,22 @@ def no_tid_check():
 
 
 async def assert_agent_counter(agent: Agent, reconnect: int, disconnected: int) -> None:
-    def is_same():
+    def is_same() -> bool:
         return agent.disconnect == disconnected and agent.reconnect == reconnect
 
     await retry_limited(is_same, 10)
 
 
-async def test_2way_protocol(inmanta_config, server_config, no_tid_check, postgres_db, database_name):
+async def test_2way_protocol(inmanta_config, server_config, no_tid_check):
     # Authentication complicates this even further
     configure_auth(auth=True, ca=False, ssl=False, authorization_provider=AuthorizationProviderName.legacy)
     rs = Server()
     server = SessionSpy()
-    rs.get_slice(SLICE_SESSION_MANAGER).add_listener(server)
+    rs._transport.add_session_listener(server)
     rs.add_slice(server)
     await rs.start()
 
-    agent = Agent("agent")
-    await agent.add_end_point_name("agent")
-    agent.set_environment(uuid.uuid4())
+    agent = Agent("agent", uuid.uuid4())
     await agent.start()
 
     await retry_limited(lambda: len(server.get_sessions()) == 1, 10)
@@ -151,7 +150,7 @@ async def test_2way_protocol(inmanta_config, server_config, no_tid_check, postgr
     assert status.code == 200
     assert "agents" in status.result
     assert len(status.result["agents"]) == 1
-    assert status.result["agents"][0]["status"], "ok"
+    assert status.result["agents"][0]["status"] == "ok"
     await server.stop()
 
     # test no reply
@@ -171,23 +170,25 @@ async def test_2way_protocol(inmanta_config, server_config, no_tid_check, postgr
     assert agent.disconnect < 2
 
 
-async def check_sessions(sessions):
+async def check_sessions(sessions: list[Session]) -> None:
     for s in sessions:
-        a = await s.client.get_agent_status_x("X")
+        a = await s.get_client().get_agent_status_x("X")
         assert a.code == 200, a.result
         result = a.get_result()
-        assert result["status"] == "ok", result
+        assert result and result["status"] == "ok", result
 
 
 @pytest.mark.slowtest
 async def test_agent_timeout(server_config, no_tid_check, async_finalizer):
     from inmanta.config import Config
 
-    Config.set("server", "agent-timeout", "1")
+    # Get a config for each agent. The session layer needs a unique name per agent
+    Config.set("agent1_rest_transport", "port", str(Config.get("agent_rest_transport", "port")))
+    Config.set("agent2_rest_transport", "port", str(Config.get("agent_rest_transport", "port")))
 
     rs = Server()
     server = SessionSpy()
-    rs.get_slice(SLICE_SESSION_MANAGER).add_listener(server)
+    rs._transport.add_session_listener(server)
     rs.add_slice(server)
     await rs.start()
     async_finalizer(rs.stop)
@@ -195,9 +196,7 @@ async def test_agent_timeout(server_config, no_tid_check, async_finalizer):
     env = uuid.uuid4()
 
     # agent 1
-    agent = Agent("agent")
-    await agent.add_end_point_name("agent")
-    agent.set_environment(env)
+    agent = Agent("agent1", env)
     await agent.start()
     async_finalizer(agent.stop)
 
@@ -207,9 +206,7 @@ async def test_agent_timeout(server_config, no_tid_check, async_finalizer):
     await assert_agent_counter(agent, 1, 0)
 
     # agent 2
-    agent2 = Agent("agent")
-    await agent2.add_end_point_name("agent")
-    agent2.set_environment(env)
+    agent2 = Agent("agent2", env)
     await agent2.start()
     async_finalizer(agent2.stop)
 
@@ -228,11 +225,9 @@ async def test_agent_timeout(server_config, no_tid_check, async_finalizer):
     # take it down
     await agent2.stop()
 
-    # Timeout=2
-    # -> 1sec: Wait for agent-timeout
-    # -> 1sec: Wait until session bookkeeping is updated
-    await retry_limited(lambda: len(server.get_sessions()) == 1, timeout=2)
-    print(server.get_sessions())
+    # Wait for the server to detect the closed WebSocket (via ws-ping-interval/ws-ping-timeout)
+    # and update session bookkeeping
+    await retry_limited(lambda: len(server.get_sessions()) == 1, timeout=5)
     await check_sessions(server.get_sessions())
     assert server.expires == 1
     await assert_agent_counter(agent, 1, 0)
@@ -241,14 +236,10 @@ async def test_agent_timeout(server_config, no_tid_check, async_finalizer):
 
 @pytest.mark.slowtest
 async def test_server_timeout(server_config, no_tid_check, async_finalizer):
-    from inmanta.config import Config
-
-    Config.set("server", "agent-timeout", "1")
-
-    async def start_server():
+    async def start_server() -> tuple[SessionSpy, Server]:
         rs = Server()
         server = SessionSpy()
-        rs.get_slice(SLICE_SESSION_MANAGER).add_listener(server)
+        rs._transport.add_session_listener(server)
         rs.add_slice(server)
         await rs.start()
         async_finalizer(rs.stop)
@@ -259,9 +250,7 @@ async def test_server_timeout(server_config, no_tid_check, async_finalizer):
     env = uuid.uuid4()
 
     # agent 1
-    agent = Agent("agent")
-    await agent.add_end_point_name("agent")
-    agent.set_environment(env)
+    agent = Agent("agent", environment=env)
     await agent.start()
     async_finalizer(agent.stop)
 
@@ -274,7 +263,7 @@ async def test_server_timeout(server_config, no_tid_check, async_finalizer):
     await rs.stop()
 
     # timeout
-    await sleep(1.1)
+    await sleep(0.1)
 
     # check agent disconnected
     await assert_agent_counter(agent, 1, 1)
@@ -285,3 +274,9 @@ async def test_server_timeout(server_config, no_tid_check, async_finalizer):
     assert len(server.get_sessions()) == 1
 
     await assert_agent_counter(agent, 2, 1)
+
+    # stop the server again
+    await rs.stop()
+
+    # check agent disconnected
+    await assert_agent_counter(agent, 2, 2)

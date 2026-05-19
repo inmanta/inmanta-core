@@ -230,6 +230,10 @@ class EnvironmentService(protocol.ServerSlice):
 
                 await refreshed_env.update_fields(halted=True, connection=con)
                 await self.agent_manager.halt_agents(refreshed_env, connection=con)
+        # Send RPC notifications to the agent after the transaction is committed.
+        # This must be outside the transaction to avoid deadlocks: the agent's RPC handler
+        # queries the DB which would block on locks held by an uncommitted transaction.
+        await self.agent_manager.halt_agents_notify(refreshed_env)
         await self.autostarted_agent_manager.stop_agents(refreshed_env, delete_venv=delete_agent_venv)
 
     @handle(methods_v2.resume_environment, env="tid")
