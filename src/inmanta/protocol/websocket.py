@@ -81,6 +81,8 @@ class Session:
         self._hostname = hostname
         self._closed = False
         self._confirmed = False
+
+        # Each session gets a unique id. It is used to track sessions.
         self._id = uuid.uuid4()
 
         self.websocket_protocol = websocket_protocol
@@ -351,8 +353,8 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
     Subclasses must implement `write_message` to provide the actual transport. Override
     `on_open_session` and `on_close_session` for session lifecycle hooks.
 
-    Before the decoder can process incoming messages, :meth:`set_call_targets` and
-    :meth:`set_authnz_context` must be called to wire in the RPC handlers and the
+    Before the decoder can process incoming messages, `set_call_targets` and
+    `set_authnz_context` must be called to wire in the RPC handlers and the
     authentication/authorization context, respectively. Constructing a decoder without
     invoking both will result in `None` lookups when an `RPC_CALL` arrives.
     """
