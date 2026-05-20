@@ -4808,7 +4808,7 @@ class ResourcePersistentState(BaseDocument):
         WHERE environment=$1 AND resource_id=v.rid
         """
         await cls._execute_query(
-            query, environment, list(orphaned_resources.keys), list(orphaned_resources.values()), connection=connection
+            query, environment, list(orphaned_resources.keys()), list(orphaned_resources.values()), connection=connection
         )
 
     @classmethod

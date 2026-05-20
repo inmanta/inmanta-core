@@ -38,7 +38,7 @@ async def update(connection: Connection) -> None:
     ) WHERE rps.is_orphan;
 
     CREATE INDEX resource_persistent_state_environment_orphaned_after_index ON public.resource_persistent_state
-        USING btree (environment, orphaned_after) WHERE orphaned_after IS NULL;
+        USING btree (environment) WHERE orphaned_after IS NULL;
 
     CREATE INDEX resource_persistent_state_environment_resource_id_orphaned_after_index ON public.resource_persistent_state
         USING btree (environment, resource_id, orphaned_after);
