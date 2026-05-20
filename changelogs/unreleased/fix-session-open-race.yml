@@ -7,8 +7,3 @@ description: >
   replied ``enabled=False`` and the scheduler stayed idle.
 change-type: patch
 destination-branches: [master]
-sections:
-  bugfix: >
-    Register agent sessions synchronously in ``AgentManager.session_opened``
-    so the scheduler is guaranteed to observe its session as live on
-    ``get_state``.
