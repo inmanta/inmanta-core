@@ -137,16 +137,19 @@ def assert_state_agents_retry(
     return func
 
 
-async def test_session_opened_is_synchronous(init_dataclasses_and_load_schema):
+async def test_get_state_reports_enabled_after_session_opened(init_dataclasses_and_load_schema):
     """
-    Regression test for the race between SESSION_OPENED and the agent's first ``get_state``.
+    Regression test for the race between the server replying ``SESSION_OPENED`` to a freshly
+    connected agent and the agent's first ``get_state`` RPC.
 
-    The server replies ``SESSION_OPENED`` to the agent as soon as ``register_session`` returns,
-    and the agent's ``on_reconnect`` immediately issues a ``get_state`` RPC. If
-    ``AgentManager.session_opened`` deferred the work to a background queue, the ``get_state``
-    handler could observe an empty ``scheduler_for_env`` and reply ``enabled=False``, leaving
-    the scheduler idle. This test asserts that ``scheduler_for_env`` is populated synchronously,
-    before ``session_opened`` returns.
+    The agent's ``on_reconnect`` issues ``get_state`` immediately after receiving
+    ``SESSION_OPENED`` and only calls ``start_working()`` if the server reports
+    ``enabled=True``. If ``AgentManager.session_opened`` does not observe the registration
+    in time for the next call to ``get_state``, the agent stays idle until the next
+    reconnect, which is the failure mode we want to prevent.
+
+    The test exercises the AgentManager protocol directly: after ``session_opened`` returns,
+    ``get_state`` must report the scheduler as enabled.
     """
     project = data.Project(name="test")
     await project.insert()
@@ -163,9 +166,8 @@ async def test_session_opened_is_synchronous(init_dataclasses_and_load_schema):
     session = MockSession(env.id, "agent", "localhost")
     await am.session_opened(session)
 
-    # The scheduler must be visible to get_state() the moment session_opened returns.
-    assert am.scheduler_for_env.get(env.id) is session
-    assert session.id in am.sessions
+    state = await am.get_state(env=env, agent=const.AGENT_SCHEDULER_ID)
+    assert state == {"enabled": True}
 
 
 async def test_api(init_dataclasses_and_load_schema):
