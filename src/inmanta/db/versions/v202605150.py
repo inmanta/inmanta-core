@@ -28,7 +28,8 @@ async def update(connection: Connection) -> None:
 
      UPDATE public.resource_persistent_state AS rps
      SET orphaned_after=(
-        SELECT COALESCE(MAX(rscm.model), 0) # Safeguard for orphaned resources that are not present on the rscm table
+        -- Safeguard for orphaned resources that are not present on the rscm table
+        SELECT COALESCE(MAX(rscm.model), 0)
         FROM public.resource AS r
         INNER JOIN public.resource_set_configuration_model AS rscm
             ON r.environment=rscm.environment AND r.resource_set=rscm.resource_set

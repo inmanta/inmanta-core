@@ -99,7 +99,7 @@ async def test_add_new_resource_status_column(
     assert_resource_persistent_state(
         resource_state_by_resource_id[inmanta.types.ResourceIdStr("test::Resource[agent1,key=key6]")],
         is_undefined=False,
-        is_orphan=True,
+        orphaned_after=1,
         # The last_handler_run field is not accurate, because it's an orphan. Tracking this accurately
         # would require an expensive query in the database migration script.
         last_handler_run=state.HandlerResult.NEW,
