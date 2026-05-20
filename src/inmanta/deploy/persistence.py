@@ -377,7 +377,7 @@ class ToDbUpdateManager(StateUpdateManager):
             FROM {data.ConfigurationModel.table_name()} AS cm
             INNER JOIN resource_set_configuration_model AS rscm
                 ON cm.environment=rscm.environment
-                AND cm.version=rscm.version
+                AND cm.version=rscm.model
             INNER JOIN {data.Resource.table_name()} AS r
                 ON rscm.environment=r.environment
                 AND rscm.resource_set=r.resource_set
