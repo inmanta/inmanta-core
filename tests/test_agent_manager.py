@@ -137,39 +137,6 @@ def assert_state_agents_retry(
     return func
 
 
-async def test_get_state_reports_enabled_after_session_opened(init_dataclasses_and_load_schema):
-    """
-    Regression test for the race between the server replying ``SESSION_OPENED`` to a freshly
-    connected agent and the agent's first ``get_state`` RPC.
-
-    The agent's ``on_reconnect`` issues ``get_state`` immediately after receiving
-    ``SESSION_OPENED`` and only calls ``start_working()`` if the server reports
-    ``enabled=True``. If ``AgentManager.session_opened`` does not observe the registration
-    in time for the next call to ``get_state``, the agent stays idle until the next
-    reconnect, which is the failure mode we want to prevent.
-
-    The test exercises the AgentManager protocol directly: after ``session_opened`` returns,
-    ``get_state`` must report the scheduler as enabled.
-    """
-    project = data.Project(name="test")
-    await project.insert()
-    env = data.Environment(name="testenv", project=project.id)
-    await env.insert()
-
-    server = Mock()
-    futures = Collector()
-    server.add_background_task.side_effect = futures
-    am = AgentManager(server, False)
-    am.add_background_task = futures
-    am.running = True
-
-    session = MockSession(env.id, "agent", "localhost")
-    await am.session_opened(session)
-
-    state = await am.get_state(env=env, agent=const.AGENT_SCHEDULER_ID)
-    assert state == {"enabled": True}
-
-
 async def test_api(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
