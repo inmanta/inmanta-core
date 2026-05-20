@@ -502,11 +502,16 @@ class AgentManager(ServerSlice, websocket.SessionListener):
     async def expire_sessions_for_environment(self, env_id: uuid.UUID) -> None:
         """
         Close the scheduler session for the given environment, if any.
+
+        Important: the actual ``close_connection()`` call is performed *outside* the
+        ``session_lock``. ``close_connection`` cascades through ``on_close_session`` ->
+        ``notify_close_session`` -> ``session_closed`` -> ``_expire_session``, which itself
+        acquires ``session_lock``; holding the lock across the call would deadlock.
         """
         async with self.session_lock:
             session_to_expire = self.scheduler_for_env.get(env_id)
-            if session_to_expire is not None:
-                await session_to_expire.close_connection()
+        if session_to_expire is not None:
+            await session_to_expire.close_connection()
 
     async def is_scheduler_active(self, tid: uuid.UUID) -> bool:
         """
@@ -515,8 +520,10 @@ class AgentManager(ServerSlice, websocket.SessionListener):
         return tid in self.scheduler_for_env
 
     async def expire_all_sessions(self) -> None:
+        # See expire_sessions_for_environment for why close_connection runs outside the lock.
         async with self.session_lock:
-            await asyncio.gather(*[s.close_connection() for s in self.sessions.values()])
+            sessions_snapshot = list(self.sessions.values())
+        await asyncio.gather(*[s.close_connection() for s in sessions_snapshot])
 
     # Agent Management
     @tracing.instrument("AgentManager.ensure_agent_registered")

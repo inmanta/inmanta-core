@@ -1,9 +1,12 @@
 ---
 description: >
-  Fix a race in the websocket-based agent transport where the server replied
-  ``SESSION_OPENED`` to the agent before ``AgentManager.scheduler_for_env``
-  was populated. The agent's ``on_reconnect`` calls ``get_state`` immediately
-  after the handshake; if it raced ahead of the registration, the server
-  replied ``enabled=False`` and the scheduler stayed idle.
+  Fix two issues in the websocket-based agent transport. (1) The server replied
+  ``SESSION_OPENED`` before ``AgentManager.scheduler_for_env`` was populated;
+  the agent's first ``get_state`` could race ahead and observe ``enabled=False``,
+  leaving the scheduler idle. (2) ``expire_sessions_for_environment`` /
+  ``expire_all_sessions`` held ``session_lock`` across the ``close_connection``
+  call, which cascades back into ``_expire_session`` and re-acquires the same
+  lock — causing ``halt_environment`` (and any caller of ``stop_agents``) to
+  deadlock.
 change-type: patch
 destination-branches: [master]
