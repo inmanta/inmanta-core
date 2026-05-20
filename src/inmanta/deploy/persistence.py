@@ -384,7 +384,6 @@ class ToDbUpdateManager(StateUpdateManager):
             WHERE
                 cm.environment=$1
                 AND cm.released
-                AND cm.version < $2
             GROUP BY
                 r.environment,
                 r.resource_id
@@ -395,6 +394,7 @@ class ToDbUpdateManager(StateUpdateManager):
         WHERE
             rps.environment=lrv.environment
             AND rps.resource_id=lrv.resource_id
+            AND lrv.max_version < $2
             """,
             environment,
             current_version,
