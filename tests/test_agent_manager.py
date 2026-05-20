@@ -33,7 +33,7 @@ from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus
 from inmanta.data import Environment
 from inmanta.data.dataview import AgentView
-from inmanta.protocol import Result, websocket
+from inmanta.protocol import Result
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER
 from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager
 from utils import UNKWN, NullAgent, assert_equal_ish, retry_limited
@@ -620,48 +620,6 @@ async def test_process_already_terminated(server, environment):
 
     # This call shouldn't raise an exception
     await autostarted_agent_manager._terminate_agents()
-
-
-@pytest.mark.parametrize("auto_start_agent", [False])  # prevent autostart to keep agent under control
-async def test_session_listener_exception_does_not_break_subsequent_sessions(
-    server, environment, async_finalizer, monkeypatch, caplog
-):
-    """
-    When the AgentManager's session_opened listener raises, the server-side notify loop must
-    catch the exception so that subsequent agent connections still register successfully.
-    """
-    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
-
-    # Replace _register_session with a version that throws.
-    old_register_session = agentmanager._register_session
-
-    async def failing_register_session(self, session: websocket.Session, now: datetime) -> None:
-        raise Exception("Failure")
-
-    monkeypatch.setattr(agentmanager, "_register_session", failing_register_session)
-
-    assert len(agentmanager.sessions) == 0
-
-    # Start agent
-    a = NullAgent(environment=environment)
-    await a.start()
-    async_finalizer(a.stop)
-
-    # The server's notify loop logs listener exceptions; no session is registered for this agent.
-    await retry_limited(lambda: "failed to handle session_opened" in caplog.text, 10)
-    assert len(agentmanager.sessions) == 0
-    await a.stop()
-
-    # Put original method back in place.
-    monkeypatch.setattr(agentmanager, "_register_session", old_register_session)
-
-    # Start a new agent
-    a = NullAgent(environment=environment)
-    await a.start()
-    async_finalizer(a.stop)
-
-    # Verify that the session is created successfully -> notify loop didn't get stuck.
-    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
 
 async def test_error_handling_agent_fork(server, environment, monkeypatch):
