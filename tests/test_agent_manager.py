@@ -35,7 +35,7 @@ from inmanta.data import Environment
 from inmanta.data.dataview import AgentView
 from inmanta.protocol import Result, websocket
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER
-from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager, SessionAction
+from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager
 from utils import UNKWN, NullAgent, assert_equal_ish, retry_limited
 
 LOGGER = logging.getLogger(__name__)
@@ -135,6 +135,37 @@ def assert_state_agents_retry(
         return True
 
     return func
+
+
+async def test_session_opened_is_synchronous(init_dataclasses_and_load_schema):
+    """
+    Regression test for the race between SESSION_OPENED and the agent's first ``get_state``.
+
+    The server replies ``SESSION_OPENED`` to the agent as soon as ``register_session`` returns,
+    and the agent's ``on_reconnect`` immediately issues a ``get_state`` RPC. If
+    ``AgentManager.session_opened`` deferred the work to a background queue, the ``get_state``
+    handler could observe an empty ``scheduler_for_env`` and reply ``enabled=False``, leaving
+    the scheduler idle. This test asserts that ``scheduler_for_env`` is populated synchronously,
+    before ``session_opened`` returns.
+    """
+    project = data.Project(name="test")
+    await project.insert()
+    env = data.Environment(name="testenv", project=project.id)
+    await env.insert()
+
+    server = Mock()
+    futures = Collector()
+    server.add_background_task.side_effect = futures
+    am = AgentManager(server, False)
+    am.add_background_task = futures
+    am.running = True
+
+    session = MockSession(env.id, "agent", "localhost")
+    await am.session_opened(session)
+
+    # The scheduler must be visible to get_state() the moment session_opened returns.
+    assert am.scheduler_for_env.get(env.id) is session
+    assert session.id in am.sessions
 
 
 async def test_api(init_dataclasses_and_load_schema):
@@ -623,20 +654,22 @@ async def test_process_already_terminated(server, environment):
 
 
 @pytest.mark.parametrize("auto_start_agent", [False])  # prevent autostart to keep agent under control
-async def test_exception_occurs_while_processing_session_action(server, environment, async_finalizer, monkeypatch, caplog):
+async def test_session_listener_exception_does_not_break_subsequent_sessions(
+    server, environment, async_finalizer, monkeypatch, caplog
+):
     """
-    This test verifies that the consumer of the _session_listener_actions queue keeps working
-    even when the an exception is thrown while handling an action.
+    When the AgentManager's session_opened listener raises, the server-side notify loop must
+    catch the exception so that subsequent agent connections still register successfully.
     """
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
-    # Replace the _process_action() method with one that throws an excption
-    old_process_action_function = agentmanager._process_action
+    # Replace _register_session with a version that throws.
+    old_register_session = agentmanager._register_session
 
-    async def new_process_action_function(self, action: SessionAction, session: websocket.Session, timestamp: datetime):
+    async def failing_register_session(self, session: websocket.Session, now: datetime) -> None:
         raise Exception("Failure")
 
-    monkeypatch.setattr(agentmanager, "_process_action", new_process_action_function)
+    monkeypatch.setattr(agentmanager, "_register_session", failing_register_session)
 
     assert len(agentmanager.sessions) == 0
 
@@ -645,20 +678,20 @@ async def test_exception_occurs_while_processing_session_action(server, environm
     await a.start()
     async_finalizer(a.stop)
 
-    # Verify that an exception is thrown an no session is created
-    await retry_limited(lambda: "An exception occurred while handling session action" in caplog.text, 10)
+    # The server's notify loop logs listener exceptions; no session is registered for this agent.
+    await retry_limited(lambda: "failed to handle session_opened" in caplog.text, 10)
     assert len(agentmanager.sessions) == 0
     await a.stop()
 
-    # Put original method in place.
-    monkeypatch.setattr(agentmanager, "_process_action", old_process_action_function)
+    # Put original method back in place.
+    monkeypatch.setattr(agentmanager, "_register_session", old_register_session)
 
-    # Start new agent
+    # Start a new agent
     a = NullAgent(environment=environment)
     await a.start()
     async_finalizer(a.stop)
 
-    # Verify that session is created successfully -> Consumer didn't crash
+    # Verify that the session is created successfully -> notify loop didn't get stuck.
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
 

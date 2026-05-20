@@ -23,11 +23,10 @@ import shutil
 import sys
 import time
 import uuid
-from asyncio import queues, subprocess
+from asyncio import subprocess
 from collections.abc import Iterable, Mapping, Sequence, Set
 from dataclasses import dataclass
 from datetime import datetime
-from enum import Enum
 from functools import reduce
 from typing import Any, Optional, Union, assert_never, cast
 
@@ -97,22 +96,6 @@ active session (WebSocket connection) to the agent process at any time.
 """
 
 
-class SessionActionType(str, Enum):
-    REGISTER_SESSION = "register_session"
-    EXPIRE_SESSION = "expire_session"
-
-
-class SessionAction:
-    """
-    A session update to be executed by the AgentManager.
-    """
-
-    def __init__(self, action_type: SessionActionType, session: websocket.Session, timestamp: datetime):
-        self.action_type = action_type
-        self.session = session
-        self.timestamp = timestamp
-
-
 # Internal tuning constants
 
 AUTO_STARTED_AGENT_WAIT = 5
@@ -150,10 +133,6 @@ class AgentManager(ServerSlice, websocket.SessionListener):
 
         # session lock
         self.session_lock = asyncio.Lock()
-
-        # This queue ensures that notifications from the SessionManager are processed in the same order
-        # in which they arrive in the SessionManager, without blocking the SessionManager.
-        self._session_listener_actions: queues.Queue[SessionAction] = queues.Queue()
 
         self.closesessionsonstart: bool = closesessionsonstart
 
@@ -237,7 +216,6 @@ class AgentManager(ServerSlice, websocket.SessionListener):
         if self.closesessionsonstart:
             await self._expire_all_sessions_in_db()
 
-        self.add_background_task(self._process_session_listener_actions())
         # Schedule cleanup of schedulersession table
         agent_process_purge_interval = opt.agent_process_purge_interval.get()
         if agent_process_purge_interval > 0:
@@ -419,67 +397,21 @@ class AgentManager(ServerSlice, websocket.SessionListener):
             env=env.id, endpoint=endpoint, should_be_unpaused_on_resume=should_be_unpaused_on_resume, connection=connection
         )
 
-    async def _process_session_listener_actions(self) -> None:
-        """
-        This is the consumer of the _session_listener_actions queue.
-        """
-        while not self.is_stopping():
-            try:
-                session_action = await self._session_listener_actions.get()
-                await self._process_action(session_action)
-            except asyncio.CancelledError:
-                return
-            except Exception:
-                # session_action is guaranteed to be bound here: queue.get() can only raise
-                # CancelledError (handled above), so any other exception comes from _process_action.
-                LOGGER.exception(
-                    "An exception occurred while handling session action %s on session id %s.",
-                    session_action.action_type.name,
-                    session_action.session.session_key,
-                    exc_info=True,
-                )
-            finally:
-                try:
-                    self._session_listener_actions.task_done()
-                except Exception:
-                    # Should never occur
-                    pass
-
-    async def _process_action(self, action: SessionAction) -> None:
-        """
-        Process a specific SessionAction.
-        """
-        action_type = action.action_type
-        if action_type == SessionActionType.REGISTER_SESSION:
-            await self._register_session(action.session, action.timestamp)
-        elif action_type == SessionActionType.EXPIRE_SESSION:
-            await self._expire_session(action.session, action.timestamp)
-        else:
-            LOGGER.warning("Unknown SessionAction %s", action_type.name)
-
     # Notify from session listener
     async def session_opened(self, session: websocket.Session) -> None:
         """
-        The _session_listener_actions queue ensures that all SessionActions are executed in the order of arrival.
+        Register a new session synchronously so that ``scheduler_for_env`` is populated before
+        the server completes its ``register_session`` call and replies ``SESSION_OPENED`` to
+        the client. The agent's ``on_reconnect`` issues ``get_state`` immediately after that
+        reply; if registration were deferred to a background queue, the ``get_state`` could
+        race ahead and see ``enabled=False``, leaving the scheduler idle.
         """
-        session_action = SessionAction(
-            action_type=SessionActionType.REGISTER_SESSION,
-            session=session,
-            timestamp=datetime.now().astimezone(),
-        )
-        await self._session_listener_actions.put(session_action)
+        await self._register_session(session, datetime.now().astimezone())
 
     # Notify from session listener
     async def session_closed(self, session: websocket.Session) -> None:
-        """
-        The _session_listener_actions queue ensures that all SessionActions are executed in the order of arrival.
-        """
-        session_action = SessionAction(
-            action_type=SessionActionType.EXPIRE_SESSION,
-            session=session,
-            timestamp=datetime.now().astimezone(),
-        )
-        await self._session_listener_actions.put(session_action)
+        """Expire a session synchronously; see :meth:`session_opened` for the rationale."""
+        await self._expire_session(session, datetime.now().astimezone())
 
     # Session registration
     async def _register_session(self, session: websocket.Session, now: datetime) -> None:

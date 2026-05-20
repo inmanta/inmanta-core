@@ -1,0 +1,14 @@
+---
+description: >
+  Fix a race in the websocket-based agent transport where the server replied
+  ``SESSION_OPENED`` to the agent before ``AgentManager.scheduler_for_env``
+  was populated. The agent's ``on_reconnect`` calls ``get_state`` immediately
+  after the handshake; if it raced ahead of the registration, the server
+  replied ``enabled=False`` and the scheduler stayed idle.
+change-type: patch
+destination-branches: [master]
+sections:
+  bugfix: >
+    Register agent sessions synchronously in ``AgentManager.session_opened``
+    so the scheduler is guaranteed to observe its session as live on
+    ``get_state``.
