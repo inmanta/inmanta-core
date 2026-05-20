@@ -4804,10 +4804,12 @@ class ResourcePersistentState(BaseDocument):
         query = f"""
         UPDATE {cls.table_name()}
         SET orphaned_after=v.value::int
-        FROM jsonb_each_text($2::jsonb) AS v(rid, value)
+        FROM UNNEST($2::text[], $3::int[]) AS v(rid, value)
         WHERE environment=$1 AND resource_id=v.rid
         """
-        await cls._execute_query(query, environment, json.dumps(orphaned_resources), connection=connection)
+        await cls._execute_query(
+            query, environment, list(orphaned_resources.keys), list(orphaned_resources.values()), connection=connection
+        )
 
     @classmethod
     async def update_resource_intent(

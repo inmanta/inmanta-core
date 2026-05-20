@@ -1,6 +1,6 @@
 change-type: minor
 description: >
-  Replace ResourcePersistentState.is_orphan with orphaned_at.
+  Replace ResourcePersistentState.is_orphan with orphaned_after.
   This field now contains the latest version where this resource is still present in the model, if it was orphaned.
   Set to None if resource is present in the latest version of the model.
 destination-branches:

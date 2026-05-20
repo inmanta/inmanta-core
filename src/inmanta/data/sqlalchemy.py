@@ -746,7 +746,6 @@ class ResourcePersistentState(Base):
         Index(
             "resource_persistent_state_environment_resource_id_orphaned_after", "environment", "resource_id", "orphaned_after"
         ),
-        Index("resource_persistent_state_environment_orphaned_after_index", "environment", "orphaned_after"),
         Index(
             "resource_persistent_state_environment_resource_id_value_res_idx", "environment", "resource_id_value", "resource_id"
         ),
@@ -776,7 +775,7 @@ class ResourcePersistentState(Base):
     agent: Mapped[str] = mapped_column(String, nullable=False)
     resource_id_value: Mapped[str] = mapped_column(String, nullable=False)
     is_undefined: Mapped[bool] = mapped_column(Boolean, nullable=False)
-    orphaned_after: Mapped[int] = mapped_column(Boolean, nullable=True)
+    orphaned_after: Mapped[int] = mapped_column(Integer, nullable=True)
     last_handler_run: Mapped[str] = mapped_column(String, nullable=False)
     blocked: Mapped[str] = mapped_column(String, nullable=False)
     created: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False)
