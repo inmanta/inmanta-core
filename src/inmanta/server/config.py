@@ -387,17 +387,17 @@ agent_hangtime = Option(
 server_ws_ping_interval = Option(
     "server",
     "ws-ping-interval",
-    3,
+    10,
     "Interval in seconds between WebSocket ping frames sent to agents",
     is_lower_bounded_int(1),
 )
 server_ws_ping_timeout = Option(
     "server",
     "ws-ping-timeout",
-    2,
+    30,
     (
         "Time in seconds to wait for a WebSocket pong response before closing the connection."
-        " Must not exceed :inmanta.config:option:`server.ws-ping-interval`."
+        " Must be at least :inmanta.config:option:`server.ws-ping-interval`."
     ),
     is_lower_bounded_int(1),
 )
