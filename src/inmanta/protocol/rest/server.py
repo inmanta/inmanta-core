@@ -345,9 +345,9 @@ class RESTServer(RESTBase, AuthnzInterface):
 
         ws_ping_interval = server_config.server_ws_ping_interval.get()
         ws_ping_timeout = server_config.server_ws_ping_timeout.get()
-        if ws_ping_timeout > ws_ping_interval:
+        if ws_ping_timeout < ws_ping_interval:
             raise Exception(
-                f"server.ws-ping-timeout ({ws_ping_timeout}) must not exceed " f"server.ws-ping-interval ({ws_ping_interval})"
+                f"server.ws-ping-timeout ({ws_ping_timeout}) must be at least " f"server.ws-ping-interval ({ws_ping_interval})"
             )
 
         application = web.Application(

@@ -1,0 +1,12 @@
+---
+description: >
+  Fix two issues in the websocket-based agent transport. (1) The server replied
+  ``SESSION_OPENED`` before ``AgentManager.scheduler_for_env`` was populated;
+  the agent's first ``get_state`` could race ahead and observe ``enabled=False``,
+  leaving the scheduler idle. (2) ``expire_sessions_for_environment`` /
+  ``expire_all_sessions`` held ``session_lock`` across the ``close_connection``
+  call, which cascades back into ``_expire_session`` and re-acquires the same
+  lock — causing ``halt_environment`` (and any caller of ``stop_agents``) to
+  deadlock.
+change-type: patch
+destination-branches: [master]

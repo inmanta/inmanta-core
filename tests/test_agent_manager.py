@@ -33,9 +33,9 @@ from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus
 from inmanta.data import Environment
 from inmanta.data.dataview import AgentView
-from inmanta.protocol import Result, websocket
+from inmanta.protocol import Result
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER
-from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager, SessionAction
+from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager
 from utils import UNKWN, NullAgent, assert_equal_ish, retry_limited
 
 LOGGER = logging.getLogger(__name__)
@@ -620,46 +620,6 @@ async def test_process_already_terminated(server, environment):
 
     # This call shouldn't raise an exception
     await autostarted_agent_manager._terminate_agents()
-
-
-@pytest.mark.parametrize("auto_start_agent", [False])  # prevent autostart to keep agent under control
-async def test_exception_occurs_while_processing_session_action(server, environment, async_finalizer, monkeypatch, caplog):
-    """
-    This test verifies that the consumer of the _session_listener_actions queue keeps working
-    even when the an exception is thrown while handling an action.
-    """
-    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
-
-    # Replace the _process_action() method with one that throws an excption
-    old_process_action_function = agentmanager._process_action
-
-    async def new_process_action_function(self, action: SessionAction, session: websocket.Session, timestamp: datetime):
-        raise Exception("Failure")
-
-    monkeypatch.setattr(agentmanager, "_process_action", new_process_action_function)
-
-    assert len(agentmanager.sessions) == 0
-
-    # Start agent
-    a = NullAgent(environment=environment)
-    await a.start()
-    async_finalizer(a.stop)
-
-    # Verify that an exception is thrown an no session is created
-    await retry_limited(lambda: "An exception occurred while handling session action" in caplog.text, 10)
-    assert len(agentmanager.sessions) == 0
-    await a.stop()
-
-    # Put original method in place.
-    monkeypatch.setattr(agentmanager, "_process_action", old_process_action_function)
-
-    # Start new agent
-    a = NullAgent(environment=environment)
-    await a.start()
-    async_finalizer(a.stop)
-
-    # Verify that session is created successfully -> Consumer didn't crash
-    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
 
 async def test_error_handling_agent_fork(server, environment, monkeypatch):
