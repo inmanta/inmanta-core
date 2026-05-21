@@ -1045,8 +1045,16 @@ def app() -> None:
     if options.config_file and not os.path.exists(options.config_file):
         LOGGER.warning("Config file %s doesn't exist", options.config_file)
 
+    component: str | None = options.component if hasattr(options, "component") else None
+
     # Load the configuration
-    Config.load_config(min_c_config_file=options.config_file, config_dir=options.config_dir)
+    Config.load_config(
+        min_c_config_file=options.config_file,
+        config_dir=options.config_dir,
+        # The scheduler gets all its configuration using a configuration file that is generated
+        # by the server. Configuration options set using environment variables must be ignored.
+        ignore_env_vars=(component == "scheduler"),
+    )
 
     # Collect potential log context
     log_context: dict[str, str] = {}
@@ -1059,7 +1067,6 @@ def app() -> None:
         log_context[LOG_CONTEXT_VAR_ENVIRONMENT] = env
 
     # Log config
-    component = options.component if hasattr(options, "component") else None
     log_config.apply_options(options, component=component, context=log_context)
     logging.captureWarnings(True)
 

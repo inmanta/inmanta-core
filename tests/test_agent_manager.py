@@ -16,6 +16,7 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import os
 import asyncio
 import datetime
 import logging
@@ -621,6 +622,34 @@ async def test_process_already_terminated(server, environment):
     # This call shouldn't raise an exception
     await autostarted_agent_manager._terminate_agents()
 
+@pytest.fixture
+def set_state_dir_using_env_var(monkeypatch, tmpdir) -> str:
+    """
+    Fixture that creates a temporary directory and configures it as the state directory
+    of the server using the INMANTA_CONFIG_STATE_DIR environment variable.
+    """
+    state_dir = os.path.join(tmpdir, "state_dir")
+    os.mkdir(state_dir)
+    monkeypatch.setenv("INMANTA_CONFIG_STATE_DIR", state_dir)
+    yield state_dir
+
+@pytest.mark.parametrize("auto_start_agent", [True])
+async def test_state_dir_scheduler(set_state_dir_using_env_var: str, server, environment):
+    """
+    Verify that the scheduler is using the state dir configured in its scheduler.cfg file.
+    It must ignore configuration options set using environment variables.
+    """
+    server_state_dir: str = set_state_dir_using_env_var
+
+    autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
+    await autostarted_agent_manager._ensure_scheduler(env=uuid.UUID(environment))
+    assert len(autostarted_agent_manager._agent_procs) == 1
+
+    # The AutostartedAgentManager configures the state dir of the scheduler as:
+    # <server_state_dir>/servers/<env_id>. The scheduler creates the executors
+    # subdirectory in it.
+    assert not os.path.exists(os.path.join(server_state_dir, "executors"))
+    assert os.path.exists(os.path.join(server_state_dir, "server", environment, "executors"))
 
 async def test_error_handling_agent_fork(server, environment, monkeypatch):
     """

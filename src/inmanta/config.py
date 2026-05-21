@@ -91,6 +91,7 @@ class Config:
     _config_dir: Optional[str] = None  # The directory this config was loaded from
     _min_c_config_file: Optional[str] = None  # Config file
     __config_definition: dict[str, dict[str, "Option"]] = defaultdict(dict)
+    _ignore_env_vars: bool = False
 
     @classmethod
     def get_config_options(cls) -> dict[str, dict[str, "Option"]]:
@@ -102,9 +103,13 @@ class Config:
         min_c_config_file: Optional[str] = None,
         config_dir: Optional[str] = None,
         main_cfg_file: str = "/etc/inmanta/inmanta.cfg",
+        ignore_env_vars: bool = False,
     ) -> None:
         """
         Load the configuration file
+
+        :param ignore_env_vars: True iff configuration options set using environment variables
+                                must be ignored.
         """
         cfg_files_in_config_dir: list[str]
         if config_dir and os.path.isdir(config_dir):
@@ -127,29 +132,38 @@ class Config:
         config = LenientConfigParser(interpolation=Interpolation())
         loaded_files = config.read(files)
         LOGGER.debug("Configuration files loaded: %s", loaded_files)
-        cls._save_loaded_config(config, config_dir, min_c_config_file)
+        cls._save_loaded_config(config, config_dir, min_c_config_file, ignore_env_vars=ignore_env_vars)
 
     @classmethod
     def load_config_from_dict(
         cls,
         input_config: typing.Mapping[str, typing.Mapping[str, typing.Any]],
+        ignore_env_vars: bool = False,
     ) -> None:
         """
         Load the configuration from a dict, used to copy config.
         Replaces all existing config.
+
+        :param ignore_env_vars: True iff configuration options set using environment variables
+                                must be ignored.
         """
         config = LenientConfigParser(interpolation=Interpolation())
         config.read_dict(input_config)
-        cls._save_loaded_config(config, config_dir=None, min_c_config_file=None)
+        cls._save_loaded_config(config, config_dir=None, min_c_config_file=None, ignore_env_vars=ignore_env_vars)
 
     @classmethod
     def _save_loaded_config(
-        cls, config: LenientConfigParser, config_dir: Optional[str], min_c_config_file: Optional[str]
+        cls,
+        config: LenientConfigParser,
+        config_dir: Optional[str],
+        min_c_config_file: Optional[str],
+        ignore_env_vars: bool,
     ) -> None:
         cls.__instance = config
         cls._config_dir = config_dir
         cls._min_c_config_file = min_c_config_file
         cls._config_updated()
+        cls._ignore_env_vars = ignore_env_vars
 
     @classmethod
     def config_as_dict(cls) -> typing.Mapping[str, typing.Mapping[str, typing.Any]]:
@@ -208,6 +222,7 @@ class Config:
         cls._config_dir = None
         cls._min_c_config_file = None
         cls._config_updated()
+        cls._ignore_env_vars = False
 
     @classmethod
     def _config_updated(cls) -> None:
@@ -252,10 +267,11 @@ class Config:
     @classmethod
     def _get_value(cls, section: str, name: str, default_value: T) -> str | T:
         cfg: ConfigParser = cls.get_instance()
-        val: Optional[str] = _get_from_env(section, name)
-        if val is not None:
-            LOGGER.debug("Setting %s:%s was set using an environment variable", section, name)
-            return val
+        if not cls._ignore_env_vars:
+            val: Optional[str] = _get_from_env(section, name)
+            if val is not None:
+                LOGGER.debug("Setting %s:%s was set using an environment variable", section, name)
+                return val
         # Typing of this method in the sdk is not entirely accurate
         # It just returns the fallback, whatever its type
         return cfg.get(section, name, fallback=default_value)
