@@ -648,8 +648,8 @@ async def test_state_dir_scheduler(set_state_dir_using_env_var: str, server, env
     assert len(autostarted_agent_manager._agent_procs) == 1
 
     # The AutostartedAgentManager configures the state dir of the scheduler as:
-    # <server_state_dir>/servers/<env_id>. The scheduler creates the executors
-    # subdirectory in it.
+    # <server_state_dir>/servers/<env_id> in the scheduler.cfg file. The scheduler
+    # creates the executors subdirectory.
     assert not os.path.exists(os.path.join(server_state_dir, "executors"))
     assert os.path.exists(os.path.join(server_state_dir, "server", environment, "executors"))
 
