@@ -16,10 +16,10 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import os
 import asyncio
 import datetime
 import logging
+import os
 import typing
 import uuid
 from asyncio import subprocess
@@ -622,6 +622,7 @@ async def test_process_already_terminated(server, environment):
     # This call shouldn't raise an exception
     await autostarted_agent_manager._terminate_agents()
 
+
 @pytest.fixture
 def set_state_dir_using_env_var(monkeypatch, tmpdir) -> str:
     """
@@ -632,6 +633,7 @@ def set_state_dir_using_env_var(monkeypatch, tmpdir) -> str:
     os.mkdir(state_dir)
     monkeypatch.setenv("INMANTA_CONFIG_STATE_DIR", state_dir)
     yield state_dir
+
 
 @pytest.mark.parametrize("auto_start_agent", [True])
 async def test_state_dir_scheduler(set_state_dir_using_env_var: str, server, environment):
@@ -650,6 +652,7 @@ async def test_state_dir_scheduler(set_state_dir_using_env_var: str, server, env
     # subdirectory in it.
     assert not os.path.exists(os.path.join(server_state_dir, "executors"))
     assert os.path.exists(os.path.join(server_state_dir, "server", environment, "executors"))
+
 
 async def test_error_handling_agent_fork(server, environment, monkeypatch):
     """
