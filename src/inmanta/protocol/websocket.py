@@ -853,8 +853,7 @@ class SessionEndpoint(endpoints.Endpoint, common.CallTarget, WebsocketFrameDecod
         ws_ping_timeout = agent_cfg.agent_ws_ping_timeout.get()
         if ws_ping_timeout < ws_ping_interval:
             raise Exception(
-                f"client.ws-ping-timeout ({ws_ping_timeout}) must be at least "
-                f"client.ws-ping-interval ({ws_ping_interval})"
+                f"client.ws-ping-timeout ({ws_ping_timeout}) must be at least " f"client.ws-ping-interval ({ws_ping_interval})"
             )
 
         # Clean up old session and connection before creating new ones
