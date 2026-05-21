@@ -5443,7 +5443,7 @@ class Resource(BaseDocument):
         update_rps_query = f"""
             UPDATE {ResourcePersistentState.table_name()} rps
             SET is_deploying=FALSE
-            WHERE environment=$1
+            WHERE environment=$1 AND is_deploying=TRUE
         """
         values = [cls._get_value(environment)]
         async with cls.get_connection(connection) as connection:
