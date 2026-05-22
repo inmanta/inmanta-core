@@ -1,13 +1,12 @@
 ---
 description: >
-  Speed up the scheduler's ``is_deploying`` reset sweep. ``Resource.reset_resource_state``
-  used to issue an env-wide ``UPDATE resource_persistent_state SET is_deploying=FALSE
-  WHERE environment=$1``, which seq-scanned the env and locked every visited row;
-  under load that queued the executor's per-row UPDATEs behind it (multi-second
-  ``ShareLock`` waits on large envs). The query now restricts to
-  ``AND is_deploying=TRUE`` and is backed by a new partial index
-  ``resource_persistent_state_environment_is_deploying_index ON
-  resource_persistent_state(environment) WHERE is_deploying``, so the sweep
-  touches and locks only the actually-deploying rows.
+  Speed up the ``Resource.reset_resource_state`` query that runs at scheduler
+  startup. It used to issue an env-wide ``UPDATE resource_persistent_state SET
+  is_deploying=FALSE WHERE environment=$1``, which sequentially scanned the
+  environment and acquired a row-level lock on every row; under load that
+  queued the executor's per-row UPDATEs behind it (multi-second ``ShareLock``
+  waits on large environments). The query now also requires
+  ``AND is_deploying=TRUE`` so it touches and locks only the actually-deploying
+  rows.
 change-type: patch
 destination-branches: [master]
