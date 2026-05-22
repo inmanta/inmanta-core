@@ -546,7 +546,7 @@ def mp_worker_entrypoint(
     logger = logging.getLogger(f"{LOGGER_NAME_EXECUTOR}.{name}")
 
     # Load config
-    inmanta.config.Config.load_config_from_dict(config)
+    inmanta.config.Config.load_config_from_dict(config, ignore_env_vars=True)
 
     # Make sure logfire is configured correctly
     tracing.configure_logfire("executor")
