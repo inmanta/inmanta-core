@@ -2141,10 +2141,6 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         :param full_module_name: The full name of the module. If this is a submodule, the corresponding top level module is
             used.
         :param allow_v1: Allow this module to be loaded as v1.
-        :param install_v1: Allow installing this module as v1 if it has not yet been installed. This option is ignored if
-            allow_v1=False.
-        :param install_v2: Allow installing this module as v2 if it has not yet been installed, implicitly trusting any Python
-            package with the corresponding name.
         :param bypass_module_cache: Fetch the module data from disk even if a cache entry exists.
         """
         parts = full_module_name.split("::")
@@ -2246,6 +2242,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         allow_v1: bool = False,
     ) -> "Module":
         """
+        TODO: outdated docstring
         Get a module instance for a given module name. The install parameters allow to install the module if it has not been
         installed yet. If both install parameters are False, the module is expected to be preinstalled.
 
@@ -2254,7 +2251,8 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         """
         if not self.is_using_virtual_env():
             self.use_virtual_env()
-        reqs: Mapping[str, list[InmantaModuleRequirement]] = self.collect_requirements()
+
+        reqs: Mapping[str, list[InmantaModuleRequirement]] = self.collect_requirements()  # Could we cache this somehow ?
         module_reqs: list[InmantaModuleRequirement] = (
             list(reqs[module_name]) if module_name in reqs else [InmantaModuleRequirement.parse(module_name)]
         )
@@ -2361,6 +2359,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         reqs = [InmantaModuleRequirement(inmanta.util.parse_requirement(requirement=spec)) for spec in self._metadata.requires]
         return [*reqs, *self.get_module_v2_requirements()]
 
+    # TODO: could we cache this ?
     def collect_requirements(self) -> "Dict[str, List[InmantaModuleRequirement]]":
         """
         Collect the list of all module requirements of all modules in the project.
