@@ -624,12 +624,12 @@ async def test_process_already_terminated(server, environment):
 
 
 @pytest.fixture
-def set_state_dir_using_env_var(monkeypatch, tmpdir) -> Iterator[str]:
+def set_state_dir_using_env_var(monkeypatch, tmp_path) -> Iterator[str]:
     """
     Fixture that creates a temporary directory and configures it as the state directory
     of the server using the INMANTA_CONFIG_STATE_DIR environment variable.
     """
-    state_dir = os.path.join(tmpdir, "state_dir")
+    state_dir = str(tmp_path / "state_dir")
     os.mkdir(state_dir)
     monkeypatch.setenv("INMANTA_CONFIG_STATE_DIR", state_dir)
     yield state_dir
