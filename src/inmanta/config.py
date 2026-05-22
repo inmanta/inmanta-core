@@ -228,8 +228,8 @@ class Config:
         cls.__instance = None
         cls._config_dir = None
         cls._min_c_config_file = None
-        cls._config_updated()
         cls._ignore_env_vars = False
+        cls._config_updated()
 
     @classmethod
     def _config_updated(cls) -> None:
