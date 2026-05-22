@@ -376,6 +376,10 @@ def test_auth_jwt_env_vars_ignored_with_load_config(tmp_path, monkeypatch):
     Verify that when Config.load_config() is called with ignore_env_vars=True,
     AuthJWTConfig does not pick up JWT configuration from environment variables.
     """
+    # This environment variable overrides the client_types config option
+    # from the config file.
+    monkeypatch.setenv(f"{auth.ENV_AUTH_JWT_PREFIX}DEFAULT_CLIENT_TYPES", "api")
+
     config_file = os.path.join(tmp_path, "auth.cfg")
     with open(config_file, "w", encoding="utf-8") as fd:
         fd.write("""
@@ -391,10 +395,6 @@ audience=https://localhost:8888/
 
     config.Config.load_config(config_file, ignore_env_vars=True)
 
-    # This environment variable overrides the client_types config option
-    # from the config file.
-    monkeypatch.setenv(f"{auth.ENV_AUTH_JWT_PREFIX}DEFAULT_CLIENT_TYPES", "api")
-
     cfg_list = auth.AuthJWTConfig.list()
     assert cfg_list == ["default"]
 
@@ -407,6 +407,10 @@ def test_auth_jwt_env_vars_ignored_with_load_config_from_dict(monkeypatch):
     Verify that when Config.load_config_from_dict() is called with ignore_env_vars=True,
     AuthJWTConfig does not pick up JWT configuration from environment variables.
     """
+    # This environment variable overrides the client_types config option
+    # from the config dictionary.
+    monkeypatch.setenv(f"{auth.ENV_AUTH_JWT_PREFIX}DEFAULT_CLIENT_TYPES", "api")
+
     config.Config.load_config_from_dict(
         {
             "auth_jwt_default": {
@@ -421,10 +425,6 @@ def test_auth_jwt_env_vars_ignored_with_load_config_from_dict(monkeypatch):
         },
         ignore_env_vars=True,
     )
-
-    # This environment variable overrides the client_types config option
-    # from the config dictionary.
-    monkeypatch.setenv(f"{auth.ENV_AUTH_JWT_PREFIX}DEFAULT_CLIENT_TYPES", "api")
 
     cfg_list = auth.AuthJWTConfig.list()
     assert cfg_list == ["default"]
