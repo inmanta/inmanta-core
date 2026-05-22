@@ -326,5 +326,6 @@ async def test_executor_ignores_env_vars(monkeypatch, mpmanager_light: MPManager
         code=[executor.ModuleInstallSpec(module_name="test", module_version="123456", blueprint=blueprint)],
     )
 
-    state_dir_in_worker = await exe.call(GetConfig("config", "state_dir"))
-    assert state_dir_in_worker != fake_state_dir
+    state_dir_in_executor = await exe.call(GetConfig("config", "state_dir"))
+    monkeypatch.delenv("INMANTA_CONFIG_STATE_DIR")
+    assert state_dir_in_executor == inmanta.config.state_dir.get()
