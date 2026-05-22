@@ -169,8 +169,8 @@ class Config:
         cls.__instance = config
         cls._config_dir = config_dir
         cls._min_c_config_file = min_c_config_file
-        cls._config_updated()
         cls._ignore_env_vars = ignore_env_vars
+        cls._config_updated()
 
     @classmethod
     def config_as_dict(cls) -> typing.Mapping[str, typing.Mapping[str, typing.Any]]:

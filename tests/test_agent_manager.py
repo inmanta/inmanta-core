@@ -23,7 +23,7 @@ import os
 import typing
 import uuid
 from asyncio import subprocess
-from typing import Optional
+from typing import Iterator, Optional
 from unittest.mock import Mock
 from uuid import UUID, uuid4
 
@@ -624,7 +624,7 @@ async def test_process_already_terminated(server, environment):
 
 
 @pytest.fixture
-def set_state_dir_using_env_var(monkeypatch, tmpdir) -> str:
+def set_state_dir_using_env_var(monkeypatch, tmpdir) -> Iterator[str]:
     """
     Fixture that creates a temporary directory and configures it as the state directory
     of the server using the INMANTA_CONFIG_STATE_DIR environment variable.
