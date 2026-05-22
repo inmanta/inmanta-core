@@ -369,3 +369,65 @@ def test_authjwtconfig_thread_safe(inmanta_config):
         raise Exception(f"Some threads didn't stop after a timeout: {[(t.name, t.is_alive()) for t in threads]}")
 
     assert not errors, errors
+
+
+def test_auth_jwt_env_vars_ignored_with_load_config(tmp_path, monkeypatch):
+    """
+    Verify that when Config.load_config() is called with ignore_env_vars=True,
+    AuthJWTConfig does not pick up JWT configuration from environment variables.
+    """
+    config_file = os.path.join(tmp_path, "auth.cfg")
+    with open(config_file, "w", encoding="utf-8") as fd:
+        fd.write("""
+[auth_jwt_default]
+algorithm=HS256
+sign=true
+client_types=agent,compiler
+key=eciwliGyqECVmXtIkNpfVrtBLutZiITZKSKYhogeHMM
+expire=0
+issuer=https://localhost:8888/
+audience=https://localhost:8888/
+""")
+
+    config.Config.load_config(config_file, ignore_env_vars=True)
+
+    # This environment variable overrides the client_types config option
+    # from the config file.
+    monkeypatch.setenv(f"{auth.ENV_AUTH_JWT_PREFIX}DEFAULT_CLIENT_TYPES", "api")
+
+    cfg_list = auth.AuthJWTConfig.list()
+    assert cfg_list == ["default"]
+
+    cfg = auth.AuthJWTConfig.get("default")
+    assert sorted(cfg.client_types) == sorted(["agent", "compiler"])
+
+
+def test_auth_jwt_env_vars_ignored_with_load_config_from_dict(monkeypatch):
+    """
+    Verify that when Config.load_config_from_dict() is called with ignore_env_vars=True,
+    AuthJWTConfig does not pick up JWT configuration from environment variables.
+    """
+    config.Config.load_config_from_dict(
+        {
+            "auth_jwt_default": {
+                "algorithm": "HS256",
+                "sign": "true",
+                "client_types": "agent,compiler",
+                "key": "eciwliGyqECVmXtIkNpfVrtBLutZiITZKSKYhogeHMM",
+                "expire": "0",
+                "issuer": "https://localhost:8888/",
+                "audience": "https://localhost:8888/",
+            }
+        },
+        ignore_env_vars=True,
+    )
+
+    # This environment variable overrides the client_types config option
+    # from the config dictionary.
+    monkeypatch.setenv(f"{auth.ENV_AUTH_JWT_PREFIX}DEFAULT_CLIENT_TYPES", "api")
+
+    cfg_list = auth.AuthJWTConfig.list()
+    assert cfg_list == ["default"]
+
+    cfg = auth.AuthJWTConfig.get("default")
+    assert sorted(cfg.client_types) == sorted(["agent", "compiler"])
