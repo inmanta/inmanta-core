@@ -98,6 +98,13 @@ class Config:
         return cls.__config_definition
 
     @classmethod
+    def is_ignoring_env_vars(cls) -> bool:
+        """
+        Return True iff config options set using environment variables must be ignored.
+        """
+        return cls._ignore_env_vars
+
+    @classmethod
     def load_config(
         cls,
         min_c_config_file: Optional[str] = None,

@@ -636,7 +636,7 @@ def set_state_dir_using_env_var(monkeypatch, tmpdir) -> str:
 
 
 @pytest.mark.parametrize("auto_start_agent", [True])
-async def test_state_dir_scheduler(set_state_dir_using_env_var: str, server, environment):
+async def test_scheduler_ignores_env_var_state_dir(set_state_dir_using_env_var: str, server, environment):
     """
     Verify that the scheduler is using the state dir configured in its scheduler.cfg file
     and ignores the state directory configured using an environment variable.

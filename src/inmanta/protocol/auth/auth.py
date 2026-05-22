@@ -202,6 +202,8 @@ class AuthJWTConfig:
     @classmethod
     def _load_config_from_environment_variables(cls) -> dict[str, dict[str, str]]:
         env_config: dict[str, dict[str, str]] = defaultdict(dict[str, str])
+        if config.Config.is_ignoring_env_vars():
+            return env_config
         for name, value in os.environ.items():
             match: re.Match[str] | None = ENV_AUTH_JWT_SETTING_REGEX.match(name)
             if match:
