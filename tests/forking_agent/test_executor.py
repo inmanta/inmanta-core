@@ -301,3 +301,30 @@ def test_hash_with_duplicates():
     )
     assert duplicated == simple
     assert duplicated.blueprint_hash() == simple.blueprint_hash()
+
+
+async def test_executor_ignores_env_vars(monkeypatch, mpmanager_light: MPManager, tmp_path) -> None:
+    """
+    Verify that executor workers ignore config options set via environment variables.
+    """
+    fake_state_dir = str(tmp_path / "fake_state_dir")
+    monkeypatch.setenv("INMANTA_CONFIG_STATE_DIR", fake_state_dir)
+
+    manager = mpmanager_light
+    await manager.start()
+
+    blueprint = executor.ExecutorBlueprint(
+        environment_id=uuid.uuid4(),
+        pip_config=inmanta.data.PipConfig(),
+        requirements=[],
+        sources=[],
+        python_version=sys.version_info[:2],
+    )
+    exe = await manager.get_executor(
+        agent_name="agent1",
+        agent_uri="local:",
+        code=[executor.ModuleInstallSpec(module_name="test", module_version="123456", blueprint=blueprint)],
+    )
+
+    state_dir_in_worker = await exe.call(GetConfig("config", "state_dir"))
+    assert state_dir_in_worker != fake_state_dir
