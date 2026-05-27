@@ -658,7 +658,6 @@ class AgentManager(ServerSlice, SessionListener):
             key = (session.tid, endpoint)
             existing = self.tid_endpoint_to_session.get(key)
             if (existing is None or existing.id not in self.sessions) and agent_statuses[endpoint] != AgentStatus.paused:
-            # if key not in self.tid_endpoint_to_session and agent_statuses[endpoint] != AgentStatus.paused:
                 LOGGER.debug("set session %s as primary for agent %s in env %s", session.id, endpoint, session.tid)
                 self.tid_endpoint_to_session[key] = session
                 self.add_background_task(session.get_client().set_state(endpoint, enabled=True))
