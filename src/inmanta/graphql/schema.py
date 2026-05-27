@@ -737,10 +737,7 @@ class ResourceFilter(StrawberryFilter):
         if self.is_deploying is not None and self.is_deploying is not strawberry.UNSET:
             stmt = stmt.filter(models.ResourcePersistentState.is_deploying == self.is_deploying)
         if self.is_orphan is not None and self.is_orphan is not strawberry.UNSET:
-            if self.is_orphan:
-                stmt = stmt.filter(models.ResourcePersistentState.orphaned_after.is_not(None))
-            else:
-                stmt = stmt.filter(models.ResourcePersistentState.orphaned_after.is_(None))
+            stmt = stmt.filter(models.ResourcePersistentState.is_orphan.is_(self.is_orphan))
         return stmt
 
 
