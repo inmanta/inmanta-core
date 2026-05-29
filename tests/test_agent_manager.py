@@ -783,11 +783,11 @@ async def test_do_start_agent_clears_shadowed_settings_env_vars(server_config, m
     """
     state_dir_env_var: str = config.state_dir.get_environment_variable()
     environment_env_var: str = inmanta.agent.config.environment.get_environment_variable()
-    executor_venv_retention_time_env_var: str = inmanta.agent.config.executor_venv_retention_time.get_environment_variable()
+    logging_config_env_var: str = config.logging_config.get_environment_variable()
 
     monkeypatch.setenv(state_dir_env_var, str(tmp_path / "state_dir"))
     monkeypatch.setenv(environment_env_var, "00000000-0000-0000-0000-000000000000")
-    monkeypatch.setenv(executor_venv_retention_time_env_var, "42")
+    monkeypatch.setenv(logging_config_env_var, str(tmp_path / "logging_config"))
 
     captured_env: dict[str, str] = {}
 
@@ -819,6 +819,9 @@ async def test_do_start_agent_clears_shadowed_settings_env_vars(server_config, m
     # verify that overridden settings are properly trimmed from the environment
     assert state_dir_env_var not in captured_env
     assert environment_env_var not in captured_env
-    # verify that other settings still reach the agent process
-    assert "PATH" in captured_env
-    assert captured_env.get(executor_venv_retention_time_env_var) == "42"
+    # Verify that other settings still reach the agent process.
+    # For now, this is mostly relevant as an additional safeguard in case we missed a relevant agent setting in the workaround
+    # for TODO.
+    # Once that issue has been addressed, this mechanism will ensure we properly inherit most of the agent config from the
+    # global one.
+    assert captured_env.get(logging_config_env_var) == str(tmp_path / "logging_config")

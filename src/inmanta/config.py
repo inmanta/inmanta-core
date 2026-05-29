@@ -241,16 +241,21 @@ class Config:
         name = normalize_name(name)
 
         option: Optional[Option[object]] = cls.validate_option_request(section, name, default_value)
-        return cls.get_for_option(option) if option is not None else cls._get_value(section, name, default_value)
+        return cls.get_for_option(option) if option is not None else cls.get_raw_value(section, name, default_value)
 
     @classmethod
     def get_for_option(cls, option: "Option[T]") -> T:
-        default_value = option.get_default_value()
-        raw_value: str | T = cls._get_value(option.section, option.name, default_value)
-        return option.validate(raw_value)
+        """
+        Returns the parsed and validated option. Unlike Option.get(), does not fall back to deprecated predecessor option.
+        """
+        return option.parse(cls.get_raw_value(option.section, option.name, None))
 
     @classmethod
-    def _get_value(cls, section: str, name: str, default_value: T) -> str | T:
+    def get_raw_value(cls, section: str, name: str, default_value: T) -> str | T:
+        """
+        Returns the option as the raw string as defined in the config file / env var, or default_value if it is not set.
+        To get the properly typed option value, with default value filled in, see get_for_option().
+        """
         cfg: ConfigParser = cls.get_instance()
         val: Optional[str] = _get_from_env(section, name)
         if val is not None:
@@ -435,7 +440,7 @@ class Option(Generic[T]):
     :param documentation: the documentation for this option
     :param validator: a function responsible for turning the string representation of the option into the correct type.
         Its docstring is used as representation for the type of the option.
-    :param predecessor_option: The Option that was deprecated in favour of this option.
+    :param predecessor_option: The Option that was deprecated in favour of this option. Should not be nested.
     """
 
     def __init__(
@@ -461,18 +466,31 @@ class Option(Generic[T]):
         """
         return f"{self.section}.{self.name}"
 
-    def get(self) -> T:
+    def get_raw(self) -> str | None:
+        """
+        Returns this option as the raw string as defined in the config file / env var, or None if it is not set.
+        """
         raw_config: ConfigParser = Config.get()
-        if self.predecessor_option:
-            has_deprecated_option = raw_config.has_option(self.predecessor_option.section, self.predecessor_option.name)
-            has_new_option = raw_config.has_option(self.section, self.name)
-            if has_deprecated_option and not has_new_option:
-                warnings.warn(
-                    f"Config option {self.predecessor_option.name} is deprecated. Use {self.name} instead.",
-                    category=DeprecationWarning,
-                )
-                return self.predecessor_option.get()
-        return Config.get_for_option(self)
+        result: str | None = Config.get_raw_value(self.section, self.name, None)
+        if result is not None or not self.predecessor_option:
+            return result
+        predecessor_result: str | None = self.predecessor_option.get_raw()
+        if predecessor_result is not None:
+            warnings.warn(
+                f"Config option {self.predecessor_option.name} is deprecated. Use {self.name} instead.",
+                category=DeprecationWarning,
+            )
+            return predecessor_result
+        return None
+
+    def parse(self, value: str | None) -> T:
+        """
+        Parses the raw string value by running it through validate, or returns default value if None.
+        """
+        return self.validate(value if value is not None else self.get_default_value())
+
+    def get(self) -> T:
+        return self.parse(self.get_raw())
 
     def get_type(self) -> Optional[str]:
         if callable(self.validator):

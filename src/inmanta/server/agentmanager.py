@@ -55,7 +55,7 @@ from inmanta.server import (
     SLICE_SERVER,
     SLICE_TRANSPORT,
 )
-from inmanta.server import config as opt
+from inmanta.server import config as server_config
 from inmanta.server import protocol
 from inmanta.server.protocol import ServerSlice
 from inmanta.server.server import Server
@@ -63,7 +63,6 @@ from inmanta.server.services import environmentservice
 from inmanta.types import Apireturn, ArgumentTypes, ResourceIdStr, ReturnTupple
 
 from ..data.dataview import AgentView
-from . import config as server_config
 from .validate_filter import InvalidFilter
 
 LOGGER = logging.getLogger(__name__)
@@ -120,7 +119,7 @@ class AgentManager(ServerSlice, websocket.SessionListener):
         super().__init__(SLICE_AGENT_MANAGER)
 
         if fact_back_off is None:
-            fact_back_off = opt.server_fact_resource_block.get()
+            fact_back_off = server_config.server_fact_resource_block.get()
 
         # back-off timer for fact requests
         self._fact_resource_block: int = fact_back_off
@@ -218,7 +217,7 @@ class AgentManager(ServerSlice, websocket.SessionListener):
             await self._expire_all_sessions_in_db()
 
         # Schedule cleanup of schedulersession table
-        agent_process_purge_interval = opt.agent_process_purge_interval.get()
+        agent_process_purge_interval = server_config.agent_process_purge_interval.get()
         if agent_process_purge_interval > 0:
             self.schedule(
                 self._purge_agent_processes, interval=agent_process_purge_interval, initial_delay=0, cancel_on_stop=False
@@ -483,7 +482,7 @@ class AgentManager(ServerSlice, websocket.SessionListener):
                     await data.SchedulerSession.expire_all(now=datetime.now().astimezone(), connection=connection)
 
     async def _purge_agent_processes(self) -> None:
-        agent_processes_to_keep = opt.agent_processes_to_keep.get()
+        agent_processes_to_keep = server_config.agent_processes_to_keep.get()
         await data.SchedulerSession.cleanup(nr_expired_records_to_keep=agent_processes_to_keep)
 
     def get_session_for(self, tid: uuid.UUID) -> Optional[websocket.Session]:
@@ -979,19 +978,18 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         """
         assert not assert_no_start_scheduler
 
-        config_options: str = await self._make_agent_config(env)
+        config_options: Mapping[inmanta.config.Option[object], str | None] = await self._get_agent_config(env)
 
         root_dir: str = self._server_storage["server"]
         config_dir = os.path.join(root_dir, str(env.id))
 
         os.makedirs(config_dir, exist_ok=True)
 
-        # TODO: clean up, move to config module
-        parser = global_config.LenientConfigParser(interpolation=configparser.Interpolation())
         section_dict: dict[str, dict[str, str]] = {}
         for option, value in config_options.items():
             if value is not None:
-                section_dict.setdefault(option.section, {})[option.name] = str(value)
+                section_dict.setdefault(option.section, {})[option.name] = value
+        parser = global_config.LenientConfigParser(interpolation=configparser.Interpolation())
         parser.read_dict(section_dict)
 
         config_path = os.path.join(config_dir, "scheduler.cfg")
@@ -1021,63 +1019,70 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         LOGGER.debug("Started new agent with PID %s", proc.pid)
         return ProcessDetails(process=proc, path_stdout=out, path_stderr=err)
 
-    async def _make_agent_config(
+    async def _get_agent_config(
         self,
         env: data.Environment,
-    ) -> dict[inmanta.config.Option[object], object | None]:
-        # TODO: return type. Also mention the None semantics
+    ) -> dict[inmanta.config.Option[object], str | None]:
         """
-        Generate the config file for the process that hosts the autostarted agents
+        Returns the config specific to this agent. All other config options should be inherited from the global config /
+        environment.
+
+        Returns all options that should be overridden for this agent. A None value signals that it should be left unset,
+        not inherited from the environment. Config values are returned as str to guarantee round-trip compatibility
+        (e.g. in cases where default != validate(str(default)), such as comma-separated lists).
 
         :param env: The environment for which to autostart agents
-        :return: A string that contains the config file content.
+        :return: A mapping of config options to their values
         """
         environment_id: str = str(env.id)
-        port: int = opt.server_bind_port.get()
 
-        privatestatedir: str = self._get_state_dir_for_agent_in_env(env.id)
-
-        agent_config_overrides: dict[inmanta.config.Option[object], object | None] = {
+        agent_config_overrides: Mapping[inmanta.config.Option[object], str | None] = {
             # global config overrides
-            global_config.state_dir: privatestatedir,
-            # TODO: redundant?
-            global_config.log_dir: global_config.log_dir.get(),
+            global_config.state_dir: self._get_state_dir_for_agent_in_env(env.id),
             # scheduler config
             agent_cfg.environment: environment_id,
-            # TODO: 2 redundant?
-            agent_cfg.agent_executor_cap: agent_cfg.agent_executor_cap.get(),
-            agent_cfg.agent_executor_retention_time: agent_cfg.agent_executor_retention_time.get(),
             # agent transport
-            agent_cfg.agent_transport.host: opt.internal_server_address.get(),
-            agent_cfg.agent_transport.port: port,
-            agent_cfg.agent_transport.ssl: server_config.server_ssl_key.get() is not None,
+            agent_cfg.agent_transport.host: server_config.internal_server_address.get(),
+            agent_cfg.agent_transport.port: str(server_config.server_bind_port.get()),
+            agent_cfg.agent_transport.ssl: str(server_config.server_ssl_key.get() is not None).lower(),
             agent_cfg.agent_transport.ssl_ca_cert_file: server_config.server_ssl_ca_cert.get(),
             agent_cfg.agent_transport.token: (
                 encode_token(["agent"], environment_id) if server_config.server_enable_auth.get() else None
             ),
         }
-        # TODO: add a comment: passthrough just in case until the follow-up ticket is fixed, though server
-        #       config is read by agent anyway
-        agent_config_passthrough: dict[inmanta.config.Option[object], object | None] = {
-            option: option.get()
+        # Best-effort approach to work around TODO: link ticket
+        # use get_raw() because it is guaranteed to be round-trip compatible
+        agent_config_passthrough: Mapping[inmanta.config.Option[object], str | None] = {
+            option: option.get_raw()
             for option in [
-                opt.db_wait_time,
-                opt.db_host,
-                opt.db_port,
-                opt.db_name,
-                opt.db_username,
-                opt.db_password,
+                global_config.log_dir,
+                scheduler_log_config,
+                agent_cfg.agent_reconnect_delay,
+                agent_cfg.server_timeout,
+                agent_cfg.agent_executor_cap,
+                agent_cfg.agent_executor_retention_time,
+                agent_cfg.executor_venv_retention_time,
+                agent_cfg.agent_cache_cleanup_tick_rate,
+                agent_cfg.agent_ws_ping_interval,
+                agent_cfg.agent_ws_ping_timeout,
+                agent_cfg.agent_transport.request_timeout,
+                agent_cfg.agent_transport.max_clients,
                 agent_cfg.scheduler_db_connection_pool_min_size,
                 agent_cfg.scheduler_db_connection_pool_max_size,
                 agent_cfg.scheduler_db_connection_timeout,
-                opt.influxdb_host,
-                opt.influxdb_port,
-                opt.influxdb_name,
-                opt.influxdb_username,
-                opt.influxdb_password,
-                opt.influxdb_interval,
-                opt.influxdb_tags,
-                scheduler_log_config,
+                server_config.db_wait_time,
+                server_config.db_host,
+                server_config.db_port,
+                server_config.db_name,
+                server_config.db_username,
+                server_config.db_password,
+                server_config.influxdb_host,
+                server_config.influxdb_port,
+                server_config.influxdb_name,
+                server_config.influxdb_username,
+                server_config.influxdb_password,
+                server_config.influxdb_interval,
+                server_config.influxdb_tags,
             ]
         }
 
