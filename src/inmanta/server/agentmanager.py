@@ -17,6 +17,7 @@ Contact: code@inmanta.com
 """
 
 import asyncio
+import configparser
 import logging
 import os
 import shutil
@@ -961,7 +962,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
                     start_new_process = False
 
                 if start_new_process:
-                    self._agent_procs[env] = await self.__do_start_agent(refreshed_env, connection=connection)
+                    self._agent_procs[env] = await self.__do_start_agent(refreshed_env)
 
                 # Wait for the scheduler to come up
                 try:
@@ -970,9 +971,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
                     LOGGER.warning("Scheduler did not become active before the timeout expired")
                 return start_new_process
 
-    async def __do_start_agent(
-        self, env: data.Environment, *, connection: Optional[asyncpg.connection.Connection] = None
-    ) -> ProcessDetails:
+    async def __do_start_agent(self, env: data.Environment) -> ProcessDetails:
         """
         Start an autostarted agent process for the given environment. Should only be called if none is running yet.
 
@@ -980,19 +979,34 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         """
         assert not assert_no_start_scheduler
 
-        config: str = await self._make_agent_config(env, connection=connection)
+        config_options: str = await self._make_agent_config(env)
 
         root_dir: str = self._server_storage["server"]
         config_dir = os.path.join(root_dir, str(env.id))
 
         os.makedirs(config_dir, exist_ok=True)
 
+        # TODO: clean up, move to config module
+        parser = global_config.LenientConfigParser(interpolation=configparser.Interpolation())
+        section_dict: dict[str, dict[str, str]] = {}
+        for option, value in config_options.items():
+            if value is not None:
+                section_dict.setdefault(option.section, {})[option.name] = str(value)
+        parser.read_dict(section_dict)
+
         config_path = os.path.join(config_dir, "scheduler.cfg")
         with open(config_path, "w+", encoding="utf-8") as fd:
-            fd.write(config)
+            parser.write(fd)
 
         out: str = os.path.join(self._server_storage["logs"], "agent-%s.out" % env.id)
         err: str = os.path.join(self._server_storage["logs"], "agent-%s.err" % env.id)
+
+        env = os.environ.copy()
+        # TODO: clean up
+        for opt in config_options.keys():
+            env.pop(opt.get_environment_variable(), None)
+        # TODO: does this belong here or in fork_inmanta?
+        env.update(tracing.get_context())
 
         proc: subprocess.Process = await self._fork_inmanta(
             [
@@ -1005,6 +1019,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
             ],
             out,
             err,
+            env=env,
         )
 
         LOGGER.debug("Started new agent with PID %s", proc.pid)
@@ -1013,95 +1028,66 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
     async def _make_agent_config(
         self,
         env: data.Environment,
-        *,
-        connection: Optional[asyncpg.connection.Connection],
-    ) -> str:
+    ) -> dict[inmanta.config.Option[object], object | None]:
+        # TODO: return type. Also mention the None semantics
         """
         Generate the config file for the process that hosts the autostarted agents
 
         :param env: The environment for which to autostart agents
         :return: A string that contains the config file content.
         """
-        environment_id = str(env.id)
+        environment_id: str = str(env.id)
         port: int = opt.server_bind_port.get()
 
         privatestatedir: str = self._get_state_dir_for_agent_in_env(env.id)
 
-        # generate config file
-        config = f"""[config]
-state-dir=%(statedir)s
-log-dir={global_config.log_dir.get()}
+        agent_config_overrides: dict[inmanta.config.Option[object], object | None] = {
+            # global config overrides
+            global_config.state_dir: privatestatedir,
+            # TODO: redundant?
+            global_config.log_dir: global_config.log_dir.get(),
 
-environment=%(env_id)s
+            # scheduler config
+            agent_cfg.environment: environment_id,
+            # TODO: 2 redundant?
+            agent_cfg.agent_executor_cap: agent_cfg.agent_executor_cap.get(),
+            agent_cfg.agent_executor_retention_time: agent_cfg.agent_executor_retention_time.get(),
 
-[agent]
-executor-cap={agent_cfg.agent_executor_cap.get()}
-executor-retention-time={agent_cfg.agent_executor_retention_time.get()}
-
-[agent_rest_transport]
-port=%(port)s
-host={opt.internal_server_address.get()}
-""" % {
-            "env_id": environment_id,
-            "port": port,
-            "statedir": privatestatedir,
+            # agent transport
+            agent_cfg.agent_transport.host: opt.internal_server_address.get(),
+            agent_cfg.agent_transport.port: port,
+            agent_cfg.agent_transport.ssl: server_config.server_ssl_key.get() is not None,
+            agent_cfg.agent_transport.ssl_ca_cert_file: server_config.server_ssl_ca_cert.get(),
+            agent_cfg.agent_transport.token: encode_token(["agent"], environment_id) if server_config.server_enable_auth.get() else None,
+        }
+        # TODO: add a comment: passthrough just in case until the follow-up ticket is fixed, though server config is read by agent anyway
+        agent_config_passthrough: dict[inmanta.config.Option[object], object | None] = {
+            option: option.get()
+            for option in [
+                opt.db_wait_time,
+                opt.db_host,
+                opt.db_port,
+                opt.db_name,
+                opt.db_username,
+                opt.db_password,
+                agent_cfg.scheduler_db_connection_pool_min_size,
+                agent_cfg.scheduler_db_connection_pool_max_size,
+                agent_cfg.scheduler_db_connection_timeout,
+                opt.influxdb_host,
+                opt.influxdb_port,
+                opt.influxdb_name,
+                opt.influxdb_username,
+                opt.influxdb_password,
+                opt.influxdb_interval,
+                opt.influxdb_tags,
+                scheduler_log_config,
+            ]
         }
 
-        if server_config.server_enable_auth.get():
-            token = encode_token(["agent"], environment_id)
-            config += """
-token=%s
-    """ % (token)
-
-        ssl_cert: Optional[str] = server_config.server_ssl_key.get()
-        ssl_ca: Optional[str] = server_config.server_ssl_ca_cert.get()
-
-        if ssl_ca is not None and ssl_cert is not None:
-            # override CA
-            config += """
-ssl=True
-ssl_ca_cert_file=%s
-    """ % (ssl_ca)
-        elif ssl_cert is not None:
-            # system CA
-            config += """
-ssl=True
-    """
-        config += f"""
-[database]
-wait_time={opt.db_wait_time.get()}
-host={opt.db_host.get()}
-port={opt.db_port.get()}
-name={opt.db_name.get()}
-username={opt.db_username.get()}
-password={opt.db_password.get()}
-
-[scheduler]
-db-connection-pool-min-size={agent_cfg.scheduler_db_connection_pool_min_size.get()}
-db-connection-pool-max-size={agent_cfg.scheduler_db_connection_pool_max_size.get()}
-db-connection-timeout={agent_cfg.scheduler_db_connection_timeout.get()}
-
-[influxdb]
-host = {opt.influxdb_host.get()}
-port = {opt.influxdb_port.get()}
-name = {opt.influxdb_name.get()}
-username = {opt.influxdb_username.get()}
-password = {opt.influxdb_password.get()}
-interval = {opt.influxdb_interval.get()}
-tags = {config_map_to_str(opt.influxdb_tags.get())}
-"""
-
-        if scheduler_log_config.get():
-            config += f"""
-
-[logging]
-scheduler = {os.path.abspath(scheduler_log_config.get())}
-"""
-
-        return config
+        return agent_config_overrides | agent_config_passthrough
 
     async def _fork_inmanta(
-        self, args: list[str], outfile: Optional[str], errfile: Optional[str], cwd: Optional[str] = None
+        self, args: list[str], outfile: Optional[str], errfile: Optional[str], cwd: Optional[str] = None, *, env: Mapping[str, object] | None = None
     ) -> subprocess.Process:
         """
         Fork an inmanta process from the same code base as the current code
@@ -1116,8 +1102,6 @@ scheduler = {os.path.abspath(scheduler_log_config.get())}
             if errfile is not None:
                 errhandle = open(errfile, "wb+")
 
-            env = os.environ.copy()
-            env.update(tracing.get_context())
             return await asyncio.create_subprocess_exec(
                 sys.executable, *full_args, cwd=cwd, env=env, stdout=outhandle, stderr=errhandle
             )
