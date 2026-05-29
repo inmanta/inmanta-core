@@ -34,7 +34,7 @@ from inmanta.ast.statements import (
     StaticEagerPromise,
     VariableReferenceHook,
 )
-from inmanta.ast.type import Bool, create_function
+from inmanta.ast.type import Bool
 from inmanta.ast.variables import IsDefinedGradual, Reference
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import ExecutionUnit, HangUnit, QueueScheduler, Resolver, ResultVariable, VariableABC
@@ -182,12 +182,6 @@ class Operator(ReferenceStatement, metaclass=OpMetaClass):
         for arg in self._arguments:
             arg_list.append(str(arg))
         return "{}({})".format(self.__class__.__name__, ", ".join(arg_list))
-
-    def to_function(self):
-        """
-        Returns a function that represents this expression
-        """
-        return create_function(expression=self)
 
     def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
         return dataflow.NodeStub("Operator.get_node() placeholder for %s" % self).reference()
