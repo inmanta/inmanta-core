@@ -22,8 +22,8 @@ import logging
 import os
 import typing
 import uuid
-from collections.abc import Iterator, Mapping
 from asyncio import subprocess
+from collections.abc import Iterator
 from typing import Optional
 from unittest.mock import Mock
 from uuid import UUID, uuid4

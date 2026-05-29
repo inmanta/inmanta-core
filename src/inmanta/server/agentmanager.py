@@ -41,7 +41,7 @@ from inmanta import const, data
 from inmanta import logging as inmanta_logging
 from inmanta import tracing
 from inmanta.agent import config as agent_cfg
-from inmanta.config import Config, config_map_to_str, scheduler_log_config
+from inmanta.config import Config, scheduler_log_config
 from inmanta.const import AgentAction, AgentStatus, AllAgentAction
 from inmanta.data import APILIMIT, Environment, InvalidSort, model
 from inmanta.data.model import DataBaseReport
@@ -1001,12 +1001,8 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         out: str = os.path.join(self._server_storage["logs"], "agent-%s.out" % env.id)
         err: str = os.path.join(self._server_storage["logs"], "agent-%s.err" % env.id)
 
-        env = os.environ.copy()
-        # TODO: clean up
-        for opt in config_options.keys():
-            env.pop(opt.get_environment_variable(), None)
-        # TODO: does this belong here or in fork_inmanta?
-        env.update(tracing.get_context())
+        shadowed_config_env_vars: Set[str] = {option.get_environment_variable() for option in config_options.keys()}
+        env = {k: v for k, v in os.environ.items() if k not in shadowed_config_env_vars}
 
         proc: subprocess.Process = await self._fork_inmanta(
             [
@@ -1046,21 +1042,22 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
             global_config.state_dir: privatestatedir,
             # TODO: redundant?
             global_config.log_dir: global_config.log_dir.get(),
-
             # scheduler config
             agent_cfg.environment: environment_id,
             # TODO: 2 redundant?
             agent_cfg.agent_executor_cap: agent_cfg.agent_executor_cap.get(),
             agent_cfg.agent_executor_retention_time: agent_cfg.agent_executor_retention_time.get(),
-
             # agent transport
             agent_cfg.agent_transport.host: opt.internal_server_address.get(),
             agent_cfg.agent_transport.port: port,
             agent_cfg.agent_transport.ssl: server_config.server_ssl_key.get() is not None,
             agent_cfg.agent_transport.ssl_ca_cert_file: server_config.server_ssl_ca_cert.get(),
-            agent_cfg.agent_transport.token: encode_token(["agent"], environment_id) if server_config.server_enable_auth.get() else None,
+            agent_cfg.agent_transport.token: (
+                encode_token(["agent"], environment_id) if server_config.server_enable_auth.get() else None
+            ),
         }
-        # TODO: add a comment: passthrough just in case until the follow-up ticket is fixed, though server config is read by agent anyway
+        # TODO: add a comment: passthrough just in case until the follow-up ticket is fixed, though server
+        #       config is read by agent anyway
         agent_config_passthrough: dict[inmanta.config.Option[object], object | None] = {
             option: option.get()
             for option in [
@@ -1087,11 +1084,20 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         return agent_config_overrides | agent_config_passthrough
 
     async def _fork_inmanta(
-        self, args: list[str], outfile: Optional[str], errfile: Optional[str], cwd: Optional[str] = None, *, env: Mapping[str, object] | None = None
+        self,
+        args: list[str],
+        outfile: Optional[str],
+        errfile: Optional[str],
+        cwd: Optional[str] = None,
+        *,
+        env: Mapping[str, object] | None = None,
     ) -> subprocess.Process:
         """
         Fork an inmanta process from the same code base as the current code
         """
+        env = env if env is not None else os.environ.copy()
+        env.update(tracing.get_context())
+
         full_args = ["-m", "inmanta.app", *args]
         # handles can be closed, owned by child process,...
         outhandle = None
