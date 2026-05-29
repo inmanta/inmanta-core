@@ -1051,7 +1051,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
             ),
         }
 
-        # Best-effort approach to work around TODO: link ticket
+        # Best-effort approach to work around #10421
         agent_config_passthrough: Sequence[inmanta.config.Option[typing.Any]] = [
             global_config.log_dir,
             scheduler_log_config,
