@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump pyjwt from 2.12.1 to 2.13.0
+destination-branches:
+- iso9
+sections: {}
