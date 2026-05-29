@@ -784,7 +784,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         preserver = server.get_slice(SLICE_SERVER)
         assert isinstance(preserver, Server)
         self._server: Server = preserver
-        self._server_storage: dict[str, str] = self._server._server_storage
+        self._server_storage: Mapping[str, str] = self._server._server_storage
 
         agent_manager = server.get_slice(SLICE_AGENT_MANAGER)
         assert isinstance(agent_manager, AgentManager)
