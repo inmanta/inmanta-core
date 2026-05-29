@@ -23,6 +23,7 @@ import os
 import shutil
 import sys
 import time
+import typing
 import uuid
 from asyncio import subprocess
 from collections.abc import Iterable, Mapping, Sequence, Set
@@ -1000,7 +1001,6 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         err: str = os.path.join(self._server_storage["logs"], "agent-%s.err" % env.id)
 
         shadowed_config_env_vars: Set[str] = {option.get_environment_variable() for option in config_options.keys()}
-        env = {k: v for k, v in os.environ.items() if k not in shadowed_config_env_vars}
 
         proc: subprocess.Process = await self._fork_inmanta(
             [
@@ -1013,7 +1013,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
             ],
             out,
             err,
-            env=env,
+            env={k: v for k, v in os.environ.items() if k not in shadowed_config_env_vars},
         )
 
         LOGGER.debug("Started new agent with PID %s", proc.pid)
@@ -1036,7 +1036,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         """
         environment_id: str = str(env.id)
 
-        agent_config_overrides: Mapping[inmanta.config.Option[object], str | None] = {
+        agent_config_overrides: dict[inmanta.config.Option[typing.Any], str | None] = {
             # global config overrides
             global_config.state_dir: self._get_state_dir_for_agent_in_env(env.id),
             # scheduler config
@@ -1050,43 +1050,40 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
                 encode_token(["agent"], environment_id) if server_config.server_enable_auth.get() else None
             ),
         }
-        # Best-effort approach to work around TODO: link ticket
-        # use get_raw() because it is guaranteed to be round-trip compatible
-        agent_config_passthrough: Mapping[inmanta.config.Option[object], str | None] = {
-            option: option.get_raw()
-            for option in [
-                global_config.log_dir,
-                scheduler_log_config,
-                agent_cfg.agent_reconnect_delay,
-                agent_cfg.server_timeout,
-                agent_cfg.agent_executor_cap,
-                agent_cfg.agent_executor_retention_time,
-                agent_cfg.executor_venv_retention_time,
-                agent_cfg.agent_cache_cleanup_tick_rate,
-                agent_cfg.agent_ws_ping_interval,
-                agent_cfg.agent_ws_ping_timeout,
-                agent_cfg.agent_transport.request_timeout,
-                agent_cfg.agent_transport.max_clients,
-                agent_cfg.scheduler_db_connection_pool_min_size,
-                agent_cfg.scheduler_db_connection_pool_max_size,
-                agent_cfg.scheduler_db_connection_timeout,
-                server_config.db_wait_time,
-                server_config.db_host,
-                server_config.db_port,
-                server_config.db_name,
-                server_config.db_username,
-                server_config.db_password,
-                server_config.influxdb_host,
-                server_config.influxdb_port,
-                server_config.influxdb_name,
-                server_config.influxdb_username,
-                server_config.influxdb_password,
-                server_config.influxdb_interval,
-                server_config.influxdb_tags,
-            ]
-        }
 
-        return agent_config_overrides | agent_config_passthrough
+        # Best-effort approach to work around TODO: link ticket
+        agent_config_passthrough: Sequence[inmanta.config.Option[typing.Any]] = [
+            global_config.log_dir,
+            scheduler_log_config,
+            agent_cfg.agent_reconnect_delay,
+            agent_cfg.server_timeout,
+            agent_cfg.agent_executor_cap,
+            agent_cfg.agent_executor_retention_time,
+            agent_cfg.executor_venv_retention_time,
+            agent_cfg.agent_cache_cleanup_tick_rate,
+            agent_cfg.agent_ws_ping_interval,
+            agent_cfg.agent_ws_ping_timeout,
+            agent_cfg.agent_transport.request_timeout,
+            agent_cfg.agent_transport.max_clients,
+            agent_cfg.scheduler_db_connection_pool_min_size,
+            agent_cfg.scheduler_db_connection_pool_max_size,
+            agent_cfg.scheduler_db_connection_timeout,
+            server_config.db_wait_time,
+            server_config.db_host,
+            server_config.db_port,
+            server_config.db_name,
+            server_config.db_username,
+            server_config.db_password,
+            server_config.influxdb_host,
+            server_config.influxdb_port,
+            server_config.influxdb_name,
+            server_config.influxdb_username,
+            server_config.influxdb_password,
+            server_config.influxdb_interval,
+            server_config.influxdb_tags,
+        ]
+
+        return agent_config_overrides | {option: option.get_raw() for option in agent_config_passthrough}
 
     async def _fork_inmanta(
         self,
@@ -1095,13 +1092,15 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         errfile: Optional[str],
         cwd: Optional[str] = None,
         *,
-        env: Mapping[str, object] | None = None,
+        env: Mapping[str, str] | None = None,
     ) -> subprocess.Process:
         """
         Fork an inmanta process from the same code base as the current code
         """
-        env = env if env is not None else os.environ.copy()
-        env.update(tracing.get_context())
+        full_env = {
+            **(env if env is not None else os.environ),
+            **tracing.get_context(),
+        }
 
         full_args = ["-m", "inmanta.app", *args]
         # handles can be closed, owned by child process,...
@@ -1114,7 +1113,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
                 errhandle = open(errfile, "wb+")
 
             return await asyncio.create_subprocess_exec(
-                sys.executable, *full_args, cwd=cwd, env=env, stdout=outhandle, stderr=errhandle
+                sys.executable, *full_args, cwd=cwd, env=full_env, stdout=outhandle, stderr=errhandle
             )
         finally:
             if outhandle is not None:
