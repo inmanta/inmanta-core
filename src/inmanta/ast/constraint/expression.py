@@ -187,7 +187,7 @@ class Operator(ReferenceStatement, metaclass=OpMetaClass):
         """
         Returns a function that represents this expression
         """
-        return create_function(self)
+        return create_function(expression=self)
 
     def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
         return dataflow.NodeStub("Operator.get_node() placeholder for %s" % self).reference()
