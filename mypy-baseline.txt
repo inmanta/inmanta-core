@@ -228,7 +228,6 @@ src/inmanta/config.py:0: error: Missing type parameters for generic type "Option
 src/inmanta/config.py:0: error: Missing type parameters for generic type "Option"  [type-arg]
 src/inmanta/config.py:0: error: Missing type parameters for generic type "Option"  [type-arg]
 src/inmanta/config.py:0: error: Missing type parameters for generic type "Option"  [type-arg]
-src/inmanta/config.py:0: error: Returning Any from function declared to return "T"  [no-any-return]
 src/inmanta/data/__init__.py:0: error: "BaseDocument" has no attribute "__name__"  [attr-defined]
 src/inmanta/data/__init__.py:0: error: "BaseDocument" has no attribute "__name__"  [attr-defined]
 src/inmanta/data/__init__.py:0: error: "BaseDocument" has no attribute "_fields"; maybe "load_fields"?  [attr-defined]
