@@ -979,7 +979,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         """
         assert not assert_no_start_scheduler
 
-        config_options: Mapping[inmanta.config.Option[object], str | None] = await self._get_agent_config(env)
+        config_options: Mapping[inmanta.config.Option[object], str | None] = self._get_agent_config(env)
 
         root_dir: str = self._server_storage["server"]
         config_dir = os.path.join(root_dir, str(env.id))
@@ -1019,7 +1019,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         LOGGER.debug("Started new agent with PID %s", proc.pid)
         return ProcessDetails(process=proc, path_stdout=out, path_stderr=err)
 
-    async def _get_agent_config(
+    def _get_agent_config(
         self,
         env: data.Environment,
     ) -> dict[inmanta.config.Option[object], str | None]:
@@ -1035,6 +1035,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         :return: A mapping of config options to their values
         """
         environment_id: str = str(env.id)
+        scheduler_log_config_value: str | None = scheduler_log_config.get()
 
         agent_config_overrides: dict[inmanta.config.Option[typing.Any], str | None] = {
             # global config overrides
@@ -1049,12 +1050,14 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
             agent_cfg.agent_transport.token: (
                 encode_token(["agent"], environment_id) if server_config.server_enable_auth.get() else None
             ),
+            scheduler_log_config: (
+                os.path.abspath(scheduler_log_config_value) if scheduler_log_config_value is not None else None
+            ),
         }
 
         # Best-effort approach to work around #10421
         agent_config_passthrough: Sequence[inmanta.config.Option[typing.Any]] = [
             global_config.log_dir,
-            scheduler_log_config,
             agent_cfg.agent_reconnect_delay,
             agent_cfg.server_timeout,
             agent_cfg.agent_executor_cap,
