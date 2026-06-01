@@ -19,15 +19,18 @@ Contact: code@inmanta.com
 import asyncio
 import datetime
 import logging
+import os
 import typing
 import uuid
 from asyncio import subprocess
+from collections.abc import Iterator
 from typing import Optional
 from unittest.mock import Mock
 from uuid import UUID, uuid4
 
 import pytest
 
+import inmanta.agent.config
 from inmanta import config, const, data
 from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus
@@ -622,6 +625,40 @@ async def test_process_already_terminated(server, environment):
     await autostarted_agent_manager._terminate_agents()
 
 
+@pytest.fixture
+def set_state_dir_using_env_var(monkeypatch, tmp_path) -> Iterator[str]:
+    """
+    Fixture that creates a temporary directory and configures it as the state directory
+    of the server using the INMANTA_CONFIG_STATE_DIR environment variable.
+    """
+    state_dir = str(tmp_path / "state_dir")
+    os.mkdir(state_dir)
+    monkeypatch.setenv(config.state_dir.get_environment_variable(), state_dir)
+    yield state_dir
+
+
+@pytest.mark.parametrize("auto_start_agent", [True])
+async def test_scheduler_ignores_env_var_state_dir(set_state_dir_using_env_var: str, server, environment):
+    """
+    Verify that the scheduler is using the state dir configured in its scheduler.cfg file
+    and ignores the state directory configured using an environment variable.
+    """
+    server_state_dir: str = set_state_dir_using_env_var
+
+    autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
+    await autostarted_agent_manager._ensure_scheduler(env=uuid.UUID(environment))
+    assert len(autostarted_agent_manager._agent_procs) == 1
+
+    # The AutostartedAgentManager configures the state dir of the scheduler as:
+    # <server_state_dir>/server/<env_id> in the scheduler.cfg file. The scheduler
+    # creates the executors subdirectory.
+    await retry_limited(
+        lambda: os.path.exists(os.path.join(server_state_dir, "server", environment, "executors")),
+        timeout=10,
+    )
+    assert not os.path.exists(os.path.join(server_state_dir, "executors"))
+
+
 async def test_error_handling_agent_fork(server, environment, monkeypatch):
     """
     Verifies resolution of issue: inmanta/inmanta-core#2777
@@ -629,7 +666,7 @@ async def test_error_handling_agent_fork(server, environment, monkeypatch):
     exception_message = "The start of the agent failed"
 
     async def _dummy_fork_inmanta(
-        self, args: list[str], outfile: Optional[str], errfile: Optional[str], cwd: Optional[str] = None
+        self, args: list[str], outfile: Optional[str], errfile: Optional[str], cwd: Optional[str] = None, *, env=None
     ) -> subprocess.Process:
         raise Exception(exception_message)
 
@@ -736,3 +773,55 @@ async def test_pause_all_agents_doesnt_pause_environment(server, environment, cl
     agent_dct = {agent.name: agent for agent in agents}
     assert not agent_dct[const.AGENT_SCHEDULER_ID].paused
     assert not agent_dct["agent1"].paused
+
+
+async def test_do_start_agent_clears_shadowed_settings_env_vars(server_config, monkeypatch, tmp_path):
+    """
+    Verify that the __do_start_agent method properly clears environment variables for shadowed / overridden config settings.
+
+    Related e2e test in test_scheduler_ignores_env_var_state_dir.
+    """
+    state_dir_env_var: str = config.state_dir.get_environment_variable()
+    environment_env_var: str = inmanta.agent.config.environment.get_environment_variable()
+    logging_config_env_var: str = config.logging_config.get_environment_variable()
+
+    monkeypatch.setenv(state_dir_env_var, str(tmp_path / "state_dir"))
+    monkeypatch.setenv(environment_env_var, "00000000-0000-0000-0000-000000000000")
+    monkeypatch.setenv(logging_config_env_var, str(tmp_path / "logging_config"))
+
+    captured_env: dict[str, str] = {}
+
+    async def mock_create_subprocess_exec(*args, **kwargs):
+        captured_env.update(kwargs.get("env") or {})
+        return Mock(pid=0)
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", mock_create_subprocess_exec)
+
+    server_dir = tmp_path / "server"
+    logs_dir = tmp_path / "logs"
+    server_dir.mkdir()
+    logs_dir.mkdir()
+
+    class ServerlessAgentManager(AutostartedAgentManager):
+        """
+        Mock agent manager that skips large parts of the setup that require interaction with the server.
+        """
+
+        def __init__(self) -> None:
+            self._server_storage = {"server": str(server_dir), "logs": str(logs_dir)}
+
+    agent_manager = ServerlessAgentManager()
+    env_mock = Mock()
+    env_mock.id = uuid4()
+
+    await agent_manager._AutostartedAgentManager__do_start_agent(env_mock)
+
+    # verify that overridden settings are properly trimmed from the environment
+    assert state_dir_env_var not in captured_env
+    assert environment_env_var not in captured_env
+    # Verify that other settings still reach the agent process.
+    # For now, this is mostly relevant as an additional safeguard in case we missed a relevant agent setting in the workaround
+    # for #10421.
+    # Once that issue has been addressed, this mechanism will ensure we properly inherit most of the agent config from the
+    # global one.
+    assert captured_env.get(logging_config_env_var) == str(tmp_path / "logging_config")
