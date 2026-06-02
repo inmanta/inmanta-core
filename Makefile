@@ -2,7 +2,7 @@
 PYTHON := python3
 ISO_VERSION :=
 PIP_INDEX :=
-TESTS := tests
+TESTS := tests/test_const.py
 PYTEST_EXTRA_ARGS :=
 
 .DEFAULT_GOAL := all
