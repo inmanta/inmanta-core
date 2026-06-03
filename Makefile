@@ -83,7 +83,7 @@ ci-pep8:
 mypy: $(parsetab)
 	$(mypy) | $(mypy_baseline) filter --sort-baseline
 ci-mypy: $(parsetab)
-	$(mypy) --junit-xml junit-mypy.xml --cobertura-xml-report coverage | $(mypy_baseline) filter --no-colors --sort-baseline &> /dev/null
+	$(mypy) --junit-xml junit-mypy.xml --cobertura-xml-report coverage | $(mypy_baseline) filter --no-colors --sort-baseline
 
 .PHONY: mypy-sync
 mypy-sync: $(parsetab)
