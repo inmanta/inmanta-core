@@ -234,7 +234,7 @@ async def env_with_resources(server, client):
         # Mark orphans as such
         if orphan:
             await data.ResourcePersistentState.mark_as_orphan(
-                environment=environment, orphaned_resources={ResourceIdStr(key): version - 1}
+                environment=environment, orphaned_resources={ResourceIdStr(key): version}
             )
 
         await data.ResourcePersistentState.update_persistent_state(
