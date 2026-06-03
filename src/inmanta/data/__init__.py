@@ -5084,8 +5084,8 @@ class ResourcePersistentState(BaseDocument):
             LEFT JOIN public.resource_diff AS rd
                 ON rps.non_compliant_diff=rd.id
             WHERE
-                rps.orphaned_after IS NULL
-                AND rps.environment=$1
+                rps.environment=$1
+                AND rps.orphaned_after IS NULL
             """
             result = await cls.select_query(query, [env, resource_ids], no_obj=True, connection=connection)
             if len(result) != len(resource_ids):
