@@ -799,6 +799,7 @@ class ResourcePersistentState(Base):
     def is_orphan(self) -> bool:
         """
         Is this resource not present in the latest released version of the model?
+        Kept for backwards compatibility.
         """
         return self.orphaned_after is not None
 
