@@ -794,7 +794,7 @@ async def test_session_expiration(server, environment, async_finalizer, caplog):
     assert "Heartbeat failed" not in caplog.text
 
     # Remove connectivity to the database
-    await data.disconnect()
+    await data.disconnect_pool()
     caplog.clear()
 
     await a.stop()
