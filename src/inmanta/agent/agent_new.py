@@ -235,7 +235,13 @@ class Agent(SessionEndpoint):
         await self.stop_working()
 
     @protocol.handle(methods.trigger, env="tid", agent="id")
-    async def trigger_update(self, env: uuid.UUID, agent: None | str, incremental_deploy: bool) -> Apireturn:
+    async def trigger_update(
+        self,
+        env: uuid.UUID,
+        agent: None | str,
+        incremental_deploy: bool,
+        resource_ids: Optional[list[ResourceIdStr]] = None,
+    ) -> Apireturn:
         """
         Trigger an update for a specific agent, or for ALL agents in the environment when <agent> param is None.
         """
@@ -247,12 +253,14 @@ class Agent(SessionEndpoint):
         else:
             agent_id = f"Agent {agent}"
 
+        resource_id_set: Optional[set[ResourceIdStr]] = set(resource_ids) if resource_ids is not None else None
+
         if incremental_deploy:
             LOGGER.info("%s got a trigger to run deploy in environment %s", agent_id, env)
-            await self.scheduler.deploy(reason="user requested a deploy", agent=agent)
+            await self.scheduler.deploy(reason="user requested a deploy", agent=agent, resource_ids=resource_id_set)
         else:
             LOGGER.info("%s got a trigger to run repair in environment %s", agent_id, env)
-            await self.scheduler.repair(reason="user requested a repair", agent=agent)
+            await self.scheduler.repair(reason="user requested a repair", agent=agent, resource_ids=resource_id_set)
         return 200
 
     @protocol.handle(methods.trigger_read_version, env="tid", agent="id")
@@ -265,7 +273,14 @@ class Agent(SessionEndpoint):
         return 200
 
     @protocol.handle(methods.do_dryrun, env="tid", dry_run_id="id")
-    async def run_dryrun(self, env: uuid.UUID, dry_run_id: uuid.UUID, agent: str, version: int) -> Apireturn:
+    async def run_dryrun(
+        self,
+        env: uuid.UUID,
+        dry_run_id: uuid.UUID,
+        agent: str,
+        version: int,
+        resource_ids: Optional[list[ResourceIdStr]] = None,
+    ) -> Apireturn:
         """
         Run a dryrun of the given version
 
@@ -275,7 +290,8 @@ class Agent(SessionEndpoint):
         assert agent == AGENT_SCHEDULER_ID
         LOGGER.info("Agent %s got a trigger to run dryrun %s for version %s in environment %s", agent, dry_run_id, version, env)
 
-        await self.scheduler.dryrun(dry_run_id, version)
+        resource_id_set: Optional[set[ResourceIdStr]] = set(resource_ids) if resource_ids is not None else None
+        await self.scheduler.dryrun(dry_run_id, version, resource_id_set)
         return 200
 
     @protocol.handle(methods.get_parameter, env="tid")

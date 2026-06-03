@@ -1455,6 +1455,9 @@ class ProjectPipConfig(inmanta.data.model.PipConfig):
         return values
 
 
+_RE_RELATION_PRECEDENCE_RULE: str = r"^(?P<ft>[^\s.]+)\.(?P<fr>[^\s.]+)\s+before\s+(?P<tt>[^\s.]+)\.(?P<tr>[^\s.]+)$"
+
+
 @stable_api
 class ProjectMetadata(Metadata, MetadataFieldRequires):
     """
@@ -1519,8 +1522,7 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
 
     _raw_parser: typing.ClassVar[type[YamlParser]] = YamlParser
 
-    _re_relation_precedence_rule: str = r"^(?P<ft>[^\s.]+)\.(?P<fr>[^\s.]+)\s+before\s+(?P<tt>[^\s.]+)\.(?P<tr>[^\s.]+)$"
-    _re_relation_precedence_rule_compiled: ClassVar[re.Pattern[str]] = re.compile(_re_relation_precedence_rule)
+    _re_relation_precedence_rule_compiled: ClassVar[re.Pattern[str]] = re.compile(_RE_RELATION_PRECEDENCE_RULE)
 
     author: Optional[str] = None
     author_email: Optional[NameEmail] = None
@@ -1531,7 +1533,7 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
     downloadpath: Optional[str] = None
     install_mode: InstallMode = InstallMode.release
     relation_precedence_policy: list[
-        Annotated[str, StringConstraints(strip_whitespace=True, pattern=_re_relation_precedence_rule, min_length=1)]
+        Annotated[str, StringConstraints(strip_whitespace=True, pattern=_RE_RELATION_PRECEDENCE_RULE, min_length=1)]
     ] = []
     agent_install_dependency_modules: bool = True
     pip: ProjectPipConfig = ProjectPipConfig()

@@ -384,8 +384,8 @@ src/inmanta/data/__init__.py:0: note: def _generate_next_value_(name, start: int
 src/inmanta/data/__init__.py:0: note: def _generate_next_value_(name: str, start: int, count: int, last_values: list[Any]) -> Any
 src/inmanta/data/__init__.py:0: note: def get_list(cls, *, order_by_column: str | None = ..., order: str | None = ..., limit: int | None = ..., offset: int | None = ..., no_obj: bool | None = ..., lock: RowLockMode | None = ..., connection: Connection | None = ..., **query: object) -> Coroutine[Any, Any, list[Environment]]
 src/inmanta/data/__init__.py:0: note: def get_list(cls, *, order_by_column: str | None = ..., order: str | None = ..., limit: int | None = ..., offset: int | None = ..., no_obj: bool | None = ..., lock: RowLockMode | None = ..., connection: Connection | None = ..., details: bool = ..., **query: object) -> Coroutine[Any, Any, list[Environment]]
-src/inmanta/data/__init__.py:0: note: def int(str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc = ..., /) -> int
-src/inmanta/data/__init__.py:0: note: def int(str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc = ..., /) -> int
+src/inmanta/data/__init__.py:0: note: def int(str | Buffer | SupportsInt | SupportsIndex = ..., /) -> int
+src/inmanta/data/__init__.py:0: note: def int(str | Buffer | SupportsInt | SupportsIndex = ..., /) -> int
 src/inmanta/data/__init__.py:0: note: def int(str | bytes | bytearray, /, base: SupportsIndex) -> int
 src/inmanta/data/__init__.py:0: note: def int(str | bytes | bytearray, /, base: SupportsIndex) -> int
 src/inmanta/data/dataview.py:0: error: "object" has no attribute "get"  [attr-defined]
@@ -702,7 +702,7 @@ src/inmanta/parser/plyInmantaLex.py:0: error: Argument 1 to "LocatableString" ha
 src/inmanta/parser/plyInmantaLex.py:0: error: Argument 1 to "Reference" has incompatible type "str"; expected "LocatableString"  [arg-type]
 src/inmanta/parser/plyInmantaLex.py:0: error: Argument 1 to "float" has incompatible type "str | LocatableString"; expected "str | Buffer | SupportsFloat | SupportsIndex"  [arg-type]
 src/inmanta/parser/plyInmantaLex.py:0: error: Argument 1 to "get" of "dict" has incompatible type "str | LocatableString"; expected "str"  [arg-type]
-src/inmanta/parser/plyInmantaLex.py:0: error: Argument 1 to "int" has incompatible type "str | LocatableString"; expected "str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc"  [arg-type]
+src/inmanta/parser/plyInmantaLex.py:0: error: Argument 1 to "int" has incompatible type "str | LocatableString"; expected "str | Buffer | SupportsInt | SupportsIndex"  [arg-type]
 src/inmanta/parser/plyInmantaLex.py:0: error: Argument 1 to "len" has incompatible type "str | LocatableString"; expected "Sized"  [arg-type]
 src/inmanta/parser/plyInmantaLex.py:0: error: Incompatible types in assignment (expression has type "Regex", variable has type "str | LocatableString")  [assignment]
 src/inmanta/parser/plyInmantaLex.py:0: error: Incompatible types in assignment (expression has type "float", variable has type "str | LocatableString")  [assignment]
@@ -1037,7 +1037,7 @@ src/inmanta/server/protocol.py:0: error: Need type annotation for "future"  [var
 src/inmanta/server/server.py:0: error: Argument 1 to "get_global_url_map" of "RESTServer" has incompatible type "dict_values[str, ServerSlice]"; expected "list[CallTarget]"  [arg-type]
 src/inmanta/server/services/databaseservice.py:0: error: No overload variant of "int" matches argument type "object"  [call-overload]
 src/inmanta/server/services/databaseservice.py:0: note: Possible overload variants:
-src/inmanta/server/services/databaseservice.py:0: note: def int(str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc = ..., /) -> int
+src/inmanta/server/services/databaseservice.py:0: note: def int(str | Buffer | SupportsInt | SupportsIndex = ..., /) -> int
 src/inmanta/server/services/databaseservice.py:0: note: def int(str | bytes | bytearray, /, base: SupportsIndex) -> int
 src/inmanta/server/services/environment_metrics_service.py:0: error: "Sequence[EnvironmentMetricsGauge]" has no attribute "append"  [attr-defined]
 src/inmanta/server/services/environment_metrics_service.py:0: error: "Sequence[EnvironmentMetricsTimer]" has no attribute "append"  [attr-defined]

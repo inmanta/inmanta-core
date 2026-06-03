@@ -575,11 +575,13 @@ class ResourceScheduler(TaskManager):
         reason: str,
         priority: TaskPriority = TaskPriority.USER_DEPLOY,
         agent: Optional[str] = None,
+        resource_ids: Optional[Set[ResourceIdStr]] = None,
     ) -> None:
         """
         Trigger a deploy
 
         :param agent: If given, deploy resources only for this agent. Otherwise deploy for all agents.
+        :param resource_ids: If given, deploy only these specific resources.
         """
         if not self._running:
             LOGGER.debug("Ignoring deploy request for halted resource scheduler")
@@ -588,6 +590,8 @@ class ResourceScheduler(TaskManager):
             to_deploy: Set[ResourceIdStr] = (
                 self._state.dirty if agent is None else self._state.dirty & self._state.resources_by_agent.get(agent, set())
             )
+            if resource_ids is not None:
+                to_deploy = to_deploy & resource_ids
             if agent is not None:
                 LOGGER.debug("Triggering deploy for %d resources on agent %s because %s", len(to_deploy), agent, reason)
             else:
@@ -601,11 +605,13 @@ class ResourceScheduler(TaskManager):
         reason: str,
         priority: TaskPriority = TaskPriority.USER_REPAIR,
         agent: Optional[str] = None,
+        resource_ids: Optional[Set[ResourceIdStr]] = None,
     ) -> None:
         """
         Trigger a repair, i.e. mark all unblocked resources as dirty, then trigger a deploy.
 
         :param agent: If given, repair resources only for this agent. Otherwise repair for all agents.
+        :param resource_ids: If given, repair only these specific resources.
         """
 
         def should_deploy_resource(resource: ResourceIdStr) -> bool:
@@ -624,6 +630,8 @@ class ResourceScheduler(TaskManager):
             in_scope: Set[ResourceIdStr] = (
                 self._state.intent.keys() if agent is None else self._state.resources_by_agent.get(agent, set())
             )
+            if resource_ids is not None:
+                in_scope = in_scope & resource_ids
 
             to_deploy: Set[ResourceIdStr] = {resource for resource in in_scope if should_deploy_resource(resource)}
             if agent is not None:
@@ -634,7 +642,9 @@ class ResourceScheduler(TaskManager):
             self._timer_manager.stop_timers(to_deploy)
             self._work.deploy_with_context(to_deploy, reason=reason, priority=priority, deploying=self._deploying_latest)
 
-    async def dryrun(self, dry_run_id: uuid.UUID, version: int) -> None:
+    async def dryrun(
+        self, dry_run_id: uuid.UUID, version: int, resource_ids: Optional[Set[ResourceIdStr]] = None
+    ) -> None:
         if not self._running:
             LOGGER.debug("Ignoring dry-run request for halted resource scheduler")
             return
@@ -645,6 +655,9 @@ class ResourceScheduler(TaskManager):
         model: ModelVersion = await self._get_single_model_version_from_db(version=version)
         for resource, resource_intent in model.resources.items():
             if resource in model.undefined:
+                continue
+
+            if resource_ids is not None and resource not in resource_ids:
                 continue
 
             if resource_intent.id.agent_name in paused_agents:

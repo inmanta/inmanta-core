@@ -36,7 +36,7 @@ from inmanta.server import (
     protocol,
 )
 from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager
-from inmanta.types import Apireturn, JsonType, ResourceVersionIdStr
+from inmanta.types import Apireturn, JsonType, ResourceIdStr, ResourceVersionIdStr
 
 LOGGER = logging.getLogger(__name__)
 
@@ -63,21 +63,33 @@ class DyrunService(protocol.ServerSlice):
         self.autostarted_agent_manager = cast(AutostartedAgentManager, server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER))
 
     @handle(methods.dryrun_request, version_id="id", env="tid")
-    async def dryrun_request(self, env: data.Environment, version_id: int) -> Apireturn:
+    async def dryrun_request(
+        self, env: data.Environment, version_id: int, resource_ids: Optional[list[ResourceIdStr]] = None
+    ) -> Apireturn:
         model = await data.ConfigurationModel.get_version(environment=env.id, version=version_id)
         if model is None:
             return 404, {"message": "The request version does not exist."}
 
-        dryrun = await self.create_dryrun(env, version_id, model)
+        dryrun = await self.create_dryrun(env, version_id, model, resource_ids=resource_ids)
 
         return 200, {"dryrun": dryrun}
 
-    async def create_dryrun(self, env: data.Environment, version_id: int, model: data.ConfigurationModel) -> data.DryRun:
+    async def create_dryrun(
+        self,
+        env: data.Environment,
+        version_id: int,
+        model: data.ConfigurationModel,
+        resource_ids: Optional[list[ResourceIdStr]] = None,
+    ) -> data.DryRun:
         if env.halted:
             raise Conflict(f"The environment {env.name}({env.id}) is halted")
 
         # fetch all resource in this cm and create a list of distinct agents
         rvs = await data.Resource.get_resources_for_version(environment=env.id, version=version_id)
+
+        if resource_ids is not None:
+            resource_id_set = set(resource_ids)
+            rvs = [r for r in rvs if r.resource_id in resource_id_set]
 
         # Create a dryrun document
         dryrun = await data.DryRun.create(environment=env.id, model=version_id, todo=len(rvs), total=len(rvs))
@@ -86,7 +98,7 @@ class DyrunService(protocol.ServerSlice):
 
         client = self.agent_manager.get_agent_client(env.id, const.AGENT_SCHEDULER_ID, live_agent_only=True)
         if client is not None:
-            self.add_background_task(client.do_dryrun(env.id, dryrun.id, const.AGENT_SCHEDULER_ID, version_id))
+            self.add_background_task(client.do_dryrun(env.id, dryrun.id, const.AGENT_SCHEDULER_ID, version_id, resource_ids))
         else:
             raise Conflict("Could not start the scheduler")
 
@@ -94,15 +106,29 @@ class DyrunService(protocol.ServerSlice):
 
         # Mark the resources in an undeployable state as done
         async with self.dryrun_lock:
+            resource_id_set = set(resource_ids) if resource_ids is not None else None
+
             undeployable_ids = model.get_undeployable()
-            undeployable_version_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in undeployable_ids]
+            filtered_undeployable_ids = (
+                [rid for rid in undeployable_ids if rid in resource_id_set] if resource_id_set is not None else undeployable_ids
+            )
+            undeployable_version_ids = [
+                ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in filtered_undeployable_ids
+            ]
             undeployable = await data.Resource.get_resources(environment=env.id, resource_version_ids=undeployable_version_ids)
             await self._save_resources_without_changes_to_dryrun(
                 dryrun_id=dryrun.id, resources=undeployable, version=version_id, diff_status=ResourceDiffStatus.undefined
             )
 
             skip_undeployable_ids = model.get_skipped_for_undeployable()
-            skip_undeployable_version_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in skip_undeployable_ids]
+            filtered_skip_undeployable_ids = (
+                [rid for rid in skip_undeployable_ids if rid in resource_id_set]
+                if resource_id_set is not None
+                else skip_undeployable_ids
+            )
+            skip_undeployable_version_ids = [
+                ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in filtered_skip_undeployable_ids
+            ]
             skipundeployable = await data.Resource.get_resources(
                 environment=env.id, resource_version_ids=skip_undeployable_version_ids
             )
@@ -153,12 +179,14 @@ class DyrunService(protocol.ServerSlice):
             await data.DryRun.update_resource(dryrun_id, parsed_id.resource_version_str(), payload)
 
     @handle(methods_v2.dryrun_trigger, env="tid")
-    async def dryrun_trigger(self, env: data.Environment, version: int) -> uuid.UUID:
+    async def dryrun_trigger(
+        self, env: data.Environment, version: int, resource_ids: Optional[list[ResourceIdStr]] = None
+    ) -> uuid.UUID:
         model = await data.ConfigurationModel.get_version(environment=env.id, version=version)
         if model is None:
             raise NotFound("The requested version does not exist.")
 
-        dryrun = await self.create_dryrun(env, version, model)
+        dryrun = await self.create_dryrun(env, version, model, resource_ids=resource_ids)
 
         return dryrun.id
 

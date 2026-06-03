@@ -20,30 +20,29 @@ import typing
 import uuid
 from abc import ABC, abstractmethod
 from enum import StrEnum
-from typing import Sequence, cast
+from typing import Any, Optional, Protocol, Sequence, cast
 
 import docstring_parser
 
 import inmanta.data.sqlalchemy as models
 import strawberry
-from inmanta import data
-from inmanta.data import get_session, get_session_factory, model
+from inmanta import const, data
+from inmanta.data import get_session, model
 from inmanta.deploy import state
 from inmanta.server.services.compilerservice import CompilerService
+from inmanta.types import ResourceIdStr
 from sqlakeyset import Marker, unserialize_bookmark
 from sqlakeyset.asyncio import select_page
-from sqlalchemy import Boolean, Select, UnaryExpression, and_, asc, desc, func, not_, select
+from sqlalchemy import Boolean, Select, UnaryExpression, and_, asc, desc, func, lateral, literal, not_, select, true
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapper
 from strawberry import relay, scalars
 from strawberry.relay import Node, NodeType
 from strawberry.scalars import JSON
-from strawberry.schema.config import StrawberryConfig
 from strawberry.types import Info
 from strawberry.types.field import field
-from strawberry.types.info import ContextType
 from strawberry.types.nodes import SelectedField, Selection
-from strawberry_sqlalchemy_mapper import StrawberrySQLAlchemyLoader, StrawberrySQLAlchemyMapper
+from strawberry_sqlalchemy_mapper import StrawberrySQLAlchemyMapper
 from strawberry_sqlalchemy_mapper.mapper import (
     _GENERATED_FIELD_KEYS_KEY,
     _IS_GENERATED_CONNECTION_TYPE_KEY,
@@ -399,6 +398,59 @@ class GraphQLContext:
     compiler_service: CompilerService
 
 
+class ResourceQueryContribution(Protocol):
+    """
+    Extension hook that lets modules (e.g. LSM) contribute extra filter fields, SQL logic,
+    and output fields to the core ``resources`` GraphQL query without core being aware of those modules.
+    """
+
+    def get_filter_input_class(self) -> type:
+        """Return a @strawberry.input class whose fields are merged into ResourceFilter."""
+        ...
+
+    def get_context_loaders(self) -> dict[str, Any]:
+        """Return per-request DataLoaders to inject into the GraphQL context."""
+        ...
+
+    def apply_to_stmt(
+        self,
+        stmt: Select[tuple[Any, ...]],
+        env_id: uuid.UUID,
+        filter: Any,
+        version_cte: Any,
+    ) -> tuple[Select[tuple[Any, ...]], Any]:
+        """Add a CTE + JOIN to the resource SELECT. Return the (possibly modified) statement and version CTE."""
+        ...
+
+    def get_resource_type_mixin(self) -> type | None:
+        """
+        Return a plain class (no decorator) whose strawberry.field declarations are merged into
+        the Resource output type. Return None if this contribution adds no output fields.
+        """
+        return None
+
+
+_resource_query_contributions: list[ResourceQueryContribution] = []
+_schema_cache: Optional[strawberry.Schema] = None
+
+
+def register_resource_query_contribution(contribution: ResourceQueryContribution) -> None:
+    """Register a ResourceQueryContribution. Clears the schema cache so it is rebuilt on next request."""
+    global _schema_cache
+    _resource_query_contributions.append(contribution)
+    _schema_cache = None
+
+
+def deregister_resource_query_contribution(contribution: ResourceQueryContribution) -> None:
+    """Remove a previously registered ResourceQueryContribution and invalidate the schema cache."""
+    global _schema_cache
+    try:
+        _resource_query_contributions.remove(contribution)
+    except ValueError:
+        pass
+    _schema_cache = None
+
+
 class CustomFilter(ABC):
     """
     Base class for custom filters.
@@ -667,7 +719,7 @@ class NotificationOrder(StrawberryOrder):
         return {"created": self.model}
 
 
-def get_requires_length(root: "Resource") -> int:
+def get_requires_length(root: "_CoreResourceBase") -> int:
     """
     Checks the length of the requires of the resource
     """
@@ -675,7 +727,7 @@ def get_requires_length(root: "Resource") -> int:
     return len(root.attributes.get("requires", []))
 
 
-def get_purged(root: "Resource") -> bool:
+def get_purged(root: "_CoreResourceBase") -> bool:
     """
     Checks the state of the purged attribute on this resource
     """
@@ -683,8 +735,7 @@ def get_purged(root: "Resource") -> bool:
     return bool(root.attributes.get("purged"))
 
 
-@mapper.type(models.Resource)
-class Resource:
+class _CoreResourceBase:
     __exclude__ = ["resource_set_"]
     requires_length: int = strawberry.field(
         resolver=get_requires_length, description="The length of the requires of this resource."
@@ -695,7 +746,7 @@ class Resource:
 
 
 @strawberry.input
-class ResourceFilter(StrawberryFilter):
+class BaseResourceFilter(StrawberryFilter):
     environment: uuid.UUID
     resource_type: StrFilter | None = strawberry.UNSET
     resource_id_value: StrFilter | None = strawberry.UNSET
@@ -706,6 +757,9 @@ class ResourceFilter(StrawberryFilter):
     last_handler_run: EnumFilter[state.HandlerResult] | None = strawberry.UNSET
     is_deploying: bool | None = strawberry.UNSET
     is_orphan: bool | None = strawberry.UNSET
+    model_version: int | None = strawberry.UNSET
+    include_requires: bool | None = strawberry.UNSET
+    include_provides: bool | None = strawberry.UNSET
 
     @property
     def model(self) -> type[models.Base]:
@@ -912,26 +966,309 @@ async def get_connection[*Ts](
         )
 
 
-def get_schema(context: GraphQLContext) -> strawberry.Schema:
+def apply_dependency_expansion(
+    stmt: Select,
+    env_id: uuid.UUID,
+    version_scalar: Any,
+    include_requires: bool,
+    include_provides: bool,
+    order_by: Optional[Sequence["StrawberryOrder"]],
+) -> Select:
     """
-    Initializes the Strawberry GraphQL schema.
-    It is initiated in a function instead of being declared at the module level, because we have to do this
-    after the SQLAlchemy engine is initialized.
+    Expand a filtered resource result set by following resource dependency edges recursively.
+
+    Uses recursive CTEs to follow requires edges (include_requires: forward — add what the
+    filtered resources need) and/or provides edges (include_provides: reverse — add resources
+    that need the filtered resources).
+
+    Returns a new Select over models.Resource for the full expanded set.  Narrowing filters
+    (resource_type, agent, blocked, …) are intentionally NOT re-applied; expansion brings in
+    dependencies regardless of their state.  Only the environment and version constraints are
+    preserved.
     """
+    # Non-recursive CTE: all resources in the target version with their requires arrays.
+    version_resources_cte = (
+        select(
+            models.Resource.resource_id.label("resource_id"),
+            models.Resource.attributes["requires"].label("requires"),
+        )
+        .join(
+            models.t_resource_set_configuration_model,
+            and_(
+                models.t_resource_set_configuration_model.c.resource_set == models.Resource.resource_set,
+                models.t_resource_set_configuration_model.c.environment == models.Resource.environment,
+                models.t_resource_set_configuration_model.c.model == version_scalar,
+            ),
+        )
+        .where(models.Resource.environment == env_id)
+        .cte("version_resources")
+    )
 
-    loader = StrawberrySQLAlchemyLoader(async_bind_factory=get_session_factory())
+    # Extract only resource_ids from the already-filtered stmt (the seed set).
+    seed_subq = (
+        select(models.Resource.resource_id.label("resource_id"))
+        .select_from(stmt.subquery("seed_base"))
+        .subquery("seed_ids")
+    )
 
-    class CustomInfo(Info):
-        @property
-        def context(self) -> ContextType:  # type: ignore[type-var]
-            return typing.cast(ContextType, {"sqlalchemy_loader": loader, "compiler_service": context.compiler_service})
+    def _forward_cte(name: str) -> Any:
+        """Recursive CTE: start from seed, follow requires edges (what each resource needs)."""
+        base = select(seed_subq.c.resource_id.label("resource_id"))
+        cte = base.cte(name, recursive=True)
+        req_lat = lateral(
+            select(func.jsonb_array_elements_text(version_resources_cte.c.requires).label("req_val")),
+            name=f"{name}_lat",
+        )
+        recursive_step = (
+            select(func.split_part(req_lat.c.req_val, ",v=", 1).label("resource_id"))
+            .select_from(cte)
+            .join(version_resources_cte, version_resources_cte.c.resource_id == cte.c.resource_id)
+            .join(req_lat, true())
+            .where(version_resources_cte.c.requires.isnot(None))
+        )
+        return cte.union(recursive_step)
+
+    def _reverse_cte(name: str) -> Any:
+        """Recursive CTE: start from seed, find resources that (transitively) require them."""
+        base = select(seed_subq.c.resource_id.label("resource_id"))
+        cte = base.cte(name, recursive=True)
+        req_lat = lateral(
+            select(func.jsonb_array_elements_text(version_resources_cte.c.requires).label("req_val")),
+            name=f"{name}_lat",
+        )
+        recursive_step = (
+            select(version_resources_cte.c.resource_id.label("resource_id"))
+            .select_from(version_resources_cte)
+            .join(req_lat, true())
+            .join(cte, func.split_part(req_lat.c.req_val, ",v=", 1) == cte.c.resource_id)
+            .where(version_resources_cte.c.requires.isnot(None))
+            .distinct()
+        )
+        return cte.union(recursive_step)
+
+    # Build the final expanded-IDs query (one or two separate recursive CTEs).
+    # PostgreSQL forbids two self-references in a single recursive CTE, so when both
+    # directions are requested we use two independent CTEs and union the results.
+    if include_requires and include_provides:
+        req_cte = _forward_cte("requires_expanded")
+        prov_cte = _reverse_cte("provides_expanded")
+        expanded_ids_query = select(req_cte.c.resource_id).union(select(prov_cte.c.resource_id))
+    elif include_requires:
+        req_cte = _forward_cte("expanded_ids")
+        expanded_ids_query = select(req_cte.c.resource_id)
+    else:
+        prov_cte = _reverse_cte("expanded_ids")
+        expanded_ids_query = select(prov_cte.c.resource_id)
+
+    # New main query: fetch all Resources for the expanded IDs (no narrowing filters).
+    new_stmt = (
+        select(models.Resource)
+        .join(
+            models.ResourcePersistentState,
+            and_(
+                models.Resource.resource_id == models.ResourcePersistentState.resource_id,
+                models.Resource.environment == models.ResourcePersistentState.environment,
+            ),
+        )
+        .join(
+            models.t_resource_set_configuration_model,
+            and_(
+                models.t_resource_set_configuration_model.c.resource_set == models.Resource.resource_set,
+                models.t_resource_set_configuration_model.c.environment == models.Resource.environment,
+                models.t_resource_set_configuration_model.c.model == version_scalar,
+            ),
+        )
+        .where(
+            models.Resource.environment == env_id,
+            models.Resource.resource_id.in_(expanded_ids_query),
+        )
+    )
+    # Re-apply sort only — no narrowing filters.
+    return add_filter_and_sort(new_stmt, ResourceOrder.default_order(), None, order_by)
+
+
+AgentTriggerMethod = strawberry.enum(const.AgentTriggerMethod)
+
+
+@strawberry.type
+class TriggerDeployResult:
+    agents: list[str] = strawberry.field(description="Agents that were triggered for deployment.")
+    warnings: list[str] = strawberry.field(description="Warnings generated while processing the deploy request.")
+
+
+@strawberry.type
+class TriggerDryrunResult:
+    dryrun_id: uuid.UUID = strawberry.field(description="ID of the newly created dryrun.")
+
+
+async def _resolve_resource_ids(
+    filter: BaseResourceFilter,
+    contributions: list[ResourceQueryContribution],
+    version_override: Optional[int] = None,
+) -> list[ResourceIdStr]:
+    """
+    Execute a resource filter and return all matching resource IDs.
+
+    Mirrors the SQL emitted by the ``resources`` query (version CTE, joins, filter application,
+    and optional dependency expansion via ``include_requires`` / ``include_provides``) but
+    projects only ``resource_id`` — no ORM objects are loaded.
+
+    Orphaned resources are excluded: only resources present in the target model version are returned.
+
+    :param filter: The resource filter to apply.
+    :param contributions: Active ResourceQueryContributions (e.g. from LSM).
+    :param version_override: If provided, use this model version instead of
+        ``filter.model_version`` or the scheduler's last processed version.
+    """
+    env_id = filter.environment
+
+    if version_override is not None:
+        version_cte = select(literal(version_override).label("version")).cte()
+    elif filter.model_version is not None and filter.model_version is not strawberry.UNSET:
+        version_cte = select(literal(filter.model_version).label("version")).cte()
+    else:
+        version_cte = (
+            select(models.Scheduler.last_processed_model_version.label("version"))
+            .where(models.Scheduler.environment == env_id)
+            .cte()
+        )
+    version_scalar = select(version_cte.c.version).scalar_subquery()
+
+    stmt = (
+        select(models.ResourcePersistentState.resource_id)
+        .select_from(models.ResourcePersistentState)
+        .join(
+            models.Resource,
+            and_(
+                models.Resource.resource_id == models.ResourcePersistentState.resource_id,
+                models.Resource.environment == models.ResourcePersistentState.environment,
+            ),
+        )
+        .join(
+            models.t_resource_set_configuration_model,
+            and_(
+                models.t_resource_set_configuration_model.c.environment == models.Resource.environment,
+                models.t_resource_set_configuration_model.c.resource_set == models.Resource.resource_set,
+                models.t_resource_set_configuration_model.c.model == version_scalar,
+            ),
+        )
+    )
+
+    for contribution in contributions:
+        stmt, version_cte = contribution.apply_to_stmt(stmt, env_id, filter, version_cte)
+
+    stmt = filter.apply_filters(stmt)
+
+    _include_requires = filter.include_requires is True
+    _include_provides = filter.include_provides is True
+    if _include_requires or _include_provides:
+        version_resources_cte = (
+            select(
+                models.Resource.resource_id.label("resource_id"),
+                models.Resource.attributes["requires"].label("requires"),
+            )
+            .join(
+                models.t_resource_set_configuration_model,
+                and_(
+                    models.t_resource_set_configuration_model.c.resource_set == models.Resource.resource_set,
+                    models.t_resource_set_configuration_model.c.environment == models.Resource.environment,
+                    models.t_resource_set_configuration_model.c.model == version_scalar,
+                ),
+            )
+            .where(models.Resource.environment == env_id)
+            .cte("version_resources")
+        )
+        seed_subq = stmt.subquery("seed_ids")
+
+        def _forward_cte(name: str) -> Any:
+            base = select(seed_subq.c.resource_id.label("resource_id"))
+            cte = base.cte(name, recursive=True)
+            req_lat = lateral(
+                select(func.jsonb_array_elements_text(version_resources_cte.c.requires).label("req_val")),
+                name=f"{name}_lat",
+            )
+            recursive_step = (
+                select(func.split_part(req_lat.c.req_val, ",v=", 1).label("resource_id"))
+                .select_from(cte)
+                .join(version_resources_cte, version_resources_cte.c.resource_id == cte.c.resource_id)
+                .join(req_lat, true())
+                .where(version_resources_cte.c.requires.isnot(None))
+            )
+            return cte.union(recursive_step)
+
+        def _reverse_cte(name: str) -> Any:
+            base = select(seed_subq.c.resource_id.label("resource_id"))
+            cte = base.cte(name, recursive=True)
+            req_lat = lateral(
+                select(func.jsonb_array_elements_text(version_resources_cte.c.requires).label("req_val")),
+                name=f"{name}_lat",
+            )
+            recursive_step = (
+                select(version_resources_cte.c.resource_id.label("resource_id"))
+                .select_from(version_resources_cte)
+                .join(req_lat, true())
+                .join(cte, func.split_part(req_lat.c.req_val, ",v=", 1) == cte.c.resource_id)
+                .where(version_resources_cte.c.requires.isnot(None))
+                .distinct()
+            )
+            return cte.union(recursive_step)
+
+        if _include_requires and _include_provides:
+            req_cte = _forward_cte("requires_expanded")
+            prov_cte = _reverse_cte("provides_expanded")
+            stmt = select(req_cte.c.resource_id).union(select(prov_cte.c.resource_id))
+        elif _include_requires:
+            req_cte = _forward_cte("expanded_ids")
+            stmt = select(req_cte.c.resource_id)
+        else:
+            prov_cte = _reverse_cte("expanded_ids")
+            stmt = select(prov_cte.c.resource_id)
+
+    async with get_session() as session:
+        result = await session.execute(stmt)
+        return [ResourceIdStr(row[0]) for row in result]
+
+
+def get_schema() -> strawberry.Schema:
+    """
+    Returns the cached Strawberry GraphQL schema, building it if needed.
+    The schema is rebuilt whenever a new ResourceQueryContribution is registered.
+    Context is provided per-request via context_value in schema.execute().
+    """
+    global _schema_cache
+    if _schema_cache is not None:
+        return _schema_cache
+
+    # Build a concrete ResourceFilter by merging BaseResourceFilter with contribution fields
+    _filter_bases: tuple[type, ...] = (BaseResourceFilter,) + tuple(
+        c.get_filter_input_class() for c in _resource_query_contributions
+    )
+    DynamicResourceFilter = strawberry.input(type("ResourceFilter", _filter_bases, {}))
+
+    # Build the Resource output type by merging _CoreResourceBase with any contribution mixins.
+    # We explicitly collect annotations and attributes from all bases into the new class's OWN
+    # __dict__ because mapper.type() only reads the class's own __annotations__ (not inherited ones).
+    _resource_mixins: tuple[type, ...] = tuple(
+        m for m in (c.get_resource_type_mixin() for c in _resource_query_contributions) if m is not None
+    )
+    _resource_annotations: dict[str, Any] = {}
+    _resource_attrs: dict[str, Any] = {}
+    _skip_attrs = {"__dict__", "__weakref__", "__doc__", "__annotations__", "__module__"}
+    for _base in (_CoreResourceBase, *_resource_mixins):
+        _resource_annotations.update(_base.__dict__.get("__annotations__", {}))
+        for _k, _v in _base.__dict__.items():
+            if _k not in _skip_attrs:
+                _resource_attrs[_k] = _v
+    Resource = mapper.type(models.Resource)(
+        type("Resource", (), {"__annotations__": _resource_annotations, **_resource_attrs})
+    )
 
     @strawberry.type
     class Query:
         @strawberry.field(description="Fetches a paginated list of environments")
         async def environments(
             self,
-            info: CustomInfo,
+            info: Info,
             first: typing.Optional[int] = strawberry.UNSET,
             after: typing.Optional[str] = strawberry.UNSET,
             last: typing.Optional[int] = strawberry.UNSET,
@@ -948,7 +1285,7 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
         @strawberry.field(description="Fetches a paginated list of notifications")
         async def notifications(
             self,
-            info: CustomInfo,
+            info: Info,
             filter: NotificationFilter,
             first: typing.Optional[int] = strawberry.UNSET,
             after: typing.Optional[str] = strawberry.UNSET,
@@ -965,15 +1302,24 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
         @strawberry.field(description="Fetches a paginated list of resources")
         async def resources(
             self,
-            info: CustomInfo,
-            filter: ResourceFilter,
+            info: Info,
+            filter: DynamicResourceFilter,  # type: ignore[valid-type]
             first: typing.Optional[int] = strawberry.UNSET,
             after: typing.Optional[str] = strawberry.UNSET,
             last: typing.Optional[int] = strawberry.UNSET,
             before: typing.Optional[str] = strawberry.UNSET,
             order_by: typing.Optional[Sequence[ResourceOrder]] = strawberry.UNSET,
         ) -> CustomListConnection[Resource]:
-            if filter.is_orphan is False:
+            # Cast to BaseResourceFilter so mypy can verify attribute access;
+            # at runtime filter is DynamicResourceFilter which inherits all BaseResourceFilter fields.
+            _filter = cast(BaseResourceFilter, filter)
+            has_model_version = _filter.model_version is not None and _filter.model_version is not strawberry.UNSET
+            if has_model_version and _filter.is_orphan is not None and _filter.is_orphan is not strawberry.UNSET:
+                raise Exception("model_version and is_orphan cannot be used together")
+
+            if has_model_version:
+                include_orphans = False
+            elif _filter.is_orphan is False:
                 include_orphans = False
             else:
                 include_orphans = True
@@ -988,12 +1334,15 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
                 ),
             )
 
-            # CTE that fetches the latest scheduled version
-            latest_scheduled_version_cte = (
-                select(models.Scheduler.last_processed_model_version.label("version"))
-                .where(models.Scheduler.environment == filter.environment)
-                .cte()
-            )
+            # CTE that determines which model version to query
+            if has_model_version:
+                version_cte = select(literal(_filter.model_version).label("version")).cte()
+            else:
+                version_cte = (
+                    select(models.Scheduler.last_processed_model_version.label("version"))
+                    .where(models.Scheduler.environment == _filter.environment)
+                    .cte()
+                )
 
             if include_orphans:
                 # CTE that checks if a resource is orphaned or not and returns the appropriate version
@@ -1005,11 +1354,11 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
                         models.ResourcePersistentState.resource_id,
                         func.coalesce(
                             models.ResourcePersistentState.orphaned_after,
-                            latest_scheduled_version_cte.c.version,
+                            version_cte.c.version,
                         ).label("version"),
                     )
                     .where(
-                        models.ResourcePersistentState.environment == filter.environment,
+                        models.ResourcePersistentState.environment == _filter.environment,
                     )
                     .cte()
                 )
@@ -1033,23 +1382,46 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
                     and_(
                         models.t_resource_set_configuration_model.c.environment == models.Resource.environment,
                         models.t_resource_set_configuration_model.c.resource_set == models.Resource.resource_set,
-                        models.t_resource_set_configuration_model.c.model
-                        == select(latest_scheduled_version_cte.c.version).scalar_subquery(),
+                        models.t_resource_set_configuration_model.c.model == select(version_cte.c.version).scalar_subquery(),
                     ),
                 )
-            stmt = add_filter_and_sort(stmt, ResourceOrder.default_order(), filter, order_by)
+
+            # Let registered contributions inject their CTEs and JOINs
+            for contribution in _resource_query_contributions:
+                stmt, version_cte = contribution.apply_to_stmt(stmt, _filter.environment, filter, version_cte)
+
+            stmt = add_filter_and_sort(stmt, ResourceOrder.default_order(), _filter, order_by)
             count_stmt: Select[tuple[int]] | None
-            if filter.purged is not strawberry.UNSET:
+            if _filter.purged is not strawberry.UNSET:
                 count_stmt = None
             else:
                 # more efficient count statement that doesn't require joining on resource
-                count_stmt = add_filter_and_sort(select(func.count()).select_from(models.ResourcePersistentState), {}, filter)
+                count_stmt = add_filter_and_sort(select(func.count()).select_from(models.ResourcePersistentState), {}, _filter)
+
+            # Recursive dependency expansion (include_requires / include_provides).
+            # Applied after all narrowing filters so the seed set is already correct.
+            # Replaces stmt with a new query over the full expanded set; the fast count
+            # optimisation cannot be used when expansion is active.
+            _include_requires = _filter.include_requires is True
+            _include_provides = _filter.include_provides is True
+            if _include_requires or _include_provides:
+                version_scalar = select(version_cte.c.version).scalar_subquery()
+                stmt = apply_dependency_expansion(
+                    stmt=stmt,
+                    env_id=_filter.environment,
+                    version_scalar=version_scalar,
+                    include_requires=_include_requires,
+                    include_provides=_include_provides,
+                    order_by=order_by,
+                )
+                count_stmt = None
+
             return await get_connection(
                 stmt, info=info, model="Resource", first=first, after=after, last=last, before=before, count_stmt=count_stmt
             )
 
         @strawberry.field(description="Fetches a summary of the state of all resources in a specific environment")
-        async def resource_summary(self, info: CustomInfo, environment: str) -> ComposedResourceSummary:
+        async def resource_summary(self, info: Info, environment: str) -> ComposedResourceSummary:
             results = await data.Resource.get_composed_resource_summary(environment)
             return ComposedResourceSummary(
                 total_count=results.total_count,
@@ -1059,4 +1431,78 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
                 is_deploying=cast(JSON, results.is_deploying),
             )
 
-    return strawberry.Schema(query=Query, config=StrawberryConfig(info_class=CustomInfo))
+    @strawberry.type
+    class Mutation:
+        @strawberry.mutation(
+            description=(
+                "Trigger a deploy for all resources matching the given filter. "
+                "``filter.environment`` is required. "
+                "Returns the agents that were triggered and any warnings."
+            )
+        )
+        async def trigger_deploy(
+            self,
+            info: Info,
+            filter: DynamicResourceFilter,  # type: ignore[valid-type]
+            agent_trigger_method: AgentTriggerMethod = AgentTriggerMethod.push_full_deploy,  # type: ignore[assignment]
+        ) -> TriggerDeployResult:
+            _filter = cast(BaseResourceFilter, filter)
+
+            env = await data.Environment.get_by_id(_filter.environment)
+            if env is None:
+                raise Exception(f"Environment {_filter.environment} does not exist")
+
+            resource_ids = await _resolve_resource_ids(_filter, _resource_query_contributions)
+
+            orchestration_service = info.context["orchestration_service"]
+            assert orchestration_service is not None
+            trigger_method = const.AgentTriggerMethod(agent_trigger_method.value)
+            result = await orchestration_service.deploy(
+                env,
+                agent_trigger_method=trigger_method,
+                resource_ids=resource_ids or None,
+            )
+
+            status_code, body = result if isinstance(result, tuple) else (result, {})
+            if status_code != 200:
+                raise Exception(body.get("message", "Deploy trigger failed"))
+
+            return TriggerDeployResult(
+                agents=body.get("agents", []),
+                warnings=body.get("warnings", []),
+            )
+
+        @strawberry.mutation(
+            description=(
+                "Trigger a dryrun for all resources matching the given filter. "
+                "``filter.environment`` is required. "
+                "``version`` is the configuration model version to dryrun. "
+                "Returns the ID of the created dryrun."
+            )
+        )
+        async def trigger_dryrun(
+            self,
+            info: Info,
+            filter: DynamicResourceFilter,  # type: ignore[valid-type]
+            version: int,
+        ) -> TriggerDryrunResult:
+            _filter = cast(BaseResourceFilter, filter)
+
+            env = await data.Environment.get_by_id(_filter.environment)
+            if env is None:
+                raise Exception(f"Environment {_filter.environment} does not exist")
+
+            resource_ids = await _resolve_resource_ids(_filter, _resource_query_contributions, version_override=version)
+
+            dryrun_service = info.context["dryrun_service"]
+            assert dryrun_service is not None
+            dryrun_id = await dryrun_service.dryrun_trigger(
+                env,
+                version=version,
+                resource_ids=resource_ids or None,
+            )
+
+            return TriggerDryrunResult(dryrun_id=dryrun_id)
+
+    _schema_cache = strawberry.Schema(query=Query, mutation=Mutation)
+    return _schema_cache

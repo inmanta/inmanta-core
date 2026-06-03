@@ -52,7 +52,7 @@ from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound
 from inmanta.protocol.return_value_meta import ReturnValueWithMeta
 from inmanta.resources import Id
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_RESOURCE, SLICE_TRANSPORT, agentmanager
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_GRAPHQL, SLICE_RESOURCE, SLICE_TRANSPORT, agentmanager
 from inmanta.server import config as opt
 from inmanta.server import extensions, protocol
 from inmanta.server.validate_filter import InvalidFilter
@@ -107,6 +107,105 @@ class ResourceActionLogLine(logging.LogRecord):
         self.relativeCreated = (self.created - logging._startTime) * 1000
 
 
+def _parse_sort(sort: str) -> list[dict[str, str]]:
+    """
+    Parse a REST sort string into GraphQL ``ResourceOrder`` variable format.
+
+    Accepts comma-separated ``field.direction`` entries.  Field names may be
+    snake_case (``resource_type``) or camelCase (``resourceType``); both are
+    accepted and normalised to camelCase for the GraphQL variable.
+
+    Example: ``"resource_type.asc,agent.desc"``
+    → ``[{"key": "resourceType", "order": "asc"}, {"key": "agent", "order": "desc"}]``
+    """
+
+    def _to_camel(s: str) -> str:
+        parts = s.split("_")
+        return parts[0] + "".join(p.title() for p in parts[1:])
+
+    result = []
+    for part in sort.split(","):
+        part = part.strip()
+        if "." in part:
+            key, direction = part.rsplit(".", 1)
+        else:
+            key, direction = part, "asc"
+        result.append({"key": _to_camel(key), "order": direction})
+    return result
+
+
+def _build_resources_filter_query() -> str:
+    """
+    Build the GraphQL query string used by the ``resources_filter`` REST handler.
+
+    The node selection is determined at call time: LSM inline fields are included
+    only when the current schema has them (i.e. when LSM is installed).  Because
+    ``get_schema()`` is called before this function, ``mapper.mapped_types["Resource"]``
+    is up to date.
+    """
+    from inmanta.graphql.schema import mapper
+
+    resource_type = mapper.mapped_types.get("Resource")
+    lsm_fields = ""
+    if resource_type is not None:
+        field_names = {f.name for f in resource_type.__strawberry_definition__.fields}
+        lsm_parts = [
+            name
+            for name in ("lsmServiceEntity", "lsmServiceInstanceId", "lsmLifecycleState")
+            if name in field_names
+        ]
+        if lsm_parts:
+            lsm_fields = "\n        " + "\n        ".join(lsm_parts)
+
+    return f"""
+query ResourcesFilter(
+  $filter: ResourceFilter!
+  $first: Int
+  $after: String
+  $last: Int
+  $before: String
+  $orderBy: [StrawberryOrder!]
+) {{
+  resources(
+    filter: $filter
+    first: $first
+    after: $after
+    last: $last
+    before: $before
+    orderBy: $orderBy
+  ) {{
+    totalCount
+    pageInfo {{
+      hasNextPage
+      hasPreviousPage
+      startCursor
+      endCursor
+    }}
+    edges {{
+      cursor
+      node {{
+        resourceId
+        resourceIdValue
+        resourceType
+        agent
+        attributes
+        purged
+        requiresLength{lsm_fields}
+        state {{
+          isOrphan
+          isUndefined
+          blocked
+          compliance
+          lastHandlerRun
+          isDeploying
+        }}
+      }}
+    }}
+  }}
+}}
+"""
+
+
 class ResourceService(protocol.ServerSlice):
     """Resource Manager service"""
 
@@ -115,9 +214,10 @@ class ResourceService(protocol.ServerSlice):
     def __init__(self) -> None:
         super().__init__(SLICE_RESOURCE)
         self._resource_action_logger = logging.getLogger(const.NAME_RESOURCE_ACTION_LOGGER)
+        self._graphql_slice: Any = None
 
     def get_dependencies(self) -> list[str]:
-        return [SLICE_DATABASE, SLICE_AGENT_MANAGER]
+        return [SLICE_DATABASE, SLICE_AGENT_MANAGER, SLICE_GRAPHQL]
 
     def get_depended_by(self) -> list[str]:
         return [SLICE_TRANSPORT]
@@ -128,6 +228,7 @@ class ResourceService(protocol.ServerSlice):
     async def prestart(self, server: protocol.Server) -> None:
         await super().prestart(server)
         self.agentmanager_service = cast("agentmanager.AgentManager", server.get_slice(SLICE_AGENT_MANAGER))
+        self._graphql_slice = server.get_slice(SLICE_GRAPHQL)
 
     async def start(self) -> None:
         self.schedule(
@@ -349,6 +450,61 @@ class ResourceService(protocol.ServerSlice):
             raise BadRequest(e.message) from e
 
         # TODO: optimize for no orphans
+
+    @handle(methods_v2.resources_filter)
+    async def resources_filter(
+        self,
+        tid: uuid.UUID,
+        filter: dict[str, Any],
+        first: Optional[int] = None,
+        after: Optional[str] = None,
+        last: Optional[int] = None,
+        before: Optional[str] = None,
+        sort: str = "resource_type.asc",
+    ) -> ReturnValueWithMeta[list[dict[str, Any]]]:
+        env = await data.Environment.get_by_id(tid)
+        if env is None:
+            raise NotFound(f"Environment with id {tid} not found.")
+
+        # Inject environment into the filter and build GraphQL variables.
+        variables: dict[str, Any] = {
+            "filter": {**filter, "environment": str(tid)},
+            "first": first,
+            "after": after,
+            "last": last,
+            "before": before,
+            "orderBy": _parse_sort(sort) if sort else None,
+        }
+
+        execution_result = await self._graphql_slice.execute_query(
+            _build_resources_filter_query(), variables=variables
+        )
+
+        if execution_result.errors:
+            # Surface GraphQL validation / execution errors as 400.
+            messages = [str(e.message) for e in execution_result.errors]
+            raise BadRequest("; ".join(messages))
+
+        resources_gql = execution_result.data["resources"]
+        nodes: list[dict[str, Any]] = [edge["node"] for edge in resources_gql["edges"]]
+        page_info: dict[str, Any] = resources_gql.get("pageInfo") or {}
+        total_count: Optional[int] = resources_gql.get("totalCount")
+
+        links: dict[str, str] = {}
+        if page_info.get("hasNextPage") and page_info.get("endCursor"):
+            links["next"] = url_concat(f"/api/v2/resources/filter/{tid}", {"after": page_info["endCursor"]})
+        if page_info.get("hasPreviousPage") and page_info.get("startCursor"):
+            links["prev"] = url_concat(f"/api/v2/resources/filter/{tid}", {"before": page_info["startCursor"]})
+
+        return ReturnValueWithMeta(
+            response=nodes,
+            links=links,
+            metadata={
+                "total": total_count,
+                "before": page_info.get("startCursor"),
+                "after": page_info.get("endCursor"),
+            },
+        )
 
     @handle(methods_v2.resource_details, env="tid")
     async def resource_details(self, env: data.Environment, rid: ResourceIdStr) -> ReleasedResourceDetails:

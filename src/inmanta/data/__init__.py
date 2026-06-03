@@ -1356,7 +1356,7 @@ class BaseDocument(metaclass=DocumentMeta):
         if "__ignore_fields__" in cls.__dict__:
             ignore = cls.__ignore_fields__
 
-        for attribute, value in cls.__dict__.items():
+        for attribute, value in list(cls.__dict__.items()):
             if attribute.startswith("_"):
                 continue
             elif isinstance(value, Field):

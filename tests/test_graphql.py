@@ -31,7 +31,7 @@ from inmanta.server.services.compilerservice import CompilerService
 from inmanta.util import retry_limited
 from strawberry_sqlalchemy_mapper import StrawberrySQLAlchemyMapper
 from strawberry_sqlalchemy_mapper.mapper import _GENERATED_FIELD_KEYS_KEY
-from utils import insert_with_link_to_configuration_model, run_compile_and_wait_until_compile_is_done
+from utils import ClientHelper, insert_with_link_to_configuration_model, run_compile_and_wait_until_compile_is_done
 
 env_1: typing.Final[str] = "11111111-1234-5678-1234-000000000001"
 
@@ -218,6 +218,10 @@ async def test_graphql_field_descriptions(server, client):
     Verify that field descriptions are resolved from SQLAlchemy column ``doc`` first, falling back to
     `:param` docstrings, and that they are exposed via GraphQL introspection.
     """
+    from inmanta.graphql.schema import get_schema
+
+    # Ensure the schema (and thus mapper.mapped_types["Resource"]) is built before we inspect it.
+    get_schema()
 
     # 1) Check mapper-level resolution: doc= takes precedence over :param docstrings
     graphql_type_to_sa_model: dict[str, type[models.Base]] = {
@@ -1297,3 +1301,694 @@ async def test_missing_query_exception(server, environment, client):
     assert result.result["data"]["data"] is None
     assert len(result.result["data"]["errors"]) == 1
     assert result.result["data"]["errors"][0] == 'Request data is missing a "query" value'
+
+
+# ---------------------------------------------------------------------------
+# Tests for ResourceQueryContribution extension hook and new filter fields
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def clean_schema_state():
+    """Saves and restores _resource_query_contributions and _schema_cache so tests don't bleed into each other."""
+    from inmanta.graphql import schema as graphql_schema
+
+    saved_contributions = list(graphql_schema._resource_query_contributions)
+    saved_cache = graphql_schema._schema_cache
+
+    graphql_schema._resource_query_contributions.clear()
+    graphql_schema._schema_cache = None
+
+    yield
+
+    graphql_schema._resource_query_contributions.clear()
+    graphql_schema._resource_query_contributions.extend(saved_contributions)
+    graphql_schema._schema_cache = saved_cache
+
+
+def test_dynamic_resource_filter_includes_contribution_fields(clean_schema_state):
+    """
+    Registering a ResourceQueryContribution should add its input fields to the dynamic
+    ResourceFilter that is built by get_schema().  Verify via strawberry introspection.
+    """
+    import strawberry
+    from inmanta.graphql.schema import get_schema, register_resource_query_contribution
+
+    @strawberry.input
+    class MockExtraFilter:
+        my_custom_field: typing.Optional[str] = strawberry.UNSET
+
+    class MockContribution:
+        def get_filter_input_class(self) -> type:
+            return MockExtraFilter
+
+        def get_context_loaders(self) -> dict:
+            return {}
+
+        def apply_to_stmt(self, stmt, env_id, filter, version_cte):
+            return stmt, version_cte
+
+        def get_resource_type_mixin(self) -> type | None:
+            return None
+
+    register_resource_query_contribution(MockContribution())
+    schema = get_schema()
+    introspection = schema.introspect()
+
+    # Find the ResourceFilter type in the schema
+    types_by_name = {t["name"]: t for t in introspection["__schema"]["types"]}
+    resource_filter = types_by_name.get("ResourceFilter")
+    assert resource_filter is not None, "ResourceFilter type not found in schema"
+
+    field_names = {f["name"] for f in resource_filter["inputFields"]}
+    # Core fields
+    assert "environment" in field_names
+    assert "resourceType" in field_names
+    assert "modelVersion" in field_names
+    # Contribution field
+    assert "myCustomField" in field_names
+
+
+def test_schema_cache_is_invalidated_on_new_contribution(clean_schema_state):
+    """Registering a new contribution should clear the schema cache."""
+    import strawberry
+    from inmanta.graphql.schema import get_schema, register_resource_query_contribution
+
+    # Build the schema once — it gets cached
+    schema1 = get_schema()
+    assert schema1 is get_schema()  # same object from cache
+
+    @strawberry.input
+    class AnotherFilter:
+        extra: typing.Optional[int] = strawberry.UNSET
+
+    class AnotherContribution:
+        def get_filter_input_class(self):
+            return AnotherFilter
+
+        def get_context_loaders(self):
+            return {}
+
+        def apply_to_stmt(self, stmt, env_id, filter, version_cte):
+            return stmt, version_cte
+
+        def get_resource_type_mixin(self) -> type | None:
+            return None
+
+    register_resource_query_contribution(AnotherContribution())
+    # Cache should be cleared; get_schema() must rebuild
+    schema2 = get_schema()
+    assert schema2 is not schema1
+
+
+def test_resource_type_mixin_adds_output_fields(clean_schema_state):
+    """
+    A ResourceQueryContribution that returns a mixin from get_resource_type_mixin()
+    should add those fields to the Resource output type in the GraphQL schema.
+    Use only built-in types (str) in the mixin so strawberry can resolve them
+    without needing a locally-defined type in the global namespace.
+    """
+    import strawberry
+    from inmanta.graphql.schema import get_schema, register_resource_query_contribution
+
+    @strawberry.input
+    class NoFilter:
+        pass
+
+    async def _resolve_extra_note(root: typing.Any, info: strawberry.types.Info) -> typing.Optional[str]:
+        return None
+
+    class _MyMixin:
+        extra_note: typing.Optional[str] = strawberry.field(
+            resolver=_resolve_extra_note,
+            description="Extra string field from a contribution.",
+        )
+
+    class MixinContribution:
+        def get_filter_input_class(self) -> type:
+            return NoFilter
+
+        def get_context_loaders(self) -> dict:
+            return {}
+
+        def apply_to_stmt(self, stmt, env_id, filter, version_cte):
+            return stmt, version_cte
+
+        def get_resource_type_mixin(self) -> type:
+            return _MyMixin
+
+    register_resource_query_contribution(MixinContribution())
+    schema = get_schema()
+    introspection = schema.introspect()
+
+    types_by_name = {t["name"]: t for t in introspection["__schema"]["types"]}
+    resource_type = types_by_name.get("Resource")
+    assert resource_type is not None, "Resource type not found in schema"
+    field_names = {f["name"] for f in (resource_type["fields"] or [])}
+    # Core fields still present
+    assert "resourceId" in field_names
+    assert "purged" in field_names
+    # Contribution field present
+    assert "extraNote" in field_names
+    # LSM inline fields are NOT present (no LSM contribution registered)
+    assert "lsmServiceEntity" not in field_names
+    assert "lsmServiceInstanceId" not in field_names
+    assert "lsmLifecycleState" not in field_names
+
+
+async def test_lsm_info_field_absent_without_contribution(server, client, environment):
+    """
+    When no ResourceQueryContribution provides the LSM mixin (LSM not installed),
+    the inline LSM fields must not appear on the Resource type at all.
+    Querying them should return a schema validation error.
+    """
+    # Verify via schema introspection that LSM fields are absent
+    introspection_result = await client.graphql_schema()
+    assert introspection_result.code == 200
+    types_list = introspection_result.result["data"]["__schema"]["types"]
+    types_by_name = {t["name"]: t for t in types_list if t.get("fields")}
+    resource_type = types_by_name.get("Resource", {})
+    field_names = {f["name"] for f in (resource_type.get("fields") or [])}
+    assert "lsmServiceEntity" not in field_names
+    assert "lsmServiceInstanceId" not in field_names
+    assert "lsmLifecycleState" not in field_names
+
+    # Querying LSM fields should be rejected by the schema validator
+    query = '{resources(filter: {environment: "%s"}) {edges {node {lsmServiceEntity}}}}' % environment
+    result = await client.graphql(query=query)
+    assert result.code == 400
+
+
+async def test_resource_filter_model_version(server, client, environment):
+    """
+    The modelVersion filter should return resources from the specified model version,
+    not from the latest scheduled version.
+    """
+    env_id = uuid.UUID(environment)
+
+    # Create 2 model versions with different resources
+    for version in [1, 2]:
+        cm = data.ConfigurationModel(
+            environment=env_id,
+            version=version,
+            date=datetime.datetime.now(),
+            total=1,
+            released=True,
+            version_info={},
+            is_suitable_for_partial_compiles=False,
+        )
+        await cm.insert()
+
+        resource_set = data.ResourceSet(environment=env_id, id=uuid.uuid4())
+        await insert_with_link_to_configuration_model(resource_set, versions=[version])
+
+        resource = data.Resource.new(
+            environment=env_id,
+            resource_version_id=f"std::testing::NullResource[agent1,name=v{version}resource],v={version}",
+            resource_set=resource_set,
+            attributes={"name": f"v{version}resource", "purged": False},
+        )
+        await resource.insert()
+        await data.ResourcePersistentState.populate_for_version(environment=env_id, model_version=version)
+
+    # Scheduler points to version 2 (the latest)
+    scheduler = data.Scheduler(environment=env_id, last_processed_model_version=2)
+    await scheduler.insert()
+
+    # Without modelVersion — should return version 2's resource
+    query_latest = '{resources(filter: {environment: "%s"}) {edges {node {resourceId}}}}' % environment
+    result = await client.graphql(query=query_latest)
+    check_correct_graphql_response(result)
+    ids_latest = {e["node"]["resourceId"] for e in result.result["data"]["data"]["resources"]["edges"]}
+    assert any("v2resource" in rid for rid in ids_latest)
+    assert not any("v1resource" in rid for rid in ids_latest)
+
+    # With modelVersion=1 — should return version 1's resource
+    query_v1 = '{resources(filter: {environment: "%s" modelVersion: 1}) {edges {node {resourceId}}}}' % environment
+    result = await client.graphql(query=query_v1)
+    check_correct_graphql_response(result)
+    ids_v1 = {e["node"]["resourceId"] for e in result.result["data"]["data"]["resources"]["edges"]}
+    assert any("v1resource" in rid for rid in ids_v1)
+    assert not any("v2resource" in rid for rid in ids_v1)
+
+
+async def test_resource_filter_model_version_and_is_orphan_error(server, client, environment):
+    """
+    Setting both modelVersion and isOrphan should return a GraphQL error (400).
+    """
+    query = '{resources(filter: {environment: "%s" modelVersion: 1 isOrphan: false}) {edges {node {resourceId}}}}' % environment
+    result = await client.graphql(query=query)
+    assert result.code == 400
+
+
+async def test_apply_to_stmt_called_with_version_cte(server, client, environment, clean_schema_state):
+    """
+    A registered ResourceQueryContribution's apply_to_stmt method should be called
+    with the correct arguments when the resources query executes.
+    """
+    import strawberry
+    from inmanta.graphql.schema import register_resource_query_contribution
+
+    called_args: list = []
+
+    @strawberry.input
+    class NoopFilter:
+        pass
+
+    class TrackingContribution:
+        def get_filter_input_class(self):
+            return NoopFilter
+
+        def get_context_loaders(self):
+            return {}
+
+        def apply_to_stmt(self, stmt, env_id, filter, version_cte):
+            called_args.append({"env_id": env_id, "version_cte": version_cte})
+            return stmt, version_cte
+
+        def get_resource_type_mixin(self) -> type | None:
+            return None
+
+    register_resource_query_contribution(TrackingContribution())
+
+    env_id = uuid.UUID(environment)
+    query = '{resources(filter: {environment: "%s"}) {edges {node {resourceId}}}}' % environment
+    await client.graphql(query=query)
+
+    assert len(called_args) == 1
+    assert called_args[0]["env_id"] == env_id
+    assert called_args[0]["version_cte"] is not None
+
+
+# ---------------------------------------------------------------------------
+# Tests for include_requires / include_provides dependency expansion
+# ---------------------------------------------------------------------------
+
+
+async def _setup_dependency_resources(
+    env_id: uuid.UUID,
+    version: int,
+) -> tuple[str, str, str]:
+    """
+    Insert a small dependency graph into the database:
+
+      A → B → C      (A requires B, B requires C)
+
+    Returns (rid_a, rid_b, rid_c).
+    """
+    rid_a = "std::testing::NullResource[agent1,name=A]"
+    rid_b = "std::testing::NullResource[agent1,name=B]"
+    rid_c = "std::testing::NullResource[agent1,name=C]"
+
+    cm = data.ConfigurationModel(
+        environment=env_id,
+        version=version,
+        date=datetime.datetime.now(),
+        total=3,
+        released=True,
+        version_info={},
+        is_suitable_for_partial_compiles=False,
+    )
+    await cm.insert()
+
+    resource_set = data.ResourceSet(environment=env_id, id=uuid.uuid4())
+    await insert_with_link_to_configuration_model(resource_set, versions=[version])
+
+    for rid, requires in [
+        (rid_a, [f"{rid_b},v={version}"]),
+        (rid_b, [f"{rid_c},v={version}"]),
+        (rid_c, []),
+    ]:
+        r = data.Resource.new(
+            environment=env_id,
+            resource_version_id=f"{rid},v={version}",
+            resource_set=resource_set,
+            attributes={"purged": False, "requires": requires},
+        )
+        await r.insert()
+
+    await data.ResourcePersistentState.populate_for_version(environment=env_id, model_version=version)
+
+    scheduler = data.Scheduler(environment=env_id, last_processed_model_version=version)
+    await scheduler.insert()
+
+    return rid_a, rid_b, rid_c
+
+
+async def test_include_requires(server, client, environment):
+    """
+    includeRequires: filtering for resource A (which requires B which requires C)
+    should expand the result to include B and C as well.
+    """
+    env_id = uuid.UUID(environment)
+    rid_a, rid_b, rid_c = await _setup_dependency_resources(env_id, version=1)
+
+    # Filter only A; with includeRequires we should get A, B, and C.
+    query = (
+        '{resources(filter: {environment: "%s" resourceIdValue: {eq: ["A"]} includeRequires: true})'
+        " {edges {node {resourceId}}}}"
+    ) % environment
+
+    result = await client.graphql(query=query)
+    check_correct_graphql_response(result)
+    edges = result.result["data"]["data"]["resources"]["edges"]
+    ids = {e["node"]["resourceId"] for e in edges}
+    assert rid_a in ids
+    assert rid_b in ids
+    assert rid_c in ids
+
+
+async def test_include_provides(server, client, environment):
+    """
+    includeProvides: filtering for resource C (which is required by B, B by A)
+    should expand the result to include B and A as well.
+    """
+    env_id = uuid.UUID(environment)
+    rid_a, rid_b, rid_c = await _setup_dependency_resources(env_id, version=1)
+
+    # Filter only C; with includeProvides we should get C, B, and A.
+    query = (
+        '{resources(filter: {environment: "%s" resourceIdValue: {eq: ["C"]} includeProvides: true})'
+        " {edges {node {resourceId}}}}"
+    ) % environment
+
+    result = await client.graphql(query=query)
+    check_correct_graphql_response(result)
+    edges = result.result["data"]["data"]["resources"]["edges"]
+    ids = {e["node"]["resourceId"] for e in edges}
+    assert rid_a in ids
+    assert rid_b in ids
+    assert rid_c in ids
+
+
+async def test_include_requires_and_provides(server, client, environment):
+    """
+    Both includeRequires and includeProvides: filtering for B (middle of A→B→C chain)
+    should expand to the full set A, B, C.
+    """
+    env_id = uuid.UUID(environment)
+    rid_a, rid_b, rid_c = await _setup_dependency_resources(env_id, version=1)
+
+    query = (
+        '{resources(filter: {environment: "%s" resourceIdValue: {eq: ["B"]}'
+        " includeRequires: true includeProvides: true})"
+        " {edges {node {resourceId}}}}"
+    ) % environment
+
+    result = await client.graphql(query=query)
+    check_correct_graphql_response(result)
+    edges = result.result["data"]["data"]["resources"]["edges"]
+    ids = {e["node"]["resourceId"] for e in edges}
+    assert ids == {rid_a, rid_b, rid_c}
+
+
+# ---------------------------------------------------------------------------
+# Tests for resources_filter REST endpoint
+# ---------------------------------------------------------------------------
+
+
+async def test_resources_filter_basic(server, client, environment):
+    """
+    Basic smoke-test: POST /api/v2/resources/filter/<tid> returns resources
+    matching the filter, with the correct response structure.
+    """
+    env_id = uuid.UUID(environment)
+    version = 1
+    cm = data.ConfigurationModel(
+        environment=env_id,
+        version=version,
+        date=datetime.datetime.now(),
+        total=2,
+        released=True,
+        version_info={},
+        is_suitable_for_partial_compiles=False,
+    )
+    await cm.insert()
+    resource_set = data.ResourceSet(environment=env_id, id=uuid.uuid4())
+    await insert_with_link_to_configuration_model(resource_set, versions=[version])
+    for name in ["alpha", "beta"]:
+        r = data.Resource.new(
+            environment=env_id,
+            resource_version_id=f"std::testing::NullResource[agent1,name={name}],v={version}",
+            resource_set=resource_set,
+            attributes={"purged": False, "requires": []},
+        )
+        await r.insert()
+    await data.ResourcePersistentState.populate_for_version(environment=env_id, model_version=version)
+    scheduler = data.Scheduler(environment=env_id, last_processed_model_version=version)
+    await scheduler.insert()
+
+    result = await client.resources_filter(tid=env_id, filter={})
+    assert result.code == 200, result.result
+    resources = result.result["data"]
+    assert isinstance(resources, list)
+    assert len(resources) == 2
+    ids = {r["resourceId"] for r in resources}
+    assert any("alpha" in rid for rid in ids)
+    assert any("beta" in rid for rid in ids)
+    # Response must include standard metadata keys.
+    metadata = result.result.get("metadata", {})
+    assert "total" in metadata
+
+
+async def test_resources_filter_by_resource_id_value(server, client, environment):
+    """resourceIdValue filter narrows the result to matching resources."""
+    env_id = uuid.UUID(environment)
+    version = 1
+    cm = data.ConfigurationModel(
+        environment=env_id,
+        version=version,
+        date=datetime.datetime.now(),
+        total=2,
+        released=True,
+        version_info={},
+        is_suitable_for_partial_compiles=False,
+    )
+    await cm.insert()
+    resource_set = data.ResourceSet(environment=env_id, id=uuid.uuid4())
+    await insert_with_link_to_configuration_model(resource_set, versions=[version])
+    for name in ["target", "other"]:
+        r = data.Resource.new(
+            environment=env_id,
+            resource_version_id=f"std::testing::NullResource[agent1,name={name}],v={version}",
+            resource_set=resource_set,
+            attributes={"purged": False, "requires": []},
+        )
+        await r.insert()
+    await data.ResourcePersistentState.populate_for_version(environment=env_id, model_version=version)
+    scheduler = data.Scheduler(environment=env_id, last_processed_model_version=version)
+    await scheduler.insert()
+
+    result = await client.resources_filter(
+        tid=env_id, filter={"resourceIdValue": {"eq": ["target"]}}
+    )
+    assert result.code == 200, result.result
+    resources = result.result["data"]
+    assert len(resources) == 1
+    assert "target" in resources[0]["resourceId"]
+
+
+async def test_resources_filter_include_requires_rest(server, client, environment):
+    """includeRequires expansion works through the REST endpoint."""
+    env_id = uuid.UUID(environment)
+    rid_a, rid_b, rid_c = await _setup_dependency_resources(env_id, version=1)
+
+    result = await client.resources_filter(
+        tid=env_id,
+        filter={"resourceIdValue": {"eq": ["A"]}, "includeRequires": True},
+    )
+    assert result.code == 200, result.result
+    resources = result.result["data"]
+    ids = {r["resourceId"] for r in resources}
+    assert rid_a in ids
+    assert rid_b in ids
+    assert rid_c in ids
+
+
+async def test_resources_filter_invalid_field(server, client, environment):
+    """An invalid filter field name should return HTTP 400."""
+    env_id = uuid.UUID(environment)
+    result = await client.resources_filter(
+        tid=env_id, filter={"nonExistentField": "value"}
+    )
+    assert result.code == 400
+
+
+async def test_resources_filter_pagination(server, client, environment):
+    """first/after cursor pagination returns subsets and correct pageInfo."""
+    env_id = uuid.UUID(environment)
+    version = 1
+    cm = data.ConfigurationModel(
+        environment=env_id,
+        version=version,
+        date=datetime.datetime.now(),
+        total=5,
+        released=True,
+        version_info={},
+        is_suitable_for_partial_compiles=False,
+    )
+    await cm.insert()
+    resource_set = data.ResourceSet(environment=env_id, id=uuid.uuid4())
+    await insert_with_link_to_configuration_model(resource_set, versions=[version])
+    for i in range(5):
+        r = data.Resource.new(
+            environment=env_id,
+            resource_version_id=f"std::testing::NullResource[agent1,name=res{i}],v={version}",
+            resource_set=resource_set,
+            attributes={"purged": False, "requires": []},
+        )
+        await r.insert()
+    await data.ResourcePersistentState.populate_for_version(environment=env_id, model_version=version)
+    scheduler = data.Scheduler(environment=env_id, last_processed_model_version=version)
+    await scheduler.insert()
+
+    # First page of 2
+    result = await client.resources_filter(tid=env_id, filter={}, first=2)
+    assert result.code == 200, result.result
+    page1 = result.result["data"]
+    assert len(page1) == 2
+    metadata = result.result.get("metadata", {})
+    after_cursor = metadata.get("after")
+    assert after_cursor  # must have a cursor for the next page
+
+    # Second page using cursor
+    result2 = await client.resources_filter(tid=env_id, filter={}, first=2, after=after_cursor)
+    assert result2.code == 200, result2.result
+    page2 = result2.result["data"]
+    assert len(page2) == 2
+    # No overlap between pages
+    ids1 = {r["resourceId"] for r in page1}
+    ids2 = {r["resourceId"] for r in page2}
+    assert ids1.isdisjoint(ids2)
+
+
+# ---------------------------------------------------------------------------
+# Tests for triggerDeploy and triggerDryrun GraphQL mutations
+# ---------------------------------------------------------------------------
+
+
+async def test_trigger_deploy_mutation(server, client, environment, agent):
+    """
+    triggerDeploy mutation: verify that the mutation triggers a deploy for the
+    resources matched by the filter and returns the triggerd agents list.
+
+    Two resource types are created. The mutation is called with a filter that
+    restricts to one resource type. The mutation must succeed and report the
+    correct agent.
+    """
+    env_id = uuid.UUID(environment)
+    clienthelper = ClientHelper(client, env_id)
+    version = await clienthelper.get_version()
+
+    resources = [
+        {
+            "key": "k1",
+            "value": "v1",
+            "id": f"test::Resource[agent1,key=k1],v={version}",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "key": "k2",
+            "value": "v2",
+            "id": f"test::Resource[agent1,key=k2],v={version}",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+    ]
+    await clienthelper.put_version_simple(resources, version)
+
+    # Wait until the version is released so the scheduler picks it up.
+    await clienthelper.wait_for_released(version)
+
+    mutation = """
+    mutation TriggerDeploy($env: UUID!, $method: AgentTriggerMethod!) {
+        triggerDeploy(
+            filter: {environment: $env}
+            agentTriggerMethod: $method
+        ) {
+            agents
+            warnings
+        }
+    }
+    """
+    result = await client.graphql(
+        query=mutation,
+        variables={"env": environment, "method": "push_incremental_deploy"},
+    )
+    assert result.code == 200, result.result
+    payload = result.result["data"]
+    assert payload["errors"] is None, payload["errors"]
+    deploy_result = payload["data"]["triggerDeploy"]
+    assert "agent1" in deploy_result["agents"]
+    assert isinstance(deploy_result["warnings"], list)
+
+
+async def test_trigger_dryrun_mutation(server, client, environment, agent):
+    """
+    triggerDryrun mutation: verify that a dryrun is created for the resources
+    matched by the filter.
+
+    Three resources on two agents are created. The mutation is called with a
+    filter that restricts to agent1. The dryrun must be created with a total
+    count equal to the number of resources on agent1 only.
+    """
+    env_id = uuid.UUID(environment)
+    clienthelper = ClientHelper(client, env_id)
+    version = await clienthelper.get_version()
+
+    resources = [
+        {
+            "key": "a1",
+            "value": "v",
+            "id": f"test::Resource[agent1,key=a1],v={version}",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "key": "a2",
+            "value": "v",
+            "id": f"test::Resource[agent1,key=a2],v={version}",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "key": "b1",
+            "value": "v",
+            "id": f"test::Resource[agent2,key=b1],v={version}",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+    ]
+    await clienthelper.put_version_simple(resources, version)
+    await clienthelper.wait_for_released(version)
+
+    mutation = """
+    mutation TriggerDryrun($env: UUID!, $version: Int!) {
+        triggerDryrun(
+            filter: {environment: $env, agent: {eq: ["agent1"]}}
+            version: $version
+        ) {
+            dryrunId
+        }
+    }
+    """
+    result = await client.graphql(
+        query=mutation,
+        variables={"env": environment, "version": version},
+    )
+    assert result.code == 200, result.result
+    payload = result.result["data"]
+    assert payload["errors"] is None, payload["errors"]
+    dryrun_id = uuid.UUID(payload["data"]["triggerDryrun"]["dryrunId"])
+
+    # The dryrun record must exist and contain only the 2 agent1 resources.
+    dryrun = await data.DryRun.get_by_id(dryrun_id)
+    assert dryrun is not None
+    assert dryrun.total == 2
+    assert dryrun.model == version

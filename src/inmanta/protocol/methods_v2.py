@@ -822,6 +822,50 @@ def resource_list(
 
 @auth(auth_label=const.CoreAuthorizationLabel.RESOURCE_READ, read_only=True, environment_param="tid")
 @typedmethod(
+    path="/resources/filter/<tid>",
+    operation="POST",
+    client_types=[ClientType.api],
+    api_version=2,
+    strict_typing=False,
+)
+def resources_filter(
+    tid: uuid.UUID,
+    filter: dict[str, Any],
+    first: Optional[int] = None,
+    after: Optional[str] = None,
+    last: Optional[int] = None,
+    before: Optional[str] = None,
+    sort: str = "resource_type.asc",
+) -> ReturnValue[list[dict[str, Any]]]:
+    """
+    List resources matching a GraphQL-compatible filter object, with relay-style cursor pagination.
+
+    The filter is translated directly to a GraphQL ``resources`` query.  All fields valid on
+    the GraphQL ``ResourceFilter`` input type are accepted here, including LSM-specific fields
+    (``serviceEntity``, ``serviceInstance``, ``lifecycleState``, ``includeOwned``) when LSM is
+    installed, and core expansion fields (``includeRequires``, ``includeProvides``).
+
+    ``environment`` does not need to be included in the filter body — it is always set from the
+    URL path parameter ``tid``.
+
+    :param tid: Environment UUID (taken from the URL path; injected automatically into the filter).
+    :param filter: GraphQL-compatible filter object.  Use camelCase field names, e.g.
+        ``{"resourceType": {"eq": ["std::File"]}, "serviceEntity": {"eq": ["my_entity"]}}``.
+    :param first: Return the first N resources (forward pagination).
+    :param after: Cursor marking the start of the next page (from a previous response's ``after``).
+    :param last: Return the last N resources (backward pagination).
+    :param before: Cursor marking the end of the previous page (from a previous response's ``before``).
+    :param sort: Sort specification in the form ``field.direction``, e.g. ``resource_type.asc``.
+        Multiple sorts can be comma-separated: ``resource_type.asc,agent.desc``.
+    :raise BadRequest: Invalid filter fields, conflicting pagination parameters, or other
+        GraphQL validation errors.
+    :raise NotFound: The referenced environment does not exist.
+    """
+    pass
+
+
+@auth(auth_label=const.CoreAuthorizationLabel.RESOURCE_READ, read_only=True, environment_param="tid")
+@typedmethod(
     path="/resource/<rid>", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
 def resource_details(tid: uuid.UUID, rid: inmanta.types.ResourceIdStr) -> model.ReleasedResourceDetails:
@@ -1353,12 +1397,13 @@ def set_fact(
 @typedmethod(
     path="/dryrun/<version>", operation="POST", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
-def dryrun_trigger(tid: uuid.UUID, version: int) -> uuid.UUID:
+def dryrun_trigger(tid: uuid.UUID, version: int, resource_ids: Optional[list[ResourceIdStr]] = None) -> uuid.UUID:
     """
     Trigger a new dryrun
 
     :param tid: The id of the environment
     :param version: The version of the configuration model to execute the dryrun for
+    :param resource_ids: Optional, list of specific resource ids to include in the dryrun
     :raise NotFound: This exception is raised when the referenced environment or version is not found
     :return: The id of the new dryrun
     """

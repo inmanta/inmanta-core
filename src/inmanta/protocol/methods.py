@@ -568,6 +568,7 @@ def deploy(
     tid: uuid.UUID,
     agent_trigger_method: const.AgentTriggerMethod = const.AgentTriggerMethod.push_full_deploy,
     agents: Optional[list] = None,
+    resource_ids: Optional[list[ResourceIdStr]] = None,
 ):
     """
     Notify agents to perform a deploy now.
@@ -575,6 +576,7 @@ def deploy(
     :param tid: The id of the environment.
     :param agent_trigger_method: Indicates whether the agents should perform a full or an incremental deploy.
     :param agents: Optional, names of specific agents to trigger
+    :param resource_ids: Optional, list of specific resource ids to deploy
     """
 
 
@@ -583,12 +585,13 @@ def deploy(
 
 @auth(auth_label=const.CoreAuthorizationLabel.DRYRUN_WRITE, read_only=False, environment_param="tid")
 @method(path="/dryrun/<id>", operation="POST", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
-def dryrun_request(tid: uuid.UUID, id: int):
+def dryrun_request(tid: uuid.UUID, id: int, resource_ids: Optional[list[ResourceIdStr]] = None):
     """
     Do a dryrun
 
     :param tid: The id of the environment
     :param id: The version of the CM to deploy
+    :param resource_ids: Optional, list of specific resource ids to include in the dryrun
     """
 
 
@@ -638,7 +641,7 @@ def dryrun_update(tid: uuid.UUID, id: uuid.UUID, resource: str, changes: dict):
     client_types=[],
     enforce_auth=False,
 )
-def do_dryrun(tid: uuid.UUID, id: uuid.UUID, agent: str, version: int):
+def do_dryrun(tid: uuid.UUID, id: uuid.UUID, agent: str, version: int, resource_ids: Optional[list[ResourceIdStr]] = None):
     """
     Do a dryrun on an agent
 
@@ -646,6 +649,7 @@ def do_dryrun(tid: uuid.UUID, id: uuid.UUID, agent: str, version: int):
     :param id: The id of the dryrun
     :param agent: The agent to do the dryrun for
     :param version: The version of the model to dryrun
+    :param resource_ids: Optional, list of specific resource ids to dryrun
     """
 
 
@@ -986,7 +990,7 @@ def set_state(agent: Optional[str], enabled: bool):
     arg_options=AGENT_ENV_OPTS,
     client_types=[],
 )
-def trigger(tid: uuid.UUID, id: None | str, incremental_deploy: bool):
+def trigger(tid: uuid.UUID, id: None | str, incremental_deploy: bool, resource_ids: Optional[list[ResourceIdStr]] = None):
     """
     When the <id> parameter is set: request this specific agent to reload resources.
     Otherwise, request ALL agents in the environment to reload resources.
@@ -994,6 +998,7 @@ def trigger(tid: uuid.UUID, id: None | str, incremental_deploy: bool):
     :param tid: The environment this agent is defined in
     :param id: The name of the agent
     :param incremental_deploy: Indicates whether the agent should perform an incremental deploy or a full deploy
+    :param resource_ids: Optional, list of specific resource ids to deploy
     """
 
 
