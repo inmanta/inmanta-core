@@ -1,6 +1,6 @@
-description: Disallow commas in agent name.
+description: Raise a clear error when resource id components contain invalid characters.
 issue-nr: 10342
 change-type: patch
 destination-branches: [master, iso9]
 sections:
-  bugfix: "Raise a clear error message instead of failing cryptically for invalid agent names"
+  bugfix: "{{description}}"
