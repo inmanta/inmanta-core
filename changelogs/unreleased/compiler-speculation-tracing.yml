@@ -1,3 +1,9 @@
-description: Add opt-in speculation tracing to the compiler scheduler (INMANTA_SPECULATION_LOG)
+description: >
+  Added opt-in speculation tracing to the compiler scheduler. Set the compiler.speculation_log_file
+  config option (or the INMANTA_COMPILER_SPECULATION_LOG_FILE environment variable) to a file path to
+  write a JSON trace of scheduler iterations and speculative freeze decisions, to diagnose why and
+  where the compiler speculates.
 change-type: minor
 destination-branches: [master, iso9]
+sections:
+  minor-improvement: "{{description}}"

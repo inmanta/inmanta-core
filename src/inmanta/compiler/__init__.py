@@ -16,6 +16,8 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import dataclasses
+import json
 import logging
 import sys
 from collections import abc
@@ -73,7 +75,12 @@ def do_compile(refs: Optional[abc.Mapping[object, object]] = None) -> tuple[dict
         statements, blocks = compiler.compile()
     except ParserException as e:
         compiler.handle_exception(e)
-    sched = scheduler.Scheduler(compiler_config.track_dataflow(), project.get_relation_precedence_policy())
+    speculation_log_file: Optional[str] = compiler_config.speculation_log_file.get()
+    sched = scheduler.Scheduler(
+        compiler_config.track_dataflow(),
+        project.get_relation_precedence_policy(),
+        track_speculation=speculation_log_file is not None,
+    )
     raised_compile_exception: bool = False
     try:
         success = sched.run(compiler, statements, blocks)
@@ -85,6 +92,14 @@ def do_compile(refs: Optional[abc.Mapping[object, object]] = None) -> tuple[dict
         success = False
     finally:
         Finalizers.call_finalizers(raised_compile_exception)
+        if speculation_log_file is not None and sched.speculation_data:
+            # Write the log even when compilation fails: diagnosing failed or stuck compiles is the
+            # main use case for speculation tracing.
+            try:
+                write_speculation_log(speculation_log_file, sched.speculation_data)
+            except OSError as e:
+                # Never let a log write failure mask the compilation result
+                LOGGER.warning("Failed to write speculation log to %s: %s", speculation_log_file, e)
     LOGGER.debug("Compile done")
 
     if not success:
@@ -94,6 +109,15 @@ def do_compile(refs: Optional[abc.Mapping[object, object]] = None) -> tuple[dict
     if compiler_config.dataflow_graphic_enable.get():
         show_dataflow_graphic(sched, compiler)
     return (sched.get_types(), compiler.get_ns())
+
+
+def write_speculation_log(path: str, records: Sequence[scheduler.IterationRecord]) -> None:
+    """
+    Write the speculation trace records collected by the scheduler to the given file as JSON.
+    """
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump([dataclasses.asdict(record) for record in records], fh, indent=2)
+    LOGGER.info("Speculation log written to %s (%d entries)", path, len(records))
 
 
 def show_dataflow_graphic(scheduler: scheduler.Scheduler, compiler: "Compiler") -> None:

@@ -11,17 +11,29 @@ model or compiler optimizations.
 
 ## Generating a speculation log
 
-Set the `INMANTA_SPECULATION_LOG` environment variable to a file path before running
-a compile:
+Set the `compiler.speculation_log_file` config option to a file path before running a
+compile. The easiest way is through its environment variable:
 
 ```bash
-INMANTA_SPECULATION_LOG=/tmp/speculation.json inmanta compile
+INMANTA_COMPILER_SPECULATION_LOG_FILE=/tmp/speculation.json inmanta compile
 ```
 
-The compiler writes a JSON log containing every scheduler iteration and every
-speculative freeze decision. The log is written at the end of compilation. There is
-no measurable performance overhead — the instrumentation is skipped entirely when the
-environment variable is not set.
+Like any config option, it can also be set in a config file:
+
+```ini
+[compiler]
+speculation_log_file=/tmp/speculation.json
+```
+
+To trace compiles triggered by an orchestrator server, set the environment variable on
+the server process (e.g. through a systemd drop-in or the container environment): server
+compiles inherit the server's environment.
+
+The compiler writes a JSON log containing a record for every scheduler iteration. When an
+iteration made progress through a speculative freeze, the record contains a nested
+`freeze` object describing that decision. The log is written at the end of compilation,
+also when compilation fails. There is no measurable performance overhead — the
+instrumentation is skipped entirely when the option is not set.
 
 ## Analyzing the log
 
