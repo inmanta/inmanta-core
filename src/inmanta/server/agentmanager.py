@@ -581,7 +581,7 @@ class AgentManager(ServerSlice, SessionListener):
                 # can be correctly promoted to primary.
                 for endpoint_name in endpoint_names_snapshot:
                     key = (session.tid, endpoint_name)
-                    if key in self.tid_endpoint_to_session and self.tid_endpoint_to_session[key].id == session.id:
+                    if key in self.tid_endpoint_to_session and self.tid_endpoint_to_session[key].get_id() == sid:
                         del self.tid_endpoint_to_session[key]
                 raise
 
