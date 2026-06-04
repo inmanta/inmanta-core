@@ -772,13 +772,19 @@ class Id:
 
     def __init__(self, entity_type: str, agent_name: str, attribute: str, attribute_value: str, version: int = 0) -> None:
         """
-        :attr entity_type: The resource type, as defined in the configuration model.
+        :param entity_type: The resource type, as defined in the configuration model.
             For example :inmanta:entity:`std::testing::NullResource`.
-        :attr agent_name: The agent responsible for this resource.
-        :attr attribute: The key attribute that uniquely identifies this resource on the agent
-        :attr attribute_value: The corresponding value for this key attribute.
-        :attr version: The version number for this resource.
+        :param agent_name: The agent responsible for this resource.
+        :param attribute: The key attribute that uniquely identifies this resource on the agent
+        :param attribute_value: The corresponding value for this key attribute.
+        :param version: The version number for this resource.
         """
+        if "," in agent_name:
+            raise ResourceException(f"Agent name '{agent_name}' is not valid. Agent names cannot contain commas.")
+        # if "]" in attribute_value:
+        #     raise ResourceException(
+        #         f"Attribute value '{attribute_value}' is not valid. Attribute values cannot contain ']'."
+        #     )
         self._entity_type = entity_type
         self._agent_name = agent_name
         self._attribute = attribute

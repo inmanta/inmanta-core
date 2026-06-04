@@ -387,6 +387,12 @@ def test_parse_rvid_regex():
     assert result is None
 
 
+def test_id_agent_name_with_comma() -> None:
+    """Verify that agent names with commas are rejected"""
+    with pytest.raises(ResourceException, match="cannot contain a comma"):
+        Id("test::Resource", "foo,bar", "key", "val")
+
+
 def test_resource_deserialize_backward_compatibility() -> None:
     """
     Verify backward compatibiltiy of resource deserialization. This is important because we store resources in serialized form
