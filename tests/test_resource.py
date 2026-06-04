@@ -387,10 +387,38 @@ def test_parse_rvid_regex():
     assert result is None
 
 
-def test_id_agent_name_with_comma() -> None:
-    """Verify that agent names with commas are rejected"""
-    with pytest.raises(ResourceException, match="cannot contain a comma"):
+def test_invalid_id_parameters() -> None:
+    with pytest.raises(ValueError, match="Invalid agent name 'foo,bar': cannot contain ','."):
         Id("test::Resource", "foo,bar", "key", "val")
+    with pytest.raises(ValueError, match="Invalid attribute name 'ke,y': cannot contain ','."):
+        Id("test::Resource", "agent", "ke,y", "val")
+    with pytest.raises(ValueError, match="Invalid attribute name 'ke=y': cannot contain '='."):
+        Id("test::Resource", "agent", "ke=y", "val")
+    with pytest.raises(ValueError, match="Invalid attribute value 'va]l': cannot contain ']'."):
+        Id("test::Resource", "agent", "key", "va]l")
+
+@pytest.mark.parametrize(
+    "entity_type,agent_name,attribute,attribute_value",
+    [
+        ("test::Resource", "agent", "key", "val"),
+        ("test::Resource", "agent=with=equals", "key", "val"),
+        ("test::Resource", "agent[with]brackets", "key", "val"),
+        ("test::Resource", "agent with spaces", "key", "val"),
+        ("test::Resource", "agent", "key]with[brackets", "val"),
+        ("test::Resource", "agent", "key with spaces", "val"),
+        ("test::Resource", "agent", "key", "value=with=equals"),
+        ("test::Resource", "agent", "key", "value[with[brackets"),
+        ("test::Resource", "agent", "key", "value with spaces"),
+        ("test::Resource", "agent", "key", "value,with,commas"),
+    ],
+)
+def test_id_roundtrip(entity_type: str, agent_name: str, attribute: str, attribute_value: str) -> None:
+    id_obj = Id(entity_type, agent_name, attribute, attribute_value)
+    parsed = Id.parse_id(id_obj.resource_str())
+    assert parsed.entity_type == entity_type
+    assert parsed.agent_name == agent_name
+    assert parsed.attribute == attribute
+    assert parsed.attribute_value == attribute_value
 
 
 def test_resource_deserialize_backward_compatibility() -> None:

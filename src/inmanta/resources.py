@@ -779,8 +779,14 @@ class Id:
         :attr attribute_value: The corresponding value for this key attribute.
         :attr version: The version number for this resource.
         """
-        if "," in agent_name:
-            raise ValueError(f"Agent name '{agent_name}' is not valid. Agent names cannot contain commas.")
+        for value, label, forbidden in (
+            (agent_name, "agent name", [","]),
+            (attribute, "attribute name", [",", "="]),
+            (attribute_value, "attribute value", ["]"]),
+        ):
+            for char in forbidden:
+                if char in value:
+                    raise ValueError(f"Invalid {label} '{value}': cannot contain '{char}'.")
 
         self._entity_type = entity_type
         self._agent_name = agent_name
