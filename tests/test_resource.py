@@ -387,15 +387,22 @@ def test_parse_rvid_regex():
     assert result is None
 
 
-def test_invalid_id_parameters() -> None:
-    with pytest.raises(ValueError, match="Invalid agent name 'foo,bar': cannot contain ','."):
-        Id("test::Resource", "foo,bar", "key", "val")
-    with pytest.raises(ValueError, match="Invalid attribute name 'ke,y': cannot contain ','."):
-        Id("test::Resource", "agent", "ke,y", "val")
-    with pytest.raises(ValueError, match="Invalid attribute name 'ke=y': cannot contain '='."):
-        Id("test::Resource", "agent", "ke=y", "val")
-    with pytest.raises(ValueError, match="Invalid attribute value 'va]l': cannot contain ']'."):
-        Id("test::Resource", "agent", "key", "va]l")
+@pytest.mark.parametrize(
+    "args,match",
+    [
+        (("test::Resource", "foo,bar", "key", "val"), "Invalid agent name 'foo,bar': cannot contain ','."),
+        (("test::Resource", "agent", "ke,y", "val"), "Invalid attribute name 'ke,y': cannot contain ','."),
+        (("test::Resource", "agent", "ke=y", "val"), "Invalid attribute name 'ke=y': cannot contain '='."),
+        (("test::Resource", "agent", "key", "va]l"), "Invalid attribute value 'va]l': cannot contain ']'."),
+    ],
+)
+def test_invalid_id_parameters(args: tuple[str, ...], match: str) -> None:
+    """
+    Test that invalid input is rejected from the Id constructor.
+    """
+    with pytest.raises(ValueError, match=match):
+        Id(*args)
+
 
 @pytest.mark.parametrize(
     "entity_type,agent_name,attribute,attribute_value",
@@ -413,6 +420,9 @@ def test_invalid_id_parameters() -> None:
     ],
 )
 def test_id_roundtrip(entity_type: str, agent_name: str, attribute: str, attribute_value: str) -> None:
+    """
+    Test that what we input on the Id constructor is the same that we get after calling Id.parse_id(id_obj.resource_str())
+    """
     id_obj = Id(entity_type, agent_name, attribute, attribute_value)
     parsed = Id.parse_id(id_obj.resource_str())
     assert parsed.entity_type == entity_type
