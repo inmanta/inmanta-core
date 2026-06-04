@@ -439,8 +439,9 @@ class Scheduler:
 
         :return: A record describing the speculative freeze that was performed to break the wait cycle, or None if no
             freeze candidate exists, i.e. no progress was made. A record is always built when a freeze is performed,
-            even when speculation tracking is disabled: this method is only called when the scheduler is stuck, so the
-            cost of building it is negligible.
+            even when speculation tracking is disabled: building it takes a few string constructions plus a pass over
+            the freeze candidates, a fraction of the cost of the candidate scan above, and this method only runs when
+            the scheduler is stuck.
         """
         # Determine drvs that should be frozen to break the cycle
         freeze_candidates: list[DelayedResultVariable[object]] = []
