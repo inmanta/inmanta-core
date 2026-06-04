@@ -781,10 +781,7 @@ class Id:
         """
         if "," in agent_name:
             raise ResourceException(f"Agent name '{agent_name}' is not valid. Agent names cannot contain commas.")
-        # if "]" in attribute_value:
-        #     raise ResourceException(
-        #         f"Attribute value '{attribute_value}' is not valid. Attribute values cannot contain ']'."
-        #     )
+
         self._entity_type = entity_type
         self._agent_name = agent_name
         self._attribute = attribute
