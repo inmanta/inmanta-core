@@ -459,7 +459,6 @@ class Option(Generic[T]):
         self.predecessor_option = predecessor_option
         Config.register_option(self)
 
-
     def get_raw(self) -> str | None:
         """
         Returns this option as the raw string as defined in the config file / env var, or None if it is not set.
