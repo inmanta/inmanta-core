@@ -26,6 +26,7 @@ import json
 import logging
 import os
 import pathlib
+import platform
 import shutil
 import typing
 import uuid
@@ -104,6 +105,19 @@ class ResourceDetails:
         return ResourceDetails(resource_dict["id"], resource_dict["model"], resource_dict["attributes"])
 
 
+def get_libc_version() -> str:
+    """
+    Return a string of the form "{lib}:{version}", where lib is the name
+    of the c library and the version its version number. Return an empty
+    string if the libc version cannot be determined. That can happen on
+    operating systems that don't rely on libc.
+    """
+    lib, version = platform.libc_ver()
+    if not lib or not version:
+        return ""
+    return f"{lib}:{version}"
+
+
 @dataclasses.dataclass
 class EnvBlueprint:
     """Represents a blueprint for creating virtual environments
@@ -115,6 +129,9 @@ class EnvBlueprint:
     _hash_cache: str | None = dataclasses.field(default=None, init=False, repr=False)
     python_version: tuple[int, int]
     project_constraints: str | None = dataclasses.field(default=None, kw_only=True)
+    # The libc version determines which python packages are compatible with the machine they run on.
+    # If this version is updated, pip might select different packages.
+    libc_version: str = dataclasses.field(default_factory=get_libc_version, kw_only=True)
 
     def __post_init__(self) -> None:
         # remove duplicates and make uniform
@@ -134,6 +151,7 @@ class EnvBlueprint:
                 "requirements": self.requirements,
                 "python_version": self.python_version,
                 "project_constraints": self.project_constraints,
+                "libc_version": self.libc_version,
             }
 
             # Serialize the blueprint dictionary to a JSON string, ensuring consistent ordering
@@ -153,12 +171,14 @@ class EnvBlueprint:
             set(self.requirements),
             self.python_version,
             self.project_constraints,
+            self.libc_version,
         ) == (
             other.environment_id,
             other.pip_config,
             set(other.requirements),
             other.python_version,
             other.project_constraints,
+            other.libc_version,
         )
 
     def __hash__(self) -> int:
@@ -169,7 +189,8 @@ class EnvBlueprint:
         constraints = ",".join(self.project_constraints.split("\n")) if self.project_constraints else ""
         return (
             f"EnvBlueprint(environment_id={self.environment_id}, requirements=[{str(req)}], "
-            f"constraints=[{constraints}], pip={self.pip_config}, python_version={self.python_version})"
+            f"constraints=[{constraints}], pip={self.pip_config}, python_version={self.python_version}, "
+            f"libc_version={self.libc_version})"
         )
 
 
@@ -244,6 +265,7 @@ class ExecutorBlueprint(EnvBlueprint):
                 "sources": [[source.hash_value, source.name, source.is_byte_code] for source in self.sources],
                 "python_version": self.python_version,
                 "project_constraints": self.project_constraints,
+                "libc_version": self.libc_version,
             }
 
             # Serialize the extended blueprint dictionary to a JSON string, ensuring consistent ordering
@@ -264,6 +286,7 @@ class ExecutorBlueprint(EnvBlueprint):
             requirements=self.requirements,
             python_version=self.python_version,
             project_constraints=self.project_constraints,
+            libc_version=self.libc_version,
         )
 
     def __eq__(self, other: object) -> bool:
@@ -276,6 +299,7 @@ class ExecutorBlueprint(EnvBlueprint):
             self.sources,
             self.python_version,
             self.project_constraints,
+            self.libc_version,
         ) == (
             other.environment_id,
             other.pip_config,
@@ -283,6 +307,7 @@ class ExecutorBlueprint(EnvBlueprint):
             other.sources,
             other.python_version,
             other.project_constraints,
+            other.libc_version,
         )
 
     def __hash__(self) -> int:
