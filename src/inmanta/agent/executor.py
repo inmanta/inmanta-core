@@ -16,7 +16,6 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import platform
 import abc
 import asyncio
 import concurrent.futures
@@ -27,6 +26,7 @@ import json
 import logging
 import os
 import pathlib
+import platform
 import shutil
 import typing
 import uuid
@@ -114,11 +114,15 @@ class EnvBlueprint:
     _hash_cache: str | None = dataclasses.field(default=None, init=False, repr=False)
     python_version: tuple[int, int]
     project_constraints: str | None = dataclasses.field(default=None, kw_only=True)
-    platform: str = platform.platform()
+    # This instance variable contains the glibc version. This version determines which
+    # python packages are compatible with the machine they run on. If this version is
+    # updated, pip might select different packages.
+    platform_details: str
 
     def __post_init__(self) -> None:
         # remove duplicates and make uniform
         self.requirements = sorted(set(self.requirements))
+        self.platform_details = platform.platform()
 
     def blueprint_hash(self) -> str:
         """
@@ -134,7 +138,7 @@ class EnvBlueprint:
                 "requirements": self.requirements,
                 "python_version": self.python_version,
                 "project_constraints": self.project_constraints,
-                "platform": self.platform,
+                "platform_details": self.platform_details,
             }
 
             # Serialize the blueprint dictionary to a JSON string, ensuring consistent ordering
@@ -154,14 +158,14 @@ class EnvBlueprint:
             set(self.requirements),
             self.python_version,
             self.project_constraints,
-            self.platform,
+            self.platform_details,
         ) == (
             other.environment_id,
             other.pip_config,
             set(other.requirements),
             other.python_version,
             other.project_constraints,
-            other.platform,
+            other.platform_details,
         )
 
     def __hash__(self) -> int:
@@ -173,7 +177,7 @@ class EnvBlueprint:
         return (
             f"EnvBlueprint(environment_id={self.environment_id}, requirements=[{str(req)}], "
             f"constraints=[{constraints}], pip={self.pip_config}, python_version={self.python_version}, "
-            f"platform={self.platform})"
+            f"platform_details={self.platform_details})"
         )
 
 
@@ -250,6 +254,7 @@ class ExecutorBlueprint(EnvBlueprint):
                 ],
                 "python_version": self.python_version,
                 "project_constraints": self.project_constraints,
+                "platform_details": self.platform_details,
             }
 
             # Serialize the extended blueprint dictionary to a JSON string, ensuring consistent ordering
@@ -270,6 +275,7 @@ class ExecutorBlueprint(EnvBlueprint):
             requirements=self.requirements,
             python_version=self.python_version,
             project_constraints=self.project_constraints,
+            platform_details=self.platform_details,
         )
 
     def __eq__(self, other: object) -> bool:
@@ -282,6 +288,7 @@ class ExecutorBlueprint(EnvBlueprint):
             self.sources,
             self.python_version,
             self.project_constraints,
+            self.platform_details,
         ) == (
             other.environment_id,
             other.pip_config,
@@ -289,6 +296,7 @@ class ExecutorBlueprint(EnvBlueprint):
             other.sources,
             other.python_version,
             other.project_constraints,
+            other.platform_details,
         )
 
     def __hash__(self) -> int:
