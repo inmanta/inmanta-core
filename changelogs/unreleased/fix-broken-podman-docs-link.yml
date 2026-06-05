@@ -1,0 +1,5 @@
+description: Fix broken link to Podman GitHub issue comment in the installation documentation.
+change-type: patch
+destination-branches: [master, iso9]
+sections:
+  bugfix: "{{description}}"
