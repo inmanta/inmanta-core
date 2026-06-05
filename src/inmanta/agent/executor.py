@@ -103,6 +103,18 @@ class ResourceDetails:
         return ResourceDetails(resource_dict["id"], resource_dict["model"], resource_dict["attributes"])
 
 
+def get_libc_version() -> str:
+    """
+    Return a string of the form "{lib}:{version}", where lib is the name
+    of the c library and the version its version number. An exception is raised
+    if we cannot determine the version of the c library.
+    """
+    lib, version = platform.libc_ver()
+    if not lib or not version:
+        raise Exception("Failed to determine libc version")
+    return f"{lib}:{version}"
+
+
 @dataclasses.dataclass
 class EnvBlueprint:
     """Represents a blueprint for creating virtual environments
@@ -116,19 +128,7 @@ class EnvBlueprint:
     project_constraints: str | None = dataclasses.field(default=None, kw_only=True)
     # The libc version determines which python packages are compatible with the machine they run on.
     # If this version is updated, pip might select different packages.
-    libc_version: str = dataclasses.field(default_factory=_get_libc_version, kw_only=True)
-
-    @staticmethod
-    def _get_libc_version() -> str:
-        """
-        Return a string of the form "{lib}:{version}", where lib is the name
-        of the c library and the version its version number. An exception is raised
-        if we cannot determine the version of the c library.
-        """
-        lib, version = platform.libc_ver()
-        if not lib or not version:
-            raise Exception("Failed to determine libc version")
-        return f"{lib}:{version}"
+    libc_version: str = dataclasses.field(default_factory=get_libc_version, kw_only=True)
 
     def __post_init__(self) -> None:
         # remove duplicates and make uniform
@@ -306,7 +306,7 @@ class ExecutorBlueprint(EnvBlueprint):
             other.sources,
             other.python_version,
             other.project_constraints,
-            other.libc_ver,
+            other.libc_version,
         )
 
     def __hash__(self) -> int:
