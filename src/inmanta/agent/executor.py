@@ -16,6 +16,7 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import platform
 import abc
 import asyncio
 import concurrent.futures
@@ -113,6 +114,7 @@ class EnvBlueprint:
     _hash_cache: str | None = dataclasses.field(default=None, init=False, repr=False)
     python_version: tuple[int, int]
     project_constraints: str | None = dataclasses.field(default=None, kw_only=True)
+    platform: str = platform.platform()
 
     def __post_init__(self) -> None:
         # remove duplicates and make uniform
@@ -132,6 +134,7 @@ class EnvBlueprint:
                 "requirements": self.requirements,
                 "python_version": self.python_version,
                 "project_constraints": self.project_constraints,
+                "platform": self.platform,
             }
 
             # Serialize the blueprint dictionary to a JSON string, ensuring consistent ordering
@@ -151,12 +154,14 @@ class EnvBlueprint:
             set(self.requirements),
             self.python_version,
             self.project_constraints,
+            self.platform,
         ) == (
             other.environment_id,
             other.pip_config,
             set(other.requirements),
             other.python_version,
             other.project_constraints,
+            other.platform,
         )
 
     def __hash__(self) -> int:
@@ -167,7 +172,8 @@ class EnvBlueprint:
         constraints = ",".join(self.project_constraints.split("\n")) if self.project_constraints else ""
         return (
             f"EnvBlueprint(environment_id={self.environment_id}, requirements=[{str(req)}], "
-            f"constraints=[{constraints}], pip={self.pip_config}, python_version={self.python_version})"
+            f"constraints=[{constraints}], pip={self.pip_config}, python_version={self.python_version}, "
+            f"platform={self.platform})"
         )
 
 
