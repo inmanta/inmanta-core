@@ -106,12 +106,13 @@ class ResourceDetails:
 def get_libc_version() -> str:
     """
     Return a string of the form "{lib}:{version}", where lib is the name
-    of the c library and the version its version number. An exception is raised
-    if we cannot determine the version of the c library.
+    of the c library and the version its version number. Return an empty
+    string if the libc version cannot be determined. That can happen on
+    operating systems that are not Linux-based.
     """
     lib, version = platform.libc_ver()
     if not lib or not version:
-        raise Exception("Failed to determine libc version")
+        return ""
     return f"{lib}:{version}"
 
 
