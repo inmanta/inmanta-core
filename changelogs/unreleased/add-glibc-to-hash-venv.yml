@@ -1,0 +1,6 @@
+---
+description: "Add the glibc version to the hash function of an executor venv."
+change-type: patch
+destination-branches: [master, iso9, iso8]
+sections:
+  minor-improvement: "{{description}}"
