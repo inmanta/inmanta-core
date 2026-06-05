@@ -1,5 +1,5 @@
 ---
-description: "Add the glibc version to the hash function of an executor venv."
+description: "Recreate the executor venvs when the version of glibc on the host has changed."
 change-type: patch
 destination-branches: [master, iso9, iso8]
 sections:
