@@ -108,7 +108,7 @@ def get_libc_version() -> str:
     Return a string of the form "{lib}:{version}", where lib is the name
     of the c library and the version its version number. Return an empty
     string if the libc version cannot be determined. That can happen on
-    operating systems that are not Linux-based.
+    operating systems that don't rely on libc.
     """
     lib, version = platform.libc_ver()
     if not lib or not version:
