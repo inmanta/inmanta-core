@@ -1,0 +1,5 @@
+description: Remove broken link to a deleted Podman GitHub issue comment from the installation documentation.
+change-type: patch
+destination-branches: [master, iso9]
+sections:
+  bugfix: "{{description}}"
