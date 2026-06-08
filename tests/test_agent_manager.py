@@ -804,7 +804,7 @@ async def test_session_expiration(quick_reconnect, server, environment, async_fi
     session = await wait_for_session()
 
     # Remove connectivity to the database
-    await data.disconnect()
+    await data.disconnect_pool()
     caplog.clear()
 
     await retry_limited(lambda: "Heartbeat failed" in caplog.text, 10)
@@ -821,7 +821,7 @@ async def test_session_expiration(quick_reconnect, server, environment, async_fi
     assert len(session._sessionstore._sessions) == 0
 
     # reconnect db
-    await data.connect(
+    await data.connect_pool(
         host=postgres_db.host,
         port=postgres_db.port,
         username=postgres_db.user,
