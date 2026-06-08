@@ -521,13 +521,6 @@ class ResourceView(DataView[ResourceStatusOrder, model.LatestReleasedResource]):
                     SELECT MAX(public.configurationmodel.version) as version
                     FROM public.configurationmodel
                     WHERE public.configurationmodel.released AND environment=$1
-                ), versioned_resource_state AS (
-                    SELECT
-                        rps.*,
-                        COALESCE(rps.orphaned_after, lv.version) AS version
-                    FROM resource_persistent_state AS rps
-                    CROSS JOIN latest_version AS lv
-                    WHERE rps.environment = $1
                 ),
                 result AS (
                     SELECT
@@ -540,13 +533,14 @@ class ResourceView(DataView[ResourceStatusOrder, model.LatestReleasedResource]):
                         rps.environment,
                         {const.SQL_RESOURCE_STATUS_SELECTOR} AS status
                     FROM resource AS r
+                    CROSS JOIN latest_version AS lv
                     INNER JOIN resource_set_configuration_model AS rscm
                         ON r.environment=rscm.environment
                         AND r.resource_set=rscm.resource_set
-                    INNER JOIN versioned_resource_state AS rps
+                    INNER JOIN resource_persistent_state AS rps
                         ON r.environment=rps.environment
                         AND r.resource_id=rps.resource_id
-                        AND rscm.model=rps.version
+                        AND rscm.model=COALESCE(rps.orphaned_after, lv.version)
                     WHERE r.environment=$1
                 )
             """
