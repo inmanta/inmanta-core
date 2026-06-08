@@ -827,6 +827,7 @@ async def test_session_expiration(quick_reconnect, server, environment, async_fi
         database=database_name,
     )
 
+    # Check that the agent can reconnect once the db is back up.
     await wait_for_session()
 
 
