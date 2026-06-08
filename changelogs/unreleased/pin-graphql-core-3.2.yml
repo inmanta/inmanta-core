@@ -1,0 +1,5 @@
+change-type: patch
+description: Pin graphql-core to the 3.2 series to avoid pulling the incompatible 3.3 pre-releases via strawberry-graphql.
+destination-branches:
+  - master
+  - iso9
