@@ -534,13 +534,13 @@ class ResourceView(DataView[ResourceStatusOrder, model.LatestReleasedResource]):
                         {const.SQL_RESOURCE_STATUS_SELECTOR} AS status
                     FROM resource AS r
                     CROSS JOIN latest_version AS lv
-                    INNER JOIN resource_set_configuration_model AS rscm
-                        ON r.environment=rscm.environment
-                        AND r.resource_set=rscm.resource_set
                     INNER JOIN resource_persistent_state AS rps
                         ON r.environment=rps.environment
                         AND r.resource_id=rps.resource_id
-                        AND rscm.model=COALESCE(rps.orphaned_after, lv.version)
+                    INNER JOIN resource_set_configuration_model AS rscm
+                        ON r.environment=rscm.environment
+                        AND r.resource_set=rscm.resource_set
+                        AND COALESCE(rps.orphaned_after, lv.version)=rscm.model
                     WHERE r.environment=$1
                 )
             """
