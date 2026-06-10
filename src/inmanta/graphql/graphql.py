@@ -16,7 +16,7 @@ from typing import Any
 
 from graphql.error import GraphQLError
 from inmanta.graphql.result import GraphQLResult
-from inmanta.graphql.schema import ResourceFilterABC, get_schema
+from inmanta.graphql.schema import GraphQLContribution, get_schema
 from inmanta.protocol import methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.decorators import handle
@@ -31,30 +31,30 @@ from strawberry.types.execution import ExecutionResult
 class GraphQLSlice(protocol.ServerSlice):
     compiler_service: CompilerService | None
     schema: Schema | None
-    extension_filter_components: dict[str, type[ResourceFilterABC]]
+    extension_contributions: dict[str, type[GraphQLContribution]]
 
     def __init__(self) -> None:
         super().__init__(name=SLICE_GRAPHQL)
         self.compiler_service = None
         self.schema = None
-        self.extension_filter_components = {}
+        self.extension_contributions = {}
 
     def get_dependencies(self) -> list[str]:
         return [SLICE_COMPILER]
 
-    def register_extension_filter(self, extension_name: str, filter_cls: type[ResourceFilterABC]) -> None:
+    def register_extension_contribution(self, extension_name: str, contribution: type[GraphQLContribution]) -> None:
         """
-        Register an extension filter.
+        Register an extension contribution.
         This is only possible if before the slice starts, during the `prestart` stage
         and if the extension name has not already been registered.
         """
         if self.schema is None:
-            if extension_name in self.extension_filter_components:
+            if extension_name in self.extension_contributions:
                 raise Exception(f"Extension {extension_name} already registered.")
-            self.extension_filter_components[extension_name] = filter_cls
+            self.extension_contributions[extension_name] = contribution
         else:
             raise Exception(
-                f"Can't register extension filter for {extension_name} because the GraphQL schema has already been generated"
+                f"Can't register extension contribution for {extension_name} because the GraphQL schema has already been generated"
             )
 
     async def prestart(self, server: Server) -> None:
@@ -66,7 +66,7 @@ class GraphQLSlice(protocol.ServerSlice):
     async def start(self) -> None:
         assert self.compiler_service is not None
         self.schema = get_schema(
-            compiler_service=self.compiler_service, extension_filter_components=list(self.extension_filter_components.values())
+            compiler_service=self.compiler_service, extension_contributions=list(self.extension_contributions.values())
         )
         await super().start()
 
