@@ -32,7 +32,7 @@ from inmanta.deploy import state
 from inmanta.server.services.compilerservice import CompilerService
 from sqlakeyset import Marker, unserialize_bookmark
 from sqlakeyset.asyncio import select_page
-from sqlalchemy import Boolean, Select, UnaryExpression, and_, asc, case, desc, func, not_, select
+from sqlalchemy import Boolean, Select, UnaryExpression, and_, asc, desc, func, not_, select
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapper
 from strawberry import relay, scalars
@@ -62,7 +62,7 @@ There are 4 important building blocks that we have to take into account:
             class Environment:
                 __exclude__ = [
                     "project_",
-                    "agentprocess",
+                    "schedulersession",
                     ...
                 ]
                 is_expert_mode: bool = strawberry.field(resolver=get_expert_mode)
@@ -584,7 +584,7 @@ class Environment:
     # Add every relation/attribute that we don't want to expose in our GraphQL endpoint to `__exclude__`
     __exclude__ = [
         "project_",
-        "agentprocess",
+        "schedulersession",
         "code",
         "compile",
         "configurationmodel",
@@ -739,12 +739,14 @@ class CoreResourceFilter(ResourceFilterABC):
             attr = getattr(self, key)
             if attr is not None and attr is not strawberry.UNSET:
                 stmt = attr.apply_filter(stmt, self.rps_model, key)
+        if self.environment is not None and self.environment is not strawberry.UNSET:
+            stmt = stmt.filter(models.ResourcePersistentState.environment == self.environment)
         if self.purged is not None and self.purged is not strawberry.UNSET:
             stmt = stmt.filter(models.Resource.attributes["purged"].astext.cast(Boolean).is_(self.purged))
         if self.is_deploying is not None and self.is_deploying is not strawberry.UNSET:
             stmt = stmt.filter(models.ResourcePersistentState.is_deploying == self.is_deploying)
         if self.is_orphan is not None and self.is_orphan is not strawberry.UNSET:
-            stmt = stmt.filter(models.ResourcePersistentState.is_orphan == self.is_orphan)
+            stmt = stmt.filter(models.ResourcePersistentState.is_orphan.is_(self.is_orphan))
         return stmt
 
 
@@ -1052,16 +1054,12 @@ def get_schema(
 
             # Only fetch resources in their latest version
             # Logic based on src/inmanta/data/dataview.py::ResourceView
-            stmt = (
-                select(models.Resource)
-                .join(
-                    models.ResourcePersistentState,
-                    and_(
-                        models.Resource.resource_id == models.ResourcePersistentState.resource_id,
-                        models.Resource.environment == models.ResourcePersistentState.environment,
-                    ),
-                )
-                .where(models.ResourcePersistentState.environment == filter.environment)
+            stmt = select(models.Resource).join(
+                models.ResourcePersistentState,
+                and_(
+                    models.Resource.resource_id == models.ResourcePersistentState.resource_id,
+                    models.Resource.environment == models.ResourcePersistentState.environment,
+                ),
             )
 
             # CTE that fetches the latest scheduled version
@@ -1079,34 +1077,9 @@ def get_schema(
                     select(
                         models.ResourcePersistentState.environment,
                         models.ResourcePersistentState.resource_id,
-                        case(
-                            # Simple case where we are dealing with non-orphans
-                            (
-                                not_(models.ResourcePersistentState.is_orphan),
-                                select(latest_scheduled_version_cte.c.version).scalar_subquery(),
-                            ),
-                            else_=select(func.max(models.t_resource_set_configuration_model.c.model))
-                            .join(
-                                models.Resource,
-                                and_(
-                                    models.Resource.environment == models.t_resource_set_configuration_model.c.environment,
-                                    models.Resource.resource_set == models.t_resource_set_configuration_model.c.resource_set,
-                                ),
-                            )
-                            .join(
-                                models.Configurationmodel,
-                                and_(
-                                    models.t_resource_set_configuration_model.c.environment
-                                    == models.Configurationmodel.environment,
-                                    models.t_resource_set_configuration_model.c.model == models.Configurationmodel.version,
-                                ),
-                            )
-                            .where(
-                                models.Resource.environment == models.ResourcePersistentState.environment,
-                                models.Resource.resource_id == models.ResourcePersistentState.resource_id,
-                                models.Configurationmodel.released.is_(True),
-                            )
-                            .scalar_subquery(),
+                        func.coalesce(
+                            models.ResourcePersistentState.orphaned_after,
+                            latest_scheduled_version_cte.c.version,
                         ).label("version"),
                     )
                     .where(

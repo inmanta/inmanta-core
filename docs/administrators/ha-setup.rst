@@ -16,7 +16,7 @@ This page describes how to deploy an Inmanta server in a HA setup and how to per
         version.
 
 
-Choosing the right type of availability requires carefull consideration of various trade-offs. The orchestrator is not part of
+Choosing the right type of availability requires careful consideration of various trade-offs. The orchestrator is not part of
 the datapath. When it is not running it will not affect the services in the network, it only affects the ability to make changes
 in the network. This means that the main consideration for choosing the right type of availability comes from how users interact
 with the web console and/or the APIs.
@@ -35,16 +35,16 @@ ensure the durability of the state of the Inmanta Orchestrator. However, high av
 There are three types of availability possible:
 
 * None: in case of failure the entire intent can be lost. It can only be restored by giving the orchestrator the same intent and
-  let it step through the lifeycle of each service in its service inventory. The deployment consists of a single orchestrator
+  let it step through the lifecycle of each service in its service inventory. The deployment consists of a single orchestrator
   instance and a single database. These can run on the same or different machines.
 * Durable: in case of failure of the orchestrator no data is lost, however the API of the orchestrator is not available. The
   deployment consists of a single orchestrator instance that connects to a primary PostgreSQL database. This primary streams all
-  changes to a standby PostgreSQL server. Database transactions only return when both databases have stored the changes durable.
-  Depending on the deployment the failover can be done manually or fully automated.
+  changes to a standby PostgreSQL server. Database transactions only return when both databases have stored the changes durably.
+  Depending on the deployment, the failover can be done manually or fully automated.
 * High-available: in case of failure no data is lost and only during the failover the APIs might be unavailable for a few
   seconds. This deployment consists of an active orchestrator and a standby orchestrator instance. The standby instance is
   inactive and activates only when there is no active orchestrator. Both connect to a PostgreSQL cluster with at least 3 nodes.
-  Database transactions only return when at least 2 out of 3 databases have stored the change durable. Depending on the deployment
+  Database transactions only return when at least 2 out of 3 databases have stored the change durably. Depending on the deployment,
   the failover can be done manually or fully automated.
 
 Durable availability provides for almost all types of deployments a good trade-off between setup and operational complexity and
@@ -54,10 +54,10 @@ the availability and durability guarantees. This setup has a number of propertie
   have been stored on disk.
 * It is possible to use a tool such as pgpool to loadbalance read-only database queries to the standby node. However, this is
   out of scope of this manual.
-* It does not provide any additionaly availability, it even slighly reduces it: both database servers need to be up and
+* It does not provide any additional availability, it even slightly reduces it: both database servers need to be up and
   responsive to process write queries. If the standby node is down, the master node will block on any write query. Read queries
   continue to be served until the database pool is exhausted.
- 
+
 If both durability and higher availability are required, a setup with at least 3 databases is required. This is out of scope for
 this documentation. Please contact support for assistance on this topic.
 
@@ -173,9 +173,9 @@ service on the standby node.
 Monitoring
 ----------
 
-This setup requires both database to be up to be up and functional. It is highly recommended to monitor this the availability of
+This setup requires both database to be up to be up and functional. It is highly recommended to monitor the availability of
 the database and the replication status. For most monitoring systems (such as nagios/icinga or promotheus/alertmanager) there
-are plugins avilable to do this in an efficient manner.
+are plugins available to do this in an efficient manner.
 
 Failover PostgreSQL
 ###################

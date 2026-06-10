@@ -29,7 +29,7 @@ from inmanta.stable_api import stable_api
 SQL_RESOURCE_STATUS_SELECTOR: typing.LiteralString = """
 (
     CASE
-        WHEN rps.is_orphan
+        WHEN rps.orphaned_after IS NOT NULL
             THEN 'orphaned'
         WHEN rps.is_deploying
             THEN 'deploying'
@@ -413,6 +413,9 @@ MODULE_PKG_NAME_PREFIX = "inmanta-module-"
 STD_PACKAGE = f"{MODULE_PKG_NAME_PREFIX}std"
 
 TRACEPARENT = "traceparent"
+
+# WebSocket endpoint path
+WS_URL_PATH = "/v2/ws"
 
 # Resource sets marked for deletion during a partial export can be passed via this env
 # variable as a space separated list of set ids.

@@ -742,7 +742,14 @@ async def test_notifications(server, client, setup_database):
         previous_time = created
 
 
-async def test_query_resources(server, client, environment, mixed_resource_generator):
+async def test_query_resources(server, client, environment, setup_database, mixed_resource_generator):
+    """
+    Test if different filters on the resource query are behaving as expected.
+
+    We include setup_database to have some resources in other envs
+    to make sure that we are not leaking resources from other envs on totalCount with different filters
+    """
+
     def is_subset_dict(expected: dict, actual: dict) -> bool:
         """
         Checks if a dict is a subset of another dict.
@@ -768,7 +775,7 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
     # Quick way of simulating a non-compliant report
     # It has to be non-orphan otherwise the compliance returned will be None
     rps = await data.ResourcePersistentState.get_one(
-        environment=environment, last_handler_run=state.HandlerResult.SUCCESSFUL, is_orphan=False
+        environment=environment, last_handler_run=state.HandlerResult.SUCCESSFUL, orphaned_after=None
     )
     assert rps
     await rps.update_fields(last_handler_run_compliant=False)
@@ -936,7 +943,7 @@ async def test_query_resources(server, client, environment, mixed_resource_gener
         assertion = f.get("assertion", None)
         if assertion:
             for res in result.result["data"]["data"]["resources"]["edges"]:
-                assert is_subset_dict(assertion, res["node"])
+                assert is_subset_dict(assertion, res["node"]), f["query"]
 
     query = """
     {

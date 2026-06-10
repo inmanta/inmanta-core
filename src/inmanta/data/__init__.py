@@ -792,7 +792,6 @@ class AgentOrder(AbstractDatabaseOrderV2):
             ColumnNameStr("name"): TablePrefixWrapper("a", StringColumn),
             ColumnNameStr("process_name"): OptionalStringColumn,
             ColumnNameStr("paused"): BoolColumn,
-            ColumnNameStr("last_failover"): OptionalDateTimeColumn,
             ColumnNameStr("status"): StringColumn,
         }
 
@@ -2915,8 +2914,7 @@ class Environment(BaseDocument):
         """
         async with self.get_connection(connection=connection) as con:
             await Agent.delete_all(environment=self.id, connection=con)
-            await AgentInstance.delete_all(tid=self.id, connection=con)
-            await AgentProcess.delete_all(environment=self.id, connection=con)
+            await SchedulerSession.delete_all(environment=self.id, connection=con)
             await Compile.delete_all(environment=self.id, connection=con)  # Triggers cascading delete on report table
             await Parameter.delete_all(environment=self.id, connection=con)
             await Notification.delete_all(environment=self.id, connection=con)
@@ -3313,15 +3311,14 @@ class UnknownParameter(BaseDocument):
             return [cls(from_postgres=True, **uk) for uk in result]
 
 
-class AgentProcess(BaseDocument):
+class SchedulerSession(BaseDocument):
     """
     A process in the infrastructure that has (had) a session as an agent.
 
-    :param sid: The session id of the agent process
+    :param sid: Scheduler ID
     :param hostname: The hostname of the device.
     :param environment: To what environment is this process bound
     :param first_seen: When the server first received data from this process
-    :param last_seen: When did the server receive data from the node for the last time.
     :param expired: When this process expired
     """
 
@@ -3331,58 +3328,47 @@ class AgentProcess(BaseDocument):
     hostname: str
     environment: uuid.UUID
     first_seen: Optional[datetime.datetime] = None
-    last_seen: Optional[datetime.datetime] = None
     expired: Optional[datetime.datetime] = None
 
     @classmethod
-    async def get_live(cls, environment: Optional[uuid.UUID] = None) -> list["AgentProcess"]:
+    async def get_live(cls, environment: Optional[uuid.UUID] = None) -> list["SchedulerSession"]:
         if environment is not None:
             result = await cls.get_list(
-                limit=DBLIMIT, environment=environment, expired=None, order_by_column="last_seen", order="ASC NULLS LAST"
+                limit=DBLIMIT, environment=environment, expired=None, order_by_column="first_seen", order="ASC NULLS LAST"
             )
         else:
-            result = await cls.get_list(limit=DBLIMIT, expired=None, order_by_column="last_seen", order="ASC NULLS LAST")
+            result = await cls.get_list(limit=DBLIMIT, expired=None, order_by_column="first_seen", order="ASC NULLS LAST")
         return result
 
     @classmethod
     async def get_by_sid(
         cls, sid: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None
-    ) -> Optional["AgentProcess"]:
+    ) -> Optional["SchedulerSession"]:
         objects = await cls.get_list(limit=DBLIMIT, connection=connection, expired=None, sid=sid)
         if len(objects) == 0:
             return None
         elif len(objects) > 1:
-            LOGGER.exception("Multiple objects with the same unique id found!")
+            LOGGER.error("Multiple objects with the same unique id found!")
             return objects[0]
         else:
             return objects[0]
 
     @classmethod
-    async def seen(
+    async def register(
         cls,
         env: uuid.UUID,
-        nodename: str,
+        hostname: str,
         sid: uuid.UUID,
         now: datetime.datetime,
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> None:
-        """
-        Update the last_seen parameter of the process and mark as not expired.
-        """
-        proc = await cls.get_one(connection=connection, sid=sid)
-        if proc is None:
-            proc = cls(hostname=nodename, environment=env, first_seen=now, last_seen=now, sid=sid)
-            await proc.insert(connection=connection)
-        else:
-            await proc.update_fields(connection=connection, last_seen=now, expired=None)
+        """Register a new scheduler session.
 
-    @classmethod
-    async def update_last_seen(
-        cls, sid: uuid.UUID, last_seen: datetime.datetime, connection: Optional[asyncpg.connection.Connection] = None
-    ) -> None:
-        aps = await cls.get_by_sid(sid=sid, connection=connection)
-        if aps:
-            await aps.update_fields(connection=connection, last_seen=last_seen)
+        The caller must ensure uniqueness of the session ID. Calling this method
+        with a duplicate ``sid`` raises a database constraint violation.
+        """
+        proc = cls(hostname=hostname, environment=env, first_seen=now, sid=sid)
+        await proc.insert(connection=connection)
 
     @classmethod
     async def expire_process(
@@ -3391,6 +3377,17 @@ class AgentProcess(BaseDocument):
         aps = await cls.get_by_sid(sid=sid, connection=connection)
         if aps is not None:
             await aps.update_fields(connection=connection, expired=now)
+
+    @classmethod
+    async def clean_up_expired_for_env(
+        cls, environment: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> None:
+        """Delete all expired session records for the given environment.
+
+        Uses raw SQL because delete_all() does not support IS NOT NULL filters.
+        """
+        query = f"DELETE FROM {cls.table_name()} WHERE environment=$1 AND expired IS NOT NULL"
+        await cls._execute_query(query, cls._get_value(environment), connection=connection)
 
     @classmethod
     async def expire_all(cls, now: datetime.datetime, connection: Optional[asyncpg.connection.Connection] = None) -> None:
@@ -3403,31 +3400,23 @@ class AgentProcess(BaseDocument):
 
     @classmethod
     async def cleanup(cls, nr_expired_records_to_keep: int) -> None:
+        # Uses ROW_NUMBER() to rank expired records per (environment, hostname) by recency,
+        # then deletes all beyond the retention limit in a single pass. This replaces a correlated
+        # COUNT(*) subquery that re-scanned the table for every candidate row (O(n^2)).
         query = f"""
-            WITH halted_env AS (
-                SELECT id FROM environment WHERE halted = true
-            )
-            DELETE FROM {cls.table_name()} AS a1
-            WHERE a1.expired IS NOT NULL AND
-                  a1.environment NOT IN (SELECT id FROM halted_env) AND
-                  (
-                    -- Take nr_expired_records_to_keep into account
-                    SELECT count(*)
-                    FROM {cls.table_name()} a2
-                    WHERE a1.environment=a2.environment AND
-                          a1.hostname=a2.hostname AND
-                          a2.expired IS NOT NULL AND
-                          a2.expired > a1.expired
-                  ) >= $1
-                  AND
-                  -- Agent process only has expired agent instances
-                  NOT EXISTS(
-                    SELECT 1
-                    FROM {cls.table_name()} AS agentprocess
-                    INNER JOIN {AgentInstance.table_name()} AS agentinstance
-                    ON agentinstance.process = agentprocess.sid
-                    WHERE agentprocess.sid = a1.sid AND agentinstance.expired IS NULL
-                  );
+            DELETE FROM {cls.table_name()}
+            WHERE sid IN (
+                SELECT sid FROM (
+                    SELECT sid, ROW_NUMBER() OVER (
+                        PARTITION BY environment, hostname
+                        ORDER BY expired DESC
+                    ) AS rn
+                    FROM {cls.table_name()}
+                    WHERE expired IS NOT NULL
+                      AND environment NOT IN (SELECT id FROM environment WHERE halted = true)
+                ) ranked
+                WHERE rn > $1
+            );
         """
         await cls._execute_query(query, cls._get_value(nr_expired_records_to_keep))
 
@@ -3443,108 +3432,8 @@ class AgentProcess(BaseDocument):
             hostname=self.hostname,
             environment=self.environment,
             first_seen=self.first_seen,
-            last_seen=self.last_seen,
             expired=self.expired,
         )
-
-
-TAgentInstance = TypeVar("TAgentInstance", bound="AgentInstance")
-
-
-class AgentInstance(BaseDocument):
-    """
-    A physical server/node in the infrastructure that reports to the management server.
-
-    :param id: The id of this agent instance
-    :param process: The agent process this instance belongs to
-    :param name: The name of this agent instance
-    :param hostname: The hostname of the device.
-    :param last_seen: When did the server receive data from the node for the last time.
-    :param expired: When this agent instance expired
-    :param tid: The environment id
-    """
-
-    __primary_key__ = ("id",)
-
-    # TODO: add env to speed up cleanup
-    id: uuid.UUID
-    process: uuid.UUID
-    name: str
-    expired: Optional[datetime.datetime] = None
-    tid: uuid.UUID
-
-    @classmethod
-    async def active_for(
-        cls: type[TAgentInstance],
-        tid: uuid.UUID,
-        endpoint: str,
-        process: Optional[uuid.UUID] = None,
-        connection: Optional[asyncpg.connection.Connection] = None,
-    ) -> list[TAgentInstance]:
-        if process is not None:
-            objects = await cls.get_list(expired=None, tid=tid, name=endpoint, connection=connection)
-        else:
-            objects = await cls.get_list(expired=None, tid=tid, name=endpoint, connection=connection)
-        return objects
-
-    @classmethod
-    async def active(cls: type[TAgentInstance]) -> list[TAgentInstance]:
-        objects = await cls.get_list(expired=None)
-        return objects
-
-    @classmethod
-    async def log_instance_creation(
-        cls: type[TAgentInstance],
-        tid: uuid.UUID,
-        process: uuid.UUID,
-        endpoints: set[str],
-        connection: Optional[asyncpg.connection.Connection] = None,
-    ) -> None:
-        """
-        Create new agent instances for a given session.
-        """
-        if not endpoints:
-            return
-        async with cls.get_connection(connection) as con:
-            await con.executemany(
-                f"""
-                INSERT INTO
-                {cls.table_name()}
-                (id, tid, process, name, expired)
-                VALUES ($1, $2, $3, $4, null)
-                ON CONFLICT ON CONSTRAINT {cls.table_name()}_unique DO UPDATE
-                SET expired = null
-                ;
-                """,
-                [tuple(map(cls._get_value, (cls._new_id(), tid, process, name))) for name in endpoints],
-            )
-
-    @classmethod
-    async def log_instance_expiry(
-        cls: type[TAgentInstance],
-        sid: uuid.UUID,
-        endpoints: set[str],
-        now: datetime.datetime,
-        connection: Optional[asyncpg.connection.Connection] = None,
-    ) -> None:
-        """
-        Expire specific instances for a given session id.
-        """
-        if not endpoints:
-            return
-        instances: list[TAgentInstance] = await cls.get_list(connection=connection, process=sid)
-        for ai in instances:
-            if ai.name in endpoints:
-                await ai.update_fields(connection=connection, expired=now)
-
-    @classmethod
-    async def expire_all(cls, now: datetime.datetime, connection: Optional[asyncpg.connection.Connection] = None) -> None:
-        query = f"""
-                UPDATE {cls.table_name()}
-                SET expired=$1
-                WHERE expired IS NULL
-        """
-        await cls._execute_query(query, cls._get_value(now), connection=connection)
 
 
 class Agent(BaseDocument):
@@ -3553,10 +3442,7 @@ class Agent(BaseDocument):
 
     :param environment: The environment this resource is defined in
     :param name: The name of this agent
-    :param last_failover: Moment at which the primary was last changed
     :param paused: is this agent paused (if so, skip it)
-    :param primary: what is the current active instance (if none, state is down). Only relevant for the $__scheduler agent.
-    :param id_primary: The current active instance, only relevant for the $__scheduler agent
     :param unpause_on_resume: whether this agent should be unpaused when resuming from environment-wide halt. Used to
         persist paused state when halting.
     """
@@ -3565,14 +3451,8 @@ class Agent(BaseDocument):
 
     environment: uuid.UUID
     name: str
-    last_failover: Optional[datetime.datetime] = None
     paused: bool = False
-    id_primary: Optional[uuid.UUID] = None
     unpause_on_resume: Optional[bool] = None
-
-    @property
-    def primary(self) -> Optional[uuid.UUID]:
-        return self.id_primary
 
     @classmethod
     def get_valid_field_names(cls) -> list[str]:
@@ -3583,43 +3463,30 @@ class Agent(BaseDocument):
     async def get_statuses(
         cls, env_id: uuid.UUID, agent_names: Set[str], *, connection: Optional[asyncpg.connection.Connection] = None
     ) -> dict[str, Optional[AgentStatus]]:
+        live_sessions = await SchedulerSession.get_live(environment=env_id)
+        has_active_session = len(live_sessions) > 0
+        agents = await cls.get_list(environment=env_id, connection=connection)
+        agents_by_name: dict[str, "Agent"] = {agent.name: agent for agent in agents}
         result: dict[str, Optional[AgentStatus]] = {}
         for agent_name in agent_names:
-            agent = await cls.get_one(environment=env_id, name=agent_name, connection=connection)
+            agent = agents_by_name.get(agent_name)
             if agent:
-                result[agent_name] = agent.get_status()
+                result[agent_name] = agent.get_status(has_active_session=has_active_session)
             else:
                 result[agent_name] = None
         return result
 
-    def get_status(self) -> AgentStatus:
+    def get_status(self, *, has_active_session: bool) -> AgentStatus:
+        """Compute the agent status given live-session knowledge.
+
+        ``has_active_session`` must be supplied by the caller (typically by querying
+        :class:`SchedulerSession`). The authoritative version-of-truth for agent status
+        on the API surface is :class:`AgentView`, which performs the equivalent check in
+        SQL — prefer it when the data is paged or filtered.
+        """
         if self.paused:
             return AgentStatus.paused
-        if self.primary is not None:
-            return AgentStatus.up
-        return AgentStatus.down
-
-    def to_dict(self) -> JsonType:
-        base = BaseDocument.to_dict(self)
-        if self.last_failover is None:
-            base["last_failover"] = ""
-
-        if self.primary is None:
-            base["primary"] = ""
-        else:
-            base["primary"] = base["id_primary"]
-            del base["id_primary"]
-
-        base["state"] = self.get_status().value
-
-        return base
-
-    @classmethod
-    def _convert_field_names_to_db_column_names(cls, field_dict: dict[str, object]) -> dict[str, object]:
-        if "primary" in field_dict:
-            field_dict["id_primary"] = field_dict["primary"]
-            del field_dict["primary"]
-        return field_dict
+        return AgentStatus.up if has_active_session else AgentStatus.down
 
     @classmethod
     async def get(
@@ -3638,8 +3505,8 @@ class Agent(BaseDocument):
     ) -> None:
         query = """
             INSERT INTO agent
-            (last_failover,paused,id_primary,unpause_on_resume,environment,name)
-            VALUES (now(),FALSE,NULL,NULL,$1,$2)
+            (paused,unpause_on_resume,environment,name)
+            VALUES (FALSE,NULL,$1,$2)
             ON CONFLICT DO NOTHING
         """
         values = [cls._get_value(environment), cls._get_value(endpoint)]
@@ -3715,55 +3582,11 @@ class Agent(BaseDocument):
         await cls._execute_query(query, *values, connection=connection)
 
     @classmethod
-    async def update_primary(
-        cls,
-        env: uuid.UUID,
-        endpoints_with_new_primary: Sequence[tuple[str, Optional[uuid.UUID]]],
-        now: datetime.datetime,
-        connection: Optional[asyncpg.connection.Connection] = None,
-    ) -> None:
-        """
-        Update the primary agent instance for agents present in the database.
-
-        :param env: The environment of the agent
-        :param endpoints_with_new_primary: Contains a tuple (agent-name, sid) for each agent that has got a new
-                                           primary agent instance. The sid in the tuple is the session id of the new
-                                           primary. If the session id is None, the Agent doesn't have a primary anymore.
-        :param now: Timestamp of this failover
-        """
-        for endpoint, sid in endpoints_with_new_primary:
-            # Lock mode is required because we will update in this transaction
-            # Deadlocks with cleanup otherwise
-            agent = await cls.get(env, endpoint, connection=connection, lock=RowLockMode.FOR_NO_KEY_UPDATE)
-            if agent is None:
-                continue
-
-            if sid is None:
-                await agent.update_fields(last_failover=now, primary=None, connection=connection)
-            else:
-                instances = await AgentInstance.active_for(tid=env, endpoint=agent.name, process=sid, connection=connection)
-                if instances:
-                    await agent.update_fields(last_failover=now, id_primary=instances[0].id, connection=connection)
-                else:
-                    await agent.update_fields(last_failover=now, id_primary=None, connection=connection)
-
-    @classmethod
-    async def mark_all_as_non_primary(cls, connection: Optional[asyncpg.connection.Connection] = None) -> None:
-        query = f"""
-                UPDATE {cls.table_name()}
-                SET id_primary=NULL
-                WHERE id_primary IS NOT NULL
-        """
-        await cls._execute_query(query, connection=connection)
-
-    @classmethod
     async def clean_up(cls, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         query = """
 DELETE FROM public.agent AS a
-WHERE -- have no primary ID set (that are down)
-      id_primary IS NULL
-      -- not used by any version
-      AND NOT EXISTS (
+WHERE -- not used by any version
+      NOT EXISTS (
           SELECT 1
           FROM public.resource AS re
           WHERE a.environment=re.environment
@@ -4730,7 +4553,7 @@ class ResourcePersistentState(BaseDocument):
     :param last_success: The start time of the last handler run that completed without failure
     :param last_produced_events: The end time of the last handler run where an effective change was produced
     :param is_undefined: Whether the desired state for this resource is undefined
-    :param is_orphan: Whether this resource is an orphan (no longer present in the latest model version)
+    :param orphaned_after: The last version where this resource was seen before being orphaned
     :param is_deploying: Whether this resource is currently being run by the handler
     :param last_handler_run: The result of the last handler run for this resource
     :param last_handler_run_compliant: Whether the last handler run reported the resource as compliant
@@ -4774,7 +4597,7 @@ class ResourcePersistentState(BaseDocument):
     # Written at version release time
     is_undefined: bool
     # Written when a new version is processed by the scheduler
-    is_orphan: bool
+    orphaned_after: int | None = None
     # Set to true when a version starts its deployment, set to false when it finishes
     is_deploying: bool
     # Written at deploy time (except for NEW -> no race condition possible with deploy path)
@@ -4796,17 +4619,20 @@ class ResourcePersistentState(BaseDocument):
 
     @classmethod
     async def mark_as_orphan(
-        cls, environment: UUID, resource_ids: Set[ResourceIdStr], connection: Optional[Connection] = None
+        cls, environment: UUID, orphaned_resources: typing.Mapping[ResourceIdStr, int], connection: Optional[Connection] = None
     ) -> None:
         """
-        Set the is_orphan column to True on all given resources
+        Set the orphaned_after column to the last seen version of the given resources
         """
         query = f"""
-            UPDATE {cls.table_name()}
-            SET is_orphan=TRUE
-            WHERE environment=$1 AND resource_id=ANY($2)
+        UPDATE {cls.table_name()}
+        SET orphaned_after=v.value::int
+        FROM UNNEST($2::text[], $3::int[]) AS v(rid, value)
+        WHERE environment=$1 AND resource_id=v.rid
         """
-        await cls._execute_query(query, environment, resource_ids, connection=connection)
+        await cls._execute_query(
+            query, environment, list(orphaned_resources.keys()), list(orphaned_resources.values()), connection=connection
+        )
 
     @classmethod
     async def update_resource_intent(
@@ -4829,7 +4655,6 @@ class ResourcePersistentState(BaseDocument):
                 resource_id,
                 resource_details.attribute_hash,
                 resource_state.compliance is state.Compliance.UNDEFINED,
-                False,
                 *([resource_state.blocked.db_value().name] if update_blocked_state else []),
             )
             for resource_id, (resource_state, resource_details) in intent.items()
@@ -4841,8 +4666,8 @@ class ResourcePersistentState(BaseDocument):
                     SET
                         current_intent_attribute_hash=$3,
                         is_undefined=$4,
-                        is_orphan=$5
-                        {", blocked=$6" if update_blocked_state else ""}
+                        orphaned_after=NULL
+                        {", blocked=$5" if update_blocked_state else ""}
                     WHERE environment=$1 AND resource_id=$2
                 """,
                 values,
@@ -4888,7 +4713,7 @@ class ResourcePersistentState(BaseDocument):
                 resource_id_value,
                 current_intent_attribute_hash,
                 is_undefined,
-                is_orphan,
+                orphaned_after,
                 is_deploying,
                 last_handler_run,
                 blocked,
@@ -4902,7 +4727,7 @@ class ResourcePersistentState(BaseDocument):
                 r.resource_id_value,
                 r.attribute_hash,
                 r.is_undefined,
-                FALSE,
+                NULL,
                 FALSE,
                 'NEW',
                 CASE
@@ -5044,7 +4869,7 @@ class ResourcePersistentState(BaseDocument):
         Return the Compliance associated with this resource_persistent_state. Returns None for orphaned resources.
         """
         return state.get_compliance_status(
-            self.is_orphan,
+            self.orphaned_after,
             self.is_undefined,
             self.last_deployed_attribute_hash,
             self.current_intent_attribute_hash,
@@ -5082,8 +4907,8 @@ class ResourcePersistentState(BaseDocument):
             LEFT JOIN public.resource_diff AS rd
                 ON rps.non_compliant_diff=rd.id
             WHERE
-                NOT rps.is_orphan
-                AND rps.environment=$1
+                rps.environment=$1
+                AND rps.orphaned_after IS NULL
             """
             result = await cls.select_query(query, [env, resource_ids], no_obj=True, connection=connection)
             if len(result) != len(resource_ids):
@@ -5092,7 +4917,7 @@ class ResourcePersistentState(BaseDocument):
             diff: dict[ResourceIdStr, m.ResourceComplianceDiff] = {}
             for record in result:
                 compliance_status = state.get_compliance_status(
-                    is_orphan=False,  # We filter out orphan resources in the query
+                    orphaned_after=None,  # We filter out orphan resources in the query
                     is_undefined=cast(bool, record["is_undefined"]),
                     last_deployed_attribute_hash=cast(str | None, record["last_deployed_attribute_hash"]),
                     current_intent_attribute_hash=cast(str | None, record["current_intent_attribute_hash"]),
@@ -5575,7 +5400,7 @@ class Resource(BaseDocument):
             FROM {ResourcePersistentState.table_name()} AS rps
             INNER JOIN {Scheduler.table_name()} AS s
                 ON rps.environment=s.environment
-            WHERE rps.environment=$1 AND NOT rps.is_orphan
+            WHERE rps.environment=$1 AND rps.orphaned_after IS NULL
         """
         results = await cls.select_query(query, [env], no_obj=True, connection=connection)
         if not results:
@@ -5593,7 +5418,7 @@ class Resource(BaseDocument):
             SELECT
             {const.SQL_RESOURCE_STATUS_SELECTOR} AS status
             FROM resource_persistent_state AS rps
-            WHERE rps.environment=$1 AND rps.resource_id=$2 AND NOT rps.is_orphan
+            WHERE rps.environment=$1 AND rps.resource_id=$2 AND rps.orphaned_after IS NULL
             """
         results = await cls.select_query(query, [env, rid], no_obj=True)
         if not results:
@@ -5620,7 +5445,7 @@ class Resource(BaseDocument):
         update_rps_query = f"""
             UPDATE {ResourcePersistentState.table_name()} rps
             SET is_deploying=FALSE
-            WHERE environment=$1
+            WHERE environment=$1 AND is_deploying=TRUE
         """
         values = [cls._get_value(environment)]
         async with cls.get_connection(connection) as connection:
@@ -6204,7 +6029,7 @@ class Resource(BaseDocument):
                 END AS compliance,
                 COUNT(*) AS row_count
             FROM resource_persistent_state
-            WHERE environment=$1 AND NOT is_orphan
+            WHERE environment=$1 AND orphaned_after IS NULL
             GROUP BY is_deploying, blocked, last_handler_run, compliance
         ),
         total AS (
@@ -6262,7 +6087,7 @@ class Resource(BaseDocument):
         SELECT rps.resource_id as resource_id,
             {const.SQL_RESOURCE_STATUS_SELECTOR} AS status
         FROM resource_persistent_state as rps
-        WHERE rps.environment=$1 AND NOT rps.is_orphan
+        WHERE rps.environment=$1 AND rps.orphaned_after IS NULL
         """
 
         query = f"""
@@ -7303,8 +7128,7 @@ _classes = [
     Project,
     Environment,
     UnknownParameter,
-    AgentProcess,
-    AgentInstance,
+    SchedulerSession,
     Agent,
     Resource,
     ResourceAction,

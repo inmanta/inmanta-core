@@ -23,9 +23,9 @@ import logging
 import os
 import sys
 import uuid
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta, timezone
 from functools import partial
-from typing import Awaitable
 
 import pytest
 from dateutil import parser
@@ -41,8 +41,9 @@ from inmanta.protocol import Client
 from inmanta.resources import Id
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_SERVER
 from inmanta.server import config as opt
-from inmanta.server.bootloader import InmantaBootloader, PostgreSQLVersion
+from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.protocol import ServerStartFailure
+from inmanta.server.services.databaseservice import PostgreSQLVersion
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 from utils import insert_with_link_to_configuration_model, log_contains, log_doesnt_contain, retry_limited
 
@@ -512,20 +513,6 @@ async def test_resource_action_log(server, client, environment, clienthelper, sn
         parser.parse(f"{parts[0]} {parts[1]}")
 
 
-async def test_invalid_sid(server, client, environment):
-    """
-    Verify that API endpoints, that should only be called by an agent, return an HTTP 400
-    if they are called without a session id.
-    """
-    res = await client.discovered_resource_create(
-        tid=environment,
-        discovered_resource_id="test::Test[agent1,attr=val]",
-        discovery_resource_id="test::Test[agent1,attr=other_val]",
-    )
-    assert res.code == 400
-    assert res.result["message"] == "Invalid request: this is an agent to server call, it should contain an agent session id"
-
-
 @pytest.mark.parametrize("tz_aware_timestamp", [True, False])
 async def test_get_param(server, client, environment, tz_aware_timestamp: bool):
     config.Config.set("server", "tz-aware-timestamps", str(tz_aware_timestamp).lower())
@@ -580,14 +567,24 @@ async def test_server_logs_address(server_config, caplog, async_finalizer):
 
 
 @pytest.fixture
-async def postgresql_version_from_db(postgresql_client) -> Awaitable[PostgreSQLVersion]:
+async def postgresql_version_from_db(postgresql_client) -> AsyncIterator[PostgreSQLVersion]:
     yield await PostgreSQLVersion.from_database(postgresql_client)
 
 
 @pytest.mark.parametrize("db_wait_time", ["2", "0"])
 @pytest.mark.parametrize("minimal_pg_version", [0, sys.maxsize])
 async def test_bootloader_connect_running_db(
-    tmp_path, server_config, postgres_db, caplog, db_wait_time: str, minimal_pg_version: int, postgresql_version_from_db
+    tmp_path,
+    server_config,
+    postgres_db,
+    caplog,
+    db_wait_time: str,
+    minimal_pg_version: int,
+    postgresql_version_from_db,
+    postgresql_client,
+    hard_clean_db,
+    hard_clean_db_post,
+    get_tables_in_db,
 ):
     """
     Tests that the bootloader can connect to a database and can start for both wait_up values
@@ -598,7 +595,18 @@ async def test_bootloader_connect_running_db(
     ibl: InmantaBootloader = InmantaBootloader(configure_logging=True)
 
     caplog.clear()
-    caplog.set_level(logging.INFO)
+    caplog.set_level(logging.DEBUG)
+
+    async def check_db_schema(check_empty: bool = False):
+        table_names = await get_tables_in_db()
+        if check_empty:
+            assert table_names == []
+        else:
+            # Arbitrary check on some "stable" tables in core schema
+            assert "compile" in table_names
+            assert "resource_persistent_state" in table_names
+
+    await check_db_schema(check_empty=True)
 
     def _check_database_connectivity_logs():
         if db_wait_time == "0":
@@ -606,17 +614,42 @@ async def test_bootloader_connect_running_db(
             # hence "Successfully connected to the database." log message will not appear.
             log_doesnt_contain(
                 caplog,
-                "inmanta.server.bootloader",
+                "inmanta.server.services.databaseservice",
                 logging.INFO,
-                "Successfully connected to the database.",
+                "Successfully reached database '%s' at %s:%s."
+                % (
+                    config.Config.get("database", "name"),
+                    config.Config.get("database", "host"),
+                    config.Config.get("database", "port"),
+                ),
+            )
+            log_contains(
+                caplog,
+                "inmanta.server.services.databaseservice",
+                logging.DEBUG,
+                "Not waiting until the database server is up because database.wait_time option is set to 0.",
             )
         else:
             log_contains(
                 caplog,
-                "inmanta.server.bootloader",
+                "inmanta.server.services.databaseservice",
                 logging.INFO,
-                "Successfully connected to the database.",
+                "Successfully reached database '%s' at %s:%s."
+                % (
+                    config.Config.get("database", "name"),
+                    config.Config.get("database", "host"),
+                    config.Config.get("database", "port"),
+                ),
             )
+        log_contains(
+            caplog,
+            "inmanta.server.services.databaseservice",
+            logging.INFO,
+            "Database replication is not active: couldn't find any standby server directly connected to the primary. "
+            "If you intend to use database replication, please check the status and the configuration "
+            "of the cluster before restarting the Inmanta server (More info in the 'HA setup' section of the "
+            "documentation).",
+        )
 
     try:
         if minimal_pg_version == sys.maxsize:
@@ -632,6 +665,8 @@ async def test_bootloader_connect_running_db(
                 _check_database_connectivity_logs()
                 assert unsupported_pg_version_error in str(exc_info.value)
 
+            # Check schema was not updated:
+            await check_db_schema(check_empty=True)
             return
 
         else:
@@ -639,12 +674,21 @@ async def test_bootloader_connect_running_db(
             _check_database_connectivity_logs()
             log_contains(
                 caplog,
-                "inmanta.server.bootloader",
+                "inmanta.server.services.databaseservice",
                 logging.INFO,
-                f"Successfully connected to the database (PostgreSQL server version {postgresql_version_from_db}).",
+                f"Database is running PostgreSQL server version {postgresql_version_from_db}.",
             )
 
+        log_contains(
+            caplog,
+            "inmanta.server.services.databaseservice",
+            logging.INFO,
+            "Successfully checked database before server start.",
+        )
         log_contains(caplog, "inmanta.server.server", logging.INFO, "Starting server endpoint")
+
+        # Check schema was populated:
+        await check_db_schema(check_empty=False)
 
     finally:
         await ibl.stop(timeout=20)
@@ -695,16 +739,15 @@ async def test_bootloader_start_no_compatibility_file(tmp_path, server_config, p
         await ibl.start()
         log_contains(
             caplog,
-            "inmanta.server.bootloader",
+            "inmanta.server.services.databaseservice",
             logging.DEBUG,
-            "No compatibility file is set. Bypassing minimal required postgres version check.",
+            "Not waiting until the database server is up because database.wait_time option is set to 0.",
         )
-
         log_contains(
             caplog,
-            "inmanta.server.bootloader",
+            "inmanta.server.services.databaseservice",
             logging.INFO,
-            "Successfully connected to the database (PostgreSQL server version",
+            f"Database is running PostgreSQL server version {postgresql_version_from_db}",
         )
 
         log_contains(caplog, "inmanta.server.server", logging.INFO, "Starting server endpoint")
@@ -1382,12 +1425,6 @@ async def test_cleanup_old_agents(server, client, env1_halted, env2_halted):
         result = await client.halt_environment(env2.id)
         assert result.code == 200
 
-    process_sid = uuid.uuid4()
-    await data.AgentProcess(hostname="localhost-dummy", environment=env1.id, sid=process_sid, last_seen=datetime.now()).insert()
-
-    id_primary = uuid.uuid4()
-    await data.AgentInstance(id=id_primary, process=process_sid, name="dummy-instance", tid=env1.id).insert()
-
     version = 1
     await data.ConfigurationModel(
         environment=env1.id,
@@ -1411,35 +1448,31 @@ async def test_cleanup_old_agents(server, client, env1_halted, env2_halted):
         attributes={"name": name},
     ).insert()
 
-    # should get purged
+    # should get purged: not used by any resource
     await data.Agent(
         environment=env1.id,
         name="agent1",
         paused=False,
-        id_primary=None,
     ).insert()
-    # should not get purged as the id_primary is set -> not down
-    await data.Agent(environment=env1.id, name="agent2", paused=False, id_primary=id_primary).insert()
+    # should get purged: not used by any resource
+    await data.Agent(environment=env1.id, name="agent2", paused=False).insert()
     # should not get purged as it is used in a version of the ConfigurationModel
     await data.Agent(
         environment=env1.id,
         name="agent4",
         paused=False,
-        id_primary=None,
     ).insert()
     # agent with "agent2" as name but in another env will get purged:
     await data.Agent(
         environment=env2.id,
         name="agent2",
         paused=False,
-        id_primary=None,
     ).insert()
     # agent with "agent1" as name but in another env will get purged:
     await data.Agent(
         environment=env2.id,
         name="agent1",
         paused=False,
-        id_primary=None,
     ).insert()
 
     agents_before_purge = await data.Agent.get_list()
@@ -1448,12 +1481,13 @@ async def test_cleanup_old_agents(server, client, env1_halted, env2_halted):
     await server.get_slice(SLICE_ORCHESTRATION)._purge_versions()
 
     agents_after_purge = [(agent.environment, agent.name) for agent in await data.Agent.get_list()]
-    number_agents_env1_after_purge = 3 if env1_halted else 2
+    # In env1: agent1 and agent2 are not used by resources -> purged (unless halted)
+    # In env1: agent4 is used by resources -> kept
+    number_agents_env1_after_purge = 3 if env1_halted else 1
     number_agents_env2_after_purge = 2 if env2_halted else 0
     assert len(agents_after_purge) == number_agents_env1_after_purge + number_agents_env2_after_purge
     if not (env1_halted or env2_halted):
         expected_agents_after_purge = [
-            (env1.id, "agent2"),
             (env1.id, "agent4"),
         ]
         assert sorted(agents_after_purge) == sorted(expected_agents_after_purge)

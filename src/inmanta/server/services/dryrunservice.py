@@ -84,7 +84,7 @@ class DyrunService(protocol.ServerSlice):
 
         await self.autostarted_agent_manager._ensure_scheduler(env.id)
 
-        client = self.agent_manager.get_agent_client(env.id, const.AGENT_SCHEDULER_ID, live_agent_only=True)
+        client = self.agent_manager.get_agent_client(env.id)
         if client is not None:
             self.add_background_task(client.do_dryrun(env.id, dryrun.id, const.AGENT_SCHEDULER_ID, version_id))
         else:

@@ -1,0 +1,6 @@
+description: Log more information about the DB during the server startup.
+change-type: patch
+destination-branches:
+  - master
+  - iso9
+  - iso8

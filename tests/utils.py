@@ -55,7 +55,6 @@ from inmanta.agent import config as cfg
 from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
 from inmanta.agent.executor import ExecutorBlueprint, ModuleInstallSpec
-from inmanta.const import AGENT_SCHEDULER_ID
 from inmanta.data.model import LEGACY_PIP_DEFAULT, AuthMethod, PipConfig, SchedulerStatusReport
 from inmanta.deploy import state
 from inmanta.deploy.scheduler import ResourceScheduler
@@ -1005,22 +1004,22 @@ async def wait_for_n_deployed_resources(client, environment, version, n, timeout
 
 class NullAgent(SessionEndpoint):
 
-    def __init__(
-        self,
-        environment: Optional[uuid.UUID] = None,
-    ):
+    def __init__(self, environment: uuid.UUID | str):
         """
         :param environment: environment id
         """
-        super().__init__(name="agent", timeout=cfg.server_timeout.get(), reconnect_delay=cfg.agent_reconnect_delay.get())
+        if isinstance(environment, str):
+            environment = uuid.UUID(environment)
+        super().__init__(
+            name="agent",
+            environment=environment,
+            timeout=cfg.server_timeout.get(),
+            reconnect_delay=cfg.agent_reconnect_delay.get(),
+        )
         self._env_id = environment
         self.enabled: dict[str, bool] = {}
-
-    async def start_connected(self) -> None:
-        """
-        Setup our single endpoint
-        """
-        await self.add_end_point_name(AGENT_SCHEDULER_ID)
+        assert self.session is not None
+        self._client = self.session.get_client()
 
     @protocol.handle(methods.set_state)
     async def set_state(self, agent: Optional[str], enabled: bool) -> Apireturn:
@@ -1028,10 +1027,10 @@ class NullAgent(SessionEndpoint):
         return 200
 
     async def on_reconnect(self) -> None:
-        pass
+        await super().on_reconnect()
 
     async def on_disconnect(self) -> None:
-        pass
+        await super().on_disconnect()
 
     @protocol.handle(methods.trigger, env="tid", agent="id")
     async def trigger_update(self, env: uuid.UUID, agent: str, incremental_deploy: bool) -> Apireturn:
@@ -1100,7 +1099,7 @@ async def is_agent_done(scheduler: ResourceScheduler, agent_name: str) -> bool:
 def assert_resource_persistent_state(
     resource_persistent_state: data.ResourcePersistentState,
     is_undefined: bool,
-    is_orphan: bool,
+    orphaned_after: int | None,
     last_handler_run: state.HandlerResult,
     blocked: state.Blocked,
     expected_compliance: Optional[state.Compliance],
@@ -1113,8 +1112,8 @@ def assert_resource_persistent_state(
         resource_persistent_state.is_undefined == is_undefined
     ), f"{resource_persistent_state.resource_id} ({resource_persistent_state.is_undefined} != {is_undefined})"
     assert (
-        resource_persistent_state.is_orphan == is_orphan
-    ), f"{resource_persistent_state.resource_id} ({resource_persistent_state.is_orphan} != {is_orphan})"
+        resource_persistent_state.orphaned_after == orphaned_after
+    ), f"{resource_persistent_state.resource_id} ({resource_persistent_state.orphaned_after} != {orphaned_after})"
     assert (
         resource_persistent_state.last_handler_run is last_handler_run
     ), f"{resource_persistent_state.resource_id} ({resource_persistent_state.last_handler_run} != {last_handler_run})"

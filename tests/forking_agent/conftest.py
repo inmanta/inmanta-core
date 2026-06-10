@@ -35,14 +35,13 @@ async def mp_manager_factory(tmp_path) -> typing.Iterator[typing.Callable[[uuid.
     managers = []
     threadpools: list[concurrent.futures.thread.ThreadPoolExecutor] = []
 
-    def make_mpmanager(agent_session_id: uuid.UUID) -> MPManager:
+    def make_mpmanager(environment: uuid.UUID) -> MPManager:
         log_folder = tmp_path / "logs"
         storage_folder = tmp_path / "executors"
         threadpool = concurrent.futures.thread.ThreadPoolExecutor()
         manager = MPManager(
             threadpool,
-            agent_session_id,
-            uuid.uuid4(),
+            environment,
             log_folder=str(log_folder),
             storage_folder=str(storage_folder),
             log_level=const.LOG_LEVEL_TRACE,
@@ -63,7 +62,7 @@ async def mp_manager_factory(tmp_path) -> typing.Iterator[typing.Callable[[uuid.
 
 @pytest.fixture
 async def mpmanager(mp_manager_factory, agent) -> MPManager:
-    return mp_manager_factory(agent.sessionid)
+    return mp_manager_factory(agent.environment)
 
 
 @pytest.fixture
