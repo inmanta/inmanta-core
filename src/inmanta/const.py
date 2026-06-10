@@ -29,7 +29,7 @@ from inmanta.stable_api import stable_api
 SQL_RESOURCE_STATUS_SELECTOR: typing.LiteralString = """
 (
     CASE
-        WHEN rps.is_orphan
+        WHEN rps.orphaned_after IS NOT NULL
             THEN 'orphaned'
         WHEN rps.is_deploying
             THEN 'deploying'
