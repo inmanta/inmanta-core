@@ -153,7 +153,7 @@ async def test_ws_ping_timeout_closes_stale_connection(inmanta_config: object, s
         agent._ws_client.protocol.stream.close()
 
         # Wait for the server to detect the stale connection and remove the session.
-        # With ws-ping-interval=1, ws-ping-timeout=1, this should happen within a few seconds.
+        # With ws-ping-interval=1, this should happen within a few seconds.
         await retry_limited(lambda: session_key not in rs._transport._sessions, TEST_TIMEOUT_S)
 
         # The agent should reconnect and establish a new active session

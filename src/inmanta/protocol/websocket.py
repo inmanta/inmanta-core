@@ -729,10 +729,9 @@ class WebSocketClientConnection(websocket.WebSocketClientConnection):
         request: httpclient.HTTPRequest,
         *,
         ping_interval: float | None = None,
-        ping_timeout: float | None = None,
         on_connection_close_callback: Callable[[], None] | None = None,
     ) -> None:
-        super().__init__(request, ping_interval=ping_interval, ping_timeout=ping_timeout)
+        super().__init__(request, ping_interval=ping_interval)
         self._on_connection_close_callback = on_connection_close_callback
 
     @property
@@ -850,11 +849,6 @@ class SessionEndpoint(endpoints.Endpoint, common.CallTarget, WebsocketFrameDecod
         from inmanta.agent import config as agent_cfg
 
         ws_ping_interval = agent_cfg.agent_ws_ping_interval.get()
-        ws_ping_timeout = agent_cfg.agent_ws_ping_timeout.get()
-        if ws_ping_timeout < ws_ping_interval:
-            raise Exception(
-                f"client.ws-ping-timeout ({ws_ping_timeout}) must be at least " f"client.ws-ping-interval ({ws_ping_interval})"
-            )
 
         # Clean up old session and connection before creating new ones
         self._reconnecting = True
@@ -872,7 +866,6 @@ class SessionEndpoint(endpoints.Endpoint, common.CallTarget, WebsocketFrameDecod
                     self.get_websocket_url(), connect_timeout=WS_CONNECT_TIMEOUT_S, ca_certs=ca_certs
                 ),
                 ping_interval=ws_ping_interval,
-                ping_timeout=ws_ping_timeout,
                 on_connection_close_callback=self._on_disconnect,
             )
 
