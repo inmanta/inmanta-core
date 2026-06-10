@@ -110,6 +110,8 @@ class CodeManager:
         module_name = get_inmanta_module_name(instance.__module__)
         loaded_modules = module.Project.get().modules
 
+        LOGGER.info(f"{loaded_modules=}",)
+
         if module_name not in loaded_modules:
             raise SourceNotFoundException(
                 "Module %s is imported in plugin code but not in model code. Either remove the unused import, "
