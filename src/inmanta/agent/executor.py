@@ -212,6 +212,16 @@ class ExecutorBlueprint(EnvBlueprint):
         requirements and making sure they all share the same pip config.
         """
 
+        def log_from_specs():
+            LOGGER.debug(f"________________________ from_specs ________________________")
+            for module_install_spec in code:
+                LOGGER.debug(f"  + {module_install_spec.module_name} v {module_install_spec.module_version}")
+                for sce in module_install_spec.blueprint.sources:
+                    LOGGER.debug(f"    > {sce.metadata.name}")
+                LOGGER.debug("\n")
+
+
+        log_from_specs()
         if not code:
             raise ValueError("from_specs expects at least one resource install spec")
         env_ids = {cd.blueprint.environment_id for cd in code}
