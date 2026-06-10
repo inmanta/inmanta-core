@@ -771,7 +771,7 @@ async def test_query_resources(server, client, environment, setup_database, mixe
     # Quick way of simulating a non-compliant report
     # It has to be non-orphan otherwise the compliance returned will be None
     rps = await data.ResourcePersistentState.get_one(
-        environment=environment, last_handler_run=state.HandlerResult.SUCCESSFUL, is_orphan=False
+        environment=environment, last_handler_run=state.HandlerResult.SUCCESSFUL, orphaned_after=None
     )
     assert rps
     await rps.update_fields(last_handler_run_compliant=False)
@@ -939,7 +939,7 @@ async def test_query_resources(server, client, environment, setup_database, mixe
         assertion = f.get("assertion", None)
         if assertion:
             for res in result.result["data"]["data"]["resources"]["edges"]:
-                assert is_subset_dict(assertion, res["node"])
+                assert is_subset_dict(assertion, res["node"]), f["query"]
 
     query = """
     {
