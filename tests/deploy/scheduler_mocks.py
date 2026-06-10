@@ -22,7 +22,7 @@ import typing
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
-from typing import Any, Callable, Coroutine, Mapping, Never, Optional, Set
+from typing import Any, Callable, Coroutine, Mapping, Never, Optional
 from uuid import UUID
 
 import asyncpg
@@ -313,7 +313,7 @@ class DummyStateManager(StateUpdateManager):
     async def mark_as_orphan(
         self,
         environment: UUID,
-        resource_ids: Set[ResourceIdStr],
+        orphaned_resources: typing.Mapping[ResourceIdStr, int],
         connection: Optional[Connection] = None,
     ) -> None:
         pass
