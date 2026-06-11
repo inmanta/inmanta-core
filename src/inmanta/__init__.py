@@ -16,7 +16,7 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-OPA_VERSION = "1.17.0"
+OPA_VERSION = "1.17.1"
 # This version is managed by bumpversion. Should you ever update it manually, make sure to consistently update it everywhere
 # (See the bumpversion.cfg file for relevant locations).
 __version__ = "18.1.2"
