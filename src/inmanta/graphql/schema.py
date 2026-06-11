@@ -687,9 +687,6 @@ class CoreResourceBase:
     )
 
 
-# Type alias used in annotations. The actual runtime type is assembled dynamically in get_schema().
-Resource = CoreResourceBase
-
 
 @dataclasses.dataclass(kw_only=True)
 @strawberry.input
@@ -955,6 +952,44 @@ class StrawberryInfoContextDict(typing.TypedDict):
     sqlalchemy_loader: StrawberrySQLAlchemyLoader
     compiler_service: CompilerService
 
+def build_resource_filter(extension_contributions: list[type[GraphQLContribution]]) -> tuple[type, tuple[type[ResourceFilterABC], ...]]:
+    """
+    Builds and returns the Resource filter object used by Strawberry to filter on resources
+    by combining the CoreResourceFilter with the ResourceFilter child classes provided by the extensions.
+
+    :param extension_contributions: list of extension graphql contributions
+    """
+    _filter_extensions: list[type[ResourceFilterABC]] = [
+        cls for ec in extension_contributions if (cls := ec.get_resource_filter_input_class()) is not None
+    ]
+    resource_filter_components: tuple[type[ResourceFilterABC], ...] = (
+        CoreResourceFilter,
+        *_filter_extensions,
+    )
+    return strawberry.input(
+        dataclasses.dataclass(kw_only=True)(type("ResourceFilter", resource_filter_components, {}))
+    ) , resource_filter_components
+
+def build_resource_return_obj(extension_contributions: list[type[GraphQLContribution]]) -> type:
+    """
+    Builds and returns the Resource object used by Strawberry by mapping the SQLAlchemy model and
+    combining it with the mixins provided by the extensions (and core).
+
+    :param extension_contributions: list of extension graphql contributions
+    """
+    _resource_mixins: tuple[type, ...] = tuple(
+        mixin for c in extension_contributions if (mixin := c.get_resource_graphql_output_type_mixin()) is not None
+    )
+    _resource_annotations: dict[str, object] = {}
+    _resource_attrs: dict[str, object] = {}
+    _skip_attrs = {"__dict__", "__weakref__", "__doc__", "__annotations__", "__module__"}
+    for _base in (CoreResourceBase, *_resource_mixins):
+        _resource_annotations.update(_base.__dict__.get("__annotations__", {}))
+        for _k, _v in _base.__dict__.items():
+            if _k not in _skip_attrs:
+                _resource_attrs[_k] = _v
+    # Can't do the same as the resource filter because the mixins can't have the mapper.type decorator and that is required
+    return mapper.type(models.Resource)(type("Resource", (), {"__annotations__": _resource_annotations, **_resource_attrs}))
 
 def get_schema(
     compiler_service: CompilerService, extension_contributions: list[type[GraphQLContribution]]
@@ -967,29 +1002,9 @@ def get_schema(
 
     loader = StrawberrySQLAlchemyLoader(async_bind_factory=get_session_factory())
 
-    _filter_extensions: list[type[ResourceFilterABC]] = [
-        cls for ec in extension_contributions if (cls := ec.get_resource_filter_input_class()) is not None
-    ]
-    resource_filter_components: tuple[type[ResourceFilterABC], ...] = (
-        CoreResourceFilter,
-        *_filter_extensions,
-    )
-    composed_resource_filter: type = strawberry.input(
-        dataclasses.dataclass(kw_only=True)(type("ResourceFilter", resource_filter_components, {}))
-    )
+    composed_resource_filter, resource_filter_components = build_resource_filter(extension_contributions)
 
-    _resource_mixins: tuple[type, ...] = tuple(
-        mixin for c in extension_contributions if (mixin := c.get_resource_graphql_output_type_mixin()) is not None
-    )
-    _resource_annotations: dict[str, object] = {}
-    _resource_attrs: dict[str, object] = {}
-    _skip_attrs = {"__dict__", "__weakref__", "__doc__", "__annotations__", "__module__"}
-    for _base in (CoreResourceBase, *_resource_mixins):
-        _resource_annotations.update(_base.__dict__.get("__annotations__", {}))
-        for _k, _v in _base.__dict__.items():
-            if _k not in _skip_attrs:
-                _resource_attrs[_k] = _v
-    mapper.type(models.Resource)(type("Resource", (), {"__annotations__": _resource_annotations, **_resource_attrs}))
+    Resource: type = build_resource_return_obj(extension_contributions)
 
     class CustomInfo(Info[StrawberryInfoContextDict, object]):
         @property
