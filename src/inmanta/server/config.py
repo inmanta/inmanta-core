@@ -388,17 +388,9 @@ server_ws_ping_interval = Option(
     "server",
     "ws-ping-interval",
     10,
-    "Interval in seconds between WebSocket ping frames sent to agents",
-    is_lower_bounded_int(1),
-)
-server_ws_ping_timeout = Option(
-    "server",
-    "ws-ping-timeout",
-    30,
-    (
-        "Time in seconds to wait for a WebSocket pong response before closing the connection."
-        " Must be at least :inmanta.config:option:`server.ws-ping-interval`."
-    ),
+    "Interval in seconds between WebSocket ping frames sent to agents. If no pong is received"
+    " :inmanta.config:option:`server.ws-ping-interval` seconds after the ping was sent,"
+    " the connection is closed.",
     is_lower_bounded_int(1),
 )
 
