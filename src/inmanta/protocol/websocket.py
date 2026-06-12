@@ -791,7 +791,7 @@ class SessionEndpoint(endpoints.Endpoint, common.CallTarget, WebsocketFrameDecod
         """
         endpoints.Endpoint.__init__(self, name)
         WebsocketFrameDecoder.__init__(self)
-        LOGGER.debug("Start transport for client %s", name)
+        LOGGER.debug("Start websocket transport for client %s", name)
 
         self._sched = util.Scheduler("session endpoint")
 
