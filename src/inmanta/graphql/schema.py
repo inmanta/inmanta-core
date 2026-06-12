@@ -920,7 +920,7 @@ async def get_connection[*Ts](
 
 class GraphQLContribution(ABC):
     """
-    Extension hook that lets modules (e.g. LSM) contribute extra filter fields, SQL logic,
+    Extension hook that lets extensions (e.g. LSM) contribute extra filter fields, SQL logic,
     and output fields to the core ``resources`` GraphQL query without core being aware of those modules.
     """
 
