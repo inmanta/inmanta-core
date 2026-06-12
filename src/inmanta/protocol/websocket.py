@@ -534,16 +534,16 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
                     self._log_rpc_call(msg)
                     self.add_background_task(self._handle_call(msg))
                 else:
-                    LOGGER.warning("Received RPC_Call on inactive session, ignoring: %s", self)
+                    LOGGER.warning("Received RPC_Call on inactive session, ignoring: %s", msg)
 
             case RPC_Reply():
                 # A reply to a request sent by the server to the client
                 if not self.active():
-                    LOGGER.warning("Received RPC_Reply on inactive session, ignoring: %s", self)
+                    LOGGER.warning("Received RPC_Reply on inactive session, ignoring: %s", msg)
                     return
 
                 if msg.reply_id not in self._replies:
-                    LOGGER.warning("Received a reply that is unknown: %s", msg.reply_id)
+                    LOGGER.warning("Received a reply with unknown reply_id: %s", msg)
                     return
 
                 LOGGER.info("Received RPC_REPLY with reply_id=%s (code: %s)", msg.reply_id, msg.code)
