@@ -1,0 +1,4 @@
+description: Add src/inmanta/data/sqlalchemy_generated.py (raw sqlacodegen output) and a test that regenerates it from the live database schema to detect schema drift.
+change-type: patch
+destination-branches:
+  - master

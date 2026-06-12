@@ -24,7 +24,7 @@ from typing import Sequence, cast
 
 import docstring_parser
 
-import inmanta.data.sqlalchemy as models
+import inmanta.data.sqlalchemy_new as models
 import strawberry
 from inmanta import data
 from inmanta.data import get_session, get_session_factory, model
@@ -32,7 +32,7 @@ from inmanta.deploy import state
 from inmanta.server.services.compilerservice import CompilerService
 from sqlakeyset import Marker, unserialize_bookmark
 from sqlakeyset.asyncio import select_page
-from sqlalchemy import Boolean, Select, UnaryExpression, and_, asc, desc, func, not_, select
+from sqlalchemy import Boolean, Select, UnaryExpression, Uuid, and_, asc, desc, func, not_, select
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapper
 from strawberry import relay, scalars
@@ -342,7 +342,9 @@ class CustomStrawberrySQLAlchemyMapper(StrawberrySQLAlchemyMapper[BaseModelType]
 
 
 # We set always_use_list to true because we don't support pagination for nested entities
-mapper: CustomStrawberrySQLAlchemyMapper[typing.Any] = CustomStrawberrySQLAlchemyMapper(always_use_list=True)
+mapper: CustomStrawberrySQLAlchemyMapper[typing.Any] = CustomStrawberrySQLAlchemyMapper(
+    always_use_list=True, extra_sqlalchemy_type_to_strawberry_type_map={Uuid: uuid.UUID}
+)
 DEFAULT_PER_PAGE: int = 50
 
 
@@ -773,7 +775,7 @@ class ResourceOrder(StrawberryOrder):
 @mapper.type(models.ResourcePersistentState)
 class ResourcePersistentState:
     __tablename__ = "resource_persistent_state"
-    __exclude__ = ["resource_set_", "environment_"]
+    __exclude__ = ["resource_set_", "environment_", "resource_diff_environment_resource", "resource_diff", "non_compliant_diff"]
 
 
 @strawberry.type
