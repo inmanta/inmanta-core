@@ -399,7 +399,7 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
             call_spec.headers["Authorization"] = "Bearer " + self._token
         future: asyncio.Future[common.Result[types.ReturnTypes]] = asyncio.Future()
 
-        LOGGER.debug("Sending call (reply_id=%s): %s %s", reply_id, call_spec.method, call_spec.url)
+        LOGGER.info("Sending call (reply_id=%s): %s %s", reply_id, call_spec.method, call_spec.url)
         # Use the method-defined timeout or a generous default.
         # The timeout covers the full round-trip including handler execution on the remote side.
         timeout = max(properties.timeout or DEFAULT_RPC_TIMEOUT_S, MIN_RPC_TIMEOUT_S)
