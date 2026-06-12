@@ -447,7 +447,7 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
         try:
             msg: WSMessages = self._message_parser.validate_json(message)
         except pydantic.ValidationError:
-            LOGGER.exception("Invalid message")
+            LOGGER.exception("Invalid message: %s", message)
             return
 
         LOGGER.log(const.LOG_LEVEL_TRACE, "Got %s", msg)
