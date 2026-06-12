@@ -631,7 +631,6 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
             url=parsed_url.path, method=msg.method, headers=msg.headers, body=msg.body, reply_id=msg.reply_id
         )
 
-        LOGGER.debug("Received call through websocket: %s %s %s", method_call.reply_id, method_call.method, method_call.url)
         if self._call_targets is None:
             LOGGER.error("Cannot dispatch method: call targets are not configured.")
             return None
