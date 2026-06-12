@@ -41,7 +41,6 @@ from strawberry.scalars import JSON
 from strawberry.schema.config import StrawberryConfig
 from strawberry.types import Info
 from strawberry.types.field import field
-from strawberry.types.info import ContextType
 from strawberry.types.nodes import SelectedField, Selection
 from strawberry_sqlalchemy_mapper import StrawberrySQLAlchemyLoader, StrawberrySQLAlchemyMapper
 from strawberry_sqlalchemy_mapper.mapper import (
@@ -390,15 +389,6 @@ def to_snake_case(name: str) -> str:
     return re.sub("([A-Z])", r"_\1", name).lower()
 
 
-@dataclasses.dataclass
-class GraphQLContext:
-    """
-    Context passed down by the GraphQL slice, to be used by the Strawberry models.
-    """
-
-    compiler_service: CompilerService
-
-
 class CustomFilter(ABC):
     """
     Base class for custom filters.
@@ -479,7 +469,7 @@ class StrawberryFilter:
             filter_dict[key] = value
         return filter_dict
 
-    def apply_filters[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
+    def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
         """
         Applies the filters to the given query.
         """
@@ -667,7 +657,7 @@ class NotificationOrder(StrawberryOrder):
         return {"created": self.model}
 
 
-def get_requires_length(root: "Resource") -> int:
+def get_requires_length(root: "CoreResourceBase") -> int:
     """
     Checks the length of the requires of the resource
     """
@@ -675,7 +665,7 @@ def get_requires_length(root: "Resource") -> int:
     return len(root.attributes.get("requires", []))
 
 
-def get_purged(root: "Resource") -> bool:
+def get_purged(root: "CoreResourceBase") -> bool:
     """
     Checks the state of the purged attribute on this resource
     """
@@ -683,8 +673,11 @@ def get_purged(root: "Resource") -> bool:
     return bool(root.attributes.get("purged"))
 
 
-@mapper.type(models.Resource)
-class Resource:
+class CoreResourceBase:
+    """
+    This is a mixin used to create the full Resource class
+    """
+
     __exclude__ = ["resource_set_"]
     requires_length: int = strawberry.field(
         resolver=get_requires_length, description="The length of the requires of this resource."
@@ -694,18 +687,31 @@ class Resource:
     )
 
 
+
+@dataclasses.dataclass(kw_only=True)
 @strawberry.input
-class ResourceFilter(StrawberryFilter):
+class ResourceFilterABC(StrawberryFilter):
+    """
+    Abstract base class that defines the shared attributes/behaviour of each extension's ResourceFilter.
+
+    :param environment: The environment the resources belong to.
+    """
+
     environment: uuid.UUID
+
+
+@dataclasses.dataclass(kw_only=True)
+@strawberry.input
+class CoreResourceFilter(ResourceFilterABC):
     resource_type: StrFilter | None = strawberry.UNSET
     resource_id_value: StrFilter | None = strawberry.UNSET
     agent: StrFilter | None = strawberry.UNSET
-    purged: bool | None = strawberry.UNSET
     blocked: EnumFilter[state.Blocked] | None = strawberry.UNSET
     compliance: EnumFilter[state.Compliance] | None = strawberry.UNSET
     last_handler_run: EnumFilter[state.HandlerResult] | None = strawberry.UNSET
     is_deploying: bool | None = strawberry.UNSET
     is_orphan: bool | None = strawberry.UNSET
+    purged: bool | None = strawberry.UNSET
 
     @property
     def model(self) -> type[models.Base]:
@@ -715,7 +721,7 @@ class ResourceFilter(StrawberryFilter):
     def rps_model(self) -> type[models.Base]:
         return models.ResourcePersistentState
 
-    def apply_filters[*Ts](
+    def apply_filter[*Ts](
         self, stmt: Select[tuple[*Ts]]
     ) -> Select[tuple[*Ts]]:  # Every filter we apply to the resource is custom, so we don't use `get_filter_dict`
         rps_keys = [
@@ -796,14 +802,14 @@ class ComposedResourceSummary:
 def add_filter_and_sort[*Ts](
     stmt: Select[tuple[*Ts]],
     default_sorting: dict[str, UnaryExpression[typing.Any]],
-    filter: typing.Optional[StrawberryFilter] = strawberry.UNSET,
+    filter: Sequence[StrawberryFilter],
     order_by: typing.Optional[Sequence[StrawberryOrder]] = strawberry.UNSET,
 ) -> Select[tuple[*Ts]]:
     """
     Adds filter and sorting to the given statement.
     """
-    if filter is not None and filter is not strawberry.UNSET:
-        stmt = filter.apply_filters(stmt)
+    for filter_instance in filter:
+        stmt = filter_instance.apply_filter(stmt)
     order_expressions: dict[str, UnaryExpression[typing.Any]] = {}
     if order_by is not None and order_by is not strawberry.UNSET:
         for order in order_by:
@@ -912,7 +918,82 @@ async def get_connection[*Ts](
         )
 
 
-def get_schema(context: GraphQLContext) -> strawberry.Schema:
+class GraphQLContribution(ABC):
+    """
+    Extension hook that lets extensions (e.g. LSM) contribute extra filter fields, SQL logic,
+    and output fields to the core ``resources`` GraphQL query without core being aware of those modules.
+    """
+
+    @classmethod
+    def get_resource_filter_input_class(cls) -> type[ResourceFilterABC] | None:
+        """Return a @strawberry.input class whose fields are merged into ResourceFilter."""
+        return None
+
+    @classmethod
+    def get_resource_graphql_output_type_mixin(cls) -> type | None:
+        """
+        Return a plain class (no decorator) whose strawberry.field declarations are merged into
+        the Resource output type. Return None if this contribution adds no output fields.
+        """
+        return None
+
+    @classmethod
+    def get_context_loaders(cls) -> dict[str, object]:
+        """Return per-request DataLoaders to inject into the GraphQL context."""
+        return {}
+
+
+class StrawberryInfoContextDict(typing.TypedDict):
+    """
+    TypedDict containing information on the current execution to pass to the CustomInfo class.
+    This context is used in our queries and field resolvers
+    """
+
+    sqlalchemy_loader: StrawberrySQLAlchemyLoader
+    compiler_service: CompilerService
+
+def build_resource_filter(extension_contributions: list[type[GraphQLContribution]]) -> tuple[type, tuple[type[ResourceFilterABC], ...]]:
+    """
+    Builds and returns the Resource filter object used by Strawberry to filter on resources
+    by combining the CoreResourceFilter with the ResourceFilter child classes provided by the extensions.
+
+    :param extension_contributions: list of extension graphql contributions
+    """
+    _filter_extensions: list[type[ResourceFilterABC]] = [
+        cls for ec in extension_contributions if (cls := ec.get_resource_filter_input_class()) is not None
+    ]
+    resource_filter_components: tuple[type[ResourceFilterABC], ...] = (
+        CoreResourceFilter,
+        *_filter_extensions,
+    )
+    return strawberry.input(
+        dataclasses.dataclass(kw_only=True)(type("ResourceFilter", resource_filter_components, {}))
+    ) , resource_filter_components
+
+def build_resource_return_obj(extension_contributions: list[type[GraphQLContribution]]) -> type:
+    """
+    Builds and returns the Resource object used by Strawberry by mapping the SQLAlchemy model and
+    combining it with the mixins provided by the extensions (and core).
+
+    :param extension_contributions: list of extension graphql contributions
+    """
+    _resource_mixins: tuple[type, ...] = tuple(
+        mixin for c in extension_contributions if (mixin := c.get_resource_graphql_output_type_mixin()) is not None
+    )
+    _resource_annotations: dict[str, object] = {}
+    _resource_attrs: dict[str, object] = {}
+    _skip_attrs = {"__dict__", "__weakref__", "__doc__", "__annotations__", "__module__"}
+    for _base in (CoreResourceBase, *_resource_mixins):
+        _resource_annotations.update(_base.__dict__.get("__annotations__", {}))
+        for _k, _v in _base.__dict__.items():
+            if _k not in _skip_attrs:
+                _resource_attrs[_k] = _v
+    # Can't do the same as the resource filter because the mixins can't have the mapper.type decorator and that is required
+    return mapper.type(models.Resource)(type("Resource", (), {"__annotations__": _resource_annotations, **_resource_attrs}))
+
+def get_schema(
+    compiler_service: CompilerService, extension_contributions: list[type[GraphQLContribution]]
+) -> strawberry.Schema:
     """
     Initializes the Strawberry GraphQL schema.
     It is initiated in a function instead of being declared at the module level, because we have to do this
@@ -921,10 +1002,17 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
 
     loader = StrawberrySQLAlchemyLoader(async_bind_factory=get_session_factory())
 
-    class CustomInfo(Info):
+    composed_resource_filter, resource_filter_components = build_resource_filter(extension_contributions)
+
+    Resource: type = build_resource_return_obj(extension_contributions)
+
+    class CustomInfo(Info[StrawberryInfoContextDict, object]):
         @property
-        def context(self) -> ContextType:  # type: ignore[type-var]
-            return typing.cast(ContextType, {"sqlalchemy_loader": loader, "compiler_service": context.compiler_service})
+        def context(self) -> StrawberryInfoContextDict:
+            return {
+                "sqlalchemy_loader": loader,
+                "compiler_service": compiler_service,
+            }
 
     @strawberry.type
     class Query:
@@ -940,7 +1028,8 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
             order_by: typing.Optional[Sequence[EnvironmentOrder]] = strawberry.UNSET,
         ) -> CustomListConnection[Environment]:
             stmt = select(models.Environment)
-            stmt = add_filter_and_sort(stmt, EnvironmentOrder.default_order(), filter, order_by)
+            filter_lst = [filter] if filter is not None and filter is not strawberry.UNSET else []
+            stmt = add_filter_and_sort(stmt, EnvironmentOrder.default_order(), filter_lst, order_by)
             return await get_connection(
                 stmt, info=info, model="Environment", first=first, after=after, last=last, before=before
             )
@@ -957,7 +1046,7 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
             order_by: typing.Optional[Sequence[NotificationOrder]] = strawberry.UNSET,
         ) -> CustomListConnection[Notification]:
             stmt = select(models.Notification)
-            stmt = add_filter_and_sort(stmt, NotificationOrder.default_order(), filter, order_by)
+            stmt = add_filter_and_sort(stmt, NotificationOrder.default_order(), [filter], order_by)
             return await get_connection(
                 stmt, info=info, model="Notification", first=first, after=after, last=last, before=before
             )
@@ -966,7 +1055,7 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
         async def resources(
             self,
             info: CustomInfo,
-            filter: ResourceFilter,
+            filter: typing.Annotated[CoreResourceFilter, strawberry.argument(graphql_type=composed_resource_filter)],
             first: typing.Optional[int] = strawberry.UNSET,
             after: typing.Optional[str] = strawberry.UNSET,
             last: typing.Optional[int] = strawberry.UNSET,
@@ -1037,13 +1126,29 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
                         == select(latest_scheduled_version_cte.c.version).scalar_subquery(),
                     ),
                 )
-            stmt = add_filter_and_sort(stmt, ResourceOrder.default_order(), filter, order_by)
+
+            # Decompose ResourceFilter into its parts
+            resource_filter_instances: list[ResourceFilterABC] = []
+            for filter_type in resource_filter_components:
+                filter_fields = {field.name: getattr(filter, field.name) for field in dataclasses.fields(filter_type)}
+                resource_filter_instances.append(filter_type(**filter_fields))
+
+            stmt = add_filter_and_sort(
+                stmt,
+                ResourceOrder.default_order(),
+                resource_filter_instances,
+                order_by,
+            )
             count_stmt: Select[tuple[int]] | None
             if filter.purged is not strawberry.UNSET:
                 count_stmt = None
             else:
                 # more efficient count statement that doesn't require joining on resource
-                count_stmt = add_filter_and_sort(select(func.count()).select_from(models.ResourcePersistentState), {}, filter)
+                count_stmt = add_filter_and_sort(
+                    select(func.count()).select_from(models.ResourcePersistentState),
+                    {},
+                    resource_filter_instances,
+                )
             return await get_connection(
                 stmt, info=info, model="Resource", first=first, after=after, last=last, before=before, count_stmt=count_stmt
             )
