@@ -598,7 +598,7 @@ async def test_auto_started_agent_log_in_debug_mode(server, environment):
         try:
             with open(log_file_path) as f:
                 log_content = f.read()
-                return "DEBUG    inmanta.protocol.websocket Start transport for client agent" in log_content
+                return "DEBUG    inmanta.protocol.websocket Start websocket transport for client agent" in log_content
         except Exception:
             return False
 

@@ -399,7 +399,7 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
             call_spec.headers["Authorization"] = "Bearer " + self._token
         future: asyncio.Future[common.Result[types.ReturnTypes]] = asyncio.Future()
 
-        LOGGER.debug("Putting call %s: %s %s in queue at %s", reply_id, call_spec.method, call_spec.url, self)
+        LOGGER.info("Sending call (reply_id=%s): %s %s", reply_id, call_spec.method, call_spec.url)
         # Use the method-defined timeout or a generous default.
         # The timeout covers the full round-trip including handler execution on the remote side.
         timeout = max(properties.timeout or DEFAULT_RPC_TIMEOUT_S, MIN_RPC_TIMEOUT_S)
@@ -409,7 +409,7 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
                 handle_timeout(
                     future=future,
                     timeout=timeout,
-                    log_message=f"Call {reply_id}: {call_spec.method} {call_spec.url} timed out.",
+                    log_message=f"Call (reply_id={reply_id}): {call_spec.method} {call_spec.url} timed out.",
                     replies=self._replies,
                     reply_id=reply_id,
                 )
@@ -431,15 +431,26 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
             if future is not None and not future.done():
                 future.set_result(common.Result(code=503, result={"message": "Failed to send RPC call"}))
 
+    def _log_rpc_call(self, rpc_call: RPC_Call) -> None:
+        """
+        Write a log message to the log indicating that this rpc_call was received.
+        """
+        log_msg = "Received RPC_CALL %s %s"
+        args_log_msg = [rpc_call.method, rpc_call.url]
+        if rpc_call.reply_id:
+            log_msg += " (reply_id=%s)"
+            args_log_msg.append(str(rpc_call.reply_id))
+        LOGGER.info(log_msg, *args_log_msg)
+
     async def on_message(self, message: str | bytes) -> None:
         """Parse an incoming websocket frame and dispatch it based on message type."""
-        LOGGER.debug("%s got %s", self, message)
         try:
-            msg = self._message_parser.validate_json(message)
+            msg: WSMessages = self._message_parser.validate_json(message)
         except pydantic.ValidationError:
-            LOGGER.exception("Invalid message")
+            LOGGER.exception("Invalid message: %s", message)
             return
 
+        LOGGER.log(const.LOG_LEVEL_TRACE, "Got %s", msg)
         match msg:
             case OpenSession():
                 if self._session is not None:
@@ -483,6 +494,12 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
                 if self._session is None:
                     LOGGER.error("Received a session open for a session that is not opened yet.")
                 else:
+                    LOGGER.info(
+                        "Received session opened confirmation for session %s on host %s with environment %s",
+                        self._session.name,
+                        self._session.hostname,
+                        self._session.environment,
+                    )
                     self._session.confirm_open()
                     # Run on_open_session as a background task so the message processing loop is not blocked.
                     # on_reconnect may send RPC calls that require processing incoming replies.
@@ -502,27 +519,34 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
                 if session is None or not session.active:
                     LOGGER.warning("Received a close for %s that is not active on %s.", session, self)
                 else:
+                    LOGGER.info(
+                        "Closing session %s on host %s with environment %s",
+                        session.name,
+                        session.hostname,
+                        session.environment,
+                    )
                     session.close_session()
                     await self.on_close_session(session)
 
             case RPC_Call():
                 if self.active():
                     # A request from the client on the server
+                    self._log_rpc_call(msg)
                     self.add_background_task(self._handle_call(msg))
                 else:
-                    LOGGER.warning("Received RPC_Call on inactive session, ignoring: %s", self)
+                    LOGGER.warning("Received RPC_Call on inactive session, ignoring: %s", msg)
 
             case RPC_Reply():
-                LOGGER.debug("Got a reply on %s with %s", self, msg)
                 # A reply to a request sent by the server to the client
                 if not self.active():
-                    LOGGER.warning("Received RPC_Reply on inactive session, ignoring: %s", self)
+                    LOGGER.warning("Received RPC_Reply on inactive session, ignoring: %s", msg)
                     return
 
                 if msg.reply_id not in self._replies:
-                    LOGGER.warning("Received a reply that is unknown: %s", msg.reply_id)
+                    LOGGER.warning("Received a reply with unknown reply_id: %s", msg)
                     return
 
+                LOGGER.info("Received RPC_REPLY with reply_id=%s (code: %s)", msg.reply_id, msg.code)
                 future = self._replies[msg.reply_id]
                 del self._replies[msg.reply_id]
                 if not future.done():
@@ -607,7 +631,6 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
             url=parsed_url.path, method=msg.method, headers=msg.headers, body=msg.body, reply_id=msg.reply_id
         )
 
-        LOGGER.debug("Received call through websocket: %s %s %s", method_call.reply_id, method_call.method, method_call.url)
         if self._call_targets is None:
             LOGGER.error("Cannot dispatch method: call targets are not configured.")
             return None
@@ -767,7 +790,7 @@ class SessionEndpoint(endpoints.Endpoint, common.CallTarget, WebsocketFrameDecod
         """
         endpoints.Endpoint.__init__(self, name)
         WebsocketFrameDecoder.__init__(self)
-        LOGGER.debug("Start transport for client %s", name)
+        LOGGER.debug("Start websocket transport for client %s", name)
 
         self._sched = util.Scheduler("session endpoint")
 
