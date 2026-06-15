@@ -345,6 +345,16 @@ mapper: CustomStrawberrySQLAlchemyMapper[typing.Any] = CustomStrawberrySQLAlchem
 DEFAULT_PER_PAGE: int = 50
 
 
+def is_set[T](value: T | None) -> typing.TypeGuard[T]:
+    """
+    Checks if a filter field was provided by the user, i.e. it is neither None nor strawberry.UNSET.
+
+    This is a TypeGuard so that mypy narrows away the `None` (and `strawberry.UNSET`) in the positive branch,
+    just like an inline `value is not None and value is not strawberry.UNSET` check would.
+    """
+    return value is not None and value is not strawberry.UNSET
+
+
 def is_field_selected(info: Info, field_name: str) -> bool:
     """
     Checks if a field was requested by the user, including nested fields and fragments.
@@ -415,9 +425,9 @@ class EnumFilter[T: StrEnum](CustomFilter):
 
     def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]], model: type[models.Base], key: str) -> Select[tuple[*Ts]]:
         # Enums are stored as a string of their name in the database and not of their value
-        if self.eq is not None and self.eq is not strawberry.UNSET:
+        if is_set(self.eq):
             stmt = stmt.where(getattr(model, key).in_([x.name for x in self.eq]))
-        if self.neq is not None and self.neq is not strawberry.UNSET:
+        if is_set(self.neq):
             stmt = stmt.where(not_(getattr(model, key).in_([x.name for x in self.neq])))
         return stmt
 
@@ -436,14 +446,14 @@ class StrFilter(CustomFilter):
     not_contains: list[str] | None = strawberry.UNSET
 
     def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]], model: type[models.Base], key: str) -> Select[tuple[*Ts]]:
-        if self.eq is not None and self.eq is not strawberry.UNSET:
+        if is_set(self.eq):
             stmt = stmt.where(getattr(model, key).in_(self.eq))
-        if self.neq is not None and self.neq is not strawberry.UNSET:
+        if is_set(self.neq):
             stmt = stmt.where(not_(getattr(model, key).in_(self.neq)))
-        if self.contains is not None and self.contains is not strawberry.UNSET:
+        if is_set(self.contains):
             for c in self.contains:
                 stmt = stmt.where(getattr(model, key).ilike(c))
-        if self.not_contains is not None and self.not_contains is not strawberry.UNSET:
+        if is_set(self.not_contains):
             for c in self.not_contains:
                 stmt = stmt.where(not_(getattr(model, key).ilike(c)))
         return stmt
@@ -699,6 +709,20 @@ class ResourceFilterABC(StrawberryFilter):
 
     environment: uuid.UUID
 
+    def handles_version(self) -> bool:
+        """
+        Return True if this (extension) filter takes over selection of the model version from core.
+        At most one extension may do so; when none does, core selects the version by default.
+        """
+        return False
+
+    def apply_version_filter[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
+        """
+        Restrict the query to the appropriate version(s) of the model. Only invoked on the single component
+        responsible for version selection: an extension whose handles_version() is True, or core otherwise.
+        """
+        raise NotImplementedError()
+
 
 @dataclasses.dataclass(kw_only=True)
 @strawberry.input
@@ -712,6 +736,7 @@ class CoreResourceFilter(ResourceFilterABC):
     is_deploying: bool | None = strawberry.UNSET
     is_orphan: bool | None = strawberry.UNSET
     purged: bool | None = strawberry.UNSET
+    model_version: int | None = strawberry.UNSET
 
     @property
     def model(self) -> type[models.Base]:
@@ -720,6 +745,35 @@ class CoreResourceFilter(ResourceFilterABC):
     @property
     def rps_model(self) -> type[models.Base]:
         return models.ResourcePersistentState
+
+    def handles_version(self) -> bool:
+        return is_set(self.is_orphan) or is_set(self.model_version)
+
+    def apply_version_filter[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
+        # Determine which version of the model each resource should be taken from:
+        #  - if a specific version was requested, pin every resource set to that version
+        #  - otherwise take each resource at the latest scheduled version, except orphaned resources which are
+        #    taken at the last version they were present in (orphaned_after). ResourcePersistentState is already
+        #    joined onto the query, so orphaned_after is available directly (no extra CTE/join needed). For
+        #    non-orphaned resources orphaned_after is NULL, so coalesce falls back to the latest scheduled version.
+        version = (
+            self.model_version
+            if is_set(self.model_version)
+            else func.coalesce(
+                models.ResourcePersistentState.orphaned_after,
+                select(models.Scheduler.last_processed_model_version)
+                .where(models.Scheduler.environment == self.environment)
+                .scalar_subquery(),
+            )
+        )
+        return stmt.join(
+            models.t_resource_set_configuration_model,
+            and_(
+                models.t_resource_set_configuration_model.c.environment == models.Resource.environment,
+                models.t_resource_set_configuration_model.c.resource_set == models.Resource.resource_set,
+                models.t_resource_set_configuration_model.c.model == version,
+            ),
+        )
 
     def apply_filter[*Ts](
         self, stmt: Select[tuple[*Ts]]
@@ -734,15 +788,15 @@ class CoreResourceFilter(ResourceFilterABC):
         ]
         for key in rps_keys:
             attr = getattr(self, key)
-            if attr is not None and attr is not strawberry.UNSET:
+            if is_set(attr):
                 stmt = attr.apply_filter(stmt, self.rps_model, key)
-        if self.environment is not None and self.environment is not strawberry.UNSET:
+        if is_set(self.environment):
             stmt = stmt.filter(models.ResourcePersistentState.environment == self.environment)
-        if self.purged is not None and self.purged is not strawberry.UNSET:
+        if is_set(self.purged):
             stmt = stmt.filter(models.Resource.attributes["purged"].astext.cast(Boolean).is_(self.purged))
-        if self.is_deploying is not None and self.is_deploying is not strawberry.UNSET:
+        if is_set(self.is_deploying):
             stmt = stmt.filter(models.ResourcePersistentState.is_deploying == self.is_deploying)
-        if self.is_orphan is not None and self.is_orphan is not strawberry.UNSET:
+        if is_set(self.is_orphan):
             stmt = stmt.filter(models.ResourcePersistentState.is_orphan.is_(self.is_orphan))
         return stmt
 
@@ -811,7 +865,7 @@ def add_filter_and_sort[*Ts](
     for filter_instance in filter:
         stmt = filter_instance.apply_filter(stmt)
     order_expressions: dict[str, UnaryExpression[typing.Any]] = {}
-    if order_by is not None and order_by is not strawberry.UNSET:
+    if is_set(order_by):
         for order in order_by:
             if order.key in order_expressions:
                 raise Exception(f"Sorting key appears multiple times in orderBy: {order.key}")
@@ -863,12 +917,12 @@ async def get_connection[*Ts](
     async with get_session() as session:
         per_page: int
         # Get results per page and sanitation of input arguments
-        if first is not None and first is not strawberry.UNSET:
-            if (last is not None and last is not strawberry.UNSET) or (before is not None and before is not strawberry.UNSET):
+        if is_set(first):
+            if is_set(last) or is_set(before):
                 raise Exception("`first` is not allowed in conjunction with `last` or `before`")
             per_page = first
-        elif last is not None and last is not strawberry.UNSET:
-            if (after is not None and after is not strawberry.UNSET) or (before is None or before is strawberry.UNSET):
+        elif is_set(last):
+            if is_set(after) or not is_set(before):
                 raise Exception("`last` is only allowed in conjunction with `before`")
             per_page = last
         else:
@@ -884,11 +938,11 @@ async def get_connection[*Ts](
 
         # Get cursor and direction of results to fetch (forwards/backwards)
         page: Marker | None = None
-        if after is not None and after is not strawberry.UNSET:
-            if before is not None and before is not strawberry.UNSET:
+        if is_set(after):
+            if is_set(before):
                 raise Exception("`after` is not allowed in conjunction with `before`")
             page = unserialize_bookmark(f">{decode_cursor(after)}")
-        elif before is not None and before is not strawberry.UNSET:
+        elif is_set(before):
             page = unserialize_bookmark(f"<{decode_cursor(before)}")
 
         # Fetch the page using sqlakeyset
@@ -952,10 +1006,10 @@ class StrawberryInfoContextDict(typing.TypedDict):
     sqlalchemy_loader: StrawberrySQLAlchemyLoader
     compiler_service: CompilerService
 
-def build_resource_filter(extension_contributions: list[type[GraphQLContribution]]) -> tuple[type, tuple[type[ResourceFilterABC], ...]]:
+def get_resource_filter_components(extension_contributions: list[type[GraphQLContribution]]) -> tuple[type[ResourceFilterABC], ...]:
     """
-    Builds and returns the Resource filter object used by Strawberry to filter on resources
-    by combining the CoreResourceFilter with the ResourceFilter child classes provided by the extensions.
+    Returns a tuple with the Resource filter classes to build the ResourceFilter (used by Strawberry to filter on resources).
+    Contains the CoreResourceFilter with the ResourceFilter child classes provided by the extensions.
 
     :param extension_contributions: list of extension graphql contributions
     """
@@ -966,9 +1020,7 @@ def build_resource_filter(extension_contributions: list[type[GraphQLContribution
         CoreResourceFilter,
         *_filter_extensions,
     )
-    return strawberry.input(
-        dataclasses.dataclass(kw_only=True)(type("ResourceFilter", resource_filter_components, {}))
-    ) , resource_filter_components
+    return resource_filter_components
 
 def build_resource_return_obj(extension_contributions: list[type[GraphQLContribution]]) -> type:
     """
@@ -989,7 +1041,9 @@ def build_resource_return_obj(extension_contributions: list[type[GraphQLContribu
             if _k not in _skip_attrs:
                 _resource_attrs[_k] = _v
     # Can't do the same as the resource filter because the mixins can't have the mapper.type decorator and that is required
-    return mapper.type(models.Resource)(type("Resource", (), {"__annotations__": _resource_annotations, **_resource_attrs}))
+    return cast(
+        type, mapper.type(models.Resource)(type("Resource", (), {"__annotations__": _resource_annotations, **_resource_attrs}))
+    )
 
 def get_schema(
     compiler_service: CompilerService, extension_contributions: list[type[GraphQLContribution]]
@@ -1002,8 +1056,10 @@ def get_schema(
 
     loader = StrawberrySQLAlchemyLoader(async_bind_factory=get_session_factory())
 
-    composed_resource_filter, resource_filter_components = build_resource_filter(extension_contributions)
+    resource_filter_components = get_resource_filter_components(extension_contributions)
 
+    composed_resource_filter: type = strawberry.input(
+        dataclasses.dataclass(kw_only=True)(type("ResourceFilter", resource_filter_components, {})))
     Resource: type = build_resource_return_obj(extension_contributions)
 
     class CustomInfo(Info[StrawberryInfoContextDict, object]):
@@ -1028,7 +1084,7 @@ def get_schema(
             order_by: typing.Optional[Sequence[EnvironmentOrder]] = strawberry.UNSET,
         ) -> CustomListConnection[Environment]:
             stmt = select(models.Environment)
-            filter_lst = [filter] if filter is not None and filter is not strawberry.UNSET else []
+            filter_lst = [filter] if is_set(filter) else []
             stmt = add_filter_and_sort(stmt, EnvironmentOrder.default_order(), filter_lst, order_by)
             return await get_connection(
                 stmt, info=info, model="Environment", first=first, after=after, last=last, before=before
@@ -1062,10 +1118,8 @@ def get_schema(
             before: typing.Optional[str] = strawberry.UNSET,
             order_by: typing.Optional[Sequence[ResourceOrder]] = strawberry.UNSET,
         ) -> CustomListConnection[Resource]:
-            if filter.is_orphan is False:
-                include_orphans = False
-            else:
-                include_orphans = True
+            if is_set(filter.model_version) and is_set(filter.is_orphan):
+                raise Exception("is_orphan cannot be provided when filtering by model_version")
 
             # Only fetch resources in their latest version
             # Logic based on src/inmanta/data/dataview.py::ResourceView
@@ -1076,62 +1130,23 @@ def get_schema(
                     models.Resource.environment == models.ResourcePersistentState.environment,
                 ),
             )
-
-            # CTE that fetches the latest scheduled version
-            latest_scheduled_version_cte = (
-                select(models.Scheduler.last_processed_model_version.label("version"))
-                .where(models.Scheduler.environment == filter.environment)
-                .cte()
-            )
-
-            if include_orphans:
-                # CTE that checks if a resource is orphaned or not and returns the appropriate version
-                # - If it is not orphaned, return the resource in the latest released version
-                # - If it is orphaned, return the resource in the latest version that it was present in.
-                included_orphans_cte = (
-                    select(
-                        models.ResourcePersistentState.environment,
-                        models.ResourcePersistentState.resource_id,
-                        func.coalesce(
-                            models.ResourcePersistentState.orphaned_after,
-                            latest_scheduled_version_cte.c.version,
-                        ).label("version"),
-                    )
-                    .where(
-                        models.ResourcePersistentState.environment == filter.environment,
-                    )
-                    .cte()
-                )
-                stmt = stmt.join(
-                    models.t_resource_set_configuration_model,
-                    and_(
-                        models.t_resource_set_configuration_model.c.environment == models.Resource.environment,
-                        models.t_resource_set_configuration_model.c.resource_set == models.Resource.resource_set,
-                    ),
-                ).join(
-                    included_orphans_cte,
-                    and_(
-                        models.Resource.environment == included_orphans_cte.c.environment,
-                        models.Resource.resource_id == included_orphans_cte.c.resource_id,
-                        models.t_resource_set_configuration_model.c.model == included_orphans_cte.c.version,
-                    ),
-                )
-            else:
-                stmt = stmt.join(
-                    models.t_resource_set_configuration_model,
-                    and_(
-                        models.t_resource_set_configuration_model.c.environment == models.Resource.environment,
-                        models.t_resource_set_configuration_model.c.resource_set == models.Resource.resource_set,
-                        models.t_resource_set_configuration_model.c.model
-                        == select(latest_scheduled_version_cte.c.version).scalar_subquery(),
-                    ),
-                )
-
             # Decompose ResourceFilter into its parts
             resource_filter_instances: list[ResourceFilterABC] = []
+            version_handler: ResourceFilterABC | None = None
             for filter_type in resource_filter_components:
                 filter_fields = {field.name: getattr(filter, field.name) for field in dataclasses.fields(filter_type)}
-                resource_filter_instances.append(filter_type(**filter_fields))
+                filter_instance = filter_type(**filter_fields)
+                resource_filter_instances.append(filter_instance)
+                if filter_instance.handles_version():
+                    if version_handler is not None:
+                        raise Exception("Only one extension can determine version logic.")
+                    version_handler = filter_instance
+
+            # An extension may take over version selection, otherwise core selects the version by default.
+            extension_handles_version = version_handler is not None
+            if version_handler is None:
+                version_handler = next(i for i in resource_filter_instances if isinstance(i, CoreResourceFilter))
+            stmt = version_handler.apply_version_filter(stmt)
 
             stmt = add_filter_and_sort(
                 stmt,
@@ -1140,7 +1155,9 @@ def get_schema(
                 order_by,
             )
             count_stmt: Select[tuple[int]] | None
-            if filter.purged is not strawberry.UNSET:
+            if is_set(filter.purged) or is_set(filter.model_version) or extension_handles_version:
+                # These filters are not applied on the ResourcePersistentState, so we can't use the more efficient
+                # count statement below. Fall back to counting the actual (version-aware) resource query.
                 count_stmt = None
             else:
                 # more efficient count statement that doesn't require joining on resource
