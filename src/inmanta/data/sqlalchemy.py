@@ -14,7 +14,7 @@ Contact: code@inmanta.com
 
 import datetime
 import uuid
-from collections.abc import Mapping, Sequence, Set
+from collections.abc import Mapping, Set
 from typing import Any, Optional
 
 import asyncpg
@@ -73,11 +73,11 @@ class InmantaModule(Base):
     version: Mapped[str] = mapped_column(
         String,
         primary_key=True,
-        doc= (
+        doc=(
             "The version of the module. This is either the pep 440 version of the module (if it was installed as a "
             "package), or a hash computed by hashing all the files that make up this module (if it was installed in "
             "editable mode)."
-        )
+        ),
     )
     environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The environment this module belongs to")
     requirements: Mapped[list[str]] = mapped_column(
@@ -226,7 +226,9 @@ class ModuleFiles(Base):
     )
     environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The environment this module file belongs to")
     file_content_hash: Mapped[str] = mapped_column(String, nullable=False, doc="The content hash of the file")
-    python_module_name: Mapped[str] = mapped_column(String, primary_key=True, doc="The fully qualified python module name")  # TODO change this field to e.g. fqn ? to handle other files eg pyproject.toml
+    python_module_name: Mapped[str] = mapped_column(
+        String, primary_key=True, doc="The fully qualified python module name"
+    )  # TODO change this field to e.g. fqn ? to handle other files eg pyproject.toml
     is_byte_code: Mapped[bool] = mapped_column(Boolean, nullable=False, doc="Whether this file contains byte code")
 
     inmanta_module: Mapped["InmantaModule"] = relationship("InmantaModule", back_populates="module_files")

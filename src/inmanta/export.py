@@ -29,7 +29,7 @@ import pydantic
 
 import inmanta.loader
 import inmanta.module
-from inmanta import const, protocol, references, module
+from inmanta import const, module, protocol, references
 from inmanta.agent.handler import Commander
 from inmanta.ast import CompilerException, Namespace, UnknownException
 from inmanta.ast.entity import Entity

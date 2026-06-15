@@ -41,7 +41,7 @@ from inmanta import const
 from inmanta.agent import config as cfg
 from inmanta.agent import resourcepool
 from inmanta.agent.handler import HandlerContext
-from inmanta.const import Change, MODULE_PKG_NAME_PREFIX
+from inmanta.const import MODULE_PKG_NAME_PREFIX, Change
 from inmanta.data import LogLine
 from inmanta.data.model import AttributeStateChange, ModuleSource, PipConfig
 from inmanta.env import PythonEnvironment
@@ -130,7 +130,7 @@ class EnvBlueprint:
     # The libc version determines which python packages are compatible with the machine they run on.
     # If this version is updated, pip might select different packages.
     libc_version: str = dataclasses.field(default_factory=get_libc_version, kw_only=True)
-    _inmanta_modules: Sequence[str] | None= dataclasses.field(default=None, init=False, repr=False)
+    _inmanta_modules: Sequence[str] | None = dataclasses.field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
         # remove duplicates and make uniform
@@ -219,13 +219,12 @@ class ExecutorBlueprint(EnvBlueprint):
         """
 
         def log_from_specs():
-            LOGGER.debug(f"________________________ from_specs ________________________")
+            LOGGER.debug("________________________ from_specs ________________________")
             for module_install_spec in code:
                 LOGGER.debug(f"  + {module_install_spec.module_name} v {module_install_spec.module_version}")
                 for sce in module_install_spec.blueprint.sources:
                     LOGGER.debug(f"    > {sce.metadata.name}")
                 LOGGER.debug("\n")
-
 
         log_from_specs()
         if not code:

@@ -407,9 +407,8 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
         self.venv_path = venv_path
         self.storage_folder = storage_folder
         self.editable_install_module_sources = editable_install_module_sources
-        self.package_install_inmanta_modules=inmanta_modules if inmanta_modules else []
+        self.package_install_inmanta_modules = inmanta_modules if inmanta_modules else []
         self._venv_touch_interval = venv_touch_interval
-
 
     async def call(self, context: ExecutorContext) -> FailedInmantaModules:
         assert context.server.timer_venv_scheduler_interval is None, "InitCommand should be only called once!"
@@ -454,8 +453,11 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
                 inmanta_module_name = module_source.get_inmanta_module_name()
                 failed[inmanta_module_name][module_source.metadata.name] = ModuleImportException(e, module_source.metadata.name)
 
-        for inmanta_module_name in self.package_install_inmanta_modules:  # TODO: importing only the top-level module is probably not enough (https://stackoverflow.com/questions/15506971/recursive-version-of-reload)
-            #                                                                     iterate over python files in files in modules instead. Can we use only 1 loop for both editable and non-editable ?
+        for (
+            inmanta_module_name
+        ) in self.package_install_inmanta_modules:  # TODO: importing only the top-level module is probably not enough
+            # (https://stackoverflow.com/questions/15506971/recursive-version-of-reload)
+            # iterate over python files in files in modules instead. Can we use only 1 loop for both editable and non-editabl ?
             try:
                 await loop.run_in_executor(
                     context.threadpool,

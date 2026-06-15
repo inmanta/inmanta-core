@@ -16,7 +16,6 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import packaging
 import hashlib
 import importlib
 import importlib.util
@@ -28,12 +27,13 @@ import shutil
 import sys
 import types
 from collections import abc, defaultdict
-from collections.abc import Iterable, Iterator, Sequence, Mapping
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from importlib.abc import FileLoader, MetaPathFinder
 from importlib.machinery import ModuleSpec, SourcelessFileLoader
 from itertools import chain
 from typing import TYPE_CHECKING, Optional
 
+import packaging
 from inmanta import const, module
 from inmanta.data.model import InmantaModule, ModuleSource
 from inmanta.module import Module
@@ -96,7 +96,13 @@ class CodeManager:
         for id in resources:
             self._types_to_agent[id.entity_type].add(id.agent_name)
 
-    def register_code(self, type_name: str, instance: object, loaded_modules: Mapping[str, Module], editable_installed_inmanta_modules:  Mapping[packaging.utils.NormalizedName, packaging.version.Version]) -> None:
+    def register_code(
+        self,
+        type_name: str,
+        instance: object,
+        loaded_modules: Mapping[str, Module],
+        editable_installed_inmanta_modules: Mapping[packaging.utils.NormalizedName, packaging.version.Version],
+    ) -> None:
         """Register the given type_object under the type_name and register the source associated with this type object.
         This method assumes the build_agent_map method was called first.
 
@@ -124,7 +130,12 @@ class CodeManager:
 
         # TODO make sure all agents get all editable installed modules
 
-    def _register_inmanta_module(self, inmanta_module_name: str, module: "module.Module", editable_installed_inmanta_modules:  Mapping[packaging.utils.NormalizedName, packaging.version.Version]) -> None:
+    def _register_inmanta_module(
+        self,
+        inmanta_module_name: str,
+        module: "module.Module",
+        editable_installed_inmanta_modules: Mapping[packaging.utils.NormalizedName, packaging.version.Version],
+    ) -> None:
         if inmanta_module_name in self.module_version_info:
             # This module was already registered
             return
@@ -133,7 +144,8 @@ class CodeManager:
             # [editable install mode]
             # We need to store the relevant files in the db, i.e.:
             #    - python code in the inmanta_plugins dir
-            #    - requirements.txt file  # TODO no need to use the file api for this one, can reuse existing mechanism to transport reqs
+            #    - requirements.txt file  # TODO no need to use the file api for this one,
+            #                               can reuse existing mechanism to transport reqs
             #    - setup.cfg  # TODO [stage 2]
             #    - pyproject.toml  # TODO [stage 2]
 
@@ -164,7 +176,7 @@ class CodeManager:
             self.module_version_info[inmanta_module_name] = InmantaModule(
                 name=inmanta_module_name,
                 version=module.version,
-                files_in_module=[], # TODO still need to register files to be able to load them later
+                files_in_module=[],  # TODO still need to register files to be able to load them later
                 requirements=[],
                 for_agents=[],
                 editable_install=False,

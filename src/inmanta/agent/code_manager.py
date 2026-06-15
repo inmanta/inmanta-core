@@ -129,7 +129,8 @@ class CodeManager:
                         module_version=first_row.inmanta_module_version,
                         blueprint=executor.ExecutorBlueprint(
                             pip_config=pip_config,
-                            requirements=first_row.requirements,  # TODO Can we shove package install modules in here ?  will it also work eg in case there are no editable installed modules ? (ie empty rown_list loop)
+                            requirements=first_row.requirements,  # TODO Can we shove package install modules in here ?
+                            # will it also work eg in case there are no editable installed modules ? (ie empty row_list loop)
                             sources=[
                                 ModuleSource(
                                     metadata=ModuleSourceMetadata(

@@ -20,7 +20,7 @@ import datetime
 import logging
 import uuid
 from collections import abc, defaultdict
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping, Sequence, Set
 from typing import Literal, Optional, cast
 
 import asyncpg
