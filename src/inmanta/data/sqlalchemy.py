@@ -14,6 +14,7 @@ Contact: code@inmanta.com
 
 import datetime
 import uuid
+from collections.abc import Mapping, Sequence, Set
 from typing import Any, Optional
 
 import asyncpg
@@ -69,7 +70,15 @@ class InmantaModule(Base):
     )
 
     name: Mapped[str] = mapped_column(String, primary_key=True, doc="The name of the module")
-    version: Mapped[str] = mapped_column(String, primary_key=True, doc="The version of the module")
+    version: Mapped[str] = mapped_column(
+        String,
+        primary_key=True,
+        doc= (
+            "The version of the module. This is either the pep 440 version of the module (if it was installed as a "
+            "package), or a hash computed by hashing all the files that make up this module (if it was installed in "
+            "editable mode)."
+        )
+    )
     environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The environment this module belongs to")
     requirements: Mapped[list[str]] = mapped_column(
         ARRAY(String()),
@@ -77,6 +86,9 @@ class InmantaModule(Base):
         server_default=text("ARRAY[]::character varying[]"),
         doc="The pip requirements for this module version",
     )
+    #  TODO Can this "requirements" field be removed ??
+    # Not used for package install since we rely on pip
+    # For editable installs, we could use the file api to transport the requirements.txt file directly instead of this field
 
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="inmanta_module", viewonly=True)
     module_files: Mapped[list["ModuleFiles"]] = relationship("ModuleFiles", back_populates="inmanta_module", viewonly=True)
@@ -150,6 +162,10 @@ class InmantaModule(Base):
                     for inmanta_module_name, inmanta_module_data in modules.items()
                 ],
             )
+            # This query is only executed for modules installed in editable mode. It registers all the necessary files
+            # for the agent(s) to be able to also install the module in editable mode.
+            # For modules installed as a package, we do not store any files in the database. We fully rely on pip during
+            # agent code install to install the
             await connection.executemany(
                 insert_files_query,
                 [
@@ -210,7 +226,7 @@ class ModuleFiles(Base):
     )
     environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The environment this module file belongs to")
     file_content_hash: Mapped[str] = mapped_column(String, nullable=False, doc="The content hash of the file")
-    python_module_name: Mapped[str] = mapped_column(String, primary_key=True, doc="The fully qualified python module name")
+    python_module_name: Mapped[str] = mapped_column(String, primary_key=True, doc="The fully qualified python module name")  # TODO change this field to e.g. fqn ? to handle other files eg pyproject.toml
     is_byte_code: Mapped[bool] = mapped_column(Boolean, nullable=False, doc="Whether this file contains byte code")
 
     inmanta_module: Mapped["InmantaModule"] = relationship("InmantaModule", back_populates="module_files")
@@ -338,7 +354,9 @@ class AgentModules(Base):
         cls,
         model_version: int,
         environment: uuid.UUID,
-        module_usage_info: dict[InmantaModuleName, tuple[InmantaModuleVersion, set[AgentName]]],
+        module_usage_info: Mapping[InmantaModuleName, tuple[InmantaModuleVersion, Set[AgentName]]],
+        editable_installed_modules: Mapping[InmantaModuleName, InmantaModuleVersion],
+        all_agents: Set[str],
         connection: asyncpg.Connection,
     ) -> None:
         """
@@ -354,6 +372,10 @@ class AgentModules(Base):
         :param module_usage_info: Maps inmanta module names to a tuple of:
             -   The version to register for this module
             -   The set of agents using this module in this model version.
+        :param editable_installed_modules: Map of [name -> version] of inmanta modules that were installed in editable mode
+            in the venv of the compiler. When this map is not empty, we assume we are in "dev" mode and we will register these
+            modules on all agents.
+        :param all_agents: All agents registered for resource deployment in this model version.
         :param environment: The environment for which to register modules per agent.
         :param connection: The asyncpg connection to use.
         """
@@ -386,7 +408,17 @@ class AgentModules(Base):
                             inmanta_module_version,
                         )
                     )
-
+            for agent_name in all_agents:
+                for inmanta_module_name, inmanta_module_version in editable_installed_modules.items():
+                    values.append(
+                        (
+                            model_version,
+                            environment,
+                            agent_name,
+                            inmanta_module_name,
+                            inmanta_module_version,
+                        )
+                    )
             await connection.executemany(
                 query,
                 values,

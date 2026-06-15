@@ -686,6 +686,7 @@ class OrchestrationService(protocol.ServerSlice):
         version: int,
         environment: uuid.UUID,
         module_version_info: Mapping[InmantaModuleName, InmantaModuleDTO],
+        all_agents: Set[str],
         *,
         allow_handler_code_update: bool = False,
         connection: asyncpg.connection.Connection,
@@ -712,16 +713,20 @@ class OrchestrationService(protocol.ServerSlice):
         :param environment: Environment this compile belongs to.
         :param module_version_info: Inmanta module information about inmanta modules that are used by
             resources exported in this version.
+        :param all_agents: Set of all agents registered for resource deployment in this model version.
         :param allow_handler_code_update: In case of a partial compile, this flag will disable the check
             for source code consistency between the base version and the current partial version.
         :param connection: DB connection expected to be managed by the caller method.
         """
 
-        modules_to_register: dict[InmantaModuleName, InmantaModuleDTO] = {
-            module_name: inmanta_module
-            for module_name, inmanta_module in module_version_info.items()
-            if inmanta_module.for_agents
-        }
+        modules_to_register: dict[InmantaModuleName, InmantaModuleDTO] = {}
+        editable_installed_modules: dict[InmantaModuleName, str] = {}
+        for module_name, inmanta_module in module_version_info.items():
+            if inmanta_module.for_agents:
+                modules_to_register[module_name] = inmanta_module
+            if inmanta_module.editable_install:
+                editable_installed_modules[module_name] = inmanta_module.version
+
         module_usage_info: dict[InmantaModuleName, tuple[InmantaModuleVersion, set[AgentName]]] = {}
 
         if partial_base_version is not None:
@@ -749,10 +754,15 @@ class OrchestrationService(protocol.ServerSlice):
             module_usage_info[module_name] = (current_module_version, current_module_agent_set)
 
         await InmantaModule.register_modules(environment=environment, modules=modules_to_register, connection=connection)
+        # TODO: in current implementation, editable installed modules will be registered twice on agents that actually use them
+        # to deploy resources. This is not an issue thanks to "on conflict do nothing" in the register_modules_for_agents
+        # method but maybe there's a better alternative performance wise.
         await AgentModules.register_modules_for_agents(
             model_version=version,
             environment=environment,
             module_usage_info=module_usage_info,
+            editable_installed_modules=editable_installed_modules,
+            all_agents=all_agents,
             connection=connection,
         )
 
@@ -916,6 +926,7 @@ class OrchestrationService(protocol.ServerSlice):
                 version,
                 env.id,
                 module_version_info,
+                all_agents,
                 allow_handler_code_update=allow_handler_code_update,
                 connection=connection,
             )

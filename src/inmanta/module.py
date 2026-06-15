@@ -1894,6 +1894,9 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
     def get_relation_precedence_policy(self) -> list[RelationPrecedenceRule]:
         return self._metadata.get_relation_precedence_rules()
 
+    def get_editable_installed_inmanta_modules(self) -> dict[packaging.utils.NormalizedName, packaging.version.Version]:
+        return {k:v for k, v in self.virtualenv.get_installed_packages(only_editable=True).items() if k.startswith(ModuleV2.PKG_NAME_PREFIX)}
+
     @classmethod
     def from_path(cls: type[TProject], path: str) -> Optional[TProject]:
         return cls(path=path) if os.path.exists(os.path.join(path, cls.PROJECT_FILE)) else None
@@ -2723,8 +2726,8 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         self._plugin_file_cache = [
             (
                 Path(file_name),
-                ModuleName(self._get_fq_mod_name_for_py_file(file_name, plugin_dir, self.name)),
-            )
+                ModuleName(self._get_fq_mod_name_for_py_file(file_name, plugin_dir, self.name)),  # TODO weird gymnastics going on here. Opportunity to clean up old v1 logic that uses the 'plugins' dir
+            )  #                                                                                     Looks like redundant path manipulation from inmanta_plugins/* -> plugins/* -> inmanta_plugins/*
             for file_name in self._list_python_files(plugin_dir)
         ]
 

@@ -29,7 +29,7 @@ import pydantic
 
 import inmanta.loader
 import inmanta.module
-from inmanta import const, protocol, references
+from inmanta import const, protocol, references, module
 from inmanta.agent.handler import Commander
 from inmanta.ast import CompilerException, Namespace, UnknownException
 from inmanta.ast.entity import Entity
@@ -510,16 +510,18 @@ class Exporter:
         """Deploy code to the server"""
 
         LOGGER.info("Sending resources and handler source to server")
-
+        _project = module.Project.get()
+        all_loaded_modules = _project.modules
+        editable_installed_modules = _project.get_editable_installed_inmanta_modules()
         types = set()
 
         # Load both resource definition and handlers
         for type_name, resource_definition in resource.get_resources():
-            code_manager.register_code(type_name, resource_definition)
+            code_manager.register_code(type_name, resource_definition, all_loaded_modules, editable_installed_modules)
             types.add(type_name)
 
         for type_name, handler_definition in Commander.get_providers():
-            code_manager.register_code(type_name, handler_definition)
+            code_manager.register_code(type_name, handler_definition, all_loaded_modules, editable_installed_modules)
             types.add(type_name)
 
         # Register all reference and mutator code to all resources. This is very coarse grained and can be optimized once
@@ -527,7 +529,7 @@ class Exporter:
         for resource_type in types:
             for type_name, obj in itertools.chain(references.reference.get_references(), references.mutator.get_mutators()):
                 if not type_name.startswith("core::"):
-                    code_manager.register_code(resource_type, obj)
+                    code_manager.register_code(resource_type, obj, all_loaded_modules, editable_installed_modules)
 
         upload_code(self.client, code_manager)
 

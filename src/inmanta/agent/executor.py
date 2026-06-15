@@ -41,7 +41,7 @@ from inmanta import const
 from inmanta.agent import config as cfg
 from inmanta.agent import resourcepool
 from inmanta.agent.handler import HandlerContext
-from inmanta.const import Change
+from inmanta.const import Change, MODULE_PKG_NAME_PREFIX
 from inmanta.data import LogLine
 from inmanta.data.model import AttributeStateChange, ModuleSource, PipConfig
 from inmanta.env import PythonEnvironment
@@ -130,10 +130,16 @@ class EnvBlueprint:
     # The libc version determines which python packages are compatible with the machine they run on.
     # If this version is updated, pip might select different packages.
     libc_version: str = dataclasses.field(default_factory=get_libc_version, kw_only=True)
+    _inmanta_modules: Sequence[str] | None= dataclasses.field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
         # remove duplicates and make uniform
         self.requirements = sorted(set(self.requirements))
+
+    def get_inmanta_modules(self):
+        if self._inmanta_modules is None:
+            self._inmanta_modules = [req for req in self.requirements if req.startswith(MODULE_PKG_NAME_PREFIX)]
+        return self._inmanta_modules
 
     def blueprint_hash(self) -> str:
         """
@@ -194,7 +200,7 @@ class EnvBlueprint:
 
 @dataclasses.dataclass
 class ExecutorBlueprint(EnvBlueprint):
-    """Extends EnvBlueprint to include sources for the executor environment."""
+    """Extends EnvBlueprint to include editable_install_module_sources for the executor environment."""
 
     sources: Sequence[ModuleSource]
     _hash_cache: Optional[str] = dataclasses.field(default=None, init=False, repr=False)
@@ -208,7 +214,7 @@ class ExecutorBlueprint(EnvBlueprint):
     def from_specs(cls, code: typing.Collection["ModuleInstallSpec"]) -> "ExecutorBlueprint":
         """
         Create a single ExecutorBlueprint by combining the blueprint(s) of several
-        ModuleInstallSpec by merging respectively their module sources and their
+        ModuleInstallSpec by merging respectively their module editable_install_module_sources and their
         requirements and making sure they all share the same pip config.
         """
 
@@ -259,7 +265,7 @@ class ExecutorBlueprint(EnvBlueprint):
 
     def blueprint_hash(self) -> str:
         """
-        Generate a stable hash for an ExecutorBlueprint instance by serializing its pip_config, sources,
+        Generate a stable hash for an ExecutorBlueprint instance by serializing its pip_config, editable_install_module_sources,
         requirements and constraints in a sorted, consistent manner. This ensures that the hash value is
         independent of the order of requirements and consistent across interpreter sessions.
         Also cache the hash to only compute it once.
@@ -270,7 +276,7 @@ class ExecutorBlueprint(EnvBlueprint):
                 "pip_config": self.pip_config.model_dump(),
                 "requirements": self.requirements,
                 # Use the hash values and name to create a stable identity
-                "sources": [
+                "editable_install_module_sources": [
                     [source.metadata.hash_value, source.metadata.name, source.metadata.is_byte_code] for source in self.sources
                 ],
                 "python_version": self.python_version,

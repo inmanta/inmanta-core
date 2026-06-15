@@ -16,6 +16,7 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import packaging
 import hashlib
 import importlib
 import importlib.util
@@ -27,7 +28,7 @@ import shutil
 import sys
 import types
 from collections import abc, defaultdict
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Iterable, Iterator, Sequence, Mapping
 from importlib.abc import FileLoader, MetaPathFinder
 from importlib.machinery import ModuleSpec, SourcelessFileLoader
 from itertools import chain
@@ -35,6 +36,7 @@ from typing import TYPE_CHECKING, Optional
 
 from inmanta import const, module
 from inmanta.data.model import InmantaModule, ModuleSource
+from inmanta.module import Module
 from inmanta.stable_api import stable_api
 from inmanta.util import hash_file_streaming
 
@@ -94,7 +96,7 @@ class CodeManager:
         for id in resources:
             self._types_to_agent[id.entity_type].add(id.agent_name)
 
-    def register_code(self, type_name: str, instance: object) -> None:
+    def register_code(self, type_name: str, instance: object, loaded_modules: Mapping[str, Module], editable_installed_inmanta_modules:  Mapping[packaging.utils.NormalizedName, packaging.version.Version]) -> None:
         """Register the given type_object under the type_name and register the source associated with this type object.
         This method assumes the build_agent_map method was called first.
 
@@ -108,9 +110,6 @@ class CodeManager:
 
         # get the module
         module_name = get_inmanta_module_name(instance.__module__)
-        loaded_modules = module.Project.get().modules
-
-        LOGGER.info(f"{loaded_modules=}",)
 
         if module_name not in loaded_modules:
             raise SourceNotFoundException(
@@ -118,35 +117,58 @@ class CodeManager:
                 "or make sure to import the module in model code." % module_name
             )
 
-        self._register_inmanta_module(module_name, loaded_modules[module_name])
+        self._register_inmanta_module(module_name, loaded_modules[module_name], editable_installed_inmanta_modules)
 
         registered_agents: set[str] = self._types_to_agent.get(type_name, set())
         self._update_agents_for_module(module_name, registered_agents)
 
-    def _register_inmanta_module(self, inmanta_module_name: str, module: "module.Module") -> None:
+        # TODO make sure all agents get all editable installed modules
+
+    def _register_inmanta_module(self, inmanta_module_name: str, module: "module.Module", editable_installed_inmanta_modules:  Mapping[packaging.utils.NormalizedName, packaging.version.Version]) -> None:
         if inmanta_module_name in self.module_version_info:
             # This module was already registered
             return
 
-        module_sources: list[ModuleSource] = []
+        if inmanta_module_name in editable_installed_inmanta_modules:
+            # [editable install mode]
+            # We need to store the relevant files in the db, i.e.:
+            #    - python code in the inmanta_plugins dir
+            #    - requirements.txt file  # TODO no need to use the file api for this one, can reuse existing mechanism to transport reqs
+            #    - setup.cfg  # TODO [stage 2]
+            #    - pyproject.toml  # TODO [stage 2]
 
-        for absolute_path, fqn_module_name in module.get_plugin_files():
-            source_info = ModuleSource.from_path(absolute_path=absolute_path, name=fqn_module_name)
-            self.__file_info[absolute_path] = source_info
-            module_sources.append(source_info)
+            module_sources: list[ModuleSource] = []
 
-        files_metadata = [module_source.metadata for module_source in module_sources]
-        requirements = self.get_inmanta_module_requirements(inmanta_module_name)
+            for absolute_path, fqn_module_name in module.get_plugin_files():
+                source_info = ModuleSource.from_path(absolute_path=absolute_path, name=fqn_module_name)
+                self.__file_info[absolute_path] = source_info
+                module_sources.append(source_info)
 
-        module_version = self.get_module_version(requirements, files_metadata)
+            files_metadata = [module_source.metadata for module_source in module_sources]
+            requirements = self.get_inmanta_module_requirements(inmanta_module_name)
 
-        self.module_version_info[inmanta_module_name] = InmantaModule(
-            name=inmanta_module_name,
-            version=module_version,
-            files_in_module=files_metadata,
-            requirements=list(requirements),
-            for_agents=[],
-        )
+            # TODO [stage 2] add setup.cfg + pyproject.toml
+            module_version = self.get_module_version(requirements, files_metadata)
+
+            self.module_version_info[inmanta_module_name] = InmantaModule(
+                name=inmanta_module_name,
+                version=module_version,
+                files_in_module=files_metadata,
+                requirements=list(requirements),
+                for_agents=[],
+                editable_install=True,
+            )
+        else:
+            # [package install mode]
+            # Store the pep 440 version of the module in the db
+            self.module_version_info[inmanta_module_name] = InmantaModule(
+                name=inmanta_module_name,
+                version=module.version,
+                files_in_module=[], # TODO still need to register files to be able to load them later
+                requirements=[],
+                for_agents=[],
+                editable_install=False,
+            )
 
     def _update_agents_for_module(self, inmanta_module_name: str, registered_agents: set[str]) -> None:
         """

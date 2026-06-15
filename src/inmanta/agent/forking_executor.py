@@ -395,8 +395,9 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
         self,
         venv_path: str,
         storage_folder: str,
-        sources: Sequence[inmanta.data.model.ModuleSource],
+        editable_install_module_sources: Sequence[inmanta.data.model.ModuleSource],
         venv_touch_interval: float = 60.0,
+        inmanta_modules: Sequence[str] | None = None,
     ):
         """
         :param venv_touch_interval: The time interval after which the virtual environment must be touched. Only used for
@@ -405,8 +406,10 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
         """
         self.venv_path = venv_path
         self.storage_folder = storage_folder
-        self.sources = sources
+        self.editable_install_module_sources = editable_install_module_sources
+        self.package_install_inmanta_modules=inmanta_modules if inmanta_modules else []
         self._venv_touch_interval = venv_touch_interval
+
 
     async def call(self, context: ExecutorContext) -> FailedInmantaModules:
         assert context.server.timer_venv_scheduler_interval is None, "InitCommand should be only called once!"
@@ -429,8 +432,8 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
 
         failed: FailedInmantaModules = defaultdict(dict)
         in_place: list[inmanta.data.model.ModuleSource] = []
-        # First put all files on disk
-        for module_source in self.sources:
+        # First put all files for editable installed modules on disk
+        for module_source in self.editable_install_module_sources:
             try:
                 await loop.run_in_executor(context.threadpool, functools.partial(loader.install_source, module_source))
                 in_place.append(module_source)
@@ -450,6 +453,17 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
                 logger.info("Failed to import source: %s", module_source.metadata.name, exc_info=True)
                 inmanta_module_name = module_source.get_inmanta_module_name()
                 failed[inmanta_module_name][module_source.metadata.name] = ModuleImportException(e, module_source.metadata.name)
+
+        for inmanta_module_name in self.package_install_inmanta_modules:  # TODO: importing only the top-level module is probably not enough (https://stackoverflow.com/questions/15506971/recursive-version-of-reload)
+            #                                                                     iterate over python files in files in modules instead. Can we use only 1 loop for both editable and non-editable ?
+            try:
+                await loop.run_in_executor(
+                    context.threadpool,
+                    functools.partial(loader.load_module, inmanta_module_name, inmanta_module_name),  # Todo: fix hv arg
+                )
+            except Exception as e:
+                logger.info("Failed to import source: %s", inmanta_module_name, exc_info=True)
+                failed[inmanta_module_name][inmanta_module_name] = ModuleImportException(e, inmanta_module_name)
 
         return failed
 
@@ -955,8 +969,9 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
                 InitCommand(
                     venv_path=venv.env_path,
                     storage_folder=storage_for_blueprint,
-                    sources=blueprint.sources,
+                    editable_install_module_sources=blueprint.sources,
                     venv_touch_interval=self.venv_checkup_interval,
+                    inmanta_modules=blueprint.get_inmanta_modules(),
                 )
             )
             if failed_modules:

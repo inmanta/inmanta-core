@@ -1255,12 +1255,19 @@ class InmantaModule(BaseModel):
     This class represents an Inmanta module during code upload.
 
     :param name: Name of this inmanta module. e.g. std
-    :param version: Version of this inmanta module. This hash is computed using the hashes of
-        the python files in this module as well as the python requirements of this module.
-    :param files_in_module: The list of python files composing this inmanta module.
-    :param requirements: The list of python requirements this inmanta module requires.
+    :param version: Version of this inmanta module. For editable install modules, this is a hash that is
+        computed using the hashes of the python files in this module as well as the python requirements of this module.
+        For packaged install modules, this is the plain pep 440 version to install e.g. "1.0.5".
+    :param files_in_module: The list of python files composing this inmanta module. This is used during code loading on the agent
+        to load all the relevant python files.
+    :param requirements: The list of python requirements this inmanta module requires. This list is only set for
+        editable installed modules. For package install modules, we rely on pip to fetch the correct requirements
+        for the given pep 440 version.
     :param for_agents: The list of agent names that require to install this inmanta module to
-        deploy resources.
+        deploy resources. Note: On the agent side for editable modules, this list is not relevant during the installation
+        since these modules will be installed on all agents. However, it is relevant during code loading; we will only
+        eagerly load the code on agents in this list.
+    :param editable_install: Whether this inmanta module was installed in editable mode in the compiler venv.
     """
 
     name: InmantaModuleName
@@ -1268,3 +1275,4 @@ class InmantaModule(BaseModel):
     files_in_module: list[ModuleSourceMetadata]
     requirements: list[str]
     for_agents: list[AgentName]
+    editable_install: bool
