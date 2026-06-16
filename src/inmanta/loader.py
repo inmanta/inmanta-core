@@ -37,7 +37,6 @@ import packaging
 from inmanta import const, module
 from inmanta.const import PLUGINS_PACKAGE
 from inmanta.data.model import InmantaModule, ModuleSource
-from inmanta.module import Module
 from inmanta.stable_api import stable_api
 from inmanta.util import hash_file_streaming
 
@@ -101,7 +100,7 @@ class CodeManager:
         self,
         type_name: str,
         instance: object,
-        loaded_modules: Mapping[str, Module],
+        loaded_modules: Mapping[str, "module.Module"],
         editable_installed_inmanta_modules: Mapping[packaging.utils.NormalizedName, packaging.version.Version],
     ) -> None:
         """Register the given type_object under the type_name and register the inmanta module associated with this type object.
