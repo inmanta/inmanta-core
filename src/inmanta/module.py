@@ -2662,6 +2662,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
             return self._dir_cache[plugin_dir]
 
         files: dict[str, str] = {}
+        # v1 modules specific stuff:
         model_dir_path: str = os.path.join(plugin_dir, "model")
         files_dir_path: str = os.path.join(plugin_dir, "files")
         templates_dir_path: str = os.path.join(plugin_dir, "templates")
@@ -2763,8 +2764,8 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         :param plugin_dir: The plugin directory relative to the inmanta module's root directory.
         :param mod_name: The top-level name of this module.
         """
-        rel_py_file = os.path.relpath(py_file, start=plugin_dir)
-        return loader.convert_relative_path_to_module(os.path.join(mod_name, loader.PLUGIN_DIR, rel_py_file))
+        rel_py_file = os.path.relpath(py_file, start=plugin_dir)  # e.g. lsm/partial.py
+        return loader.convert_relative_path_to_module(os.path.join(mod_name, loader.PLUGIN_DIR, rel_py_file))  # inmanta_plugins/lsm/partial
 
     def unload(self) -> None:
         """
