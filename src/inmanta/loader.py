@@ -128,7 +128,7 @@ class CodeManager:
         registered_agents: set[str] = self._types_to_agent.get(type_name, set())
         self._update_agents_for_module(module_name, registered_agents)
 
-        # TODO make sure all agents get all editable installed modules
+        # TODO make sure all agents get all editable installed modules (done in agent registration in put_version (double-check))
 
     def _register_inmanta_module(
         self,
