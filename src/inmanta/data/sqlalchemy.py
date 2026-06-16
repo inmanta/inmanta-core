@@ -121,12 +121,14 @@ class InmantaModule(Base):
                 name,
                 version,
                 environment,
-                requirements
+                requirements,
+                editable_install
             ) VALUES(
                 $1,
                 $2,
                 $3,
-                $4
+                $4,
+                $7
             )
             ON CONFLICT DO NOTHING;
         """
@@ -158,14 +160,11 @@ class InmantaModule(Base):
                         inmanta_module_data.version,
                         environment,
                         inmanta_module_data.requirements,
+                        inmanta_module_data.editable_install,
                     )
                     for inmanta_module_name, inmanta_module_data in modules.items()
                 ],
             )
-            # This query is only executed for modules installed in editable mode. It registers all the necessary files
-            # for the agent(s) to be able to also install the module in editable mode.
-            # For modules installed as a package, we do not store any files in the database. We fully rely on pip during
-            # agent code install to install the
             await connection.executemany(
                 insert_files_query,
                 [

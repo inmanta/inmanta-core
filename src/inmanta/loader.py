@@ -35,6 +35,7 @@ from typing import TYPE_CHECKING, Optional
 
 import packaging
 from inmanta import const, module
+from inmanta.const import PLUGINS_PACKAGE
 from inmanta.data.model import InmantaModule, ModuleSource
 from inmanta.module import Module
 from inmanta.stable_api import stable_api
@@ -103,12 +104,14 @@ class CodeManager:
         loaded_modules: Mapping[str, Module],
         editable_installed_inmanta_modules: Mapping[packaging.utils.NormalizedName, packaging.version.Version],
     ) -> None:
-        """Register the given type_object under the type_name and register the source associated with this type object.
+        """Register the given type_object under the type_name and register the inmanta module associated with this type object.
         This method assumes the build_agent_map method was called first.
+
 
         :param type_name: The inmanta type name for which the source of type_object will be registered.
             For example std::testing::NullResource
-        :param instance: An instance for which the code needs to be registered.
+        :param instance: An instance for which the code needs to be registered. This is either the definition of a
+            resource, a handler or a reference/mutator
         """
         file_name = self.get_object_source(instance)
         if file_name is None:
@@ -123,6 +126,7 @@ class CodeManager:
                 "or make sure to import the module in model code." % module_name
             )
 
+        # Register this module (if it is the first time we see it)
         self._register_inmanta_module(module_name, loaded_modules[module_name], editable_installed_inmanta_modules)
 
         registered_agents: set[str] = self._types_to_agent.get(type_name, set())
@@ -130,6 +134,7 @@ class CodeManager:
 
         # TODO make sure all agents get all editable installed modules (done in agent registration in
         #  put_version (double-check))
+
 
     def _register_inmanta_module(
         self,
@@ -141,6 +146,15 @@ class CodeManager:
             # This module was already registered
             return
 
+        module_sources: list[ModuleSource] = []
+
+        for absolute_path, fqn_module_name in module.get_plugin_files():
+            source_info = ModuleSource.from_path(absolute_path=absolute_path, name=fqn_module_name)
+            self.__file_info[absolute_path] = source_info
+            module_sources.append(source_info)
+
+        files_metadata = [module_source.metadata for module_source in module_sources]
+
         if inmanta_module_name in editable_installed_inmanta_modules:
             # [editable install mode]
             # We need to store the relevant files in the db, i.e.:
@@ -150,14 +164,7 @@ class CodeManager:
             #    - setup.cfg  # TODO [stage 2]
             #    - pyproject.toml  # TODO [stage 2]
 
-            module_sources: list[ModuleSource] = []
 
-            for absolute_path, fqn_module_name in module.get_plugin_files():
-                source_info = ModuleSource.from_path(absolute_path=absolute_path, name=fqn_module_name)
-                self.__file_info[absolute_path] = source_info
-                module_sources.append(source_info)
-
-            files_metadata = [module_source.metadata for module_source in module_sources]
             requirements = self.get_inmanta_module_requirements(inmanta_module_name)
 
             # TODO [stage 2] add setup.cfg + pyproject.toml
@@ -176,8 +183,8 @@ class CodeManager:
             # Store the pep 440 version of the module in the db
             self.module_version_info[inmanta_module_name] = InmantaModule(
                 name=inmanta_module_name,
-                version=module.version,
-                files_in_module=[],  # TODO still need to register files to be able to load them later
+                version=str(module.version),
+                files_in_module=files_metadata,
                 requirements=[],
                 for_agents=[],
                 editable_install=False,

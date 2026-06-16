@@ -131,6 +131,7 @@ class CodeManager:
                             pip_config=pip_config,
                             requirements=first_row.requirements,  # TODO Can we shove package install modules in here ?
                             # will it also work eg in case there are no editable installed modules ? (ie empty row_list loop)
+                            # never empty -> even packaged installed module will have files (with empty source)
                             sources=[
                                 ModuleSource(
                                     metadata=ModuleSourceMetadata(
