@@ -1023,6 +1023,39 @@ async def test_query_resources(server, client, environment, setup_database, mixe
         assert result_resources[i]["node"]["state"]["isDeploying"] == (False if i < instances or i >= 2 * instances else True)
 
 
+async def test_query_resources_poc(server, client, environment, mixed_resource_generator):
+    """
+    Test the PoC `poc` and `otherpoc` fields on the resources query:
+    - `poc` is joined in via `with_expression` with a hardcoded value of 42
+    - `otherpoc` is sourced from a `column_property` hardcoded to 43
+    Both should be present on every returned resource.
+    """
+    instances = 2
+    resources_per_version = 10
+    await mixed_resource_generator(environment, instances, resources_per_version)
+
+    query = """
+    {
+        resources (filter: {environment: "%s"}) {
+            edges {
+                node {
+                  resourceId
+                  poc
+                  otherpoc
+                }
+            }
+        }
+    }
+    """ % environment
+    result = await client.graphql(query=query)
+    check_correct_graphql_response(result)
+    edges = result.result["data"]["data"]["resources"]["edges"]
+    assert len(edges) > 0
+    for edge in edges:
+        assert edge["node"]["poc"] == 42
+        assert edge["node"]["otherpoc"] == 43
+
+
 async def test_graphql_variables_and_operation_name(server, client, setup_database):
     """
     Test that graphql variables and the operation name are working as intended.
