@@ -147,7 +147,9 @@ class CodeManager:
         module_sources: list[ModuleSource] = []
 
         for absolute_path, fqn_module_name in module.get_plugin_files():
-            source_info = ModuleSource.from_path(absolute_path=absolute_path, name=fqn_module_name, editable_install=editable_install)
+            source_info = ModuleSource.from_path(
+                absolute_path=absolute_path, name=fqn_module_name, editable_install=editable_install
+            )
             self.__file_info[absolute_path] = source_info
             module_sources.append(source_info)
 

@@ -1215,7 +1215,7 @@ class ModuleSource(BaseModel):
     install_on_disk: bool
 
     @classmethod
-    def from_path(cls, absolute_path: str, name: str, editable_install:bool) -> "ModuleSource":
+    def from_path(cls, absolute_path: str, name: str, editable_install: bool) -> "ModuleSource":
         """Get the content of the file"""
         with open(absolute_path, "rb") as fd:
             _content = fd.read()
