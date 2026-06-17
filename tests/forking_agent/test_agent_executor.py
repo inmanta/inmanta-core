@@ -53,7 +53,7 @@ def set_custom_executor_policy(server_config):
 
 
 def code_for(bp: executor.ExecutorBlueprint) -> list[executor.ModuleInstallSpec]:
-    return [executor.ModuleInstallSpec("test", "abcdef", bp)]
+    return [executor.ModuleInstallSpec("test", "abcdef", bp, True)]
 
 
 async def test_process_manager(
@@ -85,6 +85,7 @@ async def test_process_manager(
                 is_byte_code=False,
             ),
             source=code,
+            install_on_disk=True,
         )
 
     # Prepare a source module and its hash
@@ -352,6 +353,7 @@ def test():
             is_byte_code=False,
         ),
         source=code,
+        install_on_disk=True,
     )
     sources1 = ()
     sources2 = (module_source1,)
@@ -440,6 +442,7 @@ def test():
             is_byte_code=False,
         ),
         source=code,
+        install_on_disk=True,
     )
     sources1 = ()
     sources2 = (module_source1,)
