@@ -225,7 +225,7 @@ async def test_agent_timeout(server_config, no_tid_check, async_finalizer):
     # take it down
     await agent2.stop()
 
-    # Wait for the server to detect the closed WebSocket (via ws-ping-interval/ws-ping-timeout)
+    # Wait for the server to detect the closed WebSocket (via ws-ping-interval)
     # and update session bookkeeping
     await retry_limited(lambda: len(server.get_sessions()) == 1, timeout=5)
     await check_sessions(server.get_sessions())

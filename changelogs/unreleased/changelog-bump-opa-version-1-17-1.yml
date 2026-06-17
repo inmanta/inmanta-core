@@ -1,0 +1,6 @@
+---
+description: "Version of opa was bumped to v1.17.1"
+change-type: patch
+destination-branches: [master, iso9]
+sections:
+  upgrade-note: "{{description}}"

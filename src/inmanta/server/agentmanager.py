@@ -1065,7 +1065,6 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
             agent_cfg.executor_venv_retention_time,
             agent_cfg.agent_cache_cleanup_tick_rate,
             agent_cfg.agent_ws_ping_interval,
-            agent_cfg.agent_ws_ping_timeout,
             agent_cfg.agent_transport.request_timeout,
             agent_cfg.agent_transport.max_clients,
             agent_cfg.scheduler_db_connection_pool_min_size,

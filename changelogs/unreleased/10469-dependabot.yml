@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump logfire from 4.36.0 to 4.37.0 in the logfire group across 1 directory
+destination-branches:
+- master
+sections: {}
