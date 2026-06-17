@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump sphinx-substitution-extensions from 2026.1.12 to 2026.6.17
+destination-branches:
+- iso9
+sections: {}
