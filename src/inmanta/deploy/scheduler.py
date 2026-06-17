@@ -279,20 +279,34 @@ class TaskRunner:
         self._task: typing.Optional[asyncio.Task[None]] = None
         self._notify_tasks: dict[uuid.UUID, asyncio.Task[None]] = {}
         # Lock to prevent race conditions on the running state of this TaskRunner
+        # Any changes to self.status (except for the synchronous STOPPED confirmation) must be under this lock
         self._notify_lock = asyncio.Lock()
 
-    async def start(self) -> None:
+    async def _start(self) -> None:
+        """
+        Start this task runner. Must always be called under the notify lock.
+        """
         assert (
             self._task is None or self._task.done()
         ), f"Task Runner {self.endpoint} is trying to start twice, this should not happen"
         self.status = AgentStatus.STARTED
         self._task = asyncio.create_task(self._run())
 
-    async def stop(self) -> None:
-        self.status = AgentStatus.STOPPING
+    async def _stop(self) -> None:
+        """
+        Stops this task runner. Must always be called under the notify lock.
+        """
+        current_task = asyncio.current_task()
         for task in self._notify_tasks.values():
-            if not task.done():
-                task.cancel()
+            # task is already finished, or it is the task that's invoking stop in the first place
+            if task is current_task or task.done():
+                continue
+            task.cancel()
+        self.status = AgentStatus.STOPPING
+
+    async def stop(self) -> None:
+        async with self._notify_lock:
+            await self._stop()
 
     async def join(self) -> None:
         assert not self.is_running(), "Joining worker that is not stopped"
@@ -312,16 +326,13 @@ class TaskRunner:
         """
         try:
             async with self._notify_lock:
-                should_be_running = (
-                    await self._scheduler.should_be_running()
-                    and await self._scheduler.should_runner_be_running(endpoint=self.endpoint)
-                )
+                should_be_running = await self._scheduler.should_runner_be_running(endpoint=self.endpoint)
 
                 match self.status:
                     case AgentStatus.STARTED if not should_be_running:
-                        await self.stop()
+                        await self._stop()
                     case AgentStatus.STOPPED if should_be_running:
-                        await self.start()
+                        await self._start()
                     case AgentStatus.STOPPING if should_be_running:
                         self.status = AgentStatus.STARTED
         finally:
@@ -1224,25 +1235,23 @@ class ResourceScheduler(TaskManager):
         self._workers[agent] = TaskRunner(endpoint=agent, scheduler=self)
         self._workers[agent].notify_sync()
 
-    async def should_be_running(self) -> bool:
-        """
-        Check in the DB (authoritative entity) if the Scheduler should be running
-            i.e. if the environment is not halted.
-        """
-        current_environment = await Environment.get_by_id(self.environment)
-        assert current_environment
-        return not current_environment.halted
-
     async def should_runner_be_running(self, endpoint: str) -> bool:
         """
-        Check in the DB (authoritative entity) if the agent (or the Scheduler if endpoint == Scheduler id) should be running
-            i.e. if it is not paused.
+        Returns true iff this agent (or the Scheduler if endpoint == Scheduler id) should be running, based on the current
+        scheduler status (is it running and are deployments enabled) and the environment's and agent's halted status in DB
+        (authoritative entity).
 
         :param endpoint: The name of the agent
         """
-        await data.Agent.insert_if_not_exist(environment=self.environment, endpoint=endpoint)
-        if self._deployment_suspended:
+        if self._deployment_suspended or not self._running:
             return False
+
+        current_environment = await Environment.get_by_id(self.environment)
+        assert current_environment
+        if current_environment.halted:
+            return False
+
+        await data.Agent.insert_if_not_exist(environment=self.environment, endpoint=endpoint)
         current_agent = await data.Agent.get(env=self.environment, endpoint=endpoint)
         return not current_agent.paused
 
