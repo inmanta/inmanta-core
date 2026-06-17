@@ -76,6 +76,9 @@ def test_code_manager(tmpdir: py.path.local, deactive_venv, install_all_dependen
     project.load_module("single_plugin_file", allow_v1=True)
     project.load_module("multiple_plugin_files", allow_v1=True)
 
+    all_loaded_modules = project.modules
+    editable_installed_modules = project.get_editable_installed_inmanta_modules()
+
     # non_imported_plugin_file was not loaded in the project
     # we check that a warning is produced when we attempt to register
     # some of its code
@@ -85,11 +88,26 @@ def test_code_manager(tmpdir: py.path.local, deactive_venv, install_all_dependen
     import inmanta_plugins.single_plugin_file as single
 
     mgr = loader.CodeManager()
-    mgr.register_code("std::testing::NullResource", single.MyHandler)
-    mgr.register_code("multiple_plugin_files::NullResourceBis", multi.MyHandler)
+    mgr.register_code(
+        "std::testing::NullResource",
+        single.MyHandler,
+        loaded_modules=all_loaded_modules,
+        editable_installed_inmanta_modules=editable_installed_modules,
+    )
+    mgr.register_code(
+        "multiple_plugin_files::NullResourceBis",
+        multi.MyHandler,
+        loaded_modules=all_loaded_modules,
+        editable_installed_inmanta_modules=editable_installed_modules,
+    )
 
     with pytest.raises(SourceNotFoundException) as excinfo:
-        mgr.register_code("non_imported_plugin_file::NullResourceBis", non_imported.MyHandler)
+        mgr.register_code(
+            "non_imported_plugin_file::NullResourceBis",
+            non_imported.MyHandler,
+            loaded_modules=all_loaded_modules,
+            editable_installed_inmanta_modules=editable_installed_modules,
+        )
 
     exception_message = (
         "Module non_imported_plugin_file is imported in plugin code but not in model code. "

@@ -348,6 +348,7 @@ async def test_agent_code_loading_with_failure(
             files_in_module=[ModuleSourceMetadata(name="inmanta_plugins.test.dummy_file", hash_value=hash, is_byte_code=False)],
             requirements=[],
             for_agents=["agent1"],
+            editable_install=True,
         )
     }
 
@@ -490,6 +491,7 @@ async def test_logging_on_code_loading_error(server, client, environment, client
             files_in_module=[module_source_metadata],
             requirements=[],
             for_agents=["agent1"],
+            editable_install=True,
         )
     }
 
@@ -621,7 +623,7 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
             files_in_module=[module_source_metadata1],
             requirements=[],
             for_agents=["agent_X", "agent_Y"],
-            constraints_file_hash=None,
+            editable_install=True,
         )
     }
 
@@ -697,7 +699,7 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
             files_in_module=[module_source_metadata2],
             requirements=[],
             for_agents=["agent_X"],
-            constraints_file_hash=None,
+            editable_install=True,
         )
     }
 
@@ -736,7 +738,7 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
             files_in_module=[module_source_metadata1],
             requirements=[],
             for_agents=["agent_Z"],
-            constraints_file_hash=None,
+            editable_install=True,
         )
     }
     resources = [
@@ -791,7 +793,7 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
             files_in_module=[module_source_metadata3],
             requirements=[],
             for_agents=["agent_Z", "agent_A"],
-            constraints_file_hash=None,
+            editable_install=True,
         )
     }
     resources = [
@@ -927,6 +929,7 @@ async def test_project_constraints_in_agent_code_install(server, client, environ
             files_in_module=[module_source_metadata1],
             requirements=[],
             for_agents=["agent_X", "agent_Y"],
+            editable_install=True,
         )
     }
 
@@ -983,6 +986,7 @@ async def test_project_constraints_in_agent_code_install(server, client, environ
             files_in_module=[module_source_metadata1],
             requirements=[],
             for_agents=["agent_X", "agent_Y"],
+            editable_install=True,
         )
     }
 
