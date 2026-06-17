@@ -1212,9 +1212,10 @@ class ModuleSource(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
     metadata: ModuleSourceMetadata
     source: bytes
+    install_on_disk: bool
 
     @classmethod
-    def from_path(cls, absolute_path: str, name: str) -> "ModuleSource":
+    def from_path(cls, absolute_path: str, name: str, editable_install:bool) -> "ModuleSource":
         """Get the content of the file"""
         with open(absolute_path, "rb") as fd:
             _content = fd.read()
@@ -1230,6 +1231,7 @@ class ModuleSource(BaseModel):
                 hash_value=_hash,
             ),
             source=_content,
+            install_on_disk=editable_install,
         )
 
     def __lt__(self, other: object) -> bool | None:
@@ -1247,6 +1249,7 @@ class ModuleSource(BaseModel):
 
 
 type InmantaModuleName = str
+type LoadModuleOnAgent = bool
 type InmantaModuleVersion = str
 type AgentName = str
 

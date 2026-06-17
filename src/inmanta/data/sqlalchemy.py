@@ -90,6 +90,11 @@ class InmantaModule(Base):
     # Not used for package install since we rely on pip
     # For editable installs, we could use the file api to transport the requirements.txt file directly instead of this field
 
+    editable_install: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        doc="Whether this module was installed in" "editable mode or as a package in the " "compiler venv",
+    )
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="inmanta_module", viewonly=True)
     module_files: Mapped[list["ModuleFiles"]] = relationship("ModuleFiles", back_populates="inmanta_module", viewonly=True)
     agent_modules: Mapped[list["AgentModules"]] = relationship("AgentModules", back_populates="inmanta_module", viewonly=True)
@@ -166,7 +171,7 @@ class InmantaModule(Base):
                 ],
             )
             await connection.executemany(
-                insert_files_query,
+                insert_files_query,  # T
                 [
                     (
                         inmanta_module_name,
@@ -288,6 +293,9 @@ class AgentModules(Base):
     inmanta_module_name: Mapped[str] = mapped_column(String, primary_key=True, doc="The name of the inmanta module")
     inmanta_module_version: Mapped[str] = mapped_column(String, nullable=False, doc="The version of the inmanta module")
     environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The environment this record belongs to")
+    load_module_on_agent: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, doc="Whether module should be loaded" "on the agent after installation."
+    )
 
     agent: Mapped["Agent"] = relationship("Agent", back_populates="agent_modules", viewonly=True)
     configurationmodel: Mapped["Configurationmodel"] = relationship(
@@ -356,8 +364,6 @@ class AgentModules(Base):
         model_version: int,
         environment: uuid.UUID,
         module_usage_info: Mapping[InmantaModuleName, tuple[InmantaModuleVersion, Set[AgentName]]],
-        editable_installed_modules: Mapping[InmantaModuleName, InmantaModuleVersion],
-        all_agents: Set[str],
         connection: asyncpg.Connection,
     ) -> None:
         """
@@ -373,10 +379,6 @@ class AgentModules(Base):
         :param module_usage_info: Maps inmanta module names to a tuple of:
             -   The version to register for this module
             -   The set of agents using this module in this model version.
-        :param editable_installed_modules: Map of [name -> version] of inmanta modules that were installed in editable mode
-            in the venv of the compiler. When this map is not empty, we assume we are in "dev" mode and we will register these
-            modules on all agents.
-        :param all_agents: All agents registered for resource deployment in this model version.
         :param environment: The environment for which to register modules per agent.
         :param connection: The asyncpg connection to use.
         """
@@ -400,17 +402,6 @@ class AgentModules(Base):
             values = []
             for inmanta_module_name, (inmanta_module_version, agents_to_register) in module_usage_info.items():
                 for agent_name in agents_to_register:
-                    values.append(
-                        (
-                            model_version,
-                            environment,
-                            agent_name,
-                            inmanta_module_name,
-                            inmanta_module_version,
-                        )
-                    )
-            for agent_name in all_agents:
-                for inmanta_module_name, inmanta_module_version in editable_installed_modules.items():
                     values.append(
                         (
                             model_version,

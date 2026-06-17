@@ -136,7 +136,7 @@ class EnvBlueprint:
         # remove duplicates and make uniform
         self.requirements = sorted(set(self.requirements))
 
-    def get_inmanta_modules(self):
+    def get_inmanta_modules(self) -> Sequence[str]:
         if self._inmanta_modules is None:
             self._inmanta_modules = [req for req in self.requirements if req.startswith(MODULE_PKG_NAME_PREFIX)]
         return self._inmanta_modules
@@ -200,7 +200,7 @@ class EnvBlueprint:
 
 @dataclasses.dataclass
 class ExecutorBlueprint(EnvBlueprint):
-    """Extends EnvBlueprint to include editable_install_module_sources for the executor environment."""
+    """Extends EnvBlueprint to include sources for the executor environment."""
 
     sources: Sequence[ModuleSource]
     _hash_cache: Optional[str] = dataclasses.field(default=None, init=False, repr=False)
@@ -214,11 +214,11 @@ class ExecutorBlueprint(EnvBlueprint):
     def from_specs(cls, code: typing.Collection["ModuleInstallSpec"]) -> "ExecutorBlueprint":
         """
         Create a single ExecutorBlueprint by combining the blueprint(s) of several
-        ModuleInstallSpec by merging respectively their module editable_install_module_sources and their
+        ModuleInstallSpec by merging respectively their module sources and their
         requirements and making sure they all share the same pip config.
         """
 
-        def log_from_specs():
+        def log_from_specs() -> None:
             LOGGER.debug("________________________ from_specs ________________________")
             for module_install_spec in code:
                 LOGGER.debug(f"  + {module_install_spec.module_name} v {module_install_spec.module_version}")
@@ -231,8 +231,18 @@ class ExecutorBlueprint(EnvBlueprint):
             raise ValueError("from_specs expects at least one resource install spec")
         env_ids = {cd.blueprint.environment_id for cd in code}
         assert len(env_ids) == 1
-        sources = list({source for cd in code for source in cd.blueprint.sources})
-        requirements = list({req for cd in code for req in cd.blueprint.requirements})
+        sources = list({source for cd in code for source in cd.blueprint.sources if cd.editable_install})
+        requirements: set[str] = set()
+
+        for module_install_spec in code:
+            if module_install_spec.editable_install:
+                # Editable install:
+                # install the requirements first, and then the source from the database
+                requirements.union(module_install_spec.blueprint.requirements)
+            else:
+                # Package install:
+                # let pip handle the dependencies when installing the module as a package
+                requirements.add(f"{module_install_spec.module_name}=={module_install_spec.module_version}")
 
         # Check that constraints set at the project level are consistent across all modules
         all_constraints = {cd.blueprint.project_constraints for cd in code}
@@ -257,14 +267,14 @@ class ExecutorBlueprint(EnvBlueprint):
             environment_id=env_ids.pop(),
             pip_config=base_pip,
             sources=sources,
-            requirements=requirements,
+            requirements=list(requirements),
             python_version=base_python_version,
             project_constraints=constraints,
         )
 
     def blueprint_hash(self) -> str:
         """
-        Generate a stable hash for an ExecutorBlueprint instance by serializing its pip_config, editable_install_module_sources,
+        Generate a stable hash for an ExecutorBlueprint instance by serializing its pip_config, sources,
         requirements and constraints in a sorted, consistent manner. This ensures that the hash value is
         independent of the order of requirements and consistent across interpreter sessions.
         Also cache the hash to only compute it once.
@@ -275,7 +285,7 @@ class ExecutorBlueprint(EnvBlueprint):
                 "pip_config": self.pip_config.model_dump(),
                 "requirements": self.requirements,
                 # Use the hash values and name to create a stable identity
-                "editable_install_module_sources": [
+                "sources": [
                     [source.metadata.hash_value, source.metadata.name, source.metadata.is_byte_code] for source in self.sources
                 ],
                 "python_version": self.python_version,
@@ -368,6 +378,7 @@ class ModuleInstallSpec:
 
     module_name: str
     module_version: str
+    editable_install: bool
     blueprint: ExecutorBlueprint
 
 

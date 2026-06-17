@@ -2765,7 +2765,9 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         :param mod_name: The top-level name of this module.
         """
         rel_py_file = os.path.relpath(py_file, start=plugin_dir)  # e.g. lsm/partial.py
-        return loader.convert_relative_path_to_module(os.path.join(mod_name, loader.PLUGIN_DIR, rel_py_file))  # inmanta_plugins/lsm/partial
+        return loader.convert_relative_path_to_module(
+            os.path.join(mod_name, loader.PLUGIN_DIR, rel_py_file)
+        )  # inmanta_plugins/lsm/partial
 
     def unload(self) -> None:
         """

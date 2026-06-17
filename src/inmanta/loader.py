@@ -35,7 +35,6 @@ from typing import TYPE_CHECKING, Optional
 
 import packaging
 from inmanta import const, module
-from inmanta.const import PLUGINS_PACKAGE
 from inmanta.data.model import InmantaModule, ModuleSource
 from inmanta.stable_api import stable_api
 from inmanta.util import hash_file_streaming
@@ -83,6 +82,7 @@ class CodeManager:
         self.__file_info: dict[str, ModuleSource] = {}
 
         self._types_to_agent: dict[str, set[str]] = defaultdict(set)
+        self._all_agents: set[str] = set()
 
         # Map of [inmanta_module_name, inmanta module]
         self.module_version_info: dict[str, "InmantaModule"] = {}
@@ -95,6 +95,7 @@ class CodeManager:
         """
         for id in resources:
             self._types_to_agent[id.entity_type].add(id.agent_name)
+            self._all_agents.add(id.agent_name)
 
     def register_code(
         self,
@@ -125,21 +126,19 @@ class CodeManager:
                 "or make sure to import the module in model code." % module_name
             )
 
+        editable_install = module_name in editable_installed_inmanta_modules
+
         # Register this module (if it is the first time we see it)
-        self._register_inmanta_module(module_name, loaded_modules[module_name], editable_installed_inmanta_modules)
+        self._register_inmanta_module(module_name, loaded_modules[module_name], editable_install)
 
         registered_agents: set[str] = self._types_to_agent.get(type_name, set())
-        self._update_agents_for_module(module_name, registered_agents)
-
-        # TODO make sure all agents get all editable installed modules (done in agent registration in
-        #  put_version (double-check))
-
+        self._update_agents_for_module(module_name, registered_agents, editable_install)
 
     def _register_inmanta_module(
         self,
         inmanta_module_name: str,
         module: "module.Module",
-        editable_installed_inmanta_modules: Mapping[packaging.utils.NormalizedName, packaging.version.Version],
+        editable_install: bool,
     ) -> None:
         if inmanta_module_name in self.module_version_info:
             # This module was already registered
@@ -148,13 +147,13 @@ class CodeManager:
         module_sources: list[ModuleSource] = []
 
         for absolute_path, fqn_module_name in module.get_plugin_files():
-            source_info = ModuleSource.from_path(absolute_path=absolute_path, name=fqn_module_name)
+            source_info = ModuleSource.from_path(absolute_path=absolute_path, name=fqn_module_name, editable_install=editable_install)
             self.__file_info[absolute_path] = source_info
             module_sources.append(source_info)
 
         files_metadata = [module_source.metadata for module_source in module_sources]
 
-        if inmanta_module_name in editable_installed_inmanta_modules:
+        if editable_install:
             # [editable install mode]
             # We need to store the relevant files in the db, i.e.:
             #    - python code in the inmanta_plugins dir
@@ -162,7 +161,6 @@ class CodeManager:
             #                               can reuse existing mechanism to transport reqs
             #    - setup.cfg  # TODO [stage 2]
             #    - pyproject.toml  # TODO [stage 2]
-
 
             requirements = self.get_inmanta_module_requirements(inmanta_module_name)
 
@@ -189,12 +187,17 @@ class CodeManager:
                 editable_install=False,
             )
 
-    def _update_agents_for_module(self, inmanta_module_name: str, registered_agents: set[str]) -> None:
+    def _update_agents_for_module(self, inmanta_module_name: str, registered_agents: set[str], editable_install: bool) -> None:
         """
         Helper method to add the given agents to the list of registered agents for the given Inmanta module.
         """
-        old_set: set[str] = set(self.module_version_info[inmanta_module_name].for_agents)
-        self.module_version_info[inmanta_module_name].for_agents = list(old_set.union(registered_agents))
+        if editable_install:
+            agent_list = list(self._all_agents)
+        else:
+            old_set: set[str] = set(self.module_version_info[inmanta_module_name].for_agents)
+            agent_list = list(old_set.union(registered_agents))
+
+        self.module_version_info[inmanta_module_name].for_agents = agent_list
 
     def get_object_source(self, instance: object) -> Optional[str]:
         """Get the path of the source file in which type_object is defined"""

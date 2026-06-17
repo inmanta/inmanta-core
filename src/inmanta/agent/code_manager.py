@@ -64,6 +64,7 @@ class CodeManager:
                 models.AgentModules.inmanta_module_name,
                 models.AgentModules.inmanta_module_version,
                 models.InmantaModule.requirements,
+                models.InmantaModule.editable_install,
                 models.ModuleFiles.python_module_name,
                 models.ModuleFiles.file_content_hash,
                 models.ModuleFiles.is_byte_code,
@@ -127,11 +128,10 @@ class CodeManager:
                     ModuleInstallSpec(
                         module_name=module_name,
                         module_version=first_row.inmanta_module_version,
+                        editable_install=first_row.editable_install,
                         blueprint=executor.ExecutorBlueprint(
                             pip_config=pip_config,
-                            requirements=first_row.requirements,  # TODO Can we shove package install modules in here ?
-                            # will it also work eg in case there are no editable installed modules ? (ie empty row_list loop)
-                            # never empty -> even packaged installed module will have files (with empty source)
+                            requirements=first_row.requirements,
                             sources=[
                                 ModuleSource(
                                     metadata=ModuleSourceMetadata(
@@ -139,6 +139,7 @@ class CodeManager:
                                         hash_value=row.file_content_hash,
                                         is_byte_code=row.is_byte_code,
                                     ),
+                                    install_on_disk=first_row.editable_install,
                                     source=row.source_file_content,
                                 )
                                 for row in rows_list
