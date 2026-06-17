@@ -1079,7 +1079,7 @@ class DummyCodeManager(CodeManager):
         self, environment: uuid.UUID, model_version: int, agent_name: str
     ) -> tuple[Collection[ModuleInstallSpec], executor.FailedModules]:
         dummyblueprint: ExecutorBlueprint = _get_dummy_blueprint_for(environment)
-        return ([ModuleInstallSpec("dummy_module", "0.0.0", dummyblueprint)], {})
+        return ([ModuleInstallSpec("dummy_module", "0.0.0", dummyblueprint, True)], {}) # editable_install = True, TODO test both
 
 
 async def is_agent_done(scheduler: ResourceScheduler, agent_name: str) -> bool:

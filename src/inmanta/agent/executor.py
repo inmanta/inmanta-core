@@ -378,8 +378,8 @@ class ModuleInstallSpec:
 
     module_name: str
     module_version: str
-    editable_install: bool
     blueprint: ExecutorBlueprint
+    editable_install: bool
 
 
 class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]):

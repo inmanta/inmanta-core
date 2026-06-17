@@ -133,7 +133,7 @@ class InmantaModule(Base):
                 $2,
                 $3,
                 $4,
-                $7
+                $5
             )
             ON CONFLICT DO NOTHING;
         """
