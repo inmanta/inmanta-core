@@ -361,6 +361,8 @@ class TaskRunner:
                 )
             self._scheduler._work.agent_queues.task_done(self.endpoint, work_item.task)
 
+        # not under lock because this would pass control back to the IO loop, which might invalidate the atomicity of the
+        # preceding self.status check in the while condition.
         self.status = AgentStatus.STOPPED
 
     def is_running(self) -> bool:
