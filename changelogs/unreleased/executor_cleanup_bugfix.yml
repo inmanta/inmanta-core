@@ -1,0 +1,5 @@
+description: >
+  - Fix bug in cleanup logic that would cleanup idle executors too soon
+  - Fix bug that would prevent poolmanager to cleanup idle pool members after a restart
+change-type: patch
+destination-branches: [master, iso9, iso8]
