@@ -56,7 +56,7 @@ def code_for(bp: executor.ExecutorBlueprint) -> list[executor.ModuleInstallSpec]
     return [executor.ModuleInstallSpec("test", "abcdef", bp, True)]
 
 
-async def test_process_manager( #  TODO fixme
+async def test_process_manager(
     environment, pip_index, set_custom_executor_policy, mpmanager_light: forking_executor.MPManager
 ) -> None:
     """
@@ -325,7 +325,7 @@ def trace_error_26(func):
 
 @with_timeout(30)
 @trace_error_26
-async def test_executor_creation_and_reuse(pip_index: PipIndex, mpmanager_light: forking_executor.MPManager, caplog) -> None: #  TODO fixme
+async def test_executor_creation_and_reuse(pip_index: PipIndex, mpmanager_light: forking_executor.MPManager, caplog) -> None:
     """
     This test verifies the creation and reuse of executors based on their blueprints. It checks whether
     the concurrency aspects and the locking mechanisms work as intended.
@@ -413,7 +413,7 @@ def test():
 
 @with_timeout(30)
 @trace_error_26
-async def test_executor_creation_and_venv_usage(  # TODO fixme
+async def test_executor_creation_and_venv_usage(
     server_config, pip_index: PipIndex, mpmanager_light: forking_executor.MPManager
 ) -> None:
     """
@@ -483,6 +483,7 @@ def test():
     venv_dir = pathlib.Path(environment_manager.envs_dir)
 
     assert len([e for e in venv_dir.iterdir()]) == 3, "We should have three Virtual Environments for our 3 executors!"
+
     executor_1_venv_status_file = (
         pathlib.Path(executor_1.process.executor_virtual_env.env_path) / ".inmanta" / const.INMANTA_VENV_STATUS_FILENAME
     )

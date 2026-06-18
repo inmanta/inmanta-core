@@ -63,7 +63,7 @@ def set_custom_executor_policy(server_config):
     inmanta.agent.config.agent_executor_retention_time.set(str(old_retention_value))
 
 
-async def test_executor_server(set_custom_executor_policy, mpmanager: MPManager, client, environment, caplog): #  TODO fixme
+async def test_executor_server(set_custom_executor_policy, mpmanager: MPManager, client, environment, caplog):
     """
     Test the MPManager, this includes
 

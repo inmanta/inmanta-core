@@ -238,7 +238,7 @@ class ExecutorBlueprint(EnvBlueprint):
             if module_install_spec.editable_install:
                 # Editable install:
                 # install the requirements first, and then the source from the database
-                requirements.union(module_install_spec.blueprint.requirements)
+                requirements = requirements.union(module_install_spec.blueprint.requirements)
             else:
                 # Package install:
                 # let pip handle the dependencies when installing the module as a package
