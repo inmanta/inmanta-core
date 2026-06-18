@@ -1,5 +1,5 @@
 """
-Copyright 2024 Inmanta
+Copyright 2026 Inmanta
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -23,7 +23,7 @@ from inmanta import resources
 from inmanta.agent.handler import provider, CRUDHandler, HandlerContext, ResourcePurged
 
 
-@resources.resource("minimalwaitingmodule::WaitForFileRemoval", agent="agent", id_attribute="name")
+@resources.resource("minimalwaitingmodulev2::WaitForFileRemoval", agent="agent", id_attribute="name")
 class WaitForFileRemoval(resources.PurgeableResource):
     """
     A resource that remains in the deploying state as long as the file at `path` exists.
@@ -36,7 +36,7 @@ class WaitForFileRemoval(resources.PurgeableResource):
     fields = ("name", "agent", "path")
 
 
-@provider("minimalwaitingmodule::WaitForFileRemoval", name="wait_for_file_removal")
+@provider("minimalwaitingmodulev2::WaitForFileRemoval", name="wait_for_file_removal")
 class WaitForFileRemovalHandler(CRUDHandler):
     def read_resource(self, ctx: HandlerContext, resource: WaitForFileRemoval) -> None:
         if os.path.exists(resource.path):
