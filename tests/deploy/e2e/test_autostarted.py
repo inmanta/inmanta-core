@@ -552,7 +552,7 @@ async def wait_for_consistent_children(
 @pytest.mark.parametrize(
     "auto_start_agent,halt_during_deployment", [(True, False), (True, True)]
 )  # this overrides a fixture to allow the agent to fork!
-async def test_halt_deploy( #  TODO fixme (minimalwaitingmodule was v1)
+async def test_halt_deploy(
     snippetcompiler,
     server,
     ensure_resource_tracker_is_started,
@@ -562,6 +562,8 @@ async def test_halt_deploy( #  TODO fixme (minimalwaitingmodule was v1)
     tmp_path,
     auto_start_agent: bool,
     halt_during_deployment: bool,
+    local_module_package_index,
+    modules_v2_dir: str,
 ):
     """
     Verify that the new scheduler can actually halt an ongoing deployment and can resume it when the user requests it
@@ -580,12 +582,20 @@ async def test_halt_deploy( #  TODO fixme (minimalwaitingmodule was v1)
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     assert len(agentmanager.sessions) == 1
 
+    module_dir = os.path.join(modules_v2_dir, "minimalwaitingmodulev2")
+
     model = f"""
-        import minimalwaitingmodule
-        minimalwaitingmodule::WaitForFileRemoval(name="test", agent="agent1", path="{file_to_remove}")
+        import minimalwaitingmodulev2
+        minimalwaitingmodulev2::WaitForFileRemoval(name="test", agent="agent1", path="{file_to_remove}")
     """
 
-    snippetcompiler.setup_for_snippet(model, ministd=True, index_url="https://pypi.org/simple")
+    snippetcompiler.setup_for_snippet(
+        model,
+        autostd=True,
+        index_url=local_module_package_index,
+        install_project=True,
+        install_v2_modules=[LocalPackagePath(path=module_dir, editable=True)],
+    )
 
     # Now, let's deploy some resources
     version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
@@ -637,7 +647,13 @@ async def test_halt_deploy( #  TODO fixme (minimalwaitingmodule was v1)
         expected_terminated_process=3,
     )
 
-    snippetcompiler.setup_for_snippet(model, ministd=True, index_url="https://pypi.org/simple")
+    snippetcompiler.setup_for_snippet(
+        model,
+        autostd=True,
+        index_url=local_module_package_index,
+        install_project=True,
+        install_v2_modules=[LocalPackagePath(path=module_dir, editable=True)],
+    )
     version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
     result = await client.release_version(environment, version, push=False)
     assert result.code == 200
@@ -697,7 +713,7 @@ async def test_halt_deploy( #  TODO fixme (minimalwaitingmodule was v1)
 
 @pytest.mark.slowtest
 @pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
-async def test_pause_agent_deploy( #  TODO fixme (minimalwaitingmodule was v1)
+async def test_pause_agent_deploy(  # TODO fixme (executor reaping, v2)
     snippetcompiler,
     shortlived_executors,
     server,
@@ -707,6 +723,8 @@ async def test_pause_agent_deploy( #  TODO fixme (minimalwaitingmodule was v1)
     environment,
     auto_start_agent: bool,
     tmp_path,
+    local_module_package_index,
+    modules_v2_dir: str,
 ):
     """
     Verify that the new scheduler can pause running agent:
@@ -727,16 +745,19 @@ async def test_pause_agent_deploy( #  TODO fixme (minimalwaitingmodule was v1)
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     assert len(agentmanager.sessions) == 1
 
+    module_dir = os.path.join(modules_v2_dir, "minimalwaitingmodulev2")
     snippetcompiler.setup_for_snippet(
         f"""
-import minimalwaitingmodule
+import minimalwaitingmodulev2
 
-a = minimalwaitingmodule::WaitForFileRemoval(name="test_sleep", agent="agent1", path="{file_to_remove1}")
-b = minimalwaitingmodule::WaitForFileRemoval(name="test_sleep2", agent="agent1", path="{file_to_remove2}", requires=[a])
-minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent1", path="{file_to_remove3}", requires=[b])
+a = minimalwaitingmodulev2::WaitForFileRemoval(name="test_sleep", agent="agent1", path="{file_to_remove1}")
+b = minimalwaitingmodulev2::WaitForFileRemoval(name="test_sleep2", agent="agent1", path="{file_to_remove2}", requires=[a])
+minimalwaitingmodulev2::WaitForFileRemoval(name="test_sleep3", agent="agent1", path="{file_to_remove3}", requires=[b])
 """,
-        ministd=True,
-        index_url="https://pypi.org/simple",
+        autostd=True,
+        index_url=local_module_package_index,
+        install_project=True,
+        install_v2_modules=[LocalPackagePath(path=module_dir, editable=True)],
     )
 
     # Now, let's deploy some resources
@@ -791,7 +812,7 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent1", pat
         should_scheduler_be_defined=True,
         should_fork_server_be_defined=True,
         nb_executor_to_be_defined=0,
-        timeout=2,
+        timeout=10,
     )
 
     for f in [file_to_remove1, file_to_remove2, file_to_remove3]:
@@ -849,7 +870,7 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent1", pat
 
 @pytest.mark.slowtest
 @pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
-async def test_agent_paused_scheduler_server_restart( #  TODO fixme (minimaldeployfailuremodule was v1)
+async def test_agent_paused_scheduler_server_restart(
     snippetcompiler,
     shortlived_executors,
     server,
@@ -861,6 +882,8 @@ async def test_agent_paused_scheduler_server_restart( #  TODO fixme (minimaldepl
     async_finalizer,
     monkeypatch,
     tmp_path,
+    local_module_package_index,
+    modules_v2_dir,
 ):
     """
     Verify that the new scheduler does not alter the state of agent after a restart:
@@ -898,16 +921,20 @@ async def test_agent_paused_scheduler_server_restart( #  TODO fixme (minimaldepl
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     assert len(agentmanager.sessions) == 1
 
+    module_dir = os.path.join(modules_v2_dir, "minimaldeployfailuremodulev2")
+
     snippetcompiler.setup_for_snippet(
         f"""
-import minimaldeployfailuremodule
+import minimaldeployfailuremodulev2
 
-agent1_file_1 = minimaldeployfailuremodule::FailBasedOnFileContent(name="test_fail_1", agent="agent1", control_failure_file="{control_failure_file_1}")
-agent1_file_2 = minimaldeployfailuremodule::FailBasedOnFileContent(name="test_fail_2", agent="agent1", control_failure_file="{control_failure_file_2}")
-agent2_file_1 = minimaldeployfailuremodule::FailBasedOnFileContent(name="test_fail_3", agent="agent2", control_failure_file="{control_failure_file_1}")
+agent1_file_1 = minimaldeployfailuremodulev2::FailBasedOnFileContent(name="test_fail_1", agent="agent1", control_failure_file="{control_failure_file_1}")
+agent1_file_2 = minimaldeployfailuremodulev2::FailBasedOnFileContent(name="test_fail_2", agent="agent1", control_failure_file="{control_failure_file_2}")
+agent2_file_1 = minimaldeployfailuremodulev2::FailBasedOnFileContent(name="test_fail_3", agent="agent2", control_failure_file="{control_failure_file_1}")
     """,  # noqa: E501
-        ministd=True,
-        index_url="https://pypi.org/simple",
+        autostd=True,
+        index_url=local_module_package_index,
+        install_project=True,
+        install_v2_modules=[LocalPackagePath(path=module_dir, editable=True)],
     )
 
     # Now, let's deploy resources
@@ -977,7 +1004,7 @@ agent2_file_1 = minimaldeployfailuremodule::FailBasedOnFileContent(name="test_fa
 
 @pytest.mark.slowtest
 @pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
-async def test_agent_paused_should_remain_paused_after_environment_resume( #  TODO fixme (minimalwaitingmodule was v1)
+async def test_agent_paused_should_remain_paused_after_environment_resume(  # TODO fixme (executor reaping, v2)
     snippetcompiler,
     shortlived_executors,
     server,
@@ -987,6 +1014,8 @@ async def test_agent_paused_should_remain_paused_after_environment_resume( #  TO
     environment,
     auto_start_agent: bool,
     tmp_path,
+    local_module_package_index,
+    modules_v2_dir: str,
 ):
     """
     Verify that the new scheduler does not alter the state of the agent after resuming the environment
@@ -1006,16 +1035,19 @@ async def test_agent_paused_should_remain_paused_after_environment_resume( #  TO
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     assert len(agentmanager.sessions) == 1
 
+    module_dir = os.path.join(modules_v2_dir, "minimalwaitingmodulev2")
     snippetcompiler.setup_for_snippet(
         f"""
-import minimalwaitingmodule
+import minimalwaitingmodulev2
 
-a = minimalwaitingmodule::WaitForFileRemoval(name="test_sleep", agent="agent1", path="{file_to_remove1}")
-b = minimalwaitingmodule::WaitForFileRemoval(name="test_sleep2", agent="agent1", path="{file_to_remove2}", requires=[a])
-c = minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent1", path="{file_to_remove3}", requires=[b])
+a = minimalwaitingmodulev2::WaitForFileRemoval(name="test_sleep", agent="agent1", path="{file_to_remove1}")
+b = minimalwaitingmodulev2::WaitForFileRemoval(name="test_sleep2", agent="agent1", path="{file_to_remove2}", requires=[a])
+c = minimalwaitingmodulev2::WaitForFileRemoval(name="test_sleep3", agent="agent1", path="{file_to_remove3}", requires=[b])
 """,
-        ministd=True,
-        index_url="https://pypi.org/simple",
+        autostd=True,
+        index_url=local_module_package_index,
+        install_project=True,
+        install_v2_modules=[LocalPackagePath(path=module_dir, editable=True)],
     )
 
     # Now, let's deploy some resources
@@ -1274,7 +1306,7 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent3", pat
 
 @pytest.mark.slowtest
 @pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
-async def test_scheduler_killed( #  TODO fixme minimalwaitingmodule was v1
+async def test_scheduler_killed(
     snippetcompiler,
     server,
     ensure_resource_tracker_is_started,
@@ -1284,6 +1316,8 @@ async def test_scheduler_killed( #  TODO fixme minimalwaitingmodule was v1
     auto_start_agent: bool,
     async_finalizer,
     tmp_path,
+    local_module_package_index,
+    modules_v2_dir: str,
 ):
     """
     Verify that the AgentView is updated accordingly to the state of the Scheduler:
@@ -1306,11 +1340,19 @@ async def test_scheduler_killed( #  TODO fixme minimalwaitingmodule was v1
     for children in start_state.children:
         assert children.is_running()
 
+    module_dir = os.path.join(modules_v2_dir, "minimalwaitingmodulev2")
+
     model = f"""
-import minimalwaitingmodule
-minimalwaitingmodule::WaitForFileRemoval(name="test_sleep", agent="agent1", path="{file_to_remove}")
+import minimalwaitingmodulev2
+minimalwaitingmodulev2::WaitForFileRemoval(name="test_sleep", agent="agent1", path="{file_to_remove}")
 """
-    snippetcompiler.setup_for_snippet(model, ministd=True, index_url="https://pypi.org/simple")
+    snippetcompiler.setup_for_snippet(
+        model,
+        autostd=True,
+        index_url=local_module_package_index,
+        install_project=True,
+        install_v2_modules=[LocalPackagePath(path=module_dir, editable=True)],
+    )
 
     # Now, let's deploy a resource
     version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
@@ -1378,7 +1420,13 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep", agent="agent1", path
     # We pause the executor so it doesn't try to deploy the resource
     await client.agent_action(tid=environment, name="agent1", action=AgentAction.pause.value)
     # Let's restart everything and check that the resource is considered as available
-    snippetcompiler.setup_for_snippet(model, ministd=True, index_url="https://pypi.org/simple")
+    snippetcompiler.setup_for_snippet(
+        model,
+        autostd=True,
+        index_url=local_module_package_index,
+        install_project=True,
+        install_v2_modules=[LocalPackagePath(path=module_dir, editable=True)],
+    )
     version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
     result = await client.release_version(environment, version, push=False)
     assert result.code == 200
@@ -1396,61 +1444,7 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep", agent="agent1", path
     await retry_limited(wait_for_available, timeout=5)
 
 
-#
-# def test_load_module_recursive_complex_module_dependencies(local_module_package_index: str, snippetcompiler) -> None:
-#     """
-#     Test whether the load_module_recursive() method works correctly when complex, circular dependencies exist between modules.
-#
-#     Dependency graph:
-#
-#     complex_module_dependencies_mod1  --------------------->  complex_module_dependencies_mod2
-#            |   ^                      <---------------------             |   ^
-#            |   |                                                         |   |
-#            v   |                                                         v   |
-#     complex_module_dependencies_mod1::submod                  complex_module_dependencies_mod2::submod
-#     """
-#     project = snippetcompiler.setup_for_snippet(
-#         snippet="import complex_module_dependencies_mod1",
-#         autostd=False,
-#         index_url=local_module_package_index,
-#         python_requires=[inmanta.util.parse_requirement(requirement="inmanta-module-complex-module-dependencies-mod1")],
-#         install_project=False,
-#     )
-#
-
-    # V2 module
-    # module_name_v2 =
-    # module_copy_dir = os.path.join(tmpdir, module_name_v2)
-    # shutil.copytree(module_dir, module_copy_dir)
-    # dot_git_dir = os.path.join(module_copy_dir, ".git")
-    # assert not os.path.exists(dot_git_dir)
-    # # Non-editable install can never be checked for versioning
-    # compile_and_assert_warning(
-    #     module_name_v2,
-    #     needs_versioning_warning=False,
-    #     install_v2_modules=[LocalPackagePath(path=module_copy_dir, editable=False)],
-    # )
-    # compile_and_assert_warning(
-    #     module_name_v2,
-    #     needs_versioning_warning=True,
-    #     install_v2_modules=[LocalPackagePath(path=module_copy_dir, editable=True)],
-    # )
-    # os.mkdir(dot_git_dir)
-    # # Non-editable install can never be checked for versioning
-    # compile_and_assert_warning(
-    #     module_name_v2,
-    #     needs_versioning_warning=False,
-    #     install_v2_modules=[LocalPackagePath(path=module_copy_dir, editable=False)],
-    # )
-    # module_dir = os.path.join(modules_v2_dir, "minimalwaitingmodulev2")
-    #
-    # compile_and_assert_warning(
-    #     module_name_v2,
-    #     needs_versioning_warning=False,
-    #     install_v2_modules=[LocalPackagePath(path=module_dir, editable=True)],
-    # )
-
-async def test_rps_state_deploying( #  TODO fixme minimalwaitingmodulev was v1
+async def test_rps_state_deploying(
     snippetcompiler,
     server,
     ensure_resource_tracker_is_started,
@@ -1477,7 +1471,13 @@ async def test_rps_state_deploying( #  TODO fixme minimalwaitingmodulev was v1
 import minimalwaitingmodulev2
 minimalwaitingmodulev2::WaitForFileRemoval(name="test_sleep", agent="agent1", path="{file_to_remove}")
 """
-    snippetcompiler.setup_for_snippet(model, autostd=True,index_url=local_module_package_index, install_project=True,install_v2_modules=[LocalPackagePath(path=module_dir, editable=True)])
+    snippetcompiler.setup_for_snippet(
+        model,
+        autostd=True,
+        index_url=local_module_package_index,
+        install_project=True,
+        install_v2_modules=[LocalPackagePath(path=module_dir, editable=True)],
+    )
 
     # Deploy a resource
     version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
@@ -1504,7 +1504,7 @@ minimalwaitingmodulev2::WaitForFileRemoval(name="test_sleep", agent="agent1", pa
 
 @pytest.mark.slowtest
 @pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
-async def test_code_install_success_code_load_error_for_provider( #  TODO fixme successhandlermodule was v1
+async def test_code_install_success_code_load_error_for_provider(
     snippetcompiler,
     server,
     ensure_resource_tracker_is_started,
@@ -1515,6 +1515,8 @@ async def test_code_install_success_code_load_error_for_provider( #  TODO fixme 
     async_finalizer,
     monkeypatch,
     tmp_path,
+    modules_v2_dir,
+    local_module_package_index,
 ):
     """
     Make sure that if an agent encounters a code loading error, no resource should be deployed.
@@ -1526,15 +1528,20 @@ async def test_code_install_success_code_load_error_for_provider( #  TODO fixme 
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     assert len(agentmanager.sessions) == 1
 
+    successhandlermodulev2_dir = os.path.join(modules_v2_dir, "successhandlermodulev2")
+    minimalinstallfailuremodulev2_dir = os.path.join(modules_v2_dir, "minimalinstallfailuremodulev2")
+
     # Baseline: check that agent can successfully deploy resources of type SuccessResource
     snippetcompiler.setup_for_snippet(
         """
-    import successhandlermodule
+    import successhandlermodulev2
 
-    r_0 = successhandlermodule::SuccessResource(name="test_success_r_0", agent="agent_1")
+    r_0 = successhandlermodulev2::SuccessResource(name="test_success_r_0", agent="agent_1")
         """,  # noqa: E501
-        ministd=True,
-        index_url="https://pypi.org/simple",
+        autostd=True,
+        index_url=local_module_package_index,
+        install_project=True,
+        install_v2_modules=[LocalPackagePath(path=successhandlermodulev2_dir, editable=True)],
     )
 
     # Now, let's deploy resources
@@ -1544,17 +1551,22 @@ async def test_code_install_success_code_load_error_for_provider( #  TODO fixme 
 
     await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.deployed)
 
-    # Introduce a code loading error (via a trick in minimalinstallfailuremodule) and make sure no resource is deployed.
+    # Introduce a code loading error (via a trick in minimalinstallfailuremodulev2) and make sure no resource is deployed.
     snippetcompiler.setup_for_snippet(
         """
-    import minimalinstallfailuremodule
-    import successhandlermodule
+    import minimalinstallfailuremodulev2
+    import successhandlermodulev2
 
-    r_1 = minimalinstallfailuremodule::CodeInstallErrorResource(name="test_failure_r_1", agent="agent_1")
-    r_2 = successhandlermodule::SuccessResource(name="test_success_r_2", agent="agent_1")
+    r_1 = minimalinstallfailuremodulev2::CodeInstallErrorResource(name="test_failure_r_1", agent="agent_1")
+    r_2 = successhandlermodulev2::SuccessResource(name="test_success_r_2", agent="agent_1")
         """,  # noqa: E501
-        ministd=True,
-        index_url="https://pypi.org/simple",
+        autostd=True,
+        index_url=local_module_package_index,
+        install_project=True,
+        install_v2_modules=[
+            LocalPackagePath(path=successhandlermodulev2_dir, editable=True),
+            LocalPackagePath(path=minimalinstallfailuremodulev2_dir, editable=True),
+        ],
     )
 
     # Now, let's deploy resources
@@ -1567,7 +1579,7 @@ async def test_code_install_success_code_load_error_for_provider( #  TODO fixme 
 
 @pytest.mark.slowtest
 @pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
-async def test_code_install_success_code_load_error_for_reference( #  TODO fixme was successhandlermodule
+async def test_code_install_success_code_load_error_for_reference(
     snippetcompiler,
     server,
     ensure_resource_tracker_is_started,
@@ -1578,6 +1590,8 @@ async def test_code_install_success_code_load_error_for_reference( #  TODO fixme
     async_finalizer,
     monkeypatch,
     tmp_path,
+    modules_v2_dir,
+    local_module_package_index,
 ):
     """
     Test that the following behavior still holds when using references: when an agent
@@ -1590,27 +1604,33 @@ async def test_code_install_success_code_load_error_for_reference( #  TODO fixme
     # Make sure the session with the Scheduler is there
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     assert len(agentmanager.sessions) == 1
+
+    successhandlermodulev2_dir = os.path.join(modules_v2_dir, "successhandlermodulev2")
+    minimalinstallfailuremodulev2_dir = os.path.join(modules_v2_dir, "minimalinstallfailuremodulev2")
+
     # Baseline: check that agent can successfully deploy resources of type SuccessResourceWithReference
     snippetcompiler.setup_for_snippet(
         """
-    import successhandlermodule
+    import successhandlermodulev2
 
-    r_0 = successhandlermodule::SuccessResourceWithReference(
+    r_0 = successhandlermodulev2::SuccessResourceWithReference(
         name="test_success_r_0",
         agent="agent_1",
         my_attr="plain_string"
      )
 
-    ref = successhandlermodule::create_my_ref("base_str")
+    ref = successhandlermodulev2::create_my_ref("base_str")
 
-    r_1 = successhandlermodule::SuccessResourceWithReference(
+    r_1 = successhandlermodulev2::SuccessResourceWithReference(
         name="test_success_r_1",
         agent="agent_1",
         my_attr=ref
      )
         """,  # noqa: E501
-        ministd=True,
-        index_url="https://pypi.org/simple",
+        autostd=True,
+        index_url=local_module_package_index,
+        install_project=True,
+        install_v2_modules=[LocalPackagePath(path=successhandlermodulev2_dir, editable=True)],
     )
 
     # Now, let's deploy resources
@@ -1624,24 +1644,29 @@ async def test_code_install_success_code_load_error_for_reference( #  TODO fixme
 
     snippetcompiler.setup_for_snippet(
         """
-    import minimalinstallfailuremodule
-    import successhandlermodule
+    import minimalinstallfailuremodulev2
+    import successhandlermodulev2
 
-    r_2 = successhandlermodule::SuccessResourceWithReference(
+    r_2 = successhandlermodulev2::SuccessResourceWithReference(
         name="test_success_r_2",
         agent="agent_1",
         my_attr="plain_string"
      )
 
-    ref = minimalinstallfailuremodule::create_my_ref("base_str")
-    r_3 = successhandlermodule::SuccessResourceWithReference(
+    ref = minimalinstallfailuremodulev2::create_my_ref("base_str")
+    r_3 = successhandlermodulev2::SuccessResourceWithReference(
         name="test_failure_r_3",
         agent="agent_1",
         my_attr=ref
      )
         """,  # noqa: E501
-        ministd=True,
-        index_url="https://pypi.org/simple",
+        autostd=True,
+        index_url=local_module_package_index,
+        install_project=True,
+        install_v2_modules=[
+            LocalPackagePath(path=successhandlermodulev2_dir, editable=True),
+            LocalPackagePath(path=minimalinstallfailuremodulev2_dir, editable=True),
+        ],
     )
 
     # Now, let's deploy resources

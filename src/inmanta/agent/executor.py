@@ -242,7 +242,12 @@ class ExecutorBlueprint(EnvBlueprint):
             else:
                 # Package install:
                 # let pip handle the dependencies when installing the module as a package
-                requirements.add(f"{module_install_spec.module_name}=={module_install_spec.module_version}")
+                requirements.add(
+                    (
+                        f"{MODULE_PKG_NAME_PREFIX}{module_install_spec.module_name.replace('_', '-')}=="
+                        f"{module_install_spec.module_version}"
+                    )
+                )
 
         # Check that constraints set at the project level are consistent across all modules
         all_constraints = {cd.blueprint.project_constraints for cd in code}

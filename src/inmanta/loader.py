@@ -34,6 +34,7 @@ from itertools import chain
 from typing import TYPE_CHECKING, Optional
 
 import packaging
+import packaging.utils
 from inmanta import const, module
 from inmanta.data.model import InmantaModule, ModuleSource
 from inmanta.stable_api import stable_api
@@ -126,7 +127,10 @@ class CodeManager:
                 "or make sure to import the module in model code." % module_name
             )
 
-        editable_install = module_name in editable_installed_inmanta_modules
+        editable_install = (
+            packaging.utils.canonicalize_name(module.ModuleV2Source.get_package_name_for(module_name))
+            in editable_installed_inmanta_modules
+        )
 
         # Register this module (if it is the first time we see it)
         self._register_inmanta_module(module_name, loaded_modules[module_name], editable_install)

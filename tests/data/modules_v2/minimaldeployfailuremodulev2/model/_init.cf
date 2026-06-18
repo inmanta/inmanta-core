@@ -1,0 +1,14 @@
+entity FailBasedOnFileContent extends std::PurgeableResource:
+    """
+    Resource that will fail or succeed its deploy based on the
+    boolean value of the `fail_deploy` key in the json file at
+    the `control_failure_file` path
+    """
+    string name
+    string agent
+    string control_failure_file
+    bool managed=true
+    bool purged=false
+end
+
+implement FailBasedOnFileContent using std::none
