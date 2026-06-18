@@ -117,6 +117,7 @@ async def test_agent_installs_dependency_containing_extras(
             ],
             requirements=["pkg[optional-a]"],
             for_agents=["agent1"],
+            editable_install = True
         )
     }
 

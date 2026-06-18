@@ -619,6 +619,7 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
         :return: An instance of ExecutorVirtualEnvironment representing the created or reused environment.
         """
         internal_id = member_id.blueprint_hash()
+        LOGGER.debug(f"{internal_id=}")
         env_dir_name: str = internal_id
         env_dir: str = os.path.join(self.envs_dir, env_dir_name)
 

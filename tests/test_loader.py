@@ -51,6 +51,7 @@ def get_module_source(module: str, code: str) -> ModuleSource:
             is_byte_code=False,
         ),
         source=data,
+        install_on_disk=True,
     )
 
 
@@ -61,7 +62,7 @@ def get_module_source(module: str, code: str) -> ModuleSource:
         (False, {"lorem"}),
     ],
 )
-def test_code_manager(tmpdir: py.path.local, deactive_venv, install_all_dependencies, expected_dependencies):
+def test_code_manager(tmpdir: py.path.local, deactive_venv, install_all_dependencies, expected_dependencies): #  TODO fixme
     """Verify the code manager"""
     original_project_dir: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "plugins_project")
     project_dir = os.path.join(tmpdir, "plugins_project")

@@ -63,7 +63,7 @@ def set_custom_executor_policy(server_config):
     inmanta.agent.config.agent_executor_retention_time.set(str(old_retention_value))
 
 
-async def test_executor_server(set_custom_executor_policy, mpmanager: MPManager, client, environment, caplog):
+async def test_executor_server(set_custom_executor_policy, mpmanager: MPManager, client, environment, caplog): #  TODO fixme
     """
     Test the MPManager, this includes
 
@@ -95,7 +95,7 @@ async def test_executor_server(set_custom_executor_policy, mpmanager: MPManager,
         sources=[],
         python_version=sys.version_info[:2],
     )  # No pip
-    simplest = await manager.get_executor("agent1", "test", [executor.ModuleInstallSpec("test", "123456", simplest_blueprint)])
+    simplest = await manager.get_executor("agent1", "test", [executor.ModuleInstallSpec("test", "123456", simplest_blueprint,editable_install=True,)])
 
     # check communications
     result = await simplest.call(Echo(["aaaa"]))
@@ -117,6 +117,7 @@ def test():
             is_byte_code=False,
         ),
         source=direct_content,
+        install_on_disk=True,
     )
     # Via server: source is sent via server
     server_content = """
@@ -131,6 +132,7 @@ def test():
             is_byte_code=False,
         ),
         source=server_content,
+        install_on_disk=True,
     )
     # Upload
     res = await client.upload_file(id=server_content_hash, content=base64.b64encode(server_content).decode("ascii"))
@@ -156,8 +158,8 @@ def test():
     )
 
     # Full runner install requires pip install, this can be slow, so we build it first to prevent the other one from timing out
-    oldest_executor = await manager.get_executor("agent2", "internal:", [executor.ModuleInstallSpec("test", 1, dummy)])
-    full_runner = await manager.get_executor("agent2", "internal:", [executor.ModuleInstallSpec("test:DDD:Test", 1, full)])
+    oldest_executor = await manager.get_executor("agent2", "internal:", [executor.ModuleInstallSpec("test", 1, dummy,editable_install=True)])
+    full_runner = await manager.get_executor("agent2", "internal:", [executor.ModuleInstallSpec("test:DDD:Test", 1, full,editable_install=True)])
 
     assert oldest_executor.id in manager.pool
 
@@ -183,7 +185,7 @@ def test():
         return oldest_executor not in manager.agent_map["agent2"]
 
     with caplog.at_level(logging.DEBUG):
-        _ = await manager.get_executor("agent2", "internal:", [executor.ModuleInstallSpec("test::Test", "1", dummy)])
+        _ = await manager.get_executor("agent2", "internal:", [executor.ModuleInstallSpec("test::Test", "1", dummy,editable_install=True)])
         assert not oldest_executor.running
         assert full_runner.running
         await retry_limited(oldest_gone, 1)
@@ -201,7 +203,7 @@ def test():
         await x.join()
     await retry_limited(lambda: len(manager.agent_map["agent2"]) == 0, 10)
 
-    full_runner = await manager.get_executor("agent2", "internal:", [executor.ModuleInstallSpec("test::Test", "1", full)])
+    full_runner = await manager.get_executor("agent2", "internal:", [executor.ModuleInstallSpec("test::Test", "1", full,editable_install=True)])
 
     await retry_limited(lambda: len(manager.agent_map["agent2"]) == 1, 1)
 
@@ -283,6 +285,7 @@ def test_hash_with_duplicates():
             is_byte_code=False,
         ),
         source="foo".encode(),
+        install_on_disk=True,
     )
     requirement = "setuptools"
     simple = ExecutorBlueprint(

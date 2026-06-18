@@ -551,7 +551,7 @@ async def wait_for_consistent_children(
 @pytest.mark.parametrize(
     "auto_start_agent,halt_during_deployment", [(True, False), (True, True)]
 )  # this overrides a fixture to allow the agent to fork!
-async def test_halt_deploy(
+async def test_halt_deploy( #  TODO fixme
     snippetcompiler,
     server,
     ensure_resource_tracker_is_started,
@@ -696,7 +696,7 @@ async def test_halt_deploy(
 
 @pytest.mark.slowtest
 @pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
-async def test_pause_agent_deploy(
+async def test_pause_agent_deploy( #  TODO fixme
     snippetcompiler,
     shortlived_executors,
     server,
@@ -848,7 +848,7 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent1", pat
 
 @pytest.mark.slowtest
 @pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
-async def test_agent_paused_scheduler_server_restart(
+async def test_agent_paused_scheduler_server_restart( #  TODO fixme
     snippetcompiler,
     shortlived_executors,
     server,
@@ -976,7 +976,7 @@ agent2_file_1 = minimaldeployfailuremodule::FailBasedOnFileContent(name="test_fa
 
 @pytest.mark.slowtest
 @pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
-async def test_agent_paused_should_remain_paused_after_environment_resume(
+async def test_agent_paused_should_remain_paused_after_environment_resume( #  TODO fixme
     snippetcompiler,
     shortlived_executors,
     server,
@@ -1273,7 +1273,7 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent3", pat
 
 @pytest.mark.slowtest
 @pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
-async def test_scheduler_killed(
+async def test_scheduler_killed( #  TODO fixme
     snippetcompiler,
     server,
     ensure_resource_tracker_is_started,
@@ -1395,7 +1395,7 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep", agent="agent1", path
     await retry_limited(wait_for_available, timeout=5)
 
 
-async def test_rps_state_deploying(
+async def test_rps_state_deploying( #  TODO fixme
     snippetcompiler,
     server,
     ensure_resource_tracker_is_started,
@@ -1404,6 +1404,7 @@ async def test_rps_state_deploying(
     environment,
     async_finalizer,
     tmp_path,
+    local_module_package_index,
 ):
     """
     Verify that the is_deploying flag is correctly set when deploying starts and finishes
@@ -1415,10 +1416,10 @@ async def test_rps_state_deploying(
     config.Config.set("config", "environment", environment)
 
     model = f"""
-import minimalwaitingmodule
-minimalwaitingmodule::WaitForFileRemoval(name="test_sleep", agent="agent1", path="{file_to_remove}")
+import minimalwaitingmodulev2
+minimalwaitingmodulev2::WaitForFileRemoval(name="test_sleep", agent="agent1", path="{file_to_remove}")
 """
-    snippetcompiler.setup_for_snippet(model, ministd=True, index_url="https://pypi.org/simple")
+    snippetcompiler.setup_for_snippet(model, autostd=True,index_url=local_module_package_index)
 
     # Deploy a resource
     version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
@@ -1445,7 +1446,7 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep", agent="agent1", path
 
 @pytest.mark.slowtest
 @pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
-async def test_code_install_success_code_load_error_for_provider(
+async def test_code_install_success_code_load_error_for_provider( #  TODO fixme
     snippetcompiler,
     server,
     ensure_resource_tracker_is_started,
@@ -1508,7 +1509,7 @@ async def test_code_install_success_code_load_error_for_provider(
 
 @pytest.mark.slowtest
 @pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
-async def test_code_install_success_code_load_error_for_reference(
+async def test_code_install_success_code_load_error_for_reference( #  TODO fixme
     snippetcompiler,
     server,
     ensure_resource_tracker_is_started,
