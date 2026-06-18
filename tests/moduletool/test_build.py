@@ -242,7 +242,7 @@ def test_build_v2_module_incomplete_package_data(
         V2ModuleBuilder(module_copy_dir).build(os.path.join(module_copy_dir, "dist"), distribution=distribution)
         assert (
             "The following files are present in the inmanta_plugins/minimalv2module directory on disk, but were not "
-            "packaged: ['model/_init.cf']. Update you MANIFEST.in file if they need to be packaged."
+            "packaged: ['model/_init.cf']. Update your MANIFEST.in file if they need to be packaged."
         ) in caplog.messages
 
 

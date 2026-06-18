@@ -37,6 +37,7 @@ from psutil import NoSuchProcess, Process
 import inmanta.agent.config
 from inmanta import config, const, data
 from inmanta.const import AgentAction
+from inmanta.env import LocalPackagePath
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER
 from inmanta.server.bootloader import InmantaBootloader
 from typing_extensions import Optional
@@ -1395,6 +1396,60 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep", agent="agent1", path
     await retry_limited(wait_for_available, timeout=5)
 
 
+#
+# def test_load_module_recursive_complex_module_dependencies(local_module_package_index: str, snippetcompiler) -> None:
+#     """
+#     Test whether the load_module_recursive() method works correctly when complex, circular dependencies exist between modules.
+#
+#     Dependency graph:
+#
+#     complex_module_dependencies_mod1  --------------------->  complex_module_dependencies_mod2
+#            |   ^                      <---------------------             |   ^
+#            |   |                                                         |   |
+#            v   |                                                         v   |
+#     complex_module_dependencies_mod1::submod                  complex_module_dependencies_mod2::submod
+#     """
+#     project = snippetcompiler.setup_for_snippet(
+#         snippet="import complex_module_dependencies_mod1",
+#         autostd=False,
+#         index_url=local_module_package_index,
+#         python_requires=[inmanta.util.parse_requirement(requirement="inmanta-module-complex-module-dependencies-mod1")],
+#         install_project=False,
+#     )
+#
+
+    # V2 module
+    # module_name_v2 =
+    # module_copy_dir = os.path.join(tmpdir, module_name_v2)
+    # shutil.copytree(module_dir, module_copy_dir)
+    # dot_git_dir = os.path.join(module_copy_dir, ".git")
+    # assert not os.path.exists(dot_git_dir)
+    # # Non-editable install can never be checked for versioning
+    # compile_and_assert_warning(
+    #     module_name_v2,
+    #     needs_versioning_warning=False,
+    #     install_v2_modules=[LocalPackagePath(path=module_copy_dir, editable=False)],
+    # )
+    # compile_and_assert_warning(
+    #     module_name_v2,
+    #     needs_versioning_warning=True,
+    #     install_v2_modules=[LocalPackagePath(path=module_copy_dir, editable=True)],
+    # )
+    # os.mkdir(dot_git_dir)
+    # # Non-editable install can never be checked for versioning
+    # compile_and_assert_warning(
+    #     module_name_v2,
+    #     needs_versioning_warning=False,
+    #     install_v2_modules=[LocalPackagePath(path=module_copy_dir, editable=False)],
+    # )
+    # module_dir = os.path.join(modules_v2_dir, "minimalwaitingmodulev2")
+    #
+    # compile_and_assert_warning(
+    #     module_name_v2,
+    #     needs_versioning_warning=False,
+    #     install_v2_modules=[LocalPackagePath(path=module_dir, editable=True)],
+    # )
+
 async def test_rps_state_deploying( #  TODO fixme minimalwaitingmodulev was v1
     snippetcompiler,
     server,
@@ -1405,6 +1460,7 @@ async def test_rps_state_deploying( #  TODO fixme minimalwaitingmodulev was v1
     async_finalizer,
     tmp_path,
     local_module_package_index,
+    modules_v2_dir: str,
 ):
     """
     Verify that the is_deploying flag is correctly set when deploying starts and finishes
@@ -1415,11 +1471,13 @@ async def test_rps_state_deploying( #  TODO fixme minimalwaitingmodulev was v1
 
     config.Config.set("config", "environment", environment)
 
+    module_dir = os.path.join(modules_v2_dir, "minimalwaitingmodulev2")
+
     model = f"""
 import minimalwaitingmodulev2
 minimalwaitingmodulev2::WaitForFileRemoval(name="test_sleep", agent="agent1", path="{file_to_remove}")
 """
-    snippetcompiler.setup_for_snippet(model, autostd=True,index_url=local_module_package_index)
+    snippetcompiler.setup_for_snippet(model, autostd=True,index_url=local_module_package_index, install_project=True,install_v2_modules=[LocalPackagePath(path=module_dir, editable=True)])
 
     # Deploy a resource
     version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
