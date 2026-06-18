@@ -713,7 +713,7 @@ async def test_halt_deploy(
 
 @pytest.mark.slowtest
 @pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
-async def test_pause_agent_deploy(  # TODO fixme (executor reaping, v2)
+async def test_pause_agent_deploy(
     snippetcompiler,
     shortlived_executors,
     server,
@@ -1004,7 +1004,7 @@ agent2_file_1 = minimaldeployfailuremodulev2::FailBasedOnFileContent(name="test_
 
 @pytest.mark.slowtest
 @pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
-async def test_agent_paused_should_remain_paused_after_environment_resume(  # TODO fixme (executor reaping, v2)
+async def test_agent_paused_should_remain_paused_after_environment_resume(
     snippetcompiler,
     shortlived_executors,
     server,

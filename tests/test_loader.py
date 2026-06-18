@@ -62,7 +62,7 @@ def get_module_source(module: str, code: str) -> ModuleSource:
         (False, {"lorem"}),
     ],
 )
-def test_code_manager(tmpdir: py.path.local, deactive_venv, install_all_dependencies, expected_dependencies):  # TODO fixme
+def test_code_manager(tmpdir: py.path.local, deactive_venv, install_all_dependencies, expected_dependencies):
     """Verify the code manager"""
     original_project_dir: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "plugins_project")
     project_dir = os.path.join(tmpdir, "plugins_project")
@@ -72,10 +72,19 @@ def test_code_manager(tmpdir: py.path.local, deactive_venv, install_all_dependen
 
     Project.set(project)
     project.install_modules()
+
+    # The plugin modules are v2 modules, installed editable from the project's libs directory.
+    for module_name in ("single_plugin_file", "multiple_plugin_files", "non_imported_plugin_file"):
+        project.virtualenv.install_for_config(
+            requirements=[],
+            paths=[env.LocalPackagePath(path=os.path.join(project_dir, "libs", module_name), editable=True)],
+            config=PipConfig(use_system_config=True),
+        )
+
     project.load()
 
-    project.load_module("single_plugin_file", allow_v1=True)
-    project.load_module("multiple_plugin_files", allow_v1=True)
+    project.load_module("single_plugin_file")
+    project.load_module("multiple_plugin_files")
 
     all_loaded_modules = project.modules
     editable_installed_modules = project.get_editable_installed_inmanta_modules()
@@ -129,7 +138,12 @@ def test_code_manager(tmpdir: py.path.local, deactive_venv, install_all_dependen
 
     # register type without source
     with pytest.raises(loader.SourceNotFoundException):
-        mgr.register_code("test2", str)
+        mgr.register_code(
+            "test2",
+            str,
+            loaded_modules=all_loaded_modules,
+            editable_installed_inmanta_modules=editable_installed_modules,
+        )
 
 
 def test_code_loader(tmp_path, caplog):
