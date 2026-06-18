@@ -695,6 +695,11 @@ class GraphqlResource(models.Resource):
     # See https://docs.sqlalchemy.org/en/21/orm/mapped_sql_expr.html
 
     # PoC approach 1: value is joined in and populated onto the ORM object by the `resources` query via `with_expression`.
+    # TODO: open question: if we take this approach, who is responsible for adding it to the query?
+    #       Doesn't belong in this class. Doesn't quite belong in ResourceFilter.apply_filters. So where *do* we fit it?
+    #       Should we have a ResourceExtension that is responsible for the joining *and* the filtering?
+    #       OR The alternative below could sidestep these difficulties. But can it always do what we need it to,
+    #       without additional work?
     poc = query_expression()
     # PoC approach 2: a column_property is added to the entity's SELECT automatically, so (unlike `poc`) it needs no
     # `with_expression` in the query. Here it is just a hardcoded literal of 43.
