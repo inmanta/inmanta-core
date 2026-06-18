@@ -116,6 +116,59 @@ async def test_timed_resource_pool():
     assert not manager.pool
 
 
+async def test_timed_resource_pool_restart():
+    """
+    Regression test: a TimeBasedPoolManager that is shut down and started again must run its cleanup loop again.
+
+    Previously `start()` did not reset the shutdown flags, so after a stop/start cycle (e.g. an agent that reconnects
+    after a lost session reuses the same pool manager) the restarted cleanup task observed `running == False` and exited
+    immediately, leaving idle pool members alive forever.
+    """
+
+    counter = itertools.count()
+
+    class SimplePoolMember(PoolMember[str]):
+
+        def __init__(self, my_id: str) -> None:
+            super().__init__(my_id)
+            self.count = next(counter)
+            # wait point for shutdown!
+            self.anchor = asyncio.Event()
+
+        def __repr__(self):
+            return self.id + str(self.count)
+
+        async def request_shutdown(self) -> None:
+            await super().request_shutdown()
+            await self.set_shutdown()
+            self.anchor.set()
+
+    class SimplePoolManager(TimeBasedPoolManager[str, str, SimplePoolMember]):
+        async def create_member(self, executor_id: str) -> SimplePoolMember:
+            return SimplePoolMember(my_id=executor_id)
+
+        def _id_to_internal(self, ext_id: str) -> str:
+            return ext_id
+
+    # Very short expiry
+    manager = SimplePoolManager(0.02)
+    await manager.start()
+
+    # The manager is shut down (e.g. the agent loses its session) ...
+    await manager.request_shutdown()
+    assert not manager.running
+
+    # ... and started again (e.g. the agent reconnects and reuses the same manager)
+    await manager.start()
+    assert manager.running
+
+    # The cleanup task must run again and reap idle members
+    a = await manager.get("a")
+    await asyncio.wait_for(a.anchor.wait(), 2)
+    assert not a.running
+    assert not manager.pool
+
+
 async def test_resource_pool_stacking():
     """
     Test the specific setup needed for the forking executor, as described in that file
