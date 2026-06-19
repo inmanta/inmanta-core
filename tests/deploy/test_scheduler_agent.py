@@ -226,6 +226,35 @@ async def test_shutdown(agent: TestAgent, make_resource_minimal):
     assert len(agent.scheduler._workers) == 0
 
 
+async def test_shutdown_notify_race(agent: TestAgent, make_resource_minimal):
+    """
+    A notification (e.g. a server-driven agent-state refresh) racing with scheduler shutdown must not resurrect a task runner.
+    Once the scheduler is stopping, should_runner_be_running() should return False, and the worker must stay down. This
+    invariant is additionally reflected by the `assert not self.is_running()` in the task runner's `join()`
+    """
+    rid1 = "test::Resource[agent1,name=1]"
+    resources = {ResourceIdStr(rid1): make_resource_minimal(rid1, values={"value": "a"}, requires=[])}
+
+    await agent.scheduler._new_version([model_version(version=1, resources=resources)])
+    await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
+    worker = agent.scheduler._workers["agent1"]
+    assert worker.is_running()
+
+    # Shut down. Up to this point should_runner_be_running() returned True (env neither halted nor paused); stopping the
+    # scheduler must flip that to False so a racing notification can't restart the worker.
+    await agent.scheduler.stop()
+    assert not worker.is_running()
+
+    # A late notification arriving after stop() must not start the worker back up.
+    await worker.notify()
+    assert not worker.is_running()
+
+    # join() must not raise.
+    await agent.scheduler.join()
+    assert not worker.is_running()
+    assert worker._task.done()
+
+
 async def test_deploy_report_only(agent: TestAgent, make_resource_minimal) -> None:
     """
     Verify that a report_only resource is correctly scheduled as a deploy
