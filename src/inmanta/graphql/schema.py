@@ -346,7 +346,7 @@ mapper: CustomStrawberrySQLAlchemyMapper[typing.Any] = CustomStrawberrySQLAlchem
 DEFAULT_PER_PAGE: int = 50
 
 
-def is_set[T](value: T | None) -> typing.TypeGuard[T]:
+def is_provided[T](value: T | None) -> typing.TypeGuard[T]:
     """
     Checks if a filter field was provided by the user, i.e. it is neither None nor strawberry.UNSET.
 
@@ -435,9 +435,9 @@ class EnumFilter[T: StrEnum](CustomFilter):
 
     def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]], model: type[models.Base], key: str) -> Select[tuple[*Ts]]:
         # Enums are stored as a string of their name in the database and not of their value
-        if is_set(self.eq):
+        if is_provided(self.eq):
             stmt = stmt.where(getattr(model, key).in_([x.name for x in self.eq]))
-        if is_set(self.neq):
+        if is_provided(self.neq):
             stmt = stmt.where(not_(getattr(model, key).in_([x.name for x in self.neq])))
         return stmt
 
@@ -456,14 +456,14 @@ class StrFilter(CustomFilter):
     not_contains: list[str] | None = strawberry.UNSET
 
     def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]], model: type[models.Base], key: str) -> Select[tuple[*Ts]]:
-        if is_set(self.eq):
+        if is_provided(self.eq):
             stmt = stmt.where(getattr(model, key).in_(self.eq))
-        if is_set(self.neq):
+        if is_provided(self.neq):
             stmt = stmt.where(not_(getattr(model, key).in_(self.neq)))
-        if is_set(self.contains):
+        if is_provided(self.contains):
             for c in self.contains:
                 stmt = stmt.where(getattr(model, key).ilike(c))
-        if is_set(self.not_contains):
+        if is_provided(self.not_contains):
             for c in self.not_contains:
                 stmt = stmt.where(not_(getattr(model, key).ilike(c)))
         return stmt
@@ -738,15 +738,15 @@ class ResourceFilter(StrawberryFilter):
         ]
         for key in rps_keys:
             attr: CustomFilter | None = getattr(self, key)
-            if is_set(attr):
+            if is_provided(attr):
                 stmt = attr.apply_filter(stmt, self.rps_model, key)
-        if is_set(self.environment):
+        if is_provided(self.environment):
             stmt = stmt.filter(models.ResourcePersistentState.environment == self.environment)
-        if is_set(self.purged):
+        if is_provided(self.purged):
             stmt = stmt.filter(models.Resource.attributes["purged"].astext.cast(Boolean).is_(self.purged))
-        if is_set(self.is_deploying):
+        if is_provided(self.is_deploying):
             stmt = stmt.filter(models.ResourcePersistentState.is_deploying == self.is_deploying)
-        if is_set(self.is_orphan):
+        if is_provided(self.is_orphan):
             stmt = stmt.filter(models.ResourcePersistentState.is_orphan.is_(self.is_orphan))
         return stmt
 
@@ -812,10 +812,10 @@ def add_filter_and_sort[*Ts](
     """
     Adds filter and sorting to the given statement.
     """
-    if is_set(filter):
+    if is_provided(filter):
         stmt = filter.apply_filters(stmt)
     order_expressions: dict[str, UnaryExpression[typing.Any]] = {}
-    if is_set(order_by):
+    if is_provided(order_by):
         for order in order_by:
             if order.key in order_expressions:
                 raise Exception(f"Sorting key appears multiple times in orderBy: {order.key}")
@@ -867,12 +867,12 @@ async def get_connection[*Ts](
     async with get_session() as session:
         per_page: int
         # Get results per page and sanitation of input arguments
-        if is_set(first):
-            if is_set(last) or is_set(before):
+        if is_provided(first):
+            if is_provided(last) or is_provided(before):
                 raise Exception("`first` is not allowed in conjunction with `last` or `before`")
             per_page = first
-        elif is_set(last):
-            if is_set(after) or not is_set(before):
+        elif is_provided(last):
+            if is_provided(after) or not is_provided(before):
                 raise Exception("`last` is only allowed in conjunction with `before`")
             per_page = last
         else:
@@ -888,11 +888,11 @@ async def get_connection[*Ts](
 
         # Get cursor and direction of results to fetch (forwards/backwards)
         page: Marker | None = None
-        if is_set(after):
-            if is_set(before):
+        if is_provided(after):
+            if is_provided(before):
                 raise Exception("`after` is not allowed in conjunction with `before`")
             page = unserialize_bookmark(f">{decode_cursor(after)}")
-        elif is_set(before):
+        elif is_provided(before):
             page = unserialize_bookmark(f"<{decode_cursor(before)}")
 
         # Fetch the page using sqlakeyset
