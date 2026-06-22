@@ -1750,7 +1750,7 @@ def discovered_resource_create_batch(tid: uuid.UUID, discovered_resources: Seque
     path="/discovered/<discovered_resource_id>",
     operation="GET",
     arg_options=methods.ENV_OPTS,
-    client_types=[ClientType.api],
+    client_types=[ClientType.api, ClientType.agent],
     api_version=2,
 )
 def discovered_resources_get(tid: uuid.UUID, discovered_resource_id: ResourceIdStr) -> model.DiscoveredResourceOutput:
@@ -1767,7 +1767,7 @@ def discovered_resources_get(tid: uuid.UUID, discovered_resource_id: ResourceIdS
     path="/discovered",
     operation="GET",
     arg_options=methods.ENV_OPTS,
-    client_types=[ClientType.api],
+    client_types=[ClientType.api, ClientType.agent],
     api_version=2,
 )
 def discovered_resources_get_batch(
@@ -1819,7 +1819,7 @@ def discovered_resources_get_batch(
     path="/discovered/<discovered_resource_id>",
     operation="DELETE",
     arg_options=methods.ENV_OPTS,
-    client_types=[ClientType.api],
+    client_types=[ClientType.api, ClientType.agent],
     api_version=2,
 )
 def discovered_resource_delete(
@@ -1841,7 +1841,7 @@ def discovered_resource_delete(
     path="/discovered/",
     operation="DELETE",
     arg_options=methods.ENV_OPTS,
-    client_types=[ClientType.api],
+    client_types=[ClientType.api, ClientType.agent],
     api_version=2,
 )
 def discovered_resource_delete_batch(tid: uuid.UUID, discovered_resource_ids: Sequence[str]) -> None:
