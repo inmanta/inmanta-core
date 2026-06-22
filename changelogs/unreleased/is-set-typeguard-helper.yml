@@ -1,0 +1,5 @@
+description: Replace the repeated `x is not None and x is not strawberry.UNSET` checks in the GraphQL schema with an `is_set` TypeGuard helper.
+change-type: patch
+destination-branches: [master, iso9]
+sections:
+  other-note: "{{description}}"
