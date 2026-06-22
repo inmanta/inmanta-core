@@ -936,7 +936,11 @@ def resource_logs(
 
 @auth(auth_label=const.CoreAuthorizationLabel.FACT_READ, read_only=True, environment_param="tid")
 @typedmethod(
-    path="/resource/<rid>/facts", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api, ClientType.agent], api_version=2
+    path="/resource/<rid>/facts",
+    operation="GET",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api, ClientType.agent],
+    api_version=2,
 )
 def get_facts(tid: uuid.UUID, rid: inmanta.types.ResourceIdStr) -> list[model.Fact]:
     """
