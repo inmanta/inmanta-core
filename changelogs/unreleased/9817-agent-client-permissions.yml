@@ -8,5 +8,5 @@ description: >
   - discovered_resource_delete
   - discovered_resource_delete_batch
 change-type: patch
-destination-branches: [master]
+destination-branches: [master, iso9]
 issue-nr: 9817
