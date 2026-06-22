@@ -93,7 +93,7 @@ class InmantaModule(Base):
     editable_install: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,
-        doc="Whether this module was installed in" "editable mode or as a package in the " "compiler venv",
+        doc="Whether this module was installed in editable mode or as a package in the compiler venv",
     )
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="inmanta_module", viewonly=True)
     module_files: Mapped[list["ModuleFiles"]] = relationship("ModuleFiles", back_populates="inmanta_module", viewonly=True)

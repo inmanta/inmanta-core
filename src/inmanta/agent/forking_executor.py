@@ -430,22 +430,13 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
         loader = inmanta.loader.CodeLoader(self.storage_folder)
 
         failed: FailedInmantaModules = defaultdict(dict)
-        in_place: list[inmanta.data.model.ModuleSource] = []
-        # First put all files for editable installed modules on disk
-        for module_source in self.sources:
-            if not module_source.install_on_disk:
-                continue
-            try:
-                await loop.run_in_executor(context.threadpool, functools.partial(loader.install_source, module_source))
-                in_place.append(module_source)
-            except Exception as e:
-                logger.info("Failed to load source on disk: %s", module_source.metadata.name, exc_info=True)
-                inmanta_module_name = module_source.get_inmanta_module_name()
-                failed[inmanta_module_name][module_source.metadata.name] = e
 
-        # then try to import all python files living in modules that contain code with
-        # loading-time side effects (definition of resources, handlers or references)
-        for module_source in self.sources:
+        async def _load_source(
+            module_source: inmanta.data.model.ModuleSource,
+            failed: FailedInmantaModules,
+            loop: asyncio.AbstractEventLoop,
+            loader: inmanta.loader.CodeLoader,
+        ) -> None:
             try:
                 await loop.run_in_executor(
                     context.threadpool,
@@ -455,6 +446,30 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
                 logger.info("Failed to import source: %s", module_source.metadata.name, exc_info=True)
                 inmanta_module_name = module_source.get_inmanta_module_name()
                 failed[inmanta_module_name][module_source.metadata.name] = ModuleImportException(e, module_source.metadata.name)
+
+        async def _install_and_load_source(
+            module_source: inmanta.data.model.ModuleSource,
+            failed: FailedInmantaModules,
+            loop: asyncio.AbstractEventLoop,
+            loader: inmanta.loader.CodeLoader,
+        ) -> None:
+            try:
+                await loop.run_in_executor(context.threadpool, functools.partial(loader.install_source, module_source))
+            except Exception as e:
+                logger.info("Failed to load source on disk: %s", module_source.metadata.name, exc_info=True)
+                inmanta_module_name = module_source.get_inmanta_module_name()
+                failed[inmanta_module_name][module_source.metadata.name] = e
+            else:
+                await _load_source(module_source, failed, loop, loader)
+
+        for module_source in self.sources:
+            # Import all python files living in modules that contain code with
+            # loading-time side effects (definition of resources, handlers or references)
+            # For editable installs, we first need to put the source on disk before attempting to load the python module:
+            if module_source.install_on_disk:
+                await _install_and_load_source(module_source, failed, loop, loader)
+            else:
+                await _load_source(module_source, failed, loop, loader)
 
         return failed
 

@@ -218,27 +218,24 @@ class ExecutorBlueprint(EnvBlueprint):
         requirements and making sure they all share the same pip config.
         """
 
-        def log_from_specs() -> None:
-            LOGGER.debug("________________________ from_specs ________________________")
-            for module_install_spec in code:
-                LOGGER.debug(f"  + {module_install_spec.module_name} v {module_install_spec.module_version}")
-                for sce in module_install_spec.blueprint.sources:
-                    LOGGER.debug(f"    > {sce.metadata.name}")
-                LOGGER.debug("\n")
-
-        log_from_specs()
         if not code:
             raise ValueError("from_specs expects at least one resource install spec")
         env_ids = {cd.blueprint.environment_id for cd in code}
         assert len(env_ids) == 1
-        sources = list({source for cd in code for source in cd.blueprint.sources if cd.editable_install})
+        sources: set[ModuleSource] = set()
         requirements: set[str] = set()
 
         for module_install_spec in code:
+            # Gather all sources (both for editable and package install). Later, during code
+            # installation on the agent:
+            #   - For editable installs, we will install the source on disk and then load it
+            #   - For package installs, we will only load it
+            sources.update(module_install_spec.blueprint.sources)
+
             if module_install_spec.editable_install:
                 # Editable install:
                 # install the requirements first, and then the source from the database
-                requirements = requirements.union(module_install_spec.blueprint.requirements)
+                requirements.update(module_install_spec.blueprint.requirements)
             else:
                 # Package install:
                 # let pip handle the dependencies when installing the module as a package
@@ -271,7 +268,7 @@ class ExecutorBlueprint(EnvBlueprint):
         return ExecutorBlueprint(
             environment_id=env_ids.pop(),
             pip_config=base_pip,
-            sources=sources,
+            sources=list(sources),
             requirements=list(requirements),
             python_version=base_python_version,
             project_constraints=constraints,
@@ -378,6 +375,8 @@ class ModuleInstallSpec:
     :ivar module_name: fully qualified name for this module
     :ivar module_version: the version of the module to use
     :ivar blueprint: the associated install blueprint
+    :ivar editable_install: whether the module was installed in editable mode or as a package
+        in the compiler venv
 
     """
 
@@ -624,7 +623,6 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
         :return: An instance of ExecutorVirtualEnvironment representing the created or reused environment.
         """
         internal_id = member_id.blueprint_hash()
-        LOGGER.debug(f"{internal_id=}")
         env_dir_name: str = internal_id
         env_dir: str = os.path.join(self.envs_dir, env_dir_name)
 

@@ -50,15 +50,14 @@ class CodeManager:
     async def get_code(self, environment: uuid.UUID, model_version: int, agent_name: str) -> list[ModuleInstallSpec]:
         """
         Get the list of installation specifications (i.e. pip config, python package dependencies,
-        Inmanta modules editable_install_module_sources) required to deploy resources on a given agent for a given configuration
+        Inmanta modules sources) required to deploy resources on a given agent for a given configuration
         model version.
 
         :return: list of ModuleInstallSpec for this agent and this model version.
         """
         module_install_specs = []
 
-        # TODO [editable installed modules] add setup.cfg and pyproject.toml (to ModuleFiles?)
-        # TODO [package installed modules] Reuse or adapt ? (i.e. empty join since no files will be registered)
+        # TODO [editable installed modules] add setup.cfg and pyproject.toml (to ModuleFiles?) (Also MANIFEST.in ??)
         modules_for_agent = (
             select(
                 models.AgentModules.inmanta_module_name,

@@ -812,7 +812,7 @@ minimalwaitingmodulev2::WaitForFileRemoval(name="test_sleep3", agent="agent1", p
         should_scheduler_be_defined=True,
         should_fork_server_be_defined=True,
         nb_executor_to_be_defined=0,
-        timeout=10,
+        timeout=2,
     )
 
     for f in [file_to_remove1, file_to_remove2, file_to_remove3]:
