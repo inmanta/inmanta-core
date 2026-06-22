@@ -706,6 +706,7 @@ class ResourceFilter(StrawberryFilter):
     last_handler_run: EnumFilter[state.HandlerResult] | None = strawberry.UNSET
     is_deploying: bool | None = strawberry.UNSET
     is_orphan: bool | None = strawberry.UNSET
+    model_version: int | None = strawberry.UNSET
 
     @property
     def model(self) -> type[models.Base]:
@@ -973,12 +974,18 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
             before: typing.Optional[str] = strawberry.UNSET,
             order_by: typing.Optional[Sequence[ResourceOrder]] = strawberry.UNSET,
         ) -> CustomListConnection[Resource]:
+            # `model_version` is set when the user wants to inspect a specific version of the model instead of the
+            # latest released version.
+            filter_by_version = filter.model_version is not None and filter.model_version is not strawberry.UNSET
+            if filter_by_version and filter.is_orphan is not None and filter.is_orphan is not strawberry.UNSET:
+                # A specific version is returned as-is, so filtering it by the current orphan state is not allowed.
+                raise Exception("is_orphan cannot be provided when filtering by model_version")
+
             if filter.is_orphan is False:
                 include_orphans = False
             else:
                 include_orphans = True
 
-            # Only fetch resources in their latest version
             # Logic based on src/inmanta/data/dataview.py::ResourceView
             stmt = select(models.Resource).join(
                 models.ResourcePersistentState,
@@ -988,58 +995,73 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
                 ),
             )
 
-            # CTE that fetches the latest scheduled version
-            latest_scheduled_version_cte = (
-                select(models.Scheduler.last_processed_model_version.label("version"))
-                .where(models.Scheduler.environment == filter.environment)
-                .cte()
-            )
-
-            if include_orphans:
-                # CTE that checks if a resource is orphaned or not and returns the appropriate version
-                # - If it is not orphaned, return the resource in the latest released version
-                # - If it is orphaned, return the resource in the latest version that it was present in.
-                included_orphans_cte = (
-                    select(
-                        models.ResourcePersistentState.environment,
-                        models.ResourcePersistentState.resource_id,
-                        func.coalesce(
-                            models.ResourcePersistentState.orphaned_after,
-                            latest_scheduled_version_cte.c.version,
-                        ).label("version"),
-                    )
-                    .where(
-                        models.ResourcePersistentState.environment == filter.environment,
-                    )
-                    .cte()
-                )
+            if filter_by_version:
+                # Return the resources exactly as they were in the requested version of the model, regardless of
+                # their current (latest version) orphan state.
                 stmt = stmt.join(
                     models.t_resource_set_configuration_model,
                     and_(
                         models.t_resource_set_configuration_model.c.environment == models.Resource.environment,
                         models.t_resource_set_configuration_model.c.resource_set == models.Resource.resource_set,
-                    ),
-                ).join(
-                    included_orphans_cte,
-                    and_(
-                        models.Resource.environment == included_orphans_cte.c.environment,
-                        models.Resource.resource_id == included_orphans_cte.c.resource_id,
-                        models.t_resource_set_configuration_model.c.model == included_orphans_cte.c.version,
+                        models.t_resource_set_configuration_model.c.model == filter.model_version,
                     ),
                 )
             else:
-                stmt = stmt.join(
-                    models.t_resource_set_configuration_model,
-                    and_(
-                        models.t_resource_set_configuration_model.c.environment == models.Resource.environment,
-                        models.t_resource_set_configuration_model.c.resource_set == models.Resource.resource_set,
-                        models.t_resource_set_configuration_model.c.model
-                        == select(latest_scheduled_version_cte.c.version).scalar_subquery(),
-                    ),
+                # Only fetch resources in their latest version
+                # CTE that fetches the latest scheduled version
+                latest_scheduled_version_cte = (
+                    select(models.Scheduler.last_processed_model_version.label("version"))
+                    .where(models.Scheduler.environment == filter.environment)
+                    .cte()
                 )
+
+                if include_orphans:
+                    # CTE that checks if a resource is orphaned or not and returns the appropriate version
+                    # - If it is not orphaned, return the resource in the latest released version
+                    # - If it is orphaned, return the resource in the latest version that it was present in.
+                    included_orphans_cte = (
+                        select(
+                            models.ResourcePersistentState.environment,
+                            models.ResourcePersistentState.resource_id,
+                            func.coalesce(
+                                models.ResourcePersistentState.orphaned_after,
+                                latest_scheduled_version_cte.c.version,
+                            ).label("version"),
+                        )
+                        .where(
+                            models.ResourcePersistentState.environment == filter.environment,
+                        )
+                        .cte()
+                    )
+                    stmt = stmt.join(
+                        models.t_resource_set_configuration_model,
+                        and_(
+                            models.t_resource_set_configuration_model.c.environment == models.Resource.environment,
+                            models.t_resource_set_configuration_model.c.resource_set == models.Resource.resource_set,
+                        ),
+                    ).join(
+                        included_orphans_cte,
+                        and_(
+                            models.Resource.environment == included_orphans_cte.c.environment,
+                            models.Resource.resource_id == included_orphans_cte.c.resource_id,
+                            models.t_resource_set_configuration_model.c.model == included_orphans_cte.c.version,
+                        ),
+                    )
+                else:
+                    stmt = stmt.join(
+                        models.t_resource_set_configuration_model,
+                        and_(
+                            models.t_resource_set_configuration_model.c.environment == models.Resource.environment,
+                            models.t_resource_set_configuration_model.c.resource_set == models.Resource.resource_set,
+                            models.t_resource_set_configuration_model.c.model
+                            == select(latest_scheduled_version_cte.c.version).scalar_subquery(),
+                        ),
+                    )
             stmt = add_filter_and_sort(stmt, ResourceOrder.default_order(), filter, order_by)
             count_stmt: Select[tuple[int]] | None
-            if filter.purged is not strawberry.UNSET:
+            if filter.purged is not strawberry.UNSET or filter_by_version:
+                # These filters are not applied on the ResourcePersistentState, so the more efficient count
+                # statement below would not take them into account.
                 count_stmt = None
             else:
                 # more efficient count statement that doesn't require joining on resource

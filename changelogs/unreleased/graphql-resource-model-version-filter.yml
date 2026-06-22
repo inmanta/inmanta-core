@@ -1,0 +1,5 @@
+description: Add a `modelVersion` filter to the GraphQL `resources` query to fetch resources as they were in a specific version of the model.
+change-type: minor
+destination-branches: [master, iso9]
+sections:
+  minor-improvement: "{{description}}"

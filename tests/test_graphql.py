@@ -1023,6 +1023,134 @@ async def test_query_resources(server, client, environment, setup_database, mixe
         assert result_resources[i]["node"]["state"]["isDeploying"] == (False if i < instances or i >= 2 * instances else True)
 
 
+async def test_query_resources_model_version(server, client, environment, setup_database, mixed_resource_generator):
+    """
+    Test that filtering the resource query on `modelVersion` returns the resources as present in that specific
+    version of the model, instead of the latest released version.
+
+    We include setup_database to have some resources in other envs to make sure we don't leak across environments.
+    """
+    instances = 2
+    resources_per_version = 10
+    orphans = resources_per_version // 2
+    total_resources_in_latest_version = resources_per_version * instances
+    await mixed_resource_generator(environment, instances, resources_per_version)
+
+    # mixed_resource_generator creates 2 versions per instance (agent). With 2 instances this gives us
+    # the following configuration model versions (each agent owns resource set "set<agent_index>"):
+    #   v1: full compile, set0 created with <resources_per_version> resources (agent0)
+    #   v2: put_partial, set0 updated -> <resources_per_version> resources, the un-updated half becomes orphaned
+    #   v3: put_partial, set1 created with <resources_per_version> resources (agent1), set0 unchanged
+    #   v4: put_partial, set1 updated -> <resources_per_version> resources, the un-updated half becomes orphaned
+    latest_version = instances * 2
+
+    async def query_resources(extra_filter: str) -> dict[str, object]:
+        query = """
+        {
+            resources (filter: {environment: "%s" %s}) {
+                totalCount
+                edges {
+                    node {
+                      resourceId
+                      agent
+                      resourceIdValue
+                      state {
+                        isOrphan
+                      }
+                    }
+                }
+            }
+        }
+        """ % (
+            environment,
+            extra_filter,
+        )
+        result = await client.graphql(query=query)
+        check_correct_graphql_response(result)
+        return result.result["data"]["data"]["resources"]
+
+    def assert_resources(connection: dict[str, object], expected: set[tuple[str, str]]) -> None:
+        """
+        Assert that the connection contains exactly the (agent, resourceIdValue) tuples in `expected`,
+        and that totalCount is consistent with the number of returned edges.
+        """
+        actual = {(edge["node"]["agent"], edge["node"]["resourceIdValue"]) for edge in connection["edges"]}
+        assert actual == expected
+        assert len(connection["edges"]) == len(expected)
+        # totalCount must take the modelVersion filter into account, just like the returned edges
+        assert connection["totalCount"] == len(expected)
+
+    # The original resource set has resourceIdValue "0" .. "<resources_per_version - 1>".
+    # When a set is recompiled (iteration 1), the upper half is replaced by new resources with ids "15" .. "19"
+    # and the lower half ("0" .. "4") is kept. The replaced resources ("5" .. "9") become orphans.
+    original_ids = {str(i) for i in range(resources_per_version)}
+    updated_ids = {str(i) for i in range(resources_per_version // 2)} | {
+        str(i + 10) for i in range(resources_per_version // 2, resources_per_version)
+    }
+
+    # Sanity check: without modelVersion we get the latest version of each set + the orphans
+    no_version = await query_resources("")
+    assert no_version["totalCount"] == total_resources_in_latest_version + orphans * instances
+
+    # v1: only set0 (agent0) exists, with its original resources. Note that a specific version is returned as-is:
+    # it includes resources that are orphaned in the latest model (ids "5" .. "9"), regardless of their current
+    # orphan state.
+    v1 = await query_resources("modelVersion: 1")
+    assert_resources(v1, {("agent0", rid) for rid in original_ids})
+    assert any(edge["node"]["state"]["isOrphan"] is True for edge in v1["edges"])
+    assert any(edge["node"]["state"]["isOrphan"] is False for edge in v1["edges"])
+
+    # v2: set0 was recompiled (agent0 only), the upper half was replaced
+    assert_resources(
+        await query_resources("modelVersion: 2"),
+        {("agent0", rid) for rid in updated_ids},
+    )
+
+    # v3: set1 (agent1) was added with its original resources, set0 is unchanged from v2
+    assert_resources(
+        await query_resources("modelVersion: 3"),
+        {("agent0", rid) for rid in updated_ids} | {("agent1", rid) for rid in original_ids},
+    )
+
+    # v4 == latest: both sets recompiled. Equivalent to not specifying a version, but without the orphans, so
+    # none of the returned resources are orphaned.
+    latest_resources = {("agent0", rid) for rid in updated_ids} | {("agent1", rid) for rid in updated_ids}
+    assert len(latest_resources) == total_resources_in_latest_version
+    latest = await query_resources(f"modelVersion: {latest_version}")
+    assert_resources(latest, latest_resources)
+    assert all(edge["node"]["state"]["isOrphan"] is False for edge in latest["edges"])
+
+    # modelVersion combines with other filters: only agent0 resources are present in v1
+    assert_resources(
+        await query_resources('modelVersion: 1 agent: {eq: ["agent0"]}'),
+        {("agent0", rid) for rid in original_ids},
+    )
+    assert_resources(await query_resources('modelVersion: 1 agent: {eq: ["agent1"]}'), set())
+
+    # A version that does not exist yields no resources
+    assert_resources(await query_resources(f"modelVersion: {latest_version + 1}"), set())
+
+    # modelVersion and isOrphan are mutually exclusive: a specific version is returned as-is, so filtering it by
+    # the current orphan state is not allowed and results in an error.
+    for orphan_value in ("true", "false"):
+        result = await client.graphql(
+            query="""
+            {
+                resources (filter: {environment: "%s" modelVersion: 1 isOrphan: %s}) {
+                    totalCount
+                    edges { node { resourceId } }
+                }
+            }
+            """
+            % (environment, orphan_value)
+        )
+        assert result.code == 400
+        data = result.result["data"]
+        assert data["data"] is None
+        assert len(data["errors"]) == 1
+        assert data["errors"][0] == "is_orphan cannot be provided when filtering by model_version"
+
+
 async def test_graphql_variables_and_operation_name(server, client, setup_database):
     """
     Test that graphql variables and the operation name are working as intended.
