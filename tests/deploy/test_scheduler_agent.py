@@ -49,6 +49,14 @@ from inmanta.util import retry_limited
 from utils import make_requires
 
 
+def model_version(
+    version: int,
+    *,
+    resources: Mapping[ResourceIdStr, state.ResourceIntent],
+) -> ModelVersion:
+    return ModelVersion(version=version, resources=resources, requires={}, undefined=set())
+
+
 async def retry_limited_fast(
     fun: Callable[..., bool] | Callable[..., Awaitable[bool]],
     timeout: float = 0.1,
