@@ -1,0 +1,12 @@
+---
+description: >
+  Extend list of endpoints that the agent client is allowed to access:
+  - get_facts
+  - get_fact
+  - discovered_resources_get
+  - discovered_resources_get_batch
+  - discovered_resource_delete
+  - discovered_resource_delete_batch
+change-type: patch
+destination-branches: [master]
+issue-nr: 9817
