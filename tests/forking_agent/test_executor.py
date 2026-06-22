@@ -18,6 +18,7 @@ Contact: code@inmanta.com
 
 import asyncio
 import base64
+import datetime
 import logging
 import sys
 import uuid
@@ -36,7 +37,7 @@ import utils
 from forking_agent.ipc_commands import Echo, GetConfig, GetName, TestLoader
 from inmanta.agent import executor
 from inmanta.agent.executor import ExecutorBlueprint
-from inmanta.agent.forking_executor import MPManager
+from inmanta.agent.forking_executor import MPExecutor, MPManager
 from inmanta.data import PipConfig
 from inmanta.data.model import ModuleSourceMetadata
 from inmanta.protocol.ipc_light import ConnectionLost
@@ -272,6 +273,45 @@ async def test_executor_server_dirty_shutdown(mpmanager: MPManager, caplog):
         await child1.call(Echo(["aaaa"]))
 
     utils.assert_no_warning(caplog)
+
+
+async def test_executor_call_refreshes_last_used():
+    """
+    Regression test: MPExecutor.call() must refresh the pool member's `last_used` timestamp via touch().
+
+    The TimeBasedPoolManager reaper decides what to clean up based on PoolMember.last_used (backed by `_last_used`).
+    call() previously assigned to a stray `last_used_at` attribute instead, so `last_used` never advanced past the
+    executor's creation time and an actively-used executor could be reaped while still in use.
+    """
+
+    class FakeConnection:
+        async def call(self, method):
+            return "called"
+
+    class FakeProcess:
+        def __init__(self) -> None:
+            self.connection = FakeConnection()
+
+    blueprint = ExecutorBlueprint(
+        environment_id=uuid.uuid4(),
+        pip_config=PipConfig(),
+        requirements=[],
+        sources=[],
+        python_version=sys.version_info[:2],
+    )
+    mp_executor = MPExecutor(FakeProcess(), executor.ExecutorId("agent1", "local:", blueprint))
+
+    # Pretend the executor has been idle for a long time
+    stale = datetime.datetime.now().astimezone() - datetime.timedelta(hours=1)
+    mp_executor._last_used = stale
+
+    assert await mp_executor.call(Echo(["x"])) == "called"
+
+    # call() must have refreshed the timestamp the reaper actually reads
+    assert mp_executor.last_used > stale
+    assert mp_executor.get_idle_time() < datetime.timedelta(seconds=5)
+    # and restored the in-flight bookkeeping
+    assert mp_executor.in_flight == 0
 
 
 def test_hash_with_duplicates():
