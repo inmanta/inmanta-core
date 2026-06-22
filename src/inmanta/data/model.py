@@ -1186,7 +1186,6 @@ class ModuleSourceMetadata(BaseModel):
     name: str
     hash_value: str
     is_byte_code: bool
-    eagerly_load: bool = False
 
     def __lt__(self, other: object) -> bool | None:
         if not isinstance(other, ModuleSourceMetadata):
@@ -1207,6 +1206,8 @@ class ModuleSource(BaseModel):
     """
     This class represents a python module (file metadata + the source itself)
     :param source: the content of the file
+    :param install_on_disk: whether the source of this python module should be written to disk during agent
+        code install. This is true iff the encapsulating inmanta module was installed in editable mode.
     """
 
     model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)

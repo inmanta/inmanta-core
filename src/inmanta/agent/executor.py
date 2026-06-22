@@ -130,16 +130,10 @@ class EnvBlueprint:
     # The libc version determines which python packages are compatible with the machine they run on.
     # If this version is updated, pip might select different packages.
     libc_version: str = dataclasses.field(default_factory=get_libc_version, kw_only=True)
-    _inmanta_modules: Sequence[str] | None = dataclasses.field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
         # remove duplicates and make uniform
         self.requirements = sorted(set(self.requirements))
-
-    def get_inmanta_modules(self) -> Sequence[str]:
-        if self._inmanta_modules is None:
-            self._inmanta_modules = [req for req in self.requirements if req.startswith(MODULE_PKG_NAME_PREFIX)]
-        return self._inmanta_modules
 
     def blueprint_hash(self) -> str:
         """
@@ -228,8 +222,8 @@ class ExecutorBlueprint(EnvBlueprint):
         for module_install_spec in code:
             # Gather all sources (both for editable and package install). Later, during code
             # installation on the agent:
-            #   - For editable installs, we will install the source on disk and then load it
-            #   - For package installs, we will only load it
+            #   - For editable installs, we will write these python module sources to disk and then load them
+            #   - For package installs, we will rely on pip for the install and then load them
             sources.update(module_install_spec.blueprint.sources)
 
             if module_install_spec.editable_install:

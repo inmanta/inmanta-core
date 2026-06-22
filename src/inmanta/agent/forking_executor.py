@@ -397,7 +397,6 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
         storage_folder: str,
         sources: Sequence[inmanta.data.model.ModuleSource],
         venv_touch_interval: float = 60.0,
-        inmanta_modules: Sequence[str] | None = None,
     ):
         """
         :param venv_touch_interval: The time interval after which the virtual environment must be touched. Only used for
@@ -407,7 +406,6 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
         self.venv_path = venv_path
         self.storage_folder = storage_folder
         self.sources = sources
-        self.package_install_inmanta_modules = inmanta_modules if inmanta_modules else []
         self._venv_touch_interval = venv_touch_interval
 
     async def call(self, context: ExecutorContext) -> FailedInmantaModules:
@@ -977,7 +975,6 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
                     storage_folder=storage_for_blueprint,
                     sources=blueprint.sources,
                     venv_touch_interval=self.venv_checkup_interval,
-                    inmanta_modules=blueprint.get_inmanta_modules(),
                 )
             )
             if failed_modules:
