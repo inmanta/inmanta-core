@@ -36,8 +36,10 @@ from psutil import NoSuchProcess, Process
 
 import inmanta.agent.config
 from inmanta import config, const, data
+from inmanta.agent.code_manager import CodeManager
 from inmanta.const import AgentAction
 from inmanta.env import LocalPackagePath
+from inmanta.module import Project
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER
 from inmanta.server.bootloader import InmantaBootloader
 from typing_extensions import Optional
@@ -1675,3 +1677,96 @@ async def test_code_install_success_code_load_error_for_reference(
     assert result.code == 200
 
     await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=2, state=const.ResourceState.unavailable)
+
+
+@pytest.mark.slowtest
+@pytest.mark.parametrize("auto_start_agent", (True,))  # this overrides a fixture to allow the agent to fork!
+async def test_editable_dependency_installed_from_source_on_all_agents(
+    snippetcompiler,
+    server,
+    ensure_resource_tracker_is_started,
+    client,
+    clienthelper,
+    environment,
+    auto_start_agent: bool,
+    async_finalizer,
+    modules_v2_dir,
+    local_module_package_index,
+):
+    """
+    End-to-end regression test for the 'Improved agent code install' design (Scenario 1: module
+    under active development / source install).
+
+    Scenario (mirrors the design document):
+      - Two modules are under active development and installed in editable mode in the compiler venv:
+          * dependency_module_y: defines a resource (DepResource) and some plugin code
+          * main_module_x: defines a resource (MainResource) and reuses dependency_module_y's plugin
+            code in its handler (i.e. dependency_module_y is a transitive dependency of main_module_x).
+      - Two agents:
+          * agent_main: only ever deploys a main_module_x::MainResource
+          * agent_dep:  only ever deploys a dependency_module_y::DepResource
+
+    Because dependency_module_y is installed in editable mode, its source must be installed on *every*
+    agent that might use it, in particular on agent_main for which it is a purely transitive dependency.
+
+    Two things are verified:
+      1. The agent code install metadata: dependency_module_y is registered (as an editable/source
+         install) for both agents, even though agent_main never deploys a dependency_module_y resource.
+      2. End-to-end deployment: with `agent_install_dependency_modules` disabled, the only way
+         dependency_module_y's code can reach agent_main is through the editable-install-on-all-agents
+         mechanism. agent_main's handler imports and calls into dependency_module_y at deploy time, so a
+         successful deployment proves the source code was actually installed on agent_main.
+    """
+    config.Config.set("config", "environment", environment)
+    # Make sure the session with the Scheduler is there
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    assert len(agentmanager.sessions) == 1
+
+    main_module_x_dir = os.path.join(modules_v2_dir, "main_module_x")
+    dependency_module_y_dir = os.path.join(modules_v2_dir, "dependency_module_y")
+
+    snippetcompiler.setup_for_snippet(
+        """
+import main_module_x
+import dependency_module_y
+
+main_module_x::MainResource(name="r_main", agent="agent_main")
+dependency_module_y::DepResource(name="r_dep", agent="agent_dep")
+        """,
+        autostd=True,
+        index_url=local_module_package_index,
+        install_project=True,
+        install_v2_modules=[
+            # Install the dependency first so the editable install of main_module_x is satisfied locally.
+            LocalPackagePath(path=dependency_module_y_dir, editable=True),
+            LocalPackagePath(path=main_module_x_dir, editable=True),
+        ],
+    )
+
+    # Disable pip-based installation of inmanta module dependencies on the agents. This way, the only
+    # way dependency_module_y's code can reach agent_main is via the editable-install-on-all-agents
+    # mechanism introduced by this design. Without it, agent_main would fail to load main_module_x.
+    Project.get()._metadata.agent_install_dependency_modules = False
+
+    version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
+
+    # 1) Check the registered agent code install metadata: the editable dependency_module_y must be
+    #    registered (from source) for both agents, even for agent_main which only deploys main_module_x.
+    codemanager = CodeManager()
+    for agent_name in ("agent_main", "agent_dep"):
+        install_specs = await codemanager.get_code(
+            environment=uuid.UUID(environment), model_version=version, agent_name=agent_name
+        )
+        specs_by_module = {spec.module_name: spec for spec in install_specs}
+        assert "main_module_x" in specs_by_module, f"main_module_x not registered for {agent_name}"
+        assert "dependency_module_y" in specs_by_module, f"dependency_module_y not registered for {agent_name}"
+        # Editable installed modules are transported as source.
+        assert specs_by_module["main_module_x"].editable_install is True
+        assert specs_by_module["dependency_module_y"].editable_install is True
+
+    # 2) Check the end-to-end deployment: both resources should deploy successfully. In particular,
+    #    agent_main can only deploy its MainResource if dependency_module_y's source was installed on it.
+    result = await client.release_version(environment, version, push=False)
+    assert result.code == 200
+
+    await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=2, state=const.ResourceState.deployed)
