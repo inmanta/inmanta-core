@@ -275,6 +275,10 @@ async def test_executor_call_refreshes_last_used():
         def __init__(self) -> None:
             self.connection = FakeConnection()
 
+            # Mock these out so that the MPExecutor constructor doesn't fail
+            self.failed_resource_results = []
+            self._failed_modules = {}
+
     blueprint = ExecutorBlueprint(
         environment_id=uuid.uuid4(),
         pip_config=PipConfig(),
