@@ -936,7 +936,11 @@ def resource_logs(
 
 @auth(auth_label=const.CoreAuthorizationLabel.FACT_READ, read_only=True, environment_param="tid")
 @typedmethod(
-    path="/resource/<rid>/facts", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
+    path="/resource/<rid>/facts",
+    operation="GET",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api, ClientType.agent],
+    api_version=2,
 )
 def get_facts(tid: uuid.UUID, rid: inmanta.types.ResourceIdStr) -> list[model.Fact]:
     """
@@ -953,7 +957,7 @@ def get_facts(tid: uuid.UUID, rid: inmanta.types.ResourceIdStr) -> list[model.Fa
     path="/resource/<rid>/facts/<id>",
     operation="GET",
     arg_options=methods.ENV_OPTS,
-    client_types=[ClientType.api],
+    client_types=[ClientType.api, ClientType.agent],
     api_version=2,
 )
 def get_fact(tid: uuid.UUID, rid: inmanta.types.ResourceIdStr, id: uuid.UUID) -> model.Fact:
@@ -1750,7 +1754,7 @@ def discovered_resource_create_batch(tid: uuid.UUID, discovered_resources: Seque
     path="/discovered/<discovered_resource_id>",
     operation="GET",
     arg_options=methods.ENV_OPTS,
-    client_types=[ClientType.api],
+    client_types=[ClientType.api, ClientType.agent],
     api_version=2,
 )
 def discovered_resources_get(tid: uuid.UUID, discovered_resource_id: ResourceIdStr) -> model.DiscoveredResourceOutput:
@@ -1767,7 +1771,7 @@ def discovered_resources_get(tid: uuid.UUID, discovered_resource_id: ResourceIdS
     path="/discovered",
     operation="GET",
     arg_options=methods.ENV_OPTS,
-    client_types=[ClientType.api],
+    client_types=[ClientType.api, ClientType.agent],
     api_version=2,
 )
 def discovered_resources_get_batch(
@@ -1819,7 +1823,7 @@ def discovered_resources_get_batch(
     path="/discovered/<discovered_resource_id>",
     operation="DELETE",
     arg_options=methods.ENV_OPTS,
-    client_types=[ClientType.api],
+    client_types=[ClientType.api, ClientType.agent],
     api_version=2,
 )
 def discovered_resource_delete(
@@ -1841,7 +1845,7 @@ def discovered_resource_delete(
     path="/discovered/",
     operation="DELETE",
     arg_options=methods.ENV_OPTS,
-    client_types=[ClientType.api],
+    client_types=[ClientType.api, ClientType.agent],
     api_version=2,
 )
 def discovered_resource_delete_batch(tid: uuid.UUID, discovered_resource_ids: Sequence[str]) -> None:
