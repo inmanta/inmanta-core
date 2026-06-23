@@ -6,7 +6,8 @@ description: >
   than the configured retention time, adding avoidable deployment latency.
 change-type: patch
 destination-branches: [master, iso9, iso8]
-bugfix: >
-  Fix two agent executor cleanup issues: idle executors were no longer cleaned up after the agent reconnected
-  to the server (leaking executor processes), and regularly used executors were rebuilt more often than the
-  configured retention time, adding avoidable deployment latency.
+sections:
+  bugfix: >
+    Fix two agent executor cleanup issues: idle executors were no longer cleaned up after the agent reconnected
+    to the server (leaking executor processes), and regularly used executors were rebuilt more often than the
+    configured retention time, adding avoidable deployment latency.
