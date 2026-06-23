@@ -461,8 +461,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
                 await _load_source(module_source, failed, loop, loader)
 
         for module_source in self.sources:
-            # Import all python files living in modules that contain code with
-            # loading-time side effects (definition of resources, handlers or references)
+            # Import all python files living in all modules registered for the current agent.
             # For editable installs, we first need to put the source on disk before attempting to load the python module:
             if module_source.install_on_disk:
                 await _install_and_load_source(module_source, failed, loop, loader)
