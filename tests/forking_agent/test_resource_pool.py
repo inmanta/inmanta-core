@@ -119,10 +119,6 @@ async def test_timed_resource_pool():
 async def test_timed_resource_pool_restart():
     """
     Regression test: a TimeBasedPoolManager that is shut down and started again must run its cleanup loop again.
-
-    Previously `start()` did not reset the shutdown flags, so after a stop/start cycle (e.g. an agent that reconnects
-    after a lost session reuses the same pool manager) the restarted cleanup task observed `running == False` and exited
-    immediately, leaving idle pool members alive forever.
     """
 
     counter = itertools.count()
