@@ -346,6 +346,16 @@ mapper: CustomStrawberrySQLAlchemyMapper[typing.Any] = CustomStrawberrySQLAlchem
 DEFAULT_PER_PAGE: int = 50
 
 
+def is_provided[T](value: T | None) -> typing.TypeGuard[T]:
+    """
+    Checks if a filter field was provided by the user, i.e. it is neither None nor strawberry.UNSET.
+
+    This is a TypeGuard so that mypy narrows away the `None` (and `strawberry.UNSET`) in the positive branch,
+    just like an inline `value is not None and value is not strawberry.UNSET` check would.
+    """
+    return value is not None and value is not strawberry.UNSET
+
+
 def is_field_selected(info: Info, field_name: str) -> bool:
     """
     Checks if a field was requested by the user, including nested fields and fragments.
@@ -425,9 +435,9 @@ class EnumFilter[T: StrEnum](CustomFilter):
 
     def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]], model: type[models.Base], key: str) -> Select[tuple[*Ts]]:
         # Enums are stored as a string of their name in the database and not of their value
-        if self.eq is not None and self.eq is not strawberry.UNSET:
+        if is_provided(self.eq):
             stmt = stmt.where(getattr(model, key).in_([x.name for x in self.eq]))
-        if self.neq is not None and self.neq is not strawberry.UNSET:
+        if is_provided(self.neq):
             stmt = stmt.where(not_(getattr(model, key).in_([x.name for x in self.neq])))
         return stmt
 
@@ -446,14 +456,14 @@ class StrFilter(CustomFilter):
     not_contains: list[str] | None = strawberry.UNSET
 
     def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]], model: type[models.Base], key: str) -> Select[tuple[*Ts]]:
-        if self.eq is not None and self.eq is not strawberry.UNSET:
+        if is_provided(self.eq):
             stmt = stmt.where(getattr(model, key).in_(self.eq))
-        if self.neq is not None and self.neq is not strawberry.UNSET:
+        if is_provided(self.neq):
             stmt = stmt.where(not_(getattr(model, key).in_(self.neq)))
-        if self.contains is not None and self.contains is not strawberry.UNSET:
+        if is_provided(self.contains):
             for c in self.contains:
                 stmt = stmt.where(getattr(model, key).ilike(c))
-        if self.not_contains is not None and self.not_contains is not strawberry.UNSET:
+        if is_provided(self.not_contains):
             for c in self.not_contains:
                 stmt = stmt.where(not_(getattr(model, key).ilike(c)))
         return stmt
@@ -727,16 +737,16 @@ class ResourceFilter(StrawberryFilter):
             "last_handler_run",
         ]
         for key in rps_keys:
-            attr = getattr(self, key)
-            if attr is not None and attr is not strawberry.UNSET:
+            attr: CustomFilter | None = getattr(self, key)
+            if is_provided(attr):
                 stmt = attr.apply_filter(stmt, self.rps_model, key)
-        if self.environment is not None and self.environment is not strawberry.UNSET:
+        if is_provided(self.environment):
             stmt = stmt.filter(models.ResourcePersistentState.environment == self.environment)
-        if self.purged is not None and self.purged is not strawberry.UNSET:
+        if is_provided(self.purged):
             stmt = stmt.filter(models.Resource.attributes["purged"].astext.cast(Boolean).is_(self.purged))
-        if self.is_deploying is not None and self.is_deploying is not strawberry.UNSET:
+        if is_provided(self.is_deploying):
             stmt = stmt.filter(models.ResourcePersistentState.is_deploying == self.is_deploying)
-        if self.is_orphan is not None and self.is_orphan is not strawberry.UNSET:
+        if is_provided(self.is_orphan):
             stmt = stmt.filter(models.ResourcePersistentState.is_orphan.is_(self.is_orphan))
         return stmt
 
@@ -802,10 +812,10 @@ def add_filter_and_sort[*Ts](
     """
     Adds filter and sorting to the given statement.
     """
-    if filter is not None and filter is not strawberry.UNSET:
+    if is_provided(filter):
         stmt = filter.apply_filters(stmt)
     order_expressions: dict[str, UnaryExpression[typing.Any]] = {}
-    if order_by is not None and order_by is not strawberry.UNSET:
+    if is_provided(order_by):
         for order in order_by:
             if order.key in order_expressions:
                 raise Exception(f"Sorting key appears multiple times in orderBy: {order.key}")
@@ -857,12 +867,12 @@ async def get_connection[*Ts](
     async with get_session() as session:
         per_page: int
         # Get results per page and sanitation of input arguments
-        if first is not None and first is not strawberry.UNSET:
-            if (last is not None and last is not strawberry.UNSET) or (before is not None and before is not strawberry.UNSET):
+        if is_provided(first):
+            if is_provided(last) or is_provided(before):
                 raise Exception("`first` is not allowed in conjunction with `last` or `before`")
             per_page = first
-        elif last is not None and last is not strawberry.UNSET:
-            if (after is not None and after is not strawberry.UNSET) or (before is None or before is strawberry.UNSET):
+        elif is_provided(last):
+            if is_provided(after) or not is_provided(before):
                 raise Exception("`last` is only allowed in conjunction with `before`")
             per_page = last
         else:
@@ -878,11 +888,11 @@ async def get_connection[*Ts](
 
         # Get cursor and direction of results to fetch (forwards/backwards)
         page: Marker | None = None
-        if after is not None and after is not strawberry.UNSET:
-            if before is not None and before is not strawberry.UNSET:
+        if is_provided(after):
+            if is_provided(before):
                 raise Exception("`after` is not allowed in conjunction with `before`")
             page = unserialize_bookmark(f">{decode_cursor(after)}")
-        elif before is not None and before is not strawberry.UNSET:
+        elif is_provided(before):
             page = unserialize_bookmark(f"<{decode_cursor(before)}")
 
         # Fetch the page using sqlakeyset
