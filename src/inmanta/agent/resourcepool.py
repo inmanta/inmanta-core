@@ -201,8 +201,12 @@ class PoolManager(abc.ABC, Generic[TPoolID, TIntPoolID, TPoolMember]):
     async def start(self) -> None:
         """
         Start the Pool Manager
+
+        A pool manager can be started again after a shutdown (e.g. when the agent reconnects after a lost session),
+        so we reset the shutdown flags here to make sure the pool is considered running again.
         """
-        pass
+        self.shut_down = False
+        self.shutting_down = False
 
     async def request_shutdown(self) -> None:
         """

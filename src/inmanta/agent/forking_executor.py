@@ -786,7 +786,7 @@ class MPExecutor(executor.Executor, resourcepool.PoolMember[executor.ExecutorId]
             # We do it after the call, because calls can take a long time
             # if we set the time before the call, we can get expiry of executors under high load,
             # simply because their task is longer than the expiry time
-            self.last_used_at = datetime.datetime.now().astimezone()
+            self.touch()
             # Re-enabled normal cleanup
             self.in_flight -= 1
 
