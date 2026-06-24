@@ -720,10 +720,10 @@ class OrchestrationService(protocol.ServerSlice):
         modules_to_register: dict[InmantaModuleName, InmantaModuleDTO] = {}
 
         for module_name, inmanta_module in module_version_info.items():
-            if inmanta_module.for_agents:
+            if inmanta_module.load_module_on_agent_map:
                 modules_to_register[module_name] = inmanta_module
 
-        module_usage_info: dict[InmantaModuleName, tuple[InmantaModuleVersion, set[AgentName]]] = {}
+        module_usage_info: dict[InmantaModuleName, tuple[InmantaModuleVersion, Mapping[AgentName, bool]]] = {}
 
         if partial_base_version is not None:
             module_usage_info = await AgentModules.get_registered_modules_data(
@@ -740,14 +740,14 @@ class OrchestrationService(protocol.ServerSlice):
 
         for module_name, module in modules_to_register.items():
             current_module_version = module.version
-            current_module_agent_set = set(module.for_agents)
+            current_module_agents_to_register = module.load_module_on_agent_map
 
             if module_name in module_usage_info:
                 # This module was previously known: make sure we register agents
                 # that were already using it before in this model version
-                current_module_agent_set.update(module_usage_info[module_name][1])
+                current_module_agents_to_register.update(module_usage_info[module_name][1])
 
-            module_usage_info[module_name] = (current_module_version, current_module_agent_set)
+            module_usage_info[module_name] = (current_module_version, current_module_agents_to_register)
 
         await InmantaModule.register_modules(environment=environment, modules=modules_to_register, connection=connection)
         await AgentModules.register_modules_for_agents(

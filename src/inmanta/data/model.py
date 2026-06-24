@@ -1208,12 +1208,15 @@ class ModuleSource(BaseModel):
     :param source: the content of the file
     :param install_on_disk: whether the source of this python module should be written to disk during agent
         code install. This is true iff the encapsulating inmanta module was installed in editable mode.
+    :param load_module: whether the source of this python module should be loaded during agent
+        code install. This is true iff the encapsulating inmanta module was registered for that agent.
     """
 
     model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
     metadata: ModuleSourceMetadata
     source: bytes
     install_on_disk: bool
+    load_module: bool
 
     @classmethod
     def from_path(cls, absolute_path: str, name: str, editable_install: bool) -> "ModuleSource":
@@ -1267,10 +1270,9 @@ class InmantaModule(BaseModel):
     :param requirements: The list of python requirements this inmanta module requires. This list is only set for
         editable installed modules. For package install modules, we rely on pip to fetch the correct requirements
         for the given pep 440 version.
-    :param for_agents: The list of agent names that require to install this inmanta module to
-        deploy resources. Note: On the agent side for editable modules, this list is not relevant during the installation
-        since these modules will be installed on all agents. However, it is relevant during code loading; we will only
-        eagerly load the code on agents in this list.
+    :param load_module_on_agent_map: A mapping of [ agent name -> bool]. The keys represent all the agents on which we will
+        attempt to install this inmanta module. The subset of these keys for which the value is true represent the agents
+        on which we will load the module after installation.
     :param editable_install: Whether this inmanta module was installed in editable mode in the compiler venv.
     """
 
@@ -1278,5 +1280,5 @@ class InmantaModule(BaseModel):
     version: InmantaModuleVersion
     files_in_module: list[ModuleSourceMetadata]
     requirements: list[str]
-    for_agents: list[AgentName]
+    load_module_on_agent_map: dict[AgentName, bool]
     editable_install: bool

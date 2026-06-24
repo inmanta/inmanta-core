@@ -57,11 +57,11 @@ class CodeManager:
         """
         module_install_specs = []
 
-        # TODO [editable installed modules] add setup.cfg and pyproject.toml (to ModuleFiles?) (Also MANIFEST.in ??)
         modules_for_agent = (
             select(
                 models.AgentModules.inmanta_module_name,
                 models.AgentModules.inmanta_module_version,
+                models.AgentModules.load_module_on_agent,
                 models.InmantaModule.requirements,
                 models.InmantaModule.editable_install,
                 models.ModuleFiles.python_module_name,
@@ -121,6 +121,7 @@ class CodeManager:
                     assert row.pip_config == _pip_config
                     assert set(row.requirements) == set(first_row.requirements)
                     assert row.project_constraints == first_row.project_constraints
+                    assert row.load_module_on_agent == first_row.load_module_on_agent
 
                 pip_config = LEGACY_PIP_DEFAULT if _pip_config is None else PipConfig(**_pip_config)
                 module_install_specs.append(
@@ -128,6 +129,7 @@ class CodeManager:
                         module_name=module_name,
                         module_version=first_row.inmanta_module_version,
                         editable_install=first_row.editable_install,
+                        load_after_install=first_row.load_module_on_agent,
                         blueprint=executor.ExecutorBlueprint(
                             pip_config=pip_config,
                             requirements=first_row.requirements,

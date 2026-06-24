@@ -36,7 +36,7 @@ from typing import TYPE_CHECKING, Optional
 import packaging
 import packaging.utils
 from inmanta import const, module
-from inmanta.data.model import InmantaModule, ModuleSource
+from inmanta.data.model import InmantaModule, ModuleSource, AgentName
 from inmanta.stable_api import stable_api
 from inmanta.util import hash_file_streaming
 
@@ -150,6 +150,8 @@ class CodeManager:
 
         module_sources: list[ModuleSource] = []
 
+        # TODO update the load_module field
+
         for absolute_path, fqn_module_name in module.get_plugin_files():
             source_info = ModuleSource.from_path(
                 absolute_path=absolute_path, name=fqn_module_name, editable_install=editable_install
@@ -178,7 +180,7 @@ class CodeManager:
                 version=module_version,
                 files_in_module=files_metadata,
                 requirements=list(requirements),
-                for_agents=[],
+                load_module_on_agent_map={},
                 editable_install=True,
             )
         else:
@@ -189,21 +191,21 @@ class CodeManager:
                 version=str(module.version),
                 files_in_module=files_metadata,
                 requirements=[],
-                for_agents=[],
+                load_module_on_agent_map={},
                 editable_install=False,
             )
 
     def _update_agents_for_module(self, inmanta_module_name: str, registered_agents: set[str], editable_install: bool) -> None:
         """
-        Helper method to add the given agents to the list of registered agents for the given Inmanta module.
+        Helper method to update the set of agents registered to  for the given Inmanta module.
         """
+        new_map: dict[AgentName, bool]
         if editable_install:
-            agent_list = list(self._all_agents)
+            new_map = {agent_name: (agent_name in registered_agents) for agent_name in self._all_agents if agent_name not in self.module_version_info[inmanta_module_name].load_module_on_agent_map}
         else:
-            old_set: set[str] = set(self.module_version_info[inmanta_module_name].for_agents)
-            agent_list = list(old_set.union(registered_agents))
+            new_map = {agent_name: True for agent_name in registered_agents}
 
-        self.module_version_info[inmanta_module_name].for_agents = agent_list
+        self.module_version_info[inmanta_module_name].load_module_on_agent_map.update(new_map)
 
     def get_object_source(self, instance: object) -> Optional[str]:
         """Get the path of the source file in which type_object is defined"""

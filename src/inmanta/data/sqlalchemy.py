@@ -86,9 +86,6 @@ class InmantaModule(Base):
         server_default=text("ARRAY[]::character varying[]"),
         doc="The pip requirements for this module version",
     )
-    #  TODO Can this "requirements" field be removed ??
-    # Not used for package install since we rely on pip
-    # For editable installs, we could use the file api to transport the requirements.txt file directly instead of this field
 
     editable_install: Mapped[bool] = mapped_column(
         Boolean,
@@ -171,7 +168,7 @@ class InmantaModule(Base):
                 ],
             )
             await connection.executemany(
-                insert_files_query,  # T
+                insert_files_query,
                 [
                     (
                         inmanta_module_name,
@@ -232,7 +229,7 @@ class ModuleFiles(Base):
     file_content_hash: Mapped[str] = mapped_column(String, nullable=False, doc="The content hash of the file")
     python_module_name: Mapped[str] = mapped_column(
         String, primary_key=True, doc="The fully qualified python module name"
-    )  # TODO change this field to e.g. fqn ? to handle other files eg pyproject.toml
+    )
     is_byte_code: Mapped[bool] = mapped_column(Boolean, nullable=False, doc="Whether this file contains byte code")
 
     inmanta_module: Mapped["InmantaModule"] = relationship("InmantaModule", back_populates="module_files")
@@ -306,7 +303,7 @@ class AgentModules(Base):
     @classmethod
     async def get_registered_modules_data(
         cls, model_version: int, environment: uuid.UUID, connection: asyncpg.Connection
-    ) -> dict[InmantaModuleName, tuple[InmantaModuleVersion, set[AgentName]]]:
+    ) -> dict[InmantaModuleName, tuple[InmantaModuleVersion, dict[AgentName, bool]]]:
         """
         Retrieve all registered modules for a given model version.
         For each module, return the registered version as well as the set of agents registered
@@ -326,7 +323,8 @@ class AgentModules(Base):
             SELECT
                 agent_name,
                 inmanta_module_name,
-                inmanta_module_version
+                inmanta_module_version,
+                load_module_on_agent
             FROM
                 {AgentModules.__tablename__}
             WHERE
@@ -336,7 +334,7 @@ class AgentModules(Base):
          """
         async with connection.transaction():
             values = [model_version, environment]
-            module_usage_info: dict[InmantaModuleName, tuple[InmantaModuleVersion, set[AgentName]]] = {}
+            module_usage_info: dict[InmantaModuleName, tuple[InmantaModuleVersion, dict[AgentName, bool]]] = {}
 
             async for record in connection.cursor(query, *values):
                 if record["inmanta_module_name"] in module_usage_info:
@@ -349,11 +347,11 @@ class AgentModules(Base):
                             f"{module_usage_info[str(record["inmanta_module_name"])][0]}]"
                         )
                     else:
-                        module_usage_info[str(record["inmanta_module_name"])][1].add(str(record["agent_name"]))
+                        module_usage_info[str(record["inmanta_module_name"])][1].update({str(record["agent_name"]): bool(record["load_module_on_agent"])})
                 else:
                     module_usage_info[str(record["inmanta_module_name"])] = (
                         str(record["inmanta_module_version"]),
-                        {str(record["agent_name"])},
+                        {str(record["agent_name"]): bool(record["load_module_on_agent"])},
                     )
 
             return module_usage_info
@@ -363,7 +361,7 @@ class AgentModules(Base):
         cls,
         model_version: int,
         environment: uuid.UUID,
-        module_usage_info: Mapping[InmantaModuleName, tuple[InmantaModuleVersion, Set[AgentName]]],
+        module_usage_info: Mapping[InmantaModuleName, tuple[InmantaModuleVersion, Mapping[AgentName, bool]]],
         connection: asyncpg.Connection,
     ) -> None:
         """
@@ -378,7 +376,9 @@ class AgentModules(Base):
         :param model_version: The model version for which to register modules per agent.
         :param module_usage_info: Maps inmanta module names to a tuple of:
             -   The version to register for this module
-            -   The set of agents using this module in this model version.
+            -   The map of [AgentName -> bool] denoting agents that will either only install this module in this model version
+                (when the value for this agent name is false) or will install and then load this module (when the value is
+                true).
         :param environment: The environment for which to register modules per agent.
         :param connection: The asyncpg connection to use.
         """
@@ -388,20 +388,22 @@ class AgentModules(Base):
                 environment,
                 agent_name,
                 inmanta_module_name,
-                inmanta_module_version
+                inmanta_module_version,
+                load_module_on_agent
             ) VALUES(
                 $1,
                 $2,
                 $3,
                 $4,
-                $5
+                $5,
+                $6
             )
             ON CONFLICT DO NOTHING;
         """
         async with connection.transaction():
             values = []
             for inmanta_module_name, (inmanta_module_version, agents_to_register) in module_usage_info.items():
-                for agent_name in agents_to_register:
+                for agent_name, load_module_on_agent  in agents_to_register.items():
                     values.append(
                         (
                             model_version,
@@ -409,6 +411,7 @@ class AgentModules(Base):
                             agent_name,
                             inmanta_module_name,
                             inmanta_module_version,
+                            load_module_on_agent,
                         )
                     )
             await connection.executemany(

@@ -223,6 +223,7 @@ class ExecutorBlueprint(EnvBlueprint):
             # Gather all sources (both for editable and package install). Later, during code
             # installation on the agent:
             #   - For editable installs, we will write these python module sources to disk and then load them
+             #      on agents that were registered to use them
             #   - For package installs, we will rely on pip for the install and then load them
             sources.update(module_install_spec.blueprint.sources)
 
@@ -370,7 +371,9 @@ class ModuleInstallSpec:
     :ivar module_version: the version of the module to use
     :ivar blueprint: the associated install blueprint
     :ivar editable_install: whether the module was installed in editable mode or as a package
-        in the compiler venv
+        in the compiler venv.
+    :ivar load_after_install: whether the module should be loaded on the agent after a successful
+        installation.
 
     """
 
@@ -378,6 +381,7 @@ class ModuleInstallSpec:
     module_version: str
     blueprint: ExecutorBlueprint
     editable_install: bool
+    load_after_install: bool
 
 
 class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]):
