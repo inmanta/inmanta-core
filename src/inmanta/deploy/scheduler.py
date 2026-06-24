@@ -382,6 +382,8 @@ class ResourceScheduler(TaskManager):
         # - lock to serialize updates to the scheduler's intent (version, attributes, ...), e.g. process a new version.
         self._intent_lock: asyncio.Lock = asyncio.Lock()
 
+        # As long as self._running is False, no workers will be started and no work will be accepted
+        # (i.e. repair runs, deploy runs, etc.).
         self._running = False
         # Agent name to worker task
         # here to prevent it from being GC-ed
