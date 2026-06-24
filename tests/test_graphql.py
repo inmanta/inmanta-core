@@ -31,10 +31,16 @@ from inmanta.protocol import Result
 from inmanta.server import SLICE_COMPILER, SLICE_GRAPHQL
 from inmanta.server.services.compilerservice import CompilerService
 from inmanta.util import retry_limited
-from sqlalchemy import Select, and_
+from sqlalchemy import Select, and_, literal, select, true
+from sqlalchemy.orm import query_expression, with_expression
 from strawberry_sqlalchemy_mapper import StrawberrySQLAlchemyMapper
 from strawberry_sqlalchemy_mapper.mapper import _GENERATED_FIELD_KEYS_KEY
-from utils import insert_with_link_to_configuration_model, log_contains, run_compile_and_wait_until_compile_is_done
+from utils import (
+    insert_with_link_to_configuration_model,
+    log_contains,
+    log_doesnt_contain,
+    run_compile_and_wait_until_compile_is_done,
+)
 
 env_1: typing.Final[str] = "11111111-1234-5678-1234-000000000001"
 LOGGER = logging.getLogger(__name__)
@@ -1137,17 +1143,14 @@ async def test_query_resources_model_version(server, client, environment, setup_
     # modelVersion and isOrphan are mutually exclusive: a specific version is returned as-is, so filtering it by
     # the current orphan state is not allowed and results in an error.
     for orphan_value in ("true", "false"):
-        result = await client.graphql(
-            query="""
+        result = await client.graphql(query="""
             {
                 resources (filter: {environment: "%s" modelVersion: 1 isOrphan: %s}) {
                     totalCount
                     edges { node { resourceId } }
                 }
             }
-            """
-            % (environment, orphan_value)
-        )
+            """ % (environment, orphan_value))
         assert result.code == 400
         data = result.result["data"]
         assert data["data"] is None
@@ -1433,7 +1436,9 @@ async def test_missing_query_exception(server, environment, client):
 
 async def test_custom_extension_contributions(server, environment, client, caplog, mixed_resource_generator):
     """
-    Test to see if we can register custom resource filters and that apply_filter works as intended.
+    Test to see if we can register custom resource filters and that apply_filter works as intended, as well as
+    extension-contributed output fields: both a plain resolver field (`example`) and a query_expression-backed
+    field (`joinedValue`) that the extension populates onto the resources query via with_expression.
     """
 
     def get_example(root: "ExampleResourceMixin") -> str:
@@ -1449,6 +1454,9 @@ async def test_custom_extension_contributions(server, environment, client, caplo
         """
 
         example: str = strawberry.field(resolver=get_example, description="Checks if this mixin was loaded")
+        # Output field backed by a SQLAlchemy query_expression column that the extension populates per query
+        # (declared with a concrete type so the mapper exposes it instead of trying to auto-map the untyped column).
+        joined_value: int = strawberry.field(description="PoC field, joined in by the extension with a hardcoded value of 42.")
 
     @strawberry.input
     class ExampleResourceFilter(ResourceFilterABC):
@@ -1485,10 +1493,29 @@ async def test_custom_extension_contributions(server, environment, client, caplo
         def get_resource_filter_input_class(cls) -> type | None:
             return ExampleResourceFilter
 
+        @classmethod
+        def get_resource_sqlalchemy_columns(cls) -> dict[str, object]:
+            return {"joined_value": query_expression()}
+
+        @classmethod
+        def populate_resource_columns[*Ts](
+            cls, stmt: Select[tuple[*Ts]], resource_model: type, requested_fields: typing.AbstractSet[str]
+        ) -> Select[tuple[*Ts]]:
+            # Only populate the column when it is actually requested (selected or filtered on).
+            if "joined_value" not in requested_fields:
+                return stmt
+            LOGGER.info("Populated joined_value column")
+            # Join in a hardcoded value of 42 and populate it onto each resource's `joined_value` attribute.
+            joined_value_subquery = select(literal(42).label("joined_value")).subquery()
+            return stmt.join(joined_value_subquery, true()).options(
+                with_expression(getattr(resource_model, "joined_value"), joined_value_subquery.c.joined_value)
+            )
+
     graphql_slice = server.get_slice(SLICE_GRAPHQL)
     assert isinstance(graphql_slice, GraphQLSlice)
     with pytest.raises(
-        Exception, match="Can't register extension contribution for example because the GraphQL schema has already been generated"
+        Exception,
+        match="Can't register extension contribution for example because the GraphQL schema has already been generated",
     ):
         graphql_slice.register_extension_contribution("example", ExampleQueryContribution)
 
@@ -1510,6 +1537,7 @@ async def test_custom_extension_contributions(server, environment, client, caplo
                 edges {
                     node {
                       example
+                      joinedValue
                       state{
                         compliance
                       }
@@ -1522,8 +1550,27 @@ async def test_custom_extension_contributions(server, environment, client, caplo
         result = await client.graphql(query=query)
         check_correct_graphql_response(result)
         log_contains(caplog, __name__, logging.INFO, "Applied filter my_value")
+        # joinedValue is selected, so the extension populates its column.
+        log_contains(caplog, __name__, logging.INFO, "Populated joined_value column")
+        assert len(result.result["data"]["data"]["resources"]["edges"]) > 0
         for edge in result.result["data"]["data"]["resources"]["edges"]:
             assert edge["node"]["example"] == "my-example"
+            # The query_expression column populated by the extension via with_expression
+            assert edge["node"]["joinedValue"] == 42
+
+    # When joinedValue is neither selected nor filtered on, the extension leaves its (expensive) column unpopulated.
+    caplog.clear()
+    with caplog.at_level(logging.INFO):
+        result = await client.graphql(query="""
+            {
+                resources (filter: {environment: "%s"}) {
+                    edges { node { example } }
+                }
+            }
+            """ % environment)
+        check_correct_graphql_response(result)
+        assert len(result.result["data"]["data"]["resources"]["edges"]) > 0
+        log_doesnt_contain(caplog, __name__, logging.INFO, "Populated joined_value column")
 
     orphans = resources_per_version // 2
 
@@ -1531,65 +1578,51 @@ async def test_custom_extension_contributions(server, environment, client, caplo
 
     caplog.clear()
     with caplog.at_level(logging.INFO):
-        result = await client.graphql(
-            query="""
+        result = await client.graphql(query="""
             {
                 resources (filter: {environment: "%s" atVersion: 1}) {
                     totalCount
                     edges { node { resourceIdValue } }
                 }
             }
-            """
-            % environment
-        )
+            """ % environment)
         check_correct_graphql_response(result)
         log_contains(caplog, __name__, logging.INFO, "Applied version filter 1")
     at_version_1 = result.result["data"]["data"]["resources"]
     assert at_version_1["totalCount"] == resources_per_version
-    assert {edge["node"]["resourceIdValue"] for edge in at_version_1["edges"]} == {
-        str(i) for i in range(resources_per_version)
-    }
+    assert {edge["node"]["resourceIdValue"] for edge in at_version_1["edges"]} == {str(i) for i in range(resources_per_version)}
 
     # Without `atVersion` the extension does not handle the version (handles_version() is False), so core selects
     # the version by default: the latest version plus the orphaned resources.
-    result = await client.graphql(
-        query="""
+    result = await client.graphql(query="""
         {
             resources (filter: {environment: "%s"}) {
                 totalCount
             }
         }
-        """
-        % environment
-    )
+        """ % environment)
     check_correct_graphql_response(result)
     assert result.result["data"]["data"]["resources"]["totalCount"] == resources_per_version + orphans
 
-    result = await client.graphql(
-        query="""
+    result = await client.graphql(query="""
         {
             resources (filter: {environment: "%s" atVersion: 1 modelVersion: 2}) {
                 totalCount
             }
         }
-        """
-        % environment
-    )
+        """ % environment)
     assert result.code == 400
     assert result.result["data"]["data"] is None
     assert len(result.result["data"]["errors"]) == 1
     assert result.result["data"]["errors"][0] == "Only one extension can determine version logic."
 
-    result = await client.graphql(
-        query="""
+    result = await client.graphql(query="""
         {
             resources (filter: {environment: "%s" atVersion: 1 isOrphan: true}) {
                 totalCount
             }
         }
-        """
-        % environment
-    )
+        """ % environment)
     assert result.code == 400
     assert result.result["data"]["data"] is None
     assert len(result.result["data"]["errors"]) == 1

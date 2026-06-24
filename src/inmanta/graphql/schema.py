@@ -20,7 +20,7 @@ import typing
 import uuid
 from abc import ABC, abstractmethod
 from enum import StrEnum
-from typing import Sequence, cast
+from typing import Mapping, Sequence, cast
 
 import docstring_parser
 
@@ -355,37 +355,36 @@ def is_set[T](value: T | None) -> typing.TypeGuard[T]:
     return value is not None and value is not strawberry.UNSET
 
 
+def _walk_selected_fields(selection: Selection) -> typing.Iterator[SelectedField]:
+    """
+    Yield every SelectedField in a selection subtree: the selection itself if it is a field, plus all nested
+    selections, recursing through inline (``... on Type``) and named (``...Fragment``) fragments.
+    """
+    if isinstance(selection, SelectedField):
+        yield selection
+    for sub_selection in selection.selections or []:
+        yield from _walk_selected_fields(sub_selection)
+
+
 def is_field_selected(info: Info, field_name: str) -> bool:
     """
-    Checks if a field was requested by the user, including nested fields and fragments.
+    Checks if a field was requested by the user, including nested fields and fragments. Looks within each
+    top-level selected field (e.g. the fields inside ``resources``), not at the top-level field names themselves.
     """
+    return any(
+        field.name == field_name
+        for selected_field in info.selected_fields
+        for top_level_selection in selected_field.selections or []
+        for field in _walk_selected_fields(top_level_selection)
+    )
 
-    def _selection_contains_field(selection: Selection) -> bool:
-        """
-        Recursively checks whether a selection (field/fragment) contains the field.
-        """
-        # Direct field match
-        if isinstance(selection, SelectedField):
-            if selection.name == field_name:
-                return True
 
-        # Check nested selections
-        # Inline fragment (e.g. ... on Type { field })
-        # Named fragment (e.g. ...MyFragment)
-        if selection.selections:
-            for sub_selection in selection.selections:
-                if _selection_contains_field(sub_selection):
-                    return True
-        return False
-
-    for selected_field in info.selected_fields:
-        if not selected_field.selections:
-            continue
-
-        for top_level_selection in selected_field.selections:
-            if _selection_contains_field(top_level_selection):
-                return True
-    return False
+def get_selected_field_names(info: Info) -> set[str]:
+    """
+    Return the (camelCase) names of every field selected anywhere in the query, recursing through nested
+    selections and fragments. Used to determine which optional resource columns actually need to be populated.
+    """
+    return {field.name for selected_field in info.selected_fields for field in _walk_selected_fields(selected_field)}
 
 
 def to_snake_case(name: str) -> str:
@@ -697,7 +696,6 @@ class CoreResourceBase:
     )
 
 
-
 @dataclasses.dataclass(kw_only=True)
 @strawberry.input
 class ResourceFilterABC(StrawberryFilter):
@@ -992,6 +990,38 @@ class GraphQLContribution(ABC):
         return None
 
     @classmethod
+    def get_resource_sqlalchemy_columns(cls) -> Mapping[str, object]:
+        """
+        Return SQLAlchemy column descriptors (e.g. ``query_expression()``) keyed by attribute name. These are
+        merged onto a dynamically built subclass of ``models.Resource``, so the ``resources`` query can select a
+        single ORM object that carries extra, SQL-backed columns (joins/subqueries) that don't live on the
+        resource table. The value of each column is populated per query by ``populate_resource_columns``.
+
+        For each column declared here, the matching output field should also be declared with a concrete type on
+        the mixin returned by ``get_resource_graphql_output_type_mixin`` (otherwise the mapper would try to
+        auto-map the untyped column).
+        """
+        return {}
+
+    @classmethod
+    def populate_resource_columns[*Ts](
+        cls, stmt: "Select[tuple[*Ts]]", resource_model: type[models.Resource], requested_fields: typing.AbstractSet[str]
+    ) -> "Select[tuple[*Ts]]":
+        """
+        Populate the columns declared in ``get_resource_sqlalchemy_columns`` onto the ``resources`` query,
+        typically via sqlalchemy's ``with_expression``. ``resource_model`` is the dynamically built subclass of
+        ``models.Resource`` that carries the ``query_expression()`` placeholders (so its core columns keep their
+        type, while the extra columns are read with ``getattr``).
+
+        ``requested_fields`` holds the (snake_case) names of the resource output fields selected in the GraphQL
+        query. Populating a column is usually expensive (extra joins/subqueries), so an implementation should only
+        populate the columns whose name is in ``requested_fields`` and leave the rest as their (null)
+        ``query_expression`` default. Filter fields are intentionally excluded: a ``query_expression`` column reads
+        as NULL in a WHERE clause, so a populated column cannot be filtered on and need not be populated for a filter.
+        """
+        return stmt
+
+    @classmethod
     def get_context_loaders(cls) -> dict[str, object]:
         """Return per-request DataLoaders to inject into the GraphQL context."""
         return {}
@@ -1006,7 +1036,10 @@ class StrawberryInfoContextDict(typing.TypedDict):
     sqlalchemy_loader: StrawberrySQLAlchemyLoader
     compiler_service: CompilerService
 
-def get_resource_filter_components(extension_contributions: list[type[GraphQLContribution]]) -> tuple[type[ResourceFilterABC], ...]:
+
+def get_resource_filter_components(
+    extension_contributions: list[type[GraphQLContribution]],
+) -> tuple[type[ResourceFilterABC], ...]:
     """
     Returns a tuple with the Resource filter classes to build the ResourceFilter (used by Strawberry to filter on resources).
     Contains the CoreResourceFilter with the ResourceFilter child classes provided by the extensions.
@@ -1022,10 +1055,22 @@ def get_resource_filter_components(extension_contributions: list[type[GraphQLCon
     )
     return resource_filter_components
 
-def build_resource_return_obj(extension_contributions: list[type[GraphQLContribution]]) -> type:
+
+def build_resource_return_obj(
+    extension_contributions: list[type[GraphQLContribution]],
+) -> tuple[type, type[models.Resource]]:
     """
-    Builds and returns the Resource object used by Strawberry by mapping the SQLAlchemy model and
-    combining it with the mixins provided by the extensions (and core).
+    Builds the Resource output type used by Strawberry together with the SQLAlchemy model that backs it.
+
+    Extensions can contribute two things:
+      - output mixins (``get_resource_graphql_output_type_mixin``) whose strawberry.field declarations are merged
+        into the Resource output type, and
+      - SQLAlchemy columns (``get_resource_sqlalchemy_columns``) which are merged onto a dynamically built
+        subclass of ``models.Resource``. When any are contributed we map (and later select) that subclass so each
+        row is a single ORM object that can carry the extra columns; otherwise we map ``models.Resource`` directly.
+
+    Returns the (strawberry Resource type, SQLAlchemy resource model) tuple. The latter is needed by the
+    ``resources`` query to select the right entity and let extensions populate their columns.
 
     :param extension_contributions: list of extension graphql contributions
     """
@@ -1040,10 +1085,29 @@ def build_resource_return_obj(extension_contributions: list[type[GraphQLContribu
         for _k, _v in _base.__dict__.items():
             if _k not in _skip_attrs:
                 _resource_attrs[_k] = _v
+
+    # Collect the SQLAlchemy columns the extensions want to add to the resource entity. If there are any, build a
+    # subclass of models.Resource that carries them (single-table inheritance: same table, extra mapped columns).
+    # get_schema is called once per process, so a fixed class name is fine. (Rebuilding the schema in the same
+    # process, as the test suite does, re-registers the name and triggers a harmless SQLAlchemy duplicate-name
+    # warning; nothing resolves this class by string name, so it has no functional effect.)
+    _sqlalchemy_columns: dict[str, object] = {}
+    for c in extension_contributions:
+        _sqlalchemy_columns.update(c.get_resource_sqlalchemy_columns())
+    if _sqlalchemy_columns:
+        resource_model = cast(
+            type[models.Resource],
+            type("GraphqlResource", (models.Resource,), _sqlalchemy_columns),
+        )
+    else:
+        resource_model = models.Resource
+
     # Can't do the same as the resource filter because the mixins can't have the mapper.type decorator and that is required
-    return cast(
-        type, mapper.type(models.Resource)(type("Resource", (), {"__annotations__": _resource_annotations, **_resource_attrs}))
+    strawberry_resource = cast(
+        type, mapper.type(resource_model)(type("Resource", (), {"__annotations__": _resource_annotations, **_resource_attrs}))
     )
+    return strawberry_resource, resource_model
+
 
 def get_schema(
     compiler_service: CompilerService, extension_contributions: list[type[GraphQLContribution]]
@@ -1059,8 +1123,9 @@ def get_schema(
     resource_filter_components = get_resource_filter_components(extension_contributions)
 
     composed_resource_filter: type = strawberry.input(
-        dataclasses.dataclass(kw_only=True)(type("ResourceFilter", resource_filter_components, {})))
-    Resource: type = build_resource_return_obj(extension_contributions)
+        dataclasses.dataclass(kw_only=True)(type("ResourceFilter", resource_filter_components, {}))
+    )
+    Resource, resource_model = build_resource_return_obj(extension_contributions)
 
     class CustomInfo(Info[StrawberryInfoContextDict, object]):
         @property
@@ -1123,7 +1188,9 @@ def get_schema(
 
             # Only fetch resources in their latest version
             # Logic based on src/inmanta/data/dataview.py::ResourceView
-            stmt = select(models.Resource).join(
+            # We select `resource_model` (a subclass of models.Resource carrying the extensions' extra columns when
+            # there are any, models.Resource otherwise) so each row is a single ORM object that can carry them.
+            stmt = select(resource_model).join(
                 models.ResourcePersistentState,
                 and_(
                     models.Resource.resource_id == models.ResourcePersistentState.resource_id,
@@ -1147,6 +1214,14 @@ def get_schema(
             if version_handler is None:
                 version_handler = next(i for i in resource_filter_instances if isinstance(i, CoreResourceFilter))
             stmt = version_handler.apply_version_filter(stmt)
+
+            # Let extensions populate the extra SQL-backed columns they declared on resource_model (see
+            # populate_resource_columns), passing the selected output field names so they only populate what was
+            # requested. Skipped entirely on the common path where no extension contributed columns.
+            if resource_model is not models.Resource:
+                requested_fields = {to_snake_case(name) for name in get_selected_field_names(info)}
+                for contribution in extension_contributions:
+                    stmt = contribution.populate_resource_columns(stmt, resource_model, requested_fields)
 
             stmt = add_filter_and_sort(
                 stmt,
