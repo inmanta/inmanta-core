@@ -257,9 +257,10 @@ async def test_shutdown_notify_race(agent: TestAgent, make_resource_minimal):
 
 async def test_atomicity_start_working_method_scheduler(environment, config, monkeypatch) -> None:
     """
-    Verify that the `start_working()` method of the scheduler is atomic. Any unexpected exception
-    that occurs during the execution of this method must result in a scheduler that is not running
-    and the administrative state of the scheduler (`working` flag) must reflect that.
+    Verify that the `start_working()` and `stop_working()` methods of the scheduler is atomic.
+    Any unexpected exception that occurs during the execution of this method must result in
+    a scheduler that is not running and the administrative state of the scheduler (`working` flag)
+    must reflect that.
     """
 
     class StartFailure(Exception):
