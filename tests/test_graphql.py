@@ -21,19 +21,29 @@ import uuid
 import pytest
 
 import inmanta.data.sqlalchemy as models
+import strawberry
 from inmanta import const, data
 from inmanta.data import model
 from inmanta.deploy import state
-from inmanta.graphql.schema import _docstring_param_cache, mapper, to_snake_case
+from inmanta.graphql.graphql import GraphQLSlice
+from inmanta.graphql.schema import GraphQLContribution, _docstring_param_cache, mapper, to_snake_case
 from inmanta.protocol import Result
-from inmanta.server import SLICE_COMPILER
+from inmanta.server import SLICE_COMPILER, SLICE_GRAPHQL
 from inmanta.server.services.compilerservice import CompilerService
 from inmanta.util import retry_limited
+from sqlalchemy import Select, literal, select, true
+from sqlalchemy.orm import query_expression, with_expression
 from strawberry_sqlalchemy_mapper import StrawberrySQLAlchemyMapper
 from strawberry_sqlalchemy_mapper.mapper import _GENERATED_FIELD_KEYS_KEY
-from utils import insert_with_link_to_configuration_model, run_compile_and_wait_until_compile_is_done
+from utils import (
+    insert_with_link_to_configuration_model,
+    log_contains,
+    log_doesnt_contain,
+    run_compile_and_wait_until_compile_is_done,
+)
 
 env_1: typing.Final[str] = "11111111-1234-5678-1234-000000000001"
+LOGGER = logging.getLogger(__name__)
 
 
 def check_correct_graphql_response(result: Result[object]) -> None:
@@ -1297,3 +1307,95 @@ async def test_missing_query_exception(server, environment, client):
     assert result.result["data"]["data"] is None
     assert len(result.result["data"]["errors"]) == 1
     assert result.result["data"]["errors"][0] == 'Request data is missing a "query" value'
+
+
+async def test_custom_extension_contributions(server, environment, client, caplog, mixed_resource_generator):
+    """
+    Test that an extension can contribute output fields to the `resources` query: both a plain resolver field
+    (`example`) and a query_expression-backed field (`joinedValue`) that the extension populates onto the query via
+    with_expression, only when the field is actually selected.
+    """
+
+    def get_example(root: "ExampleResourceMixin") -> str:
+        assert hasattr(root, "attributes")  # Make mypy happy
+        return "my-example"
+
+    class ExampleResourceMixin:
+        """Mixin merged into the Resource output type."""
+
+        example: str = strawberry.field(resolver=get_example, description="Checks if this mixin was loaded")
+        # Output field backed by a SQLAlchemy query_expression column that the extension populates per query
+        # (declared with a concrete type so the mapper exposes it instead of trying to auto-map the untyped column).
+        joined_value: int = strawberry.field(description="PoC field, joined in by the extension with a hardcoded value of 42.")
+
+    class ExampleQueryContribution(GraphQLContribution):
+        @classmethod
+        def get_resource_graphql_output_type_mixin(cls) -> type | None:
+            return ExampleResourceMixin
+
+        @classmethod
+        def get_resource_sqlalchemy_columns(cls) -> dict[str, object]:
+            return {"joined_value": query_expression()}
+
+        @classmethod
+        def populate_resource_columns[*Ts](
+            cls, stmt: Select[tuple[*Ts]], resource_model: type, requested_fields: typing.AbstractSet[str]
+        ) -> Select[tuple[*Ts]]:
+            # Only populate the (potentially expensive) column when it is actually requested.
+            if "joined_value" not in requested_fields:
+                return stmt
+            LOGGER.info("Populated joined_value column")
+            # Join in a hardcoded value of 42 and populate it onto each resource's `joined_value` attribute.
+            joined_value_subquery = select(literal(42).label("joined_value")).subquery()
+            return stmt.join(joined_value_subquery, true()).options(
+                with_expression(getattr(resource_model, "joined_value"), joined_value_subquery.c.joined_value)
+            )
+
+    graphql_slice = server.get_slice(SLICE_GRAPHQL)
+    assert isinstance(graphql_slice, GraphQLSlice)
+    with pytest.raises(
+        Exception,
+        match="Can't register extension contribution for example because the GraphQL schema has already been generated",
+    ):
+        graphql_slice.register_extension_contribution("example", ExampleQueryContribution)
+
+    # GraphQLSlice has already started, so we reset its schema to make registering possible again for this test.
+    graphql_slice.schema = None
+    graphql_slice.register_extension_contribution("example", ExampleQueryContribution)
+    with pytest.raises(Exception, match="Extension example already registered."):
+        graphql_slice.register_extension_contribution("example", ExampleQueryContribution)
+    await graphql_slice.start()
+
+    instances = 1
+    resources_per_version = 6
+    await mixed_resource_generator(environment, instances, resources_per_version)
+
+    # joinedValue is selected, so the extension populates its column.
+    with caplog.at_level(logging.INFO):
+        result = await client.graphql(query="""
+            {
+                resources (filter: {environment: "%s"}) {
+                    edges { node { example joinedValue state { compliance } } }
+                }
+            }
+            """ % environment)
+        check_correct_graphql_response(result)
+        log_contains(caplog, __name__, logging.INFO, "Populated joined_value column")
+        assert len(result.result["data"]["data"]["resources"]["edges"]) > 0
+        for edge in result.result["data"]["data"]["resources"]["edges"]:
+            assert edge["node"]["example"] == "my-example"
+            assert edge["node"]["joinedValue"] == 42
+
+    # When joinedValue is neither selected nor filtered on, the extension leaves its (expensive) column unpopulated.
+    caplog.clear()
+    with caplog.at_level(logging.INFO):
+        result = await client.graphql(query="""
+            {
+                resources (filter: {environment: "%s"}) {
+                    edges { node { example } }
+                }
+            }
+            """ % environment)
+        check_correct_graphql_response(result)
+        assert len(result.result["data"]["data"]["resources"]["edges"]) > 0
+        log_doesnt_contain(caplog, __name__, logging.INFO, "Populated joined_value column")
