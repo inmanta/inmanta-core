@@ -405,6 +405,8 @@ class ResourceScheduler(TaskManager):
         # - lock to serialize updates to the scheduler's intent (version, attributes, ...), e.g. process a new version.
         self._intent_lock: asyncio.Lock = asyncio.Lock()
 
+        # As long as self._running is False, no workers will be started and no work will be accepted
+        # (i.e. repair runs, deploy runs, etc.).
         self._running = False
         # Agent name to worker task
         # here to prevent it from being GC-ed
@@ -432,6 +434,9 @@ class ResourceScheduler(TaskManager):
         self._deployment_suspended: bool = False
         self._compliance_reporting_feature_enabled: bool = False
 
+        # Prevent concurrent execution of the start() and stop() methods.
+        self._start_stop_lock = asyncio.Lock()
+
     async def _reset(self) -> None:
         """
         Clear out all state and start empty
@@ -454,25 +459,27 @@ class ResourceScheduler(TaskManager):
         await self._timer_manager.reset()
 
     async def start(self) -> None:
-        if self._running:
-            return
-        LOGGER.debug("Starting resource scheduler for environment %s", str(self.environment))
-        await self._reset()
-        await self.reset_resource_state()
+        async with self._start_stop_lock:
+            if self._running:
+                return
+            LOGGER.debug("Starting resource scheduler for environment %s", str(self.environment))
+            await self._reset()
+            await self.reset_resource_state()
 
-        await self._initialize()
+            await self._initialize()
 
     async def stop(self) -> None:
-        if not self._running:
-            return
-        self._running = False
-        await self._timer_manager.stop()
-        # Ensure workers go down
-        # First stop them
-        for worker in self._workers.values():
-            await worker.stop()
-        # Then wake them up to receive the stop
-        self._work.agent_queues.send_shutdown()
+        async with self._start_stop_lock:
+            if not self._running:
+                return
+            self._running = False
+            await self._timer_manager.stop()
+            # Ensure workers go down
+            # First stop them
+            for worker in self._workers.values():
+                await worker.stop()
+            # Then wake them up to receive the stop
+            self._work.agent_queues.send_shutdown()
 
     async def join(self) -> None:
         await asyncio.gather(*[worker.join() for worker in self._workers.values()])
