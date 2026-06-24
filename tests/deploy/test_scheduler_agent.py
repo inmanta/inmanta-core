@@ -255,6 +255,48 @@ async def test_shutdown_notify_race(agent: TestAgent, make_resource_minimal):
     assert worker._task.done()
 
 
+async def test_atomicity_start_working_method_scheduler(environment, config, monkeypatch) -> None:
+    """
+    Verify that the `start_working()` and `stop_working()` methods of the scheduler are atomic.
+    Any unexpected exception that occurs during the execution of this method must result in
+    a scheduler that is not running and the administrative state of the scheduler (`working` flag)
+    must reflect that.
+    """
+
+    class StartFailure(Exception):
+        pass
+
+    agent = TestAgent(environment)
+
+    fail_start: bool = True
+    original_reset_resource_state = agent.scheduler.reset_resource_state
+
+    async def maybe_failing_reset_resource_state() -> None:
+        if fail_start:
+            raise StartFailure()
+        await original_reset_resource_state()
+
+    monkeypatch.setattr(agent.scheduler, "reset_resource_state", maybe_failing_reset_resource_state)
+
+    with pytest.raises(StartFailure):
+        await agent.start_working()
+
+    # The administrative and operational running state must remain consistent: we are not working and the
+    # scheduler is not running.
+    assert agent.working is False
+    assert agent.scheduler._running is False
+
+    fail_start = False
+    await agent.start_working()
+    assert agent.working is True
+    assert agent.scheduler._running is True
+
+    # Sanity check: a clean stop brings both states back down again.
+    await agent.stop_working()
+    assert agent.working is False
+    assert agent.scheduler._running is False
+
+
 async def test_deploy_report_only(agent: TestAgent, make_resource_minimal) -> None:
     """
     Verify that a report_only resource is correctly scheduled as a deploy
