@@ -1,0 +1,6 @@
+---
+description: "Fixed bug where the scheduler would stop processing new model versions if the database has been running in read-only mode."
+change-type: patch
+destination-branches: [iso9, iso8]
+sections:
+  bugfix: "{{description}}"
