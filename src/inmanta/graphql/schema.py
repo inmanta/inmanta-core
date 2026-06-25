@@ -367,25 +367,21 @@ def _walk_selected_fields(selection: Selection) -> typing.Iterator[SelectedField
         yield from _walk_selected_fields(sub_selection)
 
 
-def is_field_selected(info: Info, field_name: str) -> bool:
-    """
-    Checks if a field was requested by the user, including nested fields and fragments. Looks within each
-    top-level selected field (e.g. the fields inside ``resources``), not at the top-level field names themselves.
-    """
-    return any(
-        field.name == field_name
-        for selected_field in info.selected_fields
-        for top_level_selection in selected_field.selections or []
-        for field in _walk_selected_fields(top_level_selection)
-    )
-
-
 def get_selected_field_names(info: Info) -> set[str]:
     """
     Return the (camelCase) names of every field selected anywhere in the query, recursing through nested
-    selections and fragments. Used to determine which optional resource columns actually need to be populated.
+    selections and fragments. This includes the names of the top-level resolved fields themselves (e.g. ``resources``);
+    callers only ever test inner field names, so that is harmless. Used to determine which optional resource columns
+    actually need to be populated.
     """
     return {field.name for selected_field in info.selected_fields for field in _walk_selected_fields(selected_field)}
+
+
+def is_field_selected(info: Info, field_name: str) -> bool:
+    """
+    Check whether the user requested ``field_name`` anywhere in the query, including nested fields and fragments.
+    """
+    return field_name in get_selected_field_names(info)
 
 
 def to_snake_case(name: str) -> str:
