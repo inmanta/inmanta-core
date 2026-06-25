@@ -58,7 +58,7 @@ We use a `StrawberrySQLAlchemyMapper` to map a sqlalchemy model to a strawberry 
 
 There are 4 important building blocks that we have to take into account:
     1) The strawberry class itself i.e.
-        ```
+        ``
             @mapper.type(models.Environment)
             class Environment:
                 __exclude__ = [
@@ -68,7 +68,7 @@ There are 4 important building blocks that we have to take into account:
                 ]
                 is_expert_mode: bool = strawberry.field(resolver=get_expert_mode)
                 is_compiling: bool = strawberry.field(resolver=get_is_compiling)
-        ```
+        ``
          It is always decorated with `@mapper.type(<respective_sqlalchemy_model>)`
          We use the `__exclude__` attribute to exclude any attributes or relationships from the SQLAlchemy model that
          we don't want to expose via GraphQL
@@ -76,7 +76,7 @@ There are 4 important building blocks that we have to take into account:
          We then add a custom resolver that fetches the correct value for these fields.
 
     2) The attributes of the `Query` class i.e.
-        ```
+        ``
             @strawberry.field
             async def environments(
                 self,
@@ -93,7 +93,7 @@ There are 4 important building blocks that we have to take into account:
                 return await get_connection(
                     stmt, info=info, model="Environment", first=first, after=after, last=last, before=before
                 )
-        ```
+        ``
 
         The `first`/`last`/`before`/`after` query arguments are used for pagination.
         It is possible to add custom parameters to the query that we want to use on resolution, like `filter` and `order_by`.
@@ -105,16 +105,16 @@ There are 4 important building blocks that we have to take into account:
         will generate the `Connection` class for it as well in runtime.
 
     3) The `StrawberryFilter` child class for our strawberry model i.e.
-        ```
+        ``
             @strawberry.input
             class EnvironmentFilter(StrawberryFilter):
                 id: typing.Optional[str] = strawberry.UNSET
-        ```
+        ``
         This class determines what fields we allow our users to filter on and what type we expect to receive.
 
         We can also define custom filters to handle more complex behaviour than simple equality.
         i.e. a filter to get values based on a list of enum values
-        ```
+        ``
             @strawberry.input
             class EnumFilter[T: StrEnum](CustomFilter):
                 # Expects to receive a StrEnum.
@@ -129,9 +129,9 @@ There are 4 important building blocks that we have to take into account:
                     if self.neq is not None and self.neq is not strawberry.UNSET:
                         stmt = stmt.where(not_(getattr(model, key).in_([x.name for x in self.neq])))
                     return stmt
-        ```
+        ``
     4) The `StrawberryOrder` child class for our strawberry model i.e.
-        ```
+        ``
             @strawberry.input
             class EnvironmentOrder(StrawberryOrder):
                 @property
@@ -141,7 +141,7 @@ There are 4 important building blocks that we have to take into account:
                 @property
                 def key_to_model(self) -> dict[str, type[models.Base]]:
                     return {"id": self.model, "name": self.model}
-        ```
+        ``
         This class determines what fields we allow our users to sort the results.
 
     Some tips:
@@ -226,14 +226,14 @@ class CustomStrawberrySQLAlchemyMapper(StrawberrySQLAlchemyMapper[BaseModelType]
     ) -> None:
         """
         Populate the Strawberry type with fields derived from the SQLAlchemy mapper.
-        Override to propagate SQLAlchemy column and relationship ``doc`` to GraphQL field descriptions.
+        Override to propagate SQLAlchemy column and relationship `doc` to GraphQL field descriptions.
 
         Despite the original method only working for sqlalchemy columns, this override also generates fields for relationships
         and hybrid properties.
 
         Field descriptions are resolved in order of precedence:
-        1. SQLAlchemy ``doc`` attribute
-        2. ``:param`` docstring on the corresponding ``BaseDocument`` subclass
+        1. SQLAlchemy `doc` attribute
+        2. `:param` docstring on the corresponding `BaseDocument` subclass
 
         :param mapper: The sqlalchemy mapper that describes the ORM model.
         :param type_: The Strawberry GraphQL type currently being constructed.
@@ -359,7 +359,7 @@ def is_provided[T](value: T | None) -> typing.TypeGuard[T]:
 def _walk_selected_fields(selection: Selection) -> typing.Iterator[SelectedField]:
     """
     Yield every SelectedField in a selection subtree: the selection itself if it is a field, plus all nested
-    selections, recursing through inline (``... on Type``) and named (``...Fragment``) fragments.
+    selections, recursing through inline (`... on Type`) and named (`...Fragment`) fragments.
     """
     if isinstance(selection, SelectedField):
         yield selection
@@ -370,16 +370,14 @@ def _walk_selected_fields(selection: Selection) -> typing.Iterator[SelectedField
 def get_selected_field_names(info: Info) -> set[str]:
     """
     Return the (camelCase) names of every field selected anywhere in the query, recursing through nested
-    selections and fragments. This includes the names of the top-level resolved fields themselves (e.g. ``resources``);
-    callers only ever test inner field names, so that is harmless. Used to determine which optional resource columns
-    actually need to be populated.
+    selections and fragments. This includes the names of the top-level resolved fields themselves (e.g. `resources`);
     """
     return {field.name for selected_field in info.selected_fields for field in _walk_selected_fields(selected_field)}
 
 
 def is_field_selected(info: Info, field_name: str) -> bool:
     """
-    Check whether the user requested ``field_name`` anywhere in the query, including nested fields and fragments.
+    Check whether the user requested `field_name` anywhere in the query, including nested fields and fragments.
     """
     return field_name in get_selected_field_names(info)
 
@@ -690,8 +688,8 @@ def get_purged(root: "CoreResourceBase") -> bool:
 
 class CoreResourceBase:
     """
-    Mixin carrying the core resource output fields. It is merged with the extensions' output mixins (and mapped onto
-    the SQLAlchemy resource model) by ``build_resource_return_obj`` to build the ``Resource`` GraphQL output type.
+    Mixin carrying the added core resource output fields. It is merged with the extensions' output mixins (and mapped onto
+    the SQLAlchemy resource model) by `build_resource_strawberry_type` to build the `Resource` GraphQL output type.
     """
 
     __exclude__ = ["resource_set_"]
@@ -923,31 +921,30 @@ async def get_connection[*Ts](
 
 class GraphQLContribution(ABC):
     """
-    Extension hook that lets extensions (e.g. LSM) contribute extra output fields to the core ``resources`` GraphQL
-    query without core being aware of those modules. An output field is declared as a ``strawberry.field`` on the
-    mixin returned by ``get_resource_graphql_output_type_mixin``; when it is SQL-backed it is also declared as a
-    ``query_expression`` column via ``get_resource_sqlalchemy_columns`` and populated per query by
-    ``populate_resource_columns``.
+    Extension hook that lets extensions (e.g. LSM) contribute extra information to GraphQL queries
+    without core being aware of those modules.
     """
 
     @classmethod
     def get_resource_graphql_output_type_mixin(cls) -> type | None:
         """
-        Return a plain class (no decorator) whose ``strawberry.field`` declarations are merged into the Resource
-        output type. Return None if this contribution adds no output fields.
+        Return a plain class (no decorator) whose `strawberry.field` declarations are merged into the Resource
+        output type. These output fields can be sqlalchemy columns that are later populated with populate_resource_columns or
+        simple resolvers (e.g. `purged` on `CoreResourceBase`)
+        Return None if this contribution adds no output fields.
         """
         return None
 
     @classmethod
     def get_resource_sqlalchemy_columns(cls) -> "typing.Mapping[str, object]":
         """
-        Return SQLAlchemy column descriptors (e.g. ``query_expression()``) keyed by attribute name. These are
-        merged onto a dynamically built subclass of ``models.Resource``, so the ``resources`` query can select a
+        Return SQLAlchemy column descriptors (e.g. `query_expression()`) keyed by attribute name. These are
+        merged onto a dynamically built subclass of `models.Resource`, so the `resources` query can select a
         single ORM object that carries extra, SQL-backed columns (joins/subqueries) that don't live on the
-        resource table. The value of each column is populated per query by ``populate_resource_columns``.
+        resource table. The value of each column is populated per query by `populate_resource_columns`.
 
         For each column declared here, the matching output field should also be declared with a concrete type on
-        the mixin returned by ``get_resource_graphql_output_type_mixin`` (otherwise the mapper would try to
+        the mixin returned by `get_resource_graphql_output_type_mixin` (otherwise the mapper would try to
         auto-map the untyped column).
         """
         return {}
@@ -957,36 +954,58 @@ class GraphQLContribution(ABC):
         cls, stmt: "Select[tuple[*Ts]]", resource_model: type[models.Resource], requested_fields: typing.AbstractSet[str]
     ) -> "Select[tuple[*Ts]]":
         """
-        Populate the columns declared in ``get_resource_sqlalchemy_columns`` onto the ``resources`` query, typically
-        via sqlalchemy's ``with_expression``. ``resource_model`` is the dynamically built subclass of
-        ``models.Resource`` that carries the ``query_expression()`` placeholders (so its core columns keep their
-        type, while the extra columns are read with ``getattr``).
+        Populate the columns declared in `get_resource_sqlalchemy_columns` onto the `resources` query, typically
+        via sqlalchemy's `with_expression`.
+        `resource_model` is the dynamically built subclass of `models.Resource` that carries the `query_expression()`
+        placeholders (so its core columns keep their type, while the extra columns are read with `getattr`).
 
-        ``requested_fields`` holds the (snake_case) names of the resource output fields selected in the GraphQL
+        `requested_fields` holds the (snake_case) names of the resource output fields selected in the GraphQL
         query. Populating a column is usually expensive (extra joins/subqueries), so an implementation should only
-        populate the columns whose name is in ``requested_fields`` and leave the rest as their (null)
-        ``query_expression`` default.
+        populate the columns whose name is in `requested_fields` and leave the rest as their (null)
+        `query_expression` default.
         """
         return stmt
 
 
-def build_resource_return_obj(
+def build_resource_sqlalchemy_model(
     extension_contributions: list[type[GraphQLContribution]],
-) -> tuple[type, type[models.Resource]]:
+) -> type[models.Resource]:
     """
-    Builds the Resource output type used by Strawberry together with the SQLAlchemy model that backs it.
+    Build the SQLAlchemy model backing the Resource output type.
 
-    Extensions can contribute two things:
-      - output mixins (``get_resource_graphql_output_type_mixin``) whose ``strawberry.field`` declarations are merged
-        into the Resource output type, and
-      - SQLAlchemy columns (``get_resource_sqlalchemy_columns``) which are merged onto a dynamically built subclass
-        of ``models.Resource``. When any are contributed we map (and later select) that subclass so each row is a
-        single ORM object that can carry the extra columns; otherwise we map ``models.Resource`` directly.
+    Extensions can contribute SQLAlchemy columns (`get_resource_sqlalchemy_columns`). When any are contributed we
+    build a subclass of `models.Resource` that carries them (single-table inheritance: same table, extra mapped
+    columns), so each row the `resources` query selects is a single ORM object that can carry the extra columns;
+    otherwise `models.Resource` is used directly. get_schema is called once per process, so a fixed class name is fine.
 
-    Returns the (strawberry Resource type, SQLAlchemy resource model) tuple. The latter is needed by the
-    ``resources`` query to select the right entity and let extensions populate their columns.
+    The returned model is needed by the `resources` query to select the right entity and let extensions populate their
+    columns, and by `build_resource_strawberry_type` to map the Strawberry output type from it.
 
     :param extension_contributions: list of extension graphql contributions
+    """
+    _sqlalchemy_columns: dict[str, object] = {}
+    for c in extension_contributions:
+        _sqlalchemy_columns.update(c.get_resource_sqlalchemy_columns())
+    if not _sqlalchemy_columns:
+        return models.Resource
+    return cast(
+        type[models.Resource],
+        type("Resource", (models.Resource,), _sqlalchemy_columns),
+    )
+
+
+def build_resource_strawberry_type(
+    extension_contributions: list[type[GraphQLContribution]],
+    resource_model: type[models.Resource],
+) -> type:
+    """
+    Build the Resource output type used by Strawberry, mapped from `resource_model`.
+
+    Extensions can contribute output mixins (`get_resource_graphql_output_type_mixin`) whose `strawberry.field`
+    declarations are merged (with the core fields) into the Resource output type.
+
+    :param extension_contributions: list of extension graphql contributions
+    :param resource_model: the SQLAlchemy model that backs the output type (see `build_resource_sqlalchemy_model`)
     """
     _resource_mixins: tuple[type, ...] = tuple(
         mixin for c in extension_contributions if (mixin := c.get_resource_graphql_output_type_mixin()) is not None
@@ -1000,27 +1019,10 @@ def build_resource_return_obj(
             if _k not in _skip_attrs:
                 _resource_attrs[_k] = _v
 
-    # Collect the SQLAlchemy columns the extensions want to add to the resource entity. If there are any, build a
-    # subclass of models.Resource that carries them (single-table inheritance: same table, extra mapped columns).
-    # get_schema is called once per process, so a fixed class name is fine. (Rebuilding the schema in the same
-    # process, as the test suite does, re-registers the name and triggers a harmless SQLAlchemy duplicate-name
-    # warning; nothing resolves this class by string name, so it has no functional effect.)
-    _sqlalchemy_columns: dict[str, object] = {}
-    for c in extension_contributions:
-        _sqlalchemy_columns.update(c.get_resource_sqlalchemy_columns())
-    if _sqlalchemy_columns:
-        resource_model = cast(
-            type[models.Resource],
-            type("GraphqlResource", (models.Resource,), _sqlalchemy_columns),
-        )
-    else:
-        resource_model = models.Resource
-
     # Can't do the same as the resource filter because the mixins can't have the mapper.type decorator and that is required
-    strawberry_resource = cast(
+    return cast(
         type, mapper.type(resource_model)(type("Resource", (), {"__annotations__": _resource_annotations, **_resource_attrs}))
     )
-    return strawberry_resource, resource_model
 
 
 def get_schema(
@@ -1034,7 +1036,8 @@ def get_schema(
 
     loader = StrawberrySQLAlchemyLoader(async_bind_factory=get_session_factory())
 
-    Resource, resource_model = build_resource_return_obj(extension_contributions)
+    resource_model = build_resource_sqlalchemy_model(extension_contributions)
+    Resource = build_resource_strawberry_type(extension_contributions, resource_model)
 
     class CustomInfo(Info):
         @property
