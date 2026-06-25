@@ -1026,9 +1026,7 @@ def build_resource_strawberry_type(
     )
 
 
-def get_schema(
-    context: GraphQLContext, extension_contributions: Sequence[type[GraphQLContribution]]
-) -> strawberry.Schema:
+def get_schema(context: GraphQLContext, extension_contributions: Sequence[type[GraphQLContribution]]) -> strawberry.Schema:
     """
     Initializes the Strawberry GraphQL schema.
     It is initiated in a function instead of being declared at the module level, because we have to do this
