@@ -58,7 +58,7 @@ We use a `StrawberrySQLAlchemyMapper` to map a sqlalchemy model to a strawberry 
 
 There are 4 important building blocks that we have to take into account:
     1) The strawberry class itself i.e.
-        ``
+        ```
             @mapper.type(models.Environment)
             class Environment:
                 __exclude__ = [
@@ -68,7 +68,7 @@ There are 4 important building blocks that we have to take into account:
                 ]
                 is_expert_mode: bool = strawberry.field(resolver=get_expert_mode)
                 is_compiling: bool = strawberry.field(resolver=get_is_compiling)
-        ``
+        ```
          It is always decorated with `@mapper.type(<respective_sqlalchemy_model>)`
          We use the `__exclude__` attribute to exclude any attributes or relationships from the SQLAlchemy model that
          we don't want to expose via GraphQL
@@ -76,7 +76,7 @@ There are 4 important building blocks that we have to take into account:
          We then add a custom resolver that fetches the correct value for these fields.
 
     2) The attributes of the `Query` class i.e.
-        ``
+        ```
             @strawberry.field
             async def environments(
                 self,
@@ -93,7 +93,7 @@ There are 4 important building blocks that we have to take into account:
                 return await get_connection(
                     stmt, info=info, model="Environment", first=first, after=after, last=last, before=before
                 )
-        ``
+        ```
 
         The `first`/`last`/`before`/`after` query arguments are used for pagination.
         It is possible to add custom parameters to the query that we want to use on resolution, like `filter` and `order_by`.
@@ -105,16 +105,16 @@ There are 4 important building blocks that we have to take into account:
         will generate the `Connection` class for it as well in runtime.
 
     3) The `StrawberryFilter` child class for our strawberry model i.e.
-        ``
+        ```
             @strawberry.input
             class EnvironmentFilter(StrawberryFilter):
                 id: typing.Optional[str] = strawberry.UNSET
-        ``
+        ```
         This class determines what fields we allow our users to filter on and what type we expect to receive.
 
         We can also define custom filters to handle more complex behaviour than simple equality.
         i.e. a filter to get values based on a list of enum values
-        ``
+        ```
             @strawberry.input
             class EnumFilter[T: StrEnum](CustomFilter):
                 # Expects to receive a StrEnum.
@@ -129,9 +129,9 @@ There are 4 important building blocks that we have to take into account:
                     if self.neq is not None and self.neq is not strawberry.UNSET:
                         stmt = stmt.where(not_(getattr(model, key).in_([x.name for x in self.neq])))
                     return stmt
-        ``
+        ```
     4) The `StrawberryOrder` child class for our strawberry model i.e.
-        ``
+        ```
             @strawberry.input
             class EnvironmentOrder(StrawberryOrder):
                 @property
@@ -141,7 +141,7 @@ There are 4 important building blocks that we have to take into account:
                 @property
                 def key_to_model(self) -> dict[str, type[models.Base]]:
                     return {"id": self.model, "name": self.model}
-        ``
+        ```
         This class determines what fields we allow our users to sort the results.
 
     Some tips:
