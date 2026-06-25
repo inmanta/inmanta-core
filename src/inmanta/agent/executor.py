@@ -223,7 +223,7 @@ class ExecutorBlueprint(EnvBlueprint):
             # Gather all sources (both for editable and package install). Later, during code
             # installation on the agent:
             #   - For editable installs, we will write these python module sources to disk and then load them
-             #      on agents that were registered to use them
+            #      on agents that were registered to use them
             #   - For package installs, we will rely on pip for the install and then load them
             sources.update(module_install_spec.blueprint.sources)
 

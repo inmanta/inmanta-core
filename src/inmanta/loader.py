@@ -36,7 +36,7 @@ from typing import TYPE_CHECKING, Optional
 import packaging
 import packaging.utils
 from inmanta import const, module
-from inmanta.data.model import InmantaModule, ModuleSource, AgentName
+from inmanta.data.model import InmantaModule, ModuleSource
 from inmanta.stable_api import stable_api
 from inmanta.util import hash_file_streaming
 
@@ -85,6 +85,8 @@ class CodeManager:
         self._types_to_agent: dict[str, set[str]] = defaultdict(set)
         self._all_agents: set[str] = set()
 
+        self._load_modules_on_agents_map: dict[str, set[str]] = defaultdict(set)
+        self._install_modules_on_agents_map: dict[str, set[str]] = defaultdict(set)
         # Map of [inmanta_module_name, inmanta module]
         self.module_version_info: dict[str, "InmantaModule"] = {}
 
@@ -150,11 +152,9 @@ class CodeManager:
 
         module_sources: list[ModuleSource] = []
 
-        # TODO update the load_module field
-
         for absolute_path, fqn_module_name in module.get_plugin_files():
             source_info = ModuleSource.from_path(
-                absolute_path=absolute_path, name=fqn_module_name, editable_install=editable_install
+                absolute_path=absolute_path, name=fqn_module_name, editable_install=editable_install, load_module=False
             )
             self.__file_info[absolute_path] = source_info
             module_sources.append(source_info)
@@ -180,7 +180,8 @@ class CodeManager:
                 version=module_version,
                 files_in_module=files_metadata,
                 requirements=list(requirements),
-                load_module_on_agent_map={},
+                install_module_on_agents=set(),
+                load_module_on_agents=set(),
                 editable_install=True,
             )
         else:
@@ -191,21 +192,23 @@ class CodeManager:
                 version=str(module.version),
                 files_in_module=files_metadata,
                 requirements=[],
-                load_module_on_agent_map={},
+                install_module_on_agents=set(),
+                load_module_on_agents=set(),
                 editable_install=False,
             )
 
     def _update_agents_for_module(self, inmanta_module_name: str, registered_agents: set[str], editable_install: bool) -> None:
         """
-        Helper method to update the set of agents registered to  for the given Inmanta module.
+        Helper method to update the set of agents registered for the given Inmanta module. We want to install editable modules
+        on all agents, but we do not want to eagerly load them (i.e. only load them on agents that were registered to use
+        resource/provider/references defined in this module).
         """
-        new_map: dict[AgentName, bool]
         if editable_install:
-            new_map = {agent_name: (agent_name in registered_agents) for agent_name in self._all_agents if agent_name not in self.module_version_info[inmanta_module_name].load_module_on_agent_map}
+            self.module_version_info[inmanta_module_name].install_module_on_agents = self._all_agents
         else:
-            new_map = {agent_name: True for agent_name in registered_agents}
+            self.module_version_info[inmanta_module_name].install_module_on_agents.update(registered_agents)
 
-        self.module_version_info[inmanta_module_name].load_module_on_agent_map.update(new_map)
+        self.module_version_info[inmanta_module_name].load_module_on_agents.update(registered_agents)
 
     def get_object_source(self, instance: object) -> Optional[str]:
         """Get the path of the source file in which type_object is defined"""

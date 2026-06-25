@@ -513,8 +513,6 @@ class Exporter:
         all_loaded_modules = _project.modules
         editable_installed_modules = _project.get_editable_installed_inmanta_modules()
         types = set()
-        LOGGER.debug(f"{all_loaded_modules=}")
-        LOGGER.debug(f"{editable_installed_modules=}")
 
         # Load both resource definition and handlers
         for type_name, resource_definition in resource.get_resources():

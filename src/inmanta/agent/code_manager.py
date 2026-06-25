@@ -142,6 +142,7 @@ class CodeManager:
                                     ),
                                     install_on_disk=first_row.editable_install,
                                     source=row.source_file_content,
+                                    load_module=first_row.load_module_on_agent,
                                 )
                                 for row in rows_list
                             ],

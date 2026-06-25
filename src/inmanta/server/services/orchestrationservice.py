@@ -34,9 +34,16 @@ from inmanta import const, data
 from inmanta.const import ResourceState
 from inmanta.data import APILIMIT, AVAILABLE_VERSIONS_TO_KEEP, InvalidSort, ResourcePersistentState, RowLockMode
 from inmanta.data.dataview import DesiredStateVersionView
-from inmanta.data.model import AgentName, DesiredStateVersion
+from inmanta.data.model import DesiredStateVersion
 from inmanta.data.model import InmantaModule as InmantaModuleDTO
-from inmanta.data.model import InmantaModuleName, InmantaModuleVersion, PipConfig, PromoteTriggerMethod
+from inmanta.data.model import (
+    InmantaModuleName,
+    InmantaModuleVersion,
+    InstallOnAgents,
+    LoadOnAgents,
+    PipConfig,
+    PromoteTriggerMethod,
+)
 from inmanta.data.model import Resource as ResourceDTO
 from inmanta.data.model import ResourceDiff, ResourceMinimal, SchedulerStatusReport
 from inmanta.data.sqlalchemy import AgentModules, InmantaModule
@@ -717,13 +724,11 @@ class OrchestrationService(protocol.ServerSlice):
         :param connection: DB connection expected to be managed by the caller method.
         """
 
-        modules_to_register: dict[InmantaModuleName, InmantaModuleDTO] = {}
+        modules_to_register: dict[InmantaModuleName, InmantaModuleDTO] = {
+            k: v for k, v in module_version_info.items() if v.install_module_on_agents
+        }
 
-        for module_name, inmanta_module in module_version_info.items():
-            if inmanta_module.load_module_on_agent_map:
-                modules_to_register[module_name] = inmanta_module
-
-        module_usage_info: dict[InmantaModuleName, tuple[InmantaModuleVersion, Mapping[AgentName, bool]]] = {}
+        module_usage_info: dict[InmantaModuleName, tuple[InmantaModuleVersion, InstallOnAgents, LoadOnAgents]] = {}
 
         if partial_base_version is not None:
             module_usage_info = await AgentModules.get_registered_modules_data(
@@ -740,14 +745,16 @@ class OrchestrationService(protocol.ServerSlice):
 
         for module_name, module in modules_to_register.items():
             current_module_version = module.version
-            current_module_agents_to_register = module.load_module_on_agent_map
+            _install_module_on_agents = module.install_module_on_agents
+            _load_module_on_agents = module.load_module_on_agents
 
             if module_name in module_usage_info:
                 # This module was previously known: make sure we register agents
                 # that were already using it before in this model version
-                current_module_agents_to_register.update(module_usage_info[module_name][1])
+                _install_module_on_agents.update(module_usage_info[module_name][1])
+                _load_module_on_agents.update(module_usage_info[module_name][2])
 
-            module_usage_info[module_name] = (current_module_version, current_module_agents_to_register)
+            module_usage_info[module_name] = (current_module_version, _install_module_on_agents, _load_module_on_agents)
 
         await InmantaModule.register_modules(environment=environment, modules=modules_to_register, connection=connection)
         await AgentModules.register_modules_for_agents(

@@ -1219,7 +1219,7 @@ class ModuleSource(BaseModel):
     load_module: bool
 
     @classmethod
-    def from_path(cls, absolute_path: str, name: str, editable_install: bool) -> "ModuleSource":
+    def from_path(cls, absolute_path: str, name: str, editable_install: bool, load_module: bool) -> "ModuleSource":
         """Get the content of the file"""
         with open(absolute_path, "rb") as fd:
             _content = fd.read()
@@ -1236,6 +1236,7 @@ class ModuleSource(BaseModel):
             ),
             source=_content,
             install_on_disk=editable_install,
+            load_module=load_module,
         )
 
     def __lt__(self, other: object) -> bool | None:
@@ -1256,6 +1257,8 @@ type InmantaModuleName = str
 type LoadModuleOnAgent = bool
 type InmantaModuleVersion = str
 type AgentName = str
+type InstallOnAgents = set[AgentName]
+type LoadOnAgents = set[AgentName]
 
 
 class InmantaModule(BaseModel):
@@ -1271,8 +1274,14 @@ class InmantaModule(BaseModel):
         editable installed modules. For package install modules, we rely on pip to fetch the correct requirements
         for the given pep 440 version.
     :param load_module_on_agent_map: A mapping of [ agent name -> bool]. The keys represent all the agents on which we will
-        attempt to install this inmanta module. The subset of these keys for which the value is true represent the agents
-        on which we will load the module after installation.
+        attempt to install this inmanta module. The subset of these keys for which the value is 'True' represent the agents
+        on which we will load the module after installation. The rest of the keys (for which the value is 'False') represent
+        the agents on which we will only install but not load the module (This list can only be populated when the module was
+        installed in editable mode and contains the list of agents that do not directly require the module for its
+        resource/handler/reference code, but might require some of the plugins code)
+    # TODO: is this correct ? I think it is in line with the design but it feels weird
+        # 1) Shouldn't we still load these modules ?
+        # 2) What would happen if we don't eagerly load but still use some plugins code and eg an import error surfaces
     :param editable_install: Whether this inmanta module was installed in editable mode in the compiler venv.
     """
 
@@ -1280,5 +1289,6 @@ class InmantaModule(BaseModel):
     version: InmantaModuleVersion
     files_in_module: list[ModuleSourceMetadata]
     requirements: list[str]
-    load_module_on_agent_map: dict[AgentName, bool]
+    load_module_on_agents: LoadOnAgents
+    install_module_on_agents: InstallOnAgents
     editable_install: bool
