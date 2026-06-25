@@ -226,14 +226,14 @@ class CustomStrawberrySQLAlchemyMapper(StrawberrySQLAlchemyMapper[BaseModelType]
     ) -> None:
         """
         Populate the Strawberry type with fields derived from the SQLAlchemy mapper.
-        Override to propagate SQLAlchemy column and relationship `doc` to GraphQL field descriptions.
+        Override to propagate SQLAlchemy column and relationship ``doc`` to GraphQL field descriptions.
 
         Despite the original method only working for sqlalchemy columns, this override also generates fields for relationships
         and hybrid properties.
 
         Field descriptions are resolved in order of precedence:
-        1. SQLAlchemy `doc` attribute
-        2. `:param` docstring on the corresponding `BaseDocument` subclass
+        1. SQLAlchemy ``doc`` attribute
+        2. ``:param`` docstring on the corresponding ``BaseDocument`` subclass
 
         :param mapper: The sqlalchemy mapper that describes the ORM model.
         :param type_: The Strawberry GraphQL type currently being constructed.
@@ -959,16 +959,17 @@ class GraphQLContribution(ABC):
         `resource_model` is the dynamically built subclass of `models.Resource` that carries the `query_expression()`
         placeholders (so its core columns keep their type, while the extra columns are read with `getattr`).
 
-        `requested_fields` holds the (snake_case) names of the resource output fields selected in the GraphQL
-        query. Populating a column is usually expensive (extra joins/subqueries), so an implementation should only
+        `requested_fields` holds the (snake_case) names of every field selected anywhere in the GraphQL query
+        (not only the resource output fields), so a column counts as requested when its name appears in the set.
+        Populating a column is usually expensive (extra joins/subqueries), so an implementation should only
         populate the columns whose name is in `requested_fields` and leave the rest as their (null)
-        `query_expression` default.
+        `query_expression` default. Name columns distinctly to avoid colliding with unrelated fields in the set.
         """
         return stmt
 
 
 def build_resource_sqlalchemy_model(
-    extension_contributions: list[type[GraphQLContribution]],
+    extension_contributions: Sequence[type[GraphQLContribution]],
 ) -> type[models.Resource]:
     """
     Build the SQLAlchemy model backing the Resource output type.
@@ -990,12 +991,12 @@ def build_resource_sqlalchemy_model(
         return models.Resource
     return cast(
         type[models.Resource],
-        type("Resource", (models.Resource,), _sqlalchemy_columns),
+        type("ComposedResource", (models.Resource,), _sqlalchemy_columns),
     )
 
 
 def build_resource_strawberry_type(
-    extension_contributions: list[type[GraphQLContribution]],
+    extension_contributions: Sequence[type[GraphQLContribution]],
     resource_model: type[models.Resource],
 ) -> type:
     """
@@ -1026,7 +1027,7 @@ def build_resource_strawberry_type(
 
 
 def get_schema(
-    context: GraphQLContext, extension_contributions: list[type[GraphQLContribution]]
+    context: GraphQLContext, extension_contributions: Sequence[type[GraphQLContribution]]
 ) -> strawberry.Schema:
     """
     Initializes the Strawberry GraphQL schema.
@@ -1158,8 +1159,8 @@ def get_schema(
                     ),
                 )
             # Let extensions populate the extra SQL-backed columns they declared on resource_model (see
-            # populate_resource_columns), passing the selected output field names so they only populate what was
-            # requested. Skipped entirely on the common path where no extension contributed columns.
+            # populate_resource_columns), passing the names of the fields selected in the query so they only
+            # populate what was requested. Skipped entirely on the common path where no extension contributed columns.
             if resource_model is not models.Resource:
                 requested_fields = {to_snake_case(name) for name in get_selected_field_names(info)}
                 for contribution in extension_contributions:
