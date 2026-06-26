@@ -49,12 +49,12 @@ class GraphQLSlice(protocol.ServerSlice):
         """
         if self.schema is None:
             if extension_name in self.extension_contributions:
-                raise Exception(f"Extension {extension_name} already registered.")
+                raise Exception(f"Contribution for extension {extension_name} already registered.")
             self.extension_contributions[extension_name] = contribution
         else:
             raise Exception(
                 f"Can't register extension contribution for {extension_name} "
-                "because the GraphQL schema has already been generated"
+                "because the GraphQLSlice was already started."
             )
 
     async def prestart(self, server: Server) -> None:
