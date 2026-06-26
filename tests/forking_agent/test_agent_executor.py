@@ -29,7 +29,7 @@ import inmanta
 from inmanta import const
 from inmanta.agent import executor, forking_executor
 from inmanta.data.model import ModuleSourceMetadata, PipConfig
-from inmanta.loader import ModuleSource
+from inmanta.loader import MODULE_DIR, ModuleSource, convert_module_to_relative_path
 from inmanta.signals import dump_ioloop_running, dump_threads
 from packaging import version
 from utils import PipIndex, log_contains, log_doesnt_contain, retry_limited
@@ -56,7 +56,7 @@ def code_for(bp: executor.ExecutorBlueprint) -> list[executor.ModuleInstallSpec]
     return [executor.ModuleInstallSpec("test", "abcdef", bp, editable_install=True, load_after_install=False)]
 
 
-async def test_process_manager( # TODO FIX
+async def test_process_manager(
     environment, pip_index, set_custom_executor_policy, mpmanager_light: forking_executor.MPManager
 ) -> None:
     """
@@ -85,8 +85,8 @@ async def test_process_manager( # TODO FIX
                 is_byte_code=False,
             ),
             source=code,
-            install_on_disk=False,
-            load_module=False,
+            install_on_disk=True,
+            load_module=True,
         )
 
     # Prepare a source module and its hash
@@ -244,6 +244,60 @@ assert inmanta_plugins.sub.a == 1""",
     assert installed["pkg1"] == version.Version("1.0.0")
 
 
+async def test_executor_install_without_load(environment, pip_index, mpmanager_light: forking_executor.MPManager) -> None:
+    """
+    Verify the "install but don't load" path: a module source with install_on_disk=True and load_module=False must be
+    written to disk during executor creation, but must not be imported. This is the case for modules whose code an agent
+    needs available on disk (e.g. because another module imports it) but which the agent does not load itself.
+    """
+    env_id = uuid.UUID(environment)
+    pip_config = PipConfig(index_url=pip_index.url)
+
+    def make_module_source(name: str, content: str, *, install_on_disk: bool, load_module: bool) -> ModuleSource:
+        code = content.encode()
+        sha1sum = hashlib.new("sha1")
+        sha1sum.update(code)
+        return ModuleSource(
+            metadata=ModuleSourceMetadata(name=name, hash_value=sha1sum.hexdigest(), is_byte_code=False),
+            source=code,
+            install_on_disk=install_on_disk,
+            load_module=load_module,
+        )
+
+    # This module raises on import: if it were loaded, executor creation would fail with a ModuleLoadingException.
+    install_only_source = make_module_source(
+        "inmanta_plugins.install_only",
+        "raise RuntimeError('this module must not be imported')",
+        install_on_disk=True,
+        load_module=False,
+    )
+
+    blueprint = executor.ExecutorBlueprint(
+        environment_id=env_id,
+        pip_config=pip_config,
+        requirements=(),
+        python_version=sys.version_info[:2],
+        project_constraints=None,
+        sources=[install_only_source],
+    )
+
+    executor_manager = mpmanager_light
+
+    # Creating the executor must succeed: the install-only module is put on disk but never imported.
+    the_executor = await executor_manager.get_executor("agent1", "local:", code_for(blueprint))
+    assert the_executor
+
+    # The source must have been written to disk in the blueprint's storage folder.
+    storage_for_blueprint = os.path.join(executor_manager.process_pool.code_folder, the_executor.id.blueprint.blueprint_hash())
+    source_file = os.path.join(
+        storage_for_blueprint,
+        MODULE_DIR,
+        convert_module_to_relative_path("inmanta_plugins.install_only"),
+        "__init__.py",
+    )
+    assert os.path.exists(source_file)
+
+
 async def test_process_manager_restart(environment, tmpdir, mp_manager_factory, caplog) -> None:
     """
     Verifies that virtual environments can be rediscovered upon the restart of an ExecutorManager. This test
@@ -326,7 +380,9 @@ def trace_error_26(func):
 
 @with_timeout(30)
 @trace_error_26
-async def test_executor_creation_and_reuse(pip_index: PipIndex, mpmanager_light: forking_executor.MPManager, caplog) -> None:
+async def test_executor_creation_and_reuse(
+    pip_index: PipIndex, mpmanager_light: forking_executor.MPManager, caplog
+) -> None:
     """
     This test verifies the creation and reuse of executors based on their blueprints. It checks whether
     the concurrency aspects and the locking mechanisms work as intended.
@@ -355,7 +411,7 @@ def test():
         ),
         source=code,
         install_on_disk=True,
-        load_module=False,
+        load_module=True,
     )
     sources1 = ()
     sources2 = (module_source1,)
@@ -445,6 +501,7 @@ def test():
         ),
         source=code,
         install_on_disk=True,
+        load_module=False,
     )
     sources1 = ()
     sources2 = (module_source1,)

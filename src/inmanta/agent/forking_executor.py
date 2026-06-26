@@ -428,6 +428,23 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
         loader = inmanta.loader.CodeLoader(self.storage_folder)
 
         failed: FailedInmantaModules = defaultdict(dict)
+        # Names of python modules that could not be put on disk. These are skipped during the load phase: their
+        # failure is already recorded and importing them would fail anyway.
+        failed_to_install: set[str] = set()
+
+        async def _install_source(
+            module_source: inmanta.data.model.ModuleSource,
+            failed: FailedInmantaModules,
+            loop: asyncio.AbstractEventLoop,
+            loader: inmanta.loader.CodeLoader,
+        ) -> None:
+            try:
+                await loop.run_in_executor(context.threadpool, functools.partial(loader.install_source, module_source))
+            except Exception as e:
+                logger.info("Failed to load source on disk: %s", module_source.metadata.name, exc_info=True)
+                inmanta_module_name = module_source.get_inmanta_module_name()
+                failed[inmanta_module_name][module_source.metadata.name] = e
+                failed_to_install.add(module_source.metadata.name)
 
         async def _load_source(
             module_source: inmanta.data.model.ModuleSource,
@@ -445,27 +462,16 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
                 inmanta_module_name = module_source.get_inmanta_module_name()
                 failed[inmanta_module_name][module_source.metadata.name] = ModuleImportException(e, module_source.metadata.name)
 
-        async def _install_and_load_source(
-            module_source: inmanta.data.model.ModuleSource,
-            failed: FailedInmantaModules,
-            loop: asyncio.AbstractEventLoop,
-            loader: inmanta.loader.CodeLoader,
-        ) -> None:
-            try:
-                await loop.run_in_executor(context.threadpool, functools.partial(loader.install_source, module_source))
-            except Exception as e:
-                logger.info("Failed to load source on disk: %s", module_source.metadata.name, exc_info=True)
-                inmanta_module_name = module_source.get_inmanta_module_name()
-                failed[inmanta_module_name][module_source.metadata.name] = e
-            else:
-                await _load_source(module_source, failed, loop, loader)
-
+        # First put all editable-install sources on disk. This is done for all of them before loading any module so that
+        # cross-module imports resolve regardless of the order in which the sources are processed.
         for module_source in self.sources:
-            # Import all python files living in all modules registered for the current agent.
-            # For editable installs, we first need to put the source on disk before attempting to load the python module:
             if module_source.install_on_disk:
-                await _install_and_load_source(module_source, failed, loop, loader)
-            else:
+                await _install_source(module_source, failed, loop, loader)
+
+        # Then import the python modules registered for the current agent. Modules that are only installed (load_module is
+        # False) are deliberately not imported: their code must be available on disk but is not required by this agent.
+        for module_source in self.sources:
+            if module_source.load_module and module_source.metadata.name not in failed_to_install:
                 await _load_source(module_source, failed, loop, loader)
 
         return failed
