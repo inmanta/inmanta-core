@@ -344,6 +344,7 @@ def test_hash_with_duplicates():
         ),
         source="foo".encode(),
         install_on_disk=True,
+        load_module=True,
     )
     requirement = "setuptools"
     simple = ExecutorBlueprint(

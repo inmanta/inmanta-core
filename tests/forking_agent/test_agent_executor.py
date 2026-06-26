@@ -53,10 +53,10 @@ def set_custom_executor_policy(server_config):
 
 
 def code_for(bp: executor.ExecutorBlueprint) -> list[executor.ModuleInstallSpec]:
-    return [executor.ModuleInstallSpec("test", "abcdef", bp, True)]
+    return [executor.ModuleInstallSpec("test", "abcdef", bp, editable_install=True, load_after_install=False)]
 
 
-async def test_process_manager(
+async def test_process_manager( # TODO FIX
     environment, pip_index, set_custom_executor_policy, mpmanager_light: forking_executor.MPManager
 ) -> None:
     """
@@ -85,7 +85,8 @@ async def test_process_manager(
                 is_byte_code=False,
             ),
             source=code,
-            install_on_disk=True,
+            install_on_disk=False,
+            load_module=False,
         )
 
     # Prepare a source module and its hash
@@ -354,6 +355,7 @@ def test():
         ),
         source=code,
         install_on_disk=True,
+        load_module=False,
     )
     sources1 = ()
     sources2 = (module_source1,)

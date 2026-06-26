@@ -745,8 +745,8 @@ class OrchestrationService(protocol.ServerSlice):
 
         for module_name, module in modules_to_register.items():
             current_module_version = module.version
-            _install_module_on_agents = module.install_module_on_agents
-            _load_module_on_agents = module.load_module_on_agents
+            _install_module_on_agents = set(module.install_module_on_agents)
+            _load_module_on_agents = set(module.load_module_on_agents)
 
             if module_name in module_usage_info:
                 # This module was previously known: make sure we register agents
@@ -754,7 +754,7 @@ class OrchestrationService(protocol.ServerSlice):
                 _install_module_on_agents.update(module_usage_info[module_name][1])
                 _load_module_on_agents.update(module_usage_info[module_name][2])
 
-            module_usage_info[module_name] = (current_module_version, _install_module_on_agents, _load_module_on_agents)
+            module_usage_info[module_name] = (current_module_version, list(_install_module_on_agents), list(_load_module_on_agents))
 
         await InmantaModule.register_modules(environment=environment, modules=modules_to_register, connection=connection)
         await AgentModules.register_modules_for_agents(
