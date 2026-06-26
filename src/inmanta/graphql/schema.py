@@ -356,7 +356,7 @@ def is_provided[T](value: T | None) -> typing.TypeGuard[T]:
     return value is not None and value is not strawberry.UNSET
 
 
-def _walk_selected_fields(selection: Selection) -> typing.Iterator[SelectedField]:
+def walk_selected_fields(selection: Selection) -> typing.Iterator[SelectedField]:
     """
     Yield every SelectedField in a selection subtree: the selection itself if it is a field, plus all nested
     selections, recursing through inline (`... on Type`) and named (`...Fragment`) fragments.
@@ -364,7 +364,7 @@ def _walk_selected_fields(selection: Selection) -> typing.Iterator[SelectedField
     if isinstance(selection, SelectedField):
         yield selection
     for sub_selection in selection.selections or []:
-        yield from _walk_selected_fields(sub_selection)
+        yield from walk_selected_fields(sub_selection)
 
 
 def get_selected_field_names(info: Info) -> set[str]:
@@ -372,7 +372,7 @@ def get_selected_field_names(info: Info) -> set[str]:
     Return the (camelCase) names of every field selected anywhere in the query, recursing through nested
     selections and fragments. This includes the names of the top-level resolved fields themselves (e.g. `resources`);
     """
-    return {field.name for selected_field in info.selected_fields for field in _walk_selected_fields(selected_field)}
+    return {field.name for selected_field in info.selected_fields for field in walk_selected_fields(selected_field)}
 
 
 def is_field_selected(info: Info, field_name: str) -> bool:
@@ -670,7 +670,7 @@ class NotificationOrder(StrawberryOrder):
         return {"created": self.model}
 
 
-def get_requires_length(root: "CoreResourceBase") -> int:
+def get_requires_length(root: "CoreResourceMixin") -> int:
     """
     Checks the length of the requires of the resource
     """
@@ -678,7 +678,7 @@ def get_requires_length(root: "CoreResourceBase") -> int:
     return len(root.attributes.get("requires", []))
 
 
-def get_purged(root: "CoreResourceBase") -> bool:
+def get_purged(root: "CoreResourceMixin") -> bool:
     """
     Checks the state of the purged attribute on this resource
     """
@@ -686,7 +686,7 @@ def get_purged(root: "CoreResourceBase") -> bool:
     return bool(root.attributes.get("purged"))
 
 
-class CoreResourceBase:
+class CoreResourceMixin:
     """
     Mixin carrying the added core resource output fields. It is merged with the extensions' output mixins (and mapped onto
     the SQLAlchemy resource model) by `build_resource_strawberry_type` to build the `Resource` GraphQL output type.
@@ -930,7 +930,7 @@ class GraphQLContribution(ABC):
         """
         Return a plain class (no decorator) whose `strawberry.field` declarations are merged into the Resource
         output type. These output fields can be sqlalchemy columns that are later populated with populate_resource_columns or
-        simple resolvers (e.g. `purged` on `CoreResourceBase`)
+        simple resolvers (e.g. `purged` on `CoreResourceMixin`)
         Return None if this contribution adds no output fields.
         """
         return None
@@ -1008,21 +1008,28 @@ def build_resource_strawberry_output_type(
     :param extension_contributions: list of extension graphql contributions
     :param resource_model: the SQLAlchemy model that backs the output type (see `build_resource_sqlalchemy_model`)
     """
-    _resource_mixins: tuple[type, ...] = tuple(
+    resource_mixins: tuple[type, ...] = tuple(
         mixin for c in extension_contributions if (mixin := c.get_resource_graphql_output_type_mixin()) is not None
     )
-    _resource_annotations: dict[str, object] = {}
-    _resource_attrs: dict[str, object] = {}
-    _skip_attrs = {"__dict__", "__weakref__", "__doc__", "__annotations__", "__module__"}
-    for _base in (CoreResourceBase, *_resource_mixins):
-        _resource_annotations.update(_base.__dict__.get("__annotations__", {}))
-        for _k, _v in _base.__dict__.items():
-            if _k not in _skip_attrs:
-                _resource_attrs[_k] = _v
+    resource_annotations: dict[str, object] = {}
+    resource_attrs: dict[str, object] = {}
+    resource_excludes: list[str] = []
+    for base in (CoreResourceMixin, *resource_mixins):
+        resource_annotations.update(base.__dict__.get("__annotations__", {}))
+        resource_excludes += base.__dict__.get("__excludes__", [])
+        for k, v in base.__dict__.items():
+            if not k.startswith("__"):  # Exclude private attributes. Annotations and exclude are dealt separately
+                if k not in resource_attrs:
+                    resource_attrs[k] = v
+                else:
+                    raise Exception(f"{k} defined more than once in resource mixins.")
 
     # Can't do the same as the resource filter because the mixins can't have the mapper.type decorator and that is required
     return cast(
-        type, mapper.type(resource_model)(type("Resource", (), {"__annotations__": _resource_annotations, **_resource_attrs}))
+        type,
+        mapper.type(resource_model)(
+            type("Resource", (), {"__annotations__": resource_annotations, "__exclude__": resource_excludes, **resource_attrs})
+        ),
     )
 
 
@@ -1036,7 +1043,7 @@ def get_schema(context: GraphQLContext, extension_contributions: Sequence[type[G
     loader = StrawberrySQLAlchemyLoader(async_bind_factory=get_session_factory())
 
     resource_model = build_resource_sqlalchemy_model(extension_contributions)
-    Resource = build_resource_strawberry_type(extension_contributions, resource_model)
+    Resource = build_resource_strawberry_output_type(extension_contributions, resource_model)
 
     class CustomInfo(Info):
         @property
