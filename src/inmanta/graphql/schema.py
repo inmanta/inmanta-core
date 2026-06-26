@@ -1016,7 +1016,7 @@ def build_resource_strawberry_output_type(
     resource_excludes: list[str] = []
     for base in (CoreResourceMixin, *resource_mixins):
         resource_annotations.update(base.__dict__.get("__annotations__", {}))
-        resource_excludes += base.__dict__.get("__excludes__", [])
+        resource_excludes += base.__dict__.get("__exclude__", [])
         for k, v in base.__dict__.items():
             if not k.startswith("__"):  # Exclude private attributes. Annotations and exclude are dealt separately
                 if k not in resource_attrs:
