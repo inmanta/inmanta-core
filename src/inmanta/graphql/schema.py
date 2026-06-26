@@ -922,7 +922,7 @@ async def get_connection[*Ts](
 class GraphQLContribution(ABC):
     """
     Extension hook that lets extensions (e.g. LSM) contribute extra information to GraphQL queries
-    without core being aware of those modules.
+    without a tight coupling between core and these extensions.
     """
 
     @classmethod
@@ -995,7 +995,7 @@ def build_resource_sqlalchemy_model(
     )
 
 
-def build_resource_strawberry_type(
+def build_resource_strawberry_output_type(
     extension_contributions: Sequence[type[GraphQLContribution]],
     resource_model: type[models.Resource],
 ) -> type:
