@@ -42,7 +42,7 @@ class GraphQLSlice(protocol.ServerSlice):
     def get_dependencies(self) -> list[str]:
         return [SLICE_COMPILER]
 
-    def register_extension_contribution(self, extension_name: str, contribution: type[GraphQLContribution]) -> None:
+    def register_graphql_contribution_for_extension(self, extension_name: str, contribution: type[GraphQLContribution]) -> None:
         """
         Register an extension contribution. Only possible before the slice starts (during the `prestart` stage) and
         if the extension name has not already been registered.

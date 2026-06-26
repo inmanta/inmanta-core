@@ -1357,13 +1357,13 @@ async def test_custom_extension_contributions(server, environment, client, caplo
         Exception,
         match="Can't register extension contribution for example because the GraphQLSlice was already started.",
     ):
-        graphql_slice.register_extension_contribution("example", ExampleQueryContribution)
+        graphql_slice.register_graphql_contribution_for_extension("example", ExampleQueryContribution)
 
     # GraphQLSlice has already started, so we reset its schema to make registering possible again for this test.
     graphql_slice.schema = None
-    graphql_slice.register_extension_contribution("example", ExampleQueryContribution)
+    graphql_slice.register_graphql_contribution_for_extension("example", ExampleQueryContribution)
     with pytest.raises(Exception, match="Contribution for extension example already registered."):
-        graphql_slice.register_extension_contribution("example", ExampleQueryContribution)
+        graphql_slice.register_graphql_contribution_for_extension("example", ExampleQueryContribution)
     await graphql_slice.start()
 
     instances = 1
