@@ -36,7 +36,7 @@ from typing import TYPE_CHECKING, Optional
 import packaging
 import packaging.utils
 from inmanta import const, module
-from inmanta.data.model import InmantaModule, ModuleSource
+from inmanta.data.model import InmantaModule, ModuleSource, AgentName, InmantaModuleName
 from inmanta.stable_api import stable_api
 from inmanta.util import hash_file_streaming
 
@@ -85,8 +85,8 @@ class CodeManager:
         self._types_to_agent: dict[str, set[str]] = defaultdict(set)
         self._all_agents: set[str] = set()
 
-        self._load_modules_on_agents_map: dict[str, set[str]] = defaultdict(set)
-        self._install_modules_on_agents_map: dict[str, set[str]] = defaultdict(set)
+        self._load_modules_on_agents_map: dict[InmantaModuleName, set[AgentName]] = defaultdict(set)
+        self._install_modules_on_agents_map: dict[InmantaModuleName, set[AgentName]] = defaultdict(set)
         # Map of [inmanta_module_name, inmanta module]
         self.module_version_info: dict[str, "InmantaModule"] = {}
 
@@ -180,8 +180,8 @@ class CodeManager:
                 version=module_version,
                 files_in_module=files_metadata,
                 requirements=list(requirements),
-                install_module_on_agents=set(),
-                load_module_on_agents=set(),
+                install_module_on_agents=[],
+                load_module_on_agents=[],
                 editable_install=True,
             )
         else:
@@ -192,8 +192,8 @@ class CodeManager:
                 version=str(module.version),
                 files_in_module=files_metadata,
                 requirements=[],
-                install_module_on_agents=set(),
-                load_module_on_agents=set(),
+                install_module_on_agents=[],
+                load_module_on_agents=[],
                 editable_install=False,
             )
 
@@ -204,11 +204,23 @@ class CodeManager:
         resource/provider/references defined in this module).
         """
         if editable_install:
-            self.module_version_info[inmanta_module_name].install_module_on_agents = self._all_agents
+            self._install_modules_on_agents_map[inmanta_module_name] = self._all_agents
         else:
-            self.module_version_info[inmanta_module_name].install_module_on_agents.update(registered_agents)
+            self._install_modules_on_agents_map[inmanta_module_name].update(registered_agents)
 
-        self.module_version_info[inmanta_module_name].load_module_on_agents.update(registered_agents)
+        self._load_modules_on_agents_map[inmanta_module_name].update(registered_agents)
+
+    def set_modules_to_install_and_load(self):
+        """
+        This helper method is called after code registration is done. During registration, we use
+        self._install_modules_on_agents_map and self._load_modules_on_agents_map to build sets of agent names. In this
+        method, we cast these sets to list and populate the corresponding fields of the registered InmantaModule.
+        (We can't directly use the 'set' type for these fields directly on the InmantaModule
+
+        """
+        for module_name, module in self.module_version_info.items():
+            module.install_module_on_agents = list(self._install_modules_on_agents_map[module_name])
+            module.load_module_on_agents = list(self._load_modules_on_agents_map[module_name])
 
     def get_object_source(self, instance: object) -> Optional[str]:
         """Get the path of the source file in which type_object is defined"""

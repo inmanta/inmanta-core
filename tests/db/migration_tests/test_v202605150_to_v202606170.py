@@ -31,5 +31,5 @@ part = file_name_regex.match(__name__)[1]
 async def test_add_column(
     postgresql_client: asyncpg.Connection, migrate_db_from: abc.Callable[[], abc.Awaitable[None]]
 ) -> None:
-    # This migration just adds a column
+    # This migration just adds columns
     await migrate_db_from()

@@ -25,5 +25,9 @@ async def update(connection: Connection) -> None:
 
     ALTER TABLE public.inmanta_module
     ADD COLUMN editable_install boolean DEFAULT true;
+
+    -- Add the 'load_module_on_agent' column
+    ALTER TABLE public.agent_modules
+    ADD COLUMN load_module_on_agent boolean DEFAULT false;
     """
     await connection.execute(schema)

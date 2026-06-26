@@ -530,6 +530,7 @@ class Exporter:
                 if not type_name.startswith("core::"):
                     code_manager.register_code(resource_type, obj, all_loaded_modules, editable_installed_modules)
 
+        code_manager.set_modules_to_install_and_load()
         upload_code(self.client, code_manager)
 
     def _get_env_id(self) -> uuid.UUID:
