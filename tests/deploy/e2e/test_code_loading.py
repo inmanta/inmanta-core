@@ -625,7 +625,8 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
             version="0.0.0",
             files_in_module=[module_source_metadata1],
             requirements=[],
-            for_agents=["agent_X", "agent_Y"],
+            install_module_on_agents=["agent_X", "agent_Y"],
+            load_module_on_agents=["agent_X", "agent_Y"],
             editable_install=True,
         )
     }
@@ -701,7 +702,8 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
             version="1.1.1",
             files_in_module=[module_source_metadata2],
             requirements=[],
-            for_agents=["agent_X"],
+            install_module_on_agents=["agent_X"],
+            load_module_on_agents=["agent_X"],
             editable_install=True,
         )
     }
@@ -740,7 +742,8 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
             version="0.0.0",
             files_in_module=[module_source_metadata1],
             requirements=[],
-            for_agents=["agent_Z"],
+            install_module_on_agents=["agent_Z"],
+            load_module_on_agents=["agent_Z"],
             editable_install=True,
         )
     }
@@ -795,7 +798,8 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
             version="0.0.0",
             files_in_module=[module_source_metadata3],
             requirements=[],
-            for_agents=["agent_Z", "agent_A"],
+            install_module_on_agents=["agent_Z", "agent_A"],
+            load_module_on_agents=["agent_Z", "agent_A"],
             editable_install=True,
         )
     }

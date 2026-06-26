@@ -441,7 +441,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
             try:
                 await loop.run_in_executor(context.threadpool, functools.partial(loader.install_source, module_source))
             except Exception as e:
-                logger.info("Failed to load source on disk: %s", module_source.metadata.name, exc_info=True)
+                logger.info("Failed to install source on disk: %s", module_source.metadata.name, exc_info=True)
                 inmanta_module_name = module_source.get_inmanta_module_name()
                 failed[inmanta_module_name][module_source.metadata.name] = e
                 failed_to_install.add(module_source.metadata.name)

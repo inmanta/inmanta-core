@@ -88,7 +88,9 @@ async def agent_cache(agent, environment):
     )
 
     myagent_instance = await agent.executor_manager.delegate.get_executor(
-        "agent1", "local:", [executor.ModuleInstallSpec("test", "abcdef", blueprint1, editable_install=True)]
+        "agent1",
+        "local:",
+        [executor.ModuleInstallSpec("test", "abcdef", blueprint1, editable_install=True, load_after_install=True)],
     )
     yield myagent_instance._cache
 

@@ -52,6 +52,7 @@ def get_module_source(module: str, code: str) -> ModuleSource:
         ),
         source=data,
         install_on_disk=True,
+        load_module=True,
     )
 
 

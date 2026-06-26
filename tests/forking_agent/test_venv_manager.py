@@ -293,7 +293,8 @@ class ResourceH(inmanta.agent.handler.CRUDHandler[Resource]):
             version="0.0.0",
             files_in_module=[module_source_metadata],
             requirements=[],
-            for_agents=["agent1", "agent2"],
+            install_module_on_agents=["agent1", "agent2"],
+            load_module_on_agents=["agent1", "agent2"],
             editable_install=True,
         )
     }

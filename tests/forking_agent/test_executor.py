@@ -99,14 +99,7 @@ async def test_executor_server(set_custom_executor_policy, mpmanager: MPManager,
     simplest = await manager.get_executor(
         "agent1",
         "test",
-        [
-            executor.ModuleInstallSpec(
-                "test",
-                "123456",
-                simplest_blueprint,
-                editable_install=True,
-            )
-        ],
+        [executor.ModuleInstallSpec("test", "123456", simplest_blueprint, editable_install=True, load_after_install=True)],
     )
 
     # check communications
@@ -130,6 +123,7 @@ def test():
         ),
         source=direct_content,
         install_on_disk=True,
+        load_module=True,
     )
     # Via server: source is sent via server
     server_content = """
@@ -145,6 +139,7 @@ def test():
         ),
         source=server_content,
         install_on_disk=True,
+        load_module=True,
     )
     # Upload
     res = await client.upload_file(id=server_content_hash, content=base64.b64encode(server_content).decode("ascii"))
@@ -171,10 +166,12 @@ def test():
 
     # Full runner install requires pip install, this can be slow, so we build it first to prevent the other one from timing out
     oldest_executor = await manager.get_executor(
-        "agent2", "internal:", [executor.ModuleInstallSpec("test", 1, dummy, editable_install=True)]
+        "agent2", "internal:", [executor.ModuleInstallSpec("test", 1, dummy, editable_install=True, load_after_install=True)]
     )
     full_runner = await manager.get_executor(
-        "agent2", "internal:", [executor.ModuleInstallSpec("test:DDD:Test", 1, full, editable_install=True)]
+        "agent2",
+        "internal:",
+        [executor.ModuleInstallSpec("test:DDD:Test", 1, full, editable_install=True, load_after_install=True)],
     )
 
     assert oldest_executor.id in manager.pool
@@ -202,7 +199,9 @@ def test():
 
     with caplog.at_level(logging.DEBUG):
         _ = await manager.get_executor(
-            "agent2", "internal:", [executor.ModuleInstallSpec("test::Test", "1", dummy, editable_install=True)]
+            "agent2",
+            "internal:",
+            [executor.ModuleInstallSpec("test::Test", "1", dummy, editable_install=True, load_after_install=True)],
         )
         assert not oldest_executor.running
         assert full_runner.running
@@ -222,7 +221,9 @@ def test():
     await retry_limited(lambda: len(manager.agent_map["agent2"]) == 0, 10)
 
     full_runner = await manager.get_executor(
-        "agent2", "internal:", [executor.ModuleInstallSpec("test::Test", "1", full, editable_install=True)]
+        "agent2",
+        "internal:",
+        [executor.ModuleInstallSpec("test::Test", "1", full, editable_install=True, load_after_install=True)],
     )
 
     await retry_limited(lambda: len(manager.agent_map["agent2"]) == 1, 1)

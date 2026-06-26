@@ -21,7 +21,7 @@ import asyncpg
 
 from inmanta.data.model import AgentName
 from inmanta.data.model import InmantaModule as InmantaModuleDTO
-from inmanta.data.model import InmantaModuleName, InmantaModuleVersion, InstallOnAgents, LoadOnAgents
+from inmanta.data.model import InmantaModuleName, InmantaModuleVersion
 from inmanta.deploy import state
 from sqlalchemy import (
     ARRAY,
@@ -364,7 +364,7 @@ class AgentModules(Base):
         cls,
         model_version: int,
         environment: uuid.UUID,
-        module_usage_info: Mapping[InmantaModuleName, tuple[InmantaModuleVersion, InstallOnAgents, LoadOnAgents]],
+        module_usage_info: Mapping[InmantaModuleName, tuple[InmantaModuleVersion, set[AgentName], set[AgentName]]],
         connection: asyncpg.Connection,
     ) -> None:
         """
@@ -381,9 +381,10 @@ class AgentModules(Base):
         :param model_version: The model version for which to register modules per agent.
         :param module_usage_info: Maps inmanta module names to a tuple of:
             -   The version to register for this module
-            -   The map of [AgentName -> bool] denoting agents that will either only install this module in this model version
-                (when the value for this agent name is false) or will install and then load this module (when the value is
-                true).
+            -   The set of agents on which this module will be installed for this model version
+            -   The set of agents on which this module will be loaded after installation for this model version.
+                This is a subset of the install set; agents that only install but don't load this module are those
+                present in the install set but not in the load set.
         :param environment: The environment for which to register modules per agent.
         :param connection: The asyncpg connection to use.
         """

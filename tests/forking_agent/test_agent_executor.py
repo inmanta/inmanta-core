@@ -380,9 +380,7 @@ def trace_error_26(func):
 
 @with_timeout(30)
 @trace_error_26
-async def test_executor_creation_and_reuse(
-    pip_index: PipIndex, mpmanager_light: forking_executor.MPManager, caplog
-) -> None:
+async def test_executor_creation_and_reuse(pip_index: PipIndex, mpmanager_light: forking_executor.MPManager, caplog) -> None:
     """
     This test verifies the creation and reuse of executors based on their blueprints. It checks whether
     the concurrency aspects and the locking mechanisms work as intended.
