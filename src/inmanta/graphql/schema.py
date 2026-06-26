@@ -32,9 +32,9 @@ from inmanta.deploy import state
 from inmanta.server.services.compilerservice import CompilerService
 from sqlakeyset import Marker, unserialize_bookmark
 from sqlakeyset.asyncio import select_page
-from sqlalchemy import Boolean, Select, UnaryExpression, and_, asc, desc, func, not_, select
+from sqlalchemy import Boolean, Select, UnaryExpression, and_, asc, desc, func, literal, not_, select, true
 from sqlalchemy.ext.hybrid import hybrid_property
-from sqlalchemy.orm import Mapper
+from sqlalchemy.orm import Mapper, column_property, query_expression, with_expression
 from strawberry import relay, scalars
 from strawberry.relay import Node, NodeType
 from strawberry.scalars import JSON
@@ -693,7 +693,30 @@ def get_purged(root: "Resource") -> bool:
     return bool(root.attributes.get("purged"))
 
 
-@mapper.type(models.Resource)
+class GraphqlResource(models.Resource):
+    """
+    SQLAlchemy class representing the "resource" concept in graphql. Wraps the base Resource class (representing the resource
+    table) and adds columns for graphql resource concepts.
+
+    This allows for a one-on-one mapping between the SQLAlchemy type and the Strawberry type, so that the SQLAlchemy query that
+    backs the GraphQL query can return (select) a single SQLAlchemy object (instance of this class).
+    """
+
+    # See https://docs.sqlalchemy.org/en/21/orm/mapped_sql_expr.html
+
+    # PoC approach 1: value is joined in and populated onto the ORM object by the `resources` query via `with_expression`.
+    # TODO: open question: if we take this approach, who is responsible for adding it to the query?
+    #       Doesn't belong in this class. Doesn't quite belong in ResourceFilter.apply_filters. So where *do* we fit it?
+    #       Should we have a ResourceExtension that is responsible for the joining *and* the filtering?
+    #       OR The alternative below could sidestep these difficulties. But can it always do what we need it to,
+    #       without additional work?
+    poc = query_expression()
+    # PoC approach 2: a column_property is added to the entity's SELECT automatically, so (unlike `poc`) it needs no
+    # `with_expression` in the query. Here it is just a hardcoded literal of 43.
+    otherpoc = column_property(literal(43))
+
+
+@mapper.type(GraphqlResource)
 class Resource:
     __exclude__ = ["resource_set_"]
     requires_length: int = strawberry.field(
@@ -702,6 +725,13 @@ class Resource:
     purged: bool = strawberry.field(
         resolver=get_purged, description="Checks the state of the purged attribute on this resource"
     )
+    # PoC: declared explicitly so it is exposed with a concrete type and so the mapper skips trying to
+    # auto-map the untyped (NullType) `poc` query_expression column. The value is populated onto the ORM
+    # object by the `resources` query via `with_expression`; Strawberry's default resolver reads `root.poc`.
+    poc: int = strawberry.field(description="PoC field, joined with a hardcoded value of 42.")
+    # PoC: declared explicitly so the mapper skips auto-mapping it (column_property is unsupported by the
+    # mapper). The value comes from the `column_property` on `GraphqlResource`, read as `root.otherpoc`.
+    otherpoc: int = strawberry.field(description="PoC field, sourced from a column_property hardcoded to 43.")
 
 
 @strawberry.input
@@ -990,7 +1020,8 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
 
             # Only fetch resources in their latest version
             # Logic based on src/inmanta/data/dataview.py::ResourceView
-            stmt = select(models.Resource).join(
+            # PoC: select the `GraphqlResource` subclass so each row is a single ORM object that can carry `poc`.
+            stmt = select(GraphqlResource).join(
                 models.ResourcePersistentState,
                 and_(
                     models.Resource.resource_id == models.ResourcePersistentState.resource_id,
@@ -1047,6 +1078,10 @@ def get_schema(context: GraphQLContext) -> strawberry.Schema:
                         == select(latest_scheduled_version_cte.c.version).scalar_subquery(),
                     ),
                 )
+            # PoC: join in a hardcoded value of 42 and populate it onto each resource's `poc` attribute.
+            poc_subquery = select(literal(42).label("poc")).subquery()
+            stmt = stmt.join(poc_subquery, true()).options(with_expression(GraphqlResource.poc, poc_subquery.c.poc))
+
             stmt = add_filter_and_sort(stmt, ResourceOrder.default_order(), filter, order_by)
             count_stmt: Select[tuple[int]] | None
             if filter.purged is not strawberry.UNSET:
