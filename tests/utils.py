@@ -1080,7 +1080,7 @@ class DummyCodeManager(CodeManager):
     ) -> tuple[Collection[ModuleInstallSpec], executor.FailedModules]:
         dummyblueprint: ExecutorBlueprint = _get_dummy_blueprint_for(environment)
         return (
-            [ModuleInstallSpec("dummy_module", "0.0.0", dummyblueprint, True)],
+            [ModuleInstallSpec("dummy_module", "0.0.0", dummyblueprint, editable_install=True, load_after_install=True)],
             {},
         )  # editable_install = True, TODO test both
 
