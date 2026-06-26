@@ -3,7 +3,7 @@
 asyncpg==0.31.0
 build==1.5.0
 bumpversion==0.6.0
-click==8.4.1
+click==8.4.2
 click-plugins==1.1.1.2
 colorlog==6.10.1
 cookiecutter==2.7.1
