@@ -249,7 +249,7 @@ class DryRun(Task):
                 version=self.version,
             )
         except resourcepool.PoolManagerNotRunning:
-            self._log_failure_and_create_dryrun_report(
+            dryrun_report = self._log_failure_and_create_dryrun_report(
                 rvid=executor_resource_details.rvid,
                 agent=agent,
                 started=started,
@@ -257,7 +257,7 @@ class DryRun(Task):
                 log_msg_for_report="Unable to construct an executor for this resource, because executor manager is not running",
             )
         except Exception:
-            self._log_failure_and_create_dryrun_report(
+            dryrun_report = self._log_failure_and_create_dryrun_report(
                 rvid=executor_resource_details.rvid,
                 agent=agent,
                 started=started,
@@ -268,7 +268,7 @@ class DryRun(Task):
             try:
                 dryrun_report = await my_executor.dry_run(executor_resource_details, self.dry_run_id)
             except Exception:
-                self._log_failure_and_create_dryrun_report(
+                dryrun_report = self._log_failure_and_create_dryrun_report(
                     rvid=executor_resource_details.rvid,
                     agent=agent,
                     started=started,
