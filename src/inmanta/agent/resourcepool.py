@@ -351,8 +351,13 @@ class TimeBasedPoolManager(PoolManager[TPoolID, TIntPoolID, TPoolMember]):
         We split up `cleanup_inactive_pool_members` and `cleanup_inactive_pool_members_task` in order to be able to call the
         cleanup method in the test without being blocked in a loop.
         """
+        current_task: asyncio.Task | None = asyncio.current_task()
+        assert current_task is not None
         try:
             while self.running:
+                if current_task is not self.cleanup_job:
+                    # This is a stale cleanup job
+                    return
                 try:
                     sleep_interval = await self.cleanup_inactive_pool_members()
                 except Exception:
