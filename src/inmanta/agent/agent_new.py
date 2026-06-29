@@ -160,10 +160,13 @@ class Agent(SessionEndpoint):
         This method must execute under the self._working_lock.
         """
         self.working = False
+        # Stop pushing work to executors
         await self.scheduler.stop()
+        # Wait until in-flight deployments finished
+        await self.scheduler.join()
+        # Stop executors
         await self.executor_manager.stop()
         await self.executor_manager.join([], timeout=timeout)
-        await self.scheduler.join()
         LOGGER.info("Scheduler stopped for environment %s", self.environment)
 
     @protocol.handle(methods_v2.remove_executor_venvs)
