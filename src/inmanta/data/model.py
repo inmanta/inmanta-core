@@ -1273,15 +1273,11 @@ class InmantaModule(BaseModel):
     :param requirements: The list of python requirements this inmanta module requires. This list is only set for
         editable installed modules. For package install modules, we rely on pip to fetch the correct requirements
         for the given pep 440 version.
-    :param load_module_on_agent_map: A mapping of [ agent name -> bool]. The keys represent all the agents on which we will
-        attempt to install this inmanta module. The subset of these keys for which the value is 'True' represent the agents
-        on which we will load the module after installation. The rest of the keys (for which the value is 'False') represent
-        the agents on which we will only install but not load the module (This list can only be populated when the module was
-        installed in editable mode and contains the list of agents that do not directly require the module for its
-        resource/handler/reference code, but might require some of the plugins code)
-    # TODO: is this correct ? I think it is in line with the design but it feels weird
-        # 1) Shouldn't we still load these modules ?
-        # 2) What would happen if we don't eagerly load but still use some plugins code and eg an import error surfaces
+    :param install_module_on_agents: List of agents on which we will attempt to install this inmanta module. We will not
+        eagerly load the module on all these agents, but rather only on the subset of these agents defined by the
+        load_module_on_agents parameter.
+    :param load_module_on_agents: List of agents on which we will attempt to load this inmanta module. This should be
+        a subset of install_module_on_agents.
     :param editable_install: Whether this inmanta module was installed in editable mode in the compiler venv.
     """
 

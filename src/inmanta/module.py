@@ -2733,8 +2733,8 @@ class Module(ModuleLike[TModuleMetadata], ABC):
                 Path(file_name),
                 ModuleName(
                     self._get_fq_mod_name_for_py_file(file_name, plugin_dir, self.name)
-                ),  # TODO weird gymnastics going on here. Opportunity to clean up old v1 logic that uses the 'plugins' dir
-            )  # Looks like redundant path manipulation from inmanta_plugins/* -> plugins/* -> inmanta_plugins/*
+                ),
+            )
             for file_name in self._list_python_files(plugin_dir)
         ]
 
@@ -2764,10 +2764,10 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         :param plugin_dir: The plugin directory relative to the inmanta module's root directory.
         :param mod_name: The top-level name of this module.
         """
-        rel_py_file = os.path.relpath(py_file, start=plugin_dir)  # e.g. lsm/partial.py
+        rel_py_file = os.path.relpath(py_file, start=plugin_dir)
         return loader.convert_relative_path_to_module(
             os.path.join(mod_name, loader.PLUGIN_DIR, rel_py_file)
-        )  # inmanta_plugins/lsm/partial
+        )
 
     def unload(self) -> None:
         """

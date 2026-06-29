@@ -165,14 +165,7 @@ class CodeManager:
             # [editable install mode]
             # We need to store the relevant files in the db, i.e.:
             #    - python code in the inmanta_plugins dir
-            #    - requirements.txt file  # TODO no need to use the file api for this one,
-            #                               can reuse existing mechanism to transport reqs
-            #    - setup.cfg  # TODO [stage 2]
-            #    - pyproject.toml  # TODO [stage 2]
-
             requirements = self.get_inmanta_module_requirements(inmanta_module_name)
-
-            # TODO [stage 2] add setup.cfg + pyproject.toml
             module_version = self.get_module_version(requirements, files_metadata)
 
             self.module_version_info[inmanta_module_name] = InmantaModule(
@@ -187,6 +180,10 @@ class CodeManager:
         else:
             # [package install mode]
             # Store the pep 440 version of the module in the db
+            # We register the module source (i.e. files_metadata) for package install mode as well, but the reason
+            # is slightly different from the editable install mode. Here we don't need the actual source (it will be fetched
+            # by pip on the agent), but we still need to know the file structure to be able to eagerly load all python files
+            # living in the module.
             self.module_version_info[inmanta_module_name] = InmantaModule(
                 name=inmanta_module_name,
                 version=str(module.version),
@@ -210,12 +207,13 @@ class CodeManager:
 
         self._load_modules_on_agents_map[inmanta_module_name].update(registered_agents)
 
-    def set_modules_to_install_and_load(self) -> None:
+    def _convert_agent_sets_to_lists(self) -> None:
         """
-        This helper method is called after code registration is done. During registration, we use
+        This helper method should be called after code registration is done. During registration, we use
         self._install_modules_on_agents_map and self._load_modules_on_agents_map to build sets of agent names. In this
         method, we cast these sets to list and populate the corresponding fields of the registered InmantaModule.
-        (We can't directly use the 'set' type for these fields directly on the InmantaModule
+        (We can't directly use the 'set' type for these fields directly on the InmantaModule, we need a json serializable
+        type to be able to send them over the API in the put_version call)
 
         """
         for module_name, _module in self.module_version_info.items():
@@ -235,6 +233,8 @@ class CodeManager:
 
     def get_module_version_info(self) -> dict[str, "InmantaModule"]:
         """Return all module version info"""
+        self._convert_agent_sets_to_lists()
+
         return self.module_version_info
 
     @staticmethod

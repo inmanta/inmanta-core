@@ -1052,7 +1052,6 @@ class Test(Resource):
     module_name: str = "minimalv1module"
     module_path: str = str(tmpdir.join("modulev1"))
 
-    # TODO phase out v1 ??
     v1_module_from_template(
         os.path.join(modules_dir, module_name),
         module_path,

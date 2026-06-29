@@ -289,7 +289,7 @@ class AgentModules(Base):
     inmanta_module_version: Mapped[str] = mapped_column(String, nullable=False, doc="The version of the inmanta module")
     environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The environment this record belongs to")
     load_module_on_agent: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, doc="Whether module should be loaded" "on the agent after installation."
+        Boolean, nullable=False, doc="Whether module should be loaded on the agent after installation."
     )
 
     agent: Mapped["Agent"] = relationship("Agent", back_populates="agent_modules", viewonly=True)
