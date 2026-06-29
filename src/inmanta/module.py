@@ -2662,7 +2662,6 @@ class Module(ModuleLike[TModuleMetadata], ABC):
             return self._dir_cache[plugin_dir]
 
         files: dict[str, str] = {}
-        # v1 modules specific stuff:
         model_dir_path: str = os.path.join(plugin_dir, "model")
         files_dir_path: str = os.path.join(plugin_dir, "files")
         templates_dir_path: str = os.path.join(plugin_dir, "templates")

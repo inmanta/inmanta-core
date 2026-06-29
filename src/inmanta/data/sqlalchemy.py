@@ -90,7 +90,7 @@ class InmantaModule(Base):
     editable_install: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,
-        doc="Whether this module was installed in editable mode or as a package in the compiler venv",
+        doc="Whether this module was installed in editable mode or as a package in the compiler venv.",
     )
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="inmanta_module", viewonly=True)
     module_files: Mapped[list["ModuleFiles"]] = relationship("ModuleFiles", back_populates="inmanta_module", viewonly=True)
@@ -383,7 +383,7 @@ class AgentModules(Base):
             -   The version to register for this module
             -   The set of agents on which this module will be installed for this model version
             -   The set of agents on which this module will be loaded after installation for this model version.
-                This is a subset of the install set; agents that only install but don't load this module are those
+                This is a subset of the install set: agents that only install but don't load this module are those
                 present in the install set but not in the load set.
         :param environment: The environment for which to register modules per agent.
         :param connection: The asyncpg connection to use.
