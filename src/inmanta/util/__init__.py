@@ -767,6 +767,9 @@ class NamedLock:
         when all named locks are released. While waiting for this
         condition, all attempts to acquire a named lock will block
         until this exclusive lock is released.
+
+        A named lock and this global_exclusive_lock cannot be acquired
+        simultaneously as this would result in a deadlock.
         """
         async with self._global_exclusive_lock:
             if not self._named_locks:
