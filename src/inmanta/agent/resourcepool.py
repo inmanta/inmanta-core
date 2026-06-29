@@ -224,6 +224,11 @@ class PoolManager(abc.ABC, Generic[TPoolID, TIntPoolID, TPoolMember]):
         This implies nothing about the children
         """
         async with self._locks.global_exclusive_lock():
+            # Acquire the global_exclusive_lock to make sure that no call to
+            # self.get() is executing. This way we are sure that no new instances
+            # will be added to self.pool after this method call. Without this lock
+            # the sequence request_shutdown() -> join() can have a race condition
+            # where an in-flight call to get() is not stopped/joined.
             self.shut_down = True
             self.shutting_down = True
 
