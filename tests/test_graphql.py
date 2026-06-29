@@ -26,7 +26,13 @@ from inmanta import const, data
 from inmanta.data import model
 from inmanta.deploy import state
 from inmanta.graphql.graphql import GraphQLSlice
-from inmanta.graphql.schema import GraphQLContribution, _docstring_param_cache, mapper, to_snake_case
+from inmanta.graphql.schema import (
+    GraphQLContribution,
+    _docstring_param_cache,
+    build_composed_sqlalchemy_model,
+    mapper,
+    to_snake_case,
+)
 from inmanta.protocol import Result
 from inmanta.server import SLICE_COMPILER, SLICE_GRAPHQL
 from inmanta.server.services.compilerservice import CompilerService
@@ -1330,16 +1336,20 @@ async def test_custom_extension_contributions(server, environment, client, caplo
 
     class ExampleQueryContribution(GraphQLContribution):
         @classmethod
-        def get_resource_graphql_output_type_mixin(cls) -> type | None:
+        def get_target_model(cls) -> type:
+            return models.Resource
+
+        @classmethod
+        def get_graphql_output_type_mixin(cls) -> type | None:
             return ExampleResourceMixin
 
         @classmethod
-        def get_resource_sqlalchemy_columns(cls) -> dict[str, object]:
+        def get_sqlalchemy_columns(cls) -> dict[str, object]:
             return {"joined_value": query_expression()}
 
         @classmethod
-        def populate_resource_columns[*Ts](
-            cls, stmt: Select[tuple[*Ts]], resource_model: type, requested_fields: typing.AbstractSet[str]
+        def populate_sqlalchemy_columns[*Ts](
+            cls, stmt: Select[tuple[*Ts]], model: type, requested_fields: typing.AbstractSet[str]
         ) -> Select[tuple[*Ts]]:
             # Only populate the (potentially expensive) column when it is actually requested.
             if "joined_value" not in requested_fields:
@@ -1348,8 +1358,15 @@ async def test_custom_extension_contributions(server, environment, client, caplo
             # Join in a hardcoded value of 42 and populate it onto each resource's `joined_value` attribute.
             joined_value_subquery = select(literal(42).label("joined_value")).subquery()
             return stmt.join(joined_value_subquery, true()).options(
-                with_expression(getattr(resource_model, "joined_value"), joined_value_subquery.c.joined_value)
+                with_expression(getattr(model, "joined_value"), joined_value_subquery.c.joined_value)
             )
+
+    class UnsupportedModelContribution(GraphQLContribution):
+        """Targets a model that extensions are not allowed to contribute to."""
+
+        @classmethod
+        def get_target_model(cls) -> type:
+            return models.Project
 
     graphql_slice = server.get_slice(SLICE_GRAPHQL)
     assert isinstance(graphql_slice, GraphQLSlice)
@@ -1361,8 +1378,14 @@ async def test_custom_extension_contributions(server, environment, client, caplo
 
     # GraphQLSlice has already started, so we reset its schema to make registering possible again for this test.
     graphql_slice.schema = None
+    # Contributions for models that are not registrable are rejected.
+    with pytest.raises(
+        Exception,
+        match="Can't register a GraphQL contribution for Project: only contributions for .* are supported.",
+    ):
+        graphql_slice.register_graphql_contribution_for_extension("example", UnsupportedModelContribution)
     graphql_slice.register_graphql_contribution_for_extension("example", ExampleQueryContribution)
-    with pytest.raises(Exception, match="Contribution for extension example already registered."):
+    with pytest.raises(Exception, match="Extension example already registered a GraphQL contribution for Resource."):
         graphql_slice.register_graphql_contribution_for_extension("example", ExampleQueryContribution)
     await graphql_slice.start()
 
@@ -1399,3 +1422,100 @@ async def test_custom_extension_contributions(server, environment, client, caplo
         check_correct_graphql_response(result)
         assert len(result.result["data"]["data"]["resources"]["edges"]) > 0
         log_doesnt_contain(caplog, __name__, logging.INFO, "Populated joined_value column")
+
+
+def test_build_composed_sqlalchemy_model_rejects_duplicate_columns() -> None:
+    """Two contributions declaring the same SQLAlchemy column on the same model is rejected."""
+
+    class ContributionA(GraphQLContribution):
+        @classmethod
+        def get_target_model(cls) -> type:
+            return models.Resource
+
+        @classmethod
+        def get_sqlalchemy_columns(cls) -> dict[str, object]:
+            return {"joined_value": query_expression()}
+
+    class ContributionB(GraphQLContribution):
+        @classmethod
+        def get_target_model(cls) -> type:
+            return models.Resource
+
+        @classmethod
+        def get_sqlalchemy_columns(cls) -> dict[str, object]:
+            return {"joined_value": query_expression()}
+
+    with pytest.raises(Exception, match="Column joined_value defined more than once in Resource contributions."):
+        build_composed_sqlalchemy_model(models.Resource, [ContributionA, ContributionB])
+
+
+async def test_extension_registers_multiple_contributions(server, environment, client, mixed_resource_generator):
+    """
+    A single extension can register one contribution per object type. Here the "example" extension contributes an
+    output field to both the Resource and the Environment types, and both show up in their respective queries.
+    """
+
+    def get_resource_example(root: object) -> str:
+        return "resource-example"
+
+    def get_environment_example(root: object) -> str:
+        return "environment-example"
+
+    class ExampleResourceMixin:
+        resource_example: str = strawberry.field(resolver=get_resource_example, description="Contributed onto Resource")
+
+    class ExampleEnvironmentMixin:
+        environment_example: str = strawberry.field(
+            resolver=get_environment_example, description="Contributed onto Environment"
+        )
+
+    class ResourceContribution(GraphQLContribution):
+        @classmethod
+        def get_target_model(cls) -> type:
+            return models.Resource
+
+        @classmethod
+        def get_graphql_output_type_mixin(cls) -> type | None:
+            return ExampleResourceMixin
+
+    class EnvironmentContribution(GraphQLContribution):
+        @classmethod
+        def get_target_model(cls) -> type:
+            return models.Environment
+
+        @classmethod
+        def get_graphql_output_type_mixin(cls) -> type | None:
+            return ExampleEnvironmentMixin
+
+    graphql_slice = server.get_slice(SLICE_GRAPHQL)
+    assert isinstance(graphql_slice, GraphQLSlice)
+
+    # GraphQLSlice has already started, so we reset its schema to make registering possible again for this test.
+    graphql_slice.schema = None
+    graphql_slice.register_graphql_contribution_for_extension("example", ResourceContribution)
+    graphql_slice.register_graphql_contribution_for_extension("example", EnvironmentContribution)
+
+    # Both contributions are stored under the same extension name, grouped by the type they target.
+    assert graphql_slice.extension_contributions["Resource"]["example"] is ResourceContribution
+    assert graphql_slice.extension_contributions["Environment"]["example"] is EnvironmentContribution
+    await graphql_slice.start()
+
+    await mixed_resource_generator(environment, 1, 6)
+
+    # The Resource contribution shows up on the resources query.
+    result = await client.graphql(query="""
+        { resources (filter: {environment: "%s"}) { edges { node { resourceExample } } } }
+        """ % environment)
+    check_correct_graphql_response(result)
+    resource_edges = result.result["data"]["data"]["resources"]["edges"]
+    assert len(resource_edges) > 0
+    for edge in resource_edges:
+        assert edge["node"]["resourceExample"] == "resource-example"
+
+    # The Environment contribution shows up on the environments query.
+    result = await client.graphql(query="{ environments { edges { node { environmentExample } } } }")
+    check_correct_graphql_response(result)
+    environment_edges = result.result["data"]["data"]["environments"]["edges"]
+    assert len(environment_edges) > 0
+    for edge in environment_edges:
+        assert edge["node"]["environmentExample"] == "environment-example"

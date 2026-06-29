@@ -12,11 +12,19 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+from collections import defaultdict
 from typing import Any
 
 from graphql.error import GraphQLError
 from inmanta.graphql.result import GraphQLResult
-from inmanta.graphql.schema import GraphQLContext, GraphQLContribution, get_schema
+from inmanta.graphql.schema import (
+    REGISTRABLE_MODELS,
+    GraphQLContext,
+    GraphQLContribution,
+    GraphQLTypeName,
+    get_schema,
+    graphql_type_name,
+)
 from inmanta.protocol import methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.decorators import handle
@@ -27,17 +35,22 @@ from strawberry import Schema
 from strawberry.schema.exceptions import CannotGetOperationTypeError
 from strawberry.types.execution import ExecutionResult
 
+# The name of the extension that registered a contribution.
+type ExtensionName = str
+
 
 class GraphQLSlice(protocol.ServerSlice):
     context: GraphQLContext | None
     schema: Schema | None
-    extension_contributions: dict[str, type[GraphQLContribution]]
+    # Registered contributions, grouped by the name of the object type they target (e.g. "Resource") and then by the
+    # name of the extension that registered them: {type_name: {extension_name: contribution}}.
+    extension_contributions: defaultdict[GraphQLTypeName, dict[ExtensionName, type[GraphQLContribution]]]
 
     def __init__(self) -> None:
         super().__init__(name=SLICE_GRAPHQL)
         self.context = None
         self.schema = None
-        self.extension_contributions = {}
+        self.extension_contributions = defaultdict(dict)
 
     def get_dependencies(self) -> list[str]:
         return [SLICE_COMPILER]
@@ -45,16 +58,24 @@ class GraphQLSlice(protocol.ServerSlice):
     def register_graphql_contribution_for_extension(self, extension_name: str, contribution: type[GraphQLContribution]) -> None:
         """
         Register an extension contribution. Only possible before the slice starts (during the `prestart` stage) and
-        if the extension name has not already been registered.
+        only for one of the supported object types (see REGISTRABLE_MODELS). An extension can register several
+        contributions (one per object type it extends), but not two contributions for the same object type.
         """
-        if self.schema is None:
-            if extension_name in self.extension_contributions:
-                raise Exception(f"Contribution for extension {extension_name} already registered.")
-            self.extension_contributions[extension_name] = contribution
-        else:
+        if self.schema is not None:
             raise Exception(
                 f"Can't register extension contribution for {extension_name} because the GraphQLSlice was already started."
             )
+        target_model = contribution.get_target_model()
+        if target_model not in REGISTRABLE_MODELS:
+            raise Exception(
+                f"Can't register a GraphQL contribution for {graphql_type_name(target_model)}: "
+                f"only contributions for {', '.join(graphql_type_name(model) for model in REGISTRABLE_MODELS)} are supported."
+            )
+        type_name = graphql_type_name(target_model)
+        contributions_for_type = self.extension_contributions[type_name]
+        if extension_name in contributions_for_type:
+            raise Exception(f"Extension {extension_name} already registered a GraphQL contribution for {type_name}.")
+        contributions_for_type[extension_name] = contribution
 
     async def prestart(self, server: Server) -> None:
         compiler_service = server.get_slice(SLICE_COMPILER)
@@ -64,7 +85,12 @@ class GraphQLSlice(protocol.ServerSlice):
 
     async def start(self) -> None:
         assert self.context is not None
-        self.schema = get_schema(self.context, list(self.extension_contributions.values()))
+        # get_schema only needs the contributions grouped by target type; the extension names are bookkeeping for
+        # registration, so we drop them here.
+        self.schema = get_schema(
+            self.context,
+            {type_name: list(by_extension.values()) for type_name, by_extension in self.extension_contributions.items()},
+        )
         await super().start()
 
     @handle(methods_v2.graphql, operation_name="operationName")
