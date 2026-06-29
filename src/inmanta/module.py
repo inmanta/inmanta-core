@@ -2731,9 +2731,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         self._plugin_file_cache = [
             (
                 Path(file_name),
-                ModuleName(
-                    self._get_fq_mod_name_for_py_file(file_name, plugin_dir, self.name)
-                ),
+                ModuleName(self._get_fq_mod_name_for_py_file(file_name, plugin_dir, self.name)),
             )
             for file_name in self._list_python_files(plugin_dir)
         ]
@@ -2765,9 +2763,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         :param mod_name: The top-level name of this module.
         """
         rel_py_file = os.path.relpath(py_file, start=plugin_dir)
-        return loader.convert_relative_path_to_module(
-            os.path.join(mod_name, loader.PLUGIN_DIR, rel_py_file)
-        )
+        return loader.convert_relative_path_to_module(os.path.join(mod_name, loader.PLUGIN_DIR, rel_py_file))
 
     def unload(self) -> None:
         """

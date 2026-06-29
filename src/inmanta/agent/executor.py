@@ -241,7 +241,6 @@ class ExecutorBlueprint(EnvBlueprint):
                     )
                 )
 
-
         # Check that constraints set at the project level are consistent across all modules
         all_constraints = {cd.blueprint.project_constraints for cd in code}
         assert len(all_constraints) == 1
