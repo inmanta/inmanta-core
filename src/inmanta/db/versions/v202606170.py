@@ -28,6 +28,6 @@ async def update(connection: Connection) -> None:
 
     -- Add the 'load_module_on_agent' column
     ALTER TABLE public.agent_modules
-    ADD COLUMN load_module_on_agent boolean DEFAULT false;
+    ADD COLUMN load_module_on_agent boolean DEFAULT true;
     """
     await connection.execute(schema)
