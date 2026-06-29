@@ -29,6 +29,7 @@ from typing import Optional
 
 import py
 import pytest
+from packaging.requirements import Requirement
 from pytest import fixture
 
 import utils
@@ -36,7 +37,8 @@ from inmanta import const, env, loader, moduletool
 from inmanta.data.model import ModuleSourceMetadata
 from inmanta.env import PipConfig
 from inmanta.loader import ModuleSource, SourceNotFoundException
-from inmanta.module import Project
+from inmanta.module import Project, InmantaModuleRequirement
+from inmanta.moduletool import ModuleTool
 
 
 def get_module_source(module: str, code: str) -> ModuleSource:
@@ -72,15 +74,23 @@ def test_code_manager(tmpdir: py.path.local, deactive_venv, install_all_dependen
     project._metadata.agent_install_dependency_modules = install_all_dependencies
 
     Project.set(project)
+
+    for module_req in ["multiple-plugin-files==1.0",
+    "non-imported-plugin-file==1.0",
+    "single-plugin-file==1.0"]:
+        project.add_module_requirement_persistent(Requirement(module_req))
+
     project.install_modules()
 
-    # The plugin modules are v2 modules, installed editable from the project's libs directory.
-    for module_name in ("single_plugin_file", "multiple_plugin_files", "non_imported_plugin_file"):
-        project.virtualenv.install_for_config(
-            requirements=[],
-            paths=[env.LocalPackagePath(path=os.path.join(project_dir, "libs", module_name), editable=True)],
-            config=PipConfig(use_system_config=True),
-        )
+    # TODO double check this fix
+
+    # # The plugin modules are v2 modules, installed editable from the project's libs directory.
+    # for module_name in ("single_plugin_file", "multiple_plugin_files", "non_imported_plugin_file"):
+    #     project.virtualenv.install_for_config(
+    #         requirements=[],
+    #         paths=[env.LocalPackagePath(path=os.path.join(project_dir, "libs", module_name), editable=True)],
+    #         config=PipConfig(use_system_config=True),
+    #     )
 
     project.load()
 

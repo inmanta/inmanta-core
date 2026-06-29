@@ -499,7 +499,7 @@ def test():
         ),
         source=code,
         install_on_disk=True,
-        load_module=False,
+        load_module=True,
     )
     sources1 = ()
     sources2 = (module_source1,)

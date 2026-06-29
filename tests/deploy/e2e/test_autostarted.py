@@ -1176,6 +1176,8 @@ async def test_pause_unpause_all_agents_deploy(
     environment,
     auto_start_agent: bool,
     tmp_path,
+    modules_v2_dir,
+    local_module_package_index,
 ):
     """
     Verify that the new scheduler can pause and unpause all agents
@@ -1189,16 +1191,19 @@ async def test_pause_unpause_all_agents_deploy(
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     assert len(agentmanager.sessions) == 1
 
+    module_dir = os.path.join(modules_v2_dir, "minimalwaitingmodulev2")
     snippetcompiler.setup_for_snippet(
         f"""
-import minimalwaitingmodule
+import minimalwaitingmodulev2
 
-minimalwaitingmodule::WaitForFileRemoval(name="test_sleep", agent="agent1", path="{file_to_remove}")
-minimalwaitingmodule::WaitForFileRemoval(name="test_sleep2", agent="agent2", path="{file_to_remove}")
-minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent3", path="{file_to_remove}")
+minimalwaitingmodulev2::WaitForFileRemoval(name="test_sleep", agent="agent1", path="{file_to_remove}")
+minimalwaitingmodulev2::WaitForFileRemoval(name="test_sleep2", agent="agent2", path="{file_to_remove}")
+minimalwaitingmodulev2::WaitForFileRemoval(name="test_sleep3", agent="agent3", path="{file_to_remove}")
 """,
-        ministd=True,
-        index_url="https://pypi.org/simple",
+        autostd=True,
+        index_url=local_module_package_index,
+        install_project=True,
+        install_v2_modules=[LocalPackagePath(path=module_dir, editable=True)],
     )
 
     # Now, let's deploy some resources
@@ -1642,7 +1647,7 @@ async def test_code_install_success_code_load_error_for_reference(
 
     await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=2, state=const.ResourceState.deployed)
 
-    # Introduce a code loading error (via a trick in minimalinstallfailuremodule) and make sure no resource is deployed.
+    # Introduce a code loading error (via a trick in minimalinstallfailuremodulev2) and make sure no resource is deployed.
 
     snippetcompiler.setup_for_snippet(
         """
@@ -1681,7 +1686,7 @@ async def test_code_install_success_code_load_error_for_reference(
 
 @pytest.mark.slowtest
 @pytest.mark.parametrize("auto_start_agent", (True,))  # this overrides a fixture to allow the agent to fork!
-async def test_editable_dependency_installed_from_source_on_all_agents(
+async def test_editable_dependency_installed_from_source_on_all_agents( #  TODO double check this tests especially agent_install_dependency_modules
     snippetcompiler,
     server,
     ensure_resource_tracker_is_started,
