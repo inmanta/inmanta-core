@@ -261,7 +261,7 @@ class DryRun(Task):
                 rvid=executor_resource_details.rvid,
                 agent=agent,
                 started=started,
-                log_msg_for_log="Skipping dryrun for resource %s because due to an error in constructing the executor",
+                log_msg_for_log="Skipping dryrun for resource %s due to an error when constructing the executor",
                 log_msg_for_report="Unable to construct an executor for this resource",
             )
         else:
