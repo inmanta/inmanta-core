@@ -53,7 +53,7 @@ class GraphQLSlice(protocol.ServerSlice):
             self.extension_contributions[extension_name] = contribution
         else:
             raise Exception(
-                f"Can't register extension contribution for {extension_name} " "because the GraphQLSlice was already started."
+                f"Can't register extension contribution for {extension_name} because the GraphQLSlice was already started."
             )
 
     async def prestart(self, server: Server) -> None:
