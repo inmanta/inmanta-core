@@ -58,42 +58,28 @@ def get_module_source(module: str, code: str) -> ModuleSource:
     )
 
 
-@pytest.mark.parametrize(
-    "install_all_dependencies,expected_dependencies",
-    [
-        (True, {"inmanta-module-std", "lorem"}),
-        (False, {"lorem"}),
-    ],
-)
-def test_code_manager(tmpdir: py.path.local, deactive_venv, install_all_dependencies, expected_dependencies):
+def test_code_manager(tmpdir: py.path.local, deactive_venv):
     """Verify the code manager"""
     original_project_dir: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "plugins_project")
     project_dir = os.path.join(tmpdir, "plugins_project")
     shutil.copytree(original_project_dir, project_dir)
     project: Project = Project(project_dir, venv_path=os.path.join(project_dir, ".env"))
-    project._metadata.agent_install_dependency_modules = install_all_dependencies
 
     Project.set(project)
 
-    for module_req in ["multiple-plugin-files==1.0",
-    "non-imported-plugin-file==1.0",
-    "single-plugin-file==1.0"]:
-        project.add_module_requirement_persistent(Requirement(module_req))
+    project.use_virtual_env()
+    # The plugin modules are v2 modules, installed editable from the project's libs directory.
+    for module_name in ("single_plugin_file", "multiple_plugin_files", "non_imported_plugin_file"):
+        project.virtualenv.install_for_config(
+            requirements=[],
+            paths=[env.LocalPackagePath(path=os.path.join(project_dir, "libs", module_name), editable=True)],
+            config=PipConfig(use_system_config=True),
+        )
 
-    project.install_modules()
-
-    # TODO double check this fix
-
-    # # The plugin modules are v2 modules, installed editable from the project's libs directory.
-    # for module_name in ("single_plugin_file", "multiple_plugin_files", "non_imported_plugin_file"):
-    #     project.virtualenv.install_for_config(
-    #         requirements=[],
-    #         paths=[env.LocalPackagePath(path=os.path.join(project_dir, "libs", module_name), editable=True)],
-    #         config=PipConfig(use_system_config=True),
-    #     )
 
     project.load()
 
+    expected_dependencies = {"inmanta-module-std", "lorem"}
     project.load_module("single_plugin_file")
     project.load_module("multiple_plugin_files")
 

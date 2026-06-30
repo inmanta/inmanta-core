@@ -242,13 +242,8 @@ class CodeManager:
         """Get the list of python requirements associated with this inmanta module"""
         project: module.Project = module.Project.get()
         mod: module.Module = project.modules[module_name]
+        return set(mod.get_all_python_requirements_as_list())
 
-        if project.metadata.agent_install_dependency_modules:
-            _requires = mod.get_all_python_requirements_as_list()
-        else:
-            _requires = mod.get_strict_python_requirements_as_list()
-
-        return set(_requires)
 
     @staticmethod
     def get_module_version(requirements: set[str], module_sources: Sequence["ModuleSourceMetadata"]) -> str:

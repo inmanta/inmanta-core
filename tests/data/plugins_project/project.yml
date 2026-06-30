@@ -3,3 +3,7 @@ description: A project used for plugin loading tests
 install_mode: "release"
 repo:
     - https://github.com/inmanta/
+requires:
+    - multiple-plugin-files==1.0
+    - non-imported-plugin-file==1.0
+    - single-plugin-file==1.0
