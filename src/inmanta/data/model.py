@@ -1216,7 +1216,7 @@ class ModuleSource(BaseModel):
     metadata: ModuleSourceMetadata
     source: bytes
     install_on_disk: bool
-    load_module: bool #  Move this and instal on disk to metadata ?
+    load_module: bool  # Move this and instal on disk to metadata ?
 
     @classmethod
     def from_path(cls, absolute_path: str, name: str, editable_install: bool, load_module: bool) -> "ModuleSource":

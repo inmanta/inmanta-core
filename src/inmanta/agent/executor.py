@@ -218,7 +218,7 @@ class ExecutorBlueprint(EnvBlueprint):
         assert len(env_ids) == 1
         sources: set[ModuleSource] = set()
         requirements: set[str] = set()
-        all_constraints = set[str | None] = set()
+        all_constraints: set[str | None] = set()
         pip_configs: list[PipConfig] = []
         python_versions: list[tuple[int, int]] = []
 
@@ -230,13 +230,15 @@ class ExecutorBlueprint(EnvBlueprint):
             #   - For package installs, we will rely on pip for the install and then load them
             sources.update(module_install_spec.blueprint.sources)
 
-            all_constraints |= module_install_spec.blueprint.project_constraints
+            all_constraints.add(module_install_spec.blueprint.project_constraints)
 
             pip_configs.append(module_install_spec.blueprint.pip_config)
 
             python_versions.append(module_install_spec.blueprint.python_version)
 
-            if module_install_spec.editable_install:
+            editable_install: bool = module_install_spec.blueprint.sources[0].install_on_disk
+
+            if editable_install:
                 # Editable install:
                 # install the requirements first, and then the source from the database
                 requirements.update(module_install_spec.blueprint.requirements)

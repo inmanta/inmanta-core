@@ -165,9 +165,7 @@ def test():
     )
 
     # Full runner install requires pip install, this can be slow, so we build it first to prevent the other one from timing out
-    oldest_executor = await manager.get_executor(
-        "agent2", "internal:", [executor.InmantaModuleInstallSpec("test", 1, dummy)]
-    )
+    oldest_executor = await manager.get_executor("agent2", "internal:", [executor.InmantaModuleInstallSpec("test", 1, dummy)])
     full_runner = await manager.get_executor(
         "agent2",
         "internal:",

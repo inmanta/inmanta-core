@@ -244,7 +244,6 @@ class CodeManager:
         mod: module.Module = project.modules[module_name]
         return set(mod.get_all_python_requirements_as_list())
 
-
     @staticmethod
     def get_module_version(requirements: set[str], module_sources: Sequence["ModuleSourceMetadata"]) -> str:
         module_version_hash = hashlib.new("sha1")

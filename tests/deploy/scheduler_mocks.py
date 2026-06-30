@@ -189,7 +189,9 @@ class DummyManager(executor.ExecutorManager[executor.Executor]):
         self.executors[agent_name] = executor
         return executor
 
-    async def get_executor(self, agent_name: str, agent_uri: str, code: typing.Collection[InmantaModuleInstallSpec]) -> DummyExecutor:
+    async def get_executor(
+        self, agent_name: str, agent_uri: str, code: typing.Collection[InmantaModuleInstallSpec]
+    ) -> DummyExecutor:
         if not code:
             raise ValueError(f"{self.__class__.__name__}.get_executor() expects at least one resource install specification")
         if agent_name not in self.executors:

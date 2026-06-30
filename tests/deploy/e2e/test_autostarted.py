@@ -1686,7 +1686,7 @@ async def test_code_install_success_code_load_error_for_reference(
 
 @pytest.mark.slowtest
 @pytest.mark.parametrize("auto_start_agent", (True,))  # this overrides a fixture to allow the agent to fork!
-async def test_editable_dependency_installed_from_source_on_all_agents( #  TODO double check this tests especially agent_install_dependency_modules
+async def test_editable_dependency_installed_from_source_on_all_agents(
     snippetcompiler,
     server,
     ensure_resource_tracker_is_started,

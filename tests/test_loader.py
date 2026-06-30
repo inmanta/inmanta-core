@@ -29,7 +29,6 @@ from typing import Optional
 
 import py
 import pytest
-from packaging.requirements import Requirement
 from pytest import fixture
 
 import utils
@@ -37,8 +36,7 @@ from inmanta import const, env, loader, moduletool
 from inmanta.data.model import ModuleSourceMetadata
 from inmanta.env import PipConfig
 from inmanta.loader import ModuleSource, SourceNotFoundException
-from inmanta.module import Project, InmantaModuleRequirement
-from inmanta.moduletool import ModuleTool
+from inmanta.module import Project
 
 
 def get_module_source(module: str, code: str) -> ModuleSource:
@@ -75,7 +73,6 @@ def test_code_manager(tmpdir: py.path.local, deactive_venv):
             paths=[env.LocalPackagePath(path=os.path.join(project_dir, "libs", module_name), editable=True)],
             config=PipConfig(use_system_config=True),
         )
-
 
     project.load()
 

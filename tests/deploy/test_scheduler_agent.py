@@ -2573,7 +2573,9 @@ class BrokenDummyManager(executor.ExecutorManager[executor.Executor]):
     A broken dummy ExecutorManager that fails on get_executor to test failure paths
     """
 
-    async def get_executor(self, agent_name: str, agent_uri: str, code: typing.Collection[InmantaModuleInstallSpec]) -> DummyExecutor:
+    async def get_executor(
+        self, agent_name: str, agent_uri: str, code: typing.Collection[InmantaModuleInstallSpec]
+    ) -> DummyExecutor:
         raise Exception()
 
     async def stop_for_agent(self, agent_name: str) -> list[DummyExecutor]:
