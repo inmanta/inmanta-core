@@ -376,18 +376,12 @@ class InmantaModuleInstallSpec:
     :ivar module_name: fully qualified name for this Inmanta module
     :ivar module_version: the version of the module to use
     :ivar blueprint: the associated install blueprint
-    :ivar editable_install: whether the module was installed in editable mode or as a package
-        in the compiler venv.
-    :ivar load_after_install: whether the module should be loaded on the agent after a successful
-        installation.
 
     """
 
     module_name: str
     module_version: str
     blueprint: ExecutorBlueprint
-    editable_install: bool
-    load_after_install: bool
 
 
 class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]):

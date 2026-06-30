@@ -53,7 +53,7 @@ def set_custom_executor_policy(server_config):
 
 
 def code_for(bp: executor.ExecutorBlueprint) -> list[executor.InmantaModuleInstallSpec]:
-    return [executor.InmantaModuleInstallSpec("test", "abcdef", bp, editable_install=True, load_after_install=False)]
+    return [executor.InmantaModuleInstallSpec("test", "abcdef", bp)]
 
 
 async def test_process_manager(

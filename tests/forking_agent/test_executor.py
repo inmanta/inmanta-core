@@ -99,7 +99,7 @@ async def test_executor_server(set_custom_executor_policy, mpmanager: MPManager,
     simplest = await manager.get_executor(
         "agent1",
         "test",
-        [executor.InmantaModuleInstallSpec("test", "123456", simplest_blueprint, editable_install=True, load_after_install=True)],
+        [executor.InmantaModuleInstallSpec("test", "123456", simplest_blueprint)],
     )
 
     # check communications
@@ -166,12 +166,12 @@ def test():
 
     # Full runner install requires pip install, this can be slow, so we build it first to prevent the other one from timing out
     oldest_executor = await manager.get_executor(
-        "agent2", "internal:", [executor.InmantaModuleInstallSpec("test", 1, dummy, editable_install=True, load_after_install=True)]
+        "agent2", "internal:", [executor.InmantaModuleInstallSpec("test", 1, dummy)]
     )
     full_runner = await manager.get_executor(
         "agent2",
         "internal:",
-        [executor.InmantaModuleInstallSpec("test:DDD:Test", 1, full, editable_install=True, load_after_install=True)],
+        [executor.InmantaModuleInstallSpec("test:DDD:Test", 1, full)],
     )
 
     assert oldest_executor.id in manager.pool
@@ -201,7 +201,7 @@ def test():
         _ = await manager.get_executor(
             "agent2",
             "internal:",
-            [executor.InmantaModuleInstallSpec("test::Test", "1", dummy, editable_install=True, load_after_install=True)],
+            [executor.InmantaModuleInstallSpec("test::Test", "1", dummy)],
         )
         assert not oldest_executor.running
         assert full_runner.running
@@ -223,7 +223,7 @@ def test():
     full_runner = await manager.get_executor(
         "agent2",
         "internal:",
-        [executor.InmantaModuleInstallSpec("test::Test", "1", full, editable_install=True, load_after_install=True)],
+        [executor.InmantaModuleInstallSpec("test::Test", "1", full)],
     )
 
     await retry_limited(lambda: len(manager.agent_map["agent2"]) == 1, 1)

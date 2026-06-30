@@ -1080,9 +1080,9 @@ class DummyCodeManager(CodeManager):
     ) -> tuple[Collection[InmantaModuleInstallSpec], executor.FailedModules]:
         dummyblueprint: ExecutorBlueprint = _get_dummy_blueprint_for(environment)
         return (
-            [InmantaModuleInstallSpec("dummy_module", "0.0.0", dummyblueprint, editable_install=True, load_after_install=True)],
+            [InmantaModuleInstallSpec("dummy_module", "0.0.0", dummyblueprint)],
             {},
-        )  # editable_install = True, TODO test both
+        )
 
 
 async def is_agent_done(scheduler: ResourceScheduler, agent_name: str) -> bool:

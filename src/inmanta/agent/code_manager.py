@@ -128,8 +128,6 @@ class CodeManager:
                     InmantaModuleInstallSpec(
                         module_name=module_name,
                         module_version=first_row.inmanta_module_version,
-                        editable_install=first_row.editable_install,
-                        load_after_install=first_row.load_module_on_agent,
                         blueprint=executor.ExecutorBlueprint(
                             pip_config=pip_config,
                             requirements=first_row.requirements,
