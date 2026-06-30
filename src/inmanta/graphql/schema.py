@@ -362,6 +362,8 @@ def walk_selected_fields(selection: Selection) -> typing.Iterator[SelectedField]
     """
     Yield every SelectedField in a selection subtree: the selection itself if it is a field, plus all nested
     selections, recursing through inline (`... on Type`) and named (`...Fragment`) fragments.
+
+    :param selection: the root of the selection subtree to walk.
     """
     if isinstance(selection, SelectedField):
         yield selection
@@ -373,6 +375,8 @@ def get_selected_field_names(info: Info) -> set[str]:
     """
     Return the (camelCase) names of every field selected anywhere in the query, recursing through nested
     selections and fragments. This includes the names of the top-level resolved fields themselves (e.g. `resources`);
+
+    :param info: the Strawberry resolver info holding the selected fields of the current query.
     """
     return {field.name for selected_field in info.selected_fields for field in walk_selected_fields(selected_field)}
 
@@ -380,6 +384,9 @@ def get_selected_field_names(info: Info) -> set[str]:
 def is_field_selected(info: Info, field_name: str) -> bool:
     """
     Check whether the user requested `field_name` anywhere in the query, including nested fields and fragments.
+
+    :param info: the Strawberry resolver info holding the selected fields of the current query.
+    :param field_name: the (camelCase) name of the field to look for.
     """
     return field_name in get_selected_field_names(info)
 
@@ -404,6 +411,8 @@ def graphql_type_name(model: type[models.Base]) -> GraphQLTypeName:
     """
     The name of the GraphQL output type that is built for a SQLAlchemy model. By convention it is the model's class
     name (e.g. `models.Resource` -> "Resource"). This is the single place that convention lives.
+
+    :param model: the SQLAlchemy model whose GraphQL output type name is returned.
     """
     return model.__name__
 
@@ -947,9 +956,9 @@ class GraphQLContribution(ABC):
     Extension hook that lets extensions (e.g. LSM) contribute extra information to a single GraphQL output type
     without a tight coupling between core and these extensions.
 
-    A contribution targets one object type (the one returned by `get_target_model`, e.g. `models.Resource`,
-    `models.Environment` or `models.Notification`). An extension that wants to extend several object types registers
-    one contribution per type. Core groups the contributions by target type and, for each type, merges them onto the
+    A contribution targets one object type (the one returned by `get_target_model`, e.g. `models.Resource`).
+    An extension that wants to extend several object types registers one contribution per type.
+    Core groups the contributions by target type and, for each type, merges them onto the
     GraphQL output type and its backing SQLAlchemy model (see `build_strawberry_output_type` and
     `build_composed_sqlalchemy_model`).
     """
@@ -994,14 +1003,16 @@ class GraphQLContribution(ABC):
         """
         Populate the columns declared in `get_sqlalchemy_columns` onto the query, typically via sqlalchemy's
         `with_expression`.
-        `model` is the dynamically built subclass of the target model that carries the `query_expression()`
-        placeholders (so its core columns keep their type, while the extra columns are read with `getattr`).
-
-        `requested_fields` holds the (snake_case) names of every field selected anywhere in the GraphQL query
-        (not only the target's output fields), so a column counts as requested when its name appears in the set.
         Populating a column is usually expensive (extra joins/subqueries), so an implementation should only
         populate the columns whose name is in `requested_fields` and leave the rest as their (null)
         `query_expression` default. Name columns distinctly to avoid colliding with unrelated fields in the set.
+
+        :param stmt: the query the columns are populated onto. Implementations should return it with their columns
+            added (e.g. via `with_expression`).
+        :param model: the dynamically built subclass of the target model that carries the `query_expression()`
+            placeholders (so its core columns keep their type, while the extra columns are read with `getattr`).
+        :param requested_fields: the (snake_case) names of every field selected anywhere in the GraphQL query
+            (not only the target's output fields), so a column counts as requested when its name appears in the set.
         """
         return stmt
 
@@ -1096,6 +1107,7 @@ def get_schema(
     It is initiated in a function instead of being declared at the module level, because we have to do this
     after the SQLAlchemy engine is initialized.
 
+    :param context: the GraphQL context made available to resolvers (e.g. to reach the compiler service).
     :param extension_contributions: the registered extension contributions, grouped by the name of the GraphQL output
         type they target (see `graphql_type_name`). Extension names are not relevant here, so they are dropped by the
         caller (`GraphQLSlice`).
@@ -1108,6 +1120,9 @@ def get_schema(
         Build the (possibly extension-composed) SQLAlchemy model and Strawberry output type for one object type.
         Returns the SQLAlchemy model to select in the query (a subclass carrying the extensions' extra columns when
         there are any, `base_model` otherwise) and the Strawberry output type to return.
+
+        :param base_model: the SQLAlchemy model of the object type being built (e.g. `models.Resource`).
+        :param core_mixin: the mixin carrying the core output fields for this type (e.g. `CoreResourceMixin`).
         """
         type_name = graphql_type_name(base_model)
         contributions = extension_contributions.get(type_name, [])
@@ -1122,6 +1137,13 @@ def get_schema(
         Let the extensions populate the extra SQL-backed columns they declared on `composed_model` (see
         GraphQLContribution.populate_sqlalchemy_columns), passing the names of the fields selected in the query so they only
         populate what was requested. Skipped entirely on the common path where no extension contributed columns.
+
+        :param stmt: the query the extension columns are populated onto.
+        :param base_model: the original SQLAlchemy model of the object type (e.g. `models.Resource`).
+        :param composed_model: the model actually selected by the query: a subclass of `base_model` carrying the
+            extensions' extra columns, or `base_model` itself when no extension contributed columns (in which case
+            this is a no-op).
+        :param info: the Strawberry resolver info, used to determine which fields were selected in the query.
         """
         if composed_model is base_model:
             return stmt

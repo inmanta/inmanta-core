@@ -60,18 +60,23 @@ class GraphQLSlice(protocol.ServerSlice):
         Register an extension contribution. Only possible before the slice starts (during the `prestart` stage) and
         only for one of the supported object types (see REGISTRABLE_MODELS). An extension can register several
         contributions (one per object type it extends), but not two contributions for the same object type.
+
+        :param extension_name: the name of the extension registering the contribution. Used for bookkeeping (so an
+            extension can't register two contributions for the same object type) and in error messages.
+        :param contribution: the contribution to register. Its target object type is determined by
+            `contribution.get_target_model()`.
         """
         if self.schema is not None:
             raise Exception(
                 f"Can't register extension contribution for {extension_name} because the GraphQLSlice was already started."
             )
         target_model = contribution.get_target_model()
+        type_name = graphql_type_name(target_model)
         if target_model not in REGISTRABLE_MODELS:
             raise Exception(
-                f"Can't register a GraphQL contribution for {graphql_type_name(target_model)}: "
+                f"Can't register a GraphQL contribution for {type_name}: "
                 f"only contributions for {', '.join(graphql_type_name(model) for model in REGISTRABLE_MODELS)} are supported."
             )
-        type_name = graphql_type_name(target_model)
         contributions_for_type = self.extension_contributions[type_name]
         if extension_name in contributions_for_type:
             raise Exception(f"Extension {extension_name} already registered a GraphQL contribution for {type_name}.")
