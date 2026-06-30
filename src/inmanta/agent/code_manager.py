@@ -24,7 +24,7 @@ import uuid
 import inmanta.data.sqlalchemy as models
 from inmanta import data
 from inmanta.agent import executor
-from inmanta.agent.executor import ModuleInstallSpec
+from inmanta.agent.executor import InmantaModuleInstallSpec
 from inmanta.data.model import LEGACY_PIP_DEFAULT, ModuleSource, ModuleSourceMetadata, PipConfig
 from inmanta.util.async_lru import async_lru_cache
 from sqlalchemy import and_, select
@@ -47,13 +47,13 @@ class CodeManager:
     """
 
     @async_lru_cache(maxsize=1024)
-    async def get_code(self, environment: uuid.UUID, model_version: int, agent_name: str) -> list[ModuleInstallSpec]:
+    async def get_code(self, environment: uuid.UUID, model_version: int, agent_name: str) -> list[InmantaModuleInstallSpec]:
         """
         Get the list of installation specifications (i.e. pip config, python package dependencies,
         Inmanta modules sources) required to deploy resources on a given agent for a given configuration
         model version.
 
-        :return: list of ModuleInstallSpec for this agent and this model version.
+        :return: list of InmantaModuleInstallSpec for this agent and this model version.
         """
         module_install_specs = []
 
@@ -125,7 +125,7 @@ class CodeManager:
 
                 pip_config = LEGACY_PIP_DEFAULT if _pip_config is None else PipConfig(**_pip_config)
                 module_install_specs.append(
-                    ModuleInstallSpec(
+                    InmantaModuleInstallSpec(
                         module_name=module_name,
                         module_version=first_row.inmanta_module_version,
                         editable_install=first_row.editable_install,

@@ -205,10 +205,10 @@ class ExecutorBlueprint(EnvBlueprint):
         self.sources = sorted(set(self.sources))
 
     @classmethod
-    def from_specs(cls, code: typing.Collection["ModuleInstallSpec"]) -> "ExecutorBlueprint":
+    def from_specs(cls, code: typing.Collection["InmantaModuleInstallSpec"]) -> "ExecutorBlueprint":
         """
         Create a single ExecutorBlueprint by combining the blueprint(s) of several
-        ModuleInstallSpec by merging respectively their module sources and their
+        InmantaModuleInstallSpec by merging respectively their module sources and their
         requirements and making sure they all share the same pip config.
         """
 
@@ -218,6 +218,9 @@ class ExecutorBlueprint(EnvBlueprint):
         assert len(env_ids) == 1
         sources: set[ModuleSource] = set()
         requirements: set[str] = set()
+        all_constraints = set[str | None] = set()
+        pip_configs: list[PipConfig] = []
+        python_versions: list[tuple[int, int]] = []
 
         for module_install_spec in code:
             # Gather all sources (both for editable and package install). Later, during code
@@ -226,6 +229,12 @@ class ExecutorBlueprint(EnvBlueprint):
             #      on agents that were registered to use them
             #   - For package installs, we will rely on pip for the install and then load them
             sources.update(module_install_spec.blueprint.sources)
+
+            all_constraints |= module_install_spec.blueprint.project_constraints
+
+            pip_configs.append(module_install_spec.blueprint.pip_config)
+
+            python_versions.append(module_install_spec.blueprint.python_version)
 
             if module_install_spec.editable_install:
                 # Editable install:
@@ -242,12 +251,9 @@ class ExecutorBlueprint(EnvBlueprint):
                 )
 
         # Check that constraints set at the project level are consistent across all modules
-        all_constraints = {cd.blueprint.project_constraints for cd in code}
         assert len(all_constraints) == 1
         constraints = all_constraints.pop()
 
-        pip_configs = [cd.blueprint.pip_config for cd in code]
-        python_versions = [cd.blueprint.python_version for cd in code]
         if not pip_configs:
             raise Exception("No Pip config available, aborting")
         if not python_versions:
@@ -363,11 +369,11 @@ class ExecutorId:
 
 
 @dataclass(frozen=True)
-class ModuleInstallSpec:
+class InmantaModuleInstallSpec:
     """
-    This class encapsulates the requirements for a specific (module_name, module_version).
+    This class encapsulates the requirements for a specific (inmanta_module_name, inmanta_module_version).
 
-    :ivar module_name: fully qualified name for this module
+    :ivar module_name: fully qualified name for this Inmanta module
     :ivar module_version: the version of the module to use
     :ivar blueprint: the associated install blueprint
     :ivar editable_install: whether the module was installed in editable mode or as a package
@@ -795,14 +801,14 @@ class ExecutorManager(abc.ABC, typing.Generic[E]):
     """
 
     @abc.abstractmethod
-    async def get_executor(self, agent_name: str, agent_uri: str, code: typing.Collection[ModuleInstallSpec]) -> E:
+    async def get_executor(self, agent_name: str, agent_uri: str, code: typing.Collection[InmantaModuleInstallSpec]) -> E:
         """
         Retrieves an Executor for a given agent with the relevant handler code loaded in its venv.
         If an Executor does not exist for the given configuration, a new one is created.
 
         :param agent_name: The name of the agent for which an Executor is being retrieved or created.
         :param agent_uri: The name of the host on which the agent is running.
-        :param code: Collection of ModuleInstallSpec defining the configuration for the Executor i.e.
+        :param code: Collection of InmantaModuleInstallSpec defining the configuration for the Executor i.e.
             which resource types it can act on and all necessary information to install the relevant
             handler code in its venv. Must have at least one element.
         :return: An Executor instance
