@@ -487,6 +487,127 @@ async def test_named_lock():
     assert not lock._named_locks
 
 
+async def test_named_lock_global_exclusive_lock_no_named_locks_held():
+    """
+    When no named lock is held, the global exclusive lock can be entered immediately.
+    """
+    lock = NamedLock()
+    async with lock.global_exclusive_lock():
+        pass
+    # No state is leaked
+    assert not lock._named_locks
+
+
+async def test_named_lock_global_exclusive_lock_waits_for_held_named_locks():
+    """
+    When named locks are held at the time the global exclusive lock is requested, entering its
+    context is delayed until all those named locks are released.
+    """
+    lock = NamedLock()
+    await lock.acquire("a")
+    await lock.acquire("b")
+
+    entered = asyncio.Event()
+
+    async def enter_global_exclusive_lock() -> None:
+        async with lock.global_exclusive_lock():
+            entered.set()
+
+    fut = asyncio.create_task(enter_global_exclusive_lock())
+
+    # Give the task a chance to run: it must block because named locks are still held
+    await asyncio.sleep(0)
+    assert not entered.is_set()
+
+    # Releasing one of the two named locks is not enough
+    await lock.release("a")
+    await asyncio.sleep(0)
+    assert not entered.is_set()
+
+    # Releasing the last named lock unblocks the global exclusive lock
+    await lock.release("b")
+    await asyncio.wait_for(fut, timeout=1)
+    assert entered.is_set()
+
+
+async def test_named_lock_global_exclusive_lock_blocks_new_acquisitions():
+    """
+    While the global exclusive lock is held, no named lock can be acquired. New acquisitions
+    block until the global exclusive lock is released.
+    """
+    lock = NamedLock()
+
+    release_global_lock = asyncio.Event()
+    holding_global_lock = asyncio.Event()
+
+    async def hold_global_exclusive_lock() -> None:
+        async with lock.global_exclusive_lock():
+            holding_global_lock.set()
+            await release_global_lock.wait()
+
+    global_lock_task = asyncio.create_task(hold_global_exclusive_lock())
+    # No named locks are held, so the global exclusive lock is entered immediately
+    await asyncio.wait_for(holding_global_lock.wait(), timeout=1)
+
+    # An attempt to acquire a named lock must block while the global exclusive lock is held
+    acquire_fut = asyncio.create_task(lock.acquire("a"))
+    await asyncio.sleep(0)
+    assert not acquire_fut.done()
+
+    # Releasing the global exclusive lock unblocks the named lock acquisition
+    release_global_lock.set()
+    await asyncio.wait_for(global_lock_task, timeout=1)
+    await asyncio.wait_for(acquire_fut, timeout=1)
+
+    await lock.release("a")
+    # Don't leak
+    assert not lock._named_locks
+
+
+async def test_named_lock_global_exclusive_lock_mutual_exclusion():
+    """
+    The global exclusive lock guarantees that no named lock is held while its context executes:
+    a named lock acquired before the global exclusive lock must be released before the context
+    is entered, and a named lock acquired after the global exclusive lock is released cannot be
+    held while the context executes.
+    """
+    lock = NamedLock()
+    events: list[str] = []
+
+    await lock.acquire("a")
+
+    async def use_global_exclusive_lock() -> None:
+        async with lock.global_exclusive_lock():
+            events.append("global-enter")
+            # Yield control to give any (incorrectly) unblocked named lock acquisition a chance to run
+            await asyncio.sleep(0)
+            events.append("global-exit")
+
+    async def use_named_lock() -> None:
+        # Wait until the global exclusive lock is requested, then attempt to acquire a named lock
+        await lock.acquire("b")
+        events.append("named-acquired")
+        await lock.release("b")
+
+    global_task = asyncio.create_task(use_global_exclusive_lock())
+    # Make sure the global exclusive lock is requested first and is blocked on the held "a" lock
+    await asyncio.sleep(0)
+    named_task = asyncio.create_task(use_named_lock())
+    await asyncio.sleep(0)
+
+    # Neither task can make progress while "a" is held
+    assert events == []
+
+    # Releasing "a" lets the global exclusive lock proceed; the named lock acquisition must wait
+    # until the global exclusive lock context has fully completed.
+    await lock.release("a")
+    await asyncio.wait_for(asyncio.gather(global_task, named_task), timeout=1)
+
+    assert events == ["global-enter", "global-exit", "named-acquired"]
+    # Don't leak
+    assert not lock._named_locks
+
+
 def test_running_test_fixture():
     """
     Assert that the RUNNING_TESTS variable is set to True when we run the tests
