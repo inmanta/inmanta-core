@@ -16,6 +16,7 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import asyncio
 import datetime
 import logging
 import os
@@ -81,7 +82,11 @@ class Agent(SessionEndpoint):
         self.executor_manager: executor.ExecutorManager[executor.Executor] = self.create_executor_manager()
         assert self.session is not None
         self.scheduler = scheduler.ResourceScheduler(self._environment_id, self.executor_manager, self.session.get_client())
+
         self.working = False
+        # Prevents that the start_working() and stop_working() methods execute concurrently.
+        self._working_lock = asyncio.Lock()
+        self._stopping = False
         self._client = self.session.get_client()
         self._db_monitor: DatabaseMonitor | None = None
 
@@ -112,8 +117,8 @@ class Agent(SessionEndpoint):
         )
 
     async def stop(self) -> None:
-        if self.working:
-            await self.stop_working()
+        self._stopping = True
+        await self.stop_working()
         if self._db_monitor:
             await self._db_monitor.stop()
         threadpools_to_join = [self.thread_pool]
@@ -124,18 +129,36 @@ class Agent(SessionEndpoint):
 
     async def start_working(self) -> None:
         """Start working, once we have a session"""
-
-        if self.working:
-            return
-        self.working = True
-        await self.executor_manager.start()
-        await self.scheduler.start()
-        LOGGER.info("Scheduler started for environment %s", self.environment)
+        async with self._working_lock:
+            if self.working:
+                return
+            if self._stopping:
+                LOGGER.warning(
+                    "Ignoring start_working request on scheduler for environment %s, because scheduler is shutting down.",
+                    self.environment,
+                )
+                return
+            try:
+                await self.executor_manager.start()
+                await self.scheduler.start()
+                self.working = True
+            except Exception:
+                await self._stop_working()
+                raise
+            else:
+                LOGGER.info("Scheduler started for environment %s", self.environment)
 
     async def stop_working(self, timeout: float = 0.0) -> None:
         """Stop working, connection lost"""
-        if not self.working:
-            return
+        async with self._working_lock:
+            if not self.working:
+                return
+            await self._stop_working(timeout=timeout)
+
+    async def _stop_working(self, timeout: float = 0.0) -> None:
+        """
+        This method must execute under the self._working_lock.
+        """
         self.working = False
         await self.scheduler.stop()
         await self.executor_manager.stop()

@@ -20,6 +20,7 @@ import asyncio
 import itertools
 
 from inmanta.agent.resourcepool import PoolManager, PoolMember, SingleIdPoolManager, TimeBasedPoolManager
+from utils import retry_limited
 
 
 async def test_resource_pool():
@@ -163,6 +164,89 @@ async def test_timed_resource_pool_restart():
     await asyncio.wait_for(a.anchor.wait(), 2)
     assert not a.running
     assert not manager.pool
+
+
+async def test_timed_resource_pool_no_cleanup_job_leak():
+    """
+    The TimeBasedPoolManager create a new cleanup job every time the start()
+    method is called and it stops that cleanup job when request_shutdown() and join()
+    are called in succession. This test makes sure that we don't leak cleanup jobs
+    when start() is called after request_shutdown() without a join() in between.
+    """
+
+    counter = itertools.count()
+
+    # Used to block the cleanup job inside cleanup_inactive_pool_members() so we can
+    # interleave a restart while it is running rather than sleeping. During the sleep
+    # stage we cannot get any race conditions, because request_shutdown() would cancel
+    # the sleep task, which raises a CancelledError in the cleanup job.
+    inside_cleanup = asyncio.Event()
+    release_cleanup = asyncio.Event()
+
+    class SimplePoolMember(PoolMember[str]):
+
+        def __init__(self, my_id: str) -> None:
+            super().__init__(my_id)
+            self.count = next(counter)
+            self.request_shutdown_finished_event = asyncio.Event()
+
+        def __repr__(self):
+            return self.id + str(self.count)
+
+        async def request_shutdown(self) -> None:
+            await super().request_shutdown()
+            await self.set_shutdown()
+            self.request_shutdown_finished_event.set()
+
+    class SimplePoolManager(TimeBasedPoolManager[str, str, SimplePoolMember]):
+        async def create_member(self, executor_id: str) -> SimplePoolMember:
+            return SimplePoolMember(my_id=executor_id)
+
+        def _id_to_internal(self, ext_id: str) -> str:
+            return ext_id
+
+        async def cleanup_inactive_pool_members(self) -> float:
+            # Block the very first cleanup invocation until the test releases it, leaving the
+            # cleanup job actively running (not sleeping) during the restart.
+            if not release_cleanup.is_set():
+                inside_cleanup.set()
+                await release_cleanup.wait()
+            return await super().cleanup_inactive_pool_members()
+
+    # Very short expiry
+    manager = SimplePoolManager(0.02)
+    await manager.start()
+    first_cleanup_job = manager.cleanup_job
+    assert first_cleanup_job is not None
+
+    # Wait until the original cleanup job is actively running cleanup (not sleeping).
+    await asyncio.wait_for(inside_cleanup.wait(), 2)
+
+    # Request shutdown and start again while the original cleanup job is still blocked
+    # inside cleanup_inactive_pool_members(). Because it is not sleeping, the
+    # shutdown can not cancel it, and start() resets `PoolManager.running` back to True.
+    await manager.request_shutdown()
+    await manager.start()
+    second_cleanup_job = manager.cleanup_job
+    assert second_cleanup_job is not None
+    assert first_cleanup_job is not second_cleanup_job
+
+    # Let the blocked cleanup invocations proceed.
+    release_cleanup.set()
+
+    # The stale (original) cleanup job must terminate itself instead of looping forever.
+    await retry_limited(lambda: first_cleanup_job.done(), timeout=5)
+
+    # The current cleanup job must still be running and cleaning up idle members.
+    assert manager.running
+    a = await manager.get("a")
+    await asyncio.wait_for(a.request_shutdown_finished_event.wait(), 2)
+    assert not a.running
+    assert not manager.pool
+
+    await manager.request_shutdown()
+    await manager.join()
+    assert second_cleanup_job.done()
 
 
 async def test_resource_pool_stacking():
