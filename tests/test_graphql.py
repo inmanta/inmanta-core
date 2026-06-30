@@ -1323,7 +1323,6 @@ async def test_custom_extension_contributions(server, environment, client, caplo
     """
 
     def get_example(root: "ExampleResourceMixin") -> str:
-        assert hasattr(root, "attributes")  # Make mypy happy
         return "my-example"
 
     class ExampleResourceMixin:
@@ -1384,6 +1383,7 @@ async def test_custom_extension_contributions(server, environment, client, caplo
         match="Can't register a GraphQL contribution for Project: only contributions for .* are supported.",
     ):
         graphql_slice.register_graphql_contribution_for_extension("example", UnsupportedModelContribution)
+    # Try to register contributions for the same type twice
     graphql_slice.register_graphql_contribution_for_extension("example", ExampleQueryContribution)
     with pytest.raises(Exception, match="Extension example already registered a GraphQL contribution for Resource."):
         graphql_slice.register_graphql_contribution_for_extension("example", ExampleQueryContribution)
@@ -1398,7 +1398,15 @@ async def test_custom_extension_contributions(server, environment, client, caplo
         result = await client.graphql(query="""
             {
                 resources (filter: {environment: "%s"}) {
-                    edges { node { example joinedValue state { compliance } } }
+                    edges {
+                        node {
+                         example
+                         joinedValue
+                         state {
+                            compliance
+                            }
+                        }
+                    }
                 }
             }
             """ % environment)
@@ -1415,7 +1423,11 @@ async def test_custom_extension_contributions(server, environment, client, caplo
         result = await client.graphql(query="""
             {
                 resources (filter: {environment: "%s"}) {
-                    edges { node { example } }
+                    edges {
+                        node {
+                            example
+                            }
+                        }
                 }
             }
             """ % environment)
@@ -1504,7 +1516,14 @@ async def test_extension_registers_multiple_contributions(server, environment, c
 
     # The Resource contribution shows up on the resources query.
     result = await client.graphql(query="""
-        { resources (filter: {environment: "%s"}) { edges { node { resourceExample } } } }
+        { resources (filter: {environment: "%s"}) {
+            edges {
+                node {
+                    resourceExample
+                    }
+                }
+            }
+        }
         """ % environment)
     check_correct_graphql_response(result)
     resource_edges = result.result["data"]["data"]["resources"]["edges"]
@@ -1513,7 +1532,15 @@ async def test_extension_registers_multiple_contributions(server, environment, c
         assert edge["node"]["resourceExample"] == "resource-example"
 
     # The Environment contribution shows up on the environments query.
-    result = await client.graphql(query="{ environments { edges { node { environmentExample } } } }")
+    result = await client.graphql(query="""
+        { environments {
+            edges {
+                node {
+                    environmentExample
+                    }
+                }
+            }
+        }""")
     check_correct_graphql_response(result)
     environment_edges = result.result["data"]["data"]["environments"]["edges"]
     assert len(environment_edges) > 0
