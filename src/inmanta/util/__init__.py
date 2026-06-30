@@ -37,9 +37,9 @@ import typing
 import uuid
 import warnings
 from abc import ABC, abstractmethod
-from asyncio import AbstractEventLoop, CancelledError, Lock, Task, ensure_future, gather
+from asyncio import AbstractEventLoop, CancelledError, Event, Lock, Task, ensure_future, gather
 from collections import abc, defaultdict
-from collections.abc import Awaitable, Callable, Collection, Coroutine, Iterable, Iterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Collection, Coroutine, Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from logging import Logger
@@ -752,22 +752,48 @@ class NamedLock:
     """Create fine grained locks"""
 
     def __init__(self) -> None:
+        self._global_exclusive_lock: Lock = Lock()
+        self._all_named_locks_released_event: Event = Event()
         self._master_lock: Lock = Lock()
         self._named_locks: dict[str, Lock] = {}
         self._named_locks_counters: dict[str, int] = {}
+
+    @contextlib.asynccontextmanager
+    async def global_exclusive_lock(self) -> AsyncIterator[None]:
+        """
+        Context manager that ensures that no named lock is acquired
+        while its context is executing. If named locks are acquired
+        when this method is called, the context will only be entered
+        when all named locks are released. While waiting for this
+        condition, all attempts to acquire a named lock will block
+        until this exclusive lock is released.
+
+        A named lock and this global_exclusive_lock cannot be acquired
+        simultaneously as this would result in a deadlock.
+        """
+        async with self._global_exclusive_lock:
+            if not self._named_locks:
+                # No locks were acquired
+                yield
+            else:
+                # Wait until all acquired named locks are released
+                self._all_named_locks_released_event.clear()
+                await self._all_named_locks_released_event.wait()
+                yield
 
     def get(self, name: str) -> NamedSubLock:
         return NamedSubLock(self, name)
 
     async def acquire(self, name: str) -> None:
-        async with self._master_lock:
-            if name in self._named_locks:
-                lock = self._named_locks[name]
-                self._named_locks_counters[name] += 1
-            else:
-                lock = Lock()
-                self._named_locks[name] = lock
-                self._named_locks_counters[name] = 1
+        async with self._global_exclusive_lock:
+            async with self._master_lock:
+                if name in self._named_locks:
+                    lock = self._named_locks[name]
+                    self._named_locks_counters[name] += 1
+                else:
+                    lock = Lock()
+                    self._named_locks[name] = lock
+                    self._named_locks_counters[name] = 1
         await lock.acquire()
 
     async def release(self, name: str) -> None:
@@ -779,6 +805,8 @@ class NamedLock:
             if self._named_locks_counters[name] <= 0:
                 del self._named_locks[name]
                 del self._named_locks_counters[name]
+            if not self._named_locks:
+                self._all_named_locks_released_event.set()
 
 
 class nullcontext(contextlib.nullcontext[T], contextlib.AbstractAsyncContextManager[T]):
