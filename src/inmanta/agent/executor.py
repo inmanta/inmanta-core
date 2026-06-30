@@ -202,7 +202,7 @@ class ExecutorBlueprint(EnvBlueprint):
     def __post_init__(self) -> None:
         super().__post_init__()
         # remove duplicates and make uniform
-        self.sources = sorted(set(self.sources))
+        self.sources = sorted(set(self.sources), key=lambda source: source.sort_key())
 
     @classmethod
     def from_specs(cls, code: typing.Collection["InmantaModuleInstallSpec"]) -> "ExecutorBlueprint":
@@ -289,9 +289,19 @@ class ExecutorBlueprint(EnvBlueprint):
                 "environment_id": str(self.environment_id),
                 "pip_config": self.pip_config.model_dump(),
                 "requirements": self.requirements,
-                # Use the hash values and name to create a stable identity
+                # Use the hash values and name to create a stable identity. The install_on_disk and load_module flags
+                # are part of the identity as well: two blueprints that ship the same source files but install/load a
+                # different subset of them produce different executors. Otherwise they would collide on a single shared
+                # executor process, whose loaded modules would depend on which agent won the creation race.
                 "sources": [
-                    [source.metadata.hash_value, source.metadata.name, source.metadata.is_byte_code] for source in self.sources
+                    [
+                        source.metadata.hash_value,
+                        source.metadata.name,
+                        source.metadata.is_byte_code,
+                        source.install_on_disk,
+                        source.load_module,
+                    ]
+                    for source in self.sources
                 ],
                 "python_version": self.python_version,
                 "project_constraints": self.project_constraints,

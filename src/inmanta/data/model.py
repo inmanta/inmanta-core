@@ -1201,7 +1201,6 @@ class ModuleSourceMetadata(BaseModel):
         return self.name.split(".")[1]
 
 
-@functools.total_ordering
 class ModuleSource(BaseModel):
     """
     This class represents a python module (file metadata + the source itself)
@@ -1210,13 +1209,17 @@ class ModuleSource(BaseModel):
         code install. This is true iff the encapsulating inmanta module was installed in editable mode.
     :param load_module: whether the source of this python module should be loaded during agent
         code install. This is true iff the encapsulating inmanta module was registered for that agent.
+
+    install_on_disk and load_module are part of this model's (pydantic structural) identity: the same file content
+    can be installed/loaded differently depending on the agent it is destined for, and an executor that ships these
+    sources is identified by what it installs and loads, not only by the file contents.
     """
 
     model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
     metadata: ModuleSourceMetadata
     source: bytes
     install_on_disk: bool
-    load_module: bool  # Move this and instal on disk to metadata ?
+    load_module: bool
 
     @classmethod
     def from_path(cls, absolute_path: str, name: str, editable_install: bool, load_module: bool) -> "ModuleSource":
@@ -1239,15 +1242,9 @@ class ModuleSource(BaseModel):
             load_module=load_module,
         )
 
-    def __lt__(self, other: object) -> bool | None:
-        if not isinstance(other, ModuleSource):
-            return NotImplemented
-        return self.metadata < other.metadata
-
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, ModuleSource):
-            return False
-        return self.metadata == other.metadata
+    def sort_key(self) -> tuple[ModuleSourceMetadata, bool, bool]:
+        """Stable ordering key covering the full identity of this source."""
+        return (self.metadata, self.install_on_disk, self.load_module)
 
     def get_inmanta_module_name(self) -> str:
         return self.metadata.get_inmanta_module_name()

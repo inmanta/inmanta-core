@@ -1717,9 +1717,7 @@ async def test_editable_dependency_installed_from_source_on_all_agents(
     Two things are verified:
       1. The agent code install metadata: dependency_module_y is registered (as an editable/source
          install) for both agents, even though agent_main never deploys a dependency_module_y resource.
-      2. End-to-end deployment: with `agent_install_dependency_modules` disabled, the only way
-         dependency_module_y's code can reach agent_main is through the editable-install-on-all-agents
-         mechanism. agent_main's handler imports and calls into dependency_module_y at deploy time, so a
+      2. End-to-end deployment: agent_main's handler imports and calls into dependency_module_y at deploy time, so a
          successful deployment proves the source code was actually installed on agent_main.
     """
     config.Config.set("config", "environment", environment)
@@ -1748,11 +1746,6 @@ dependency_module_y::DepResource(name="r_dep", agent="agent_dep")
         ],
     )
 
-    # Disable pip-based installation of inmanta module dependencies on the agents. This way, the only
-    # way dependency_module_y's code can reach agent_main is via the editable-install-on-all-agents
-    # mechanism introduced by this design. Without it, agent_main would fail to load main_module_x.
-    Project.get()._metadata.agent_install_dependency_modules = False
-
     version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
 
     # 1) Check the registered agent code install metadata: the editable dependency_module_y must be
@@ -1766,8 +1759,8 @@ dependency_module_y::DepResource(name="r_dep", agent="agent_dep")
         assert "main_module_x" in specs_by_module, f"main_module_x not registered for {agent_name}"
         assert "dependency_module_y" in specs_by_module, f"dependency_module_y not registered for {agent_name}"
         # Editable installed modules are transported as source.
-        assert specs_by_module["main_module_x"].editable_install is True
-        assert specs_by_module["dependency_module_y"].editable_install is True
+        assert specs_by_module["main_module_x"].blueprint.sources[0].install_on_disk is True
+        assert specs_by_module["dependency_module_y"].blueprint.sources[0].install_on_disk is True
 
     # 2) Check the end-to-end deployment: both resources should deploy successfully. In particular,
     #    agent_main can only deploy its MainResource if dependency_module_y's source was installed on it.

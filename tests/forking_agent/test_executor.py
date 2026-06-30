@@ -88,12 +88,24 @@ async def test_executor_server(set_custom_executor_policy, mpmanager: MPManager,
 
     inmanta.config.Config.set("test", "aaa", "bbbb")
 
+    empty_source_content = "".encode("utf-8")
+    empty_source = inmanta.data.model.ModuleSource(
+        metadata=ModuleSourceMetadata(
+            name="inmanta_plugins.test.empty",
+            hash_value=inmanta.util.hash_file(empty_source_content),
+            is_byte_code=False,
+        ),
+        source=empty_source_content,
+        install_on_disk=True,
+        load_module=True,
+    )
+
     # Simple empty venv
     simplest_blueprint = executor.ExecutorBlueprint(
         environment_id=uuid.UUID(environment),
         pip_config=inmanta.data.PipConfig(),
         requirements=[],
-        sources=[],
+        sources=[empty_source],
         python_version=sys.version_info[:2],
     )  # No pip
     simplest = await manager.get_executor(
