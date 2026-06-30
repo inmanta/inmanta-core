@@ -39,7 +39,6 @@ from inmanta import config, const, data
 from inmanta.agent.code_manager import CodeManager
 from inmanta.const import AgentAction
 from inmanta.env import LocalPackagePath
-from inmanta.module import Project
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER
 from inmanta.server.bootloader import InmantaBootloader
 from typing_extensions import Optional
