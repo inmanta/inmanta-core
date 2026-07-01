@@ -592,7 +592,7 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         await asyncio.gather(*(child.join() for child in self.executors.values()))
 
     async def get_executor(
-        self, agent_name: str, agent_uri: str, code: typing.Collection[executor.ModuleInstallSpec]
+        self, agent_name: str, agent_uri: str, code: typing.Collection[executor.InmantaModuleInstallSpec]
     ) -> InProcessExecutor:
         """
         Retrieves an Executor for a given agent with the relevant handler code loaded in its venv.
@@ -600,7 +600,7 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
 
         :param agent_name: The name of the agent for which an Executor is being retrieved or created.
         :param agent_uri: The name of the host on which the agent is running.
-        :param code: Collection of ModuleInstallSpec defining the configuration for the Executor i.e.
+        :param code: Collection of InmantaModuleInstallSpec defining the configuration for the Executor i.e.
             all necessary information to install the relevant handler code in its venv. Must have
             at least one element.
         :return: An Executor instance
@@ -624,7 +624,7 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
 
         return out
 
-    async def ensure_code(self, code: typing.Collection[executor.ModuleInstallSpec]) -> FailedInmantaModules:
+    async def ensure_code(self, code: typing.Collection[executor.InmantaModuleInstallSpec]) -> FailedInmantaModules:
         """Ensure that the code for the given environment and version is loaded"""
 
         failed_to_load: FailedInmantaModules = defaultdict(dict)

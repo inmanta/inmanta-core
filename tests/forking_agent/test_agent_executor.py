@@ -52,8 +52,8 @@ def set_custom_executor_policy(server_config):
     inmanta.agent.config.agent_executor_cap.set(str(old_cap_value))
 
 
-def code_for(bp: executor.ExecutorBlueprint) -> list[executor.ModuleInstallSpec]:
-    return [executor.ModuleInstallSpec("test", "abcdef", bp)]
+def code_for(bp: executor.ExecutorBlueprint) -> list[executor.InmantaModuleInstallSpec]:
+    return [executor.InmantaModuleInstallSpec("test", "abcdef", bp)]
 
 
 async def test_process_manager(

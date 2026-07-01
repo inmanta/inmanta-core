@@ -1,0 +1,4 @@
+description: Rename the internal `ModuleInstallSpec` class to `InmantaModuleInstallSpec`.
+change-type: patch
+destination-branches:
+  - master

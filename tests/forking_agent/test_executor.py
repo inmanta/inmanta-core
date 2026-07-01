@@ -96,7 +96,9 @@ async def test_executor_server(set_custom_executor_policy, mpmanager: MPManager,
         sources=[],
         python_version=sys.version_info[:2],
     )  # No pip
-    simplest = await manager.get_executor("agent1", "test", [executor.ModuleInstallSpec("test", "123456", simplest_blueprint)])
+    simplest = await manager.get_executor(
+        "agent1", "test", [executor.InmantaModuleInstallSpec("test", "123456", simplest_blueprint)]
+    )
 
     # check communications
     result = await simplest.call(Echo(["aaaa"]))
@@ -157,8 +159,10 @@ def test():
     )
 
     # Full runner install requires pip install, this can be slow, so we build it first to prevent the other one from timing out
-    oldest_executor = await manager.get_executor("agent2", "internal:", [executor.ModuleInstallSpec("test", 1, dummy)])
-    full_runner = await manager.get_executor("agent2", "internal:", [executor.ModuleInstallSpec("test:DDD:Test", 1, full)])
+    oldest_executor = await manager.get_executor("agent2", "internal:", [executor.InmantaModuleInstallSpec("test", 1, dummy)])
+    full_runner = await manager.get_executor(
+        "agent2", "internal:", [executor.InmantaModuleInstallSpec("test:DDD:Test", 1, full)]
+    )
 
     assert oldest_executor.id in manager.pool
 
@@ -184,7 +188,7 @@ def test():
         return oldest_executor not in manager.agent_map["agent2"]
 
     with caplog.at_level(logging.DEBUG):
-        _ = await manager.get_executor("agent2", "internal:", [executor.ModuleInstallSpec("test::Test", "1", dummy)])
+        _ = await manager.get_executor("agent2", "internal:", [executor.InmantaModuleInstallSpec("test::Test", "1", dummy)])
         assert not oldest_executor.running
         assert full_runner.running
         await retry_limited(oldest_gone, 1)
@@ -202,7 +206,9 @@ def test():
         await x.join()
     await retry_limited(lambda: len(manager.agent_map["agent2"]) == 0, 10)
 
-    full_runner = await manager.get_executor("agent2", "internal:", [executor.ModuleInstallSpec("test::Test", "1", full)])
+    full_runner = await manager.get_executor(
+        "agent2", "internal:", [executor.InmantaModuleInstallSpec("test::Test", "1", full)]
+    )
 
     await retry_limited(lambda: len(manager.agent_map["agent2"]) == 1, 1)
 
