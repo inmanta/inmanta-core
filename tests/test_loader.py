@@ -33,7 +33,7 @@ from pytest import fixture
 
 import utils
 from inmanta import const, env, loader, moduletool
-from inmanta.data.model import ModuleSourceMetadata
+from inmanta.data.model import ExecutorModuleSource, ModuleSourceMetadata
 from inmanta.env import PipConfig
 from inmanta.loader import ModuleSource, SourceNotFoundException
 from inmanta.module import Project
@@ -582,3 +582,91 @@ def test():
     assert mod.test() == 10
     with pytest.raises(ImportError):
         import inmanta_plugins.old_format  # NOQA
+
+
+def _executor_source(name: str, code: str, *, install_on_disk: bool, load_module: bool) -> ExecutorModuleSource:
+    data = code.encode()
+    sha1sum = hashlib.new("sha1")
+    sha1sum.update(data)
+    return ExecutorModuleSource(
+        metadata=ModuleSourceMetadata(name=name, hash_value=sha1sum.hexdigest(), is_byte_code=False),
+        source=data,
+        install_on_disk=install_on_disk,
+        load_module=load_module,
+    )
+
+
+def test_deploy_and_load(tmp_path, caplog):
+    """
+    deploy_and_load installs every install_on_disk source on disk, imports only the load_module ones, and records
+    import failures per module without preventing the healthy modules from loading.
+    """
+    caplog.set_level(DEBUG)
+    cl = loader.CodeLoader(tmp_path)
+
+    # install_on_disk but not load_module: its code raises on import, so it must be written to disk but never imported.
+    install_only = _executor_source(
+        "inmanta_plugins.dal_install_only",
+        "raise RuntimeError('this module must not be imported')",
+        install_on_disk=True,
+        load_module=False,
+    )
+    healthy = _executor_source("inmanta_plugins.dal_ok", "value = 42", install_on_disk=True, load_module=True)
+    broken = _executor_source(
+        "inmanta_plugins.dal_broken", "raise RuntimeError('boom')", install_on_disk=True, load_module=True
+    )
+
+    failed = cl.deploy_and_load([install_only, healthy, broken], "agent1")
+
+    # The healthy module was installed and imported.
+    import inmanta_plugins.dal_ok  # NOQA
+
+    assert inmanta_plugins.dal_ok.value == 42
+
+    # The install-only module is on disk but was never imported.
+    install_only_file = os.path.join(
+        tmp_path, loader.MODULE_DIR, loader.convert_module_to_relative_path("inmanta_plugins.dal_install_only"), "__init__.py"
+    )
+    assert os.path.exists(install_only_file)
+    assert "inmanta_plugins.dal_install_only" not in sys.modules
+
+    # Only the broken import is reported, keyed by inmanta module name -> python module name.
+    assert set(failed) == {"dal_broken"}
+    assert set(failed["dal_broken"]) == {"inmanta_plugins.dal_broken"}
+    assert isinstance(failed["dal_broken"]["inmanta_plugins.dal_broken"], loader.ModuleImportException)
+
+
+def test_deploy_and_load_skips_load_when_install_fails(tmp_path, caplog, monkeypatch):
+    """
+    A module whose on-disk install fails is recorded as an install failure and is not imported afterwards, while the
+    other modules still install and load normally.
+    """
+    caplog.set_level(DEBUG)
+    cl = loader.CodeLoader(tmp_path)
+
+    real_install_source = cl.install_source
+
+    def flaky_install_source(module_source: ExecutorModuleSource) -> None:
+        if module_source.metadata.name == "inmanta_plugins.dal_fail_install":
+            raise OSError("disk full")
+        real_install_source(module_source)
+
+    monkeypatch.setattr(cl, "install_source", flaky_install_source)
+
+    fail_install = _executor_source("inmanta_plugins.dal_fail_install", "value = 1", install_on_disk=True, load_module=True)
+    healthy = _executor_source("inmanta_plugins.dal_ok2", "value = 7", install_on_disk=True, load_module=True)
+
+    failed = cl.deploy_and_load([fail_install, healthy], "agent1")
+
+    # The healthy module still loaded.
+    import inmanta_plugins.dal_ok2  # NOQA
+
+    assert inmanta_plugins.dal_ok2.value == 7
+
+    # The failing module is recorded with the raw install exception (not a ModuleImportException): because the recorded
+    # failure is the install error, the load phase must have been skipped for it.
+    assert set(failed) == {"dal_fail_install"}
+    recorded = failed["dal_fail_install"]["inmanta_plugins.dal_fail_install"]
+    assert isinstance(recorded, OSError)
+    assert not isinstance(recorded, loader.ModuleImportException)
+    assert "inmanta_plugins.dal_fail_install" not in sys.modules
