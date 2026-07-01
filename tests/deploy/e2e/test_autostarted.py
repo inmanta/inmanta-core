@@ -1741,7 +1741,7 @@ dependency_module_y::DepResource(name="r_dep", agent="agent_dep")
         install_v2_modules=[
             # Install the dependency first so the editable install of main_module_x is satisfied locally.
             LocalPackagePath(path=dependency_module_y_dir, editable=True),
-            LocalPackagePath(path=main_module_x_dir, editable=True),
+            LocalPackagePath(path=main_module_x_dir, editable=False),
         ],
     )
 
@@ -1750,16 +1750,33 @@ dependency_module_y::DepResource(name="r_dep", agent="agent_dep")
     # 1) Check the registered agent code install metadata: the editable dependency_module_y must be
     #    registered (from source) for both agents, even for agent_main which only deploys main_module_x.
     codemanager = CodeManager()
-    for agent_name in ("agent_main", "agent_dep"):
-        install_specs = await codemanager.get_code(
-            environment=uuid.UUID(environment), model_version=version, agent_name=agent_name
-        )
-        specs_by_module = {spec.module_name: spec for spec in install_specs}
-        assert "main_module_x" in specs_by_module, f"main_module_x not registered for {agent_name}"
-        assert "dependency_module_y" in specs_by_module, f"dependency_module_y not registered for {agent_name}"
-        # Editable installed modules are transported as source.
-        assert specs_by_module["main_module_x"].blueprint.sources[0].install_on_disk is True
-        assert specs_by_module["dependency_module_y"].blueprint.sources[0].install_on_disk is True
+
+    # Check agent_main
+    agent_name = "agent_main"
+    install_specs = await codemanager.get_code(
+        environment=uuid.UUID(environment), model_version=version, agent_name=agent_name
+    )
+    specs_by_module = {spec.module_name: spec for spec in install_specs}
+    assert len(specs_by_module) == 3, f"Expecting only 3 modules, got these modules instead: {specs_by_module.keys()}"
+    assert "std" in specs_by_module, f"std not registered for {agent_name}"
+    assert "main_module_x" in specs_by_module, f"main_module_x not registered for {agent_name}"
+    assert "dependency_module_y" in specs_by_module, f"dependency_module_y not registered for {agent_name}"
+
+    assert specs_by_module["main_module_x"].blueprint.sources[0].install_on_disk is False
+    assert specs_by_module["dependency_module_y"].blueprint.sources[0].install_on_disk is True
+
+    # Check agent_dep
+    agent_name = "agent_dep"
+    install_specs = await codemanager.get_code(
+        environment=uuid.UUID(environment), model_version=version, agent_name=agent_name
+    )
+    specs_by_module = {spec.module_name: spec for spec in install_specs}
+    assert len(specs_by_module) == 2, f"Expecting only 2 module, got these modules instead: {specs_by_module.keys()}"
+    assert "std" in specs_by_module, f"std not registered for {agent_name}"
+    assert "main_module_x" not in specs_by_module, f"main_module_x incorrectly registered for {agent_name}"
+    assert "dependency_module_y" in specs_by_module, f"dependency_module_y not registered for {agent_name}"
+
+    assert specs_by_module["dependency_module_y"].blueprint.sources[0].install_on_disk is True
 
     # 2) Check the end-to-end deployment: both resources should deploy successfully. In particular,
     #    agent_main can only deploy its MainResource if dependency_module_y's source was installed on it.
