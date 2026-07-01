@@ -223,6 +223,11 @@ class ExecutorBlueprint(EnvBlueprint):
         python_versions: list[tuple[int, int]] = []
 
         for module_install_spec in code:
+            # An install spec describes a single inmanta module, which always ships at least one python file.
+            # We rely on this below to derive the install mode from its sources.
+            if not module_install_spec.blueprint.sources:
+                raise ValueError(f"Install spec for module {module_install_spec.module_name} has no sources")
+
             # Gather all sources (both for editable and package install). Later, during code
             # installation on the agent:
             #   - For editable installs, we will write these python module sources to disk and then load them
@@ -236,6 +241,7 @@ class ExecutorBlueprint(EnvBlueprint):
 
             python_versions.append(module_install_spec.blueprint.python_version)
 
+            # All sources of a single module share the same install mode, so the first one is representative.
             editable_install: bool = module_install_spec.blueprint.sources[0].install_on_disk
 
             if editable_install:
