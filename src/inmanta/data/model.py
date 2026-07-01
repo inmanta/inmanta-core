@@ -1203,26 +1203,18 @@ class ModuleSourceMetadata(BaseModel):
 
 class ModuleSource(BaseModel):
     """
-    This class represents a python module (file metadata + the source itself)
-    :param source: the content of the file
-    :param install_on_disk: whether the source of this python module should be written to disk during agent
-        code install. This is true iff the encapsulating inmanta module was installed in editable mode.
-    :param load_module: whether the source of this python module should be loaded during agent
-        code install. This is true iff the encapsulating inmanta module was registered for that agent.
+    This class represents a python module (file metadata + the source itself).
 
-    install_on_disk and load_module are part of this model's (pydantic structural) identity: the same file content
-    can be installed/loaded differently depending on the agent it is destined for, and an executor that ships these
-    sources is identified by what it installs and loads, not only by the file contents.
+    :param metadata: metadata describing the python module (name, content hash, byte-code flag).
+    :param source: the content of the file.
     """
 
     model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
     metadata: ModuleSourceMetadata
     source: bytes
-    install_on_disk: bool
-    load_module: bool
 
     @classmethod
-    def from_path(cls, absolute_path: str, name: str, editable_install: bool, load_module: bool) -> "ModuleSource":
+    def from_path(cls, absolute_path: str, name: str) -> "ModuleSource":
         """Get the content of the file"""
         with open(absolute_path, "rb") as fd:
             _content = fd.read()
@@ -1238,16 +1230,33 @@ class ModuleSource(BaseModel):
                 hash_value=_hash,
             ),
             source=_content,
-            install_on_disk=editable_install,
-            load_module=load_module,
         )
+
+    def get_inmanta_module_name(self) -> str:
+        return self.metadata.get_inmanta_module_name()
+
+
+class ExecutorModuleSource(ModuleSource):
+    """
+    A ModuleSource destined for a specific executor, extended with the install/load semantics that describe
+    what the executor should do with the source during agent code install.
+
+    :param install_on_disk: whether the source of this python module should be written to disk during agent
+        code install. This is true iff the encapsulating inmanta module was installed in editable mode.
+    :param load_module: whether the source of this python module should be loaded during agent
+        code install. This is true iff the encapsulating inmanta module was registered for that agent.
+
+    install_on_disk and load_module are part of this model's (pydantic structural) identity: the same file content
+    can be installed/loaded differently depending on the agent it is destined for, and an executor that ships these
+    sources is identified by what it installs and loads, not only by the file contents.
+    """
+
+    install_on_disk: bool
+    load_module: bool
 
     def sort_key(self) -> tuple[ModuleSourceMetadata, bool, bool]:
         """Stable ordering key covering the full identity of this source."""
         return (self.metadata, self.install_on_disk, self.load_module)
-
-    def get_inmanta_module_name(self) -> str:
-        return self.metadata.get_inmanta_module_name()
 
 
 type InmantaModuleName = str

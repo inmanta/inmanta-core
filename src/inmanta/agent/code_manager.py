@@ -25,7 +25,7 @@ import inmanta.data.sqlalchemy as models
 from inmanta import data
 from inmanta.agent import executor
 from inmanta.agent.executor import InmantaModuleInstallSpec
-from inmanta.data.model import LEGACY_PIP_DEFAULT, ModuleSource, ModuleSourceMetadata, PipConfig
+from inmanta.data.model import LEGACY_PIP_DEFAULT, ExecutorModuleSource, ModuleSourceMetadata, PipConfig
 from inmanta.util.async_lru import async_lru_cache
 from sqlalchemy import and_, select
 
@@ -132,7 +132,7 @@ class CodeManager:
                             pip_config=pip_config,
                             requirements=first_row.requirements,
                             sources=[
-                                ModuleSource(
+                                ExecutorModuleSource(
                                     metadata=ModuleSourceMetadata(
                                         name=row.python_module_name,
                                         hash_value=row.file_content_hash,

@@ -395,7 +395,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
         self,
         venv_path: str,
         storage_folder: str,
-        sources: Sequence[inmanta.data.model.ModuleSource],
+        sources: Sequence[inmanta.data.model.ExecutorModuleSource],
         venv_touch_interval: float = 60.0,
     ):
         """
@@ -432,6 +432,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
         # failure is already recorded and importing them would fail anyway.
         failed_to_install: set[str] = set()
 
+        # Could we refactor the logic below to live in the loader?
         async def _install_source(
             module_source: inmanta.data.model.ModuleSource,
             failed: FailedInmantaModules,

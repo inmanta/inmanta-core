@@ -1702,9 +1702,11 @@ async def test_editable_dependency_installed_from_source_on_all_agents(
     under active development / source install).
 
     Scenario (mirrors the design document):
-      - Two modules are under active development and installed in editable mode in the compiler venv:
-          * dependency_module_y: defines a resource (DepResource) and some plugin code
-          * main_module_x: defines a resource (MainResource) and reuses dependency_module_y's plugin
+      - Two modules:
+          * dependency_module_y: installed in editable mode in the compiler venv, defines a
+            resource (DepResource) and some plugin code
+          * main_module_x: installed in package mode from local index, defines a
+            resource (MainResource) and reuses dependency_module_y's plugin
             code in its handler (i.e. dependency_module_y is a transitive dependency of main_module_x).
       - Two agents:
           * agent_main: only ever deploys a main_module_x::MainResource
@@ -1753,9 +1755,7 @@ dependency_module_y::DepResource(name="r_dep", agent="agent_dep")
 
     # Check agent_main
     agent_name = "agent_main"
-    install_specs = await codemanager.get_code(
-        environment=uuid.UUID(environment), model_version=version, agent_name=agent_name
-    )
+    install_specs = await codemanager.get_code(environment=uuid.UUID(environment), model_version=version, agent_name=agent_name)
     specs_by_module = {spec.module_name: spec for spec in install_specs}
     assert len(specs_by_module) == 3, f"Expecting only 3 modules, got these modules instead: {specs_by_module.keys()}"
     assert "std" in specs_by_module, f"std not registered for {agent_name}"
@@ -1767,9 +1767,7 @@ dependency_module_y::DepResource(name="r_dep", agent="agent_dep")
 
     # Check agent_dep
     agent_name = "agent_dep"
-    install_specs = await codemanager.get_code(
-        environment=uuid.UUID(environment), model_version=version, agent_name=agent_name
-    )
+    install_specs = await codemanager.get_code(environment=uuid.UUID(environment), model_version=version, agent_name=agent_name)
     specs_by_module = {spec.module_name: spec for spec in install_specs}
     assert len(specs_by_module) == 2, f"Expecting only 2 module, got these modules instead: {specs_by_module.keys()}"
     assert "std" in specs_by_module, f"std not registered for {agent_name}"

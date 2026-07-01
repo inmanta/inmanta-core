@@ -153,11 +153,7 @@ class CodeManager:
         module_sources: list[ModuleSource] = []
 
         for absolute_path, fqn_module_name in module.get_plugin_files():
-            # Default load_module to False, this value is irrelevant at this stage: we will only send the module_source
-            # metadata over the API.
-            source_info = ModuleSource.from_path(
-                absolute_path=absolute_path, name=fqn_module_name, editable_install=editable_install, load_module=False
-            )
+            source_info = ModuleSource.from_path(absolute_path=absolute_path, name=fqn_module_name)
             self.__file_info[absolute_path] = source_info
             module_sources.append(source_info)
 

@@ -28,8 +28,8 @@ import pytest
 import inmanta
 from inmanta import const
 from inmanta.agent import executor, forking_executor
-from inmanta.data.model import ModuleSourceMetadata, PipConfig
-from inmanta.loader import MODULE_DIR, ModuleSource, convert_module_to_relative_path
+from inmanta.data.model import ExecutorModuleSource, ModuleSourceMetadata, PipConfig
+from inmanta.loader import MODULE_DIR, convert_module_to_relative_path
 from inmanta.signals import dump_ioloop_running, dump_threads
 from packaging import version
 from utils import PipIndex, log_contains, log_doesnt_contain, retry_limited
@@ -73,12 +73,12 @@ async def test_process_manager(
     constraints = "pkg1<2.0.0\npkg2"
     pip_config = PipConfig(index_url=pip_index.url)
 
-    def make_module_source(name: str, content: str) -> ModuleSource:
+    def make_module_source(name: str, content: str) -> ExecutorModuleSource:
         code = content.encode()
         sha1sum = hashlib.new("sha1")
         sha1sum.update(code)
         hv: str = sha1sum.hexdigest()
-        return ModuleSource(
+        return ExecutorModuleSource(
             metadata=ModuleSourceMetadata(
                 name=name,
                 hash_value=hv,
@@ -256,11 +256,11 @@ async def test_executor_install_without_load(environment, pip_index, mpmanager_l
     env_id = uuid.UUID(environment)
     pip_config = PipConfig(index_url=pip_index.url)
 
-    def make_module_source(name: str, content: str, *, install_on_disk: bool, load_module: bool) -> ModuleSource:
+    def make_module_source(name: str, content: str, *, install_on_disk: bool, load_module: bool) -> ExecutorModuleSource:
         code = content.encode()
         sha1sum = hashlib.new("sha1")
         sha1sum.update(code)
-        return ModuleSource(
+        return ExecutorModuleSource(
             metadata=ModuleSourceMetadata(name=name, hash_value=sha1sum.hexdigest(), is_byte_code=False),
             source=code,
             install_on_disk=install_on_disk,
@@ -318,7 +318,7 @@ async def test_process_manager_restart(environment, tmpdir, mp_manager_factory, 
     code = b"b = 1"
     sha1sum = hashlib.new("sha1")
     sha1sum.update(code)
-    module_source1 = ModuleSource(
+    module_source1 = ExecutorModuleSource(
         metadata=ModuleSourceMetadata(
             name="inmanta_plugins.bp1",
             hash_value=sha1sum.hexdigest(),
@@ -419,7 +419,7 @@ def test():
     sha1sum = hashlib.new("sha1")
     sha1sum.update(code)
     hv: str = sha1sum.hexdigest()
-    module_source1 = ModuleSource(
+    module_source1 = ExecutorModuleSource(
         metadata=ModuleSourceMetadata(
             name="inmanta_plugins.test",
             hash_value=hv,
@@ -433,7 +433,7 @@ def test():
     bp1_code = b"b = 1"
     bp1_sha1sum = hashlib.new("sha1")
     bp1_sha1sum.update(bp1_code)
-    module_source_bp1 = ModuleSource(
+    module_source_bp1 = ExecutorModuleSource(
         metadata=ModuleSourceMetadata(
             name="inmanta_plugins.bp1",
             hash_value=bp1_sha1sum.hexdigest(),
@@ -523,7 +523,7 @@ def test():
     sha1sum = hashlib.new("sha1")
     sha1sum.update(code)
     hv: str = sha1sum.hexdigest()
-    module_source1 = ModuleSource(
+    module_source1 = ExecutorModuleSource(
         metadata=ModuleSourceMetadata(
             name="inmanta_plugins.test",
             hash_value=hv,
@@ -537,7 +537,7 @@ def test():
     bp1_code = b"b = 1"
     bp1_sha1sum = hashlib.new("sha1")
     bp1_sha1sum.update(bp1_code)
-    module_source_bp1 = ModuleSource(
+    module_source_bp1 = ExecutorModuleSource(
         metadata=ModuleSourceMetadata(
             name="inmanta_plugins.bp1",
             hash_value=bp1_sha1sum.hexdigest(),

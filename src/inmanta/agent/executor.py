@@ -43,7 +43,7 @@ from inmanta.agent import resourcepool
 from inmanta.agent.handler import HandlerContext
 from inmanta.const import Change
 from inmanta.data import LogLine
-from inmanta.data.model import AttributeStateChange, ModuleSource, PipConfig
+from inmanta.data.model import AttributeStateChange, ExecutorModuleSource, PipConfig
 from inmanta.env import PythonEnvironment
 from inmanta.resources import Id
 from inmanta.types import JsonType, ResourceIdStr, ResourceVersionIdStr
@@ -196,7 +196,7 @@ class EnvBlueprint:
 class ExecutorBlueprint(EnvBlueprint):
     """Extends EnvBlueprint to include sources for the executor environment."""
 
-    sources: Sequence[ModuleSource]
+    sources: Sequence[ExecutorModuleSource]
     _hash_cache: Optional[str] = dataclasses.field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -216,7 +216,7 @@ class ExecutorBlueprint(EnvBlueprint):
             raise ValueError("from_specs expects at least one resource install spec")
         env_ids = {cd.blueprint.environment_id for cd in code}
         assert len(env_ids) == 1
-        sources: set[ModuleSource] = set()
+        sources: set[ExecutorModuleSource] = set()
         requirements: set[str] = set()
         all_constraints: set[str | None] = set()
         pip_configs: list[PipConfig] = []

@@ -89,7 +89,7 @@ async def test_executor_server(set_custom_executor_policy, mpmanager: MPManager,
     inmanta.config.Config.set("test", "aaa", "bbbb")
 
     empty_source_content = "".encode("utf-8")
-    empty_source = inmanta.data.model.ModuleSource(
+    empty_source = inmanta.data.model.ExecutorModuleSource(
         metadata=ModuleSourceMetadata(
             name="inmanta_plugins.test.empty",
             hash_value=inmanta.util.hash_file(empty_source_content),
@@ -127,7 +127,7 @@ async def test_executor_server(set_custom_executor_policy, mpmanager: MPManager,
 def test():
    return "DIRECT"
     """.encode("utf-8")
-    direct = inmanta.data.model.ModuleSource(
+    direct = inmanta.data.model.ExecutorModuleSource(
         metadata=ModuleSourceMetadata(
             name="inmanta_plugins.test.testA",
             hash_value=inmanta.util.hash_file(direct_content),
@@ -143,7 +143,7 @@ def test():
    return "server"
 """.encode("utf-8")
     server_content_hash = inmanta.util.hash_file(server_content)
-    via_server = inmanta.data.model.ModuleSource(
+    via_server = inmanta.data.model.ExecutorModuleSource(
         metadata=ModuleSourceMetadata(
             name="inmanta_plugins.test.testB",
             hash_value=server_content_hash,
@@ -347,7 +347,7 @@ async def test_executor_call_refreshes_last_used():
 
 def test_hash_with_duplicates():
     env_id = uuid.uuid4()
-    source = inmanta.data.model.ModuleSource(
+    source = inmanta.data.model.ExecutorModuleSource(
         metadata=ModuleSourceMetadata(
             name="test",
             hash_value="aaaaa",
@@ -383,7 +383,7 @@ def test_from_specs_rejects_spec_without_sources():
     with a clear error rather than failing with an opaque IndexError.
     """
     env_id = uuid.uuid4()
-    source = inmanta.data.model.ModuleSource(
+    source = inmanta.data.model.ExecutorModuleSource(
         metadata=ModuleSourceMetadata(
             name="inmanta_plugins.test",
             hash_value="aaaaa",
@@ -394,7 +394,9 @@ def test_from_specs_rejects_spec_without_sources():
         load_module=True,
     )
 
-    def make_spec(module_name: str, sources: list[inmanta.data.model.ModuleSource]) -> executor.InmantaModuleInstallSpec:
+    def make_spec(
+        module_name: str, sources: list[inmanta.data.model.ExecutorModuleSource]
+    ) -> executor.InmantaModuleInstallSpec:
         return executor.InmantaModuleInstallSpec(
             module_name=module_name,
             module_version="1.0",

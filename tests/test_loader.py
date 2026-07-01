@@ -51,8 +51,6 @@ def get_module_source(module: str, code: str) -> ModuleSource:
             is_byte_code=False,
         ),
         source=data,
-        install_on_disk=True,
-        load_module=True,
     )
 
 
