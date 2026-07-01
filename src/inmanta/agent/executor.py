@@ -46,13 +46,9 @@ from inmanta.data import LogLine
 from inmanta.data.model import AttributeStateChange, ExecutorModuleSource, PipConfig
 from inmanta.env import PythonEnvironment
 from inmanta.resources import Id
-from inmanta.types import JsonType, ResourceIdStr, ResourceVersionIdStr
+from inmanta.types import FailedInmantaModules, JsonType, ResourceIdStr, ResourceVersionIdStr
 
 LOGGER = logging.getLogger(__name__)
-
-
-FailedModules: typing.TypeAlias = dict[str, Exception]
-FailedInmantaModules: typing.TypeAlias = dict[str, FailedModules]
 
 
 class AgentInstance(abc.ABC):

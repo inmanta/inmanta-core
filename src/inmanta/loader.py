@@ -25,6 +25,7 @@ import os
 import pathlib
 import shutil
 import sys
+import traceback
 import types
 from collections import abc, defaultdict
 from collections.abc import Iterable, Iterator, Mapping, Sequence
@@ -36,8 +37,9 @@ from typing import TYPE_CHECKING, Optional
 import packaging
 import packaging.utils
 from inmanta import const, module
-from inmanta.data.model import AgentName, InmantaModule, InmantaModuleName, ModuleSource
+from inmanta.data.model import AgentName, ExecutorModuleSource, InmantaModule, InmantaModuleName, ModuleSource
 from inmanta.stable_api import stable_api
+from inmanta.types import FailedInmantaModules
 from inmanta.util import hash_file_streaming
 
 VERSION_FILE = "version"
@@ -263,6 +265,18 @@ class CodeManager:
         raise KeyError("No file found with this hash")
 
 
+class ModuleImportException(Exception):
+    """Raised when a python module could not be imported during agent code loading."""
+
+    def __init__(self, base_exception: Exception, module_name: str):
+        self.message = f"Failed to import module source {module_name}:\n{str(base_exception)}.\n"
+        self.tb = "".join(traceback.format_tb(base_exception.__traceback__))
+        self.__cause__ = base_exception
+
+    def __str__(self) -> str:
+        return self.message + self.tb + "\n"
+
+
 class CodeLoader:
     """
     Class responsible for managing code loaded from modules received from the compiler
@@ -394,6 +408,56 @@ class CodeLoader:
         sources = set(module_sources)
         for module_source in sources:
             self.install_source(module_source)
+
+    def deploy_and_load(self, module_sources: Sequence[ExecutorModuleSource], executor_name: str) -> FailedInmantaModules:
+        """
+        Install the given module sources on disk and import the ones registered for this executor.
+
+        The sources flagged with install_on_disk are all written to disk first, before any module is imported, so that
+        cross-module imports resolve regardless of the order in which the sources are processed. The sources flagged with
+        load_module are then imported, except those whose on-disk install failed (importing them would fail anyway).
+        Failures are collected per module and returned rather than raised, so that a single broken module does not
+        prevent the others from being installed and loaded.
+
+        :param module_sources: The module sources destined for this executor.
+        :param executor_name: The name of the executor this code is loaded for, included in log messages for context.
+        :return: The python modules that could not be installed or imported, grouped by inmanta module.
+        """
+        failed: FailedInmantaModules = defaultdict(dict)
+        # Names of python modules that could not be put on disk. These are skipped during the load phase: their
+        # failure is already recorded and importing them would fail anyway.
+        failed_to_install: set[str] = set()
+
+        for module_source in module_sources:
+            if module_source.install_on_disk:
+                try:
+                    self.install_source(module_source)
+                except Exception as e:
+                    LOGGER.info(
+                        "Failed to install source on disk for executor %s: %s",
+                        executor_name,
+                        module_source.metadata.name,
+                        exc_info=True,
+                    )
+                    failed[module_source.get_inmanta_module_name()][module_source.metadata.name] = e
+                    failed_to_install.add(module_source.metadata.name)
+
+        for module_source in module_sources:
+            if module_source.load_module and module_source.metadata.name not in failed_to_install:
+                try:
+                    self.load_module(module_source.metadata.name, module_source.metadata.hash_value)
+                except Exception as e:
+                    LOGGER.info(
+                        "Failed to import source for executor %s: %s",
+                        executor_name,
+                        module_source.metadata.name,
+                        exc_info=True,
+                    )
+                    failed[module_source.get_inmanta_module_name()][module_source.metadata.name] = ModuleImportException(
+                        e, module_source.metadata.name
+                    )
+
+        return failed
 
 
 class PluginModuleLoader(FileLoader):

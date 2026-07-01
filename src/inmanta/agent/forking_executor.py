@@ -72,11 +72,9 @@ import os
 import pathlib
 import socket
 import threading
-import traceback
 import typing
 import uuid
 from asyncio import Future, transports
-from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from typing import Awaitable
@@ -98,13 +96,7 @@ import inmanta.types
 import inmanta.util
 from inmanta import const, tracing
 from inmanta.agent import executor, resourcepool
-from inmanta.agent.executor import (
-    DeployReport,
-    FailedInmantaModules,
-    GetFactReport,
-    ModuleLoadingException,
-    VirtualEnvironmentManager,
-)
+from inmanta.agent.executor import DeployReport, GetFactReport, ModuleLoadingException, VirtualEnvironmentManager
 from inmanta.agent.resourcepool import PoolManager, PoolMember
 from inmanta.const import LOGGER_NAME_EXECUTOR
 from inmanta.protocol.ipc_light import (
@@ -116,7 +108,7 @@ from inmanta.protocol.ipc_light import (
     LogShipper,
     ReturnType,
 )
-from inmanta.types import ResourceIdStr
+from inmanta.types import FailedInmantaModules, ResourceIdStr
 from inmanta.util import set_default_event_loop
 from setproctitle import setproctitle
 
@@ -412,8 +404,6 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
         assert context.server.timer_venv_scheduler_interval is None, "InitCommand should be only called once!"
 
         loop = asyncio.get_running_loop()
-        parent_logger = LOGGER
-        logger = parent_logger.getChild(context.name)
 
         context.server.post_init(self._venv_touch_interval)
 
@@ -424,58 +414,10 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
         context.venv = inmanta.env.VirtualEnv(self.venv_path)
         context.venv.use_virtual_env()
 
-        # Download and load code
+        # Download and load code. The install/load policy lives in the CodeLoader; run the whole batch in one shot on a
+        # worker thread since install_source and load_module perform blocking file IO and imports.
         loader = inmanta.loader.CodeLoader(self.storage_folder)
-
-        failed: FailedInmantaModules = defaultdict(dict)
-        # Names of python modules that could not be put on disk. These are skipped during the load phase: their
-        # failure is already recorded and importing them would fail anyway.
-        failed_to_install: set[str] = set()
-
-        # Could we refactor the logic below to live in the loader?
-        async def _install_source(
-            module_source: inmanta.data.model.ModuleSource,
-            failed: FailedInmantaModules,
-            loop: asyncio.AbstractEventLoop,
-            loader: inmanta.loader.CodeLoader,
-        ) -> None:
-            try:
-                await loop.run_in_executor(context.threadpool, functools.partial(loader.install_source, module_source))
-            except Exception as e:
-                logger.info("Failed to install source on disk: %s", module_source.metadata.name, exc_info=True)
-                inmanta_module_name = module_source.get_inmanta_module_name()
-                failed[inmanta_module_name][module_source.metadata.name] = e
-                failed_to_install.add(module_source.metadata.name)
-
-        async def _load_source(
-            module_source: inmanta.data.model.ModuleSource,
-            failed: FailedInmantaModules,
-            loop: asyncio.AbstractEventLoop,
-            loader: inmanta.loader.CodeLoader,
-        ) -> None:
-            try:
-                await loop.run_in_executor(
-                    context.threadpool,
-                    functools.partial(loader.load_module, module_source.metadata.name, module_source.metadata.hash_value),
-                )
-            except Exception as e:
-                logger.info("Failed to import source: %s", module_source.metadata.name, exc_info=True)
-                inmanta_module_name = module_source.get_inmanta_module_name()
-                failed[inmanta_module_name][module_source.metadata.name] = ModuleImportException(e, module_source.metadata.name)
-
-        # First put all editable-install sources on disk. This is done for all of them before loading any module so that
-        # cross-module imports resolve regardless of the order in which the sources are processed.
-        for module_source in self.sources:
-            if module_source.install_on_disk:
-                await _install_source(module_source, failed, loop, loader)
-
-        # Then import the python modules registered for the current agent. Modules that are only installed (load_module is
-        # False) are deliberately not imported: their code must be available on disk but is not required by this agent.
-        for module_source in self.sources:
-            if module_source.load_module and module_source.metadata.name not in failed_to_install:
-                await _load_source(module_source, failed, loop, loader)
-
-        return failed
+        return await loop.run_in_executor(context.threadpool, loader.deploy_and_load, self.sources, context.name)
 
 
 class InitCommandFor(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
@@ -1186,13 +1128,3 @@ class MPManager(
         children = list(self.agent_map[agent_name])
         await asyncio.gather(*(child.request_shutdown() for child in children))
         return children
-
-
-class ModuleImportException(Exception):
-    def __init__(self, base_exception: Exception, module_name: str):
-        self.message = f"Failed to import module source {module_name}:\n{str(base_exception)}.\n"
-        self.tb = "".join(traceback.format_tb(base_exception.__traceback__))
-        self.__cause__ = base_exception
-
-    def __str__(self) -> str:
-        return self.message + self.tb + "\n"
