@@ -409,7 +409,7 @@ class CodeLoader:
         for module_source in sources:
             self.install_source(module_source)
 
-    def deploy_and_load(self, module_sources: Sequence[ExecutorModuleSource], executor_name: str) -> FailedInmantaModules:
+    def deploy_and_load(self, module_sources: Sequence[ExecutorModuleSource], logger: logging.Logger) -> FailedInmantaModules:
         """
         Install the given module sources on disk and import the ones registered for this executor.
 
@@ -420,7 +420,7 @@ class CodeLoader:
         prevent the others from being installed and loaded.
 
         :param module_sources: The module sources destined for this executor.
-        :param executor_name: The name of the executor this code is loaded for, included in log messages for context.
+        :param logger: The executor-scoped logger to use when reporting install and import failures.
         :return: The python modules that could not be installed or imported, grouped by inmanta module.
         """
         failed: FailedInmantaModules = defaultdict(dict)
@@ -433,12 +433,7 @@ class CodeLoader:
                 try:
                     self.install_source(module_source)
                 except Exception as e:
-                    LOGGER.info(
-                        "Failed to install source on disk for executor %s: %s",
-                        executor_name,
-                        module_source.metadata.name,
-                        exc_info=True,
-                    )
+                    logger.info("Failed to install source on disk: %s", module_source.metadata.name, exc_info=True)
                     failed[module_source.get_inmanta_module_name()][module_source.metadata.name] = e
                     failed_to_install.add(module_source.metadata.name)
 
@@ -447,12 +442,7 @@ class CodeLoader:
                 try:
                     self.load_module(module_source.metadata.name, module_source.metadata.hash_value)
                 except Exception as e:
-                    LOGGER.info(
-                        "Failed to import source for executor %s: %s",
-                        executor_name,
-                        module_source.metadata.name,
-                        exc_info=True,
-                    )
+                    logger.info("Failed to import source: %s", module_source.metadata.name, exc_info=True)
                     failed[module_source.get_inmanta_module_name()][module_source.metadata.name] = ModuleImportException(
                         e, module_source.metadata.name
                     )

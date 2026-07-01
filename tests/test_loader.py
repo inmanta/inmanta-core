@@ -20,6 +20,7 @@ import hashlib
 import importlib.abc
 import importlib.machinery
 import importlib.util
+import logging
 import os
 import shutil
 import sys
@@ -616,7 +617,7 @@ def test_deploy_and_load(tmp_path, caplog):
         "inmanta_plugins.dal_broken", "raise RuntimeError('boom')", install_on_disk=True, load_module=True
     )
 
-    failed = cl.deploy_and_load([install_only, healthy, broken], "agent1")
+    failed = cl.deploy_and_load([install_only, healthy, broken], logging.getLogger(__name__).getChild("agent1"))
 
     # The healthy module was installed and imported.
     import inmanta_plugins.dal_ok  # NOQA
@@ -656,7 +657,7 @@ def test_deploy_and_load_skips_load_when_install_fails(tmp_path, caplog, monkeyp
     fail_install = _executor_source("inmanta_plugins.dal_fail_install", "value = 1", install_on_disk=True, load_module=True)
     healthy = _executor_source("inmanta_plugins.dal_ok2", "value = 7", install_on_disk=True, load_module=True)
 
-    failed = cl.deploy_and_load([fail_install, healthy], "agent1")
+    failed = cl.deploy_and_load([fail_install, healthy], logging.getLogger(__name__).getChild("agent1"))
 
     # The healthy module still loaded.
     import inmanta_plugins.dal_ok2  # NOQA

@@ -404,6 +404,8 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
         assert context.server.timer_venv_scheduler_interval is None, "InitCommand should be only called once!"
 
         loop = asyncio.get_running_loop()
+        parent_logger = LOGGER
+        logger = parent_logger.getChild(context.name)
 
         context.server.post_init(self._venv_touch_interval)
 
@@ -417,7 +419,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
         # Download and load code. The install/load policy lives in the CodeLoader; run the whole batch in one shot on a
         # worker thread since install_source and load_module perform blocking file IO and imports.
         loader = inmanta.loader.CodeLoader(self.storage_folder)
-        return await loop.run_in_executor(context.threadpool, loader.deploy_and_load, self.sources, context.name)
+        return await loop.run_in_executor(context.threadpool, loader.deploy_and_load, self.sources, logger)
 
 
 class InitCommandFor(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
