@@ -106,7 +106,10 @@ assert inmanta_plugins.sub.a == 1""",
     # Prepare a cross module import, this should work
     module_source2 = make_module_source("inmanta_plugins.sub", """a=1""")
 
-    sources1 = []
+    # A distinct standalone module, only used by blueprint1
+    module_source3 = make_module_source("inmanta_plugins.bp1", """b=1""")
+
+    sources1 = [module_source3]
     sources2 = [module_source1, module_source2]
 
     # Define blueprints for executors and environments
@@ -310,9 +313,24 @@ async def test_process_manager_restart(environment, tmpdir, mp_manager_factory, 
     pip_index = PipIndex(artifact_dir=str(tmpdir))
     pip_config = PipConfig(index_url=pip_index.url)
     requirements = ()
-    sources = ()
 
-    # Create a blueprint with no requirements and no sources
+    # A single standalone module for the blueprint
+    code = b"b = 1"
+    sha1sum = hashlib.new("sha1")
+    sha1sum.update(code)
+    module_source1 = ModuleSource(
+        metadata=ModuleSourceMetadata(
+            name="inmanta_plugins.bp1",
+            hash_value=sha1sum.hexdigest(),
+            is_byte_code=False,
+        ),
+        source=code,
+        install_on_disk=True,
+        load_module=True,
+    )
+    sources = (module_source1,)
+
+    # Create a blueprint with no requirements and a single source
     blueprint1 = executor.ExecutorBlueprint(
         environment_id=env_id,
         pip_config=pip_config,
@@ -411,7 +429,21 @@ def test():
         install_on_disk=True,
         load_module=True,
     )
-    sources1 = ()
+    # A distinct standalone module, only used by blueprint1
+    bp1_code = b"b = 1"
+    bp1_sha1sum = hashlib.new("sha1")
+    bp1_sha1sum.update(bp1_code)
+    module_source_bp1 = ModuleSource(
+        metadata=ModuleSourceMetadata(
+            name="inmanta_plugins.bp1",
+            hash_value=bp1_sha1sum.hexdigest(),
+            is_byte_code=False,
+        ),
+        source=bp1_code,
+        install_on_disk=True,
+        load_module=True,
+    )
+    sources1 = (module_source_bp1,)
     sources2 = (module_source1,)
 
     blueprint1 = executor.ExecutorBlueprint(
@@ -501,7 +533,21 @@ def test():
         install_on_disk=True,
         load_module=True,
     )
-    sources1 = ()
+    # A distinct standalone module, only used by blueprint1
+    bp1_code = b"b = 1"
+    bp1_sha1sum = hashlib.new("sha1")
+    bp1_sha1sum.update(bp1_code)
+    module_source_bp1 = ModuleSource(
+        metadata=ModuleSourceMetadata(
+            name="inmanta_plugins.bp1",
+            hash_value=bp1_sha1sum.hexdigest(),
+            is_byte_code=False,
+        ),
+        source=bp1_code,
+        install_on_disk=True,
+        load_module=True,
+    )
+    sources1 = (module_source_bp1,)
     sources2 = (module_source1,)
     sources3 = (module_source1,)
 
