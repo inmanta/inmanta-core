@@ -17,7 +17,6 @@ Contact: code@inmanta.com
 """
 
 import datetime
-import functools
 import hashlib
 import json
 import os
@@ -1170,7 +1169,6 @@ class DataBaseReport(BaseModel):
         )
 
 
-@functools.total_ordering
 class ModuleSourceMetadata(BaseModel):
     """
     This class holds metadata for a given python module. i.e. it doesn't contain
@@ -1187,15 +1185,9 @@ class ModuleSourceMetadata(BaseModel):
     hash_value: str
     is_byte_code: bool
 
-    def __lt__(self, other: object) -> bool | None:
-        if not isinstance(other, ModuleSourceMetadata):
-            return NotImplemented
-        return (self.name, self.hash_value, self.is_byte_code) < (other.name, other.hash_value, other.is_byte_code)
-
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, ModuleSourceMetadata):
-            return False
-        return (self.name, self.hash_value, self.is_byte_code) == (other.name, other.hash_value, other.is_byte_code)
+    def sort_key(self) -> tuple[str, str, bool]:
+        """Stable ordering key covering the full identity of this metadata."""
+        return (self.name, self.hash_value, self.is_byte_code)
 
     def get_inmanta_module_name(self) -> str:
         return self.name.split(".")[1]
@@ -1254,9 +1246,9 @@ class ExecutorModuleSource(ModuleSource):
     install_on_disk: bool
     load_module: bool
 
-    def sort_key(self) -> tuple[ModuleSourceMetadata, bool, bool]:
+    def sort_key(self) -> tuple[tuple[str, str, bool], bool, bool]:
         """Stable ordering key covering the full identity of this source."""
-        return (self.metadata, self.install_on_disk, self.load_module)
+        return (self.metadata.sort_key(), self.install_on_disk, self.load_module)
 
 
 type InmantaModuleName = str
