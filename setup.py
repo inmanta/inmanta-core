@@ -102,6 +102,7 @@ setup(
             "openapi_spec_validator",
             "pep8-naming",
             "psutil",
+            "sqlacodegen~=4.0",
             "time-machine",
             # types
             "types-python-dateutil",
