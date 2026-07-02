@@ -184,6 +184,23 @@ class CompileRun:
             ret, _, _ = await asyncio.gather(sub_process.wait(), self.drain_out(out), self.drain_err(err))
             return ret
 
+    async def get_remote(self) -> str | None:
+        try:
+            sub_process = await asyncio.create_subprocess_exec(
+                "git", "remote", "get-url", "origin", stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=self._project_dir
+            )
+
+            out, _ = await sub_process.communicate()
+        finally:
+            if sub_process.returncode is None:
+                # The process is still running, kill it
+                sub_process.kill()
+
+        if sub_process.returncode != 0:
+            return None
+
+        return out.decode().strip()
+
     async def get_branch(self) -> Optional[str]:
         try:
             sub_process = await asyncio.create_subprocess_exec(
@@ -493,8 +510,21 @@ class CompileRun:
                 """
                 Returns an iterator over all setup stages. Inspecting stage success state is the responsibility of the caller.
                 """
-                repo_url: str = env.repo_url
-                repo_branch: str = env.repo_branch
+                repo_url: str = env.repo_url.strip()
+                repo_branch: str = env.repo_branch.strip()
+
+                # Determine whether the repo_url has changed.
+                # If so, we need to perform a clean checkout.
+                if os.listdir(project_dir):
+                    current_repo_url: str | None = await self.get_remote()
+                    if current_repo_url != repo_url:
+                        await self._info(
+                            f"Removing project and venv directory for environment {environment_id} at {project_dir},"
+                            " because repo url has changed."
+                        )
+                        shutil.rmtree(project_dir)
+                        os.mkdir(project_dir)
+
                 if os.path.exists(os.path.join(project_dir, "project.yml")):
                     yield self._end_stage(0)
 
