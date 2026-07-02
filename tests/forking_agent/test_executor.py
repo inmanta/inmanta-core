@@ -88,15 +88,31 @@ async def test_executor_server(set_custom_executor_policy, mpmanager: MPManager,
 
     inmanta.config.Config.set("test", "aaa", "bbbb")
 
+    empty_source_content = "".encode("utf-8")
+    empty_source = inmanta.data.model.ExecutorModuleSource(
+        metadata=ModuleSourceMetadata(
+            name="inmanta_plugins.test.empty",
+            hash_value=inmanta.util.hash_file(empty_source_content),
+            is_byte_code=False,
+        ),
+        source=empty_source_content,
+        install_on_disk=True,
+        load_module=True,
+    )
+
     # Simple empty venv
     simplest_blueprint = executor.ExecutorBlueprint(
         environment_id=uuid.UUID(environment),
         pip_config=inmanta.data.PipConfig(),
         requirements=[],
-        sources=[],
+        sources=[empty_source],
         python_version=sys.version_info[:2],
     )  # No pip
-    simplest = await manager.get_executor("agent1", "test", [executor.ModuleInstallSpec("test", "123456", simplest_blueprint)])
+    simplest = await manager.get_executor(
+        "agent1",
+        "test",
+        [executor.InmantaModuleInstallSpec("test", "123456", simplest_blueprint)],
+    )
 
     # check communications
     result = await simplest.call(Echo(["aaaa"]))
@@ -111,13 +127,15 @@ async def test_executor_server(set_custom_executor_policy, mpmanager: MPManager,
 def test():
    return "DIRECT"
     """.encode("utf-8")
-    direct = inmanta.data.model.ModuleSource(
+    direct = inmanta.data.model.ExecutorModuleSource(
         metadata=ModuleSourceMetadata(
             name="inmanta_plugins.test.testA",
             hash_value=inmanta.util.hash_file(direct_content),
             is_byte_code=False,
         ),
         source=direct_content,
+        install_on_disk=True,
+        load_module=True,
     )
     # Via server: source is sent via server
     server_content = """
@@ -125,13 +143,15 @@ def test():
    return "server"
 """.encode("utf-8")
     server_content_hash = inmanta.util.hash_file(server_content)
-    via_server = inmanta.data.model.ModuleSource(
+    via_server = inmanta.data.model.ExecutorModuleSource(
         metadata=ModuleSourceMetadata(
             name="inmanta_plugins.test.testB",
             hash_value=server_content_hash,
             is_byte_code=False,
         ),
         source=server_content,
+        install_on_disk=True,
+        load_module=True,
     )
     # Upload
     res = await client.upload_file(id=server_content_hash, content=base64.b64encode(server_content).decode("ascii"))
@@ -157,8 +177,12 @@ def test():
     )
 
     # Full runner install requires pip install, this can be slow, so we build it first to prevent the other one from timing out
-    oldest_executor = await manager.get_executor("agent2", "internal:", [executor.ModuleInstallSpec("test", 1, dummy)])
-    full_runner = await manager.get_executor("agent2", "internal:", [executor.ModuleInstallSpec("test:DDD:Test", 1, full)])
+    oldest_executor = await manager.get_executor("agent2", "internal:", [executor.InmantaModuleInstallSpec("test", 1, dummy)])
+    full_runner = await manager.get_executor(
+        "agent2",
+        "internal:",
+        [executor.InmantaModuleInstallSpec("test:DDD:Test", 1, full)],
+    )
 
     assert oldest_executor.id in manager.pool
 
@@ -184,7 +208,11 @@ def test():
         return oldest_executor not in manager.agent_map["agent2"]
 
     with caplog.at_level(logging.DEBUG):
-        _ = await manager.get_executor("agent2", "internal:", [executor.ModuleInstallSpec("test::Test", "1", dummy)])
+        _ = await manager.get_executor(
+            "agent2",
+            "internal:",
+            [executor.InmantaModuleInstallSpec("test::Test", "1", dummy)],
+        )
         assert not oldest_executor.running
         assert full_runner.running
         await retry_limited(oldest_gone, 1)
@@ -202,7 +230,11 @@ def test():
         await x.join()
     await retry_limited(lambda: len(manager.agent_map["agent2"]) == 0, 10)
 
-    full_runner = await manager.get_executor("agent2", "internal:", [executor.ModuleInstallSpec("test::Test", "1", full)])
+    full_runner = await manager.get_executor(
+        "agent2",
+        "internal:",
+        [executor.InmantaModuleInstallSpec("test::Test", "1", full)],
+    )
 
     await retry_limited(lambda: len(manager.agent_map["agent2"]) == 1, 1)
 
@@ -315,13 +347,15 @@ async def test_executor_call_refreshes_last_used():
 
 def test_hash_with_duplicates():
     env_id = uuid.uuid4()
-    source = inmanta.data.model.ModuleSource(
+    source = inmanta.data.model.ExecutorModuleSource(
         metadata=ModuleSourceMetadata(
             name="test",
             hash_value="aaaaa",
             is_byte_code=False,
         ),
         source="foo".encode(),
+        install_on_disk=True,
+        load_module=True,
     )
     requirement = "setuptools"
     simple = ExecutorBlueprint(
@@ -340,3 +374,45 @@ def test_hash_with_duplicates():
     )
     assert duplicated == simple
     assert duplicated.blueprint_hash() == simple.blueprint_hash()
+
+
+def test_from_specs_rejects_spec_without_sources():
+    """
+    An install spec describes a single inmanta module, which always ships at least one python file.
+    from_specs derives the install mode from those sources, so a spec without any must be rejected
+    with a clear error rather than failing with an opaque IndexError.
+    """
+    env_id = uuid.uuid4()
+    source = inmanta.data.model.ExecutorModuleSource(
+        metadata=ModuleSourceMetadata(
+            name="inmanta_plugins.test",
+            hash_value="aaaaa",
+            is_byte_code=False,
+        ),
+        source=b"a = 1",
+        install_on_disk=True,
+        load_module=True,
+    )
+
+    def make_spec(
+        module_name: str, sources: list[inmanta.data.model.ExecutorModuleSource]
+    ) -> executor.InmantaModuleInstallSpec:
+        return executor.InmantaModuleInstallSpec(
+            module_name=module_name,
+            module_version="1.0",
+            blueprint=ExecutorBlueprint(
+                environment_id=env_id,
+                pip_config=PipConfig(),
+                requirements=[],
+                sources=sources,
+                python_version=sys.version_info[:2],
+            ),
+        )
+
+    # A spec with no sources is rejected with a clear error naming the offending module.
+    with pytest.raises(ValueError, match="empty_module has no sources"):
+        ExecutorBlueprint.from_specs([make_spec("ok_module", [source]), make_spec("empty_module", [])])
+
+    # Sanity check: a spec with at least one source is accepted.
+    blueprint = ExecutorBlueprint.from_specs([make_spec("ok_module", [source])])
+    assert blueprint.sources == [source]

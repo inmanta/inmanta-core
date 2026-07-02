@@ -718,11 +718,13 @@ class OrchestrationService(protocol.ServerSlice):
         """
 
         modules_to_register: dict[InmantaModuleName, InmantaModuleDTO] = {
-            module_name: inmanta_module
-            for module_name, inmanta_module in module_version_info.items()
-            if inmanta_module.for_agents
+            k: v for k, v in module_version_info.items() if v.install_module_on_agents
         }
-        module_usage_info: dict[InmantaModuleName, tuple[InmantaModuleVersion, set[AgentName]]] = {}
+
+        # Seed with the base version's module usage so that, for a partial compile, modules that are not part of
+        # the current export are carried forward (e.g. to repair resources that weren't part of this partial export).
+        # Agent sets are merged below, so we work with sets throughout the method.
+        module_usage_info: dict[InmantaModuleName, tuple[InmantaModuleVersion, set[AgentName], set[AgentName]]] = {}
 
         if partial_base_version is not None:
             module_usage_info = await AgentModules.get_registered_modules_data(
@@ -738,15 +740,17 @@ class OrchestrationService(protocol.ServerSlice):
                 )
 
         for module_name, module in modules_to_register.items():
-            current_module_version = module.version
-            current_module_agent_set = set(module.for_agents)
+            install_on_agents = set(module.install_module_on_agents)
+            load_on_agents = set(module.load_module_on_agents)
 
             if module_name in module_usage_info:
-                # This module was previously known: make sure we register agents
-                # that were already using it before in this model version
-                current_module_agent_set.update(module_usage_info[module_name][1])
+                # This module was already registered in the base version: keep the agents that were using it
+                # registered as well (e.g. to repair resources that weren't part of this partial export).
+                _, base_install_on_agents, base_load_on_agents = module_usage_info[module_name]
+                install_on_agents |= base_install_on_agents
+                load_on_agents |= base_load_on_agents
 
-            module_usage_info[module_name] = (current_module_version, current_module_agent_set)
+            module_usage_info[module_name] = (module.version, install_on_agents, load_on_agents)
 
         await InmantaModule.register_modules(environment=environment, modules=modules_to_register, connection=connection)
         await AgentModules.register_modules_for_agents(

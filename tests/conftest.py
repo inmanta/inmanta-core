@@ -2094,7 +2094,9 @@ def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
         if any(not os.path.exists(f) for f in [build_dir, index_dir, timestamp_file]):
             # Cache doesn't exist
             return True
-        if len(os.listdir(index_dir)) != len(os.listdir(modules_v2_dir)) + 3:  # #modules + index.html + setuptools + wheel
+        if (
+            len(os.listdir(index_dir)) != len(os.listdir(modules_v2_dir)) + 4
+        ):  # #modules + index.html + setuptools + wheel + packaging
             # Modules were added/removed from the build_dir
             return True
         # Cache is dirty

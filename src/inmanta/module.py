@@ -1494,21 +1494,6 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
         should freeze lists. The following syntax should be used to specify a rule
         `<first-type>.<relation-name> before <then-type>.<relation-name>`. With this rule in
         place, the compiler will first freeze `first-type.relation-name` and only then `then-type.relation-name`.
-    :param agent_install_dependency_modules: [DEPRECATED] If true, when a module declares Python dependencies on
-        other (v2) modules, the agent will install these dependency modules with pip. This option should only be enabled
-        if the agent is configured with the appropriate pip related environment variables. The option allows to an extent
-        for inter-module dependencies within handler code, even if the dependency module doesn't have any handlers that
-        would otherwise be considered relevant for this agent.
-        Care should still be taken when you use inter-module imports. The current code loading mechanism does not explicitly
-        order reloads. A general guideline is to use qualified imports where you can (import the module rather than objects
-        from the module). When this is not feasible, you should be aware of
-        `Python's reload semantics <https://docs.python.org/3/library/importlib.html#importlib.reload>`_ and take this into
-        account when making changes to handler code.
-        Another caveat is that if the dependency module does contain code that is relevant for the agent, it will be loaded
-        like any other handler code and it will be this code that is imported by any dependent modules (though depending on
-        the load order the very first import may use the version installed by pip). If at some point this dependency module's
-        handlers cease to be relevant for this agent, its code will remain stale. Therefore this feature should not be depended
-        on in transient scenarios like this.
     :param pip: A configuration section that holds information about the pip configuration that should be taken into account
                 when installing Python packages (See: :py:class:`inmanta.module.ProjectPipConfig` for more details).
     :param environment_settings: The environment settings that need to be configured on the server for this project.
@@ -1533,7 +1518,6 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
     relation_precedence_policy: list[
         Annotated[str, StringConstraints(strip_whitespace=True, pattern=_re_relation_precedence_rule, min_length=1)]
     ] = []
-    agent_install_dependency_modules: bool = True
     pip: ProjectPipConfig = ProjectPipConfig()
     environment_settings: dict[str, inmanta.data.model.EnvSettingType] | None = None
 
@@ -1893,6 +1877,13 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
     def get_relation_precedence_policy(self) -> list[RelationPrecedenceRule]:
         return self._metadata.get_relation_precedence_rules()
+
+    def get_editable_installed_inmanta_modules(self) -> dict[packaging.utils.NormalizedName, packaging.version.Version]:
+        return {
+            k: v
+            for k, v in self.virtualenv.get_installed_packages(only_editable=True).items()
+            if k.startswith(ModuleV2.PKG_NAME_PREFIX)
+        }
 
     @classmethod
     def from_path(cls: type[TProject], path: str) -> Optional[TProject]:

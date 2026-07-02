@@ -72,11 +72,9 @@ import os
 import pathlib
 import socket
 import threading
-import traceback
 import typing
 import uuid
 from asyncio import Future, transports
-from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from typing import Awaitable
@@ -98,13 +96,7 @@ import inmanta.types
 import inmanta.util
 from inmanta import const, tracing
 from inmanta.agent import executor, resourcepool
-from inmanta.agent.executor import (
-    DeployReport,
-    FailedInmantaModules,
-    GetFactReport,
-    ModuleLoadingException,
-    VirtualEnvironmentManager,
-)
+from inmanta.agent.executor import DeployReport, GetFactReport, ModuleLoadingException, VirtualEnvironmentManager
 from inmanta.agent.resourcepool import PoolManager, PoolMember
 from inmanta.const import LOGGER_NAME_EXECUTOR
 from inmanta.protocol.ipc_light import (
@@ -116,7 +108,7 @@ from inmanta.protocol.ipc_light import (
     LogShipper,
     ReturnType,
 )
-from inmanta.types import ResourceIdStr
+from inmanta.types import FailedInmantaModules, ResourceIdStr
 from inmanta.util import set_default_event_loop
 from setproctitle import setproctitle
 
@@ -395,7 +387,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
         self,
         venv_path: str,
         storage_folder: str,
-        sources: Sequence[inmanta.data.model.ModuleSource],
+        sources: Sequence[inmanta.data.model.ExecutorModuleSource],
         venv_touch_interval: float = 60.0,
     ):
         """
@@ -424,34 +416,10 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
         context.venv = inmanta.env.VirtualEnv(self.venv_path)
         context.venv.use_virtual_env()
 
-        # Download and load code
+        # Download and load code. The install/load policy lives in the CodeLoader; run the whole batch in one shot on a
+        # worker thread since install_source and load_module perform blocking file IO and imports.
         loader = inmanta.loader.CodeLoader(self.storage_folder)
-
-        failed: FailedInmantaModules = defaultdict(dict)
-        in_place: list[inmanta.data.model.ModuleSource] = []
-        # First put all files on disk
-        for module_source in self.sources:
-            try:
-                await loop.run_in_executor(context.threadpool, functools.partial(loader.install_source, module_source))
-                in_place.append(module_source)
-            except Exception as e:
-                logger.info("Failed to load source on disk: %s", module_source.metadata.name, exc_info=True)
-                inmanta_module_name = module_source.get_inmanta_module_name()
-                failed[inmanta_module_name][module_source.metadata.name] = e
-
-        # then try to import them
-        for module_source in in_place:
-            try:
-                await loop.run_in_executor(
-                    context.threadpool,
-                    functools.partial(loader.load_module, module_source.metadata.name, module_source.metadata.hash_value),
-                )
-            except Exception as e:
-                logger.info("Failed to import source: %s", module_source.metadata.name, exc_info=True)
-                inmanta_module_name = module_source.get_inmanta_module_name()
-                failed[inmanta_module_name][module_source.metadata.name] = ModuleImportException(e, module_source.metadata.name)
-
-        return failed
+        return await loop.run_in_executor(context.threadpool, loader.deploy_and_load, self.sources, logger)
 
 
 class InitCommandFor(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
@@ -1075,7 +1043,7 @@ class MPManager(
         self,
         agent_name: str,
         agent_uri: str,
-        code: typing.Collection[executor.ModuleInstallSpec],
+        code: typing.Collection[executor.InmantaModuleInstallSpec],
     ) -> MPExecutor:
         """
         Retrieves an Executor for a given agent with the relevant handler code loaded in its venv.
@@ -1083,7 +1051,7 @@ class MPManager(
 
         :param agent_name: The name of the agent for which an Executor is being retrieved or created.
         :param agent_uri: The name of the host on which the agent is running.
-        :param code: Collection of ModuleInstallSpec defining the configuration for the Executor i.e.
+        :param code: Collection of InmantaModuleInstallSpec defining the configuration for the Executor i.e.
             which resource types it can act on and all necessary information to install the relevant
             handler code in its venv. Must have at least one element.
         :return: An Executor instance
@@ -1162,13 +1130,3 @@ class MPManager(
         children = list(self.agent_map[agent_name])
         await asyncio.gather(*(child.request_shutdown() for child in children))
         return children
-
-
-class ModuleImportException(Exception):
-    def __init__(self, base_exception: Exception, module_name: str):
-        self.message = f"Failed to import module source {module_name}:\n{str(base_exception)}.\n"
-        self.tb = "".join(traceback.format_tb(base_exception.__traceback__))
-        self.__cause__ = base_exception
-
-    def __str__(self) -> str:
-        return self.message + self.tb + "\n"

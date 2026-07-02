@@ -17,7 +17,6 @@ Contact: code@inmanta.com
 """
 
 import datetime
-import functools
 import hashlib
 import json
 import os
@@ -1170,7 +1169,6 @@ class DataBaseReport(BaseModel):
         )
 
 
-@functools.total_ordering
 class ModuleSourceMetadata(BaseModel):
     """
     This class holds metadata for a given python module. i.e. it doesn't contain
@@ -1187,25 +1185,20 @@ class ModuleSourceMetadata(BaseModel):
     hash_value: str
     is_byte_code: bool
 
-    def __lt__(self, other: object) -> bool | None:
-        if not isinstance(other, ModuleSourceMetadata):
-            return NotImplemented
-        return (self.name, self.hash_value, self.is_byte_code) < (other.name, other.hash_value, other.is_byte_code)
-
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, ModuleSourceMetadata):
-            return False
-        return (self.name, self.hash_value, self.is_byte_code) == (other.name, other.hash_value, other.is_byte_code)
+    def sort_key(self) -> tuple[str, str, bool]:
+        """Stable ordering key covering the full identity of this metadata."""
+        return (self.name, self.hash_value, self.is_byte_code)
 
     def get_inmanta_module_name(self) -> str:
         return self.name.split(".")[1]
 
 
-@functools.total_ordering
 class ModuleSource(BaseModel):
     """
-    This class represents a python module (file metadata + the source itself)
-    :param source: the content of the file
+    This class represents a python module (file metadata + the source itself).
+
+    :param metadata: metadata describing the python module (name, content hash, byte-code flag).
+    :param source: the content of the file.
     """
 
     model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
@@ -1231,23 +1224,39 @@ class ModuleSource(BaseModel):
             source=_content,
         )
 
-    def __lt__(self, other: object) -> bool | None:
-        if not isinstance(other, ModuleSource):
-            return NotImplemented
-        return self.metadata < other.metadata
-
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, ModuleSource):
-            return False
-        return self.metadata == other.metadata
-
     def get_inmanta_module_name(self) -> str:
         return self.metadata.get_inmanta_module_name()
 
 
+class ExecutorModuleSource(ModuleSource):
+    """
+    A ModuleSource destined for a specific executor, extended with the install/load semantics that describe
+    what the executor should do with the source during agent code install.
+
+    :param install_on_disk: whether the source of this python module should be written to disk during agent
+        code install. This is true iff the encapsulating inmanta module was installed in editable mode.
+    :param load_module: whether the source of this python module should be loaded during agent
+        code install. This is true iff the encapsulating inmanta module was registered for that agent.
+
+    install_on_disk and load_module are part of this model's (pydantic structural) identity: the same file content
+    can be installed/loaded differently depending on the agent it is destined for, and an executor that ships these
+    sources is identified by what it installs and loads, not only by the file contents.
+    """
+
+    install_on_disk: bool
+    load_module: bool
+
+    def sort_key(self) -> tuple[tuple[str, str, bool], bool, bool]:
+        """Stable ordering key covering the full identity of this source."""
+        return (self.metadata.sort_key(), self.install_on_disk, self.load_module)
+
+
 type InmantaModuleName = str
+type LoadModuleOnAgent = bool
 type InmantaModuleVersion = str
 type AgentName = str
+type InstallOnAgents = list[AgentName]
+type LoadOnAgents = list[AgentName]
 
 
 class InmantaModule(BaseModel):
@@ -1255,16 +1264,25 @@ class InmantaModule(BaseModel):
     This class represents an Inmanta module during code upload.
 
     :param name: Name of this inmanta module. e.g. std
-    :param version: Version of this inmanta module. This hash is computed using the hashes of
-        the python files in this module as well as the python requirements of this module.
+    :param version: Version of this inmanta module. For editable install modules, this is a hash that is
+        computed using the hashes of the python files in this module as well as the python requirements of this module.
+        For packaged install modules, this is the plain pep 440 version to install e.g. "1.0.5".
     :param files_in_module: The list of python files composing this inmanta module.
-    :param requirements: The list of python requirements this inmanta module requires.
-    :param for_agents: The list of agent names that require to install this inmanta module to
-        deploy resources.
+    :param requirements: The list of python requirements this inmanta module requires. This list is only set for
+        editable installed modules. For package install modules, we rely on pip to fetch the correct requirements
+        for the given pep 440 version.
+    :param install_module_on_agents: List of agents on which we will attempt to install this inmanta module. We will not
+        eagerly load the module on all these agents, but rather only on the subset of these agents defined by the
+        load_module_on_agents parameter.
+    :param load_module_on_agents: List of agents on which we will attempt to load this inmanta module. This should be
+        a subset of install_module_on_agents.
+    :param editable_install: Whether this inmanta module was installed in editable mode in the compiler venv.
     """
 
     name: InmantaModuleName
     version: InmantaModuleVersion
     files_in_module: list[ModuleSourceMetadata]
     requirements: list[str]
-    for_agents: list[AgentName]
+    load_module_on_agents: LoadOnAgents
+    install_module_on_agents: InstallOnAgents
+    editable_install: bool
