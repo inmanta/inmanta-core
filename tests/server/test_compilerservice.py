@@ -525,9 +525,7 @@ async def test_compile_runner(environment_factory: EnvironmentFactory, server, c
 
 @pytest.mark.slowtest
 @pytest.mark.parametrize("no_agent", [True])
-async def test_compile_runner_repo_url_changed(
-    environment_factory: EnvironmentFactory, server, client, tmpdir
-) -> None:
+async def test_compile_runner_repo_url_changed(environment_factory: EnvironmentFactory, server, client, tmpdir) -> None:
     """
     When the repo_url of an environment changes, the compiler service should detect that the origin
     of the checkout present in the project directory no longer matches the configured repo_url and
@@ -580,9 +578,7 @@ async def test_compile_runner_repo_url_changed(
     assert f"{marker_print_other} hello" in stages["Recompiling configuration model"]["outstream"]
 
     # The checkout in the project directory now points at the new repository.
-    remote_url = subprocess.check_output(
-        ["git", "remote", "get-url", "origin"], cwd=project_work_dir, encoding="utf-8"
-    ).strip()
+    remote_url = subprocess.check_output(["git", "remote", "get-url", "origin"], cwd=project_work_dir, encoding="utf-8").strip()
     assert remote_url == env_other.repo_url
 
 
