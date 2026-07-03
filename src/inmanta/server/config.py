@@ -58,6 +58,32 @@ db_name = Option("database", "name", "inmanta", "The name of the database on the
 db_username = Option("database", "username", "postgres", "The username to access the database in the PostgreSQL server", is_str)
 db_password = Option("database", "password", None, "The password that belong to the database user", is_str)
 
+db_singleton_lock = Option(
+    "database",
+    "singleton_lock",
+    True,
+    "Guard against more than one Inmanta server being active on the same database at the same time. "
+    "When enabled (the default), the server acquires a PostgreSQL advisory lock on startup and holds it "
+    "for its entire lifetime. A second server pointed at the same database will wait for the lock (see "
+    ":inmanta.config:option:`database.singleton_lock_wait_time`) and refuse to start if it cannot get it. "
+    "Running two servers against one database corrupts it, so only disable this if you are certain no "
+    "other server is running. The lock requires a session-mode connection to the primary: it does not "
+    "work through a transaction-pooling proxy such as pgbouncer in transaction mode.",
+    is_bool,
+)
+
+db_singleton_lock_wait_time = Option(
+    "database",
+    "singleton_lock_wait_time",
+    30,
+    "How long, in seconds, the server waits for the singleton lock (see "
+    ":inmanta.config:option:`database.singleton_lock`) to be released by another server before it gives "
+    "up and refuses to start. This absorbs restarts where the previous server has not fully released the "
+    "lock yet. If set to 0, the server tries only once. If set to a negative value, the server waits "
+    "forever.",
+    is_time,
+)
+
 db_connection_pool_min_size = Option(
     "database",
     "connection_pool_min_size",
