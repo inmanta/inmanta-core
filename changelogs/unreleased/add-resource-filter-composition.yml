@@ -1,0 +1,6 @@
+description: >
+  Enable extensions to contribute their own resource filter fields to the GraphQL `resources` query (via
+  GraphQLContribution.get_resource_filter_input_class), composed into a single ResourceFilter input. Also add a
+  `modelVersion` filter to fetch resources as present in a specific version of the model.
+change-type: minor
+destination-branches: [master, iso9]
