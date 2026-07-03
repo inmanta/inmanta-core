@@ -197,11 +197,14 @@ async def test_set_password(server: protocol.Server, auth_client: endpoints.Clie
     assert response.code == 200
 
 
-async def test_environment_create_token(server: protocol.Server, auth_client: endpoints.Client, monkeypatch) -> None:
+async def test_environment_create_token(server: protocol.Server, auth_client: endpoints.Client, monkeypatch, caplog) -> None:
     """
     Verify that the environment_create_token endpoint works correctly when the server.auth=true
     option is set via an environment variable.
     Reproduction of bug: https://github.com/inmanta/inmanta-core/issues/8962
+
+    Also verify that the minted token is attributed to its creator (a `created_by` claim) and that
+    the access log attributes calls made with it to that creator instead of the anonymous `user=<>`.
     """
     config.Config.set("server", "auth", "false")
     monkeypatch.setenv("INMANTA_SERVER_AUTH", "true")
@@ -229,6 +232,27 @@ async def test_environment_create_token(server: protocol.Server, auth_client: en
     response = await auth_client.environment_create_token(tid=env_id, client_types=["api"])
     assert response.code == 200
     assert response.result["data"]
+
+    # The token is attributed to the user that created it via a dedicated claim. It is deliberately
+    # not stored in `sub`, because the policy engine authorizes on `sub`.
+    api_token = response.result["data"]
+    claims, _ = auth.decode_token(api_token)
+    assert claims[const.INMANTA_CREATED_BY_URN] == "admin"
+    assert "sub" not in claims
+
+    # A call made with that token is attributed to its creator in the access log, instead of `user=<>`.
+    config.Config.set("client_rest_transport", "token", api_token)
+    token_client = protocol.Client("client")
+    caplog.clear()
+    with caplog.at_level(logging.DEBUG, logger="inmanta.protocol.rest"):
+        response = await token_client.environment_create_token(tid=env_id, client_types=["api"])
+        assert response.code == 200
+    access_logs = [r.getMessage() for r in caplog.records if "Calling method environment_create_token" in r.getMessage()]
+    assert access_logs
+    assert all(
+        "token=api" in message and "created_by=admin" in message and f"env={env_id}" in message for message in access_logs
+    )
+    assert all("user=<>" not in message for message in access_logs)
 
 
 async def test_password_max_length(server: protocol.Server, auth_client: endpoints.Client) -> None:
