@@ -534,6 +534,11 @@ def _custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
     if isinstance(o, (uuid.UUID, pydantic.AnyUrl, pydantic_core.Url)):
         return str(o)
 
+    if isinstance(o, pydantic.SecretStr):
+        # Never serialize the secret value across a (de)serialization boundary (e.g. the policy
+        # engine input); emit the redacted form (str(SecretStr) == "**********").
+        return str(o)
+
     if isinstance(o, datetime.datetime):
         return o.isoformat(timespec="microseconds")
 
