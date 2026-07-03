@@ -344,7 +344,7 @@ class CallArguments:
         # verify if we need to inject a CallContext
         if call_context_var := self.get_call_context():
             self._call_args[call_context_var] = common.CallContext(
-                request_headers=self._headers, auth_token=self._auth_token, auth_username=self._auth_username
+                request_headers=self._request_headers, auth_token=self._auth_token, auth_username=self._auth_username
             )
 
         self._processed = True

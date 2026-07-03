@@ -16,6 +16,8 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import logging
+
 import pytest
 
 import nacl.pwhash
@@ -125,6 +127,37 @@ async def test_login(server: protocol.Server, client: endpoints.Client, auth_cli
     response = await new_auth_client.list_users()
     assert response.code == 200
     assert response.result["data"][0]["username"] == "admin"
+
+
+async def test_login_audit_logging_and_redaction(
+    server: protocol.Server, client: endpoints.Client, auth_client: endpoints.Client, caplog
+) -> None:
+    """Login attempts are audit-logged and passwords are never written to the logs (SecretStr redaction)."""
+    password = "sup3r-s3cret-unique-pw"
+    wrong_password = "wrong-unique-pw"
+    response = await auth_client.add_user("admin", password)
+    assert response.code == 200
+
+    with caplog.at_level(logging.DEBUG):
+        response = await client.login("admin", wrong_password)
+        assert response.code == 401
+        response = await client.login("admin", password)
+        assert response.code == 200
+
+    # Every login attempt is audit-logged with the username.
+    assert any(
+        record.levelno == logging.WARNING and "Failed login for user 'admin'" in record.getMessage()
+        for record in caplog.records
+    )
+    assert any(
+        record.levelno == logging.INFO and "Successful login for user 'admin'" in record.getMessage()
+        for record in caplog.records
+    )
+
+    # The dispatcher logs the call arguments at debug level; the password must be redacted there.
+    login_call_logs = [record.getMessage() for record in caplog.records if "Calling method login" in record.getMessage()]
+    assert login_call_logs
+    assert all(password not in message and wrong_password not in message for message in login_call_logs)
 
 
 async def test_set_password(server: protocol.Server, auth_client: endpoints.Client) -> None:
