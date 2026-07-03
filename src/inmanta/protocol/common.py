@@ -82,13 +82,21 @@ class CallContext:
     request_headers: Mapping[str, str]
     auth_token: Optional[auth.claim_type]
     auth_username: Optional[str]
+    # The peer IP of the connection (the direct client, or the reverse proxy when the API is
+    # fronted by one). None when it could not be determined (e.g. internal calls).
+    remote_ip: Optional[str]
 
     def __init__(
-        self, request_headers: Mapping[str, str], auth_token: Optional[auth.claim_type], auth_username: Optional[str]
+        self,
+        request_headers: Mapping[str, str],
+        auth_token: Optional[auth.claim_type],
+        auth_username: Optional[str],
+        remote_ip: Optional[str] = None,
     ) -> None:
         self.request_headers = request_headers
         self.auth_token = auth_token
         self.auth_username = auth_username
+        self.remote_ip = remote_ip
 
 
 class ArgOption:

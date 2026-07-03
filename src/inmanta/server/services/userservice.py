@@ -47,14 +47,16 @@ def verify_authentication_enabled() -> None:
 
 def _get_source_ip(context: common.CallContext) -> str:
     """
-    Best-effort source IP of the request for audit logging. The orchestrator is expected to run
-    behind a reverse proxy, so the client IP is taken from the X-Forwarded-For header.
+    Source of the request for audit logging. This is the connection peer IP, which is the client
+    for direct access (the common case for the web console) and the reverse proxy when the API is
+    fronted by one. In the latter case the originating client is reported by the proxy in the
+    X-Forwarded-For header, so it is appended when present.
     """
-    headers = context.request_headers
-    forwarded = headers.get("X-Forwarded-For") or headers.get("x-forwarded-for")
+    remote_ip = context.remote_ip or "unknown"
+    forwarded = context.request_headers.get("X-Forwarded-For") or context.request_headers.get("x-forwarded-for")
     if forwarded:
-        return forwarded.split(",")[0].strip()
-    return "unknown"
+        return f"{remote_ip} (X-Forwarded-For: {forwarded.split(',')[0].strip()})"
+    return remote_ip
 
 
 class UserService(server_protocol.ServerSlice):

@@ -62,17 +62,20 @@ class CallArguments:
         config: common.UrlMethod,
         message: dict[str, Optional[object]],
         request_headers: Mapping[str, str],
+        remote_ip: Optional[str] = None,
     ) -> None:
         """
         :param config: The method configuration that contains the metadata and functions to call
         :param message: The message received by the RPC call
         :param request_headers: The headers received by the RPC call
+        :param remote_ip: The peer IP of the connection, or None when it could not be determined
         :param handler: The handler for the call
         """
         self._config = config
         self._properties = self._config.properties
         self._message = message
         self._request_headers = request_headers
+        self._remote_ip = remote_ip
         self._argspec: inspect.FullArgSpec = inspect.getfullargspec(self._properties.function)
 
         self._call_args: JsonType = {}
@@ -344,7 +347,10 @@ class CallArguments:
         # verify if we need to inject a CallContext
         if call_context_var := self.get_call_context():
             self._call_args[call_context_var] = common.CallContext(
-                request_headers=self._request_headers, auth_token=self._auth_token, auth_username=self._auth_username
+                request_headers=self._request_headers,
+                auth_token=self._auth_token,
+                auth_username=self._auth_username,
+                remote_ip=self._remote_ip,
             )
 
         self._processed = True
@@ -654,6 +660,7 @@ async def execute_call(
     config: common.UrlMethod | None,
     message: dict[str, object],
     request_headers: Mapping[str, str],
+    remote_ip: Optional[str] = None,
 ) -> common.Response:
     if config is None:
         raise Exception("This method is unknown! This should not occur!")
@@ -661,7 +668,7 @@ async def execute_call(
         # First check if the call is authenticated, then process the request so we can handle it and then authorize it.
         # Authorization might need data from the request but we do not want to process it before we are sure the call
         # is authenticated.
-        arguments = CallArguments(config, message, request_headers)
+        arguments = CallArguments(config, message, request_headers, remote_ip=remote_ip)
         is_auth_enabled: bool = endpoint.is_auth_enabled()
         arguments.authenticate(auth_enabled=is_auth_enabled)
         await arguments.process()

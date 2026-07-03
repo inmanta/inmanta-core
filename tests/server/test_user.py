@@ -144,15 +144,22 @@ async def test_login_audit_logging_and_redaction(
         response = await client.login("admin", password)
         assert response.code == 200
 
-    # Every login attempt is audit-logged with the username.
-    assert any(
-        record.levelno == logging.WARNING and "Failed login for user 'admin'" in record.getMessage()
-        for record in caplog.records
-    )
-    assert any(
-        record.levelno == logging.INFO and "Successful login for user 'admin'" in record.getMessage()
-        for record in caplog.records
-    )
+    # Every login attempt is audit-logged with the username and the connection peer IP.
+    failed = [
+        r.getMessage()
+        for r in caplog.records
+        if r.levelno == logging.WARNING and "Failed login for user 'admin'" in r.getMessage()
+    ]
+    succeeded = [
+        r.getMessage()
+        for r in caplog.records
+        if r.levelno == logging.INFO and "Successful login for user 'admin'" in r.getMessage()
+    ]
+    assert failed
+    assert succeeded
+    # The source IP is captured from the connection (not "unknown"), which is the direct client
+    # for the in-process test rather than an X-Forwarded-For header.
+    assert all("unknown" not in line for line in failed + succeeded)
 
     # The dispatcher logs the call arguments at debug level; the password must be redacted there.
     login_call_logs = [record.getMessage() for record in caplog.records if "Calling method login" in record.getMessage()]
