@@ -29,6 +29,7 @@ from inmanta.graphql.graphql import GraphQLSlice
 from inmanta.graphql.schema import (
     GraphQLContribution,
     ResourceFilterABC,
+    StrawberryFilter,
     _docstring_param_cache,
     build_composed_sqlalchemy_model,
     is_provided,
@@ -1103,12 +1104,13 @@ async def test_graphql_variables_and_operation_name(server, client, setup_databa
         }
     }
     """
-    # omit variables
+    # omit variables: the optional $environment is absent, so `id` is left unset and simply not filtered on -- rather
+    # than erroring. This is consistent with how every other filter field treats an unset value, and is what lets
+    # filters compose (a component only carries some of the composed filter's fields, see decompose_filter).
     result = await client.graphql(query=query)
-    assert result.code == 400
-    assert result.result["data"]["data"] is None
-    assert len(result.result["data"]["errors"]) == 1
-    assert result.result["data"]["errors"][0] == "Filter id was requested but no value was provided"
+    check_correct_graphql_response(result)
+    # `id` was not filtered on, so all environments are returned.
+    assert len(result.result["data"]["data"]["environments"]["edges"]) == 3
 
     # Test with multiple variables
     query = """
@@ -1678,7 +1680,7 @@ async def test_query_resources_model_version(server, client, environment, setup_
 async def test_custom_extension_resource_filter(server, environment, client, caplog, mixed_resource_generator):
     """
     Test that an extension can contribute its own resource filter fields (via
-    GraphQLContribution.get_resource_filter_input_class): they are composed into the `resources` query's
+    GraphQLContribution.get_filter_input_class): they are composed into the `resources` query's
     ResourceFilter input, the extension's apply_filter runs alongside core's, and the extension can take over
     version selection through handles_version / apply_version_filter (mutually exclusive with core's own
     version selection).
@@ -1729,7 +1731,7 @@ async def test_custom_extension_resource_filter(server, environment, client, cap
             return ExampleResourceMixin
 
         @classmethod
-        def get_resource_filter_input_class(cls) -> type[ResourceFilterABC] | None:
+        def get_filter_input_class(cls) -> type[ResourceFilterABC] | None:
             return ExampleResourceFilter
 
     graphql_slice = server.get_slice(SLICE_GRAPHQL)
@@ -1823,3 +1825,61 @@ async def test_custom_extension_resource_filter(server, environment, client, cap
     assert result.result["data"]["data"] is None
     assert len(result.result["data"]["errors"]) == 1
     assert result.result["data"]["errors"][0] == "Only one extension can determine version logic."
+
+
+async def test_custom_extension_environment_filter(server, client, project_default, caplog):
+    """
+    Filter composition is generic across object types, not resource-specific: an extension can contribute a filter
+    (via GraphQLContribution.get_filter_input_class) to the `environments` query too. Its fields are composed into the
+    EnvironmentFilter input and its apply_filter runs alongside core's.
+    """
+
+    @strawberry.input
+    class ExampleEnvironmentFilter(StrawberryFilter):
+        name_contains: str | None = strawberry.UNSET
+
+        def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
+            LOGGER.info("Applied environment filter %s", self.name_contains)
+            if is_provided(self.name_contains):
+                stmt = stmt.where(models.Environment.name.ilike(f"%{self.name_contains}%"))
+            return stmt
+
+    class ExampleEnvironmentContribution(GraphQLContribution):
+        @classmethod
+        def get_target_model(cls) -> type:
+            return models.Environment
+
+        @classmethod
+        def get_filter_input_class(cls) -> type[StrawberryFilter] | None:
+            return ExampleEnvironmentFilter
+
+    graphql_slice = server.get_slice(SLICE_GRAPHQL)
+    assert isinstance(graphql_slice, GraphQLSlice)
+    # GraphQLSlice has already started, so we reset its schema to make registering possible again for this test.
+    graphql_slice.schema = None
+    graphql_slice.register_graphql_contribution_for_extension("example", ExampleEnvironmentContribution)
+    await graphql_slice.start()
+
+    for name in ("alpha", "alpine", "beta"):
+        result = await client.environment_create(project_id=project_default, name=name)
+        assert result.code == 200
+
+    # The contributed field filters the environments query, alongside core sorting.
+    with caplog.at_level(logging.INFO):
+        result = await client.graphql(query="""
+            {
+                environments (filter: {nameContains: "alp"}) {
+                    edges { node { name } }
+                }
+            }
+            """)
+        check_correct_graphql_response(result)
+        log_contains(caplog, __name__, logging.INFO, "Applied environment filter alp")
+    names = {edge["node"]["name"] for edge in result.result["data"]["data"]["environments"]["edges"]}
+    assert names == {"alpha", "alpine"}
+
+    # The filter is optional: without it, all environments are returned.
+    result = await client.graphql(query="{ environments { edges { node { name } } } }")
+    check_correct_graphql_response(result)
+    all_names = {edge["node"]["name"] for edge in result.result["data"]["data"]["environments"]["edges"]}
+    assert {"alpha", "alpine", "beta"} <= all_names
