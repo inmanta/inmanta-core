@@ -166,8 +166,8 @@ async def test_default_policy_change_password(server, client) -> None:
     config.Config.set("client_rest_transport", "token", token)
     client_user1 = endpoints.Client("client")
 
-    # A user can change their own password
-    result = await client_user1.set_password(username=username1, password="testtest")
+    # A user can change their own password (self-service requires the current password)
+    result = await client_user1.set_password(username=username1, password="testtest", current_password="password")
     assert result.code == 200
 
     # A user cannot change the password of another user
