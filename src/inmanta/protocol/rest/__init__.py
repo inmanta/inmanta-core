@@ -617,16 +617,16 @@ class CallArguments:
         """
         Short description of the authenticated actor for the access log.
 
-        Interactive sessions carry a username (the `sub` claim) and are logged as ``user=<name>``.
-        API and service tokens have no `sub`; they are logged from their claims as
-        ``token=<client-types> created_by=<creator> env=<env>`` so that actions performed with a
-        token are attributable instead of appearing as ``user=<>``.
+        Interactive sessions carry a username (the sub claim) and are logged as user=<name>.
+        API and service tokens have no sub; they are logged from their claims as
+        token=<client-types> created_by=<creator> env=<env> so that actions performed with a
+        token are attributable instead of appearing as user=<>.
         """
         if self._auth_username:
             return f"user={self._auth_username}"
         if self._auth_token is None:
             return "user=<>"
-        # `ct` is decoded into a list of client types (see decode_token); render it comma-joined.
+        # ct is decoded into a list of client types (see decode_token); render it comma-joined.
         client_types = self._auth_token.get(const.INMANTA_URN + "ct")
         if isinstance(client_types, str):
             rendered_client_types = client_types

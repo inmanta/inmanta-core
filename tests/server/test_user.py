@@ -203,8 +203,8 @@ async def test_environment_create_token(server: protocol.Server, auth_client: en
     option is set via an environment variable.
     Reproduction of bug: https://github.com/inmanta/inmanta-core/issues/8962
 
-    Also verify that the minted token is attributed to its creator (a `created_by` claim) and that
-    the access log attributes calls made with it to that creator instead of the anonymous `user=<>`.
+    Also verify that the minted token is attributed to its creator (a created_by claim) and that
+    the access log attributes calls made with it to that creator instead of the anonymous user=<>.
     """
     config.Config.set("server", "auth", "false")
     monkeypatch.setenv("INMANTA_SERVER_AUTH", "true")
@@ -234,13 +234,13 @@ async def test_environment_create_token(server: protocol.Server, auth_client: en
     assert response.result["data"]
 
     # The token is attributed to the user that created it via a dedicated claim. It is deliberately
-    # not stored in `sub`, because the policy engine authorizes on `sub`.
+    # not stored in sub, because the policy engine authorizes on sub.
     api_token = response.result["data"]
     claims, _ = auth.decode_token(api_token)
     assert claims[const.INMANTA_CREATED_BY_URN] == "admin"
     assert "sub" not in claims
 
-    # A call made with that token is attributed to its creator in the access log, instead of `user=<>`.
+    # A call made with that token is attributed to its creator in the access log, instead of user=<>.
     config.Config.set("client_rest_transport", "token", api_token)
     token_client = protocol.Client("client")
     caplog.clear()
@@ -254,7 +254,7 @@ async def test_environment_create_token(server: protocol.Server, auth_client: en
     )
     assert all("user=<>" not in message for message in access_logs)
     # Attribution chains: a token minted using an attributed token keeps the original creator, even
-    # though the minting token has no `sub`.
+    # though the minting token has no sub.
     chained_claims, _ = auth.decode_token(response.result["data"])
     assert chained_claims[const.INMANTA_CREATED_BY_URN] == "admin"
     assert "sub" not in chained_claims

@@ -540,8 +540,8 @@ class EnvironmentService(protocol.ServerSlice):
         # Attribute the token to the user that created it so that actions performed with it are not
         # anonymous in the access log. When the token is minted using another attributed token rather
         # than an interactive session, carry over its creator so attribution survives token chains.
-        # This is a claim only; it is deliberately not stored in `sub` because the policy engine
-        # authorizes on `sub`.
+        # This is a claim only; it is deliberately not stored in sub because the policy engine
+        # authorizes on sub.
         created_by = context.auth_username
         if not created_by and context.auth_token is not None:
             inherited_creator = context.auth_token.get(const.INMANTA_CREATED_BY_URN)
