@@ -250,14 +250,18 @@ async def test_password_max_length(server: protocol.Server, auth_client: endpoin
 
 async def test_login_malformed_hash_is_401(server: protocol.Server, auth_client: endpoints.Client) -> None:
     """A stored password hash that cannot be parsed yields 401, not a 500 server error."""
-    user = data.User(username="corrupt", password_hash="not-a-valid-argon2-hash", auth_method=AuthMethod.database)
-    await user.insert()
+    # A garbage-prefixed hash raises InvalidkeyError; a well-formed but oversized hash raises a plain
+    # ValueError. Use the latter so the dedicated (ValueError, CryptoError) branch is actually exercised.
+    for bad_hash in ["not-a-valid-argon2-hash", "$argon2id$" + "x" * 200]:
+        user = data.User(username=f"corrupt-{len(bad_hash)}", password_hash=bad_hash, auth_method=AuthMethod.database)
+        await user.insert()
+        response = await auth_client.login(user.username, "some_password_123")
+        assert response.code == 401
 
-    response = await auth_client.login("corrupt", "some_password_123")
-    assert response.code == 401
 
-
-async def test_set_password_self_service_requires_current(server: protocol.Server, auth_client: endpoints.Client) -> None:
+async def test_set_password_self_service_requires_current(
+    server: protocol.Server, auth_client: endpoints.Client, caplog
+) -> None:
     """Changing your own password requires the current password; an admin changing another user's does not."""
     old = "old_password_123"
     new = "new_password_123"
@@ -275,13 +279,18 @@ async def test_set_password_self_service_requires_current(server: protocol.Serve
     response = await carol_client.set_password("carol", new)
     assert response.code == 400
 
-    # Self-service with a wrong current password is refused.
-    response = await carol_client.set_password("carol", new, current_password="not_the_password")
-    assert response.code == 401
+    # Self-service with a wrong current password is refused and audited.
+    with caplog.at_level(logging.WARNING):
+        response = await carol_client.set_password("carol", new, current_password="not_the_password")
+        assert response.code == 401
+    assert any("Failed password change for user 'carol'" in r.getMessage() for r in caplog.records)
 
-    # Self-service with the correct current password succeeds.
-    response = await carol_client.set_password("carol", new, current_password=old)
-    assert response.code == 200
+    # Self-service with the correct current password succeeds and is audited.
+    caplog.clear()
+    with caplog.at_level(logging.INFO):
+        response = await carol_client.set_password("carol", new, current_password=old)
+        assert response.code == 200
+    assert any("Password for user 'carol' changed by 'carol'" in r.getMessage() for r in caplog.records)
     response = await auth_client.login("carol", new)
     assert response.code == 200
 

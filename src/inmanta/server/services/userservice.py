@@ -145,6 +145,7 @@ class UserService(server_protocol.ServerSlice):
         verify_authentication_enabled()
         secret = password.get_secret_value()
         verify_password_policy(secret)
+        source_ip = _get_source_ip(context)
         # check if the user already exists
         user = await data.User.get_one(username=username)
         if not user:
@@ -155,11 +156,18 @@ class UserService(server_protocol.ServerSlice):
         if context.auth_username == username:
             if current_password is None:
                 raise exceptions.BadRequest("changing your own password requires the current password")
-            try:
-                if not user.password_hash:
-                    raise nacl.exceptions.InvalidkeyError()
-                nacl.pwhash.verify(user.password_hash.encode(), current_password.get_secret_value().encode())
-            except nacl.exceptions.InvalidkeyError:
+            current_password_ok = bool(user.password_hash)
+            if current_password_ok:
+                try:
+                    nacl.pwhash.verify(user.password_hash.encode(), current_password.get_secret_value().encode())
+                except nacl.exceptions.InvalidkeyError:
+                    current_password_ok = False
+            else:
+                # No local password (e.g. an OIDC-only account): still run a verification so the response
+                # time does not reveal whether the account has a password.
+                verify_dummy_password(current_password)
+            if not current_password_ok:
+                LOGGER.warning("Failed password change for user '%s' from %s: incorrect current password", username, source_ip)
                 raise exceptions.UnauthorizedException(message="The current password is incorrect", no_prefix=True)
 
         # hash the password
@@ -167,6 +175,7 @@ class UserService(server_protocol.ServerSlice):
 
         # insert the user
         await user.update_fields(password_hash=pw_hash.decode())
+        LOGGER.info("Password for user '%s' changed by '%s' from %s", username, context.auth_username or "<unknown>", source_ip)
 
     @protocol.handle(protocol.methods_v2.login)
     async def login(
@@ -189,7 +198,9 @@ class UserService(server_protocol.ServerSlice):
             LOGGER.warning("Failed login for user '%s' from %s: invalid password", username, source_ip)
             raise exceptions.UnauthorizedException(message=invalid_username_password_msg, no_prefix=True)
         except (ValueError, nacl.exceptions.CryptoError):
-            # A stored hash that cannot be parsed is an authentication failure, not a server error.
+            # A stored hash that cannot be parsed is an authentication failure, not a server error. Most
+            # malformed hashes raise InvalidkeyError (a CryptoError subclass) and are handled above; this
+            # clause also covers a hash that is well-formed but too long, which raises a plain ValueError.
             LOGGER.warning("Failed login for user '%s' from %s: malformed stored password hash", username, source_ip)
             raise exceptions.UnauthorizedException(message=invalid_username_password_msg, no_prefix=True)
 
