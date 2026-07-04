@@ -1,0 +1,10 @@
+description: >-
+  Add the server.login_session_expire option to give web-console login sessions their own lifetime,
+  decoupled from the auth_jwt `expire` that governs agent and compiler service tokens. An explicit
+  token expiry now takes precedence over the signing config's `expire` (which, as a side effect, makes
+  the `inmanta-cli token bootstrap` token honor its own 1-hour lifetime regardless of the configured
+  `expire`).
+change-type: minor
+destination-branches:
+  - master
+  - iso9

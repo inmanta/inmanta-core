@@ -16,6 +16,7 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import jwt
 import pytest
 
 import nacl.pwhash
@@ -125,6 +126,29 @@ async def test_login(server: protocol.Server, client: endpoints.Client, auth_cli
     response = await new_auth_client.list_users()
     assert response.code == 200
     assert response.result["data"][0]["username"] == "admin"
+
+
+async def test_login_session_expire(server: protocol.Server, auth_client: endpoints.Client) -> None:
+    """
+    The login session token gets its own lifetime via server.login_session_expire, decoupled from the
+    auth_jwt `expire` (which is 0/eternal in this fixture and governs agent/compiler service tokens).
+    """
+    response = await auth_client.add_user("admin", "adminadmin")
+    assert response.code == 200
+
+    # Default (option unset): the login token follows the signing config, which is eternal here.
+    response = await auth_client.login("admin", "adminadmin")
+    assert response.code == 200
+    claims = jwt.decode(response.result["data"]["token"], options={"verify_signature": False})
+    assert "exp" not in claims
+
+    # With the option set, the login session expires after that many seconds even though the signing
+    # config's expire is 0.
+    config.Config.set("server", "login_session_expire", "3600")
+    response = await auth_client.login("admin", "adminadmin")
+    assert response.code == 200
+    claims = jwt.decode(response.result["data"]["token"], options={"verify_signature": False})
+    assert claims["exp"] - claims["iat"] == 3600
 
 
 async def test_set_password(server: protocol.Server, auth_client: endpoints.Client) -> None:
