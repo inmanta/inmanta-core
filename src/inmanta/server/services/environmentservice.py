@@ -538,9 +538,16 @@ class EnvironmentService(protocol.ServerSlice):
         if not config.Config.getboolean("server", "auth", False):
             raise BadRequest("Authentication is disabled, generating a token is not allowed")
         # Attribute the token to the user that created it so that actions performed with it are not
-        # anonymous in the access log. This is a claim only; it is deliberately not stored in `sub`
-        # because the policy engine authorizes on `sub`.
-        custom_claims = {const.INMANTA_CREATED_BY_URN: context.auth_username} if context.auth_username else None
+        # anonymous in the access log. When the token is minted using another attributed token rather
+        # than an interactive session, carry over its creator so attribution survives token chains.
+        # This is a claim only; it is deliberately not stored in `sub` because the policy engine
+        # authorizes on `sub`.
+        created_by = context.auth_username
+        if not created_by and context.auth_token is not None:
+            inherited_creator = context.auth_token.get(const.INMANTA_CREATED_BY_URN)
+            if isinstance(inherited_creator, str):
+                created_by = inherited_creator
+        custom_claims = {const.INMANTA_CREATED_BY_URN: created_by} if created_by else None
         return encode_token(client_types, str(env.id), idempotent, custom_claims=custom_claims)
 
     @handle(methods_v2.environment_settings_list, env="tid")

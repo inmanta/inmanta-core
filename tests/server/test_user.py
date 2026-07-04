@@ -253,6 +253,11 @@ async def test_environment_create_token(server: protocol.Server, auth_client: en
         "token=api" in message and "created_by=admin" in message and f"env={env_id}" in message for message in access_logs
     )
     assert all("user=<>" not in message for message in access_logs)
+    # Attribution chains: a token minted using an attributed token keeps the original creator, even
+    # though the minting token has no `sub`.
+    chained_claims, _ = auth.decode_token(response.result["data"])
+    assert chained_claims[const.INMANTA_CREATED_BY_URN] == "admin"
+    assert "sub" not in chained_claims
 
 
 async def test_password_max_length(server: protocol.Server, auth_client: endpoints.Client) -> None:
