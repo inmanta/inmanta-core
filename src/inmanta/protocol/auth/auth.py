@@ -67,10 +67,13 @@ def encode_token(
     if not idempotent:
         payload["iat"] = int(time.time())
 
-        if cfg.expire > 0:
-            payload["exp"] = int(time.time() + cfg.expire)
-        elif expire is not None:
+        # An explicit expire argument takes precedence over the signing config's expire, so a caller
+        # (e.g. the login endpoint) can give its tokens a lifetime that is decoupled from the service
+        # token expiry configured on the signing config.
+        if expire is not None:
             payload["exp"] = int(time.time() + expire)
+        elif cfg.expire > 0:
+            payload["exp"] = int(time.time() + cfg.expire)
 
     if environment is not None:
         payload[const.INMANTA_URN + "env"] = environment

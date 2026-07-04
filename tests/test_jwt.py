@@ -58,6 +58,25 @@ def test_jwt_create(inmanta_config):
     assert jot2 != jot3
 
 
+def test_encode_token_expire_precedence(inmanta_config):
+    """
+    An explicit expire argument takes precedence over the signing config's expire, so a caller (e.g. the
+    login endpoint) can give its tokens a lifetime decoupled from the service-token expiry.
+    """
+    config.Config.set("auth_jwt_default", "expire", "7200")
+
+    # No explicit expire -> falls back to the signing config's expire.
+    service = jwt.decode(auth.encode_token(["agent"]), options={"verify_signature": False})
+    assert service["exp"] - service["iat"] == 7200
+
+    # An explicit expire wins over the signing config's expire.
+    session = jwt.decode(auth.encode_token(["api"], expire=3600), options={"verify_signature": False})
+    assert session["exp"] - session["iat"] == 3600
+
+    # An idempotent token never gets an expiry, regardless of either setting.
+    assert "exp" not in jwt.decode(auth.encode_token(["api"], idempotent=True), options={"verify_signature": False})
+
+
 class PKHandler(web.RequestHandler):
     def get(self):
         public_key = {
