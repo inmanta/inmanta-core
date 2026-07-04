@@ -136,19 +136,25 @@ async def test_login_session_expire(server: protocol.Server, auth_client: endpoi
     response = await auth_client.add_user("admin", "adminadmin")
     assert response.code == 200
 
-    # Default (option unset): the login token follows the signing config, which is eternal here.
+    # By default login sessions expire after one hour, even though the signing config's expire is 0.
+    response = await auth_client.login("admin", "adminadmin")
+    assert response.code == 200
+    claims = jwt.decode(response.result["data"]["token"], options={"verify_signature": False})
+    assert claims["exp"] - claims["iat"] == 3600
+
+    # Setting the option to 0 restores the old behavior: fall back to the signing config's expire (eternal here).
+    config.Config.set("server", "login_session_expire", "0")
     response = await auth_client.login("admin", "adminadmin")
     assert response.code == 200
     claims = jwt.decode(response.result["data"]["token"], options={"verify_signature": False})
     assert "exp" not in claims
 
-    # With the option set, the login session expires after that many seconds even though the signing
-    # config's expire is 0.
-    config.Config.set("server", "login_session_expire", "3600")
+    # A custom value is honored.
+    config.Config.set("server", "login_session_expire", "7200")
     response = await auth_client.login("admin", "adminadmin")
     assert response.code == 200
     claims = jwt.decode(response.result["data"]["token"], options={"verify_signature": False})
-    assert claims["exp"] - claims["iat"] == 3600
+    assert claims["exp"] - claims["iat"] == 7200
 
 
 async def test_set_password(server: protocol.Server, auth_client: endpoints.Client) -> None:

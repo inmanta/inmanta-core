@@ -65,15 +65,17 @@ def encode_token(
         payload.update(custom_claims)
 
     if not idempotent:
-        payload["iat"] = int(time.time())
+        # Use a single time source so iat and exp are consistent and the token lifetime is exactly `expire`.
+        now = int(time.time())
+        payload["iat"] = now
 
         # An explicit expire argument takes precedence over the signing config's expire, so a caller
         # (e.g. the login endpoint) can give its tokens a lifetime that is decoupled from the service
         # token expiry configured on the signing config.
         if expire is not None:
-            payload["exp"] = int(time.time() + expire)
+            payload["exp"] = now + int(expire)
         elif cfg.expire > 0:
-            payload["exp"] = int(time.time() + cfg.expire)
+            payload["exp"] = now + int(cfg.expire)
 
     if environment is not None:
         payload[const.INMANTA_URN + "env"] = environment
