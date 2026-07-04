@@ -1,0 +1,10 @@
+description: >-
+  Harden the built-in database login. Login now verifies against a dummy password hash for unknown
+  users so the response time no longer reveals whether an account exists, a stored password hash that
+  cannot be parsed returns 401 instead of a 500 server error, passwords are capped at 128 characters,
+  and changing your own password now requires providing the current one (an administrator changing
+  another user's password does not).
+change-type: minor
+destination-branches:
+  - master
+  - iso9

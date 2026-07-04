@@ -336,6 +336,8 @@ ENVELOPE_KEY = "data"
 
 # Minimum password length
 MIN_PASSWORD_LENGTH = 8
+# Maximum password length, a guard against denial-of-service through very expensive password hashing
+MAX_PASSWORD_LENGTH = 128
 
 
 class AgentAction(str, Enum):

@@ -229,3 +229,71 @@ async def test_environment_create_token(server: protocol.Server, auth_client: en
     response = await auth_client.environment_create_token(tid=env_id, client_types=["api"])
     assert response.code == 200
     assert response.result["data"]
+
+
+async def test_password_max_length(server: protocol.Server, auth_client: endpoints.Client) -> None:
+    """Passwords longer than MAX_PASSWORD_LENGTH are rejected, on both add_user and set_password."""
+    too_long = "a" * (const.MAX_PASSWORD_LENGTH + 1)
+    at_max = "a" * const.MAX_PASSWORD_LENGTH
+
+    response = await auth_client.add_user("bob", too_long)
+    assert response.code == 400
+    assert "at most" in response.result["message"]
+
+    response = await auth_client.add_user("bob", at_max)
+    assert response.code == 200
+
+    response = await auth_client.set_password("bob", too_long)
+    assert response.code == 400
+    assert "at most" in response.result["message"]
+
+
+async def test_login_malformed_hash_is_401(server: protocol.Server, auth_client: endpoints.Client) -> None:
+    """A stored password hash that cannot be parsed yields 401, not a 500 server error."""
+    user = data.User(username="corrupt", password_hash="not-a-valid-argon2-hash", auth_method=AuthMethod.database)
+    await user.insert()
+
+    response = await auth_client.login("corrupt", "some_password_123")
+    assert response.code == 401
+
+
+async def test_set_password_self_service_requires_current(server: protocol.Server, auth_client: endpoints.Client) -> None:
+    """Changing your own password requires the current password; an admin changing another user's does not."""
+    old = "old_password_123"
+    new = "new_password_123"
+
+    response = await auth_client.add_user("carol", old)
+    assert response.code == 200
+
+    # Log in as carol to obtain a session token whose sub is carol (i.e. a self-service caller).
+    response = await auth_client.login("carol", old)
+    assert response.code == 200
+    config.Config.set("client_rest_transport", "token", response.result["data"]["token"])
+    carol_client = protocol.Client("client")
+
+    # Self-service without the current password is refused.
+    response = await carol_client.set_password("carol", new)
+    assert response.code == 400
+
+    # Self-service with a wrong current password is refused.
+    response = await carol_client.set_password("carol", new, current_password="not_the_password")
+    assert response.code == 401
+
+    # Self-service with the correct current password succeeds.
+    response = await carol_client.set_password("carol", new, current_password=old)
+    assert response.code == 200
+    response = await auth_client.login("carol", new)
+    assert response.code == 200
+
+    # An administrator (a caller with a different identity) can reset it without the current password.
+    response = await auth_client.set_password("carol", "admin_reset_123")
+    assert response.code == 200
+
+
+def test_verify_dummy_password_smoke() -> None:
+    """The dummy-hash verification used for username-enumeration resistance runs without raising."""
+    from pydantic import SecretStr
+
+    from inmanta.server.services.userservice import verify_dummy_password
+
+    verify_dummy_password(SecretStr("any password"))

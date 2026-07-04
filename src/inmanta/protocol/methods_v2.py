@@ -1612,7 +1612,7 @@ def add_user(username: str, password: SecretStr) -> model.User:
     """Add a new user to the system
 
     :param username: The username of the new user. The username cannot be an empty string.
-    :param password: The password of this new user. The password should be at least 8 characters long.
+    :param password: The password of this new user. It should be between 8 and 128 characters long.
     :raises Conflict: Raised when there is already a user with this user_name
     :raises BadRequest: Raised when server authentication is not enabled
     """
@@ -1620,13 +1620,18 @@ def add_user(username: str, password: SecretStr) -> model.User:
 
 @auth(auth_label=const.CoreAuthorizationLabel.USER_CHANGE_PASSWORD, read_only=False)
 @typedmethod(path="/user/<username>/password", operation="PATCH", client_types=[ClientType.api], api_version=2)
-def set_password(username: str, password: SecretStr) -> None:
+def set_password(username: str, password: SecretStr, current_password: Optional[SecretStr] = None) -> None:
     """Change the password of a user
 
     :param username: The username of the user
-    :param password: The password of this new user. The password should be at least 8 characters long.
+    :param password: The new password. It should be between 8 and 128 characters long.
+    :param current_password: The user's current password. Required when a user changes their own password
+                             (so a hijacked session cannot take over the account); ignored when an
+                             administrator changes another user's password.
     :raises NotFound: Raised when the user does not exist
-    :raises BadRequest: Raised when server authentication is not enabled
+    :raises BadRequest: Raised when server authentication is not enabled, or when a user changes their own
+                        password without providing the current one.
+    :raises UnauthorizedException: Raised when the provided current password is incorrect.
     """
 
 
