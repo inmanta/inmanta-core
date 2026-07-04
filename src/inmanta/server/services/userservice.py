@@ -128,7 +128,7 @@ class UserService(server_protocol.ServerSlice):
             const.INMANTA_ROLES_URN: {str(env_id): roles for env_id, roles in role_assignments.assignments.items()},
             const.INMANTA_IS_ADMIN_URN: user.is_admin,
         }
-        # Give login sessions their own lifetime, decoupled from the auth_jwt `expire` that governs
+        # Give login sessions their own lifetime, decoupled from the auth_jwt expire that governs
         # agent/compiler service tokens. When the option is 0, fall back to the signing config's expire.
         session_expire = server_config.server_login_session_expire.get()
         token = auth.encode_token(
