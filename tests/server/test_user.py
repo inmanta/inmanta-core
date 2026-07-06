@@ -336,3 +336,17 @@ async def test_password_nfkc(server: protocol.Server, auth_client: endpoints.Cli
     assert (await auth_client.login("olof", decomposed)).code == 200
     # After the upgrade the composed form works too.
     assert (await auth_client.login("olof", composed)).code == 200
+
+
+async def test_login_oversized_password_rejected(server: protocol.Server, auth_client: endpoints.Client) -> None:
+    """
+    A login attempt whose input exceeds MAX_RAW_PASSWORD_LENGTH is rejected as invalid credentials without
+    ever running NFKC normalization on it. This guards the unauthenticated login path against a
+    normalization CPU cost on pathologically long input.
+    """
+    response = await auth_client.add_user("wendy", "Str0ng-Pass!")
+    assert response.code == 200
+
+    oversized = "a" * (const.MAX_RAW_PASSWORD_LENGTH + 1)
+    response = await auth_client.login("wendy", oversized)
+    assert response.code == 401
