@@ -335,7 +335,11 @@ EXTENSION_MODULE = "extension"
 ENVELOPE_KEY = "data"
 
 # Minimum password length
-MIN_PASSWORD_LENGTH = 8
+MIN_PASSWORD_LENGTH = 12
+# Maximum password length, a guard against denial-of-service through very expensive password hashing
+MAX_PASSWORD_LENGTH = 128
+# The number of distinct character classes (lowercase, uppercase, digit, special) a password must use
+MIN_PASSWORD_CHARACTER_CLASSES = 3
 
 
 class AgentAction(str, Enum):
