@@ -26,7 +26,7 @@ from pydantic import SecretStr
 
 import nacl.exceptions
 import nacl.pwhash
-from inmanta import const, data, protocol
+from inmanta import const, data, protocol, util
 from inmanta.data import AuthMethod, model
 from inmanta.protocol import common, exceptions
 from inmanta.protocol.auth import auth
@@ -47,7 +47,7 @@ def verify_authentication_enabled() -> None:
 
 def verify_password_policy(password: str) -> None:
     """Raise a BadRequest if the password does not satisfy the password policy (length and complexity)."""
-    violation = const.password_policy_violation(password)
+    violation = util.password_policy_violation(password)
     if violation is not None:
         raise exceptions.BadRequest(violation)
 

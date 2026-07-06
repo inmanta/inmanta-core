@@ -25,11 +25,11 @@ from asyncpg import PostgresError
 
 import nacl.pwhash
 from inmanta import config, data
-from inmanta.const import password_policy_violation
 from inmanta.data import start_engine, stop_engine
 from inmanta.data.model import AuthMethod
 from inmanta.protocol.auth import auth
 from inmanta.server import config as server_config
+from inmanta.util import password_policy_violation
 
 
 class ConnectionPoolException(Exception):

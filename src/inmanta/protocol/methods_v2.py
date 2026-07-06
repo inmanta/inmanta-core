@@ -1612,7 +1612,7 @@ def add_user(username: str, password: SecretStr) -> model.User:
     """Add a new user to the system
 
     :param username: The username of the new user. The username cannot be an empty string.
-    :param password: The password of this new user. It should be between 8 and 128 characters long.
+    :param password: The password of this new user. It should be between 12 and 128 characters long.
     :raises Conflict: Raised when there is already a user with this user_name
     :raises BadRequest: Raised when server authentication is not enabled
     """
@@ -1624,7 +1624,7 @@ def set_password(username: str, password: SecretStr, current_password: Optional[
     """Change the password of a user
 
     :param username: The username of the user
-    :param password: The new password. It should be between 8 and 128 characters long.
+    :param password: The new password. It should be between 12 and 128 characters long.
     :param current_password: The user's current password. Required when a user changes their own password
                              (so a hijacked session cannot take over the account); ignored when an
                              administrator changes another user's password.
