@@ -103,6 +103,11 @@ def verify_password(stored_hash: str, password: str) -> tuple[bool, bool]:
     :raises nacl.exceptions.CryptoError: (except InvalidkeyError) or ValueError when the stored hash
              itself cannot be parsed; the caller decides how to report that.
     """
+    # Reject pathologically long input before normalizing. normalize runs on the unauthenticated login
+    # path, and NFKC on a very large string is expensive enough to stall the event loop; no legitimate
+    # password approaches this cap. A too-long password simply does not match.
+    if len(password) > const.MAX_RAW_PASSWORD_LENGTH:
+        return False, False
     normalized = normalize_password(password)
     try:
         nacl.pwhash.verify(stored_hash.encode(), normalized.encode())
@@ -116,6 +121,17 @@ def verify_password(stored_hash: str, password: str) -> tuple[bool, bool]:
         except nacl.exceptions.InvalidkeyError:
             pass
     return False, False
+
+
+def normalize_new_password(password: SecretStr) -> str:
+    """
+    Normalize a to-be-stored password to NFKC, rejecting pathologically long input before normalizing
+    (NFKC on a very large string is expensive). Returns the normalized secret to hash.
+    """
+    raw = password.get_secret_value()
+    if len(raw) > const.MAX_RAW_PASSWORD_LENGTH:
+        raise exceptions.BadRequest(f"the password should be at most {const.MAX_PASSWORD_LENGTH} characters long")
+    return normalize_password(raw)
 
 
 def _get_source_ip(context: common.CallContext) -> str:
@@ -153,8 +169,7 @@ class UserService(server_protocol.ServerSlice):
         verify_authentication_enabled()
         if not username:
             raise exceptions.BadRequest("the username cannot be an empty string")
-        # Normalize before hashing so the password verifies regardless of how it was typed (see normalize_password).
-        secret = normalize_password(password.get_secret_value())
+        secret = normalize_new_password(password)
         verify_password_policy(secret)
 
         # hash the password
@@ -190,8 +205,7 @@ class UserService(server_protocol.ServerSlice):
         current_password: Optional[SecretStr] = None,
     ) -> None:
         verify_authentication_enabled()
-        # Normalize before hashing so the password verifies regardless of how it was typed (see normalize_password).
-        secret = normalize_password(password.get_secret_value())
+        secret = normalize_new_password(password)
         verify_password_policy(secret)
         source_ip = _get_source_ip(context)
         # check if the user already exists
@@ -254,11 +268,15 @@ class UserService(server_protocol.ServerSlice):
             LOGGER.warning("Failed login for user '%s' from %s: invalid password", username, source_ip)
             raise exceptions.UnauthorizedException(message=invalid_username_password_msg, no_prefix=True)
         if needs_rehash:
-            # The password only matched its pre-normalization form: migrate the stored hash to the
-            # normalized form so future logins verify on the first (normalized) attempt.
-            await user.update_fields(
-                password_hash=nacl.pwhash.str(normalize_password(password.get_secret_value()).encode()).decode()
-            )
+            # The password only matched its pre-normalization form: best-effort migrate the stored hash to
+            # the normalized form so future logins verify on the first attempt. Authentication has already
+            # succeeded, so a failure here (e.g. a transient DB error) must not fail the login.
+            try:
+                await user.update_fields(
+                    password_hash=nacl.pwhash.str(normalize_password(password.get_secret_value()).encode()).decode()
+                )
+            except Exception:
+                LOGGER.warning("Could not migrate the stored password hash for user '%s' to the normalized form", username)
 
         LOGGER.info("Successful login for user '%s' from %s", username, source_ip)
         role_assignments: model.RoleAssignmentsPerEnvironment = await data.Role.get_roles_for_user(username)

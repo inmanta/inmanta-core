@@ -338,6 +338,10 @@ ENVELOPE_KEY = "data"
 MIN_PASSWORD_LENGTH = 12
 # Maximum password length, a guard against denial-of-service through very expensive password hashing
 MAX_PASSWORD_LENGTH = 128
+# Hard cap on the raw (pre-normalization) password length. Applied before Unicode normalization on the
+# unauthenticated login path, so a pathologically long input cannot make normalization expensive. It is
+# well above MAX_PASSWORD_LENGTH because combining sequences use more code points than the normalized form.
+MAX_RAW_PASSWORD_LENGTH = 1024
 # The number of distinct character classes (lowercase, uppercase, digit, special) a password must use
 MIN_PASSWORD_CHARACTER_CLASSES = 3
 

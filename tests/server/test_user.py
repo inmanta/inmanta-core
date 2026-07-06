@@ -313,8 +313,8 @@ async def test_password_nfkc(server: protocol.Server, auth_client: endpoints.Cli
     Passwords are matched in Unicode NFKC form, so the same password verifies regardless of how it was
     typed, and hashes stored (by older versions) before normalization still work and are migrated.
     """
-    decomposed = "pa\u0308ssword"  # base 'a' + combining diaeresis (U+0308), 9 code points
-    composed = "p\u00e4ssword"  # precomposed 'a'-umlaut (U+00E4), 8 code points
+    decomposed = "Pa\u0308ssw0rd-123"  # base 'a' + combining diaeresis (U+0308); NFKC + policy compliant
+    composed = "P\u00e4ssw0rd-123"  # precomposed 'a'-umlaut (U+00E4); the NFKC form of decomposed
     assert decomposed != composed
 
     # A user created with the decomposed form can log in with either form (both normalize to the same).
