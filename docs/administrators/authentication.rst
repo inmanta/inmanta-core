@@ -228,6 +228,38 @@ Now, restart the orchestrator to activate the new configuration.
 After the restart of the orchestrator, authentication is enabled on all API endpoints. This also means that the
 web-console will ask for your credentials.
 
+.. _auth-int-limitations:
+
+Scope and limitations
+^^^^^^^^^^^^^^^^^^^^^
+
+The built-in provider is intended for small, trusted, or edge deployments where direct login is limited to a small
+number of technical users who already reach the orchestrator through other layers of security (network segmentation,
+a VPN or reverse proxy, ...). It deliberately keeps credential management minimal: passwords must be between 12 and
+128 characters long and use at least three of the four character classes (lowercase, uppercase, digit, special), but
+beyond that the provider does little.
+
+In particular, the built-in provider does **not** provide:
+
+* checks against breached or common-password lists;
+* password expiry, rotation, reuse history, or a self-service reset / forgot-password flow;
+* multi-factor authentication (MFA);
+* login rate limiting, brute-force back-off, or account lockout;
+* SSO or automated (SCIM) user provisioning.
+
+By design, these controls are expected to come from the layers around the orchestrator rather than from the built-in
+provider:
+
+* **Password policy, MFA, SSO, and credential lifecycle**: use an external OpenID Connect (OIDC) identity provider
+  (Entra ID, Authentik, Keycloak, Okta, Auth0, ...) instead of the built-in provider. Such providers supply these
+  natively. See :ref:`auth-ext`.
+* **Brute-force protection and rate limiting**: place the login and API endpoints behind a reverse proxy, WAF, or
+  network controls that provide rate limiting and back-off - the same edge you should already use before exposing the
+  API. An external IdP additionally moves the interactive login surface off the orchestrator entirely.
+
+Use the built-in provider only where direct login stays limited to a small set of trusted technical users behind such
+layers; whenever the login endpoint would be exposed more broadly, prefer an external OIDC provider.
+
 .. _auth-ext:
 
 External authentication providers
