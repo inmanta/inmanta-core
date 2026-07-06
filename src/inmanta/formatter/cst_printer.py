@@ -877,11 +877,18 @@ class CSTPrinter:
         else:
             base_indent = 0
 
-        inner = self._indent_str(self._indent + 1)
+        # Re-indent continuation lines: shift each by (target - base_indent), preserving
+        # relative indentation. Clamp at 0 so lines dedented below the first continuation
+        # line - typically the closing bracket, aligned with the statement - are not
+        # over-indented (previously such lines were pushed one level too deep).
+        shift = (self._indent + 1) * self._config.indent_width - base_indent
         result_lines: list[str] = [first_line_text]
         for line in orig_lines[1:]:
-            stripped = line[base_indent:] if len(line) >= base_indent else line.lstrip()
-            result_lines.append(inner + stripped if stripped else "")
+            if not line.strip():
+                result_lines.append("")
+                continue
+            orig_indent = len(line) - len(line.lstrip())
+            result_lines.append(" " * max(0, orig_indent + shift) + line.lstrip())
         return "\n".join(result_lines)
 
     @staticmethod

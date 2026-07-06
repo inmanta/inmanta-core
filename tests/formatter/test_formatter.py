@@ -127,6 +127,32 @@ def test_attribute_default_no_spaces():
     assert '    string name="default"\n' in result
 
 
+def test_comment_in_call_preserves_closing_bracket_indent():
+    """A comment inside a multi-line call forces verbatim preservation; the closing
+    bracket, aligned with the statement, must stay at column 0 (regression: it was
+    pushed one indent level too deep, e.g. ``    )``)."""
+    source = "x = foo::Bar(\n    a = 1,\n    # keep me\n)\n"
+    result = format_string(source)
+    assert result == source
+
+
+def test_comment_in_nested_call_preserves_bracket_levels():
+    """Nested multi-line call with an inner comment: every closing bracket keeps its
+    original indentation (the outermost ``)`` used to be over-indented)."""
+    source = (
+        "vrf = foo::Bar(\n"
+        "    config = foo::Config(\n"
+        "        vrfs = [foo::Vrfs(\n"
+        "            name = n,\n"
+        "            # inner comment\n"
+        "        )],\n"
+        "    ),\n"
+        ")\n"
+    )
+    result = format_string(source)
+    assert result == source
+
+
 def test_string_quote_normalization():
     """Single-quoted strings should be normalized to double-quoted."""
     source = "x = 'hello'\n"
