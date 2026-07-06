@@ -30,8 +30,12 @@ def frozen_attribute(freeze: dict) -> str:
 def analyze(path: str) -> None:
     iterations = json.loads(Path(path).read_text())
 
-    # Flatten the freeze records, keeping the iteration number of the enclosing iteration record
-    freezes = [{**it["freeze"], "iteration": it["iteration"]} for it in iterations if it["freeze"] is not None]
+    # Flatten the freeze records, keeping the iteration number and waiter count of the enclosing iteration record
+    freezes = [
+        {**it["freeze"], "iteration": it["iteration"], "allwaiters": it["allwaiters"]}
+        for it in iterations
+        if it["freeze"] is not None
+    ]
 
     print(f"Speculation log: {path}")
     print(f"  Iterations: {len(iterations)}")

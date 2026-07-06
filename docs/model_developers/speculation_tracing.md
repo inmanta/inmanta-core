@@ -18,15 +18,9 @@ compile. The easiest way is through its environment variable:
 INMANTA_COMPILER_SPECULATION_LOG_FILE=/tmp/speculation.json inmanta compile
 ```
 
-Like any config option, it can also be set in a config file:
-
-```ini
-[compiler]
-speculation_log_file=/tmp/speculation.json
-```
-
-To trace compiles triggered by an orchestrator server, set the environment variable on
-the server process (e.g. through a systemd drop-in or the container environment): server
+Like any config option it can also be set under `[compiler]` in an Inmanta config file. To
+trace compiles triggered by an orchestrator server, set the environment variable on the
+server process (e.g. through a systemd drop-in or the container environment): server
 compiles inherit the server's environment.
 
 The compiler writes a JSON log containing a record for every scheduler iteration. When an
@@ -69,8 +63,10 @@ Each scheduler iteration makes progress through one of these mechanisms:
 | `zerowaiters_promoted` | A zero-waiter variable gained waiters and was promoted           |
 | `final_freeze`         | End of compilation: remaining variables frozen unconditionally   |
 
-A high ratio of `find_wait_cycle` to `waitqueue` indicates the model has patterns that
-prevent the compiler from determining list completeness.
+`find_wait_cycle` should be far smaller than `waitqueue`, and ideally zero: every
+`find_wait_cycle` iteration is a freeze the compiler was forced to guess at. Any significant
+`find_wait_cycle` count indicates the model has patterns that prevent the compiler from
+determining list completeness.
 
 ### Frozen attributes
 
@@ -96,12 +92,14 @@ relation speculatively frozen in sequence.
    `is defined` check supports gradual execution — it returns `true` as soon as any
    element exists, without waiting for the list to be frozen.
 
-2. **Reading a list in the same constructor that populates it** — If entity `A`'s
-   constructor expression reads `a.some_list`, but `some_list` is populated by an
-   implementation that runs after construction, the compiler is forced to speculate.
+2. **Reading a list before it is fully populated** — If an expression reads `a.some_list`
+   while other statements are still adding to it, and the read does not support gradual
+   execution, the compiler is forced to speculate.
 
-   *Fix:* Move the read to a separate implementation, or restructure so the list is
-   populated before it is read.
+   *Fix:* Read the list gradually (e.g. through `is defined`) instead of eagerly, or compute
+   the value you need from the upstream data that feeds the list rather than from the list
+   itself. Moving the read to a separate implementation does not help on its own: the
+   scheduler does not guarantee that the populating statements run first.
 
 3. **Co-dependent lists** — Two list relations that read each other (e.g., `purged`
    depends on both `source` and `destination`) create a cycle that requires speculation

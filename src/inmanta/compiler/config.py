@@ -16,8 +16,6 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-from typing import Optional
-
 from inmanta.config import Option, is_bool, is_str, is_str_opt
 
 datatrace_enable: Option[bool] = Option(
@@ -73,7 +71,7 @@ export_compile_data_file: Option[str] = Option(
 )
 
 
-speculation_log_file: Option[Optional[str]] = Option(
+speculation_log_file: Option[str | None] = Option(
     "compiler",
     "speculation_log_file",
     None,

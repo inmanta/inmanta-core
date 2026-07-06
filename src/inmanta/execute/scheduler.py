@@ -77,9 +77,9 @@ class ProgressSource(StrEnum):
     """
 
     WAITQUEUE = "waitqueue"
-    "Normal execution: a variable with waiters was frozen from the wait queue."
+    "Normal execution: a variable with progress potential was frozen from the wait queue."
     ZEROWAITERS_PROMOTED = "zerowaiters_promoted"
-    "A variable without effective waiters gained progress potential and was frozen."
+    "Wait queue was exhausted and repopulated with variables with progress potential. One of them was frozen."
     FIND_WAIT_CYCLE = "find_wait_cycle"
     "Speculation: a wait cycle was broken by speculatively freezing a variable."
     FINAL_FREEZE = "final_freeze"
@@ -90,38 +90,40 @@ class ProgressSource(StrEnum):
 class FrozenRelationDetails:
     """
     Identity of the relation attribute variable that was selected for a speculative freeze.
+
+    :param entity: Full name of the entity type that owns the frozen relation.
+    :param attribute: Full name of the frozen relation attribute (entity.attribute).
+    :param instance: String representation of the instance that owns the frozen relation (truncated).
     """
 
     entity: str
-    "Full name of the entity type that owns the frozen relation."
     attribute: str
-    "Full name of the frozen relation attribute (`entity.attribute`)."
     instance: str
-    "String representation of the instance that owns the frozen relation (truncated)."
 
 
 @dataclass(frozen=True, slots=True)
 class FreezeRecord:
     """
     Record of a single speculative freeze decision made by find_wait_cycle() to break a wait cycle.
+
+    :param candidates: Number of freeze candidates the decision was made over.
+    :param var_type: Class name of the frozen variable.
+    :param waiting_providers: Number of outstanding providers on the frozen variable.
+    :param progress_potential: Progress potential of the frozen variable.
+    :param nb_waiters: Number of waiters on the frozen variable.
+    :param candidate_attrs: Number of freeze candidates per relation attribute, for the most common
+        relation attributes.
+    :param relation: Details of the frozen relation attribute, or None if the frozen variable is not a
+        relation attribute variable.
     """
 
-    allwaiters: int
-    "Total number of waiters at the time of the freeze decision."
     candidates: int
-    "Number of freeze candidates the decision was made over."
     var_type: str
-    "Class name of the frozen variable."
     waiting_providers: int
-    "Number of outstanding providers on the frozen variable."
     progress_potential: int
-    "Progress potential of the frozen variable."
-    num_waiters: int
-    "Number of waiters on the frozen variable."
+    nb_waiters: int
     candidate_attrs: Mapping[str, int]
-    "Number of freeze candidates per relation attribute, for the most common relation attributes."
     relation: Optional[FrozenRelationDetails]
-    "Details of the frozen relation attribute. None if the frozen variable is not a relation attribute variable."
 
 
 @dataclass(frozen=True, slots=True)
@@ -129,24 +131,26 @@ class IterationRecord:
     """
     Speculation trace record for a single iteration of the scheduler's run() loop. Appended to
     Scheduler.speculation_data when the scheduler is constructed with track_speculation=True.
+
+    :param iteration: Iteration number within the run() loop.
+    :param stmts_executed: Number of statements executed in this iteration.
+    :param progress_source: The mechanism through which this iteration made progress.
+    :param basequeue: Size of the queue of runnable statements at the end of the iteration.
+    :param waitqueue: Size of the queue of delayed variables at the end of the iteration.
+    :param zerowaiters: Number of delayed variables without effective waiters at the end of the iteration.
+    :param allwaiters: Total number of waiters at the end of the iteration.
+    :param freeze: The speculative freeze that made progress in this iteration, or None if this iteration
+        made progress through another mechanism.
     """
 
     iteration: int
-    "Iteration number within the run() loop."
     stmts_executed: int
-    "Number of statements executed in this iteration."
     progress_source: ProgressSource
-    "The mechanism through which this iteration made progress."
     basequeue: int
-    "Size of the queue of runnable statements at the end of the iteration."
     waitqueue: int
-    "Size of the queue of delayed variables at the end of the iteration."
     zerowaiters: int
-    "Number of delayed variables without effective waiters at the end of the iteration."
     allwaiters: int
-    "Total number of waiters at the end of the iteration."
     freeze: Optional[FreezeRecord]
-    "The speculative freeze that made progress in this iteration, if any."
 
 
 class Scheduler:
@@ -438,10 +442,7 @@ class Scheduler:
         For performance reasons, we keep progress potential local and instead detect this situation here.
 
         :return: A record describing the speculative freeze that was performed to break the wait cycle, or None if no
-            freeze candidate exists, i.e. no progress was made. A record is always built when a freeze is performed,
-            even when speculation tracking is disabled: building it takes a few string constructions plus a pass over
-            the freeze candidates, a fraction of the cost of the candidate scan above, and this method only runs when
-            the scheduler is stuck.
+            freeze candidate exists, i.e. no progress was made.
         """
         # Determine drvs that should be frozen to break the cycle
         freeze_candidates: list[DelayedResultVariable[object]] = []
@@ -472,13 +473,15 @@ class Scheduler:
         candidate_attrs: Counter[str] = Counter(
             str(candidate.attribute) for candidate in freeze_candidates if isinstance(candidate, RelationAttributeVariable)
         )
+        # Build the record unconditionally, also when speculation tracking is disabled: it is a few string
+        # constructions plus a pass over the freeze candidates, a fraction of the cost of the candidate scan
+        # above, and this method only runs when the scheduler is stuck.
         record = FreezeRecord(
-            allwaiters=len(allwaiters),
             candidates=len(freeze_candidates),
             var_type=type(drv_to_freeze).__name__,
             waiting_providers=drv_to_freeze.get_waiting_providers(),
             progress_potential=drv_to_freeze.get_progress_potential(),
-            num_waiters=len(drv_to_freeze.waiters),
+            nb_waiters=len(drv_to_freeze.waiters),
             candidate_attrs=dict(candidate_attrs.most_common(10)),
             relation=relation,
         )
@@ -567,15 +570,14 @@ class Scheduler:
 
             # all safe stmts are done
             count_before = count
-            progress = False
             assert not basequeue
-            # The mechanism through which this iteration makes progress. Deliberately not initialized with a default:
-            # each of the branches below is required to set it.
-            progress_source: ProgressSource
+            # The mechanism through which this iteration makes progress, or None until one of the branches below
+            # freezes a variable. Exactly one branch sets it before the iteration record is built.
+            progress: Optional[ProgressSource] = None
             freeze_record: Optional[FreezeRecord] = None
 
             # find a RV that has waiters, so freezing creates progress
-            while len(waitqueue) > 0 and not progress:
+            while len(waitqueue) > 0 and progress is None:
                 next_rv = waitqueue.popleft()
                 if next_rv.hasValue:
                     # already froze itself
@@ -591,12 +593,11 @@ class Scheduler:
                     # freeze it and go to next iteration, new statements will be on the basequeue
                     LOGGER.log(LOG_LEVEL_TRACE, "Freezing %s", next_rv)
                     next_rv.freeze()
-                    progress = True
-                    progress_source = ProgressSource.WAITQUEUE
+                    progress = ProgressSource.WAITQUEUE
 
             # no waiters in waitqueue,...
             # see if any zerowaiters have become gotten waiters
-            if not progress:
+            if progress is None:
                 has_potential: list[DelayedResultVariable[object]] = []
                 new_zerowaiters: Deque[DelayedResultVariable[object]] = deque()
                 for w in zerowaiters:
@@ -608,7 +609,7 @@ class Scheduler:
                         new_zerowaiters.append(w)
                 waitqueue.replace(has_potential)
                 zerowaiters = new_zerowaiters
-                while len(waitqueue) > 0 and not progress:
+                while len(waitqueue) > 0 and progress is None:
                     LOGGER.log(LOG_LEVEL_TRACE, "Moved zerowaiters to waiters")
                     next_rv = waitqueue.popleft()
                     if next_rv.get_waiting_providers() > 0:
@@ -616,31 +617,31 @@ class Scheduler:
                     else:
                         LOGGER.log(LOG_LEVEL_TRACE, "Freezing %s", next_rv)
                         next_rv.freeze()
-                        progress = True
-                        progress_source = ProgressSource.ZEROWAITERS_PROMOTED
+                        progress = ProgressSource.ZEROWAITERS_PROMOTED
 
-            if not progress:
+            if progress is None:
                 # nothing works anymore, attempt to unfreeze wait cycle
                 freeze_record = self.find_wait_cycle(relation_precedence_graph, queue.allwaiters)
                 if freeze_record is not None:
-                    progress = True
-                    progress_source = ProgressSource.FIND_WAIT_CYCLE
+                    progress = ProgressSource.FIND_WAIT_CYCLE
 
-            if not progress:
+            if progress is None:
                 # no one waiting anymore, all done, freeze and finish
                 LOGGER.log(LOG_LEVEL_TRACE, "Finishing statements with no waiters")
-                progress_source = ProgressSource.FINAL_FREEZE
+                progress = ProgressSource.FINAL_FREEZE
 
                 while len(zerowaiters) > 0:
                     next_rv = zerowaiters.pop()
                     next_rv.freeze()
 
             if self.track_speculation:
+                # One of the branches above always sets progress before we get here.
+                assert progress is not None
                 self.speculation_data.append(
                     IterationRecord(
                         iteration=i,
                         stmts_executed=count - count_before,
-                        progress_source=progress_source,
+                        progress_source=progress,
                         basequeue=len(basequeue),
                         waitqueue=len(waitqueue),
                         zerowaiters=len(zerowaiters),
