@@ -200,7 +200,9 @@ Verify whether the hostname, in the generated configuration section, is correct 
 Step 3: Create the initial user
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Re-run the same command again to create the initial user. The password for this new user must be at least 8 characters long.
+Re-run the same command again to create the initial user. The password for this new user must be between 12 and 128
+characters long and contain at least three of the following four character classes: a lowercase letter, an uppercase
+letter, a digit, and a special character. The same policy applies to passwords set through the API.
 
 .. code-block:: ini
 
