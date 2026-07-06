@@ -235,12 +235,12 @@ Scope and limitations
 
 The built-in provider is intended for small, trusted, or edge deployments where direct login is limited to a small
 number of technical users who already reach the orchestrator through other layers of security (network segmentation,
-a VPN or reverse proxy, ...). It deliberately keeps credential management minimal: the only password rule it enforces
-is a minimum length of 8 characters.
+a VPN or reverse proxy, ...). It deliberately keeps credential management minimal: passwords must be between 12 and
+128 characters long and use at least three of the four character classes (lowercase, uppercase, digit, special), but
+beyond that the provider does little.
 
 In particular, the built-in provider does **not** provide:
 
-* password complexity or composition rules;
 * checks against breached or common-password lists;
 * password expiry, rotation, reuse history, or a self-service reset / forgot-password flow;
 * multi-factor authentication (MFA);
