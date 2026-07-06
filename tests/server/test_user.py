@@ -306,3 +306,33 @@ def test_verify_dummy_password_smoke() -> None:
     from inmanta.server.services.userservice import verify_dummy_password
 
     verify_dummy_password(SecretStr("any password"))
+
+
+async def test_password_nfkc(server: protocol.Server, auth_client: endpoints.Client) -> None:
+    """
+    Passwords are matched in Unicode NFKC form, so the same password verifies regardless of how it was
+    typed, and hashes stored (by older versions) before normalization still work and are migrated.
+    """
+    decomposed = "pa\u0308ssword"  # base 'a' + combining diaeresis (U+0308), 9 code points
+    composed = "p\u00e4ssword"  # precomposed 'a'-umlaut (U+00E4), 8 code points
+    assert decomposed != composed
+
+    # A user created with the decomposed form can log in with either form (both normalize to the same).
+    response = await auth_client.add_user("nina", decomposed)
+    assert response.code == 200
+    assert (await auth_client.login("nina", composed)).code == 200
+    assert (await auth_client.login("nina", decomposed)).code == 200
+
+    # Migration: a hash stored from the raw, non-normalized bytes (as an older version would have).
+    user = data.User(
+        username="olof",
+        password_hash=nacl.pwhash.str(decomposed.encode()).decode(),
+        auth_method=AuthMethod.database,
+    )
+    await user.insert()
+    # The composed form does not match the raw-decomposed hash yet.
+    assert (await auth_client.login("olof", composed)).code == 401
+    # The decomposed form matches via the fallback and upgrades the stored hash to the normalized form.
+    assert (await auth_client.login("olof", decomposed)).code == 200
+    # After the upgrade the composed form works too.
+    assert (await auth_client.login("olof", composed)).code == 200
