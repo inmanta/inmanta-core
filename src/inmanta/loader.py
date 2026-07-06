@@ -165,8 +165,11 @@ class CodeManager:
             # [editable install mode]
             # We need to store the relevant files in the db, i.e.:
             #    - python code in the inmanta_plugins dir
+            #    - setup.cfg
+            #    - pyproject.toml
             requirements = self.get_inmanta_module_requirements(inmanta_module_name)
             module_version = self.get_module_version(requirements, files_metadata)
+            setup_cfg_path = module.get_metadata_file_path()
 
             self.module_version_info[inmanta_module_name] = InmantaModule(
                 name=inmanta_module_name,

@@ -29,12 +29,13 @@ import py
 import pytest
 
 from inmanta import module
+from inmanta.const import PLUGINS_PACKAGE
 from inmanta.module import (
     InmantaModuleRequirement,
     InvalidMetadata,
     InvalidModuleException,
     ModuleDeprecationWarning,
-    ModuleV2Metadata,
+    ModuleV2Metadata, Module, ModuleV2,
 )
 from inmanta.moduletool import ModuleTool
 from moduletool.common import add_file, make_module_simple
@@ -386,6 +387,21 @@ install_requires =
     assert mod.metadata.name == "inmanta-module-mod1"
     assert mod.metadata.version == "1.2.3"
     assert mod.metadata.license == "Apache 2.0"
+
+def test_module_get_fq_mod_name_for_py_file(modules_v2_dir: str) -> None:
+
+    mod_name = "elaboratev2module"
+    sub_package_name = "subpkg"
+    file_name = "other_module"
+    file_name = "/home/hugo/work/inmanta/github-repos/inmanta-core/tests/data/modules_v2/elaboratev2module/inmanta_plugins/elaboratev2module/other_module.py"
+
+
+    module = ModuleV2.from_path(os.path.join(modules_v2_dir, mod_name))
+
+
+    fqn = module._get_fq_mod_name_for_py_file(file_name, PLUGINS_PACKAGE , mod_name)
+    assert fqn == f"{PLUGINS_PACKAGE}.{mod_name}.{sub_package_name}.{file_name}"
+
 
 
 @pytest.mark.parametrize("deprecated", ["", "deprecated: true", "deprecated: false"])
