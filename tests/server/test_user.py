@@ -16,6 +16,8 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import logging
+
 import pytest
 
 import nacl.pwhash
@@ -125,6 +127,44 @@ async def test_login(server: protocol.Server, client: endpoints.Client, auth_cli
     response = await new_auth_client.list_users()
     assert response.code == 200
     assert response.result["data"][0]["username"] == "admin"
+
+
+async def test_login_audit_logging_and_redaction(
+    server: protocol.Server, client: endpoints.Client, auth_client: endpoints.Client, caplog
+) -> None:
+    """Login attempts are audit-logged and passwords are never written to the logs (SecretStr redaction)."""
+    password = "sup3r-s3cret-unique-pw"
+    wrong_password = "wrong-unique-pw"
+    response = await auth_client.add_user("admin", password)
+    assert response.code == 200
+
+    with caplog.at_level(logging.DEBUG):
+        response = await client.login("admin", wrong_password)
+        assert response.code == 401
+        response = await client.login("admin", password)
+        assert response.code == 200
+
+    # Every login attempt is audit-logged with the username and the connection peer IP.
+    failed = [
+        r.getMessage()
+        for r in caplog.records
+        if r.levelno == logging.WARNING and "Failed login for user 'admin'" in r.getMessage()
+    ]
+    succeeded = [
+        r.getMessage()
+        for r in caplog.records
+        if r.levelno == logging.INFO and "Successful login for user 'admin'" in r.getMessage()
+    ]
+    assert failed
+    assert succeeded
+    # The source IP is captured from the connection (not "unknown"), which is the direct client
+    # for the in-process test rather than an X-Forwarded-For header.
+    assert all("unknown" not in line for line in failed + succeeded)
+
+    # The dispatcher logs the call arguments at debug level; the password must be redacted there.
+    login_call_logs = [record.getMessage() for record in caplog.records if "Calling method login" in record.getMessage()]
+    assert login_call_logs
+    assert all(password not in message and wrong_password not in message for message in login_call_logs)
 
 
 async def test_set_password(server: protocol.Server, auth_client: endpoints.Client) -> None:
