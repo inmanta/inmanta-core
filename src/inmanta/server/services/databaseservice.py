@@ -281,7 +281,7 @@ class SingletonLock:
         self._connection: Optional[asyncpg.Connection] = None
         self._monitor_task: Optional[asyncio.Task[None]] = None
         self._on_lock_lost: Optional[Callable[[], None]] = None
-        self._lock_lost_signalled: bool = False
+        self._lock_lost_signaled: bool = False
 
     async def acquire(self, *, wait_time: int, connection_timeout: int = 5) -> None:
         """
@@ -384,9 +384,9 @@ class SingletonLock:
             return False
 
     def _signal_lock_lost(self) -> None:
-        if self._lock_lost_signalled:
+        if self._lock_lost_signaled:
             return
-        self._lock_lost_signalled = True
+        self._lock_lost_signaled = True
         if self._on_lock_lost is not None:
             self._on_lock_lost()
 
@@ -472,7 +472,7 @@ class DatabaseService(protocol.ServerSlice):
         """
         if self.is_stopping():
             return
-        LOGGER.critical("Shutting down the server because the database singleton lock was lost.")
+        # The monitor task has already logged why the lock was lost; just trigger the shutdown here.
         os.kill(os.getpid(), signal.SIGTERM)
 
     def get_dependencies(self) -> list[str]:

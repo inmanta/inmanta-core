@@ -74,7 +74,8 @@ async def test_singleton_lock_waits_for_release(postgres_db, database_name):
         releaser = asyncio.ensure_future(release_after_delay())
         # Should block for ~1s until lock1 is released, then succeed well within wait_time.
         await lock2.acquire(wait_time=10)
-        await releaser
+        # acquire only returned because lock1 was released, so the releaser must already be done.
+        assert releaser.done()
     finally:
         await lock1.stop()
         await lock2.stop()

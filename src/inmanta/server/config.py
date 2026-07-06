@@ -67,8 +67,11 @@ db_singleton_lock = Option(
     "for its entire lifetime. A second server pointed at the same database will wait for the lock (see "
     ":inmanta.config:option:`database.singleton_lock_wait_time`) and refuse to start if it cannot get it. "
     "Running two servers against one database corrupts it, so only disable this if you are certain no "
-    "other server is running. The lock requires a session-mode connection to the primary: it does not "
-    "work through a transaction-pooling proxy such as pgbouncer in transaction mode.",
+    "other server is running. The lock uses one dedicated database connection, separate from and in "
+    "addition to the server's connection pool (see "
+    ":inmanta.config:option:`server.db_connection_pool_max_size`), so size the database's max_connections "
+    "accordingly. The lock requires a session-mode connection to the primary: it does not work through a "
+    "transaction-pooling proxy such as pgbouncer in transaction mode.",
     is_bool,
 )
 
@@ -77,7 +80,7 @@ db_singleton_lock_wait_time = Option(
     "singleton_lock_wait_time",
     30,
     "How long, in seconds, the server waits for the singleton lock (see "
-    ":inmanta.config:option:`database.singleton_lock`) to be released by another server before it gives "
+    ":inmanta.config:option:`database.singleton_lock`) to be acquired before it gives "
     "up and refuses to start. This absorbs restarts where the previous server has not fully released the "
     "lock yet. If set to 0, the server tries only once. If set to a negative value, the server waits "
     "forever.",
