@@ -84,6 +84,30 @@ def _get_source_ip(context: common.CallContext) -> str:
     return remote_ip
 
 
+def issue_session_token(user: data.User, role_assignments: model.RoleAssignmentsPerEnvironment) -> tuple[str, int | None]:
+    """
+    Mint a login-session token for the given user and return it together with its lifetime in seconds
+    (None when the token does not expire). Shared by the login and session-renewal endpoints so both issue
+    identical claims and honor the same session lifetime, and so renewal always reflects the user's current
+    roles and admin status.
+    """
+    custom_claims: Mapping[str, str | bool | Mapping[str, list[str]]] = {
+        "sub": user.username,
+        const.INMANTA_ROLES_URN: {str(env_id): roles for env_id, roles in role_assignments.assignments.items()},
+        const.INMANTA_IS_ADMIN_URN: user.is_admin,
+    }
+    # Give login sessions their own lifetime, decoupled from the auth_jwt expire that governs
+    # agent/compiler service tokens. When the option is 0, fall back to the signing config's expire.
+    session_expire = server_config.server_login_session_expire.get()
+    expires_in = session_expire if session_expire > 0 else None
+    token = auth.encode_token(
+        [str(const.ClientType.api.value)],
+        expire=expires_in,
+        custom_claims=custom_claims,
+    )
+    return token, expires_in
+
+
 class UserService(server_protocol.ServerSlice):
     """Slice for managing users"""
 
@@ -204,27 +228,42 @@ class UserService(server_protocol.ServerSlice):
 
         LOGGER.info("Successful login for user '%s' from %s", username, source_ip)
         role_assignments: model.RoleAssignmentsPerEnvironment = await data.Role.get_roles_for_user(username)
-
-        custom_claims: Mapping[str, str | bool | Mapping[str, list[str]]] = {
-            "sub": username,
-            const.INMANTA_ROLES_URN: {str(env_id): roles for env_id, roles in role_assignments.assignments.items()},
-            const.INMANTA_IS_ADMIN_URN: user.is_admin,
-        }
-        # Give login sessions their own lifetime, decoupled from the auth_jwt expire that governs
-        # agent/compiler service tokens. When the option is 0, fall back to the signing config's expire.
-        session_expire = server_config.server_login_session_expire.get()
-        token = auth.encode_token(
-            [str(const.ClientType.api.value)],
-            expire=session_expire if session_expire > 0 else None,
-            custom_claims=custom_claims,
-        )
+        token, expires_in = issue_session_token(user, role_assignments)
         return common.ReturnValue(
             status_code=200,
             headers={"Authorization": f"Bearer {token}"},
-            response=model.LoginReturn(
-                user=user.to_dao(),
-                token=token,
-            ),
+            response=model.LoginReturn(user=user.to_dao(), token=token, expires_in=expires_in),
+        )
+
+    @protocol.handle(protocol.methods_v2.login_renew)
+    async def login_renew(self, context: common.CallContext) -> common.ReturnValue[model.LoginReturn]:
+        verify_authentication_enabled()
+        # Renewal is authenticated by the caller's current, still-valid token: a valid token is the
+        # credential, so no password is checked. Two things must hold for a token to be renewable:
+        #  1. It carries a sub claim identifying the user; a service token (agent/compiler/API) has none.
+        #  2. It was minted by this server's own signing authority. A token merely accepted by decode_token
+        #     is not enough: with an external issuer configured (the break-glass topology where a local
+        #     sign=true section coexists with an OIDC section), a user authenticated against that external
+        #     issuer would otherwise be handed a fresh, locally-signed token carrying the roles and is_admin
+        #     of a same-named local account. So we require the token's issuer to be our own signing issuer.
+        # The user is taken from the token's sub claim, so a caller can only ever renew their own session.
+        sign_config = auth.AuthJWTConfig.get_sign_config()
+        username = context.auth_username
+        token_issuer = context.auth_token.get("iss") if context.auth_token else None
+        if not username or sign_config is None or token_issuer != sign_config.issuer:
+            raise exceptions.BadRequest("Only login sessions issued by this server can be renewed.")
+        user = await data.User.get_one(username=username)
+        if not user:
+            # The user was removed while the session was still active; force a fresh login.
+            raise exceptions.UnauthorizedException(message="User account no longer exists.", no_prefix=True)
+
+        role_assignments: model.RoleAssignmentsPerEnvironment = await data.Role.get_roles_for_user(username)
+        token, expires_in = issue_session_token(user, role_assignments)
+        LOGGER.debug("Renewed the login session for user '%s'", username)
+        return common.ReturnValue(
+            status_code=200,
+            headers={"Authorization": f"Bearer {token}"},
+            response=model.LoginReturn(user=user.to_dao(), token=token, expires_in=expires_in),
         )
 
     @protocol.handle(protocol.methods_v2.get_current_user)
