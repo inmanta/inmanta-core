@@ -21,6 +21,7 @@ import uuid
 from collections.abc import Mapping
 
 import asyncpg
+from pydantic import SecretStr
 
 import nacl.exceptions
 import nacl.pwhash
@@ -44,6 +45,20 @@ def verify_authentication_enabled() -> None:
         )
 
 
+def _get_source_ip(context: common.CallContext) -> str:
+    """
+    Source of the request for audit logging. This is the connection peer IP, which is the client
+    for direct access (the common case for the web console) and the reverse proxy when the API is
+    fronted by one. In the latter case the originating client is reported by the proxy in the
+    X-Forwarded-For header, so it is appended when present.
+    """
+    remote_ip = context.remote_ip or "unknown"
+    forwarded = context.request_headers.get("X-Forwarded-For") or context.request_headers.get("x-forwarded-for")
+    if forwarded:
+        return f"{remote_ip} (X-Forwarded-For: {forwarded.split(',')[0].strip()})"
+    return remote_ip
+
+
 class UserService(server_protocol.ServerSlice):
     """Slice for managing users"""
 
@@ -61,15 +76,16 @@ class UserService(server_protocol.ServerSlice):
         return await data.User.list_users_with_roles()
 
     @protocol.handle(protocol.methods_v2.add_user)
-    async def add_user(self, username: str, password: str) -> model.User:
+    async def add_user(self, username: str, password: SecretStr) -> model.User:
         verify_authentication_enabled()
         if not username:
             raise exceptions.BadRequest("the username cannot be an empty string")
-        if not password or len(password) < MIN_PASSWORD_LENGTH:
+        secret = password.get_secret_value()
+        if not secret or len(secret) < MIN_PASSWORD_LENGTH:
             raise exceptions.BadRequest("the password should be at least 8 characters long")
 
         # hash the password
-        pw_hash = nacl.pwhash.str(password.encode())
+        pw_hash = nacl.pwhash.str(secret.encode())
 
         # insert the user
         try:
@@ -93,9 +109,10 @@ class UserService(server_protocol.ServerSlice):
         await user.delete()
 
     @protocol.handle(protocol.methods_v2.set_password)
-    async def set_password(self, username: str, password: str) -> None:
+    async def set_password(self, username: str, password: SecretStr) -> None:
         verify_authentication_enabled()
-        if not password or len(password) < MIN_PASSWORD_LENGTH:
+        secret = password.get_secret_value()
+        if not secret or len(secret) < MIN_PASSWORD_LENGTH:
             raise exceptions.BadRequest("the password should be at least 8 characters long")
         # check if the user already exists
         user = await data.User.get_one(username=username)
@@ -103,24 +120,30 @@ class UserService(server_protocol.ServerSlice):
             raise exceptions.NotFound(f"User with name {username} does not exist.")
 
         # hash the password
-        pw_hash = nacl.pwhash.str(password.encode())
+        pw_hash = nacl.pwhash.str(secret.encode())
 
         # insert the user
         await user.update_fields(password_hash=pw_hash.decode())
 
     @protocol.handle(protocol.methods_v2.login)
-    async def login(self, username: str, password: str) -> common.ReturnValue[model.LoginReturn]:
+    async def login(
+        self, username: str, password: SecretStr, context: common.CallContext
+    ) -> common.ReturnValue[model.LoginReturn]:
         verify_authentication_enabled()
+        source_ip = _get_source_ip(context)
         # check if the user exists
         invalid_username_password_msg = "Invalid username or password"
         user = await data.User.get_one(username=username)
         if not user or not user.password_hash:
+            LOGGER.warning("Failed login for user '%s' from %s: no such user", username, source_ip)
             raise exceptions.UnauthorizedException(message=invalid_username_password_msg, no_prefix=True)
         try:
-            nacl.pwhash.verify(user.password_hash.encode(), password.encode())
+            nacl.pwhash.verify(user.password_hash.encode(), password.get_secret_value().encode())
         except nacl.exceptions.InvalidkeyError:
+            LOGGER.warning("Failed login for user '%s' from %s: invalid password", username, source_ip)
             raise exceptions.UnauthorizedException(message=invalid_username_password_msg, no_prefix=True)
 
+        LOGGER.info("Successful login for user '%s' from %s", username, source_ip)
         role_assignments: model.RoleAssignmentsPerEnvironment = await data.Role.get_roles_for_user(username)
 
         custom_claims: Mapping[str, str | bool | Mapping[str, list[str]]] = {

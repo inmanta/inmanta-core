@@ -23,6 +23,8 @@ import uuid
 from collections.abc import Mapping, Sequence
 from typing import Any, Literal, Optional, Union
 
+from pydantic import SecretStr
+
 import inmanta.types
 from inmanta import const
 from inmanta.const import AgentAction, AllAgentAction, ApiDocsFormat, Change, ClientType, ParameterSource, ResourceState
@@ -1565,7 +1567,7 @@ def get_environment_metrics(
 
 
 @typedmethod(path="/login", operation="POST", client_types=[ClientType.api], enforce_auth=False, api_version=2)
-def login(username: str, password: str) -> ReturnValue[model.LoginReturn]:
+def login(username: str, password: SecretStr) -> ReturnValue[model.LoginReturn]:
     """Login a user.
 
      When the login succeeds an authentication header is returned with the Bearer token set.
@@ -1606,7 +1608,7 @@ def delete_user(username: str) -> None:
 
 @auth(auth_label=const.CoreAuthorizationLabel.USER_WRITE, read_only=False)
 @typedmethod(path="/user", operation="POST", client_types=[ClientType.api], api_version=2)
-def add_user(username: str, password: str) -> model.User:
+def add_user(username: str, password: SecretStr) -> model.User:
     """Add a new user to the system
 
     :param username: The username of the new user. The username cannot be an empty string.
@@ -1618,7 +1620,7 @@ def add_user(username: str, password: str) -> model.User:
 
 @auth(auth_label=const.CoreAuthorizationLabel.USER_CHANGE_PASSWORD, read_only=False)
 @typedmethod(path="/user/<username>/password", operation="PATCH", client_types=[ClientType.api], api_version=2)
-def set_password(username: str, password: str) -> None:
+def set_password(username: str, password: SecretStr) -> None:
     """Change the password of a user
 
     :param username: The username of the user
