@@ -34,10 +34,10 @@ from typing import Optional, cast
 import asyncpg
 from asyncpg import StringDataRightTruncationError
 
-from inmanta import config, data
+from inmanta import config, const, data
 from inmanta.data import AUTOSTART_AGENT_DEPLOY_INTERVAL, AUTOSTART_AGENT_REPAIR_INTERVAL, Setting, model
 from inmanta.protocol import encode_token, handle, methods, methods_v2
-from inmanta.protocol.common import ReturnValue, attach_warnings
+from inmanta.protocol.common import CallContext, ReturnValue, attach_warnings
 from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound, ServerError
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
@@ -263,11 +263,13 @@ class EnvironmentService(protocol.ServerSlice):
         return 200
 
     @handle(methods.create_token, env="tid")
-    async def create_token(self, env: data.Environment, client_types: list[str], idempotent: bool) -> Apireturn:
+    async def create_token(
+        self, env: data.Environment, client_types: list[str], idempotent: bool, context: CallContext
+    ) -> Apireturn:
         """
         Create a new auth token for this environment
         """
-        return 200, {"token": await self.environment_create_token(env, client_types, idempotent)}
+        return 200, {"token": await self.environment_create_token(env, client_types, idempotent, context)}
 
     @handle(methods.list_settings, env="tid")
     async def list_settings(self, env: data.Environment) -> Apireturn:
@@ -523,13 +525,26 @@ class EnvironmentService(protocol.ServerSlice):
                     await self._resume(env, connection=connection)
 
     @handle(methods_v2.environment_create_token, env="tid")
-    async def environment_create_token(self, env: data.Environment, client_types: list[str], idempotent: bool) -> str:
+    async def environment_create_token(
+        self, env: data.Environment, client_types: list[str], idempotent: bool, context: CallContext
+    ) -> str:
         """
         Create a new auth token for this environment
         """
         if not config.Config.getboolean("server", "auth", False):
             raise BadRequest("Authentication is disabled, generating a token is not allowed")
-        return encode_token(client_types, str(env.id), idempotent)
+        # Attribute the token to the user that created it so that actions performed with it are not
+        # anonymous in the access log. When the token is minted using another attributed token rather
+        # than an interactive session, carry over its creator so attribution survives token chains.
+        # This is a claim only; it is deliberately not stored in sub because the policy engine
+        # authorizes on sub.
+        created_by = context.auth_username
+        if not created_by and context.auth_token is not None:
+            inherited_creator = context.auth_token.get(const.INMANTA_CREATED_BY_URN)
+            if isinstance(inherited_creator, str):
+                created_by = inherited_creator
+        custom_claims = {const.INMANTA_CREATED_BY_URN: created_by} if created_by else None
+        return encode_token(client_types, str(env.id), idempotent, custom_claims=custom_claims)
 
     @handle(methods_v2.environment_settings_list, env="tid")
     async def environment_settings_list(self, env: data.Environment) -> model.EnvironmentSettingsReponse:
