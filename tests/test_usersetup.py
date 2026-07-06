@@ -90,9 +90,9 @@ async def test_user_setup(
     cli = CLI_user_setup()
     result = await cli.run("yes", "new_user", "pw")
     assert result.exit_code == 1
-    assert result.stderr == "Error: the password should be at least 8 characters long\n"
+    assert result.stderr == "Error: the password should be at least 12 characters long\n"
 
-    result = await cli.run("yes", "new_user", "password")
+    result = await cli.run("yes", "new_user", "Str0ng-Pass!")
     assert result.exit_code == 0
 
     users = await data.User.get_list(connection=postgresql_client)
@@ -115,7 +115,7 @@ async def test_user_setup_empty_username(
     setup_config(tmpdir, postgres_db, database_name)
     cli = CLI_user_setup()
 
-    result = await cli.run("yes", "", "password")
+    result = await cli.run("yes", "", "Str0ng-Pass!")
     assert result.exit_code == 0
 
     users = await data.User.get_list(connection=postgresql_client)
@@ -133,7 +133,7 @@ async def test_user_setup_schema_outdated(
         await PGRestore(fh.readlines(), postgresql_client).run()
 
     cli = CLI_user_setup()
-    result = await cli.run("yes", "new_user", "password")
+    result = await cli.run("yes", "new_user", "Str0ng-Pass!")
     assert result.exit_code == 1
     assert (
         result.stderr == "Error: The version of the database is out of date: start the server"

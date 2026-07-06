@@ -19,14 +19,14 @@ Contact: code@inmanta.com
 import logging
 import uuid
 from collections.abc import Mapping
+from typing import Optional
 
 import asyncpg
 from pydantic import SecretStr
 
 import nacl.exceptions
 import nacl.pwhash
-from inmanta import const, data, protocol
-from inmanta.const import MIN_PASSWORD_LENGTH
+from inmanta import const, data, protocol, util
 from inmanta.data import AuthMethod, model
 from inmanta.protocol import common, exceptions
 from inmanta.protocol.auth import auth
@@ -43,6 +43,31 @@ def verify_authentication_enabled() -> None:
         raise exceptions.BadRequest(
             "Server authentication should be enabled. To setup the initial user use the inmanta-initial-user-setup tool."
         )
+
+
+def verify_password_policy(password: str) -> None:
+    """Raise a BadRequest if the password does not satisfy the password policy (length and complexity)."""
+    violation = util.password_policy_violation(password)
+    if violation is not None:
+        raise exceptions.BadRequest(violation)
+
+
+_dummy_password_hash: Optional[str] = None
+
+
+def verify_dummy_password(password: SecretStr) -> None:
+    """
+    Verify the password against a constant dummy hash. This makes the response time of a login for an
+    unknown user match that of a known user with a wrong password, preventing username enumeration
+    through timing.
+    """
+    global _dummy_password_hash
+    if _dummy_password_hash is None:
+        _dummy_password_hash = nacl.pwhash.str(b"a constant dummy password used only for timing").decode()
+    try:
+        nacl.pwhash.verify(_dummy_password_hash.encode(), password.get_secret_value().encode())
+    except nacl.exceptions.InvalidkeyError:
+        pass
 
 
 def _get_source_ip(context: common.CallContext) -> str:
@@ -81,8 +106,7 @@ class UserService(server_protocol.ServerSlice):
         if not username:
             raise exceptions.BadRequest("the username cannot be an empty string")
         secret = password.get_secret_value()
-        if not secret or len(secret) < MIN_PASSWORD_LENGTH:
-            raise exceptions.BadRequest("the password should be at least 8 characters long")
+        verify_password_policy(secret)
 
         # hash the password
         pw_hash = nacl.pwhash.str(secret.encode())
@@ -109,21 +133,47 @@ class UserService(server_protocol.ServerSlice):
         await user.delete()
 
     @protocol.handle(protocol.methods_v2.set_password)
-    async def set_password(self, username: str, password: SecretStr) -> None:
+    async def set_password(
+        self,
+        username: str,
+        password: SecretStr,
+        context: common.CallContext,
+        current_password: Optional[SecretStr] = None,
+    ) -> None:
         verify_authentication_enabled()
         secret = password.get_secret_value()
-        if not secret or len(secret) < MIN_PASSWORD_LENGTH:
-            raise exceptions.BadRequest("the password should be at least 8 characters long")
+        verify_password_policy(secret)
+        source_ip = _get_source_ip(context)
         # check if the user already exists
         user = await data.User.get_one(username=username)
         if not user:
             raise exceptions.NotFound(f"User with name {username} does not exist.")
+
+        # Changing your own password requires proving you know the current one, so a hijacked session
+        # cannot silently take over the account. An administrator changing another user's password does not.
+        if context.auth_username == username:
+            if current_password is None:
+                raise exceptions.BadRequest("changing your own password requires the current password")
+            current_password_ok = bool(user.password_hash)
+            if current_password_ok:
+                try:
+                    nacl.pwhash.verify(user.password_hash.encode(), current_password.get_secret_value().encode())
+                except nacl.exceptions.InvalidkeyError:
+                    current_password_ok = False
+            else:
+                # No local password (e.g. an OIDC-only account): still run a verification so the response
+                # time does not reveal whether the account has a password.
+                verify_dummy_password(current_password)
+            if not current_password_ok:
+                LOGGER.warning("Failed password change for user '%s' from %s: incorrect current password", username, source_ip)
+                raise exceptions.UnauthorizedException(message="The current password is incorrect", no_prefix=True)
 
         # hash the password
         pw_hash = nacl.pwhash.str(secret.encode())
 
         # insert the user
         await user.update_fields(password_hash=pw_hash.decode())
+        LOGGER.info("Password for user '%s' changed by '%s' from %s", username, context.auth_username or "<unknown>", source_ip)
 
     @protocol.handle(protocol.methods_v2.login)
     async def login(
@@ -135,12 +185,21 @@ class UserService(server_protocol.ServerSlice):
         invalid_username_password_msg = "Invalid username or password"
         user = await data.User.get_one(username=username)
         if not user or not user.password_hash:
+            # Still run a verification against a dummy hash so the timing does not reveal that the user
+            # does not exist (username-enumeration resistance).
+            verify_dummy_password(password)
             LOGGER.warning("Failed login for user '%s' from %s: no such user", username, source_ip)
             raise exceptions.UnauthorizedException(message=invalid_username_password_msg, no_prefix=True)
         try:
             nacl.pwhash.verify(user.password_hash.encode(), password.get_secret_value().encode())
         except nacl.exceptions.InvalidkeyError:
             LOGGER.warning("Failed login for user '%s' from %s: invalid password", username, source_ip)
+            raise exceptions.UnauthorizedException(message=invalid_username_password_msg, no_prefix=True)
+        except (ValueError, nacl.exceptions.CryptoError):
+            # A stored hash that cannot be parsed is an authentication failure, not a server error. Most
+            # malformed hashes raise InvalidkeyError (a CryptoError subclass) and are handled above; this
+            # clause also covers a hash that is well-formed but too long, which raises a plain ValueError.
+            LOGGER.warning("Failed login for user '%s' from %s: malformed stored password hash", username, source_ip)
             raise exceptions.UnauthorizedException(message=invalid_username_password_msg, no_prefix=True)
 
         LOGGER.info("Successful login for user '%s' from %s", username, source_ip)

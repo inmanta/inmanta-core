@@ -25,11 +25,11 @@ from asyncpg import PostgresError
 
 import nacl.pwhash
 from inmanta import config, data
-from inmanta.const import MIN_PASSWORD_LENGTH
 from inmanta.data import start_engine, stop_engine
 from inmanta.data.model import AuthMethod
 from inmanta.protocol.auth import auth
 from inmanta.server import config as server_config
+from inmanta.util import password_policy_violation
 
 
 class ConnectionPoolException(Exception):
@@ -133,8 +133,9 @@ async def do_user_setup() -> None:
             raise click.ClickException("the username cannot be an empty string")
 
         password = click.prompt("What password do you want to use?", hide_input=True)
-        if not password or len(password) < MIN_PASSWORD_LENGTH:
-            raise click.ClickException("the password should be at least 8 characters long")
+        password_violation = password_policy_violation(password)
+        if password_violation is not None:
+            raise click.ClickException(password_violation)
 
         pw_hash = nacl.pwhash.str(password.encode())
 
