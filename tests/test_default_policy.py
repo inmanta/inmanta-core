@@ -167,15 +167,15 @@ async def test_default_policy_change_password(server, client) -> None:
     client_user1 = endpoints.Client("client")
 
     # A user can change their own password (self-service requires the current password)
-    result = await client_user1.set_password(username=username1, password="testtest", current_password="password")
+    result = await client_user1.set_password(username=username1, password="Str0ng-Pass!", current_password="password")
     assert result.code == 200
 
     # A user cannot change the password of another user
-    result = await client_user1.set_password(username=username2, password="testtest")
+    result = await client_user1.set_password(username=username2, password="Str0ng-Pass!")
     assert result.code == 403
 
     # A global admin can change any user's password
-    result = await global_admin_client.set_password(username=username2, password="testtest")
+    result = await global_admin_client.set_password(username=username2, password="Str0ng-Pass!")
     assert result.code == 200
 
 

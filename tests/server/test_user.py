@@ -60,14 +60,14 @@ async def test_create_and_delete_user(server: protocol.Server, auth_client: endp
     # Try adding a user with a password that is too short
     response = await auth_client.add_user("admin", "test")
     assert response.code == 400
-    assert response.result["message"] == "Invalid request: the password should be at least 8 characters long"
+    assert response.result["message"] == "Invalid request: the password should be at least 12 characters long"
 
     # Try adding a user with no username
     response = await auth_client.add_user("", "test12345")
     assert response.code == 400
     assert response.result["message"] == "Invalid request: the username cannot be an empty string"
 
-    response = await auth_client.add_user("admin", "test1234")
+    response = await auth_client.add_user("admin", "Str0ng-Pass!")
     assert response.code == 200
 
     response = await auth_client.list_users()
@@ -76,7 +76,7 @@ async def test_create_and_delete_user(server: protocol.Server, auth_client: endp
     assert response.result["data"][0]["username"] == "admin"
 
     # Try adding a user with the same username
-    response = await auth_client.add_user("admin", "test12345")
+    response = await auth_client.add_user("admin", "Str0ng-Pass!")
     assert response.code == 409
     assert (
         response.result["message"] == "Request conflicts with the current state of the resource: A user with name admin "
@@ -93,7 +93,7 @@ async def test_create_and_delete_user(server: protocol.Server, auth_client: endp
 
 async def test_login(server: protocol.Server, client: endpoints.Client, auth_client: endpoints.Client) -> None:
     """Test the built-in user authentication"""
-    response = await auth_client.add_user("admin", "test1234")
+    response = await auth_client.add_user("admin", "Str0ng-Pass!")
     assert response.code == 200
 
     response = await auth_client.list_users()
@@ -110,7 +110,7 @@ async def test_login(server: protocol.Server, client: endpoints.Client, auth_cli
     response = await client.login("admin", "wrong")
     assert response.code == 401
 
-    response = await client.login("admin", "test1234")
+    response = await client.login("admin", "Str0ng-Pass!")
     assert response.code == 200
     assert "token" in response.result["data"]
     assert "user" in response.result["data"]
@@ -168,8 +168,8 @@ async def test_login_audit_logging_and_redaction(
 
 
 async def test_set_password(server: protocol.Server, auth_client: endpoints.Client) -> None:
-    old_pw = "old_password"
-    new_pw = "new_password"
+    old_pw = "Old-Passw0rd!"
+    new_pw = "New-Passw0rd!"
     response = await auth_client.add_user("admin", old_pw)
     assert response.code == 200
 
@@ -180,7 +180,7 @@ async def test_set_password(server: protocol.Server, auth_client: endpoints.Clie
 
     response = await auth_client.set_password("admin", "toshort")
     assert response.code == 400
-    assert response.result["message"] == "Invalid request: the password should be at least 8 characters long"
+    assert response.result["message"] == "Invalid request: the password should be at least 12 characters long"
 
     response = await auth_client.set_password("admin", new_pw)
     assert response.code == 200
@@ -234,7 +234,7 @@ async def test_environment_create_token(server: protocol.Server, auth_client: en
 async def test_password_max_length(server: protocol.Server, auth_client: endpoints.Client) -> None:
     """Passwords longer than MAX_PASSWORD_LENGTH are rejected, on both add_user and set_password."""
     too_long = "a" * (const.MAX_PASSWORD_LENGTH + 1)
-    at_max = "a" * const.MAX_PASSWORD_LENGTH
+    at_max = "Aa1" + "a" * (const.MAX_PASSWORD_LENGTH - 3)
 
     response = await auth_client.add_user("bob", too_long)
     assert response.code == 400

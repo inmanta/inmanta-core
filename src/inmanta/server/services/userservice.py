@@ -27,7 +27,6 @@ from pydantic import SecretStr
 import nacl.exceptions
 import nacl.pwhash
 from inmanta import const, data, protocol
-from inmanta.const import MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH
 from inmanta.data import AuthMethod, model
 from inmanta.protocol import common, exceptions
 from inmanta.protocol.auth import auth
@@ -47,11 +46,10 @@ def verify_authentication_enabled() -> None:
 
 
 def verify_password_policy(password: str) -> None:
-    """Raise a BadRequest if the password does not satisfy the length policy."""
-    if not password or len(password) < MIN_PASSWORD_LENGTH:
-        raise exceptions.BadRequest(f"the password should be at least {MIN_PASSWORD_LENGTH} characters long")
-    if len(password) > MAX_PASSWORD_LENGTH:
-        raise exceptions.BadRequest(f"the password should be at most {MAX_PASSWORD_LENGTH} characters long")
+    """Raise a BadRequest if the password does not satisfy the password policy (length and complexity)."""
+    violation = const.password_policy_violation(password)
+    if violation is not None:
+        raise exceptions.BadRequest(violation)
 
 
 _dummy_password_hash: Optional[str] = None
