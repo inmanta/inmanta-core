@@ -65,7 +65,6 @@ def encode_token(
         payload.update(custom_claims)
 
     if not idempotent:
-        # Use a single time source so iat and exp are consistent and the token lifetime is exactly the requested expiry.
         now = int(time.time())
         payload["iat"] = now
 
