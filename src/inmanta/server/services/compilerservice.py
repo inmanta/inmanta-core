@@ -184,12 +184,11 @@ class CompileRun:
             ret, _, _ = await asyncio.gather(sub_process.wait(), self.drain_out(out), self.drain_err(err))
             return ret
 
-    async def get_remote(self) -> str | None:
+    async def _run_cmd_async(*cmd: str) -> str | None:
         try:
             sub_process = await asyncio.create_subprocess_exec(
-                "git", "remote", "get-url", "origin", stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=self._project_dir
+                *cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=self._project_dir
             )
-
             out, _ = await sub_process.communicate()
         finally:
             if sub_process.returncode is None:
@@ -198,25 +197,19 @@ class CompileRun:
 
         if sub_process.returncode != 0:
             return None
+        else:
+            return out.decode()
 
-        return out.decode().strip()
+    async def get_remote(self) -> str | None:
+        result: str | None = await self._run_cmd_async("git", "remote", "get-url", "origin")
+        return result.strip() is result is not None else None
 
-    async def get_branch(self) -> Optional[str]:
-        try:
-            sub_process = await asyncio.create_subprocess_exec(
-                "git", "branch", stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=self._project_dir
-            )
-
-            out, err = await sub_process.communicate()
-        finally:
-            if sub_process.returncode is None:
-                # The process is still running, kill it
-                sub_process.kill()
-
-        if sub_process.returncode != 0:
+    async def get_branch(self) -> str | None:
+        result: str | None = await self._run_cmd_async("git", "branch")
+        if result is None:
             return None
 
-        o = re.search(r"\* ([^\s]+)$", out.decode(), re.MULTILINE)
+        o = re.search(r"\* ([^\s]+)$", out, re.MULTILINE)
         if o is not None:
             return o.group(1)
         else:
@@ -226,26 +219,8 @@ class CompileRun:
         """
         Returns the fully qualified branch name of the upstream branch associated with the currently checked out branch.
         """
-        try:
-            sub_process = await asyncio.create_subprocess_exec(
-                "git",
-                "rev-parse",
-                "--symbolic-full-name",
-                "@{upstream}",
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                cwd=self._project_dir,
-            )
-            out, err = await sub_process.communicate()
-        finally:
-            if sub_process.returncode is None:
-                # The process is still running, kill it
-                sub_process.kill()
-
-        if sub_process.returncode != 0:
-            return None
-
-        return out.decode().strip()
+        result: str | None = await self._run_cmd_async("git", "rev-parse", "--symbolic-full-name", "@{upstream}")
+        return result.strip() is result is not None else None
 
     async def _run_compile_stage(self, name: str, cmd: list[str], cwd: str, env: dict[str, str] = {}) -> data.Report:
         await self._start_stage(name, " ".join(cmd))
