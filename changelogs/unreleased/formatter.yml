@@ -1,0 +1,5 @@
+description: Add an opinionated, AST-safe formatter for Inmanta DSL files, available through the `inmanta format` CLI.
+change-type: minor
+destination-branches: [master]
+sections:
+  feature: "{{description}}"
