@@ -122,7 +122,10 @@ def do_compile(refs: Optional[abc.Mapping[object, object]] = None) -> tuple[dict
     When the compile fails because a relation was frozen before all its contributions were known (modified after
     freeze), the freeze order was a wrong heuristic choice rather than a model error, so the compile is retried
     with the violated relations frozen as late as possible. Every retry has to learn at least one new relation,
-    so a model without a valid evaluation order still fails with the original error.
+    with a single exception: one final retry that learns nothing new is allowed, because a failed attempt can
+    leave behind state (requested facts and parameters, persisted allocations) that lets the next attempt succeed.
+    A model without a valid evaluation order therefore still fails with the original error, after at most one
+    compile attempt more than the number of relations it can learn.
 
     The learned relations are cached in the project's cf cache directory so that future compiles of a model that
     needs them succeed in a single attempt. The cache only changes based on observed compiles, so the freeze order
@@ -136,6 +139,8 @@ def do_compile(refs: Optional[abc.Mapping[object, object]] = None) -> tuple[dict
     project = module.Project.get()
     cached_freeze_hints: set[tuple[str, str]] = _load_freeze_order_hints(project)
     freeze_relations_last: set[tuple[str, str]] = set(cached_freeze_hints)
+    # one modified-after-freeze retry is allowed even when it learns no new relation, see the except clause
+    final_retry_left: bool = True
     while True:
         compiler = Compiler(refs=refs)
 
@@ -153,7 +158,8 @@ def do_compile(refs: Optional[abc.Mapping[object, object]] = None) -> tuple[dict
             success = sched.run(compiler, statements, blocks)
         except CompilerException as e:
             raised_compile_exception = True
-            new_freeze_hints: set[tuple[str, str]] = _relations_modified_after_freeze(e) - freeze_relations_last
+            violated_relations: set[tuple[str, str]] = _relations_modified_after_freeze(e)
+            new_freeze_hints: set[tuple[str, str]] = violated_relations - freeze_relations_last
             if new_freeze_hints:
                 freeze_relations_last |= new_freeze_hints
                 LOGGER.warning(
@@ -163,6 +169,18 @@ def do_compile(refs: Optional[abc.Mapping[object, object]] = None) -> tuple[dict
                 )
                 # the AST is cached on the project and holds state from this compile (type definitions registered
                 # on the namespaces), so force a fresh load for the next attempt
+                project.invalidate_state()
+                continue
+            if violated_relations and final_retry_left:
+                # A failed attempt can leave behind state that lets the next attempt succeed, even with the same
+                # freeze order hints: it requests facts and parameters and persists allocations, just like the
+                # unknown-driven recompiles of the server converge over multiple compiles.
+                final_retry_left = False
+                LOGGER.warning(
+                    "Compilation failed again because relations were frozen before all their contributions were"
+                    " known: %s. Retrying one more time.",
+                    ", ".join(sorted(f"{entity}.{relation}" for entity, relation in violated_relations)),
+                )
                 project.invalidate_state()
                 continue
             if compiler_config.dataflow_graphic_enable.get():

@@ -252,14 +252,17 @@ def test_freeze_order_retry_calls_finalizers_once(snippetcompiler: "SnippetCompi
     assert len(calls) == 1
 
 
-def test_freeze_order_cycle_still_fails(snippetcompiler: "SnippetCompilationTest") -> None:
+def test_freeze_order_cycle_still_fails(snippetcompiler: "SnippetCompilationTest", caplog: pytest.LogCaptureFixture) -> None:
     """
     Verify that a model without any valid freeze order still fails with the modified-after-freeze error: the
-    retry mechanism gives up as soon as a compile attempt does not learn any new relation to freeze late.
+    retry mechanism gives up after the first compile attempt that does not learn any new relation to freeze
+    late, plus the single allowed retry without progress.
     """
     snippetcompiler.setup_for_snippet(MODEL_FREEZE_ORDER_CYCLE, autostd=True)
-    with pytest.raises(CompilerException) as exc_info:
-        compiler.do_compile()
+    with caplog.at_level(logging.WARNING):
+        with pytest.raises(CompilerException) as exc_info:
+            compiler.do_compile()
+    assert len([record for record in caplog.records if "Retrying one more time" in record.message]) == 1
     exceptions: list[CompilerException] = [exc_info.value]
     freeze_exceptions: list[ModifiedAfterFreezeException] = []
     while exceptions:
