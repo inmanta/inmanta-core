@@ -247,7 +247,12 @@ crashes with one of the following exception:
 * ``Optional variable accessed that has no value``: This error occurs when a ``[0:1]`` relationship was considered
   complete too soon.
 
-The following sections provide information on how this issue can be resolved.
+When a compile fails with a ``List modified after freeze`` error, the compiler automatically recompiles the model,
+this time considering the relationships that were considered complete too soon as late as possible. In most cases
+this retry resolves the problem and the compile succeeds without any action from the user (the retry is visible as
+a warning in the compiler output). Only when the retry cannot find an order in which the model compiles, the
+compilation fails with the error mentioned above. The following sections provide information on how this issue can
+be resolved in that case.
 
 Relationship precedence policy
 ------------------------------

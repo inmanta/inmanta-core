@@ -16,9 +16,14 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import logging
 import typing
 
+import pytest
+
 import inmanta.compiler as compiler
+from inmanta.ast import CompilerException, ModifiedAfterFreezeException
+from utils import log_contains
 
 if typing.TYPE_CHECKING:
     from conftest import SnippetCompilationTest
@@ -40,9 +45,8 @@ if typing.TYPE_CHECKING:
 # List modified after freeze. Progress potential is purely local: the scheduler does
 # not consider that freezing one candidate can add providers to another.
 #
-# The choice is order-sensitive, not semantic: moving the registry/if statements in
-# front of the tunnel/rule_count statements flips the waitqueue order and the exact
-# same model compiles successfully.
+# The compile as a whole still succeeds: do_compile detects the modified-after-freeze
+# failure and recompiles with Host.rules frozen as late as possible.
 MODEL_PLUGIN_CONSUMERS: str = """
 entity Host: end
 entity Rule:
@@ -94,26 +98,64 @@ end
 """
 
 
-def test_freeze_order_with_plugin_consumers(snippetcompiler: "SnippetCompilationTest") -> None:
-    """
-    A valid freeze order exists for this model (Registry.sources before Host.rules), so it should compile.
+# Every freeze order fails for this model: freezing either list unblocks the if statement
+# that contributes to the other list, which at that point is either already frozen or
+# freezes before the contribution arrives, closing the cycle in the other direction.
+MODEL_FREEZE_ORDER_CYCLE: str = """
+entity A: end
+entity Item:
+    string name
+end
 
-    Currently fails with List modified after freeze because the scheduler freezes Host.rules first,
-    see the comment on MODEL_PLUGIN_CONSUMERS.
+A.alist [0:] -- Item
+A.blist [0:] -- Item
+
+implement A using std::none
+implement Item using std::none
+
+a = A()
+a.alist += Item(name="seed_a")
+a.blist += Item(name="seed_b")
+
+if std::count(a.alist) > 0:
+    a.blist += Item(name="from_a")
+end
+
+if std::count(a.blist) > 0:
+    a.alist += Item(name="from_b")
+end
+"""
+
+
+def test_freeze_order_with_plugin_consumers(
+    snippetcompiler: "SnippetCompilationTest", caplog: pytest.LogCaptureFixture
+) -> None:
+    """
+    Verify that a model that has a valid freeze order (Registry.sources before Host.rules) compiles even though
+    the scheduler's greedy freeze choice picks Host.rules first: the compile is retried with Host.rules frozen
+    as late as possible, see the comment on MODEL_PLUGIN_CONSUMERS.
     """
     snippetcompiler.setup_for_snippet(MODEL_PLUGIN_CONSUMERS, autostd=True)
-    types, _ = compiler.do_compile()
+    with caplog.at_level(logging.WARNING):
+        types, _ = compiler.do_compile()
     host = types["__config__::Host"].get_all_instances()[0]
     rules = host.get_attribute("rules").get_value()
     assert sorted(rule.get_attribute("name").get_value() for rule in rules) == ["one", "static", "two"]
+    # the model compiled through the recovery path, not by a lucky freeze order
+    log_contains(
+        caplog,
+        "inmanta.compiler",
+        logging.WARNING,
+        "relations were frozen before all their contributions were known: __config__::Host.rules",
+    )
 
 
 def test_freeze_order_gradual_consumers_only(snippetcompiler: "SnippetCompilationTest") -> None:
     """
-    Control for test_freeze_order_with_plugin_consumers: the same model compiles when the relation is
-    assigned directly instead of being consumed by plugins. Relation assignment is a gradual union, so
-    it does not give host.rules progress potential and the scheduler freezes it last, after the App
-    instances have contributed their rules.
+    Control for test_freeze_order_with_plugin_consumers: the same model compiles in a single attempt when the
+    relation is assigned directly instead of being consumed by plugins. Relation assignment is a gradual union,
+    so it does not give host.rules progress potential and the scheduler freezes it last, after the App instances
+    have contributed their rules.
     """
     model: str = MODEL_PLUGIN_CONSUMERS.replace(
         'tunnel = Tunnel(ingress=std::key_sort(host.rules, "name"))\nrule_count = std::count(host.rules)',
@@ -122,3 +164,22 @@ def test_freeze_order_gradual_consumers_only(snippetcompiler: "SnippetCompilatio
     assert "key_sort" not in model  # guard the replace against model refactoring
     snippetcompiler.setup_for_snippet(model, autostd=True)
     compiler.do_compile()
+
+
+def test_freeze_order_cycle_still_fails(snippetcompiler: "SnippetCompilationTest") -> None:
+    """
+    Verify that a model without any valid freeze order still fails with the modified-after-freeze error: the
+    retry mechanism gives up as soon as a compile attempt does not learn any new relation to freeze late.
+    """
+    snippetcompiler.setup_for_snippet(MODEL_FREEZE_ORDER_CYCLE, autostd=True)
+    with pytest.raises(CompilerException) as exc_info:
+        compiler.do_compile()
+    exceptions: list[CompilerException] = [exc_info.value]
+    freeze_exceptions: list[ModifiedAfterFreezeException] = []
+    while exceptions:
+        current = exceptions.pop()
+        if isinstance(current, ModifiedAfterFreezeException):
+            freeze_exceptions.append(current)
+        exceptions.extend(current.get_causes())
+    assert freeze_exceptions, f"Expected a ModifiedAfterFreezeException, got {exc_info.value.format_trace()}"
+    assert "List modified after freeze" in freeze_exceptions[0].get_message()

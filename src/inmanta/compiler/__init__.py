@@ -34,11 +34,13 @@ from inmanta.ast import (
     DoubleSetException,
     LocatableString,
     Location,
+    ModifiedAfterFreezeException,
     MultiException,
     Namespace,
     Range,
     UnsetException,
 )
+from inmanta.ast.attribute import RelationAttribute
 from inmanta.ast.entity import Entity
 from inmanta.ast.statements.define import DefineEntity, DefineRelation, PluginStatement
 from inmanta.compiler import config as compiler_config
@@ -57,43 +59,79 @@ if TYPE_CHECKING:
     from inmanta.ast import BasicBlock, Statement  # noqa: F401
 
 
+def _relations_modified_after_freeze(exception: CompilerException) -> set[tuple[str, str]]:
+    """
+    Return the (entity type name, relation name) pair of each relation that is reported modified after freeze
+    anywhere in the given exception's cause tree.
+    """
+    result: set[tuple[str, str]] = set()
+    work: list[CompilerException] = [exception]
+    while work:
+        current = work.pop()
+        if isinstance(current, ModifiedAfterFreezeException) and isinstance(current.attribute, RelationAttribute):
+            result.add((current.attribute.entity.get_full_name(), current.attribute.name))
+        work.extend(current.get_causes())
+    return result
+
+
 def do_compile(refs: Optional[abc.Mapping[object, object]] = None) -> tuple[dict[str, inmanta_type.Type], Namespace]:
     """
     Perform a complete compilation run for the current project (as returned by :py:meth:`inmanta.module.Project.get`)
 
+    When the compile fails because a relation was frozen before all its contributions were known (modified after
+    freeze), the freeze order was a wrong heuristic choice rather than a model error, so the compile is retried
+    with the violated relations frozen as late as possible. Every retry has to learn at least one new relation,
+    so a model without a valid evaluation order still fails with the original error.
+
     :param refs: Datastructure used to pass on mocking information to the compiler. Supported options:
                     * key="facts"; value=Dict with the following structure: {"<resource_id": {"<fact_name>": "<fact_value"}}
     """
-    compiler = Compiler(refs=refs)
+    freeze_relations_last: set[tuple[str, str]] = set()
+    while True:
+        compiler = Compiler(refs=refs)
 
-    LOGGER.debug("Starting compile")
+        LOGGER.debug("Starting compile")
 
-    project = module.Project.get()
-    try:
-        statements, blocks = compiler.compile()
-    except ParserException as e:
-        compiler.handle_exception(e)
-    sched = scheduler.Scheduler(compiler_config.track_dataflow(), project.get_relation_precedence_policy())
-    raised_compile_exception: bool = False
-    try:
-        success = sched.run(compiler, statements, blocks)
-    except CompilerException as e:
-        raised_compile_exception = True
+        project = module.Project.get()
+        try:
+            statements, blocks = compiler.compile()
+        except ParserException as e:
+            compiler.handle_exception(e)
+        sched = scheduler.Scheduler(
+            compiler_config.track_dataflow(), project.get_relation_precedence_policy(), freeze_relations_last
+        )
+        raised_compile_exception: bool = False
+        try:
+            success = sched.run(compiler, statements, blocks)
+        except CompilerException as e:
+            raised_compile_exception = True
+            new_freeze_hints: set[tuple[str, str]] = _relations_modified_after_freeze(e) - freeze_relations_last
+            if new_freeze_hints:
+                freeze_relations_last |= new_freeze_hints
+                LOGGER.warning(
+                    "Compilation failed because the following relations were frozen before all their contributions"
+                    " were known: %s. Recompiling with these relations frozen as late as possible.",
+                    ", ".join(sorted(f"{entity}.{relation}" for entity, relation in new_freeze_hints)),
+                )
+                # the AST is cached on the project and holds state from this compile (type definitions registered
+                # on the namespaces), so force a fresh load for the next attempt
+                project.invalidate_state()
+                continue
+            if compiler_config.dataflow_graphic_enable.get():
+                show_dataflow_graphic(sched, compiler)
+            compiler.handle_exception(e)
+            success = False
+        finally:
+            Finalizers.call_finalizers(raised_compile_exception)
+        LOGGER.debug("Compile done")
+
+        if not success:
+            sys.stderr.write("Unable to execute all statements.\n")
+        if compiler_config.export_compile_data.get():
+            compiler.export_data()
         if compiler_config.dataflow_graphic_enable.get():
             show_dataflow_graphic(sched, compiler)
-        compiler.handle_exception(e)
-        success = False
-    finally:
-        Finalizers.call_finalizers(raised_compile_exception)
-    LOGGER.debug("Compile done")
-
-    if not success:
-        sys.stderr.write("Unable to execute all statements.\n")
-    if compiler_config.export_compile_data.get():
-        compiler.export_data()
-    if compiler_config.dataflow_graphic_enable.get():
-        show_dataflow_graphic(sched, compiler)
-    return (sched.get_types(), compiler.get_ns())
+        return (sched.get_types(), compiler.get_ns())
 
 
 def show_dataflow_graphic(scheduler: scheduler.Scheduler, compiler: "Compiler") -> None:
