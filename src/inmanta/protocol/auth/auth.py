@@ -49,6 +49,19 @@ def encode_token(
     expire: Optional[float] = None,
     custom_claims: Optional[Mapping[str, str | bool | Mapping[str, list[str]]]] = None,
 ) -> str:
+    """
+    Encode and sign a JWT bearer token for the given client types.
+
+    :param client_types: The client types to embed in the token. Each must be allowed by the signing configuration.
+    :param environment: When set, scope the token to this environment by adding an environment claim.
+    :param idempotent: When True, omit the time-based claims (iat and exp) so that encoding identical inputs always
+        produces an identical token. Used for tokens that must be stable across calls, such as environment tokens.
+    :param expire: The token lifetime in seconds. Takes precedence over the expiry from the signing configuration.
+        Ignored when idempotent is True.
+    :param custom_claims: Additional claims to merge into the token payload.
+    :return: The signed JWT as a string.
+    :raises Exception: When no signing configuration is available or a requested client type is not allowed.
+    """
     cfg = AuthJWTConfig.get_sign_config()
     if cfg is None:
         raise Exception("No JWT signing configuration available.")
@@ -65,12 +78,16 @@ def encode_token(
         payload.update(custom_claims)
 
     if not idempotent:
-        payload["iat"] = int(time.time())
+        now = int(time.time())
+        payload["iat"] = now
 
-        if cfg.expire > 0:
-            payload["exp"] = int(time.time() + cfg.expire)
-        elif expire is not None:
-            payload["exp"] = int(time.time() + expire)
+        # An explicit expire argument takes precedence over the signing config's expire, so a caller
+        # (e.g. the login endpoint) can give its tokens a lifetime that is decoupled from the service
+        # token expiry configured on the signing config.
+        if expire is not None:
+            payload["exp"] = now + int(expire)
+        elif cfg.expire > 0:
+            payload["exp"] = now + int(cfg.expire)
 
     if environment is not None:
         payload[const.INMANTA_URN + "env"] = environment

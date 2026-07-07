@@ -152,6 +152,16 @@ server_auth_method = Option("server", "auth_method", "oidc", "The authentication
 server_additional_auth_header = Option(
     "server", "auth_additional_header", None, "An additional header to look for authentication tokens", is_str_opt
 )
+server_login_session_expire = Option(
+    "server",
+    "login_session_expire",
+    3600,
+    "Lifetime in seconds of the session token issued by the /login endpoint, used by the web console under "
+    "database or break-glass authentication. Defaults to 3600 (one hour) and is independent of the auth_jwt "
+    "`expire` option that governs agent and compiler service tokens. Set to 0 to instead follow the auth_jwt "
+    "`expire` behavior (which is eternal by default).",
+    is_time,
+)
 
 server_ssl_key = Option(
     "server", "ssl_key_file", None, "Server private key to use for this server Leave blank to disable SSL", is_str_opt
