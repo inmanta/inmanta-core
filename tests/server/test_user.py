@@ -18,6 +18,7 @@ Contact: code@inmanta.com
 
 import logging
 
+import jwt
 import pytest
 
 import nacl.pwhash
@@ -165,6 +166,35 @@ async def test_login_audit_logging_and_redaction(
     login_call_logs = [record.getMessage() for record in caplog.records if "Calling method login" in record.getMessage()]
     assert login_call_logs
     assert all(password not in message and wrong_password not in message for message in login_call_logs)
+
+
+async def test_login_session_expire(server: protocol.Server, auth_client: endpoints.Client) -> None:
+    """
+    The login session token gets its own lifetime via server.login_session_expire, decoupled from the
+    auth_jwt `expire` (which is 0/eternal in this fixture and governs agent/compiler service tokens).
+    """
+    response = await auth_client.add_user("admin", "Str0ng-Pass!")
+    assert response.code == 200
+
+    # By default login sessions expire after one hour, even though the signing config's expire is 0.
+    response = await auth_client.login("admin", "Str0ng-Pass!")
+    assert response.code == 200
+    claims = jwt.decode(response.result["data"]["token"], options={"verify_signature": False})
+    assert claims["exp"] - claims["iat"] == 3600
+
+    # Setting the option to 0 restores the old behavior: fall back to the signing config's expire (eternal here).
+    config.Config.set("server", "login_session_expire", "0")
+    response = await auth_client.login("admin", "Str0ng-Pass!")
+    assert response.code == 200
+    claims = jwt.decode(response.result["data"]["token"], options={"verify_signature": False})
+    assert "exp" not in claims
+
+    # A custom value is honored.
+    config.Config.set("server", "login_session_expire", "7200")
+    response = await auth_client.login("admin", "Str0ng-Pass!")
+    assert response.code == 200
+    claims = jwt.decode(response.result["data"]["token"], options={"verify_signature": False})
+    assert claims["exp"] - claims["iat"] == 7200
 
 
 async def test_set_password(server: protocol.Server, auth_client: endpoints.Client) -> None:
