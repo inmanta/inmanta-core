@@ -75,8 +75,9 @@ def test_encode_token_expire_precedence(inmanta_config):
 
     # An idempotent token never gets an expiry, regardless of either setting.
     assert "exp" not in jwt.decode(auth.encode_token(["api"], idempotent=True), options={"verify_signature": False})
-    assert "exp" not in jwt.decode(auth.encode_token(["api"], idempotent=True, expire=3600), options={"verify_signature": False})
-
+    assert "exp" not in jwt.decode(
+        auth.encode_token(["api"], idempotent=True, expire=3600), options={"verify_signature": False}
+    )
 
 
 class PKHandler(web.RequestHandler):
