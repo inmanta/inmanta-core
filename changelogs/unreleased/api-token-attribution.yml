@@ -1,0 +1,9 @@
+description: >-
+  Attribute API tokens to the user that created them. Tokens minted via
+  environment_create_token now carry a urn:inmanta:created_by claim, and the
+  per-call request log (debug level) reports the token's client types, creator
+  and environment (token=api created_by=bob env=...) instead of an anonymous
+  user=<>. As a result, an idempotent token now differs per creating user.
+change-type: minor
+destination-branches:
+  - iso9

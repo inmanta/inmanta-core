@@ -612,6 +612,36 @@ class CallArguments:
         client_types_token = self._auth_token[ct_key]
         return any(ct in {const.ClientType.agent.value, const.ClientType.compiler.value} for ct in client_types_token)
 
+    def describe_actor(self) -> str:
+        """
+        Short description of the authenticated actor for the access log.
+
+        Interactive sessions carry a username (the sub claim) and are logged as user=<name>.
+        API and service tokens have no sub; they are logged from their claims as
+        token=<client-types> created_by=<creator> env=<env> so that actions performed with a
+        token are attributable instead of appearing as user=<>.
+        """
+        if self._auth_username:
+            return f"user={self._auth_username}"
+        if self._auth_token is None:
+            return "user=<>"
+        # ct is decoded into a list of client types (see decode_token); render it comma-joined.
+        client_types = self._auth_token.get(const.INMANTA_URN + "ct")
+        if isinstance(client_types, str):
+            rendered_client_types = client_types
+        elif isinstance(client_types, Sequence) and client_types:
+            rendered_client_types = ",".join(str(ct) for ct in client_types)
+        else:
+            rendered_client_types = "<>"
+        parts: list[str] = [f"token={rendered_client_types}"]
+        created_by = self._auth_token.get(const.INMANTA_CREATED_BY_URN)
+        if created_by:
+            parts.append(f"created_by={created_by}")
+        env = self._auth_token.get(const.INMANTA_URN + "env")
+        if env:
+            parts.append(f"env={env}")
+        return " ".join(parts)
+
 
 # Shared
 class RESTBase(util.TaskHandler[None], abc.ABC):
@@ -674,10 +704,10 @@ class RESTBase(util.TaskHandler[None], abc.ABC):
                 await authorization_provider.authorize_request(arguments)
 
             LOGGER.debug(
-                "Calling method %s(%s) user=%s",
+                "Calling method %s(%s) %s",
                 config.method_name,
                 ", ".join([f"{name}={common.shorten(str(value))}" for name, value in arguments.call_args.items()]),
-                arguments.auth_username if arguments.auth_username else "<>",
+                arguments.describe_actor(),
             )
 
             with tracing.span("Calling method " + config.method_name, arguments=arguments.call_args):
