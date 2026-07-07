@@ -170,7 +170,12 @@ def do_compile(refs: Optional[abc.Mapping[object, object]] = None) -> tuple[dict
             compiler.handle_exception(e)
             success = False
         finally:
-            Finalizers.call_finalizers(raised_compile_exception)
+            try:
+                Finalizers.call_finalizers(raised_compile_exception)
+            finally:
+                # the finalizers registered by this attempt must not survive into a retry, or a later
+                # compile in the same process, where they would be called a second time
+                Finalizers.reset_finalizers()
         LOGGER.debug("Compile done")
 
         if not success:

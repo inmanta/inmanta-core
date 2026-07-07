@@ -25,6 +25,7 @@ import pytest
 
 import inmanta.compiler as compiler
 from inmanta.ast import CompilerException, ModifiedAfterFreezeException
+from inmanta.module import RelationPrecedenceRule
 from utils import log_contains, log_doesnt_contain
 
 if typing.TYPE_CHECKING:
@@ -208,6 +209,47 @@ def test_freeze_order_hints_cache_pruned(snippetcompiler: "SnippetCompilationTes
     compiler.do_compile()
     with open(cache_path, encoding="utf-8") as fh:
         assert json.load(fh) == []
+
+
+def test_freeze_order_hint_defers_to_precedence_policy(
+    snippetcompiler: "SnippetCompilationTest", caplog: pytest.LogCaptureFixture
+) -> None:
+    """
+    Verify that a relation with an explicit relation precedence rule is scheduled by that rule, even when a
+    cached freeze-order hint names the same relation: the rule already freezes it in a valid order, so the
+    model compiles in a single attempt.
+    """
+    project = snippetcompiler.setup_for_snippet(
+        MODEL_PLUGIN_CONSUMERS,
+        autostd=True,
+        relation_precedence_rules=[
+            RelationPrecedenceRule(
+                first_type="__config__::Registry",
+                first_relation_name="sources",
+                then_type="__config__::Host",
+                then_relation_name="rules",
+            )
+        ],
+    )
+    cache_path: str = compiler._freeze_order_hints_cache_path(project)
+    os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+    with open(cache_path, "w", encoding="utf-8") as fh:
+        json.dump([["__config__::Host", "rules"]], fh)
+    with caplog.at_level(logging.WARNING):
+        compiler.do_compile()
+    log_doesnt_contain(caplog, "inmanta.compiler", logging.WARNING, "relations were frozen before all their contributions")
+
+
+def test_freeze_order_retry_calls_finalizers_once(snippetcompiler: "SnippetCompilationTest") -> None:
+    """
+    Verify that a finalizer is called exactly once when the compile is retried: the finalizers of a
+    discarded attempt must not survive into, and be called again by, later attempts.
+    """
+    calls: list[int] = []
+    compiler.Finalizers.add_function(lambda: calls.append(1))
+    snippetcompiler.setup_for_snippet(MODEL_PLUGIN_CONSUMERS, autostd=True)
+    compiler.do_compile()
+    assert len(calls) == 1
 
 
 def test_freeze_order_cycle_still_fails(snippetcompiler: "SnippetCompilationTest") -> None:
