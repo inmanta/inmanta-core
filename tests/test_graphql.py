@@ -40,7 +40,7 @@ from inmanta.protocol import Result
 from inmanta.server import SLICE_COMPILER, SLICE_GRAPHQL
 from inmanta.server.services.compilerservice import CompilerService
 from inmanta.util import retry_limited
-from sqlalchemy import Select, and_, literal, select, true
+from sqlalchemy import Select, and_, func, literal, select, true
 from sqlalchemy.orm import query_expression, with_expression
 from strawberry_sqlalchemy_mapper import StrawberrySQLAlchemyMapper
 from strawberry_sqlalchemy_mapper.mapper import _GENERATED_FIELD_KEYS_KEY
@@ -1895,3 +1895,81 @@ async def test_custom_extension_environment_filter(server, client, project_defau
     check_correct_graphql_response(result)
     all_names = {edge["node"]["name"] for edge in result.result["data"]["data"]["environments"]["edges"]}
     assert {"alpha", "alpine", "beta"} <= all_names
+
+
+async def test_custom_extension_filter_field_collision(server):
+    """
+    A contributed filter field whose name collides with a core field (or another extension's) is rejected when the
+    schema is built. The composed filter input is built by multiple inheritance, so a collision would silently
+    merge the two fields into one; detecting it up front surfaces the misconfigured extension instead.
+    """
+
+    @strawberry.input
+    class CollidingEnvironmentFilter(StrawberryFilter):
+        # `id` already exists on CoreEnvironmentFilter.
+        id: uuid.UUID | None = strawberry.UNSET
+
+        def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
+            return stmt
+
+    class CollidingContribution(GraphQLContribution):
+        @classmethod
+        def get_target_model(cls) -> type:
+            return models.Environment
+
+        @classmethod
+        def get_filter_input_class(cls) -> type[StrawberryFilter] | None:
+            return CollidingEnvironmentFilter
+
+    graphql_slice = server.get_slice(SLICE_GRAPHQL)
+    assert isinstance(graphql_slice, GraphQLSlice)
+    graphql_slice.schema = None
+    graphql_slice.register_graphql_contribution_for_extension("example", CollidingContribution)
+    with pytest.raises(Exception, match="id defined more than once in Environment filters."):
+        await graphql_slice.start()
+
+
+async def test_custom_extension_filter_validation(server, client, project_default):
+    """
+    validate_filter is available on every filter, not just resources: an extension contributing a filter to the
+    (non-resource) `environments` query can reject invalid field combinations, and the error is surfaced to the user.
+    """
+
+    @strawberry.input
+    class ValidatingEnvironmentFilter(StrawberryFilter):
+        min_name_length: int | None = strawberry.UNSET
+
+        def validate_filter(self) -> None:
+            if is_provided(self.min_name_length) and self.min_name_length < 0:
+                raise ValueError("minNameLength must not be negative")
+
+        def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
+            if is_provided(self.min_name_length):
+                stmt = stmt.where(func.length(models.Environment.name) >= self.min_name_length)
+            return stmt
+
+    class ValidatingContribution(GraphQLContribution):
+        @classmethod
+        def get_target_model(cls) -> type:
+            return models.Environment
+
+        @classmethod
+        def get_filter_input_class(cls) -> type[StrawberryFilter] | None:
+            return ValidatingEnvironmentFilter
+
+    graphql_slice = server.get_slice(SLICE_GRAPHQL)
+    assert isinstance(graphql_slice, GraphQLSlice)
+    graphql_slice.schema = None
+    graphql_slice.register_graphql_contribution_for_extension("example", ValidatingContribution)
+    await graphql_slice.start()
+
+    # An invalid value is rejected by validate_filter (proving it runs for non-resource filters too).
+    result = await client.graphql(query="{ environments (filter: {minNameLength: -1}) { edges { node { name } } } }")
+    assert result.code == 400
+    assert result.result["data"]["data"] is None
+    assert len(result.result["data"]["errors"]) == 1
+    assert result.result["data"]["errors"][0] == "minNameLength must not be negative"
+
+    # A valid value passes validation and is applied.
+    result = await client.graphql(query="{ environments (filter: {minNameLength: 0}) { edges { node { name } } } }")
+    check_correct_graphql_response(result)

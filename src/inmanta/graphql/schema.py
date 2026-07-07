@@ -513,6 +513,14 @@ class StrawberryFilter:
         """
         return stmt.filter_by(**self.get_filter_dict())
 
+    def validate_filter(self) -> None:
+        """
+        Validate the provided filter fields, raising a `ValueError` if they are inconsistent (e.g. two mutually
+        exclusive fields are set). Called on every component of a composed filter before it is applied. The default
+        accepts everything; override to add component-specific validation.
+        """
+        return
+
 
 @strawberry.input
 class StrawberryOrder:
@@ -751,12 +759,6 @@ class ResourceFilterABC(StrawberryFilter):
     """
 
     environment: uuid.UUID
-
-    def validate_filter(self) -> None:
-        """
-        Checks if the provided filter fields are valid.
-        """
-        return
 
     def handles_version(self) -> bool:
         """
@@ -1250,6 +1252,14 @@ def build_composed_filter_input(
     :param contributions: the extension contributions that target this type.
     """
     components = get_filter_components(core_filter, contributions)
+    # Guard against multiple components having the same field that is not shared
+    # __annotations__ is used because it doesn't contain the fields of the parent class so those are excluded for the comparison
+    seen_fields: set[str] = set()
+    for component in components:
+        for field_name in component.__dict__.get("__annotations__", {}):
+            if field_name in seen_fields:
+                raise Exception(f"{field_name} defined more than once in {type_name} filters.")
+            seen_fields.add(field_name)
     composed = cast(
         type,
         strawberry.input(dataclasses.dataclass(kw_only=True)(type(f"{type_name}Filter", components, {}))),
@@ -1396,6 +1406,8 @@ def get_schema(
             stmt = select(environment_model)
             stmt = populate_extension_columns(stmt, models.Environment, environment_model, info)
             filters = decompose_filter(filter, environment_filter_components) if is_provided(filter) else []
+            for filter_component in filters:
+                filter_component.validate_filter()
             stmt = add_filter_and_sort(stmt, EnvironmentOrder.default_order(), filters, order_by)
             return await get_connection(
                 stmt, info=info, model="Environment", first=first, after=after, last=last, before=before
@@ -1417,6 +1429,8 @@ def get_schema(
             stmt = select(notification_model)
             stmt = populate_extension_columns(stmt, models.Notification, notification_model, info)
             filters = decompose_filter(filter, notification_filter_components)
+            for filter_component in filters:
+                filter_component.validate_filter()
             stmt = add_filter_and_sort(stmt, NotificationOrder.default_order(), filters, order_by)
             return await get_connection(
                 stmt, info=info, model="Notification", first=first, after=after, last=last, before=before
