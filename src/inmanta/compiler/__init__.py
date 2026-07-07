@@ -16,7 +16,9 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import json
 import logging
+import os
 import sys
 from collections import abc
 from collections.abc import Sequence
@@ -74,6 +76,45 @@ def _relations_modified_after_freeze(exception: CompilerException) -> set[tuple[
     return result
 
 
+def _freeze_order_hints_cache_path(project: "module.Project") -> str:
+    return os.path.join(project.project_path, const.CF_CACHE_DIR, "compiler_freeze_order_hints.json")
+
+
+def _load_freeze_order_hints(project: "module.Project") -> set[tuple[str, str]]:
+    """
+    Load the freeze-order hints learned by a previous compile, see do_compile. A missing, unreadable or
+    invalid cache file is treated as an empty one.
+    """
+    try:
+        with open(_freeze_order_hints_cache_path(project), encoding="utf-8") as fh:
+            raw = json.load(fh)
+    except (OSError, ValueError):
+        return set()
+    if not isinstance(raw, list):
+        return set()
+    return {
+        (item[0], item[1])
+        for item in raw
+        if isinstance(item, list) and len(item) == 2 and isinstance(item[0], str) and isinstance(item[1], str)
+    }
+
+
+def _store_freeze_order_hints(project: "module.Project", hints: abc.Set[tuple[str, str]]) -> None:
+    """
+    Persist the freeze-order hints for future compiles, see do_compile. A failure to write is not fatal:
+    the hints will be learned again by the next compile that needs them.
+    """
+    path = _freeze_order_hints_cache_path(project)
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        tmp_path = f"{path}.tmp"
+        with open(tmp_path, "w", encoding="utf-8") as fh:
+            json.dump(sorted(hints), fh)
+        os.replace(tmp_path, path)
+    except OSError:
+        LOGGER.debug("Failed to write the freeze-order hints cache %s", path, exc_info=True)
+
+
 def do_compile(refs: Optional[abc.Mapping[object, object]] = None) -> tuple[dict[str, inmanta_type.Type], Namespace]:
     """
     Perform a complete compilation run for the current project (as returned by :py:meth:`inmanta.module.Project.get`)
@@ -83,16 +124,23 @@ def do_compile(refs: Optional[abc.Mapping[object, object]] = None) -> tuple[dict
     with the violated relations frozen as late as possible. Every retry has to learn at least one new relation,
     so a model without a valid evaluation order still fails with the original error.
 
+    The learned relations are cached in the project's cf cache directory so that future compiles of a model that
+    needs them succeed in a single attempt. The cache only changes based on observed compiles, so the freeze order
+    cannot oscillate between compiles of an unchanged model: it grows when a compile learns a new relation and it
+    shrinks, on a successful compile, by the pairs that no longer resolve to a relation of the model. Deleting the
+    cache directory is always safe: it merely means the relations have to be learned again.
+
     :param refs: Datastructure used to pass on mocking information to the compiler. Supported options:
                     * key="facts"; value=Dict with the following structure: {"<resource_id": {"<fact_name>": "<fact_value"}}
     """
-    freeze_relations_last: set[tuple[str, str]] = set()
+    project = module.Project.get()
+    cached_freeze_hints: set[tuple[str, str]] = _load_freeze_order_hints(project)
+    freeze_relations_last: set[tuple[str, str]] = set(cached_freeze_hints)
     while True:
         compiler = Compiler(refs=refs)
 
         LOGGER.debug("Starting compile")
 
-        project = module.Project.get()
         try:
             statements, blocks = compiler.compile()
         except ParserException as e:
@@ -131,6 +179,10 @@ def do_compile(refs: Optional[abc.Mapping[object, object]] = None) -> tuple[dict
             compiler.export_data()
         if compiler_config.dataflow_graphic_enable.get():
             show_dataflow_graphic(sched, compiler)
+        # keep the hints that still resolve to a relation of the successfully compiled model
+        freeze_hints: set[tuple[str, str]] = set(sched.resolvable_freeze_relations_last())
+        if freeze_hints != cached_freeze_hints:
+            _store_freeze_order_hints(project, freeze_hints)
         return (sched.get_types(), compiler.get_ns())
 
 

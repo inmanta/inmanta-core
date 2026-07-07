@@ -154,21 +154,28 @@ class Scheduler:
             )
         return attribute
 
-    def _resolve_freeze_relations_last(self) -> set[RelationAttribute]:
+    def _resolve_freeze_relations_last(self) -> dict[tuple[str, str], RelationAttribute]:
         """
         Resolve the (entity type name, relation name) pairs in self.freeze_relations_last to the RelationAttributes
-        of the current type set. Pairs that do not resolve to a relation attribute are ignored: they are recovery
+        of the current type set. Pairs that do not resolve to a relation attribute are left out: they are recovery
         hints learned from a previous compile, not user input to validate.
         """
-        result: set[RelationAttribute] = set()
+        result: dict[tuple[str, str], RelationAttribute] = {}
         for entity_type_name, relation_name in self.freeze_relations_last:
             entity_type = self.types.get(entity_type_name)
             if not isinstance(entity_type, Entity):
                 continue
             attribute = entity_type.get_attributes().get(relation_name)
             if isinstance(attribute, RelationAttribute):
-                result.add(attribute)
+                result[(entity_type_name, relation_name)] = attribute
         return result
+
+    def resolvable_freeze_relations_last(self) -> AbstractSet[tuple[str, str]]:
+        """
+        Return the subset of the freeze_relations_last pairs passed to this scheduler that resolve to a relation
+        attribute of the compiled model. Used to prune stale pairs from the freeze-order hints cache.
+        """
+        return self._resolve_freeze_relations_last().keys()
 
     def freeze_all(self, exns: list[CompilerException]) -> None:
         for t in [t for t in self.types.values() if isinstance(t, Entity)]:
@@ -409,7 +416,7 @@ class Scheduler:
         self.define_types(compiler, statements, blocks)
         attributes_with_precedence_rule: list[RelationAttribute] = self._set_precedence_rules_on_relationship_attributes()
         relation_precedence_graph = RelationPrecedenceGraph(attributes_with_precedence_rule)
-        freeze_last_attributes: set[RelationAttribute] = self._resolve_freeze_relations_last()
+        freeze_last_attributes: set[RelationAttribute] = set(self._resolve_freeze_relations_last().values())
 
         # give all loose blocks an empty XC
         # register the XC's as scopes

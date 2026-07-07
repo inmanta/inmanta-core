@@ -16,14 +16,16 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import json
 import logging
+import os
 import typing
 
 import pytest
 
 import inmanta.compiler as compiler
 from inmanta.ast import CompilerException, ModifiedAfterFreezeException
-from utils import log_contains
+from utils import log_contains, log_doesnt_contain
 
 if typing.TYPE_CHECKING:
     from conftest import SnippetCompilationTest
@@ -164,6 +166,48 @@ def test_freeze_order_gradual_consumers_only(snippetcompiler: "SnippetCompilatio
     assert "key_sort" not in model  # guard the replace against model refactoring
     snippetcompiler.setup_for_snippet(model, autostd=True)
     compiler.do_compile()
+
+
+def test_freeze_order_hints_cached_across_compiles(
+    snippetcompiler: "SnippetCompilationTest", caplog: pytest.LogCaptureFixture
+) -> None:
+    """
+    Verify that the relations learned by the retry are cached in the project's cf cache directory and that a
+    subsequent compile seeds the freeze order from that cache, compiling the model in a single attempt.
+    """
+    project = snippetcompiler.setup_for_snippet(MODEL_PLUGIN_CONSUMERS, autostd=True)
+    with caplog.at_level(logging.WARNING):
+        compiler.do_compile()
+    log_contains(caplog, "inmanta.compiler", logging.WARNING, "relations were frozen before all their contributions")
+    with open(compiler._freeze_order_hints_cache_path(project), encoding="utf-8") as fh:
+        assert json.load(fh) == [["__config__::Host", "rules"]]
+
+    caplog.clear()
+    project.invalidate_state()
+    with caplog.at_level(logging.WARNING):
+        types, _ = compiler.do_compile()
+    log_doesnt_contain(caplog, "inmanta.compiler", logging.WARNING, "relations were frozen before all their contributions")
+    host = types["__config__::Host"].get_all_instances()[0]
+    assert len(host.get_attribute("rules").get_value()) == 3
+
+
+def test_freeze_order_hints_cache_pruned(snippetcompiler: "SnippetCompilationTest") -> None:
+    """
+    Verify that cached freeze-order hints that no longer resolve to a relation of the model are dropped from the
+    cache by a successful compile.
+    """
+    model: str = MODEL_PLUGIN_CONSUMERS.replace(
+        'tunnel = Tunnel(ingress=std::key_sort(host.rules, "name"))\nrule_count = std::count(host.rules)',
+        "tunnel = Tunnel(ingress=host.rules)",
+    )
+    project = snippetcompiler.setup_for_snippet(model, autostd=True)
+    cache_path: str = compiler._freeze_order_hints_cache_path(project)
+    os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+    with open(cache_path, "w", encoding="utf-8") as fh:
+        json.dump([["__config__::DoesNotExist", "rules"], ["__config__::Host", "gone"]], fh)
+    compiler.do_compile()
+    with open(cache_path, encoding="utf-8") as fh:
+        assert json.load(fh) == []
 
 
 def test_freeze_order_cycle_still_fails(snippetcompiler: "SnippetCompilationTest") -> None:

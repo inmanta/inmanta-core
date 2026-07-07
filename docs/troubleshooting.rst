@@ -250,9 +250,12 @@ crashes with one of the following exception:
 When a compile fails with a ``List modified after freeze`` error, the compiler automatically recompiles the model,
 this time considering the relationships that were considered complete too soon as late as possible. In most cases
 this retry resolves the problem and the compile succeeds without any action from the user (the retry is visible as
-a warning in the compiler output). Only when the retry cannot find an order in which the model compiles, the
-compilation fails with the error mentioned above. The following sections provide information on how this issue can
-be resolved in that case.
+a warning in the compiler output). The relationships learned this way are cached in the ``.cfcache`` directory of
+the project (``compiler_freeze_order_hints.json``), so subsequent compiles succeed in a single attempt. The cache
+can always be invalidated by deleting that file or the whole ``.cfcache`` directory: the relationships are then
+learned again on the next compile that needs them. Only when the retry cannot find an order in which the model
+compiles, the compilation fails with the error mentioned above. The following sections provide information on how
+this issue can be resolved in that case.
 
 Relationship precedence policy
 ------------------------------
