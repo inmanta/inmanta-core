@@ -1,0 +1,15 @@
+---
+description: >
+  The server now guards against more than one instance being active on the same database. On startup it
+  acquires a PostgreSQL advisory lock and holds it for its whole lifetime; a second server pointed at the
+  same database waits for the lock and refuses to start if it cannot acquire it, and a running server shuts
+  down if it loses the lock. This prevents database corruption from stray or duplicate servers and is the
+  foundation for active/passive high availability.
+change-type: minor
+destination-branches: [iso9]
+sections:
+  feature: >
+    Added a database singleton lock so at most one Inmanta server can be active on a given database. It is
+    enabled by default and configurable via the new ``database.singleton_lock`` and
+    ``database.singleton_lock_wait_time`` options. A second server on the same database refuses to start,
+    and a server that loses the lock (for example after a database failover) shuts down.
