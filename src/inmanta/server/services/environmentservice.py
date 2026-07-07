@@ -343,10 +343,9 @@ class EnvironmentService(protocol.ServerSlice):
 
         if (repository is None and branch is not None) or (repository is not None and branch is None):
             raise BadRequest("Repository and branch should be set together.")
-        if repository is None:
-            repository = ""
-        if branch is None:
-            branch = ""
+
+        repository = repository.strip() if repository is not None else ""
+        branch = branch.strip() if branch is not None else ""
 
         # fetch the project first
         project = await data.Project.get_by_id(project_id)
@@ -416,10 +415,10 @@ class EnvironmentService(protocol.ServerSlice):
 
         fields: dict[str, str | int | uuid.UUID] = {"name": name}
         if repository is not None:
-            fields["repo_url"] = repository
+            fields["repo_url"] = repository.strip()
 
         if branch is not None:
-            fields["repo_branch"] = branch
+            fields["repo_branch"] = branch.strip()
 
         # Update the project field if requested and the project exists
         if project_id is not None:
