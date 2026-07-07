@@ -1659,22 +1659,34 @@ async def test_query_resources_model_version(server, client, environment, setup_
     # A version that does not exist yields no resources
     assert_resources(await query_resources(f"modelVersion: {latest_version + 1}"), set())
 
-    # modelVersion and isOrphan are mutually exclusive: a specific version is returned as-is, so filtering it by
-    # the current orphan state is not allowed and results in an error.
-    for orphan_value in ("true", "false"):
+    # modelVersion returns a specific version as-is, so it cannot be combined with filters on the current
+    # (unversioned) resource state; doing so results in an error. isOrphan/isDeploying are booleans, the others
+    # are enum filters, so exercise a representative of each. Identity filters (agent, resourceType,
+    # resourceIdValue) are version-independent and DO combine with modelVersion (covered above for `agent`).
+    for extra, expected_conflicts in (
+        ("isOrphan: true", "isOrphan"),
+        ("isOrphan: false", "isOrphan"),
+        ("isDeploying: true", "isDeploying"),
+        ("blocked: {eq: BLOCKED}", "blocked"),
+        ("compliance: {eq: HAS_UPDATE}", "compliance"),
+        ("lastHandlerRun: {eq: NEW}", "lastHandlerRun"),
+        ("isOrphan: true isDeploying: true", "isOrphan, isDeploying"),
+    ):
         result = await client.graphql(query="""
             {
-                resources (filter: {environment: "%s" modelVersion: 1 isOrphan: %s}) {
+                resources (filter: {environment: "%s" modelVersion: 1 %s}) {
                     totalCount
                     edges { node { resourceId } }
                 }
             }
-            """ % (environment, orphan_value))
+            """ % (environment, extra))
         assert result.code == 400
         data = result.result["data"]
         assert data["data"] is None
         assert len(data["errors"]) == 1
-        assert data["errors"][0] == "is_orphan cannot be provided when filtering by model_version"
+        assert data["errors"][0] == (
+            "modelVersion cannot be combined with filters on the current resource state: " + expected_conflicts
+        )
 
 
 async def test_custom_extension_resource_filter(server, environment, client, caplog, mixed_resource_generator):

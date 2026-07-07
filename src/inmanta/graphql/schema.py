@@ -32,7 +32,7 @@ from inmanta.deploy import state
 from inmanta.server.services.compilerservice import CompilerService
 from sqlakeyset import Marker, unserialize_bookmark
 from sqlakeyset.asyncio import select_page
-from sqlalchemy import Boolean, Select, UnaryExpression, and_, asc, desc, func, not_, select
+from sqlalchemy import Boolean, ColumnElement, Select, UnaryExpression, and_, asc, desc, func, not_, select
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapper
 from strawberry import relay, scalars
@@ -752,6 +752,12 @@ class ResourceFilterABC(StrawberryFilter):
 
     environment: uuid.UUID
 
+    def validate_filter(self) -> None:
+        """
+        Checks if the provided filter fields are valid.
+        """
+        return
+
     def handles_version(self) -> bool:
         """
         Return True if this filter component takes over selection of the model version from core. At most one
@@ -765,6 +771,15 @@ class ResourceFilterABC(StrawberryFilter):
         responsible for version selection: an extension whose `handles_version()` is True, or core otherwise.
         """
         raise NotImplementedError()
+
+    def filters_on_resource_table(self) -> bool:
+        """
+        Return True if this component's `apply_filter` constrains the `Resource` table (`models.Resource`) rather
+        than only `ResourcePersistentState`. The `resources` query uses this to decide whether the efficient count
+        (which counts `ResourcePersistentState` alone, without joining `Resource`) is valid: it is only used when no
+        applied component filters on the `Resource` table.
+        """
+        return False
 
 
 @dataclasses.dataclass(kw_only=True)
@@ -789,28 +804,50 @@ class CoreResourceFilter(ResourceFilterABC):
     def rps_model(self) -> type[models.Base]:
         return models.ResourcePersistentState
 
+    def validate_filter(self) -> None:
+        # modelVersion returns the resources exactly as they were in that version of the model. The filters below
+        # reflect the *current* state of a resource (tracked on ResourcePersistentState, which is not versioned),
+        # so combining them with modelVersion would mix a historical snapshot with current state; reject that.
+        if is_provided(self.model_version):
+            current_state_filters = {
+                "isOrphan": self.is_orphan,
+                "isDeploying": self.is_deploying,
+                "blocked": self.blocked,
+                "compliance": self.compliance,
+                "lastHandlerRun": self.last_handler_run,
+            }
+            conflicting = [name for name, value in current_state_filters.items() if is_provided(value)]
+            if conflicting:
+                raise ValueError(
+                    "modelVersion cannot be combined with filters on the current resource state: " + ", ".join(conflicting)
+                )
+
     def handles_version(self) -> bool:
         # is_orphan and model_version both control which version(s) of the model are selected, so providing either
-        # means core owns version selection. This also lets us detect a conflict when an extension tries to take it over.
+        # means core owns version selection.
         return is_provided(self.is_orphan) or is_provided(self.model_version)
 
     def apply_version_filter[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
         # Determine which version of the model each resource should be taken from:
         #  - if a specific version was requested, pin every resource set to that version
         #  - otherwise take each resource at the latest scheduled version, except orphaned resources which are
-        #    taken at the last version they were present in (orphaned_after). ResourcePersistentState is already
-        #    joined onto the query, so orphaned_after is available directly (no extra CTE/join needed). For
-        #    non-orphaned resources orphaned_after is NULL, so coalesce falls back to the latest scheduled version.
-        version = (
-            self.model_version
-            if is_provided(self.model_version)
-            else func.coalesce(
-                models.ResourcePersistentState.orphaned_after,
-                select(models.Scheduler.last_processed_model_version)
+        #    taken at the last version they were present in (orphaned_after).
+        #    For non-orphaned resources orphaned_after is NULL, so coalesce falls back to the latest scheduled version.
+        version: int | ColumnElement[int]
+        if is_provided(self.model_version):
+            version = self.model_version
+        else:
+            # Compute the latest scheduled version once, as a CTE, instead of inlining the subquery in the join
+            # condition below, so it is not (re-)evaluated per candidate row.
+            latest_scheduled_version = (
+                select(models.Scheduler.last_processed_model_version.label("version"))
                 .where(models.Scheduler.environment == self.environment)
-                .scalar_subquery(),
+                .cte()
             )
-        )
+            version = func.coalesce(
+                models.ResourcePersistentState.orphaned_after,
+                select(latest_scheduled_version.c.version).scalar_subquery(),
+            )
         return stmt.join(
             models.t_resource_set_configuration_model,
             and_(
@@ -844,6 +881,11 @@ class CoreResourceFilter(ResourceFilterABC):
         if is_provided(self.is_orphan):
             stmt = stmt.filter(models.ResourcePersistentState.is_orphan.is_(self.is_orphan))
         return stmt
+
+    def filters_on_resource_table(self) -> bool:
+        # `purged` is the only core filter applied on the `Resource` table (`attributes`); every other core filter
+        # constrains `ResourcePersistentState`.
+        return is_provided(self.purged)
 
 
 class ResourceOrder(StrawberryOrder):
@@ -1393,12 +1435,6 @@ def get_schema(
             before: typing.Optional[str] = strawberry.UNSET,
             order_by: typing.Optional[Sequence[ResourceOrder]] = strawberry.UNSET,
         ) -> CustomListConnection[Resource]:
-            if is_provided(filter.model_version) and is_provided(filter.is_orphan):
-                raise Exception("is_orphan cannot be provided when filtering by model_version")
-
-            # Logic based on src/inmanta/data/dataview.py::ResourceView
-            # We select `resource_model` (a subclass of models.Resource carrying the extensions' extra columns when
-            # there are any, models.Resource otherwise) so each row is a single ORM object that can carry them.
             stmt = select(resource_model).join(
                 models.ResourcePersistentState,
                 and_(
@@ -1412,11 +1448,15 @@ def get_schema(
             # (`handles_version`); core does it by default.
             resource_filter_instances = cast(list[ResourceFilterABC], decompose_filter(filter, resource_filter_components))
             version_handler: ResourceFilterABC | None = None
+            filters_on_resource_table: bool = False
             for filter_instance in resource_filter_instances:
+                filter_instance.validate_filter()
                 if filter_instance.handles_version():
                     if version_handler is not None:
-                        raise Exception("Only one extension can determine version logic.")
+                        raise ValueError("Only one extension can determine version logic.")
                     version_handler = filter_instance
+                if filter_instance.filters_on_resource_table():
+                    filters_on_resource_table = True
 
             # True when a component actively took over version selection (core via is_orphan/model_version, or an
             # extension) rather than the plain default of "latest scheduled version + orphans".
@@ -1428,9 +1468,11 @@ def get_schema(
             stmt = populate_extension_columns(stmt, models.Resource, resource_model, info)
             stmt = add_filter_and_sort(stmt, ResourceOrder.default_order(), resource_filter_instances, order_by)
             count_stmt: Select[tuple[int]] | None
-            if is_provided(filter.purged) or is_provided(filter.model_version) or custom_version_selection:
-                # These filters are not (only) applied on ResourcePersistentState, so the more efficient count below
-                # would not match; fall back to counting the actual (version-aware) resource query.
+            # The efficient count below only selects from ResourcePersistentState, so it is only valid when the row
+            # set it counts matches the real query: no component may change the version selection, and no component's
+            # apply_filter may constrain the Resource table.
+            # Otherwise, fall back to counting the actual (version-aware) resource query.
+            if custom_version_selection or filters_on_resource_table:
                 count_stmt = None
             else:
                 # more efficient count statement that doesn't require joining on resource
