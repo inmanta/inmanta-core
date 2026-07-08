@@ -612,11 +612,8 @@ class EnvironmentService(protocol.ServerSlice):
         Revoke a registered token by its jti. The token is rejected on subsequent requests.
         """
         async with data.get_session() as session:
-            repo = TokenRepository(session)
-            token = await repo.get_by_jti(jti)
-            if token is None or token.environment != env.id:
+            if not await TokenRepository(session).revoke(jti, env.id):
                 raise NotFound(f"No token with jti {jti} exists in environment {env.id}.")
-            await repo.revoke(jti)
             await session.commit()
         auth.invalidate_jti(jti)
 

@@ -69,7 +69,7 @@ class Base(DeclarativeBase):
         await connection.execute("DELETE FROM %s WHERE environment=$1" % cls.__tablename__, environment)
 
 
-class WriteValidatedMixin:
+class SetValidatedMixin:
     """
     Declarative mixin that type-checks every mapped column's value on assignment, as defense in depth. The
     expected Python type and whether None is allowed are derived from the column definition itself (the SQL
@@ -489,7 +489,7 @@ class InmantaUser(Base):
     role_assignment: Mapped[list["RoleAssignment"]] = relationship("RoleAssignment", back_populates="user")
 
 
-class Token(WriteValidatedMixin, Base):
+class Token(SetValidatedMixin, Base):
     """
     Registry entry for an issued, revocable authentication token, identified by its jti claim.
 
@@ -497,7 +497,7 @@ class Token(WriteValidatedMixin, Base):
     token is accepted only while a matching, non-revoked row exists; revoking a token flips revoked so it is
     rejected on every subsequent request.
 
-    All values written to this table are server-generated, but the Enum column type and WriteValidatedMixin
+    All values written to this table are server-generated, but the Enum column type and SetValidatedMixin
     still enforce them at the data layer as defense in depth. Persistence goes through TokenRepository; this
     class is a plain mapped entity.
     """
@@ -581,9 +581,15 @@ class TokenRepository:
         self.session.add(token)
         await self.session.flush()
 
-    async def revoke(self, jti: uuid.UUID) -> None:
-        """Mark the token with the given jti as revoked. The caller commits."""
-        await self.session.execute(update(Token).where(Token.jti == jti).values(revoked=True))
+    async def revoke(self, jti: uuid.UUID, environment: uuid.UUID) -> bool:
+        """
+        Revoke the token with the given jti within the given environment. Returns whether a matching token
+        existed (so the caller can distinguish a real revoke from an unknown jti). The caller commits.
+        """
+        result = await self.session.execute(
+            update(Token).where(Token.jti == jti, Token.environment == environment).values(revoked=True).returning(Token.jti)
+        )
+        return result.first() is not None
 
     async def mark_used(self, jti: uuid.UUID, when: datetime.datetime) -> None:
         """Record that the token with the given jti was just used to authenticate. The caller commits."""
