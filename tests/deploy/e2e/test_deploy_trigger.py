@@ -62,7 +62,7 @@ async def test_deploy_trigger(server, client, clienthelper, resource_container, 
                 caplog,
                 "inmanta.scheduler",
                 logging.INFO,
-                f"All agents got a trigger to run repair in environment {environment}",
+                f"All agents got a trigger to run repair for all resources in environment {environment}",
             )
             agents = ["agent1", "agent2", "agent3"]  # this also includes paused agents
         else:
@@ -70,10 +70,13 @@ async def test_deploy_trigger(server, client, clienthelper, resource_container, 
                 caplog,
                 "inmanta.scheduler",
                 logging.INFO,
-                f"Agent agent1 got a trigger to run repair in environment {environment}",
+                f"Agent agent1 got a trigger to run repair for all resources in environment {environment}",
             )
         log_doesnt_contain(
-            caplog, "inmanta.scheduler", logging.INFO, f"Agent agent5 got a trigger to run repair in environment {environment}"
+            caplog,
+            "inmanta.scheduler",
+            logging.INFO,
+            f"Agent agent5 got a trigger to run repair for all resources in environment {environment}",
         )
 
         assert result.result["agents"] == agents

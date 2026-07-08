@@ -1,0 +1,6 @@
+description: >-
+  The resource scheduler's deploy and repair can now be triggered for a specific collection of resources (via
+  the internal agent trigger interface), intersected with the optional agent filter. This is internal groundwork
+  for triggering deploy/repair on the result of a resource filter.
+change-type: patch
+destination-branches: [master, iso9]
