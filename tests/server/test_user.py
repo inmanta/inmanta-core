@@ -200,24 +200,24 @@ async def test_login_session_expire(server: protocol.Server, auth_client: endpoi
 
 async def test_login_reports_expires_in(server: protocol.Server, auth_client: endpoints.Client) -> None:
     """login reports the session lifetime in seconds so a client can renew before it expires."""
-    assert (await auth_client.add_user("admin", "adminadmin")).code == 200
+    assert (await auth_client.add_user("admin", "Str0ng-Pass!")).code == 200
 
-    response = await auth_client.login("admin", "adminadmin")
+    response = await auth_client.login("admin", "Str0ng-Pass!")
     assert response.code == 200
     assert response.result["data"]["expires_in"] == 3600
 
     # When the option is 0 (eternal), no lifetime is reported.
     config.Config.set("server", "login_session_expire", "0")
-    response = await auth_client.login("admin", "adminadmin")
+    response = await auth_client.login("admin", "Str0ng-Pass!")
     assert response.code == 200
     assert response.result["data"]["expires_in"] is None
 
 
 async def test_login_renew(server: protocol.Server, auth_client: endpoints.Client) -> None:
     """A logged-in user renews their session with the session token and gets a fresh, working token."""
-    assert (await auth_client.add_user("admin", "adminadmin")).code == 200
+    assert (await auth_client.add_user("admin", "Str0ng-Pass!")).code == 200
 
-    login = await auth_client.login("admin", "adminadmin")
+    login = await auth_client.login("admin", "Str0ng-Pass!")
     assert login.code == 200
     session_token = login.result["data"]["token"]
 
@@ -239,9 +239,9 @@ async def test_login_renew(server: protocol.Server, auth_client: endpoints.Clien
 
 async def test_login_renew_reflects_current_admin_status(server: protocol.Server, auth_client: endpoints.Client) -> None:
     """A renewed token carries the user's current admin status, not the status captured at login time."""
-    assert (await auth_client.add_user("admin", "adminadmin")).code == 200
+    assert (await auth_client.add_user("admin", "Str0ng-Pass!")).code == 200
 
-    login = await auth_client.login("admin", "adminadmin")
+    login = await auth_client.login("admin", "Str0ng-Pass!")
     assert login.code == 200
     session_token = login.result["data"]["token"]
     assert jwt.decode(session_token, options={"verify_signature": False})[const.INMANTA_IS_ADMIN_URN] is False
@@ -270,7 +270,7 @@ async def test_login_renew_rejects_external_issuer_token(server: protocol.Server
     otherwise let a user authenticated against the external issuer obtain a locally-signed token carrying
     the roles and admin status of a same-named local account.
     """
-    assert (await auth_client.add_user("admin", "adminadmin")).code == 200
+    assert (await auth_client.add_user("admin", "Str0ng-Pass!")).code == 200
 
     # Register a second, verify-only issuer, as an external OIDC provider would be. It shares the HS256 key
     # of the fixture's signing config purely to keep the test deterministic; only the issuer differs.
