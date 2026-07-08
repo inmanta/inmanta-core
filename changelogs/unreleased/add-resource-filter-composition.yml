@@ -5,3 +5,7 @@ description: >
   fetch resources as present in a specific version of the model.
 change-type: minor
 destination-branches: [master, iso9]
+sections:
+  minor-improvement: >
+    Add a `modelVersion` filter to the `resources` GraphQL query to fetch the resources present in a specific
+    version of the model, instead of the latest released version.

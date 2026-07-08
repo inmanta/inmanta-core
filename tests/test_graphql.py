@@ -1630,16 +1630,21 @@ async def test_query_resources_model_version(server, client, environment, setup_
     assert any(edge["node"]["state"]["isOrphan"] is False for edge in v1["edges"])
 
     # v2: set0 was recompiled (agent0 only), the upper half was replaced
+    v2 = await query_resources("modelVersion: 2")
     assert_resources(
-        await query_resources("modelVersion: 2"),
+        v2,
         {("agent0", rid) for rid in updated_ids},
     )
+    assert all(edge["node"]["state"]["isOrphan"] is False for edge in v2["edges"])
 
     # v3: set1 (agent1) was added with its original resources, set0 is unchanged from v2
+    v3 = await query_resources("modelVersion: 3")
     assert_resources(
-        await query_resources("modelVersion: 3"),
+        v3,
         {("agent0", rid) for rid in updated_ids} | {("agent1", rid) for rid in original_ids},
     )
+    assert any(edge["node"]["state"]["isOrphan"] is True for edge in v3["edges"])
+    assert any(edge["node"]["state"]["isOrphan"] is False for edge in v3["edges"])
 
     # v4 == latest: both sets recompiled. Equivalent to not specifying a version, but without the orphans, so
     # none of the returned resources are orphaned.

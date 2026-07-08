@@ -502,7 +502,7 @@ class StrawberryFilter:
         """
         Returns the provided filter fields in dict form, to feed to the SQLAlchemy query as an exact-match filter.
         Fields left UNSET are skipped (not filtered on) -- this is what lets a filter compose with others that carry
-        their own fields (see `decompose_filter`), where any given component only has some of the fields set.
+        their own fields (see `decompose_filter`).
         This is only used for simple filters i.e. exact match on the same table.
         """
         return {key: value for key, value in self.__dict__.items() if value is not strawberry.UNSET}
@@ -750,8 +750,6 @@ class ResourceFilterABC(StrawberryFilter):
     """
     Abstract base class that defines the shared attributes/behaviour of every resource filter component: core's
     `CoreResourceFilter` and each extension's resource filter (contributed via `GraphQLContribution.get_filter_input_class`).
-    These components are composed into the single `ResourceFilter` GraphQL input type exposed on the `resources` query
-    by the generic filter composition (see `get_filter_components` / `build_composed_filter_input` and `get_schema`).
     The version-selection hooks below are specific to resources; other object types' filters compose the same way but
     have no version concept.
 
@@ -809,7 +807,7 @@ class CoreResourceFilter(ResourceFilterABC):
     def validate_filter(self) -> None:
         # modelVersion returns the resources exactly as they were in that version of the model. The filters below
         # reflect the *current* state of a resource (tracked on ResourcePersistentState, which is not versioned),
-        # so combining them with modelVersion would mix a historical snapshot with current state; reject that.
+        # so combining them with modelVersion would mix a historical snapshot with current state.
         if is_provided(self.model_version):
             current_state_filters = {
                 "isOrphan": self.is_orphan,
@@ -951,8 +949,11 @@ def add_filter_and_sort[*Ts](
     """
     Adds filter and sorting to the given statement.
 
+    :param stmt: the query to add the filter and sorting to.
+    :param default_sorting: the sorting to apply for each key not already covered by `order_by`.
     :param filter: the filter components to apply. A single query can have several components: the `resources` query
         composes core and extension filters, while the other queries pass a single (or no) filter.
+    :param order_by: the sorting requested by the user, taking precedence over `default_sorting` for the same key.
     """
     for filter_component in filter:
         stmt = filter_component.apply_filter(stmt)
@@ -1219,9 +1220,9 @@ def get_filter_components(
 ) -> tuple[type[StrawberryFilter], ...]:
     """
     Return the filter components that compose an object type's filter input type: the type's `core_filter` followed by
-    every extension-contributed filter class (see `GraphQLContribution.get_filter_input_class`). `build_composed_filter_input`
-    builds the composed input from these by multiple inheritance, and each query's resolver decomposes the received
-    filter back into one instance per component (see `decompose_filter`) to apply them.
+    every extension-contributed filter class. `build_composed_filter_input` builds the composed input from these by multiple
+    inheritance, and each query's resolver decomposes the received filter back
+    into one instance per component (see `decompose_filter`) to apply them.
 
     :param core_filter: the core filter class of the object type (e.g. `CoreResourceFilter`).
     :param contributions: the extension contributions that target the same object type.
@@ -1239,13 +1240,7 @@ def build_composed_filter_input(
 ) -> tuple[tuple[type[StrawberryFilter], ...], type]:
     """
     Build the filter input type for an object type, composed of its core filter and the extensions' contributed
-    filters (mirrors `build_strawberry_output_type` on the output side). The components are merged by multiple
-    inheritance into a single `@strawberry.input` named `{type_name}Filter` (the user-facing filter type), while the
-    core filter keeps a distinct name (e.g. `CoreResourceFilter`). `get_schema` is called once per process, so a fixed
-    class name is fine.
-
-    Returns the tuple of components (so the resolver can decompose the received filter, see `decompose_filter`) and
-    the composed input type (to expose as the query's `filter` argument).
+    filters. The components are merged by multiple inheritance into a single `@strawberry.input` named `{type_name}Filter`.
 
     :param type_name: the name of the object type being built (e.g. "Resource").
     :param core_filter: the core filter class of the object type (e.g. `CoreResourceFilter`).
@@ -1269,17 +1264,14 @@ def build_composed_filter_input(
 
 def decompose_filter[F: StrawberryFilter](filter: object, components: tuple[type[F], ...]) -> list[F]:
     """
-    Split a composed filter value (built by `build_composed_filter_input`) back into one instance per component,
-    reading each component's fields off the composed value. This lets every component apply its own `apply_filter`
-    (and, for resources, its version-selection hooks) on just its own fields.
+    Split a composed filter value back into one instance per component, reading each component's fields off the composed value.
+    This lets every component apply its own `apply_filter` on just its own fields.
 
     :param filter: the composed filter value received by the resolver.
-    :param components: the filter components the composed type was built from (see `get_filter_components`).
+    :param components: the filter components the composed type was built from.
     """
     decomposed: list[F] = []
     for component in components:
-        # Every component is a @strawberry.input, hence a dataclass, but that isn't visible through the StrawberryFilter
-        # bound (the base class is not itself a dataclass), so mypy can't tell dataclasses.fields accepts it.
         component_fields = dataclasses.fields(component)  # type: ignore[arg-type]
         decomposed.append(component(**{field.name: getattr(filter, field.name) for field in component_fields}))
     return decomposed
@@ -1299,8 +1291,7 @@ class RegistrableGraphQLType:
 
 # The object types extensions can register GraphQL contributions for (see GraphQLContribution), mapping each SQLAlchemy
 # model to its core building blocks. `get_schema` composes each of these from the core building blocks and the
-# registered contributions; registrations for any other model are rejected. The GraphQL output type name is always the
-# model's class name (e.g. `models.Resource` -> "Resource"), which is also the key the contributions are grouped under.
+# registered contributions; registrations for any other model are rejected.
 REGISTRABLE_MODELS: "Mapping[type[models.Base], RegistrableGraphQLType]" = {
     models.Resource: RegistrableGraphQLType(core_mixin=CoreResourceMixin, core_filter=CoreResourceFilter),
     models.Environment: RegistrableGraphQLType(core_mixin=CoreEnvironmentMixin, core_filter=CoreEnvironmentFilter),
@@ -1362,11 +1353,9 @@ def get_schema(
             stmt = contribution.populate_sqlalchemy_columns(stmt, composed_model, requested_fields)
         return stmt
 
-    # For each registrable object type, build its (possibly extension-composed) output type and filter input type.
-    # The output type and the filter input are composed the same generic way from the type's core building blocks and
-    # the contributions targeting it; each query's resolver decomposes the received filter back into its components.
+    # Build each registrable object type's output type and (extension-composed) filter input, both composed the same
+    # generic way from the type's core building blocks (see RegistrableGraphQLType) and the contributions targeting it.
     built_types: dict[GraphQLTypeName, tuple[type[models.Base], type]] = {}
-    # type_name -> (filter components the composed input was built from, composed filter input type)
     built_filters: dict[GraphQLTypeName, tuple[tuple[type[StrawberryFilter], ...], type]] = {}
     for base_model, registrable in REGISTRABLE_MODELS.items():
         type_name = graphql_type_name(base_model)
@@ -1374,12 +1363,12 @@ def get_schema(
         built_types[type_name] = build_output_type(base_model, registrable.core_mixin)
         built_filters[type_name] = build_composed_filter_input(type_name, registrable.core_filter, contributions)
 
-    environment_model, Environment = built_types["Environment"]
-    notification_model, Notification = built_types["Notification"]
-    resource_model, Resource = built_types["Resource"]
-    environment_filter_components, EnvironmentFilter = built_filters["Environment"]
-    notification_filter_components, NotificationFilter = built_filters["Notification"]
-    resource_filter_components, ResourceFilter = built_filters["Resource"]
+    environment_model, Environment = built_types[graphql_type_name(models.Environment)]
+    notification_model, Notification = built_types[graphql_type_name(models.Notification)]
+    resource_model, Resource = built_types[graphql_type_name(models.Resource)]
+    environment_filter_components, EnvironmentFilter = built_filters[graphql_type_name(models.Environment)]
+    notification_filter_components, NotificationFilter = built_filters[graphql_type_name(models.Notification)]
+    resource_filter_components, ResourceFilter = built_filters[graphql_type_name(models.Resource)]
 
     class CustomInfo(Info):
         @property
@@ -1396,8 +1385,6 @@ def get_schema(
             after: typing.Optional[str] = strawberry.UNSET,
             last: typing.Optional[int] = strawberry.UNSET,
             before: typing.Optional[str] = strawberry.UNSET,
-            # The declared type is the core filter (so it stays typed), but the GraphQL input the user gets is the
-            # composed type carrying the core + extension fields.
             filter: typing.Annotated[
                 typing.Optional[CoreEnvironmentFilter], strawberry.argument(graphql_type=typing.Optional[EnvironmentFilter])
             ] = strawberry.UNSET,
@@ -1417,8 +1404,6 @@ def get_schema(
         async def notifications(
             self,
             info: CustomInfo,
-            # The declared type is the core filter (so it stays typed), but the GraphQL input the user gets is the
-            # composed type carrying the core + extension fields.
             filter: typing.Annotated[CoreNotificationFilter, strawberry.argument(graphql_type=NotificationFilter)],
             first: typing.Optional[int] = strawberry.UNSET,
             after: typing.Optional[str] = strawberry.UNSET,
@@ -1440,8 +1425,6 @@ def get_schema(
         async def resources(
             self,
             info: CustomInfo,
-            # The declared type is CoreResourceFilter (so filter.<core field> stays typed), but the GraphQL input
-            # the user actually gets is the composed type carrying core + extension fields.
             filter: typing.Annotated[CoreResourceFilter, strawberry.argument(graphql_type=ResourceFilter)],
             first: typing.Optional[int] = strawberry.UNSET,
             after: typing.Optional[str] = strawberry.UNSET,
@@ -1459,7 +1442,7 @@ def get_schema(
 
             # Decompose the composed ResourceFilter into one instance per component (core + each extension). Every
             # resource filter component is a ResourceFilterABC, and at most one may take over version selection
-            # (`handles_version`); core does it by default.
+            # Core does it by default.
             resource_filter_instances = cast(list[ResourceFilterABC], decompose_filter(filter, resource_filter_components))
             version_handler: ResourceFilterABC | None = None
             filters_on_resource_table: bool = False
