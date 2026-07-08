@@ -271,6 +271,7 @@ INTEGER_AS_LOG_LEVEL: abc.Mapping[int, LogLevel] = {value: log_level for log_lev
 INMANTA_URN = "urn:inmanta:"
 INMANTA_IS_ADMIN_URN = f"{INMANTA_URN}is_admin"
 INMANTA_ROLES_URN = f"{INMANTA_URN}roles"
+INMANTA_CREATED_BY_URN = f"{INMANTA_URN}created_by"
 
 
 class Compilestate(str, Enum):
@@ -335,7 +336,15 @@ EXTENSION_MODULE = "extension"
 ENVELOPE_KEY = "data"
 
 # Minimum password length
-MIN_PASSWORD_LENGTH = 8
+MIN_PASSWORD_LENGTH = 12
+# Maximum password length, a guard against denial-of-service through very expensive password hashing
+MAX_PASSWORD_LENGTH = 128
+# Hard cap on the raw (pre-normalization) password length. Applied before Unicode normalization on the
+# unauthenticated login path, so a pathologically long input cannot make normalization expensive. It is
+# well above MAX_PASSWORD_LENGTH because combining sequences use more code points than the normalized form.
+MAX_RAW_PASSWORD_LENGTH = 1024
+# The number of distinct character classes (lowercase, uppercase, digit, special) a password must use
+MIN_PASSWORD_CHARACTER_CLASSES = 3
 
 
 class AgentAction(str, Enum):

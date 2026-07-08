@@ -72,6 +72,37 @@ T = TypeVar("T")
 S = TypeVar("S")
 
 
+def password_policy_violation(password: str) -> Optional[str]:
+    """
+    Return a human-readable reason the password violates the password policy, or None if it is acceptable.
+
+    The policy is a length range plus a basic complexity requirement (a mix of character classes). It is
+    shared by the API (add_user, set_password) and the inmanta-initial-user-setup CLI so both enforce the
+    same rules. Note this is a deliberately minimal, self-contained check: richer credential controls
+    (breached-password lists, history, rotation, MFA) are out of scope for the built-in provider and are
+    expected from an external OIDC identity provider instead.
+    """
+    if not password or len(password) < const.MIN_PASSWORD_LENGTH:
+        return f"the password should be at least {const.MIN_PASSWORD_LENGTH} characters long"
+    if len(password) > const.MAX_PASSWORD_LENGTH:
+        return f"the password should be at most {const.MAX_PASSWORD_LENGTH} characters long"
+    # Count the character classes used. "special" is anything that is not a letter or a digit.
+    classes = sum(
+        [
+            any(c.islower() for c in password),
+            any(c.isupper() for c in password),
+            any(c.isdigit() for c in password),
+            any(not c.isalnum() for c in password),
+        ]
+    )
+    if classes < const.MIN_PASSWORD_CHARACTER_CLASSES:
+        return (
+            f"the password should contain at least {const.MIN_PASSWORD_CHARACTER_CLASSES} of the following four "
+            "character classes: a lowercase letter, an uppercase letter, a digit, and a special character"
+        )
+    return None
+
+
 def groupby(mylist: list[T], f: Callable[[T], S]) -> Iterator[tuple[S, Iterator[T]]]:
     return itertools.groupby(sorted(mylist, key=f), f)
 
@@ -532,6 +563,11 @@ def _custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
         return o.json_serialization_step()
 
     if isinstance(o, (uuid.UUID, pydantic.AnyUrl, pydantic_core.Url)):
+        return str(o)
+
+    if isinstance(o, pydantic.SecretStr):
+        # Never serialize the secret value across a (de)serialization boundary (e.g. the policy
+        # engine input); emit the redacted form (str(SecretStr) == "**********").
         return str(o)
 
     if isinstance(o, datetime.datetime):
