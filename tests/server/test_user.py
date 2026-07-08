@@ -17,7 +17,9 @@ Contact: code@inmanta.com
 """
 
 import base64
+import datetime
 import logging
+import uuid
 
 import jwt
 import pytest
@@ -25,6 +27,7 @@ import pytest
 import nacl.pwhash
 from inmanta import config, const, data
 from inmanta.data.model import AuthMethod
+from inmanta.data.sqlalchemy import Token, TokenRepository
 from inmanta.protocol import endpoints
 from inmanta.protocol.auth import auth
 from inmanta.server import SLICE_USER, protocol
@@ -496,3 +499,117 @@ async def test_password_nfkc(server: protocol.Server, auth_client: endpoints.Cli
     assert (await auth_client.login("olof", decomposed)).code == 200
     # After the upgrade the composed form works too.
     assert (await auth_client.login("olof", composed)).code == 200
+
+
+async def test_token_registry(server: protocol.Server, auth_client: endpoints.Client) -> None:
+    """
+    Non-idempotent tokens are registered in the token registry and can be listed and revoked; idempotent
+    tokens stay stateless (no jti, not tracked). A revoked token is rejected on subsequent requests.
+    """
+    user = data.User(
+        username="admin",
+        password_hash=nacl.pwhash.str("adminadmin".encode()).decode(),
+        auth_method=AuthMethod.database,
+    )
+    await user.insert()
+
+    response = await auth_client.login("admin", "adminadmin")
+    assert response.code == 200
+    config.Config.set("client_rest_transport", "token", response.result["data"]["token"])
+    admin_client = protocol.Client("client")
+
+    response = await admin_client.project_create(name="test")
+    assert response.code == 200
+    project_id = response.result["data"]["id"]
+    response = await admin_client.environment_create(project_id=project_id, name="test")
+    assert response.code == 200
+    env_id = response.result["data"]["id"]
+
+    # An idempotent token is stateless: no jti and not tracked in the registry.
+    response = await admin_client.environment_create_token(tid=env_id, client_types=["api"], idempotent=True)
+    assert response.code == 200
+    assert "jti" not in jwt.decode(response.result["data"], options={"verify_signature": False})
+    response = await admin_client.environment_token_list(tid=env_id)
+    assert response.code == 200
+    assert response.result["data"] == []
+
+    # A non-idempotent token gets a jti and is registered.
+    response = await admin_client.environment_create_token(tid=env_id, client_types=["api"], idempotent=False)
+    assert response.code == 200
+    revocable_token = response.result["data"]
+    jti = jwt.decode(revocable_token, options={"verify_signature": False})["jti"]
+
+    response = await admin_client.environment_token_list(tid=env_id)
+    assert response.code == 200
+    assert len(response.result["data"]) == 1
+    assert response.result["data"][0]["jti"] == jti
+    assert response.result["data"][0]["created_by"] == "admin"
+    assert response.result["data"][0]["revoked"] is False
+
+    # The registered token works for authenticated calls.
+    config.Config.set("client_rest_transport", "token", revocable_token)
+    token_client = protocol.Client("client")
+    response = await token_client.environment_token_list(tid=env_id)
+    assert response.code == 200
+
+    # After revocation the same token is rejected.
+    response = await admin_client.environment_token_revoke(tid=env_id, jti=jti)
+    assert response.code == 200
+    response = await token_client.environment_token_list(tid=env_id)
+    assert response.code == 403
+
+    # A legacy token without a jti keeps working (stateless validation, non-breaking migration).
+    legacy_token = auth.encode_token([str(const.ClientType.api.value)], environment=str(env_id))
+    assert "jti" not in jwt.decode(legacy_token, options={"verify_signature": False})
+    config.Config.set("client_rest_transport", "token", legacy_token)
+    legacy_client = protocol.Client("client")
+    response = await legacy_client.environment_token_list(tid=env_id)
+    assert response.code == 200
+
+    # Revoking a jti that does not exist returns 404.
+    response = await admin_client.environment_token_revoke(tid=env_id, jti=uuid.uuid4())
+    assert response.code == 404
+
+    # A token cannot be revoked through a different environment (no cross-environment revoke).
+    response = await admin_client.environment_create_token(tid=env_id, client_types=["api"], idempotent=False)
+    assert response.code == 200
+    other_jti = jwt.decode(response.result["data"], options={"verify_signature": False})["jti"]
+    response = await admin_client.environment_create(project_id=project_id, name="other")
+    assert response.code == 200
+    other_env = response.result["data"]["id"]
+    response = await admin_client.environment_token_revoke(tid=other_env, jti=other_jti)
+    assert response.code == 404
+    # It is untouched (still present and unrevoked) in its own environment.
+    response = await admin_client.environment_token_list(tid=env_id)
+    assert any(t["jti"] == other_jti and t["revoked"] is False for t in response.result["data"])
+
+    # A token whose jti claim is not a valid UUID is rejected.
+    bad_token = auth.encode_token(
+        [str(const.ClientType.api.value)], environment=str(env_id), custom_claims={"jti": "not-a-uuid"}
+    )
+    config.Config.set("client_rest_transport", "token", bad_token)
+    bad_client = protocol.Client("client")
+    response = await bad_client.environment_token_list(tid=env_id)
+    assert response.code == 403
+
+
+async def test_token_registry_cleanup(server: protocol.Server) -> None:
+    """delete_expired removes expired registry entries while keeping valid and non-expiring ones."""
+    now = datetime.datetime.now(tz=datetime.timezone.utc)
+    expired_jti, valid_jti, eternal_jti = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    async with data.get_session() as session:
+        repo = TokenRepository(session)
+        await repo.add(Token(jti=expired_jti, issued_at=now, expires_at=now - datetime.timedelta(hours=1), revoked=False))
+        await repo.add(Token(jti=valid_jti, issued_at=now, expires_at=now + datetime.timedelta(hours=1), revoked=False))
+        await repo.add(Token(jti=eternal_jti, issued_at=now, expires_at=None, revoked=False))
+        await session.commit()
+
+    async with data.get_session() as session:
+        await TokenRepository(session).delete_expired()
+        await session.commit()
+
+    async with data.get_session() as session:
+        repo = TokenRepository(session)
+        assert await repo.get_by_jti(expired_jti) is None
+        assert await repo.get_by_jti(valid_jti) is not None
+        assert await repo.get_by_jti(eternal_jti) is not None

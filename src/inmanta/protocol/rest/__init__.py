@@ -698,6 +698,9 @@ class RESTBase(util.TaskHandler[None], abc.ABC):
             arguments = CallArguments(config, message, request_headers, remote_ip=remote_ip)
             is_auth_enabled: bool = self.is_auth_enabled()
             arguments.authenticate(auth_enabled=is_auth_enabled)
+            # Enforce the token registry (jti allowlist) for tokens that carry a jti. Stateless service and
+            # legacy tokens have no jti and pass through unchanged.
+            await auth.validate_jti(arguments.auth_token)
             await arguments.process()
             authorization_provider = self.get_authorization_provider()
             if authorization_provider:

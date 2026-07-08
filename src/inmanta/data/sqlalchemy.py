@@ -14,13 +14,15 @@ Contact: code@inmanta.com
 
 import datetime
 import uuid
-from typing import Any, Optional
+from typing import Any, Callable, Optional, Sequence
 
 import asyncpg
 
+from inmanta.const import ClientType
 from inmanta.data.model import AgentName
 from inmanta.data.model import InmantaModule as InmantaModuleDTO
 from inmanta.data.model import InmantaModuleName, InmantaModuleVersion
+from inmanta.data.model import Token as TokenDTO
 from inmanta.deploy import state
 from sqlalchemy import (
     ARRAY,
@@ -40,17 +42,24 @@ from sqlalchemy import (
     UniqueConstraint,
     and_,
     case,
+    delete,
+    event,
+    func,
     or_,
+    select,
     text,
+    update,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.ext.hybrid import hybrid_property
-from sqlalchemy.orm import DeclarativeBase, Mapped, foreign, mapped_column, relationship
+from sqlalchemy.orm import DeclarativeBase, Mapped, class_mapper, foreign, mapped_column, relationship
 
 # This file is mostly generated code (generated with sqlacodegen),
-# but it suffered some modifications, keep that in mind if you were to regenerate it
-# Currently, these models don't offer any additional validation, besides typing, so it's best to avoid inserting/modifying
-# DB entries directly using these models.
+# but it suffered some modifications, keep that in mind if you were to regenerate it.
+# Most of these models are read-only projections and carry no validation beyond typing, so avoid
+# inserting/modifying DB entries through them directly. A model may be written through a dedicated
+# repository once it enforces its own write-time validation (see Token / TokenRepository below).
 
 
 class Base(DeclarativeBase):
@@ -58,6 +67,56 @@ class Base(DeclarativeBase):
     @classmethod
     async def delete_all(cls, environment: uuid.UUID, connection: asyncpg.connection.Connection) -> None:
         await connection.execute("DELETE FROM %s WHERE environment=$1" % cls.__tablename__, environment)
+
+
+class SetValidatedMixin:
+    """
+    Declarative mixin that type-checks every mapped column's value on assignment, as defense in depth. The
+    expected Python type and whether None is allowed are derived from the column definition itself (the SQL
+    type's python_type and the column's nullable flag), so there is nothing to keep in sync by hand.
+
+    It fires on attribute assignment (writes), not on ORM load, so reads are unaffected. Scalar values are
+    checked against their column type; element membership of enum/array columns is enforced by the column type
+    (e.g. Enum) at bind time. A column whose SQL type does not declare a python_type is skipped.
+    """
+
+    @staticmethod
+    def _make_column_validator(
+        key: str, python_type: type, nullable: bool
+    ) -> Callable[[object, object, object, object], object]:
+        """Build a SQLAlchemy attribute 'set' listener that type-checks one column against its declared type."""
+
+        def _validate(target: object, value: object, oldvalue: object, initiator: object) -> object:
+            if value is None:
+                if not nullable:
+                    raise ValueError(f"{type(target).__name__}.{key} must not be None")
+                return value
+            if not isinstance(value, python_type):
+                raise TypeError(f"{type(target).__name__}.{key} must be a {python_type.__name__}, got {type(value).__name__}")
+            return value
+
+        return _validate
+
+    @classmethod
+    def __declare_last__(cls) -> None:
+        """
+        SQLAlchemy declarative hook, invoked once after the mapper is configured. Registers a write-time
+        validator (see _make_column_validator) for every mapped column, so each column's value is type-checked
+        on assignment against that column's own declared type and nullability.
+        """
+        mapper = class_mapper(cls)
+        for column_property in mapper.column_attrs:
+            column = column_property.columns[0]
+            try:
+                python_type = column.type.python_type
+            except NotImplementedError:
+                continue
+            event.listen(
+                getattr(cls, column_property.key),
+                "set",
+                cls._make_column_validator(column_property.key, python_type, column.nullable),
+                retval=True,
+            )
 
 
 class InmantaModule(Base):
@@ -428,6 +487,117 @@ class InmantaUser(Base):
     )
 
     role_assignment: Mapped[list["RoleAssignment"]] = relationship("RoleAssignment", back_populates="user")
+
+
+class Token(SetValidatedMixin, Base):
+    """
+    Registry entry for an issued, revocable authentication token, identified by its jti claim.
+
+    Only non-idempotent tokens are registered here; idempotent tokens stay stateless and are not tracked. A
+    token is accepted only while a matching, non-revoked row exists; revoking a token flips revoked so it is
+    rejected on every subsequent request.
+
+    All values written to this table are server-generated, but the Enum column type and SetValidatedMixin
+    still enforce them at the data layer as defense in depth. Persistence goes through TokenRepository; this
+    class is a plain mapped entity.
+    """
+
+    __tablename__ = "token"
+
+    __table_args__ = (
+        ForeignKeyConstraint(["environment"], ["environment.id"], ondelete="CASCADE", name="token_environment_fkey"),
+        PrimaryKeyConstraint("jti", name="token_pkey"),
+    )
+
+    jti: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The unique identifier of the token (its jti claim)")
+    created_by: Mapped[str | None] = mapped_column(
+        String, doc="The user that created the token, or None when it was created by a service token"
+    )
+    client_types: Mapped[list[ClientType]] = mapped_column(
+        ARRAY(
+            Enum(
+                ClientType,
+                native_enum=False,
+                create_constraint=False,
+                values_callable=lambda enum_cls: [m.value for m in enum_cls],
+            )
+        ),
+        nullable=False,
+        server_default=text("ARRAY[]::character varying[]"),
+        doc="The client types the token is valid for",
+    )
+    environment: Mapped[uuid.UUID | None] = mapped_column(
+        UUID, doc="The environment the token is scoped to, or None when it is not scoped to an environment"
+    )
+    issued_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, doc="The moment the token was issued")
+    expires_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(True), doc="The moment the token expires, or None when the token does not expire"
+    )
+    revoked: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false"), doc="Whether the token has been revoked"
+    )
+    last_used: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(True), doc="The last time the token was used to authenticate a request, or None if it has not been used"
+    )
+
+    def to_dto(self) -> TokenDTO:
+        """Project this registry entry onto its API data-transfer object."""
+        return TokenDTO(
+            jti=self.jti,
+            created_by=self.created_by,
+            client_types=self.client_types,
+            environment=self.environment,
+            issued_at=self.issued_at,
+            expires_at=self.expires_at,
+            revoked=self.revoked,
+            last_used=self.last_used,
+        )
+
+
+class TokenRepository:
+    """
+    Data access for the token registry. Holds the SQLAlchemy statements for the token table and runs them
+    against a caller-provided session. The caller owns the transaction and commits at the operation boundary;
+    these methods never commit.
+    """
+
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def get_by_jti(self, jti: uuid.UUID) -> Token | None:
+        """Return the registry entry for the given jti, or None if there is none."""
+        result = await self.session.execute(select(Token).where(Token.jti == jti))
+        return result.scalar_one_or_none()
+
+    async def list_for_environment(self, environment: uuid.UUID) -> Sequence[Token]:
+        """Return the registered tokens scoped to the given environment, newest first."""
+        result = await self.session.execute(
+            select(Token).where(Token.environment == environment).order_by(Token.issued_at.desc())
+        )
+        return result.scalars().all()
+
+    async def add(self, token: Token) -> None:
+        """Stage a new token for insertion and flush it so a bad value surfaces here. The caller commits."""
+        self.session.add(token)
+        await self.session.flush()
+
+    async def revoke(self, jti: uuid.UUID, environment: uuid.UUID) -> bool:
+        """
+        Revoke the token with the given jti within the given environment. Returns whether a matching token
+        existed (so the caller can distinguish a real revoke from an unknown jti). The caller commits.
+        """
+        result = await self.session.execute(
+            update(Token).where(Token.jti == jti, Token.environment == environment).values(revoked=True).returning(Token.jti)
+        )
+        return result.first() is not None
+
+    async def mark_used(self, jti: uuid.UUID, when: datetime.datetime) -> None:
+        """Record that the token with the given jti was just used to authenticate. The caller commits."""
+        await self.session.execute(update(Token).where(Token.jti == jti).values(last_used=when))
+
+    async def delete_expired(self) -> None:
+        """Delete registry entries for tokens that have already expired. The caller commits."""
+        await self.session.execute(delete(Token).where(Token.expires_at.is_not(None), Token.expires_at < func.now()))
 
 
 class Project(Base):
