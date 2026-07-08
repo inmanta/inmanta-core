@@ -359,8 +359,8 @@ class EnvironmentService(protocol.ServerSlice):
         if (repository is None and branch is not None) or (repository is not None and branch is None):
             raise BadRequest("Repository and branch should be set together.")
 
-        repository = repository.strip() if repository is not None else ""
-        branch = branch.strip() if branch is not None else ""
+        repository = repository.strip() if repository else ""
+        branch = branch.strip() if branch else ""
 
         # fetch the project first
         project = await data.Project.get_by_id(project_id)
