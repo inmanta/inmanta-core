@@ -67,14 +67,24 @@ def validate_server_setup() -> None:
 
         click.echo(f"{'Server authentication: ' : <50}{click.style('enabled', fg='green')}")
 
-        # make sure the method is set to database
-        if server_config.server_auth_method.get() != "database":
+        # The database user is the primary credential when auth_method=database, and a break-glass
+        # fallback account when auth_method is oidc or jwt (used via the web-console local login
+        # fallback). Any other value is rejected to catch typos.
+        auth_method = server_config.server_auth_method.get()
+        allowed_auth_methods = ("database", "oidc", "jwt")
+        if auth_method not in allowed_auth_methods:
             raise click.ClickException(
-                "The server authentication method should be set to database to continue. Make sure auth_method in the server "
-                "section is set to database"
+                f"The server authentication method (auth_method in the server section) is '{auth_method}', "
+                f"expected one of {', '.join(allowed_auth_methods)}."
             )
 
-        click.echo(f"{'Server authentication method: ' : <50}{click.style('database', fg='green')}")
+        click.echo(f"{'Server authentication method: ' : <50}{click.style(auth_method, fg='green')}")
+
+        if auth_method != "database":
+            click.echo(
+                f"Note: auth_method is '{auth_method}'. Creating a break-glass database user for the web-console "
+                "local login fallback. Make sure web-ui.oidc_local_fallback is enabled so it can be used."
+            )
 
         # make sure there is auth config that supports signing tokens
         cfg = auth.AuthJWTConfig.get_sign_config()
