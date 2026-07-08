@@ -1,0 +1,14 @@
+---
+description: >
+  The server keeps an environment's project checkout and compiler venv on its local filesystem, while compile
+  reports live in the database. These can disagree: the server may have been promoted after a failover, or its
+  state directory may have been wiped or restored from a snapshot. The server now records which compile last ran
+  against each project directory and verifies this at startup against the latest compile in the database. On a
+  mismatch it requests an update and recompile so the local state converges to the project definition.
+change-type: minor
+destination-branches: [master]
+sections:
+  feature: >
+    At startup the server now verifies for every environment that the project state on its local filesystem was
+    produced by that environment's latest compile (this can be false after a failover to another server or a
+    wiped state directory). If not, it automatically requests an update and recompile to converge the local state.

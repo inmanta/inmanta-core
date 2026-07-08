@@ -444,6 +444,13 @@ INMANTA_DISK_LAYOUT_VERSION = ".inmanta_disk_layout_version"
 DEFAULT_INMANTA_DISK_LAYOUT_VERSION = 2
 
 
+# File present in the root of an environment's project directory on the server. It contains the id of the last compile
+# that ran against this directory. At server start it is compared to the latest compile in the database to detect that
+# the local project state was not produced by that compile (e.g. after a failover to another server or a wiped state
+# directory), in which case an update and recompile is requested to converge.
+INMANTA_LAST_COMPILE_MARKER = ".inmanta_last_compile"
+
+
 # ID to represent the new scheduler as an agent
 AGENT_SCHEDULER_ID = "$__scheduler"
 

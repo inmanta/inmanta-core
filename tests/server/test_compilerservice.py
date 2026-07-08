@@ -40,7 +40,7 @@ import inmanta.data.model as model
 import inmanta.util
 import utils
 from inmanta import config, data
-from inmanta.const import INMANTA_REMOVED_SET_ID, ParameterSource
+from inmanta.const import INMANTA_LAST_COMPILE_MARKER, INMANTA_REMOVED_SET_ID, ParameterSource
 from inmanta.data import APILIMIT, Compile, Report
 from inmanta.data.model import PipConfig
 from inmanta.env import PythonEnvironment, VirtualEnv
@@ -2447,3 +2447,139 @@ async def test_drain_multibyte_utf8_at_chunk_boundary(tmp_path, drain_method: st
 
     assert getattr(run.stage, stream_kwarg) == payload
     assert "\u2026" in getattr(run.stage, stream_kwarg)
+
+
+async def test_recompile_when_local_checkout_is_stale(mocked_compiler_service_block: queue.Queue, server, environment) -> None:
+    """
+    A server whose local project checkout was not produced by the environment's latest compile (e.g. after a failover
+    to another server or a wiped state directory) requests an update and recompile at startup to converge.
+    """
+    env = await data.Environment.get_by_id(uuid.UUID(environment))
+    await env.update_fields(repo_url="https://example.com/test/repo.git")
+    compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
+    project_dir = compilerslice._get_project_dir(env.id)
+    marker_path = os.path.join(project_dir, INMANTA_LAST_COMPILE_MARKER)
+    # the mocked compile runner does not set up the project directory itself
+    os.makedirs(project_dir)
+
+    # this environment never compiled: there is no local state to verify
+    await compilerslice._recompile_environments_with_stale_local_state()
+    assert await data.Compile.get_next_run(env.id) is None
+
+    # a compile records on disk that it ran against the local project directory, so nothing to converge
+    first_id, _ = await compilerslice.request_recompile(env=env, force_update=False, do_export=False, remote_id=uuid.uuid4())
+    await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id, fail=False)
+    with open(marker_path) as fh:
+        assert fh.read() == str(first_id)
+    await compilerslice._recompile_environments_with_stale_local_state()
+    assert await data.Compile.get_next_run(env.id) is None
+
+    # identical requests queued together are merged: only one compile runs and writes the marker. The disk state
+    # produced by that compile is up to date for the merged request as well. The two identical requests are queued
+    # behind a compile with a different merge key, so that they merge when the first of them starts.
+    await compilerslice.request_recompile(env=env, force_update=False, do_export=False, remote_id=uuid.uuid4())
+    merged_into_id, _ = await compilerslice.request_recompile(
+        env=env, force_update=False, do_export=True, remote_id=uuid.uuid4()
+    )
+    merged_id, _ = await compilerslice.request_recompile(env=env, force_update=False, do_export=True, remote_id=uuid.uuid4())
+    await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id, fail=False)
+    await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id, fail=False)
+    merged_compile = await data.Compile.get_by_id(merged_id)
+    assert merged_compile.substitute_compile_id == merged_into_id
+    with open(marker_path) as fh:
+        assert fh.read() == str(merged_into_id)
+    await compilerslice._recompile_environments_with_stale_local_state()
+    assert await data.Compile.get_next_run(env.id) is None
+
+    # simulate a failover to a standby that holds an older version of the project: its marker points to an
+    # older compile than the latest one in the database, which ran on the server that is now gone
+    with open(marker_path, "w") as fh:
+        fh.write(str(first_id))
+    await compilerslice._recompile_environments_with_stale_local_state()
+    requested = await data.Compile.get_next_run(env.id)
+    assert requested is not None
+    assert requested.force_update
+    assert requested.metadata["type"] == "recovery"
+    await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id, fail=False)
+    with open(marker_path) as fh:
+        assert fh.read() == str(requested.id)
+    await compilerslice._recompile_environments_with_stale_local_state()
+    assert await data.Compile.get_next_run(env.id) is None
+
+    # without a repository the server cannot restore the local checkout by itself: the environment is
+    # skipped even though its state directory is wiped (simulating a failover to a never-active standby)
+    await env.update_fields(repo_url="")
+    shutil.rmtree(project_dir)
+    os.makedirs(project_dir)
+    await compilerslice._recompile_environments_with_stale_local_state()
+    assert await data.Compile.get_next_run(env.id) is None
+
+    # with the repository restored, the stale checkout is detected and an update and recompile is requested
+    await env.update_fields(repo_url="https://example.com/test/repo.git")
+    await compilerslice._recompile_environments_with_stale_local_state()
+    requested = await data.Compile.get_next_run(env.id)
+    assert requested is not None
+    assert requested.force_update
+    assert requested.do_export
+    assert requested.metadata["type"] == "recovery"
+
+    # running the requested compile records it in the marker, after which the check converges to a no-op
+    await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id, fail=False)
+    with open(marker_path) as fh:
+        assert fh.read() == str(requested.id)
+    await compilerslice._recompile_environments_with_stale_local_state()
+    assert await data.Compile.get_next_run(env.id) is None
+
+    # the marker records the last compile attempt, whether it succeeded or not: the local state was produced by
+    # that attempt either way. Otherwise a compile that fails for reasons unrelated to the local state (a model
+    # error, missing git credentials, ...) would be retried at every server restart, forever.
+    failed_id, _ = await compilerslice.request_recompile(env=env, force_update=False, do_export=False, remote_id=uuid.uuid4())
+    await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id, fail=True)
+    failed_compile = await data.Compile.get_by_id(failed_id)
+    assert failed_compile.success is False
+    with open(marker_path) as fh:
+        assert fh.read() == str(failed_id)
+    await compilerslice._recompile_environments_with_stale_local_state()
+    assert await data.Compile.get_next_run(env.id) is None
+
+
+async def test_stale_local_state_halted_environment(mocked_compiler_service_block: queue.Queue, server, environment) -> None:
+    """
+    A halted environment is not verified at startup: the requested compile could not run anyway and would only
+    accumulate queued compiles across restarts. It is verified when the environment is resumed.
+    """
+    env = await data.Environment.get_by_id(uuid.UUID(environment))
+    await env.update_fields(repo_url="https://example.com/test/repo.git")
+    compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
+    project_dir = compilerslice._get_project_dir(env.id)
+    # the mocked compile runner does not set up the project directory itself
+    os.makedirs(project_dir)
+
+    # a compile ran normally, then the environment was halted
+    await compilerslice.request_recompile(env=env, force_update=False, do_export=False, remote_id=uuid.uuid4())
+    await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id, fail=False)
+    await env.update_fields(halted=True)
+
+    # simulate a failover: the latest compile in the database ran against the disk of another server, this state
+    # directory is empty
+    shutil.rmtree(project_dir)
+    os.makedirs(project_dir)
+
+    # halted: nothing is requested at startup
+    await compilerslice._recompile_environments_with_stale_local_state()
+    assert await data.Compile.get_next_run(env.id) is None
+
+    # resuming the environment verifies the local state and requests the recompile
+    await env.update_fields(halted=False)
+    await compilerslice.resume_environment(env.id)
+    requested = await data.Compile.get_next_run(env.id)
+    assert requested is not None
+    assert requested.force_update
+    assert requested.metadata["type"] == "recovery"
+
+    # running the requested compile records it in the marker and the check converges to a no-op
+    await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id, fail=False)
+    with open(os.path.join(project_dir, INMANTA_LAST_COMPILE_MARKER)) as fh:
+        assert fh.read() == str(requested.id)
+    await compilerslice._recompile_environments_with_stale_local_state()
+    assert await data.Compile.get_next_run(env.id) is None
