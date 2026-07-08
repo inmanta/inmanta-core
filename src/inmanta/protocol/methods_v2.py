@@ -1578,6 +1578,23 @@ def login(username: str, password: SecretStr) -> ReturnValue[model.LoginReturn]:
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.USER_READ, read_only=True)
+@typedmethod(path="/login/renew", operation="POST", client_types=[ClientType.api], api_version=2)
+def login_renew() -> ReturnValue[model.LoginReturn]:
+    """Renew the current login session.
+
+    The caller authenticates with their current, still-valid session token; no password is required. A fresh
+    token is returned (with a new expiry) carrying the user's current roles and admin status. This lets an
+    interactive client, such as the web console, keep an active session alive instead of forcing the user to
+    log in again when the session expires. The user is taken from the token, so a caller can only ever renew
+    their own session.
+
+    :raises BadRequest: Raised when the token is not a login session (for example an API token), or if server
+                        authentication is not enabled
+    :raises UnauthorizedException: Raised when the user no longer exists
+    """
+
+
 @auth(auth_label=const.CoreAuthorizationLabel.ROLE_ASSIGNMENT_READ, read_only=True)
 @typedmethod(path="/user", operation="GET", client_types=[ClientType.api], api_version=2)
 def list_users() -> list[model.UserWithRoles]:
