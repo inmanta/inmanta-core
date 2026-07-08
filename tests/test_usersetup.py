@@ -20,9 +20,11 @@ import asyncio
 import logging
 import os
 
+import pytest
 from click import testing
 
 from inmanta import data
+from inmanta.data.model import AuthMethod
 from inmanta.db.util import PGRestore
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.user_setup import cmd
@@ -101,27 +103,29 @@ async def test_user_setup(
     assert users[0].is_admin
 
 
-async def test_user_setup_oidc(
-    tmpdir, server_pre_start, postgres_db, postgresql_client, database_name, hard_clean_db, hard_clean_db_post
+@pytest.mark.parametrize("auth_method", ["oidc", "jwt"])
+async def test_user_setup_break_glass(
+    tmpdir, server_pre_start, postgres_db, postgresql_client, database_name, hard_clean_db, hard_clean_db_post, auth_method
 ):
     """
-    A break-glass database admin can be provisioned while auth_method is oidc, so the web-console
-    local login fallback has an account to log into when the IdP is unavailable.
+    A break-glass database admin can be provisioned while auth_method is oidc or jwt, so the web-console
+    local login fallback has an account to log into when the identity provider is unavailable.
     """
     ibl = InmantaBootloader(configure_logging=True)
     await ibl.start()
     await ibl.stop(timeout=20)
 
-    setup_config(tmpdir, postgres_db, database_name, auth_method="oidc")
+    setup_config(tmpdir, postgres_db, database_name, auth_method=auth_method)
     cli = CLI_user_setup()
 
-    result = await cli.run("yes", "breakglass", "password")
+    result = await cli.run("yes", "breakglass", "Str0ng-Pass!")
     assert result.exit_code == 0
 
     users = await data.User.get_list(connection=postgresql_client)
     assert len(users) == 1
     assert users[0].username == "breakglass"
     assert users[0].is_admin
+    assert users[0].auth_method == AuthMethod.database
 
 
 async def test_user_setup_invalid_auth_method(
