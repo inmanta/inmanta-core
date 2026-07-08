@@ -2390,9 +2390,9 @@ async def test_drain_multibyte_utf8_at_chunk_boundary(tmp_path, drain_method: st
     assert "\u2026" in getattr(run.stage, stream_kwarg)
 
 
-async def test_recompile_when_local_state_is_stale(mocked_compiler_service_block: queue.Queue, server, environment) -> None:
+async def test_recompile_when_local_checkout_is_stale(mocked_compiler_service_block: queue.Queue, server, environment) -> None:
     """
-    A server whose local project state was not produced by the environment's latest compile (e.g. after a failover
+    A server whose local project checkout was not produced by the environment's latest compile (e.g. after a failover
     to another server or a wiped state directory) requests an update and recompile at startup to converge.
     """
     env = await data.Environment.get_by_id(uuid.UUID(environment))
@@ -2447,16 +2447,15 @@ async def test_recompile_when_local_state_is_stale(mocked_compiler_service_block
     await compilerslice._recompile_environments_with_stale_local_state()
     assert await data.Compile.get_next_run(env.id) is None
 
-    # simulate a failover to a standby that was never active before: its state directory is empty
+    # without a repository the server cannot restore the local checkout by itself: the environment is
+    # skipped even though its state directory is wiped (simulating a failover to a never-active standby)
+    await env.update_fields(repo_url="")
     shutil.rmtree(project_dir)
     os.makedirs(project_dir)
-
-    # without a repository the server cannot restore the local state by itself: the environment is skipped
-    await env.update_fields(repo_url="")
     await compilerslice._recompile_environments_with_stale_local_state()
     assert await data.Compile.get_next_run(env.id) is None
 
-    # with a repository the stale state is detected and an update and recompile is requested
+    # with the repository restored, the stale checkout is detected and an update and recompile is requested
     await env.update_fields(repo_url="https://example.com/test/repo.git")
     await compilerslice._recompile_environments_with_stale_local_state()
     requested = await data.Compile.get_next_run(env.id)

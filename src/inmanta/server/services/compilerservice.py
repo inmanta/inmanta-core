@@ -985,8 +985,9 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
             self.fully_ready = True
             # start a waiting compile in each environment
             await self._process_next_compile_in_queue()
-            # A compile recovered above may itself converge stale local state, in which case the check below
-            # queues one redundant recovery compile behind it. This is bounded and self-corrects.
+            # The call above may restart a compile that was still queued when the server went down. The check
+            # below cannot take the result of that compile into account, so it may request one extra recompile
+            # for such an environment. This is harmless: it happens at most once, at startup.
             await self._recompile_environments_with_stale_local_state()
 
         self.add_background_task(sub_recovery())
@@ -1012,7 +1013,7 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
 
     async def _recompile_environments_with_stale_local_state(self) -> None:
         """
-        Verify the local project state of every environment and request an update and recompile where it is stale.
+        Verify the local project checkout of every environment and request an update and recompile where it is stale.
 
         Halted environments are skipped: a compile requested for them cannot run until they are resumed, so it would
         only accumulate queued compiles across restarts (which the report retention cleanup does not touch for halted
@@ -1047,8 +1048,8 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
         except OSError:
             pass
         LOGGER.warning(
-            "The local project state of environment %s was not produced by compile %s, the latest compile"
-            " in the database (e.g. after a failover to another server or a wiped state directory)."
+            "The local project checkout of environment %s was not produced by compile %s, the latest compile"
+            " in the database (This can be caused by a failover to another orchestrator server or a wiped state directory)."
             " Requesting an update and recompile to converge.",
             env.id,
             expected_id,
@@ -1060,7 +1061,7 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
             remote_id=uuid.uuid4(),
             metadata={
                 "type": "recovery",
-                "message": "Recompile because the local project state does not match the latest compile",
+                "message": "Recompile because the local project checkout does not match the latest compile",
             },
         )
 
