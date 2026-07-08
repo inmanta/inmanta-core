@@ -1019,9 +1019,8 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
         environments). They are verified when they are resumed instead.
         """
         for env in await data.Environment.get_list():
-            if env.halted:
-                continue
-            await self._recompile_environment_with_stale_local_state(env)
+            if not env.halted:
+                await self._recompile_environment_with_stale_local_state(env)
 
     async def _recompile_environment_with_stale_local_state(self, env: data.Environment) -> None:
         """
@@ -1072,7 +1071,6 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
         await self._process_next_compile_in_queue(environment=environment)
         env: Optional[data.Environment] = await data.Environment.get_by_id(environment)
         if env is not None:
-            # halted environments are not verified at startup: verify the local project state now
             await self._recompile_environment_with_stale_local_state(env)
 
     def is_environment_compiling(self, environment_id: uuid.UUID) -> bool:
