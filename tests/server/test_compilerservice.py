@@ -567,13 +567,13 @@ async def test_compile_runner_repo_url_changed(environment_factory: EnvironmentF
     # Recompile with the same repo_url: the checkout must be reused, no clean checkout is performed.
     compile, stages = await _compile_and_assert(env)
     assert "Cloning repository" not in stages
-    assert "because repo url has changed" not in stages["Init"]["outstream"]
+    assert "because the repo url has changed" not in stages["Init"]["outstream"]
     assert f"{marker_print} hello" in stages["Recompiling configuration model"]["outstream"]
 
     # Compile with a different repo_url in the same project directory: the compiler service must
     # detect the changed repo url, wipe the project directory and clone the new repository.
     compile, stages = await _compile_and_assert(env_other)
-    assert "because repo url has changed" in stages["Init"]["outstream"]
+    assert "because the repo url has changed" in stages["Init"]["outstream"]
     assert stages["Cloning repository"]["returncode"] == 0
     assert f"{marker_print_other} hello" in stages["Recompiling configuration model"]["outstream"]
 
