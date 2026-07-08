@@ -17,6 +17,7 @@ Contact: code@inmanta.com
 """
 
 import logging
+import unicodedata
 import uuid
 from collections.abc import Mapping
 from typing import Optional
@@ -68,6 +69,69 @@ def verify_dummy_password(password: SecretStr) -> None:
         nacl.pwhash.verify(_dummy_password_hash.encode(), password.get_secret_value().encode())
     except nacl.exceptions.InvalidkeyError:
         pass
+
+
+def normalize_password(password: str) -> str:
+    """
+    Normalize a password to Unicode NFKC before it is hashed or verified.
+
+    The same password can be entered as different byte sequences depending on the operating system,
+    keyboard, or input method: for example an accented character may be a single code point (é, U+00E9)
+    on one machine and a base letter plus a combining accent (e + U+0301) on another, and compatibility
+    characters (ligatures, full-width forms, ...) have canonical equivalents too. Because the hash is
+    computed over the raw bytes, without normalization the exact same password typed on two machines can
+    fail to verify. NFKC collapses these variants to a single canonical form so a password is accepted
+    regardless of how it was typed. This is recommended by NIST SP 800-63B. For ASCII passwords it is a
+    no-op.
+    """
+    return unicodedata.normalize("NFKC", password)
+
+
+def verify_password(stored_hash: str, password: str) -> tuple[bool, bool]:
+    """
+    Verify a password against a stored hash, tolerating hashes created before NFKC normalization.
+
+    Passwords are normalized (see normalize_password) before being hashed, but hashes stored by older
+    versions were computed from the raw, non-normalized input. Verifying only the normalized form would
+    lock those users out, and a hash cannot be re-normalized in place. So we verify the normalized form
+    first and, only if that fails and the input actually changed under normalization, fall back to the
+    raw form. A match on the raw form is reported via the second return value so the caller can
+    transparently re-hash the password to its normalized form, migrating the account on next use.
+
+    :return: (matched, needs_rehash). matched is True when the password is correct; needs_rehash is True
+             only when it matched the pre-normalization (raw) form and the stored hash should be updated.
+    :raises nacl.exceptions.CryptoError: (except InvalidkeyError) or ValueError when the stored hash
+             itself cannot be parsed; the caller decides how to report that.
+    """
+    # Reject pathologically long input before normalizing. normalize runs on the unauthenticated login
+    # path, and NFKC on a very large string is expensive enough to stall the event loop; no legitimate
+    # password approaches this cap. A too-long password simply does not match.
+    if len(password) > const.MAX_RAW_PASSWORD_LENGTH:
+        return False, False
+    normalized = normalize_password(password)
+    try:
+        nacl.pwhash.verify(stored_hash.encode(), normalized.encode())
+        return True, False
+    except nacl.exceptions.InvalidkeyError:
+        pass
+    if password != normalized:
+        try:
+            nacl.pwhash.verify(stored_hash.encode(), password.encode())
+            return True, True
+        except nacl.exceptions.InvalidkeyError:
+            pass
+    return False, False
+
+
+def normalize_new_password(password: SecretStr) -> str:
+    """
+    Normalize a to-be-stored password to NFKC, rejecting pathologically long input before normalizing
+    (NFKC on a very large string is expensive). Returns the normalized secret to hash.
+    """
+    raw = password.get_secret_value()
+    if len(raw) > const.MAX_RAW_PASSWORD_LENGTH:
+        raise exceptions.BadRequest(f"the password should be at most {const.MAX_PASSWORD_LENGTH} characters long")
+    return normalize_password(raw)
 
 
 def _get_source_ip(context: common.CallContext) -> str:
@@ -129,7 +193,7 @@ class UserService(server_protocol.ServerSlice):
         verify_authentication_enabled()
         if not username:
             raise exceptions.BadRequest("the username cannot be an empty string")
-        secret = password.get_secret_value()
+        secret = normalize_new_password(password)
         verify_password_policy(secret)
 
         # hash the password
@@ -165,7 +229,7 @@ class UserService(server_protocol.ServerSlice):
         current_password: Optional[SecretStr] = None,
     ) -> None:
         verify_authentication_enabled()
-        secret = password.get_secret_value()
+        secret = normalize_new_password(password)
         verify_password_policy(secret)
         source_ip = _get_source_ip(context)
         # check if the user already exists
@@ -181,8 +245,10 @@ class UserService(server_protocol.ServerSlice):
             current_password_ok = bool(user.password_hash)
             if current_password_ok:
                 try:
-                    nacl.pwhash.verify(user.password_hash.encode(), current_password.get_secret_value().encode())
-                except nacl.exceptions.InvalidkeyError:
+                    # The current password only has to match; the account is re-hashed with the new one below,
+                    # so any pre-normalization rehash flag can be ignored here.
+                    current_password_ok, _ = verify_password(user.password_hash, current_password.get_secret_value())
+                except (ValueError, nacl.exceptions.CryptoError):
                     current_password_ok = False
             else:
                 # No local password (e.g. an OIDC-only account): still run a verification so the response
@@ -215,16 +281,26 @@ class UserService(server_protocol.ServerSlice):
             LOGGER.warning("Failed login for user '%s' from %s: no such user", username, source_ip)
             raise exceptions.UnauthorizedException(message=invalid_username_password_msg, no_prefix=True)
         try:
-            nacl.pwhash.verify(user.password_hash.encode(), password.get_secret_value().encode())
-        except nacl.exceptions.InvalidkeyError:
-            LOGGER.warning("Failed login for user '%s' from %s: invalid password", username, source_ip)
-            raise exceptions.UnauthorizedException(message=invalid_username_password_msg, no_prefix=True)
+            matched, needs_rehash = verify_password(user.password_hash, password.get_secret_value())
         except (ValueError, nacl.exceptions.CryptoError):
-            # A stored hash that cannot be parsed is an authentication failure, not a server error. Most
-            # malformed hashes raise InvalidkeyError (a CryptoError subclass) and are handled above; this
-            # clause also covers a hash that is well-formed but too long, which raises a plain ValueError.
+            # A stored hash that cannot be parsed is an authentication failure, not a server error. (Most
+            # malformed hashes raise InvalidkeyError, a CryptoError subclass; a well-formed but too-long
+            # hash raises a plain ValueError. Both are handled here.)
             LOGGER.warning("Failed login for user '%s' from %s: malformed stored password hash", username, source_ip)
             raise exceptions.UnauthorizedException(message=invalid_username_password_msg, no_prefix=True)
+        if not matched:
+            LOGGER.warning("Failed login for user '%s' from %s: invalid password", username, source_ip)
+            raise exceptions.UnauthorizedException(message=invalid_username_password_msg, no_prefix=True)
+        if needs_rehash:
+            # The password only matched its pre-normalization form: best-effort migrate the stored hash to
+            # the normalized form so future logins verify on the first attempt. Authentication has already
+            # succeeded, so a failure here (e.g. a transient DB error) must not fail the login.
+            try:
+                await user.update_fields(
+                    password_hash=nacl.pwhash.str(normalize_password(password.get_secret_value()).encode()).decode()
+                )
+            except Exception:
+                LOGGER.warning("Could not migrate the stored password hash for user '%s' to the normalized form", username)
 
         LOGGER.info("Successful login for user '%s' from %s", username, source_ip)
         role_assignments: model.RoleAssignmentsPerEnvironment = await data.Role.get_roles_for_user(username)
