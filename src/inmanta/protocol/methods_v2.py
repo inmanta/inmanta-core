@@ -325,6 +325,41 @@ def environment_create_token(tid: uuid.UUID, client_types: Sequence[str], idempo
     """
 
 
+@auth(auth_label=const.CoreAuthorizationLabel.TOKEN, read_only=True, environment_param="tid")
+@typedmethod(
+    path="/environment_auth",
+    operation="GET",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def environment_token_list(tid: uuid.UUID) -> list[model.Token]:
+    """
+    List the registered, revocable tokens for an environment. Only non-idempotent tokens are tracked in
+    the registry; idempotent (reproducible) tokens are not listed.
+
+    :param tid: The id of the environment.
+    """
+
+
+@auth(auth_label=const.CoreAuthorizationLabel.TOKEN, read_only=False, environment_param="tid")
+@typedmethod(
+    path="/environment_auth/<jti>",
+    operation="DELETE",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def environment_token_revoke(tid: uuid.UUID, jti: uuid.UUID) -> None:
+    """
+    Revoke a registered token by its jti so that it is rejected on subsequent requests. The signing key
+    is not affected, so other tokens remain valid.
+
+    :param tid: The id of the environment the token belongs to.
+    :param jti: The unique identifier (the jti claim) of the token to revoke.
+    """
+
+
 # Method for listing/getting/setting/removing settings of an environment. This API is also used by agents to configure
 # environments.
 @auth(auth_label=const.CoreAuthorizationLabel.ENVIRONMENT_SETTING_READ, read_only=True, environment_param="tid")

@@ -701,6 +701,9 @@ async def execute_call(
         arguments = CallArguments(config, message, request_headers, remote_ip=remote_ip)
         is_auth_enabled: bool = endpoint.is_auth_enabled()
         arguments.authenticate(auth_enabled=is_auth_enabled)
+        # Enforce the token registry (jti allowlist) for tokens that carry a jti. Stateless service and
+        # legacy tokens have no jti and pass through unchanged.
+        await auth.validate_jti(arguments.auth_token)
         await arguments.process()
 
         authorization_provider = endpoint.get_authorization_provider()

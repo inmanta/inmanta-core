@@ -18,6 +18,7 @@ Contact: code@inmanta.com
 
 import base64
 import configparser
+import datetime
 import json
 import logging
 import os
@@ -25,8 +26,9 @@ import re
 import ssl
 import threading
 import time
+import uuid
 from collections import defaultdict
-from typing import Any, Mapping, MutableMapping, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Mapping, MutableMapping, Optional, Sequence
 from urllib import error, request
 
 import jwt
@@ -36,6 +38,9 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicNumbers
 
 from inmanta import config, const
 from inmanta.protocol import exceptions
+
+if TYPE_CHECKING:
+    from inmanta.data import model
 
 LOGGER = logging.getLogger(__name__)
 
@@ -163,6 +168,78 @@ def decode_token(token: str) -> tuple[claim_type, "AuthJWTConfig"]:
         raise exceptions.Forbidden(*e.args)
 
     return decoded_payload, cfg
+
+
+# In-process cache for the token registry (the jti allowlist). Because HA is active/standby (a single
+# active API process), an in-process cache with event-driven invalidation is correct without
+# cross-process coordination; the TTL is only a backstop against a missed invalidation.
+# Maps a jti string to (cache expiry as a monotonic timestamp, the registered token as a DTO). Only tokens
+# that exist in the registry are cached; unknown jtis are not, so a flood of forged jtis cannot grow the cache.
+JTI_CACHE_TTL: float = 60.0
+_jti_cache: dict[str, tuple[float, "model.Token"]] = {}
+
+
+def invalidate_jti(jti: uuid.UUID | str) -> None:
+    """Drop a jti from the registry cache so the next request re-reads it from the database."""
+    _jti_cache.pop(str(jti), None)
+
+
+def prune_jti_cache() -> None:
+    """Evict cache entries whose TTL has elapsed, so the cache does not grow unbounded over time."""
+    now = time.monotonic()
+    for jti in [jti for jti, (expiry, _token) in _jti_cache.items() if expiry <= now]:
+        _jti_cache.pop(jti, None)
+
+
+async def validate_jti(claims: Optional[claim_type]) -> None:
+    """
+    Enforce the token registry for tokens that carry a jti claim: such a token is accepted only if
+    its jti is present in the registry and not revoked. Tokens without a jti (agent/compiler service
+    tokens and legacy tokens) keep the stateless, signature-only validation and pass through unchanged.
+
+    :raises Forbidden: if a jti-bearing token is unknown to the registry or has been revoked.
+    """
+    if not claims:
+        return
+    jti = claims.get("jti")
+    if not jti or not isinstance(jti, str):
+        return
+
+    now = time.monotonic()
+    # The cache only ever holds registered tokens (as DTOs); a cache miss may resolve to None (unknown jti).
+    token: "Optional[model.Token]"
+    cached = _jti_cache.get(jti)
+    if cached is not None and cached[0] > now:
+        token = cached[1]
+    else:
+        try:
+            jti_uuid = uuid.UUID(jti)
+        except ValueError:
+            raise exceptions.Forbidden("The provided token has an invalid jti claim.")
+        # Lazy import: the data layer imports the protocol package, so importing it at module load
+        # time would create a circular import.
+        from inmanta import data
+        from inmanta.data.sqlalchemy import TokenRepository
+
+        async with data.get_session() as session:
+            repo = TokenRepository(session)
+            entry = await repo.get_by_jti(jti_uuid)
+            # Snapshot to a DTO while the entity's attributes are still loaded (before the session closes).
+            token = entry.to_dto() if entry is not None else None
+            if entry is not None:
+                # Best-effort last-used tracking, bounded to at most once per cache TTL per token.
+                try:
+                    await repo.mark_used(jti_uuid, datetime.datetime.now(tz=datetime.timezone.utc))
+                    await session.commit()
+                except Exception:
+                    LOGGER.debug("Failed to update last_used for token %s", jti, exc_info=True)
+        if token is not None:
+            _jti_cache[jti] = (now + JTI_CACHE_TTL, token)
+
+    if token is None:
+        raise exceptions.Forbidden("The provided token is not recognized; it may have been revoked.")
+    if token.revoked:
+        raise exceptions.Forbidden("The provided token has been revoked.")
 
 
 #############################
