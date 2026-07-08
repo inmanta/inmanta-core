@@ -27,10 +27,14 @@ from inmanta.data import model
 from inmanta.deploy import state
 from inmanta.graphql.graphql import GraphQLSlice
 from inmanta.graphql.schema import (
+    EnumFilter,
     GraphQLContribution,
+    ResourceFilter,
+    StrFilter,
     _docstring_param_cache,
     build_composed_sqlalchemy_model,
     mapper,
+    resolve_resource_ids,
     to_snake_case,
 )
 from inmanta.protocol import Result
@@ -752,6 +756,76 @@ async def test_notifications(server, client, setup_database):
         created = datetime.datetime.fromisoformat(edge["node"]["created"])
         assert created < previous_time
         previous_time = created
+
+
+async def test_resolve_resource_ids(server, client, environment, setup_database, mixed_resource_generator):
+    """
+    ``resolve_resource_ids`` must return exactly the set of resource ids that the equivalent ``resources`` GraphQL
+    query returns for the same filter. This is the contract the filtered resource actions rely on: a deploy/dryrun
+    on a filter operates on precisely the resources the user sees in the ``resources`` view.
+
+    We include ``setup_database`` so there are resources in other environments, to make sure the resolver does not
+    leak resources across environments.
+    """
+    instances = 2
+    resources_per_version = 10
+    await mixed_resource_generator(environment, instances, resources_per_version)
+    env_uuid = uuid.UUID(environment)
+
+    async def ids_from_graphql(filter_fragment: str) -> set[str]:
+        query = """
+        {
+            resources (filter: {environment: "%s" %s}) {
+                edges { node { resourceId } }
+            }
+        }
+        """ % (
+            environment,
+            filter_fragment,
+        )
+        result = await client.graphql(query=query)
+        check_correct_graphql_response(result)
+        return {edge["node"]["resourceId"] for edge in result.result["data"]["data"]["resources"]["edges"]}
+
+    # (graphql filter fragment, equivalent ResourceFilter built in python)
+    cases: list[tuple[str, ResourceFilter]] = [
+        ("", ResourceFilter(environment=env_uuid)),
+        ('agent: {eq: ["agent1"]}', ResourceFilter(environment=env_uuid, agent=StrFilter(eq=["agent1"]))),
+        (
+            'agent: {eq: ["agent1"]} isOrphan: false',
+            ResourceFilter(environment=env_uuid, agent=StrFilter(eq=["agent1"]), is_orphan=False),
+        ),
+        ("isOrphan: true", ResourceFilter(environment=env_uuid, is_orphan=True)),
+        ('resourceIdValue: {eq: ["0"]}', ResourceFilter(environment=env_uuid, resource_id_value=StrFilter(eq=["0"]))),
+        (
+            'resourceType: {contains: ["%XResource0%"]}',
+            ResourceFilter(environment=env_uuid, resource_type=StrFilter(contains=["%XResource0%"])),
+        ),
+        (
+            "blocked: {eq: BLOCKED}",
+            ResourceFilter(environment=env_uuid, blocked=EnumFilter[state.Blocked](eq=[state.Blocked.BLOCKED])),
+        ),
+        ("isDeploying: true", ResourceFilter(environment=env_uuid, is_deploying=True)),
+        (
+            "lastHandlerRun: {eq: NEW}",
+            ResourceFilter(
+                environment=env_uuid, last_handler_run=EnumFilter[state.HandlerResult](eq=[state.HandlerResult.NEW])
+            ),
+        ),
+        ("purged: false", ResourceFilter(environment=env_uuid, purged=False)),
+    ]
+
+    saw_non_empty = False
+    for fragment, filter_obj in cases:
+        expected = await ids_from_graphql(fragment)
+        actual = await resolve_resource_ids(filter_obj)
+        assert actual == expected, fragment
+        saw_non_empty = saw_non_empty or bool(expected)
+    # sanity check: the fixtures actually produced resources that match at least one filter
+    assert saw_non_empty
+
+    # An empty match yields an empty set (not an error).
+    assert await resolve_resource_ids(ResourceFilter(environment=env_uuid, agent=StrFilter(eq=["does-not-exist"]))) == set()
 
 
 async def test_query_resources(server, client, environment, setup_database, mixed_resource_generator):

@@ -1,0 +1,6 @@
+description: >-
+  Add a reusable resolver that turns a resource filter into the set of matching resource ids, reusing the
+  version-selection logic of the GraphQL `resources` query. This is internal groundwork for triggering resource
+  actions (deploy/dryrun) on the result of a filter.
+change-type: patch
+destination-branches: [master, iso9]

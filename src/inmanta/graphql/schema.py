@@ -30,6 +30,7 @@ from inmanta import data
 from inmanta.data import get_session, get_session_factory, model
 from inmanta.deploy import state
 from inmanta.server.services.compilerservice import CompilerService
+from inmanta.types import ResourceIdStr
 from sqlakeyset import Marker, unserialize_bookmark
 from sqlakeyset.asyncio import select_page
 from sqlalchemy import Boolean, Select, UnaryExpression, and_, asc, desc, func, not_, select
@@ -856,6 +857,97 @@ def add_filter_and_sort[*Ts](
     return stmt
 
 
+def join_latest_version[*Ts](
+    stmt: Select[tuple[*Ts]],
+    environment: uuid.UUID,
+    *,
+    include_orphans: bool,
+) -> Select[tuple[*Ts]]:
+    """
+    Restrict a statement that selects from (or joins on) ``models.Resource`` to the resources as present in their
+    latest version. Logic based on ``src/inmanta/data/dataview.py::ResourceView``.
+
+    - When ``include_orphans`` is True, an orphaned resource is returned in the latest version it was present in,
+      and every other resource in the latest scheduled version.
+    - When ``include_orphans`` is False, only resources in the latest scheduled version are returned.
+
+    Extracted from the ``resources`` query so the exact same version-selection logic can be reused to resolve a
+    ``ResourceFilter`` into a set of resource ids (see ``resolve_resource_ids``).
+    """
+    # CTE that fetches the latest scheduled version
+    latest_scheduled_version_cte = (
+        select(models.Scheduler.last_processed_model_version.label("version"))
+        .where(models.Scheduler.environment == environment)
+        .cte()
+    )
+
+    if include_orphans:
+        # CTE that checks if a resource is orphaned or not and returns the appropriate version
+        # - If it is not orphaned, return the resource in the latest released version
+        # - If it is orphaned, return the resource in the latest version that it was present in.
+        included_orphans_cte = (
+            select(
+                models.ResourcePersistentState.environment,
+                models.ResourcePersistentState.resource_id,
+                func.coalesce(
+                    models.ResourcePersistentState.orphaned_after,
+                    latest_scheduled_version_cte.c.version,
+                ).label("version"),
+            )
+            .where(
+                models.ResourcePersistentState.environment == environment,
+            )
+            .cte()
+        )
+        return stmt.join(
+            models.t_resource_set_configuration_model,
+            and_(
+                models.t_resource_set_configuration_model.c.environment == models.Resource.environment,
+                models.t_resource_set_configuration_model.c.resource_set == models.Resource.resource_set,
+            ),
+        ).join(
+            included_orphans_cte,
+            and_(
+                models.Resource.environment == included_orphans_cte.c.environment,
+                models.Resource.resource_id == included_orphans_cte.c.resource_id,
+                models.t_resource_set_configuration_model.c.model == included_orphans_cte.c.version,
+            ),
+        )
+    return stmt.join(
+        models.t_resource_set_configuration_model,
+        and_(
+            models.t_resource_set_configuration_model.c.environment == models.Resource.environment,
+            models.t_resource_set_configuration_model.c.resource_set == models.Resource.resource_set,
+            models.t_resource_set_configuration_model.c.model
+            == select(latest_scheduled_version_cte.c.version).scalar_subquery(),
+        ),
+    )
+
+
+async def resolve_resource_ids(filter: ResourceFilter) -> set[ResourceIdStr]:
+    """
+    Resolve a ``ResourceFilter`` into the set of resource ids matching it, using the exact same version-selection
+    and filtering logic as the ``resources`` query, but without pagination, sorting or extension output columns.
+
+    This is the shared building block used to trigger resource actions (deploy/dryrun) on the result of a filter:
+    the same set of resources the user sees in the ``resources`` query is the set the action operates on.
+    """
+    # Mirrors the include_orphans logic of the `resources` resolver.
+    include_orphans = filter.is_orphan is not False
+    stmt = select(models.Resource.resource_id).join(
+        models.ResourcePersistentState,
+        and_(
+            models.Resource.resource_id == models.ResourcePersistentState.resource_id,
+            models.Resource.environment == models.ResourcePersistentState.environment,
+        ),
+    )
+    stmt = join_latest_version(stmt, filter.environment, include_orphans=include_orphans)
+    stmt = filter.apply_filters(stmt)
+    async with get_session() as session:
+        result = await session.execute(stmt)
+        return {ResourceIdStr(resource_id) for resource_id in result.scalars().all()}
+
+
 def encode_cursor(cursor: str) -> str:
     """
     :param cursor: The cursor received from sqlakeyset without direction information ('<'/'>').
@@ -1214,13 +1306,10 @@ def get_schema(
             before: typing.Optional[str] = strawberry.UNSET,
             order_by: typing.Optional[Sequence[ResourceOrder]] = strawberry.UNSET,
         ) -> CustomListConnection[Resource]:
-            if filter.is_orphan is False:
-                include_orphans = False
-            else:
-                include_orphans = True
+            # Mirrors resolve_resource_ids: is_orphan=False excludes orphans, otherwise they are included.
+            include_orphans = filter.is_orphan is not False
 
-            # Only fetch resources in their latest version
-            # Logic based on src/inmanta/data/dataview.py::ResourceView
+            # Only fetch resources in their latest version, honouring the is_orphan filter (see join_latest_version).
             # We select `resource_model` (a subclass of models.Resource carrying the extensions' extra columns when
             # there are any, models.Resource otherwise) so each row is a single ORM object that can carry them.
             stmt = select(resource_model).join(
@@ -1230,56 +1319,7 @@ def get_schema(
                     models.Resource.environment == models.ResourcePersistentState.environment,
                 ),
             )
-
-            # CTE that fetches the latest scheduled version
-            latest_scheduled_version_cte = (
-                select(models.Scheduler.last_processed_model_version.label("version"))
-                .where(models.Scheduler.environment == filter.environment)
-                .cte()
-            )
-
-            if include_orphans:
-                # CTE that checks if a resource is orphaned or not and returns the appropriate version
-                # - If it is not orphaned, return the resource in the latest released version
-                # - If it is orphaned, return the resource in the latest version that it was present in.
-                included_orphans_cte = (
-                    select(
-                        models.ResourcePersistentState.environment,
-                        models.ResourcePersistentState.resource_id,
-                        func.coalesce(
-                            models.ResourcePersistentState.orphaned_after,
-                            latest_scheduled_version_cte.c.version,
-                        ).label("version"),
-                    )
-                    .where(
-                        models.ResourcePersistentState.environment == filter.environment,
-                    )
-                    .cte()
-                )
-                stmt = stmt.join(
-                    models.t_resource_set_configuration_model,
-                    and_(
-                        models.t_resource_set_configuration_model.c.environment == models.Resource.environment,
-                        models.t_resource_set_configuration_model.c.resource_set == models.Resource.resource_set,
-                    ),
-                ).join(
-                    included_orphans_cte,
-                    and_(
-                        models.Resource.environment == included_orphans_cte.c.environment,
-                        models.Resource.resource_id == included_orphans_cte.c.resource_id,
-                        models.t_resource_set_configuration_model.c.model == included_orphans_cte.c.version,
-                    ),
-                )
-            else:
-                stmt = stmt.join(
-                    models.t_resource_set_configuration_model,
-                    and_(
-                        models.t_resource_set_configuration_model.c.environment == models.Resource.environment,
-                        models.t_resource_set_configuration_model.c.resource_set == models.Resource.resource_set,
-                        models.t_resource_set_configuration_model.c.model
-                        == select(latest_scheduled_version_cte.c.version).scalar_subquery(),
-                    ),
-                )
+            stmt = join_latest_version(stmt, filter.environment, include_orphans=include_orphans)
             stmt = populate_extension_columns(stmt, models.Resource, resource_model, info)
 
             stmt = add_filter_and_sort(stmt, ResourceOrder.default_order(), filter, order_by)
