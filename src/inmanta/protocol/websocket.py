@@ -469,7 +469,8 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
                         await self.write_message(RejectSession(reason="Authentication required").model_dump_json())
                         return
                     try:
-                        auth_module.decode_token(msg.token)
+                        claims, _ = auth_module.decode_token(msg.token)
+                        await auth_module.validate_jti(claims)
                     except Exception:
                         await self.write_message(RejectSession(reason="Invalid authentication token").model_dump_json())
                         return

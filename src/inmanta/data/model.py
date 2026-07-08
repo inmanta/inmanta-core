@@ -916,6 +916,19 @@ class UserWithRoles(User):
         return {str(k): v for k, v in roles.items()}
 
 
+class Token(BaseModel):
+    """A registered (revocable) authentication token, tracked in the token registry."""
+
+    jti: uuid.UUID
+    created_by: str | None = None
+    client_types: list[const.ClientType] = []
+    environment: uuid.UUID | None = None
+    issued_at: datetime.datetime
+    expires_at: datetime.datetime | None = None
+    revoked: bool = False
+    last_used: datetime.datetime | None = None
+
+
 class CurrentUser(BaseModel):
     """Information about the current logged in user"""
 

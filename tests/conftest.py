@@ -189,6 +189,7 @@ TABLES_TO_KEEP = [x.table_name() for x in data._classes] + [
     "module_files",
     "role_assignment",
     "resource_diff",
+    "token",  # Managed via the SQLAlchemy ORM (TokenRepository), not a BaseDocument
 ]  # Join table
 
 # Save the cwd as early as possible to prevent that it gets overridden by another fixture
