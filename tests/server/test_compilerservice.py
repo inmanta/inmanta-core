@@ -524,6 +524,65 @@ async def test_compile_runner(environment_factory: EnvironmentFactory, server, c
 
 
 @pytest.mark.slowtest
+@pytest.mark.parametrize("no_agent", [True])
+async def test_compile_runner_repo_url_changed(environment_factory: EnvironmentFactory, server, client, tmpdir) -> None:
+    """
+    When the repo_url of an environment changes, the compiler service should detect that the origin
+    of the checkout present in the project directory no longer matches the configured repo_url and
+    perform a clean checkout (wipe the project directory and clone the new repository).
+
+    A recompile with an unchanged repo_url must NOT trigger this clean checkout.
+    """
+    marker_print = "_INM_MM:"
+    marker_print_other = "_INM_MM_OTHER:"
+
+    def make_main(marker: str) -> str:
+        return f"""
+    import std::testing
+    std::print("{marker} hello")
+
+    std::testing::NullResource(name="test")
+        """
+
+    other_factory = EnvironmentFactory(dir=str(tmpdir.join("environment_factory_other")), project_name="test_other")
+
+    # Two independent git repositories (different repo_url), each with its own marker.
+    env = await environment_factory.create_environment(make_main(marker_print))
+    env_other = await other_factory.create_environment(make_main(marker_print_other))
+
+    # Sanity check: the two environments really point at different repositories.
+    assert env.repo_url != env_other.repo_url
+
+    project_work_dir = os.path.join(tmpdir, "work")
+    ensure_directory_exist(project_work_dir)
+
+    def _compile_and_assert(env):
+        return compile_and_assert(env=env, client=client, project_work_dir=project_work_dir, export=False)
+
+    # First compile: clones the first repository into an empty project directory.
+    compile, stages = await _compile_and_assert(env)
+    assert stages["Cloning repository"]["returncode"] == 0
+    assert f"{marker_print} hello" in stages["Recompiling configuration model"]["outstream"]
+
+    # Recompile with the same repo_url: the checkout must be reused, no clean checkout is performed.
+    compile, stages = await _compile_and_assert(env)
+    assert "Cloning repository" not in stages
+    assert "because the repo url has changed" not in stages["Init"]["outstream"]
+    assert f"{marker_print} hello" in stages["Recompiling configuration model"]["outstream"]
+
+    # Compile with a different repo_url in the same project directory: the compiler service must
+    # detect the changed repo url, wipe the project directory and clone the new repository.
+    compile, stages = await _compile_and_assert(env_other)
+    assert "because the repo url has changed" in stages["Init"]["outstream"]
+    assert stages["Cloning repository"]["returncode"] == 0
+    assert f"{marker_print_other} hello" in stages["Recompiling configuration model"]["outstream"]
+
+    # The checkout in the project directory now points at the new repository.
+    remote_url = subprocess.check_output(["git", "remote", "get-url", "origin"], cwd=project_work_dir, encoding="utf-8").strip()
+    assert remote_url == env_other.repo_url
+
+
+@pytest.mark.slowtest
 async def test_server_side_compile_with_ssl_enabled(
     tmpdir, request, environment_factory: EnvironmentFactory, server_multi, client_multi, environment_multi
 ) -> None:
