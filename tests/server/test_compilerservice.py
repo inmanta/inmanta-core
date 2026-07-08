@@ -2403,22 +2403,39 @@ async def test_recompile_when_local_state_is_stale(mocked_compiler_service_block
     # the mocked compile runner does not set up the project directory itself
     os.makedirs(project_dir)
 
-    # this environment never compiled: there is no local state to restore
+    # this environment never compiled: there is no local state to verify
     await compilerslice._recompile_environments_with_stale_local_state()
     assert await data.Compile.get_next_run(env.id) is None
 
-    # the database has a completed compile but the local disk has no marker: this server did not run that compile
-    now = datetime.datetime.now().astimezone()
-    completed_compile = data.Compile(
-        remote_id=uuid.uuid4(),
-        environment=env.id,
-        requested=now,
-        started=now,
-        completed=now,
-        success=True,
-        force_update=False,
+    # a compile records on disk that it ran against the local project directory, so nothing to converge
+    first_id, _ = await compilerslice.request_recompile(env=env, force_update=False, do_export=False, remote_id=uuid.uuid4())
+    await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id, fail=False)
+    with open(marker_path) as fh:
+        assert fh.read() == str(first_id)
+    await compilerslice._recompile_environments_with_stale_local_state()
+    assert await data.Compile.get_next_run(env.id) is None
+
+    # identical requests queued together are merged: only one compile runs and writes the marker. The disk state
+    # produced by that compile is up to date for the merged request as well. The two identical requests are queued
+    # behind a compile with a different merge key, so that they merge when the first of them starts.
+    await compilerslice.request_recompile(env=env, force_update=False, do_export=False, remote_id=uuid.uuid4())
+    merged_into_id, _ = await compilerslice.request_recompile(
+        env=env, force_update=False, do_export=True, remote_id=uuid.uuid4()
     )
-    await completed_compile.insert()
+    merged_id, _ = await compilerslice.request_recompile(env=env, force_update=False, do_export=True, remote_id=uuid.uuid4())
+    await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id, fail=False)
+    await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id, fail=False)
+    merged_compile = await data.Compile.get_by_id(merged_id)
+    assert merged_compile.substitute_compile_id == merged_into_id
+    with open(marker_path) as fh:
+        assert fh.read() == str(merged_into_id)
+    await compilerslice._recompile_environments_with_stale_local_state()
+    assert await data.Compile.get_next_run(env.id) is None
+
+    # simulate a failover: the latest compile in the database ran against the disk of another server, this state
+    # directory is empty
+    shutil.rmtree(project_dir)
+    os.makedirs(project_dir)
 
     # without a repository the server cannot restore the local state by itself: the environment is skipped
     await env.update_fields(repo_url="")
@@ -2441,23 +2458,6 @@ async def test_recompile_when_local_state_is_stale(mocked_compiler_service_block
     await compilerslice._recompile_environments_with_stale_local_state()
     assert await data.Compile.get_next_run(env.id) is None
 
-    # a compile that was merged into another one records the compile that actually ran as its substitute:
-    # the marker matches the substitute, not the merged compile's own id
-    now = datetime.datetime.now().astimezone()
-    merged_compile = data.Compile(
-        remote_id=uuid.uuid4(),
-        environment=env.id,
-        requested=now,
-        started=now,
-        completed=now,
-        success=True,
-        force_update=False,
-        substitute_compile_id=requested.id,
-    )
-    await merged_compile.insert()
-    await compilerslice._recompile_environments_with_stale_local_state()
-    assert await data.Compile.get_next_run(env.id) is None
-
     # the marker records the last compile attempt, whether it succeeded or not: the local state was produced by
     # that attempt either way. Otherwise a compile that fails for reasons unrelated to the local state (a model
     # error, missing git credentials, ...) would be retried at every server restart, forever.
@@ -2477,24 +2477,21 @@ async def test_stale_local_state_halted_environment(mocked_compiler_service_bloc
     accumulate queued compiles across restarts. It is verified when the environment is resumed.
     """
     env = await data.Environment.get_by_id(uuid.UUID(environment))
-    await env.update_fields(repo_url="https://example.com/test/repo.git", halted=True)
+    await env.update_fields(repo_url="https://example.com/test/repo.git")
     compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
     project_dir = compilerslice._get_project_dir(env.id)
     # the mocked compile runner does not set up the project directory itself
     os.makedirs(project_dir)
 
-    # the database has a completed compile but the local disk has no marker: this server did not run that compile
-    now = datetime.datetime.now().astimezone()
-    completed_compile = data.Compile(
-        remote_id=uuid.uuid4(),
-        environment=env.id,
-        requested=now,
-        started=now,
-        completed=now,
-        success=True,
-        force_update=False,
-    )
-    await completed_compile.insert()
+    # a compile ran normally, then the environment was halted
+    await compilerslice.request_recompile(env=env, force_update=False, do_export=False, remote_id=uuid.uuid4())
+    await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id, fail=False)
+    await env.update_fields(halted=True)
+
+    # simulate a failover: the latest compile in the database ran against the disk of another server, this state
+    # directory is empty
+    shutil.rmtree(project_dir)
+    os.makedirs(project_dir)
 
     # halted: nothing is requested at startup
     await compilerslice._recompile_environments_with_stale_local_state()
