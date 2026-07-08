@@ -493,13 +493,13 @@ class CompileRun:
                 # If so, we need to perform a clean checkout.
                 if os.listdir(project_dir):
                     current_repo_url: str | None = await self.get_remote()
-                    if repo_url != "" and current_repo_url != repo_url:
-                        # Don't remove anything if (repo_url == "") because that would break pytest_inmanta_lsm.
+                    if repo_url and current_repo_url != repo_url:
+                        # Don't remove anything if no repo-url was defined because that would break pytest_inmanta_lsm.
                         # pytest_inmanta_lsm manually copies data in the servers project directory to use it in
                         # server-side compiles.
                         await self._info(
-                            f"Removing project and venv directory for environment {environment_id} at {project_dir},"
-                            " because repo url has changed."
+                            f"Removing the project directory for environment {environment_id} at {project_dir},"
+                            " because the repo url has changed."
                         )
                         shutil.rmtree(project_dir)
                         os.mkdir(project_dir)
