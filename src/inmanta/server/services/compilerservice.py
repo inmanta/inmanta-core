@@ -184,24 +184,35 @@ class CompileRun:
             ret, _, _ = await asyncio.gather(sub_process.wait(), self.drain_out(out), self.drain_err(err))
             return ret
 
-    async def get_branch(self) -> Optional[str]:
+    async def _run_cmd_async(self, *cmd: str) -> str | None:
+        sub_process: Process | None = None
         try:
             sub_process = await asyncio.create_subprocess_exec(
-                "git", "branch", stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=self._project_dir
+                *cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=self._project_dir
             )
-
-            out, err = await sub_process.communicate()
+            out, _ = await sub_process.communicate()
         finally:
-            if sub_process.returncode is None:
+            if sub_process and sub_process.returncode is None:
                 # The process is still running, kill it
                 sub_process.kill()
 
-        if sub_process.returncode != 0:
+        if not sub_process or sub_process.returncode != 0:
+            return None
+        else:
+            return out.decode()
+
+    async def get_remote(self) -> str | None:
+        result: str | None = await self._run_cmd_async("git", "remote", "get-url", "origin")
+        return result.strip() if result is not None else None
+
+    async def get_branch(self) -> str | None:
+        result: str | None = await self._run_cmd_async("git", "branch")
+        if result is None:
             return None
 
-        o = re.search(r"\* ([^\s]+)$", out.decode(), re.MULTILINE)
-        if o is not None:
-            return o.group(1)
+        match = re.search(r"\* ([^\s]+)$", result, re.MULTILINE)
+        if match is not None:
+            return match.group(1)
         else:
             return None
 
@@ -209,26 +220,8 @@ class CompileRun:
         """
         Returns the fully qualified branch name of the upstream branch associated with the currently checked out branch.
         """
-        try:
-            sub_process = await asyncio.create_subprocess_exec(
-                "git",
-                "rev-parse",
-                "--symbolic-full-name",
-                "@{upstream}",
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                cwd=self._project_dir,
-            )
-            out, err = await sub_process.communicate()
-        finally:
-            if sub_process.returncode is None:
-                # The process is still running, kill it
-                sub_process.kill()
-
-        if sub_process.returncode != 0:
-            return None
-
-        return out.decode().strip()
+        result: str | None = await self._run_cmd_async("git", "rev-parse", "--symbolic-full-name", "@{upstream}")
+        return result.strip() if result is not None else None
 
     async def _run_compile_stage(self, name: str, cmd: list[str], cwd: str, env: dict[str, str] = {}) -> data.Report:
         await self._start_stage(name, " ".join(cmd))
@@ -493,8 +486,24 @@ class CompileRun:
                 """
                 Returns an iterator over all setup stages. Inspecting stage success state is the responsibility of the caller.
                 """
-                repo_url: str = env.repo_url
-                repo_branch: str = env.repo_branch
+                repo_url: str = env.repo_url.strip()
+                repo_branch: str = env.repo_branch.strip()
+
+                # Determine whether the repo_url has changed.
+                # If so, we need to perform a clean checkout.
+                if os.listdir(project_dir):
+                    current_repo_url: str | None = await self.get_remote()
+                    if repo_url and current_repo_url != repo_url:
+                        # Don't remove anything if no repo-url was defined because that would break pytest_inmanta_lsm.
+                        # pytest_inmanta_lsm manually copies data in the servers project directory to use it in
+                        # server-side compiles.
+                        await self._info(
+                            f"Removing the project directory for environment {environment_id} at {project_dir},"
+                            " because the repo url has changed."
+                        )
+                        shutil.rmtree(project_dir)
+                        os.mkdir(project_dir)
+
                 if os.path.exists(os.path.join(project_dir, "project.yml")):
                     yield self._end_stage(0)
 
