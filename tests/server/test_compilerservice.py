@@ -2432,8 +2432,22 @@ async def test_recompile_when_local_state_is_stale(mocked_compiler_service_block
     await compilerslice._recompile_environments_with_stale_local_state()
     assert await data.Compile.get_next_run(env.id) is None
 
-    # simulate a failover: the latest compile in the database ran against the disk of another server, this state
-    # directory is empty
+    # simulate a failover to a standby that holds an older version of the project: its marker points to an
+    # older compile than the latest one in the database, which ran on the server that is now gone
+    with open(marker_path, "w") as fh:
+        fh.write(str(first_id))
+    await compilerslice._recompile_environments_with_stale_local_state()
+    requested = await data.Compile.get_next_run(env.id)
+    assert requested is not None
+    assert requested.force_update
+    assert requested.metadata["type"] == "recovery"
+    await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id, fail=False)
+    with open(marker_path) as fh:
+        assert fh.read() == str(requested.id)
+    await compilerslice._recompile_environments_with_stale_local_state()
+    assert await data.Compile.get_next_run(env.id) is None
+
+    # simulate a failover to a standby that was never active before: its state directory is empty
     shutil.rmtree(project_dir)
     os.makedirs(project_dir)
 
