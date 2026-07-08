@@ -16,6 +16,7 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import base64
 import logging
 
 import jwt
@@ -195,6 +196,106 @@ async def test_login_session_expire(server: protocol.Server, auth_client: endpoi
     assert response.code == 200
     claims = jwt.decode(response.result["data"]["token"], options={"verify_signature": False})
     assert claims["exp"] - claims["iat"] == 7200
+
+
+async def test_login_reports_expires_in(server: protocol.Server, auth_client: endpoints.Client) -> None:
+    """login reports the session lifetime in seconds so a client can renew before it expires."""
+    assert (await auth_client.add_user("admin", "Str0ng-Pass!")).code == 200
+
+    response = await auth_client.login("admin", "Str0ng-Pass!")
+    assert response.code == 200
+    assert response.result["data"]["expires_in"] == 3600
+
+    # When the option is 0 (eternal), no lifetime is reported.
+    config.Config.set("server", "login_session_expire", "0")
+    response = await auth_client.login("admin", "Str0ng-Pass!")
+    assert response.code == 200
+    assert response.result["data"]["expires_in"] is None
+
+
+async def test_login_renew(server: protocol.Server, auth_client: endpoints.Client) -> None:
+    """A logged-in user renews their session with the session token and gets a fresh, working token."""
+    assert (await auth_client.add_user("admin", "Str0ng-Pass!")).code == 200
+
+    login = await auth_client.login("admin", "Str0ng-Pass!")
+    assert login.code == 200
+    session_token = login.result["data"]["token"]
+
+    # A client holding the session token can renew it (no password), getting a new token and lifetime.
+    config.Config.set("client_rest_transport", "token", session_token)
+    session_client = protocol.Client("client")
+    renew = await session_client.login_renew()
+    assert renew.code == 200
+    assert renew.result["data"]["expires_in"] == 3600
+    new_token = renew.result["data"]["token"]
+    claims = jwt.decode(new_token, options={"verify_signature": False})
+    assert claims["sub"] == "admin"
+
+    # The renewed token authenticates subsequent calls.
+    config.Config.set("client_rest_transport", "token", new_token)
+    renewed_client = protocol.Client("client")
+    assert (await renewed_client.list_users()).code == 200
+
+
+async def test_login_renew_reflects_current_admin_status(server: protocol.Server, auth_client: endpoints.Client) -> None:
+    """A renewed token carries the user's current admin status, not the status captured at login time."""
+    assert (await auth_client.add_user("admin", "Str0ng-Pass!")).code == 200
+
+    login = await auth_client.login("admin", "Str0ng-Pass!")
+    assert login.code == 200
+    session_token = login.result["data"]["token"]
+    assert jwt.decode(session_token, options={"verify_signature": False})[const.INMANTA_IS_ADMIN_URN] is False
+
+    # Promote the user, then renew: the fresh token must reflect the new admin status.
+    assert (await auth_client.set_is_admin("admin", True)).code == 200
+    config.Config.set("client_rest_transport", "token", session_token)
+    session_client = protocol.Client("client")
+    renew = await session_client.login_renew()
+    assert renew.code == 200
+    assert jwt.decode(renew.result["data"]["token"], options={"verify_signature": False})[const.INMANTA_IS_ADMIN_URN] is True
+
+
+async def test_login_renew_rejects_non_session_token(server: protocol.Server, auth_client: endpoints.Client) -> None:
+    """Renewal only applies to login sessions: a token without a sub claim (an API token) is rejected."""
+    # The auth_client fixture's token is a bare API token, minted without a sub claim.
+    response = await auth_client.login_renew()
+    assert response.code == 400
+    assert "login sessions" in response.result["message"]
+
+
+async def test_login_renew_rejects_external_issuer_token(server: protocol.Server, auth_client: endpoints.Client) -> None:
+    """
+    A token from another issuer must not be renewable, even when its username matches a local account.
+    In the break-glass topology (a local sign=true section alongside an external OIDC issuer) this would
+    otherwise let a user authenticated against the external issuer obtain a locally-signed token carrying
+    the roles and admin status of a same-named local account.
+    """
+    assert (await auth_client.add_user("admin", "Str0ng-Pass!")).code == 200
+
+    # Register a second, verify-only issuer, as an external OIDC provider would be. It shares the HS256 key
+    # of the fixture's signing config purely to keep the test deterministic; only the issuer differs.
+    key_b64 = "eciwliGyqECVmXtIkNpfVrtBLutZiITZKSKYhogeHMM"
+    key_bytes = base64.urlsafe_b64decode((key_b64 + "==").encode("ascii"))
+    external_issuer = "https://external.example/"
+    config.Config.set("auth_jwt_external", "algorithm", "HS256")
+    config.Config.set("auth_jwt_external", "sign", "false")
+    config.Config.set("auth_jwt_external", "client_types", "api")
+    config.Config.set("auth_jwt_external", "key", key_b64)
+    config.Config.set("auth_jwt_external", "issuer", external_issuer)
+    config.Config.set("auth_jwt_external", "audience", external_issuer)
+
+    # A token minted by that external issuer whose sub happens to match the local "admin" account.
+    external_token = jwt.encode(
+        {"iss": external_issuer, "aud": [external_issuer], "sub": "admin"},
+        key_bytes,
+        algorithm="HS256",
+    )
+    config.Config.set("client_rest_transport", "token", external_token)
+    external_client = protocol.Client("client")
+
+    response = await external_client.login_renew()
+    assert response.code == 400
+    assert "issued by this server" in response.result["message"]
 
 
 async def test_set_password(server: protocol.Server, auth_client: endpoints.Client) -> None:
