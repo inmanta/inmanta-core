@@ -239,6 +239,10 @@ async def validate_jti(claims: Optional[claim_type]) -> None:
         if token is not None:
             _jti_cache[jti] = (now + JTI_CACHE_TTL, token)
 
+    # These two checks cover both the cache-hit and the just-fetched paths. A revoked token keeps its registry
+    # row (revoke sets revoked=True, it is not deleted), so it comes back as a non-None entry and is rejected by
+    # the second check; a None token means the jti is absent from the registry entirely (unknown/forged, or
+    # already cleaned up).
     if token is None:
         raise exceptions.Forbidden("The provided token is not recognized; it may have been revoked.")
     if token.revoked:
