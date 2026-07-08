@@ -985,14 +985,95 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
             self.fully_ready = True
             # start a waiting compile in each environment
             await self._process_next_compile_in_queue()
+            # A compile recovered above may itself converge stale local state, in which case the check below
+            # queues one redundant recovery compile behind it. This is bounded and self-corrects.
+            await self._recompile_environments_with_stale_local_state()
 
         self.add_background_task(sub_recovery())
+
+    def _get_project_dir(self, environment_id: uuid.UUID) -> str:
+        """Return the directory that holds the project checkout and compiler venv for the given environment."""
+        return os.path.join(self._server_state_dir, str(environment_id), "compiler")
+
+    def _write_last_compile_marker(self, environment_id: uuid.UUID, compile_id: uuid.UUID) -> None:
+        """
+        Record in the environment's project directory which compile last ran against it. The startup consistency
+        check compares this marker to the latest compile in the database.
+        """
+        project_dir = self._get_project_dir(environment_id)
+        if not os.path.isdir(project_dir):
+            # the compile never got to setting up the project directory
+            return
+        try:
+            with open(os.path.join(project_dir, const.INMANTA_LAST_COMPILE_MARKER), "w") as fh:
+                fh.write(str(compile_id))
+        except OSError:
+            LOGGER.warning("Failed to write the last-compile marker for environment %s", environment_id, exc_info=True)
+
+    async def _recompile_environments_with_stale_local_state(self) -> None:
+        """
+        Verify the local project state of every environment and request an update and recompile where it is stale.
+
+        Halted environments are skipped: a compile requested for them cannot run until they are resumed, so it would
+        only accumulate queued compiles across restarts (which the report retention cleanup does not touch for halted
+        environments). They are verified when they are resumed instead.
+        """
+        for env in await data.Environment.get_list():
+            if env.halted:
+                continue
+            await self._recompile_environment_with_stale_local_state(env)
+
+    async def _recompile_environment_with_stale_local_state(self, env: data.Environment) -> None:
+        """
+        The project checkout and compiler venv live on the server's local filesystem, while compile reports live in
+        the database. These can disagree: this server may have been promoted after a failover, or its state directory
+        may have been wiped or restored from a snapshot. In that case the project state on disk is not the state that
+        produced the environment's latest compile. Detect this by comparing the last-compile marker on disk to the
+        latest compile in the database, and request an update and recompile to converge the local state.
+        """
+        if not env.repo_url:
+            # without a repository the server cannot restore the local state by itself
+            return
+        last_compile = await data.Compile.get_last_run(env.id)
+        if last_compile is None:
+            # this environment never completed a compile: there is no local state to restore
+            return
+        # a merged compile records the compile that actually ran as its substitute
+        expected_id = last_compile.substitute_compile_id or last_compile.id
+        marker_path = os.path.join(self._get_project_dir(env.id), const.INMANTA_LAST_COMPILE_MARKER)
+        try:
+            with open(marker_path) as fh:
+                if fh.read().strip() == str(expected_id):
+                    return
+        except OSError:
+            pass
+        LOGGER.warning(
+            "The local project state of environment %s was not produced by compile %s, the latest compile"
+            " in the database (e.g. after a failover to another server or a wiped state directory)."
+            " Requesting an update and recompile to converge.",
+            env.id,
+            expected_id,
+        )
+        await self.request_recompile(
+            env,
+            force_update=True,
+            do_export=True,
+            remote_id=uuid.uuid4(),
+            metadata={
+                "type": "recovery",
+                "message": "Recompile because the local project state does not match the latest compile",
+            },
+        )
 
     async def resume_environment(self, environment: uuid.UUID) -> None:
         """
         Resume compiler service after halt.
         """
         await self._process_next_compile_in_queue(environment=environment)
+        env: Optional[data.Environment] = await data.Environment.get_by_id(environment)
+        if env is not None:
+            # halted environments are not verified at startup: verify the local project state now
+            await self._recompile_environment_with_stale_local_state(env)
 
     def is_environment_compiling(self, environment_id: uuid.UUID) -> bool:
         return environment_id in self._env_to_compile_task
@@ -1065,9 +1146,7 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
             if not c.id == compile.id and CompilerService._compile_merge_key(c) == compile_merge_key
         ]
 
-        runner = self._get_compile_runner(
-            compile, project_dir=os.path.join(self._server_state_dir, str(compile.environment), "compiler")
-        )
+        runner = self._get_compile_runner(compile, project_dir=self._get_project_dir(compile.environment))
 
         merged_env_vars = dict(compile.mergeable_environment_variables)
         for merge_candidate in merge_candidates:
@@ -1094,6 +1173,7 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
         end = datetime.datetime.now().astimezone()
         compile_data_json: Optional[dict[str, object]] = None if compile_data is None else compile_data.model_dump()
         await compile.update_fields(completed=end, success=success, version=version, compile_data=compile_data_json)
+        self._write_last_compile_marker(compile.environment, compile.id)
         awaitables = [
             merge_candidate.update_fields(
                 started=compile.started,

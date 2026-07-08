@@ -40,7 +40,7 @@ import inmanta.data.model as model
 import inmanta.util
 import utils
 from inmanta import config, data
-from inmanta.const import INMANTA_REMOVED_SET_ID, ParameterSource
+from inmanta.const import INMANTA_LAST_COMPILE_MARKER, INMANTA_REMOVED_SET_ID, ParameterSource
 from inmanta.data import APILIMIT, Compile, Report
 from inmanta.data.model import PipConfig
 from inmanta.env import PythonEnvironment, VirtualEnv
@@ -2388,3 +2388,187 @@ async def test_drain_multibyte_utf8_at_chunk_boundary(tmp_path, drain_method: st
 
     assert getattr(run.stage, stream_kwarg) == payload
     assert "\u2026" in getattr(run.stage, stream_kwarg)
+
+
+async def test_last_compile_marker_written(mocked_compiler_service_block: queue.Queue, server, environment) -> None:
+    """The id of the compile that last ran against an environment's project directory is recorded on disk."""
+    env = await data.Environment.get_by_id(uuid.UUID(environment))
+    compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
+    project_dir = compilerslice._get_project_dir(env.id)
+    # the mocked compile runner does not set up the project directory itself
+    os.makedirs(project_dir)
+
+    compile_id, _ = await compilerslice.request_recompile(env=env, force_update=False, do_export=False, remote_id=uuid.uuid4())
+    await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id, fail=False)
+
+    with open(os.path.join(project_dir, INMANTA_LAST_COMPILE_MARKER)) as fh:
+        assert fh.read() == str(compile_id)
+
+
+async def test_last_compile_marker_written_for_failed_compile(
+    mocked_compiler_service_block: queue.Queue, server, environment
+) -> None:
+    """
+    The marker records the last compile attempt, whether it succeeded or not: the local state was produced by that
+    attempt either way. Otherwise a compile that fails for reasons unrelated to the local state (a model error,
+    missing git credentials, ...) would be retried at every server restart, forever.
+    """
+    env = await data.Environment.get_by_id(uuid.UUID(environment))
+    await env.update_fields(repo_url="https://example.com/test/repo.git")
+    compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
+    project_dir = compilerslice._get_project_dir(env.id)
+    # the mocked compile runner does not set up the project directory itself
+    os.makedirs(project_dir)
+
+    compile_id, _ = await compilerslice.request_recompile(env=env, force_update=False, do_export=False, remote_id=uuid.uuid4())
+    await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id, fail=True)
+
+    failed_compile = await data.Compile.get_by_id(compile_id)
+    assert failed_compile.success is False
+    with open(os.path.join(project_dir, INMANTA_LAST_COMPILE_MARKER)) as fh:
+        assert fh.read() == str(compile_id)
+
+    # the failed compile is not retried at startup
+    await compilerslice._recompile_environments_with_stale_local_state()
+    assert await data.Compile.get_next_run(env.id) is None
+
+
+async def test_recompile_when_local_state_is_stale(mocked_compiler_service_block: queue.Queue, server, environment) -> None:
+    """
+    A server whose local project state was not produced by the environment's latest compile (e.g. after a failover
+    to another server or a wiped state directory) requests an update and recompile at startup to converge.
+    """
+    env = await data.Environment.get_by_id(uuid.UUID(environment))
+    await env.update_fields(repo_url="https://example.com/test/repo.git")
+    compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
+    project_dir = compilerslice._get_project_dir(env.id)
+    # the mocked compile runner does not set up the project directory itself
+    os.makedirs(project_dir)
+
+    # this environment never compiled: there is no local state to restore
+    await compilerslice._recompile_environments_with_stale_local_state()
+    assert await data.Compile.get_next_run(env.id) is None
+
+    # the database has a completed compile but the local disk has no marker: this server did not run that compile
+    now = datetime.datetime.now().astimezone()
+    completed_compile = data.Compile(
+        remote_id=uuid.uuid4(),
+        environment=env.id,
+        requested=now,
+        started=now,
+        completed=now,
+        success=True,
+        force_update=False,
+    )
+    await completed_compile.insert()
+
+    await compilerslice._recompile_environments_with_stale_local_state()
+    requested = await data.Compile.get_next_run(env.id)
+    assert requested is not None
+    assert requested.force_update
+    assert requested.do_export
+    assert requested.metadata["type"] == "recovery"
+
+    # running the requested compile records the marker, after which the check converges to a no-op
+    await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id, fail=False)
+    await compilerslice._recompile_environments_with_stale_local_state()
+    assert await data.Compile.get_next_run(env.id) is None
+
+
+async def test_no_recompile_when_local_state_matches(mocked_compiler_service_block: queue.Queue, server, environment) -> None:
+    """A server that ran the environment's latest compile itself does not recompile at startup."""
+    env = await data.Environment.get_by_id(uuid.UUID(environment))
+    await env.update_fields(repo_url="https://example.com/test/repo.git")
+    compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
+    project_dir = compilerslice._get_project_dir(env.id)
+    # the mocked compile runner does not set up the project directory itself
+    os.makedirs(project_dir)
+
+    compile_id, _ = await compilerslice.request_recompile(env=env, force_update=False, do_export=False, remote_id=uuid.uuid4())
+    await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id, fail=False)
+
+    await compilerslice._recompile_environments_with_stale_local_state()
+    assert await data.Compile.get_next_run(env.id) is None
+
+    # a compile that was merged into another one records the compile that actually ran as its substitute:
+    # the marker matches the substitute, not the merged compile's own id
+    now = datetime.datetime.now().astimezone()
+    merged_compile = data.Compile(
+        remote_id=uuid.uuid4(),
+        environment=env.id,
+        requested=now,
+        started=now,
+        completed=now,
+        success=True,
+        force_update=False,
+        substitute_compile_id=compile_id,
+    )
+    await merged_compile.insert()
+    await compilerslice._recompile_environments_with_stale_local_state()
+    assert await data.Compile.get_next_run(env.id) is None
+
+
+async def test_no_recompile_without_repo_url(mocked_compiler_service_block: queue.Queue, server, environment) -> None:
+    """
+    An environment without a repository is not verified: the server cannot restore the local state by itself,
+    so a forced compile would only fail at every startup.
+    """
+    env = await data.Environment.get_by_id(uuid.UUID(environment))
+    assert not env.repo_url
+    compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
+
+    # the database has a completed compile and there is no marker on disk, but there is no repository to restore from
+    now = datetime.datetime.now().astimezone()
+    completed_compile = data.Compile(
+        remote_id=uuid.uuid4(),
+        environment=env.id,
+        requested=now,
+        started=now,
+        completed=now,
+        success=True,
+        force_update=False,
+    )
+    await completed_compile.insert()
+
+    await compilerslice._recompile_environments_with_stale_local_state()
+    assert await data.Compile.get_next_run(env.id) is None
+
+
+async def test_stale_local_state_halted_environment(mocked_compiler_service_block: queue.Queue, server, environment) -> None:
+    """
+    A halted environment is not verified at startup: the requested compile could not run anyway and would only
+    accumulate queued compiles across restarts. It is verified when the environment is resumed.
+    """
+    env = await data.Environment.get_by_id(uuid.UUID(environment))
+    await env.update_fields(repo_url="https://example.com/test/repo.git", halted=True)
+    compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
+    project_dir = compilerslice._get_project_dir(env.id)
+    # the mocked compile runner does not set up the project directory itself
+    os.makedirs(project_dir)
+
+    # the database has a completed compile but the local disk has no marker: this server did not run that compile
+    now = datetime.datetime.now().astimezone()
+    completed_compile = data.Compile(
+        remote_id=uuid.uuid4(),
+        environment=env.id,
+        requested=now,
+        started=now,
+        completed=now,
+        success=True,
+        force_update=False,
+    )
+    await completed_compile.insert()
+
+    # halted: nothing is requested at startup
+    await compilerslice._recompile_environments_with_stale_local_state()
+    assert await data.Compile.get_next_run(env.id) is None
+
+    # resuming the environment verifies the local state and requests the recompile
+    await env.update_fields(halted=False)
+    await compilerslice.resume_environment(env.id)
+    requested = await data.Compile.get_next_run(env.id)
+    assert requested is not None
+    assert requested.force_update
+    assert requested.metadata["type"] == "recovery"
+
+    await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id, fail=False)
