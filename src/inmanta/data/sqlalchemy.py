@@ -99,6 +99,11 @@ class WriteValidatedMixin:
 
     @classmethod
     def __declare_last__(cls) -> None:
+        """
+        SQLAlchemy declarative hook, invoked once after the mapper is configured. Registers a write-time
+        validator (see _make_column_validator) for every mapped column, so each column's value is type-checked
+        on assignment against that column's own declared type and nullability.
+        """
         mapper = class_mapper(cls)
         for column_property in mapper.column_attrs:
             column = column_property.columns[0]

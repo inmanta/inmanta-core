@@ -9,3 +9,9 @@ change-type: minor
 destination-branches:
   - master
   - iso9
+sections:
+  feature: >
+    Added a token registry so user-created API tokens can be listed and individually revoked without rotating
+    the signing key. Non-idempotent tokens now carry a jti claim and are recorded in a new token table, and are
+    rejected once revoked; idempotent, service and legacy tokens keep their stateless, signature-only validation.
+    New environment_token_list and environment_token_revoke API endpoints expose the registry.

@@ -216,8 +216,11 @@ async def validate_jti(claims: Optional[claim_type]) -> None:
             jti_uuid = uuid.UUID(jti)
         except ValueError:
             raise exceptions.Forbidden("The provided token has an invalid jti claim.")
-        # Lazy import: the data layer imports the protocol package, so importing it at module load
-        # time would create a circular import.
+        # Imported inside the function, not at module level. auth.auth sits on the data <-> protocol import
+        # cycle (data/__init__ imports inmanta.protocol, which imports auth.auth). Binding the data module at
+        # load time is actually harmless, but a module-level "from inmanta.data import Token" (or any
+        # module-level data.<attr> reference) would fail with an import-order-dependent ImportError. Keeping
+        # the import local sidesteps that trap.
         from inmanta import data
         from inmanta.data.sqlalchemy import TokenRepository
 
