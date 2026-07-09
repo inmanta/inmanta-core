@@ -76,7 +76,7 @@ class CodeManager:
                  in this dictionary are ``ModuleSource`` objects.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, resources: Mapping["Id", "Resource"]) -> None:
         # Old implementation
         # Use by external code
 
@@ -84,23 +84,18 @@ class CodeManager:
         # To which python module do these python files belong
         self.__file_info: dict[str, ModuleSource] = {}
 
-        self._types_to_agent: dict[str, set[str]] = defaultdict(set)
-        self._all_agents: set[str] = set()
+        self._types_to_agent: dict[str, set[AgentName]] = defaultdict(set)
+        self._all_agents: set[AgentName] = set()
+
+        for id in resources:
+            self._types_to_agent[id.entity_type].add(id.agent_name)
+            self._all_agents.add(id.agent_name)
 
         self._load_modules_on_agents_map: dict[InmantaModuleName, set[AgentName]] = defaultdict(set)
         self._install_modules_on_agents_map: dict[InmantaModuleName, set[AgentName]] = defaultdict(set)
         # Map of [inmanta_module_name, inmanta module]
         self.module_version_info: dict[str, "InmantaModule"] = {}
 
-    def build_agent_map(self, resources: dict["Id", "Resource"]) -> None:
-        """
-        Construct a map of which agents are registered to deploy which resource type.
-        This map is later used to construct a map of which agents need to load
-        which Inmanta module(s).
-        """
-        for id in resources:
-            self._types_to_agent[id.entity_type].add(id.agent_name)
-            self._all_agents.add(id.agent_name)
 
     def register_code(
         self,
@@ -110,8 +105,6 @@ class CodeManager:
         editable_installed_inmanta_modules: Mapping[packaging.utils.NormalizedName, packaging.version.Version],
     ) -> None:
         """Register the given type_object under the type_name and register the inmanta module associated with this type object.
-        This method assumes the build_agent_map method was called first.
-
 
         :param type_name: The inmanta type name for which the source of type_object will be registered.
             For example std::testing::NullResource

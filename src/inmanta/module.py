@@ -1880,9 +1880,9 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
     def get_editable_installed_inmanta_modules(self) -> dict[packaging.utils.NormalizedName, packaging.version.Version]:
         return {
-            k: v
-            for k, v in self.virtualenv.get_installed_packages(only_editable=True).items()
-            if k.startswith(ModuleV2.PKG_NAME_PREFIX)
+            name: version
+            for name, version in self.virtualenv.get_installed_packages(only_editable=True).items()
+            if name.startswith(ModuleV2.PKG_NAME_PREFIX)
         }
 
     @classmethod

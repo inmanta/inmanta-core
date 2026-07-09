@@ -558,8 +558,7 @@ class Exporter:
         if version is None and not partial_compile:
             raise Exception("Full export requires version to be set")
 
-        code_manager = inmanta.loader.CodeManager()
-        code_manager.build_agent_map(self._resources)
+        code_manager = inmanta.loader.CodeManager(resources=self._resources)
 
         self.register_code(code_manager)
 
