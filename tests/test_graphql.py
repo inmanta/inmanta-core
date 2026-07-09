@@ -1936,8 +1936,7 @@ async def test_custom_extension_filter_field_collision(server):
 
 async def test_custom_extension_filter_validation(server, client, project_default):
     """
-    validate_filter is available on every filter, not just resources: an extension contributing a filter to the
-    (non-resource) `environments` query can reject invalid field combinations, and the error is surfaced to the user.
+    Validate that an error is raised if a filter, contributed by extension, rejects an invalid filter combination using its validate_filter method.
     """
 
     @strawberry.input

@@ -1292,10 +1292,10 @@ class RegistrableGraphQLType:
 # The object types extensions can register GraphQL contributions for (see GraphQLContribution), mapping each SQLAlchemy
 # model to its core building blocks. `get_schema` composes each of these from the core building blocks and the
 # registered contributions; registrations for any other model are rejected.
-REGISTRABLE_MODELS: "Mapping[type[models.Base], RegistrableGraphQLType]" = {
-    models.Resource: RegistrableGraphQLType(core_mixin=CoreResourceMixin, core_filter=CoreResourceFilter),
-    models.Environment: RegistrableGraphQLType(core_mixin=CoreEnvironmentMixin, core_filter=CoreEnvironmentFilter),
-    models.Notification: RegistrableGraphQLType(core_mixin=CoreNotificationMixin, core_filter=CoreNotificationFilter),
+CONTRIBUTABLE_MODELS: "Mapping[type[models.Base], RegistrableGraphQLType]" = {
+    models.Resource: ContributableGraphQLType(core_mixin=CoreResourceMixin, core_filter=CoreResourceFilter),
+    models.Environment: ContributableGraphQLType(core_mixin=CoreEnvironmentMixin, core_filter=CoreEnvironmentFilter),
+    models.Notification: ContributableGraphQLType(core_mixin=CoreNotificationMixin, core_filter=CoreNotificationFilter),
 }
 
 
@@ -1354,12 +1354,12 @@ def get_schema(
         return stmt
 
     # Build each registrable object type's output type and filter input.
-    built_types: dict[GraphQLTypeName, tuple[type[models.Base], type]] = {}
+    built_output_types: dict[GraphQLTypeName, tuple[type[models.Base], type]] = {}
     built_filters: dict[GraphQLTypeName, tuple[tuple[type[StrawberryFilter], ...], type]] = {}
     for base_model, registrable in REGISTRABLE_MODELS.items():
         type_name = graphql_type_name(base_model)
         contributions = extension_contributions.get(type_name, [])
-        built_types[type_name] = build_output_type(base_model, registrable.core_mixin)
+        built_output_types[type_name] = build_output_type(base_model, registrable.core_mixin)
         built_filters[type_name] = build_composed_filter_input(type_name, registrable.core_filter, contributions)
 
     environment_model, Environment = built_types[graphql_type_name(models.Environment)]
