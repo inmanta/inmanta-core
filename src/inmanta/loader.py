@@ -28,7 +28,7 @@ import sys
 import traceback
 import types
 from collections import abc, defaultdict
-from collections.abc import Iterable, Iterator, Mapping, Sequence, Collection
+from collections.abc import Collection, Iterable, Iterator, Mapping, Sequence
 from importlib.abc import FileLoader, MetaPathFinder
 from importlib.machinery import ModuleSpec, SourcelessFileLoader
 from itertools import chain
@@ -51,7 +51,7 @@ LOGGER = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from inmanta.data.model import ModuleSourceMetadata
-    from inmanta.resources import Id, Resource
+    from inmanta.resources import Id
 
 
 def get_inmanta_module_name(python_module_name: str) -> str:
@@ -100,7 +100,6 @@ class CodeManager:
         self._install_modules_on_agents_map: dict[InmantaModuleName, set[AgentName]] = defaultdict(set)
         # Map of [inmanta_module_name, inmanta module]
         self.module_version_info: dict[str, "InmantaModule"] = {}
-
 
     def register_code(
         self,
@@ -198,7 +197,9 @@ class CodeManager:
                 editable_install=False,
             )
 
-    def _update_load_and_install_agent_maps(self, inmanta_module_name: str, registered_agents: set[str], editable_install: bool) -> None:
+    def _update_load_and_install_agent_maps(
+        self, inmanta_module_name: str, registered_agents: set[str], editable_install: bool
+    ) -> None:
         """
         Helper method to update the set of agents registered for the given Inmanta module. We want to install editable modules
         on all agents, but we do not want to eagerly load them (i.e. only load them on agents that were registered to use
