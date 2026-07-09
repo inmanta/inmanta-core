@@ -1459,9 +1459,13 @@ def get_schema(
                 if filter_instance.filters_on_resource_table():
                     filters_on_resource_table = True
 
-            # True when a component actively took over version selection
-            # rather than the plain default of "latest scheduled version + orphans".
-            custom_version_selection = version_handler is not None
+            # Only a genuine change to version selection invalidates the ResourcePersistentState-only count: an
+            # extension taking over selection, or a pinned model_version (a historical snapshot). is_orphan leaves
+            # the default selection unchanged, so it must not disable the fast count -- it only enforces the
+            # single-version-owner rule above.
+            custom_version_selection = version_handler is not None and (
+                not isinstance(version_handler, CoreResourceFilter) or is_provided(version_handler.model_version)
+            )
             if version_handler is None:
                 version_handler = next(i for i in resource_filter_instances if isinstance(i, CoreResourceFilter))
             stmt = version_handler.apply_version_filter(stmt)
