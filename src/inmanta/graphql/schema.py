@@ -770,7 +770,9 @@ class ResourceFilterABC(StrawberryFilter):
         Restrict the query to the appropriate version(s) of the model. Only invoked on the single component
         responsible for version selection: an extension whose `handles_version()` is True, or core otherwise.
         """
-        raise NotImplementedError()
+        raise NotImplementedError(
+            f"{type(self).__name__} returns handles_version()=True but does not implement apply_version_filter()."
+        )
 
     def filters_on_resource_table(self) -> bool:
         """
@@ -1449,7 +1451,10 @@ def get_schema(
                 filter_instance.validate_filter()
                 if filter_instance.handles_version():
                     if version_handler is not None:
-                        raise ValueError("Only one extension can determine version logic.")
+                        raise ValueError(
+                            "Multiple filter components tried to control version selection; at most one may: "
+                            "an extension (via handles_version), or core (via isOrphan / modelVersion)."
+                        )
                     version_handler = filter_instance
                 if filter_instance.filters_on_resource_table():
                     filters_on_resource_table = True
