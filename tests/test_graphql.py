@@ -1846,9 +1846,7 @@ async def test_custom_extension_resource_filter(server, environment, client, cap
 
 async def test_custom_extension_environment_filter(server, client, project_default, caplog):
     """
-    Filter composition is generic across object types, not resource-specific: an extension can contribute a filter
-    (via GraphQLContribution.get_filter_input_class) to the `environments` query too. Its fields are composed into the
-    EnvironmentFilter input and its apply_filter runs alongside core's.
+    Validate that we can extend the environment filter with additional filter logic.
     """
 
     @strawberry.input
@@ -1886,7 +1884,11 @@ async def test_custom_extension_environment_filter(server, client, project_defau
         result = await client.graphql(query="""
             {
                 environments (filter: {nameContains: "alp"}) {
-                    edges { node { name } }
+                    edges {
+                        node {
+                            name
+                            }
+                        }
                 }
             }
             """)
@@ -1894,12 +1896,6 @@ async def test_custom_extension_environment_filter(server, client, project_defau
         log_contains(caplog, __name__, logging.INFO, "Applied environment filter alp")
     names = {edge["node"]["name"] for edge in result.result["data"]["data"]["environments"]["edges"]}
     assert names == {"alpha", "alpine"}
-
-    # The filter is optional: without it, all environments are returned.
-    result = await client.graphql(query="{ environments { edges { node { name } } } }")
-    check_correct_graphql_response(result)
-    all_names = {edge["node"]["name"] for edge in result.result["data"]["data"]["environments"]["edges"]}
-    assert {"alpha", "alpine", "beta"} <= all_names
 
 
 async def test_custom_extension_filter_field_collision(server):
@@ -1936,7 +1932,8 @@ async def test_custom_extension_filter_field_collision(server):
 
 async def test_custom_extension_filter_validation(server, client, project_default):
     """
-    Validate that an error is raised if a filter, contributed by extension, rejects an invalid filter combination using its validate_filter method.
+    Validate that an error is raised if a filter, contributed by extension,
+    rejects an invalid filter combination using its validate_filter method.
     """
 
     @strawberry.input

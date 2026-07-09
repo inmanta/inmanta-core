@@ -1278,7 +1278,7 @@ def decompose_filter[F: StrawberryFilter](filter: object, components: tuple[type
 
 
 @dataclasses.dataclass(frozen=True)
-class RegistrableGraphQLType:
+class ContributableGraphQLType:
     """
     The core building blocks of an object type that extensions can contribute to (see `GraphQLContribution`):
     the mixin carrying its core output fields and the class carrying its core filter fields. `get_schema` composes
@@ -1292,7 +1292,7 @@ class RegistrableGraphQLType:
 # The object types extensions can register GraphQL contributions for (see GraphQLContribution), mapping each SQLAlchemy
 # model to its core building blocks. `get_schema` composes each of these from the core building blocks and the
 # registered contributions; registrations for any other model are rejected.
-CONTRIBUTABLE_MODELS: "Mapping[type[models.Base], RegistrableGraphQLType]" = {
+CONTRIBUTABLE_MODELS: "Mapping[type[models.Base], ContributableGraphQLType]" = {
     models.Resource: ContributableGraphQLType(core_mixin=CoreResourceMixin, core_filter=CoreResourceFilter),
     models.Environment: ContributableGraphQLType(core_mixin=CoreEnvironmentMixin, core_filter=CoreEnvironmentFilter),
     models.Notification: ContributableGraphQLType(core_mixin=CoreNotificationMixin, core_filter=CoreNotificationFilter),
@@ -1356,15 +1356,15 @@ def get_schema(
     # Build each registrable object type's output type and filter input.
     built_output_types: dict[GraphQLTypeName, tuple[type[models.Base], type]] = {}
     built_filters: dict[GraphQLTypeName, tuple[tuple[type[StrawberryFilter], ...], type]] = {}
-    for base_model, registrable in REGISTRABLE_MODELS.items():
+    for base_model, registrable in CONTRIBUTABLE_MODELS.items():
         type_name = graphql_type_name(base_model)
         contributions = extension_contributions.get(type_name, [])
         built_output_types[type_name] = build_output_type(base_model, registrable.core_mixin)
         built_filters[type_name] = build_composed_filter_input(type_name, registrable.core_filter, contributions)
 
-    environment_model, Environment = built_types[graphql_type_name(models.Environment)]
-    notification_model, Notification = built_types[graphql_type_name(models.Notification)]
-    resource_model, Resource = built_types[graphql_type_name(models.Resource)]
+    environment_model, Environment = built_output_types[graphql_type_name(models.Environment)]
+    notification_model, Notification = built_output_types[graphql_type_name(models.Notification)]
+    resource_model, Resource = built_output_types[graphql_type_name(models.Resource)]
     environment_filter_components, EnvironmentFilter = built_filters[graphql_type_name(models.Environment)]
     notification_filter_components, NotificationFilter = built_filters[graphql_type_name(models.Notification)]
     resource_filter_components, ResourceFilter = built_filters[graphql_type_name(models.Resource)]
