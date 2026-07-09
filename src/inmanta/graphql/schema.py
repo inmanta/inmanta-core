@@ -1353,8 +1353,7 @@ def get_schema(
             stmt = contribution.populate_sqlalchemy_columns(stmt, composed_model, requested_fields)
         return stmt
 
-    # Build each registrable object type's output type and (extension-composed) filter input, both composed the same
-    # generic way from the type's core building blocks (see RegistrableGraphQLType) and the contributions targeting it.
+    # Build each registrable object type's output type and filter input.
     built_types: dict[GraphQLTypeName, tuple[type[models.Base], type]] = {}
     built_filters: dict[GraphQLTypeName, tuple[tuple[type[StrawberryFilter], ...], type]] = {}
     for base_model, registrable in REGISTRABLE_MODELS.items():
@@ -1455,8 +1454,8 @@ def get_schema(
                 if filter_instance.filters_on_resource_table():
                     filters_on_resource_table = True
 
-            # True when a component actively took over version selection (core via is_orphan/model_version, or an
-            # extension) rather than the plain default of "latest scheduled version + orphans".
+            # True when a component actively took over version selection
+            # rather than the plain default of "latest scheduled version + orphans".
             custom_version_selection = version_handler is not None
             if version_handler is None:
                 version_handler = next(i for i in resource_filter_instances if isinstance(i, CoreResourceFilter))
