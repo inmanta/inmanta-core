@@ -6,3 +6,7 @@ description: >
   package-install modules (pip-installed via a synthesized inmanta-module-*==version requirement).
 change-type: major
 destination-branches: [master]
+sections:
+  upgrade-note: >
+  The deprecated 'agent_install_dependency_modules' setting in the project.yml file has been removed.
+

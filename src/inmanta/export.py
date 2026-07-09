@@ -509,9 +509,9 @@ class Exporter:
         """Deploy code to the server"""
 
         LOGGER.info("Sending resources and handler source to server")
-        _project = module.Project.get()
-        all_loaded_modules = _project.modules
-        editable_installed_modules = _project.get_editable_installed_inmanta_modules()
+        project = module.Project.get()
+        all_loaded_modules = project.modules
+        editable_installed_modules = project.get_editable_installed_inmanta_modules()
         types = set()
 
         # Load both resource definition and handlers
