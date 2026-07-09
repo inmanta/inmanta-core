@@ -2088,16 +2088,24 @@ def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
     cache_dir = os.path.abspath(os.path.join(os.path.dirname(modules_v2_dir), f"{os.path.basename(modules_v2_dir)}.cache"))
     build_dir = os.path.join(cache_dir, "build")
     index_dir = os.path.join(build_dir, "simple")
+
+    # The timestamp_file file is used to decide whether the cache is dirty:
+    # When we (re)build the cache, we write the list of v2 modules present in modules_v2_dir.
+    # The cache is considered dirty if
+    #   - an existing module has been modified after the timestamp_file was last modified
+    #   - or if a module is added/removed in modules_v2_dir
     timestamp_file = os.path.join(cache_dir, "cache_creation_timestamp")
 
     def _should_rebuild_cache() -> bool:
         if any(not os.path.exists(f) for f in [build_dir, index_dir, timestamp_file]):
             # Cache doesn't exist
             return True
-        if (
-            len(os.listdir(index_dir)) != len(os.listdir(modules_v2_dir)) + 4
-        ):  # #modules + index.html + setuptools + wheel + packaging
-            # Modules were added/removed from the build_dir
+
+        modules_in_dir = str(sorted(os.listdir(modules_v2_dir)))
+        with open(timestamp_file) as fd:
+            cached_modules = fd.read().strip()
+        # Modules were added/removed from the build_dir
+        if cached_modules != modules_in_dir:
             return True
         # Cache is dirty
         return any(
@@ -2113,7 +2121,8 @@ def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
             shutil.rmtree(cache_dir)
         os.makedirs(build_dir)
         # Build modules
-        for module_dir in os.listdir(modules_v2_dir):
+        module_list = sorted(os.listdir(modules_v2_dir))
+        for module_dir in module_list:
             path: str = os.path.join(modules_v2_dir, module_dir)
             ModuleTool().build(path=path, output_dir=build_dir, wheel=True)
         # Download bare necessities
@@ -2124,7 +2133,8 @@ def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
         # Build python package repository
         libpip2pi.dir2pi(build_dir)
         # Update timestamp file
-        open(timestamp_file, "w").close()
+        with open(timestamp_file, "w") as fd:
+            fd.write(str(module_list))
     else:
         logger.info("Using cache %s", cache_dir)
 
