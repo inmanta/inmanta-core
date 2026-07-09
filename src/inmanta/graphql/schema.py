@@ -30,6 +30,7 @@ from inmanta import data
 from inmanta.data import get_session, get_session_factory, model
 from inmanta.deploy import state
 from inmanta.server.services.compilerservice import CompilerService
+from inmanta.types import ResourceIdStr
 from sqlakeyset import Marker, unserialize_bookmark
 from sqlakeyset.asyncio import select_page
 from sqlalchemy import Boolean, ColumnElement, Select, UnaryExpression, and_, asc, desc, func, not_, select
@@ -1331,6 +1332,83 @@ def decompose_and_validate_filter[F: StrawberryFilter](filter: object, component
     return instances
 
 
+# Set by get_schema so the REST layer can resolve a filter to resource ids using the exact same composed filter
+# components as the `resources` query: (composed ResourceFilter type, its filter components).
+_composed_resource_filter: "tuple[type, tuple[type[StrawberryFilter], ...]] | None" = None
+
+
+def _strip_optional(annotation: object) -> object:
+    """Return the non-None member of an ``X | None`` annotation, or the annotation itself if it is not a union."""
+    args = typing.get_args(annotation)
+    if args:
+        non_none = [arg for arg in args if arg is not type(None)]
+        if non_none:
+            return non_none[0]
+    return annotation
+
+
+def build_resource_filter_from_coerced(coerced: Mapping[str, object], environment: uuid.UUID, composed_type: type) -> object:
+    """
+    Reconstruct an instance of the composed strawberry ``ResourceFilter`` from the value produced by graphql-core input
+    coercion of a REST body (a mapping keyed by the GraphQL field names, with sub-filters as nested mappings and enums
+    already parsed). ``environment`` is supplied out of band (the ``tid``) and is not part of the REST body.
+
+    Generic over the (possibly extension-composed) filter: each present field is mapped back onto its declared filter
+    type, so contributed fields reconstruct without core changes as long as they follow the filter-primitive pattern
+    (a nested operator object, or a scalar).
+    """
+    result = composed_type(environment=environment)
+    field_types = typing.get_type_hints(composed_type)
+    for graphql_name, value in coerced.items():
+        attribute = to_snake_case(graphql_name)
+        if attribute == "environment":
+            continue
+        if isinstance(value, Mapping):
+            sub_filter_type = cast(typing.Callable[..., object], _strip_optional(field_types[attribute]))
+            setattr(result, attribute, sub_filter_type(**{to_snake_case(key): val for key, val in value.items()}))
+        else:
+            setattr(result, attribute, value)
+    return result
+
+
+async def resolve_resource_ids(coerced_filter: Mapping[str, object], environment: uuid.UUID) -> set[ResourceIdStr]:
+    """
+    Resolve a coerced resource filter (the value produced by graphql-core coercion of a REST body) into the set of
+    matching resource ids, using the exact same composed filter, version selection and per-component filtering as the
+    ``resources`` query. Shared building block for triggering resource actions on the result of a filter.
+    """
+    if _composed_resource_filter is None:
+        raise Exception("The GraphQL schema has not been built yet; cannot resolve a resource filter.")
+    composed_type, components = _composed_resource_filter
+    composed = build_resource_filter_from_coerced(coerced_filter, environment, composed_type)
+    instances = cast(list[ResourceFilterABC], decompose_filter(composed, components))
+
+    # Mirror the `resources` resolver: at most one component owns version selection (core by default), and every
+    # component's apply_filter is applied.
+    version_handler: ResourceFilterABC | None = None
+    for instance in instances:
+        instance.validate_filter()
+        if instance.handles_version():
+            if version_handler is not None:
+                raise ValueError("Multiple filter components tried to control version selection.")
+            version_handler = instance
+    if version_handler is None:
+        version_handler = next(instance for instance in instances if isinstance(instance, CoreResourceFilter))
+
+    stmt = select(models.Resource.resource_id).join(
+        models.ResourcePersistentState,
+        and_(
+            models.Resource.resource_id == models.ResourcePersistentState.resource_id,
+            models.Resource.environment == models.ResourcePersistentState.environment,
+        ),
+    )
+    stmt = version_handler.apply_version_filter(stmt)
+    stmt = add_filter_and_sort(stmt, ResourceOrder.default_order(), instances)
+    async with get_session() as session:
+        result = await session.execute(stmt)
+        return {ResourceIdStr(resource_id) for resource_id in result.scalars().all()}
+
+
 @dataclasses.dataclass(frozen=True)
 class ContributableGraphQLType:
     """
@@ -1427,6 +1505,10 @@ def get_schema(
     environment_filter_components, EnvironmentFilter = built_filters[graphql_type_name(models.Environment)]
     notification_filter_components, NotificationFilter = built_filters[graphql_type_name(models.Notification)]
     resource_filter_components, ResourceFilter = built_filters[graphql_type_name(models.Resource)]
+    # Expose the composed resource filter so the REST layer can resolve a filter to resource ids (see
+    # resolve_resource_ids) against the exact same composition.
+    global _composed_resource_filter
+    _composed_resource_filter = (ResourceFilter, resource_filter_components)
 
     class CustomInfo(Info):
         @property

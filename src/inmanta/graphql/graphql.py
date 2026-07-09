@@ -15,7 +15,9 @@ Contact: code@inmanta.com
 from collections import defaultdict
 from typing import Any
 
+from graphql import GraphQLInputObjectType
 from graphql.error import GraphQLError
+from inmanta.graphql.rest_filter import graphql_input_registry, strip_input_field
 from inmanta.graphql.result import GraphQLResult
 from inmanta.graphql.schema import (
     CONTRIBUTABLE_MODELS,
@@ -96,6 +98,11 @@ class GraphQLSlice(protocol.ServerSlice):
             self.context,
             {type_name: list(by_extension.values()) for type_name, by_extension in self.extension_contributions.items()},
         )
+        # Publish the composed ResourceFilter (minus `environment`, which REST supplies as the tid) so REST endpoints
+        # can validate and document their filter body against the exact same GraphQL type (see rest_filter).
+        resource_filter_type = self.schema._schema.type_map["ResourceFilter"]
+        assert isinstance(resource_filter_type, GraphQLInputObjectType)
+        graphql_input_registry.publish("ResourceFilter", strip_input_field(resource_filter_type, "environment"))
         await super().start()
 
     @handle(methods_v2.graphql, operation_name="operationName")
