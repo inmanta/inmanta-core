@@ -22,9 +22,10 @@ import itertools
 import logging
 import time
 import uuid
-from collections.abc import Sequence
+from collections.abc import Sequence, Mapping
 from typing import Any, Callable, Literal, Optional, Union
 
+import packaging
 import pydantic
 
 import inmanta.loader
@@ -38,6 +39,7 @@ from inmanta.data import model
 from inmanta.execute import proxy
 from inmanta.execute.proxy import DynamicProxy, ProxyContext
 from inmanta.execute.runtime import Instance
+from inmanta.module import ModuleMetadata
 from inmanta.resources import Id, IgnoreResourceException, Resource, resource, to_id
 from inmanta.stable_api import stable_api
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
@@ -510,22 +512,22 @@ class Exporter:
 
         LOGGER.info("Sending resources and handler source to server")
         project = module.Project.get()
-        all_loaded_modules = project.modules
-        editable_installed_modules = project.get_editable_installed_inmanta_modules()
-        types = set()
+        all_loaded_modules: Mapping[str, "module.Module[ModuleMetadata]"] = project.modules
+        editable_installed_modules: set[packaging.utils.NormalizedName] = project.get_editable_installed_inmanta_modules().keys()
+        resource_types = set()
 
         # Load both resource definition and handlers
-        for type_name, resource_definition in resource.get_resources():
-            code_manager.register_code(type_name, resource_definition, all_loaded_modules, editable_installed_modules)
-            types.add(type_name)
+        for resource_type, resource_definition in resource.get_resources():
+            code_manager.register_code(resource_type, resource_definition, all_loaded_modules, editable_installed_modules)
+            resource_types.add(resource_type)
 
-        for type_name, handler_definition in Commander.get_providers():
-            code_manager.register_code(type_name, handler_definition, all_loaded_modules, editable_installed_modules)
-            types.add(type_name)
+        for resource_type, handler_definition in Commander.get_providers():
+            code_manager.register_code(resource_type, handler_definition, all_loaded_modules, editable_installed_modules)
+            resource_types.add(resource_type)
 
         # Register all reference and mutator code to all resources. This is very coarse grained and can be optimized once
         # usage patterns have been established.
-        for resource_type in types:
+        for resource_type in resource_types:
             for type_name, obj in itertools.chain(references.reference.get_references(), references.mutator.get_mutators()):
                 if not type_name.startswith("core::"):
                     code_manager.register_code(resource_type, obj, all_loaded_modules, editable_installed_modules)
@@ -558,7 +560,7 @@ class Exporter:
         if version is None and not partial_compile:
             raise Exception("Full export requires version to be set")
 
-        code_manager = inmanta.loader.CodeManager(resources=self._resources)
+        code_manager = inmanta.loader.CodeManager(resources=self._resources.keys())
 
         self.register_code(code_manager)
 

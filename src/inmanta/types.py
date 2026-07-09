@@ -107,9 +107,9 @@ ReturnTupple = tuple[int, Optional[JsonType]]
 
 # Failures encountered while installing/importing agent code, grouped for reporting.
 # Map of python module name -> the exception that prevented it from being installed or loaded.
-FailedModules = dict[str, Exception]
+FailedPythonModules = dict[str, Exception]
 # Map of inmanta module name -> its failed python modules.
-FailedInmantaModules = dict[str, FailedModules]
+FailedInmantaModules = dict[str, FailedPythonModules]
 type StrictJson = dict[str, StrictJson] | list[StrictJson] | str | int | float | bool | None
 
 type StrMapping[T] = Mapping[str, T] | Mapping[ResourceIdStr, T] | Mapping[ResourceVersionIdStr, T]
