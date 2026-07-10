@@ -1635,16 +1635,12 @@ async def test_query_resources_model_version(server, client, environment, setup_
     """
     instances = 2
     resources_per_version = 10
-    orphans = resources_per_version // 2
+    orphans = resources_per_version / 2
     total_resources_in_latest_version = resources_per_version * instances
     await mixed_resource_generator(environment, instances, resources_per_version)
 
-    # mixed_resource_generator creates 2 versions per instance (agent). With 2 instances this gives us
-    # the following configuration model versions (each agent owns resource set "set<agent_index>"):
-    #   v1: full compile, set0 created with <resources_per_version> resources (agent0)
-    #   v2: put_partial, set0 updated -> <resources_per_version> resources, the un-updated half becomes orphaned
-    #   v3: put_partial, set1 created with <resources_per_version> resources (agent1), set0 unchanged
-    #   v4: put_partial, set1 updated -> <resources_per_version> resources, the un-updated half becomes orphaned
+    # mixed_resource_generator creates 2 versions per instance (agent).
+    # With 2 instances this gives us 4 configuration model versions:
     latest_version = instances * 2
 
     async def query_resources(extra_filter: str) -> dict[str, object]:
@@ -1695,15 +1691,14 @@ async def test_query_resources_model_version(server, client, environment, setup_
     no_version = await query_resources("")
     assert no_version["totalCount"] == total_resources_in_latest_version + orphans * instances
 
-    # v1: only set0 (agent0) exists, with its original resources. Note that a specific version is returned as-is:
-    # it includes resources that are orphaned in the latest model (ids "5" .. "9"), regardless of their current
-    # orphan state.
+    # v1: only set0 (agent0) exists, with its original resources. Some of its resources were orphaned in the next version
     v1 = await query_resources("modelVersion: 1")
     assert_resources(v1, {("agent0", rid) for rid in original_ids})
     assert any(edge["node"]["state"]["isOrphan"] is True for edge in v1["edges"])
     assert any(edge["node"]["state"]["isOrphan"] is False for edge in v1["edges"])
 
-    # v2: set0 was recompiled (agent0 only), the upper half was replaced
+    # v2: set0 was recompiled (agent0 only).
+    # Only contains set0 resources as they appear on the latest model version (no orphans)
     v2 = await query_resources("modelVersion: 2")
     assert_resources(
         v2,
@@ -1720,7 +1715,7 @@ async def test_query_resources_model_version(server, client, environment, setup_
     assert any(edge["node"]["state"]["isOrphan"] is True for edge in v3["edges"])
     assert any(edge["node"]["state"]["isOrphan"] is False for edge in v3["edges"])
 
-    # v4 == latest: both sets recompiled. Equivalent to not specifying a version, but without the orphans, so
+    # v4 == latest. Equivalent to not specifying a version, but without the orphans, so
     # none of the returned resources are orphaned.
     latest_resources = {("agent0", rid) for rid in updated_ids} | {("agent1", rid) for rid in updated_ids}
     assert len(latest_resources) == total_resources_in_latest_version
@@ -1770,11 +1765,10 @@ async def test_query_resources_model_version(server, client, environment, setup_
 
 async def test_custom_extension_resource_filter(server, environment, client, caplog, mixed_resource_generator):
     """
-    Test that an extension can contribute its own resource filter fields (via
-    GraphQLContribution.get_filter_input_class): they are composed into the `resources` query's
-    ResourceFilter input, the extension's apply_filter runs alongside core's, and the extension can take over
-    version selection through handles_version / resolve_model_version (mutually exclusive with core's own
-    version selection).
+    Test that an extension can contribute its own resource filter fields: they are composed into the `resources` query's
+    ResourceFilter input, the extension's apply_filter runs after core's.
+    The extension can take over version selection through handles_version / resolve_model_version
+    (mutually exclusive with core's own version selection).
     """
 
     def get_example(root: "ExampleResourceMixin") -> str:
@@ -1852,7 +1846,7 @@ async def test_custom_extension_resource_filter(server, environment, client, cap
         for edge in result.result["data"]["data"]["resources"]["edges"]:
             assert edge["node"]["example"] == "my-example"
 
-    orphans = resources_per_version // 2
+    orphans = resources_per_version / 2
 
     # When the extension provides `atVersion` its handles_version() returns True, so it takes over version selection
     # from core.
