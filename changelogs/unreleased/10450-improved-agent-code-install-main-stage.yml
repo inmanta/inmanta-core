@@ -1,12 +1,13 @@
 ---
 description: >
-  Main stage of the improved code install on the agent: rework how module code reaches agents. Split the old single
-  'for_agents' notion into 'install-on-agent' vs 'load-on-agent', and distinguish
-  editable-install modules (source stored in the DB, written to disk on all agents, imported only on agents that use them) from
-  package-install modules (pip-installed via a synthesized inmanta-module-*==version requirement).
+  Main stage of the improved code install on the agent: rework how module code reaches agents. We now make a distinction
+  for modules installed in the venv of the compiler if they were installed in editable mode or as a package.
+  To install these modules on the agent:
+    - For modules installed in editable mode, the existing code transport mechanism is mostly reused
+    - For modules installed as a package, we now rely on pip
 change-type: major
 destination-branches: [master]
 sections:
   upgrade-note: >
-  The deprecated 'agent_install_dependency_modules' setting in the project.yml file has been removed.
+    The deprecated 'agent_install_dependency_modules' setting in the project.yml file has been removed.
 

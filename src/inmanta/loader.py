@@ -38,7 +38,6 @@ import packaging
 import packaging.utils
 from inmanta import const, module
 from inmanta.data.model import AgentName, ExecutorModuleSource, InmantaModule, InmantaModuleName, ModuleSource
-from inmanta.module import ModuleMetadata
 from inmanta.stable_api import stable_api
 from inmanta.types import FailedInmantaModules
 from inmanta.util import hash_file_streaming
@@ -77,7 +76,7 @@ class CodeManager:
                  in this dictionary are ``ModuleSource`` objects.
     """
 
-    def __init__(self, resources: Collection[Id]) -> None:
+    def __init__(self, resources: Collection["Id"]) -> None:
         """
 
         :param resources: Collection of all resources present in the current compile run.
@@ -105,7 +104,7 @@ class CodeManager:
         self,
         resource_entity_type: str,
         class_definition: type[object],
-        loaded_modules: Mapping[str, "module.Module[ModuleMetadata]"],
+        loaded_modules: Mapping[str, "module.Module[module.ModuleMetadata]"],
         editable_installed_inmanta_modules: Collection[packaging.utils.NormalizedName],
     ) -> None:
         """
@@ -151,7 +150,7 @@ class CodeManager:
     def _register_inmanta_module(
         self,
         inmanta_module_name: str,
-        module: "module.Module[ModuleMetadata]",
+        module: "module.Module[module.ModuleMetadata]",
         editable_install: bool,
     ) -> None:
         if inmanta_module_name in self.module_version_info:
@@ -251,7 +250,7 @@ class CodeManager:
     def get_inmanta_module_requirements(module_name: str) -> set[str]:
         """Get the list of python requirements associated with this inmanta module"""
         project: module.Project = module.Project.get()
-        mod: module.Module[ModuleMetadata] = project.modules[module_name]
+        mod: module.Module[module.ModuleMetadata] = project.modules[module_name]
         return set(mod.get_all_python_requirements_as_list())
 
     @staticmethod
