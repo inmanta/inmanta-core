@@ -19,6 +19,7 @@ Contact: code@inmanta.com
 import asyncio
 import base64
 import binascii
+import datetime
 import logging
 import os
 import re
@@ -34,10 +35,12 @@ from typing import Optional, cast
 import asyncpg
 from asyncpg import StringDataRightTruncationError
 
-from inmanta import config, data
+from inmanta import config, const, data
 from inmanta.data import AUTOSTART_AGENT_DEPLOY_INTERVAL, AUTOSTART_AGENT_REPAIR_INTERVAL, Setting, model
+from inmanta.data.sqlalchemy import Token, TokenRepository
 from inmanta.protocol import encode_token, handle, methods, methods_v2
-from inmanta.protocol.common import ReturnValue, attach_warnings
+from inmanta.protocol.auth import auth
+from inmanta.protocol.common import CallContext, ReturnValue, attach_warnings
 from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound, ServerError
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
@@ -125,6 +128,16 @@ class EnvironmentService(protocol.ServerSlice):
     async def start(self) -> None:
         await super().start()
         await self._enable_schedules_all_envs()
+        # Periodically prune expired token-registry entries and the in-process jti cache so neither
+        # grows unbounded. Note: unrevoked, non-expiring (eternal) tokens are valid and are kept by
+        # design; revoke them (or issue tokens with an expiry) to remove them from the registry.
+        self.schedule(self._cleanup_tokens, 3600, initial_delay=0, cancel_on_stop=False)
+
+    async def _cleanup_tokens(self) -> None:
+        async with data.get_session() as session:
+            await TokenRepository(session).delete_expired()
+            await session.commit()
+        auth.prune_jti_cache()
 
     async def _enable_schedules_all_envs(self) -> None:
         """
@@ -267,11 +280,13 @@ class EnvironmentService(protocol.ServerSlice):
         return 200
 
     @handle(methods.create_token, env="tid")
-    async def create_token(self, env: data.Environment, client_types: list[str], idempotent: bool) -> Apireturn:
+    async def create_token(
+        self, env: data.Environment, client_types: list[str], idempotent: bool, context: CallContext
+    ) -> Apireturn:
         """
         Create a new auth token for this environment
         """
-        return 200, {"token": await self.environment_create_token(env, client_types, idempotent)}
+        return 200, {"token": await self.environment_create_token(env, client_types, idempotent, context)}
 
     @handle(methods.list_settings, env="tid")
     async def list_settings(self, env: data.Environment) -> Apireturn:
@@ -343,10 +358,9 @@ class EnvironmentService(protocol.ServerSlice):
 
         if (repository is None and branch is not None) or (repository is not None and branch is None):
             raise BadRequest("Repository and branch should be set together.")
-        if repository is None:
-            repository = ""
-        if branch is None:
-            branch = ""
+
+        repository = repository.strip() if repository else ""
+        branch = branch.strip() if branch else ""
 
         # fetch the project first
         project = await data.Project.get_by_id(project_id)
@@ -416,10 +430,10 @@ class EnvironmentService(protocol.ServerSlice):
 
         fields: dict[str, str | int | uuid.UUID] = {"name": name}
         if repository is not None:
-            fields["repo_url"] = repository
+            fields["repo_url"] = repository.strip()
 
         if branch is not None:
-            fields["repo_branch"] = branch
+            fields["repo_branch"] = branch.strip()
 
         # Update the project field if requested and the project exists
         if project_id is not None:
@@ -527,13 +541,80 @@ class EnvironmentService(protocol.ServerSlice):
                     await self._resume(env, connection=connection)
 
     @handle(methods_v2.environment_create_token, env="tid")
-    async def environment_create_token(self, env: data.Environment, client_types: list[str], idempotent: bool) -> str:
+    async def environment_create_token(
+        self, env: data.Environment, client_types: list[str], idempotent: bool, context: CallContext
+    ) -> str:
         """
         Create a new auth token for this environment
         """
         if not config.Config.getboolean("server", "auth", False):
             raise BadRequest("Authentication is disabled, generating a token is not allowed")
-        return encode_token(client_types, str(env.id), idempotent)
+        # Attribute the token to the user that created it so that actions performed with it are not
+        # anonymous in the access log. When the token is minted using another attributed token rather
+        # than an interactive session, carry over its creator so attribution survives token chains.
+        # This is a claim only; it is deliberately not stored in sub because the policy engine
+        # authorizes on sub.
+        created_by = context.auth_username
+        if not created_by and context.auth_token is not None:
+            inherited_creator = context.auth_token.get(const.INMANTA_CREATED_BY_URN)
+            if isinstance(inherited_creator, str):
+                created_by = inherited_creator
+        custom_claims: dict[str, str] = {}
+        if created_by:
+            custom_claims[const.INMANTA_CREATED_BY_URN] = created_by
+
+        if idempotent:
+            # Idempotent tokens are reproducible and stateless: they carry no jti, are not tracked in
+            # the registry, and cannot be individually revoked (legacy behavior, kept unchanged so
+            # existing automation that relies on a stable token keeps working).
+            return encode_token(client_types, str(env.id), idempotent, custom_claims=custom_claims or None)
+
+        # A non-idempotent token is unique; give it a jti and register it so it can be listed and
+        # individually revoked without rotating the signing key.
+        jti = uuid.uuid4()
+        custom_claims["jti"] = str(jti)
+        token = encode_token(client_types, str(env.id), idempotent, custom_claims=custom_claims)
+        now = datetime.datetime.now(tz=datetime.timezone.utc)
+        # Record when the token stops being valid, mirroring the exp that encode_token derived from the
+        # signing config (this call passes no explicit expire, so cfg.expire governs both). This field
+        # is informational (for listing and cleanup); token expiry itself is enforced by the JWT exp
+        # claim, not by the registry.
+        sign_cfg = auth.AuthJWTConfig.get_sign_config()
+        expires_at = now + datetime.timedelta(seconds=sign_cfg.expire) if sign_cfg is not None and sign_cfg.expire > 0 else None
+        async with data.get_session() as session:
+            await TokenRepository(session).add(
+                Token(
+                    jti=jti,
+                    created_by=created_by,
+                    client_types=[const.ClientType(ct) for ct in client_types],
+                    environment=env.id,
+                    issued_at=now,
+                    expires_at=expires_at,
+                    revoked=False,
+                )
+            )
+            await session.commit()
+        return token
+
+    @handle(methods_v2.environment_token_list, env="tid")
+    async def environment_token_list(self, env: data.Environment) -> list[model.Token]:
+        """
+        List the registered (revocable) tokens for this environment.
+        """
+        async with data.get_session() as session:
+            tokens = await TokenRepository(session).list_for_environment(env.id)
+            return [token.to_dto() for token in tokens]
+
+    @handle(methods_v2.environment_token_revoke, env="tid")
+    async def environment_token_revoke(self, env: data.Environment, jti: uuid.UUID) -> None:
+        """
+        Revoke a registered token by its jti. The token is rejected on subsequent requests.
+        """
+        async with data.get_session() as session:
+            if not await TokenRepository(session).revoke(jti, env.id):
+                raise NotFound(f"No token with jti {jti} exists in environment {env.id}.")
+            await session.commit()
+        auth.invalidate_jti(jti)
 
     @handle(methods_v2.environment_settings_list, env="tid")
     async def environment_settings_list(self, env: data.Environment) -> model.EnvironmentSettingsReponse:

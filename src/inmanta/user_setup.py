@@ -25,11 +25,11 @@ from asyncpg import PostgresError
 
 import nacl.pwhash
 from inmanta import config, data
-from inmanta.const import MIN_PASSWORD_LENGTH
 from inmanta.data import start_engine, stop_engine
 from inmanta.data.model import AuthMethod
 from inmanta.protocol.auth import auth
 from inmanta.server import config as server_config
+from inmanta.util import password_policy_violation
 
 
 class ConnectionPoolException(Exception):
@@ -67,14 +67,24 @@ def validate_server_setup() -> None:
 
         click.echo(f"{'Server authentication: ' : <50}{click.style('enabled', fg='green')}")
 
-        # make sure the method is set to database
-        if server_config.server_auth_method.get() != "database":
+        # The database user is the primary credential when auth_method=database, and a break-glass
+        # fallback account when auth_method is oidc or jwt (used via the web-console local login
+        # fallback). Any other value is rejected to catch typos.
+        auth_method = server_config.server_auth_method.get()
+        allowed_auth_methods = ("database", "oidc", "jwt")
+        if auth_method not in allowed_auth_methods:
             raise click.ClickException(
-                "The server authentication method should be set to database to continue. Make sure auth_method in the server "
-                "section is set to database"
+                f"The server authentication method (auth_method in the server section) is '{auth_method}', "
+                f"expected one of {', '.join(allowed_auth_methods)}."
             )
 
-        click.echo(f"{'Server authentication method: ' : <50}{click.style('database', fg='green')}")
+        click.echo(f"{'Server authentication method: ' : <50}{click.style(auth_method, fg='green')}")
+
+        if auth_method != "database":
+            click.echo(
+                f"Note: auth_method is '{auth_method}'. Creating a break-glass database user for the web-console "
+                "local login fallback. Make sure web-ui.oidc_local_fallback is enabled so it can be used."
+            )
 
         # make sure there is auth config that supports signing tokens
         cfg = auth.AuthJWTConfig.get_sign_config()
@@ -133,8 +143,9 @@ async def do_user_setup() -> None:
             raise click.ClickException("the username cannot be an empty string")
 
         password = click.prompt("What password do you want to use?", hide_input=True)
-        if not password or len(password) < MIN_PASSWORD_LENGTH:
-            raise click.ClickException("the password should be at least 8 characters long")
+        password_violation = password_policy_violation(password)
+        if password_violation is not None:
+            raise click.ClickException(password_violation)
 
         pw_hash = nacl.pwhash.str(password.encode())
 
