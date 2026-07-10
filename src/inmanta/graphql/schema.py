@@ -1337,7 +1337,7 @@ def decompose_and_validate_filter[F: StrawberryFilter](filter: object, component
 
 
 def _strip_optional(annotation: object) -> object:
-    """Return the non-None member of an ``X | None`` annotation, or the annotation itself if it is not a union."""
+    """Return the non-None member of an `X | None` annotation, or the annotation itself if it is not a union."""
     args = typing.get_args(annotation)
     if args:
         non_none = [arg for arg in args if arg is not type(None)]
@@ -1347,15 +1347,9 @@ def _strip_optional(annotation: object) -> object:
 
 
 def build_resource_filter_from_coerced(coerced: Mapping[str, object], environment: uuid.UUID, composed_type: type) -> object:
-    """
-    Reconstruct an instance of the composed strawberry ``ResourceFilter`` from the value produced by graphql-core input
-    coercion of a REST body (a mapping keyed by the GraphQL field names, with sub-filters as nested mappings and enums
-    already parsed). ``environment`` is supplied out of band (the ``tid``) and is not part of the REST body.
-
-    Generic over the (possibly extension-composed) filter: each present field is mapped back onto its declared filter
-    type, so contributed fields reconstruct without core changes as long as they follow the filter-primitive pattern
-    (a nested operator object, or a scalar).
-    """
+    """Rebuild a composed strawberry ResourceFilter instance from a coerced REST body (GraphQL field names, nested
+    sub-filters, enums already parsed). environment comes from the tid, not the body. Generic over extension-composed
+    fields as long as each is a nested operator object or a scalar."""
     result = composed_type(environment=environment)
     field_types = typing.get_type_hints(composed_type)
     for graphql_name, value in coerced.items():
@@ -1371,11 +1365,8 @@ def build_resource_filter_from_coerced(coerced: Mapping[str, object], environmen
 
 
 async def resolve_resource_ids(coerced_filter: Mapping[str, object], environment: uuid.UUID) -> set[ResourceIdStr]:
-    """
-    Resolve a coerced resource filter (the value produced by graphql-core coercion of a REST body) into the set of
-    matching resource ids, using the exact same composed filter, version selection and per-component filtering as the
-    ``resources`` query. Shared building block for triggering resource actions on the result of a filter.
-    """
+    """Resolve a coerced REST filter into the matching resource ids, using the same composition, version selection and
+    per-component filtering as the resources query. Used to trigger resource actions on a filter."""
     resolved: ResolvedFilter | None = getattr(CoreResourceFilter, "__resolved_filter__", None)
     if resolved is None:
         raise Exception("The GraphQL schema has not been built yet; cannot resolve a resource filter.")

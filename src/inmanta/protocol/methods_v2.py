@@ -1398,21 +1398,17 @@ def deploy_filtered(
     agent_trigger_method: const.AgentTriggerMethod = const.AgentTriggerMethod.push_full_deploy,
 ) -> ReturnValue[list[ResourceIdStr]]:
     """
-    Trigger a deploy (or repair) on the resources matching the given filter, on the current desired state (the
-    scheduler's last processed version). The filter body is the GraphQL ``resources`` query's ``ResourceFilter``
-    (minus ``environment``, which is the ``tid``): it is validated against, and documented from, that GraphQL type,
-    so the action operates on exactly the set of resources the ``resources`` view returns. A single resource can be
-    targeted with a sufficiently specific filter (e.g. ``resourceType`` + ``agent`` + ``resourceIdValue``).
+    Trigger a deploy or repair on the resources matching the filter, on the current desired state (the scheduler's
+    last processed version). The filter is the GraphQL `resources` query's `ResourceFilter` (minus `environment`, taken
+    from the tid), so it selects exactly the resources the `resources` view returns. Target one resource with a
+    specific enough filter (e.g. resourceType + agent + resourceIdValue).
 
     :param tid: The id of the environment.
-    :param filter: The resource filter, as a JSON object matching the GraphQL ``ResourceFilter`` (camelCase field
-        names, enum values as their GraphQL names). When omitted, all resources are selected. Malformed filters
-        (unknown fields, bad operators/values) are rejected with a 400.
-    :param agent_trigger_method: Whether to perform an incremental deploy (only non-compliant resources among the
-        matched resources) or a full deploy/repair (all matched resources, even compliant ones).
-    :return: The resource ids that matched the filter and were scheduled for deploy.
-    :raise BadRequest: The filter selects a specific model version or orphaned resources (``modelVersion`` and
-        ``isOrphan: true`` are not allowed: a deploy always acts on the current desired state).
+    :param filter: The resource filter, a JSON object matching the GraphQL `ResourceFilter` (camelCase fields, enum
+        values as their GraphQL names). Omitted selects all resources; a malformed filter is rejected with a 400.
+    :param agent_trigger_method: Incremental deploy (only non-compliant matches) or full deploy/repair (all matches).
+    :return: The resource ids that matched and were scheduled for deploy.
+    :raise BadRequest: The filter sets `modelVersion` or `isOrphan: true` (a deploy acts on the current desired state).
     :raise NotFound: The scheduler for this environment could not be reached.
     """
 
