@@ -34,9 +34,16 @@ from inmanta import const, data
 from inmanta.const import ResourceState
 from inmanta.data import APILIMIT, AVAILABLE_VERSIONS_TO_KEEP, InvalidSort, ResourcePersistentState, RowLockMode
 from inmanta.data.dataview import DesiredStateVersionView
-from inmanta.data.model import AgentName, DesiredStateVersion
+from inmanta.data.model import DesiredStateVersion
 from inmanta.data.model import InmantaModule as InmantaModuleDTO
-from inmanta.data.model import InmantaModuleName, InmantaModuleVersion, PipConfig, PromoteTriggerMethod
+from inmanta.data.model import (
+    InmantaModuleName,
+    InmantaModuleVersion,
+    InstallOnAgents,
+    LoadOnAgents,
+    PipConfig,
+    PromoteTriggerMethod,
+)
 from inmanta.data.model import Resource as ResourceDTO
 from inmanta.data.model import ResourceDiff, ResourceMinimal, SchedulerStatusReport
 from inmanta.data.sqlalchemy import AgentModules, InmantaModule
@@ -724,7 +731,7 @@ class OrchestrationService(protocol.ServerSlice):
         # Seed with the base version's module usage so that, for a partial compile, modules that are not part of
         # the current export are carried forward (e.g. to repair resources that weren't part of this partial export).
         # Agent sets are merged below, so we work with sets throughout the method.
-        module_usage_info: dict[InmantaModuleName, tuple[InmantaModuleVersion, set[AgentName], set[AgentName]]] = {}
+        module_usage_info: dict[InmantaModuleName, tuple[InmantaModuleVersion, InstallOnAgents, LoadOnAgents]] = {}
 
         if partial_base_version is not None:
             module_usage_info = await AgentModules.get_registered_modules_data(

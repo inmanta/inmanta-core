@@ -80,7 +80,7 @@ class CodeManager:
     def __init__(self, resources: Collection[Id]) -> None:
         """
 
-        :param resources: Map of all resources present in the current compile run.
+        :param resources: Collection of all resources present in the current compile run.
         """
         # Old implementation
         # Use by external code
@@ -103,28 +103,33 @@ class CodeManager:
 
     def register_code(
         self,
-        type_name: str,
-        instance: object,
+        resource_entity_type: str,
+        class_definition: type[object],
         loaded_modules: Mapping[str, "module.Module[ModuleMetadata]"],
         editable_installed_inmanta_modules: Collection[packaging.utils.NormalizedName],
     ) -> None:
-        """Register the given type_object under the type_name and register the inmanta module associated with this type object.
+        """
+        Register the inmanta module in which the given class_definition is defined for all agents that will
+        handle resources of type resource_entity_type.
 
-        :param type_name: The inmanta type name for which the source of type_object will be registered.
-            For example std::testing::NullResource
-        :param instance: An instance for which the code needs to be registered. This is either the definition of a
-            resource, a handler or a reference/mutator
+        :param resource_entity_type: The inmanta type name (e.g. std::testing::NullResource) for which the source
+            code of class_definition will be registered.
+        :param class_definition: Definition of either a resource, a handler, a reference or a mutator class
+            for which the code needs to be registered. This is the actual decorated (e.g. by @resource) class defined
+            inside a plugin.
         :param loaded_modules: A map of {module_name: module} containing all modules that were loaded
             in the venv of the compiler. Keys are 'raw' module names e.g. "std".
         :param editable_installed_inmanta_modules: The collection of modules installed in editable mode
             in the venv of the compiler. The canonical package name is used e.g. "inmanta-module-std".
         """
-        file_name = self.get_object_source(instance)
+        file_name = self.get_object_source(class_definition)
         if file_name is None:
-            raise SourceNotFoundException(f"Unable to locate source code of instance {instance} for entity {type_name}")
+            raise SourceNotFoundException(
+                f"Unable to locate source code of definition {class_definition} for entity {resource_entity_type}"
+            )
 
         # get the module
-        module_name = get_inmanta_module_name(instance.__module__)
+        module_name = get_inmanta_module_name(class_definition.__module__)
 
         if module_name not in loaded_modules:
             raise SourceNotFoundException(
@@ -140,7 +145,7 @@ class CodeManager:
         # Register this module (if it is the first time we see it)
         self._register_inmanta_module(module_name, loaded_modules[module_name], editable_install)
 
-        registered_agents: set[str] = self._types_to_agent.get(type_name, set())
+        registered_agents: set[str] = self._types_to_agent.get(resource_entity_type, set())
         self._update_load_and_install_agent_maps(module_name, registered_agents, editable_install)
 
     def _register_inmanta_module(

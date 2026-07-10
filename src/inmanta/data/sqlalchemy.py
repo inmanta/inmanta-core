@@ -21,7 +21,7 @@ import asyncpg
 
 from inmanta.data.model import AgentName
 from inmanta.data.model import InmantaModule as InmantaModuleDTO
-from inmanta.data.model import InmantaModuleName, InmantaModuleVersion
+from inmanta.data.model import InmantaModuleName, InmantaModuleVersion, InstallOnAgents, LoadOnAgents
 from inmanta.deploy import state
 from sqlalchemy import (
     ARRAY,
@@ -301,7 +301,7 @@ class AgentModules(Base):
     @classmethod
     async def get_registered_modules_data(
         cls, model_version: int, environment: uuid.UUID, connection: asyncpg.Connection
-    ) -> dict[InmantaModuleName, tuple[InmantaModuleVersion, set[AgentName], set[AgentName]]]:
+    ) -> dict[InmantaModuleName, tuple[InmantaModuleVersion, InstallOnAgents, LoadOnAgents]]:
         """
         Retrieve all registered modules for a given model version.
         For each module, return the registered version as well as the set of agents registered

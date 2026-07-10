@@ -22,7 +22,7 @@ import itertools
 import logging
 import time
 import uuid
-from collections.abc import Mapping, Sequence, Collection
+from collections.abc import Collection, Mapping, Sequence
 from typing import Any, Callable, Literal, Optional, Union
 
 import pydantic
@@ -530,9 +530,13 @@ class Exporter:
         # Register all reference and mutator code to all resources. This is very coarse grained and can be optimized once
         # usage patterns have been established.
         for resource_type in resource_types:
-            for type_name, obj in itertools.chain(references.reference.get_references(), references.mutator.get_mutators()):
+            for type_name, reference_or_mutator_definition in itertools.chain(
+                references.reference.get_references(), references.mutator.get_mutators()
+            ):
                 if not type_name.startswith("core::"):
-                    code_manager.register_code(resource_type, obj, all_loaded_modules, editable_installed_modules)
+                    code_manager.register_code(
+                        resource_type, reference_or_mutator_definition, all_loaded_modules, editable_installed_modules
+                    )
 
         upload_code(self.client, code_manager)
 

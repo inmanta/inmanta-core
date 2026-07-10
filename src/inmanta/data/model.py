@@ -1255,8 +1255,8 @@ type InmantaModuleName = str
 type LoadModuleOnAgent = bool
 type InmantaModuleVersion = str
 type AgentName = str
-type InstallOnAgents = list[AgentName]
-type LoadOnAgents = list[AgentName]
+type InstallOnAgents = set[AgentName]
+type LoadOnAgents = set[AgentName]
 
 
 class InmantaModule(BaseModel):
@@ -1283,6 +1283,6 @@ class InmantaModule(BaseModel):
     version: InmantaModuleVersion
     files_in_module: list[ModuleSourceMetadata]
     requirements: list[str]
-    load_module_on_agents: LoadOnAgents
-    install_module_on_agents: InstallOnAgents
+    load_module_on_agents: list[AgentName]
+    install_module_on_agents: list[AgentName]
     editable_install: bool
