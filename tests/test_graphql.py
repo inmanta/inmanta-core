@@ -1793,7 +1793,7 @@ async def test_custom_extension_resource_filter(server, environment, client, cap
         def resolve_model_version(self) -> ModelVersionSelection:
             # Pin every resource to the requested version of the model -- no join boilerplate, the resolver joins.
             LOGGER.info("Applied version filter %s", self.at_version)
-            return ModelVersionSelection.pinned(self.at_version)
+            return ModelVersionSelection.create_for_exact_version(self.at_version)
 
         def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
             LOGGER.info("Applied filter %s %s", self.my_attr, self.other_attr)
@@ -1931,7 +1931,7 @@ async def test_resources_count_path(server, environment, client, monkeypatch, mi
             return is_provided(self.at_version)
 
         def resolve_model_version(self) -> ModelVersionSelection:
-            return ModelVersionSelection.pinned(self.at_version)
+            return ModelVersionSelection.create_for_exact_version(self.at_version)
 
         def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
             # Never constrains the Resource table.

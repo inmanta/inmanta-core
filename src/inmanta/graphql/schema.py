@@ -765,18 +765,20 @@ class ModelVersionSelection:
     version: int | ColumnElement[int]
     include_orphans: bool = False
 
-    @staticmethod
-    def pinned(version: "int | ColumnElement[int]") -> "ModelVersionSelection":
+    @classmethod
+    def create_for_exact_version(cls, version: "int | ColumnElement[int]") -> "ModelVersionSelection":
         """Select every resource exactly at `version` (a concrete model version, or a scalar expression computing one)."""
-        return ModelVersionSelection(version=version)
+        return cls(version=version)
 
-    @staticmethod
-    def latest(environment: uuid.UUID, *, include_orphans: bool = True) -> "ModelVersionSelection":
+    @classmethod
+    def create_for_latest_scheduled_version(
+        cls, environment: uuid.UUID, *, include_orphans: bool = True
+    ) -> "ModelVersionSelection":
         """
         The latest scheduled model version. Orphaned resources are additionally taken at the last version they were
         present in when `include_orphans` is True; when False, only resources present in the latest version are selected.
         """
-        return ModelVersionSelection(
+        return cls(
             version=latest_scheduled_model_version(environment),
             include_orphans=include_orphans,
         )
@@ -899,9 +901,9 @@ class CoreResourceFilter(ResourceFilterABC):
 
     def resolve_model_version(self) -> ModelVersionSelection:
         if is_provided(self.model_version):
-            return ModelVersionSelection.pinned(self.model_version)
+            return ModelVersionSelection.create_for_exact_version(self.model_version)
         include_orphans = not is_provided(self.is_orphan) or self.is_orphan is True
-        return ModelVersionSelection.latest(self.environment, include_orphans=include_orphans)
+        return ModelVersionSelection.create_for_latest_scheduled_version(self.environment, include_orphans=include_orphans)
 
     def allows_persistent_state_count(self) -> bool:
         # A pinned modelVersion is a historical snapshot whose membership depends on the version, and `purged` is the
