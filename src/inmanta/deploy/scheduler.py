@@ -595,6 +595,8 @@ class ResourceScheduler(TaskManager):
         """
         Trigger a deploy
 
+        :param reason: Human-readable reason for the deploy, recorded on the scheduled tasks.
+        :param priority: Scheduling priority of the deploy tasks.
         :param agent: If given, deploy resources only for this agent. Otherwise deploy for all agents.
         :param resources: If given, deploy only resources in this collection. Otherwise deploy all resources
             (on the given agent if one is given). Combined with the agent filter as an intersection.
@@ -627,6 +629,8 @@ class ResourceScheduler(TaskManager):
         """
         Trigger a repair, i.e. mark all unblocked resources as dirty, then trigger a deploy.
 
+        :param reason: Human-readable reason for the repair, recorded on the scheduled tasks.
+        :param priority: Scheduling priority of the repair tasks.
         :param agent: If given, repair resources only for this agent. Otherwise repair for all agents.
         :param resources: If given, repair only resources in this collection. Otherwise repair all resources
             (on the given agent if one is given). Combined with the agent filter as an intersection.
