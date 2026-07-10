@@ -12,6 +12,7 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import importlib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Annotated, Optional
@@ -38,29 +39,25 @@ This module lets a REST method argument reuse a GraphQL input type (e.g. the com
 the request validation (via graphql-core input coercion) and the OpenAPI documentation (via GraphQL introspection),
 so the REST and GraphQL filter languages can never drift.
 
-An argument is declared as ``Annotated[GraphQLFilter, graphql_input("<TypeName>")]``. Because both hooks resolve the
-GraphQL type lazily from ``graphql_input_registry`` (populated by the ``GraphQLSlice`` at server start), the marker
-can be used in a statically-declared method even though the composed type only exists after start.
+An argument is declared as ``Annotated[GraphQLFilter, graphql_input("<dotted path to the core filter class>")]``. The
+path is resolved lazily (only at validation / documentation time, always after the schema is built), so this module
+never imports ``schema`` at load time -- which would create an import cycle via compilerservice -> protocol. The
+resolved class carries a ``ResolvedFilter`` that ``schema.get_schema`` attaches at server start.
 """
 
 
-class _GraphQLInputRegistry:
+@dataclass(frozen=True)
+class ResolvedFilter:
     """
-    Maps the name referenced by ``graphql_input`` to the graphql-core input type used to validate and document the
-    REST body. Populated by the ``GraphQLSlice`` once it has composed the schema.
+    The runtime artifacts of a composed filter, attached to its core filter class by ``schema.get_schema`` at server
+    start. ``input_type`` (graphql-core, environment stripped) drives REST body validation and OpenAPI;
+    ``composed_type`` and ``components`` (strawberry) let the REST layer reconstruct and apply the filter (see
+    ``schema.resolve_resource_ids``).
     """
 
-    def __init__(self) -> None:
-        self._types: dict[str, GraphQLInputObjectType] = {}
-
-    def publish(self, name: str, input_type: GraphQLInputObjectType) -> None:
-        self._types[name] = input_type
-
-    def get(self, name: str) -> Optional[GraphQLInputObjectType]:
-        return self._types.get(name)
-
-
-graphql_input_registry = _GraphQLInputRegistry()
+    input_type: GraphQLInputObjectType
+    composed_type: type
+    components: tuple[type, ...]
 
 
 class GraphQLFilter(BaseModel):
@@ -79,38 +76,44 @@ class GraphQLFilter(BaseModel):
 @dataclass(frozen=True)
 class graphql_input:
     """
-    ``Annotated`` metadata selecting the GraphQL input type that validates and documents an argument. Both the
-    pydantic validation (``__get_pydantic_core_schema__`` -> graphql-core coercion) and the OpenAPI schema
-    (``__get_pydantic_json_schema__`` -> GraphQL introspection) are derived from that type, resolved lazily from
-    ``graphql_input_registry``.
+    ``Annotated`` metadata whose value is the dotted path to the strawberry core filter class this argument mirrors
+    (e.g. ``"inmanta.graphql.schema.CoreResourceFilter"``). Resolved lazily so this module never imports ``schema``
+    at load time. Validation coerces the JSON body against the resolved class's ``ResolvedFilter.input_type``, and
+    OpenAPI is generated from it.
     """
 
-    type_name: str
+    filter_class_path: str
+
+    def _resolved(self) -> Optional[ResolvedFilter]:
+        module_path, _, class_name = self.filter_class_path.rpartition(".")
+        filter_class = getattr(importlib.import_module(module_path), class_name)
+        resolved: Optional[ResolvedFilter] = getattr(filter_class, "__resolved_filter__", None)
+        return resolved
 
     def __get_pydantic_core_schema__(self, source_type: object, handler: GetCoreSchemaHandler) -> core_schema.CoreSchema:
-        # Runs when the arguments model is built (import time), before the GraphQL schema exists. Only return a
-        # validator; the registry is resolved lazily inside `_coerce` (per request, after start).
+        # Runs when the arguments model is built (import time), before the schema exists. Only return a validator;
+        # the class path is resolved lazily inside `_coerce` (per request, after start).
         return core_schema.no_info_plain_validator_function(self._coerce)
 
     def __get_pydantic_json_schema__(self, schema: core_schema.CoreSchema, handler: GetJsonSchemaHandler) -> JsonSchemaValue:
-        # Runs at OpenAPI generation (after start). Degrade to a permissive object schema if the type is not
-        # published yet, so documentation generation never hard-fails.
-        input_type = graphql_input_registry.get(self.type_name)
-        if input_type is None:
+        # Runs at OpenAPI generation (after start). Degrade to a permissive object schema if not resolved yet, so
+        # documentation generation never hard-fails.
+        resolved = self._resolved()
+        if resolved is None:
             return {"type": "object"}
-        return graphql_input_to_openapi(input_type)
+        return graphql_input_to_openapi(resolved.input_type)
 
     def _coerce(self, value: object) -> object:
-        input_type = graphql_input_registry.get(self.type_name)
-        if input_type is None:
-            raise ValueError(f"GraphQL input type {self.type_name!r} is not available")
+        resolved = self._resolved()
+        if resolved is None:
+            raise ValueError(f"Filter class {self.filter_class_path!r} has no resolved filter (is the server started?).")
         errors: list[str] = []
 
         def on_error(path: Sequence[object], invalid_value: object, error: GraphQLError) -> None:
             location = ".".join(str(p) for p in path)
             errors.append(f"{location}: {error.message}" if location else error.message)
 
-        coerced = coerce_input_value(value, input_type, on_error)
+        coerced = coerce_input_value(value, resolved.input_type, on_error)
         if errors:
             raise ValueError("; ".join(errors))
         return coerced
@@ -161,5 +164,6 @@ def graphql_input_to_openapi(gql_type: object) -> dict[str, object]:
     return {"type": "object"}
 
 
-# Reusable argument alias for the composed ResourceFilter of the `resources` query.
-ResourceFilterArg = Annotated[GraphQLFilter, graphql_input("ResourceFilter")]
+# Reusable argument alias for the composed ResourceFilter of the `resources` query. The class is referenced by dotted
+# path (not imported) to keep this module free of a `schema` import; see `graphql_input`.
+ResourceFilterArg = Annotated[GraphQLFilter, graphql_input("inmanta.graphql.schema.CoreResourceFilter")]
