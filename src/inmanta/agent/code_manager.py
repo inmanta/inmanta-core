@@ -48,6 +48,7 @@ class CodeManager:
 
     @async_lru_cache(maxsize=1024)
     async def get_code(self, environment: uuid.UUID, model_version: int, agent_name: str) -> list[ModuleInstallSpec]:
+        # TODO update this read path to handle both package and source moduleinstallspec
         """
         Get the list of installation specifications (i.e. pip config, python package dependencies,
         Inmanta modules sources) required to deploy resources on a given agent for a given configuration
