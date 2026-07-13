@@ -22,6 +22,7 @@ import pytest
 
 from inmanta import const, data
 from inmanta.const import AgentAction
+from inmanta.types import ResourceIdStr
 from utils import get_resource, log_contains, log_doesnt_contain, resource_action_consistency_check, retry_limited
 
 
@@ -62,7 +63,7 @@ async def test_deploy_trigger(server, client, clienthelper, resource_container, 
                 caplog,
                 "inmanta.scheduler",
                 logging.INFO,
-                f"All agents got a trigger to run repair in environment {environment}",
+                f"All agents got a trigger to run repair for all resources in environment {environment}",
             )
             agents = ["agent1", "agent2", "agent3"]  # this also includes paused agents
         else:
@@ -70,10 +71,13 @@ async def test_deploy_trigger(server, client, clienthelper, resource_container, 
                 caplog,
                 "inmanta.scheduler",
                 logging.INFO,
-                f"Agent agent1 got a trigger to run repair in environment {environment}",
+                f"Agent agent1 got a trigger to run repair for all resources in environment {environment}",
             )
         log_doesnt_contain(
-            caplog, "inmanta.scheduler", logging.INFO, f"Agent agent5 got a trigger to run repair in environment {environment}"
+            caplog,
+            "inmanta.scheduler",
+            logging.INFO,
+            f"Agent agent5 got a trigger to run repair for all resources in environment {environment}",
         )
 
         assert result.result["agents"] == agents
@@ -183,3 +187,146 @@ async def test_spontaneous_repair(server, client, agent, resource_container, env
 
     await verify_deployment_result()
     await resource_action_consistency_check()
+
+
+async def test_deploy_trigger_specific_resources(server, client, clienthelper, resource_container, environment, caplog, agent):
+    """
+    Verify that the deploy endpoint correctly forwards a resource filter to the scheduler via the trigger method.
+
+    When a list of resources is given:
+    - repair (full deploy): only the specified resources are deployed, even if compliant
+    - incremental deploy: only dirty resources that are also in the list are deployed
+    """
+    caplog.set_level(logging.INFO)
+    version = await clienthelper.get_version()
+
+    resources = [
+        get_resource(version, key="key1", agent="agent1"),
+        get_resource(version, key="key2", agent="agent1"),
+        get_resource(version, key="key1", agent="agent2"),
+        get_resource(version, key="key2", agent="agent2"),
+    ]
+
+    await clienthelper.put_version_simple(resources, version)
+    result = await client.release_version(environment, version, True)
+    assert result.code == 200
+    await clienthelper.wait_for_deployed(version)
+
+    r_agent1_key1 = ResourceIdStr("test::Resource[agent1,key=key1]")
+    r_agent1_key2 = ResourceIdStr("test::Resource[agent1,key=key2]")
+    r_agent2_key1 = ResourceIdStr("test::Resource[agent2,key=key1]")
+    r_agent2_key2 = ResourceIdStr("test::Resource[agent2,key=key2]")
+
+    assert resource_container.Provider.readcount("agent1", "key1") == 1
+    assert resource_container.Provider.readcount("agent1", "key2") == 1
+    assert resource_container.Provider.readcount("agent2", "key1") == 1
+    assert resource_container.Provider.readcount("agent2", "key2") == 1
+
+    # repair with a specific resource list: only those resources should be re-deployed, even though all are compliant
+    result = await client.deploy(
+        environment,
+        agent_trigger_method=const.AgentTriggerMethod.push_full_deploy,
+        resources=[r_agent1_key1, r_agent2_key2],
+    )
+    assert result.code == 200
+
+    await retry_limited(
+        lambda: resource_container.Provider.readcount("agent1", "key1") == 2
+        and resource_container.Provider.readcount("agent2", "key2") == 2,
+        10,
+    )
+
+    log_contains(
+        caplog,
+        "inmanta.scheduler",
+        logging.INFO,
+        f"All agents got a trigger to run repair for 2 resources in environment {environment}",
+    )
+    caplog.clear()
+
+    assert resource_container.Provider.readcount("agent1", "key1") == 2
+    assert resource_container.Provider.readcount("agent1", "key2") == 1  # not in the resource list, not re-deployed
+    assert resource_container.Provider.readcount("agent2", "key1") == 1  # not in the resource list, not re-deployed
+    assert resource_container.Provider.readcount("agent2", "key2") == 2
+
+    # set up for incremental deploy: make agent1/key2 and agent2/key2 fail on the next deploy attempt
+    resource_container.Provider.set_fail("agent1", "key2", 1)
+    resource_container.Provider.set_fail("agent2", "key2", 1)
+
+    result = await client.deploy(environment, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy)
+    assert result.code == 200
+
+    # wait until all resources have been attempted: successful ones go up by 1, failing ones go up by 1 then stay dirty
+    await retry_limited(
+        lambda: resource_container.Provider.readcount("agent1", "key1") == 3  # successfully re-deployed
+        and resource_container.Provider.readcount("agent1", "key2") == 2  # deploy attempted, failed -> dirty
+        and resource_container.Provider.readcount("agent2", "key1") == 2  # successfully re-deployed
+        and resource_container.Provider.readcount("agent2", "key2") == 3,  # deploy attempted, failed -> dirty
+        10,
+    )
+
+    log_contains(
+        caplog,
+        "inmanta.scheduler",
+        logging.INFO,
+        f"All agents got a trigger to run repair for all resources in environment {environment}",
+    )
+    caplog.clear()
+
+    # now trigger an incremental deploy for only [r_agent1_key2, r_agent2_key1]:
+    # - r_agent1_key1: compliant, not in the list -> not deployed
+    # - r_agent1_key2: dirty and in the list -> gets re-deployed
+    # - r_agent2_key1: compliant and in the list -> not deployed
+    # - r_agent2_key2: dirty, not in the list -> not deployed
+    result = await client.deploy(
+        environment,
+        agent_trigger_method=const.AgentTriggerMethod.push_incremental_deploy,
+        resources=[r_agent1_key2, r_agent2_key1],
+    )
+    assert result.code == 200
+
+    await retry_limited(
+        lambda: resource_container.Provider.readcount("agent1", "key2") == 3,
+        10,
+    )
+
+    log_contains(
+        caplog,
+        "inmanta.scheduler",
+        logging.INFO,
+        f"All agents got a trigger to run deploy for 2 resources in environment {environment}",
+    )
+    caplog.clear()
+
+    assert resource_container.Provider.readcount("agent1", "key1") == 3  # not in incremental list, unchanged
+    assert resource_container.Provider.readcount("agent1", "key2") == 3  # dirty and in the list, re-deployed
+    assert resource_container.Provider.readcount("agent2", "key1") == 2  # compliant and in the list, skipped
+    assert resource_container.Provider.readcount("agent2", "key2") == 3  # dirty but not in incremental list
+
+    # repair with both agent and resources filters: only the intersection is deployed
+    # resources=[r_agent1_key2, r_agent2_key2] but agents=["agent1"] -> only r_agent1_key2 qualifies
+    result = await client.deploy(
+        environment,
+        agent_trigger_method=const.AgentTriggerMethod.push_full_deploy,
+        agents=["agent1"],
+        resources=[r_agent1_key2, r_agent2_key2],
+    )
+    assert result.code == 200
+
+    await retry_limited(
+        lambda: resource_container.Provider.readcount("agent1", "key2") == 4,
+        10,
+    )
+
+    log_contains(
+        caplog,
+        "inmanta.scheduler",
+        logging.INFO,
+        f"Agent agent1 got a trigger to run repair for 2 resources in environment {environment}",
+    )
+    caplog.clear()
+
+    assert resource_container.Provider.readcount("agent1", "key1") == 3  # not in resources list
+    assert resource_container.Provider.readcount("agent1", "key2") == 4  # in both agent and resources filter
+    assert resource_container.Provider.readcount("agent2", "key1") == 2  # agent2 not triggered
+    assert resource_container.Provider.readcount("agent2", "key2") == 3  # agent2 not triggered
