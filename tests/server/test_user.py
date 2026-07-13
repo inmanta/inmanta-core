@@ -374,6 +374,13 @@ async def test_environment_create_token(server: protocol.Server, auth_client: en
     assert claims[const.INMANTA_CREATED_BY_URN] == "admin"
     assert "sub" not in claims
 
+    # By default the token is non-idempotent: it carries a jti and is tracked in the registry so it
+    # can be listed and revoked.
+    assert "jti" in claims
+    response = await auth_client.environment_token_list(tid=env_id)
+    assert response.code == 200
+    assert [t["jti"] for t in response.result["data"]] == [claims["jti"]]
+
     # A call made with that token is attributed to its creator in the access log, instead of user=<>.
     config.Config.set("client_rest_transport", "token", api_token)
     token_client = protocol.Client("client")
@@ -392,6 +399,7 @@ async def test_environment_create_token(server: protocol.Server, auth_client: en
     chained_claims, _ = auth.decode_token(response.result["data"])
     assert chained_claims[const.INMANTA_CREATED_BY_URN] == "admin"
     assert "sub" not in chained_claims
+    assert "jti" in chained_claims
 
 
 async def test_password_max_length(server: protocol.Server, auth_client: endpoints.Client) -> None:
