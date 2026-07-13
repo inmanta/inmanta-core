@@ -926,6 +926,7 @@ class Token(BaseModel):
     issued_at: datetime.datetime
     expires_at: datetime.datetime | None = None
     revoked: bool = False
+    revoked_at: datetime.datetime | None = None
     last_used: datetime.datetime | None = None
 
 

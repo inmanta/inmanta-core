@@ -545,6 +545,7 @@ async def test_token_registry(server: protocol.Server, auth_client: endpoints.Cl
     assert response.result["data"][0]["jti"] == jti
     assert response.result["data"][0]["created_by"] == "admin"
     assert response.result["data"][0]["revoked"] is False
+    assert response.result["data"][0]["revoked_at"] is None
 
     # The registered token works for authenticated calls.
     config.Config.set("client_rest_transport", "token", revocable_token)
@@ -557,6 +558,20 @@ async def test_token_registry(server: protocol.Server, auth_client: endpoints.Cl
     assert response.code == 200
     response = await token_client.environment_token_list(tid=env_id)
     assert response.code == 403
+
+    # The revocation moment is recorded and exposed in the listing.
+    response = await admin_client.environment_token_list(tid=env_id)
+    assert response.code == 200
+    [revoked_entry] = [t for t in response.result["data"] if t["jti"] == jti]
+    assert revoked_entry["revoked"] is True
+    assert revoked_entry["revoked_at"] is not None
+
+    # Revoking again succeeds (idempotent) and keeps the original revocation time.
+    response = await admin_client.environment_token_revoke(tid=env_id, jti=jti)
+    assert response.code == 200
+    response = await admin_client.environment_token_list(tid=env_id)
+    [entry_after_second_revoke] = [t for t in response.result["data"] if t["jti"] == jti]
+    assert entry_after_second_revoke["revoked_at"] == revoked_entry["revoked_at"]
 
     # A legacy token without a jti keeps working (stateless validation, non-breaking migration).
     legacy_token = auth.encode_token([str(const.ClientType.api.value)], environment=str(env_id))
@@ -594,18 +609,24 @@ async def test_token_registry(server: protocol.Server, auth_client: endpoints.Cl
 
 
 async def test_token_registry_cleanup(server: protocol.Server) -> None:
-    """delete_expired removes expired registry entries while keeping valid and non-expiring ones."""
+    """
+    delete_stale removes expired entries and entries revoked before the retention cutoff, while
+    keeping valid, non-expiring and recently-revoked ones.
+    """
     now = datetime.datetime.now(tz=datetime.timezone.utc)
     expired_jti, valid_jti, eternal_jti = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    old_revoked_jti, fresh_revoked_jti = uuid.uuid4(), uuid.uuid4()
     async with data.get_session() as session:
         repo = TokenRepository(session)
         await repo.add(Token(jti=expired_jti, issued_at=now, expires_at=now - datetime.timedelta(hours=1), revoked=False))
         await repo.add(Token(jti=valid_jti, issued_at=now, expires_at=now + datetime.timedelta(hours=1), revoked=False))
         await repo.add(Token(jti=eternal_jti, issued_at=now, expires_at=None, revoked=False))
+        await repo.add(Token(jti=old_revoked_jti, issued_at=now, revoked=True, revoked_at=now - datetime.timedelta(days=2)))
+        await repo.add(Token(jti=fresh_revoked_jti, issued_at=now, revoked=True, revoked_at=now - datetime.timedelta(hours=1)))
         await session.commit()
 
     async with data.get_session() as session:
-        await TokenRepository(session).delete_expired()
+        await TokenRepository(session).delete_stale(revoked_before=now - datetime.timedelta(days=1))
         await session.commit()
 
     async with data.get_session() as session:
@@ -613,3 +634,5 @@ async def test_token_registry_cleanup(server: protocol.Server) -> None:
         assert await repo.get_by_jti(expired_jti) is None
         assert await repo.get_by_jti(valid_jti) is not None
         assert await repo.get_by_jti(eternal_jti) is not None
+        assert await repo.get_by_jti(old_revoked_jti) is None
+        assert await repo.get_by_jti(fresh_revoked_jti) is not None

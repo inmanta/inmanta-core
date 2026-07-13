@@ -53,8 +53,9 @@ from inmanta.server import (
     SLICE_SERVER,
     SLICE_TRANSPORT,
     agentmanager,
-    protocol,
 )
+from inmanta.server import config as server_config
+from inmanta.server import protocol
 from inmanta.server.server import Server
 from inmanta.server.services import orchestrationservice, resourceservice
 from inmanta.server.services.environmentlistener import (  # These were moved from this module, important to keep them in place
@@ -128,14 +129,17 @@ class EnvironmentService(protocol.ServerSlice):
     async def start(self) -> None:
         await super().start()
         await self._enable_schedules_all_envs()
-        # Periodically prune expired token-registry entries and the in-process jti cache so neither
-        # grows unbounded. Note: unrevoked, non-expiring (eternal) tokens are valid and are kept by
-        # design; revoke them (or issue tokens with an expiry) to remove them from the registry.
+        # Periodically prune stale token-registry entries (expired tokens and tokens revoked longer ago
+        # than the retention window) and the in-process jti cache so neither grows unbounded. Note:
+        # unrevoked, non-expiring (eternal) tokens are valid and are kept by design; revoke them (or
+        # issue tokens with an expiry) to remove them from the registry.
         self.schedule(self._cleanup_tokens, 3600, initial_delay=0, cancel_on_stop=False)
 
     async def _cleanup_tokens(self) -> None:
+        retention = datetime.timedelta(seconds=server_config.server_revoked_token_retention.get())
+        revoked_before = datetime.datetime.now(datetime.timezone.utc) - retention
         async with data.get_session() as session:
-            await TokenRepository(session).delete_expired()
+            await TokenRepository(session).delete_stale(revoked_before=revoked_before)
             await session.commit()
         auth.prune_jti_cache()
 
