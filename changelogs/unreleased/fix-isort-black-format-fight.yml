@@ -1,0 +1,6 @@
+description: Stop isort and black from fighting in `make format` by enabling isort's ensure_newline_before_comments
+change-type: patch
+destination-branches:
+  - master
+  - iso9
+  - iso8
