@@ -20,7 +20,7 @@ pipeline {
                 script{
                     sh 'echo "blub"'
                     stage('sub-test'){
-                        steps{
+                        script {
                             sh '''
                                 . venv/bin/activate
                                 pytest ./inmanta-core/tests/test_const.py::test_action_set_consistency \
