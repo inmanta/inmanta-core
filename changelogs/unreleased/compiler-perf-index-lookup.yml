@@ -1,0 +1,3 @@
+description: Optimize index lookup with frozenset caching and inline add_to_index restructuring
+change-type: patch
+destination-branches: [master, iso9, iso8]
