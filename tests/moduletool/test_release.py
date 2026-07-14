@@ -517,7 +517,54 @@ def test_populate_changelog(tmpdir, modules_dir: str, monkeypatch, top_level_hea
 """.lstrip()
 
 
-def test_release_tag_message_contains_changelog_entries(tmpdir, modules_dir: str, monkeypatch) -> None:
+@pytest.mark.parametrize_any(
+    "changelog_content, expected_tag_message",
+    [
+        # The changelog contains a section for the released version, followed by sections for older versions
+        (
+            """
+# Changelog
+
+## v1.0.1 - ?
+
+- Add support for feature X
+- Fix bug in feature Y
+
+## v1.0.0 - 2023-01-01
+
+- Initial release
+            """,
+            "- Add support for feature X\n- Fix bug in feature Y",
+        ),
+        # The section for the released version is the only section in the changelog file
+        (
+            """
+# Changelog
+
+## v1.0.1 - ?
+
+- Add support for feature X
+            """,
+            "- Add support for feature X",
+        ),
+        # The section for the released version is empty -> fall back to the default tag message
+        (
+            """
+# Changelog
+
+## v1.0.1 - ?
+
+## v1.0.0 - 2023-01-01
+
+- Initial release
+            """,
+            "auto tag by module tool",
+        ),
+    ],
+)
+def test_release_tag_message_contains_changelog_entries(
+    tmpdir, modules_dir: str, monkeypatch, changelog_content: str, expected_tag_message: str
+) -> None:
     """
     Verify that the `inmanta module release` command uses the changelog entries of the released version
     as the message of the release tag (inmanta/inmanta-core#7893).
@@ -532,18 +579,7 @@ def test_release_tag_message_contains_changelog_entries(tmpdir, modules_dir: str
     )
     path_changelog_file = os.path.join(path_module, const.MODULE_CHANGELOG_FILE)
     with open(path_changelog_file, "w", encoding="utf-8") as fh:
-        fh.write("""
-# Changelog
-
-## v1.0.1 - ?
-
-- Add support for feature X
-- Fix bug in feature Y
-
-## v1.0.0 - 2023-01-01
-
-- Initial release
-            """.strip())
+        fh.write(changelog_content.strip())
     gitprovider.git_init(repo=path_module)
     gitprovider.commit(repo=path_module, message="Initial commit", add=["*"], commit_all=True)
 
@@ -551,7 +587,7 @@ def test_release_tag_message_contains_changelog_entries(tmpdir, modules_dir: str
     module_tool = ModuleTool()
     module_tool.release(dev=False, message="Commit changes")
 
-    assert get_tag_message(path=path_module, tag="1.0.1") == "- Add support for feature X\n- Fix bug in feature Y"
+    assert get_tag_message(path=path_module, tag="1.0.1") == expected_tag_message
 
 
 def test_too_many_version_bump_arguments() -> None:
