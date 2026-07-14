@@ -4,6 +4,7 @@ pipeline {
     stages {
         stage('Setup') {
             steps {
+                deleteDir()
                 sh '''
                     git clone -b test/arnaud https://github.com/inmanta/inmanta-core.git
                     python3.13 -m venv venv
@@ -36,9 +37,6 @@ pipeline {
                 skipMarkingStageUnstable: false
             )
         }
-        cleanup {
-            deleteDir()
-        }    
     }
 }
 
