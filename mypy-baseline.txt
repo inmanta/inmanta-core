@@ -1,4 +1,3 @@
-src/inmanta/agent/cache.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
 src/inmanta/agent/forking_executor.py:0: error: Argument 1 of "connection_made" is incompatible with supertype "asyncio.protocols.BaseProtocol"; supertype defines the argument type as "BaseTransport"  [override]
 src/inmanta/agent/forking_executor.py:0: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#incompatible-overrides
 src/inmanta/agent/forking_executor.py:0: note: This violates the Liskov substitution principle

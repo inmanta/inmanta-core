@@ -19,11 +19,7 @@ pipeline {
             steps {
                 catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
                     sh '''
-                        . venv/bin/activate
-                        pytest ./inmanta-core/tests/test_const.py::test_action_set_consistency \
-                            -p no:cacheprovider \
-                            -o addopts="" \
-                            --junitxml=junit.xml
+                        make ci-mypy
                     '''
                 }
             }
@@ -33,7 +29,7 @@ pipeline {
     post {
         always {
             junit(
-                testResults: 'junit.xml',
+                testResults: 'junit-mypy.xml',
                 skipMarkingBuildUnstable: true,
                 allowEmptyResults: true,
                 skipMarkingStageUnstable: false
