@@ -17,19 +17,14 @@ pipeline {
 
         stage('Test') {
             steps {
-                script{
-                    sh 'echo "blub"'
-                    stage('sub-test'){
-                        script {
-                            sh '''
-                                . venv/bin/activate
-                                pytest ./inmanta-core/tests/test_const.py::test_action_set_consistency \
-                                    -p no:cacheprovider \
-                                    -o addopts="" \
-                                    --junitxml=junit.xml || true
-                            '''
-                        }
-                    }
+                catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
+                    sh '''
+                        . venv/bin/activate
+                        pytest ./inmanta-core/tests/test_const.py::test_action_set_consistency \
+                            -p no:cacheprovider \
+                            -o addopts="" \
+                            --junitxml=junit.xml || true
+                    '''
                 }
             }
         }
