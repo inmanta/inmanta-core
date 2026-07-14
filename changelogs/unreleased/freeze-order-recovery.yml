@@ -1,0 +1,5 @@
+description: "Fixed compile failures with a `List modified after freeze` error that were caused by the order in which the compiler considers relations complete: when such a failure occurs, the compiler now automatically recompiles with the affected relations considered complete as late as possible, so models with a valid evaluation order compile without requiring a manual relation precedence policy. The learned relations are cached in the project's `.cfcache` directory so subsequent compiles succeed in a single attempt."
+change-type: minor
+destination-branches: [master, iso9]
+sections:
+  bugfix: "{{description}}"

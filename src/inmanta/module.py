@@ -2080,6 +2080,10 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
                 del self.modules[module]
         else:
             self.modules = {}
+            # The namespace tree carries load state (the registered type definitions), so a full reload
+            # needs a fresh tree. On partial invalidation the remaining modules keep their AST, which is
+            # bound to the existing tree, so it has to be kept.
+            self.root_ns = Namespace("__root__")
         self.loaded = False
         self._ast_cache = None
         self._complete_ast = None

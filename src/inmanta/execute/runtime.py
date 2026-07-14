@@ -429,6 +429,9 @@ class RelationAttributeVariable:
 
     __slots__ = ()
 
+    # the slot is defined by each subclass
+    attribute: "ast.attribute.RelationAttribute"
+
 
 class AttributeVariable(ResultVariable["Instance"], RelationAttributeVariable):
     """
