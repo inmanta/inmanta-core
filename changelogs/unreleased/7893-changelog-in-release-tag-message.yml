@@ -3,6 +3,6 @@ description: "The `inmanta module release` command now uses the changelog entrie
 issue-nr: 7893
 issue-repo: inmanta-core
 change-type: minor
-destination-branches: [master]
+destination-branches: [master, iso9]
 sections:
   minor-improvement: "{{description}}"
