@@ -1,0 +1,44 @@
+pipeline {
+    agent any
+
+    stages {
+        stage('Setup') {
+            steps {
+                sh '''
+                    git clone -b test/arnaud https://github.com/inmanta/inmanta-core.git
+                    python3.13 -m venv venv
+                    . venv/bin/activate
+                    pip install -U pip
+                    pip install -e './inmanta-core[dev]' -r ./inmanta-core/requirements.txt pytest pytest-asyncio
+                '''
+            }
+        }
+
+        stage('Test') {
+            steps {
+                sh '''
+                    . venv/bin/activate
+                    pytest ./inmanta-core/tests/test_const.py::test_action_set_consistency \
+                        -p no:cacheprovider \
+                        -o addopts="" \
+                        --junitxml=junit.xml || true
+                '''
+            }
+        }
+    }
+
+    post {
+        always {
+            junit(
+                testResults: 'junit.xml',
+                skipMarkingBuildUnstable: true,
+                allowEmptyResults: true,
+                skipMarkingStageUnstable: false
+            )
+        }
+        cleanup {
+            deleteDir()
+        }    
+    }
+}
+
