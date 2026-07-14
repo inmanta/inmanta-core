@@ -17,16 +17,18 @@ pipeline {
 
         stage('Test') {
             steps {
-                sh 'echo "blub"'
-                stage('sub-test'){
-                    steps{
-                        sh '''
-                            . venv/bin/activate
-                            pytest ./inmanta-core/tests/test_const.py::test_action_set_consistency \
-                                -p no:cacheprovider \
-                                -o addopts="" \
-                                --junitxml=junit.xml || true
-                        '''
+                script{
+                    sh 'echo "blub"'
+                    stage:('sub-test'){
+                        steps{
+                            sh '''
+                                . venv/bin/activate
+                                pytest ./inmanta-core/tests/test_const.py::test_action_set_consistency \
+                                    -p no:cacheprovider \
+                                    -o addopts="" \
+                                    --junitxml=junit.xml || true
+                            '''
+                        }
                     }
                 }
             }
