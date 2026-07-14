@@ -23,7 +23,7 @@ pipeline {
                         pytest ./inmanta-core/tests/test_const.py::test_action_set_consistency \
                             -p no:cacheprovider \
                             -o addopts="" \
-                            --junitxml=junit.xml || true
+                            --junitxml=junit.xml
                     '''
                 }
             }
