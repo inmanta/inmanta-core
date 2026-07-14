@@ -563,6 +563,17 @@ def test_populate_changelog(tmpdir, modules_dir: str, monkeypatch, top_level_hea
             """,
             "auto tag by module tool",
         ),
+        # The changelog doesn't contain a section for the released version -> fall back to the default tag message
+        (
+            """
+# Changelog
+
+## v1.0.0 - 2023-01-01
+
+- Initial release
+            """,
+            "auto tag by module tool",
+        ),
         # The changelog file is empty -> fall back to the default tag message
         (
             "",
