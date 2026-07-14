@@ -19,7 +19,7 @@ pipeline {
             steps {
                 script{
                     sh 'echo "blub"'
-                    stage:('sub-test'){
+                    stage('sub-test'){
                         steps{
                             sh '''
                                 . venv/bin/activate
