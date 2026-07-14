@@ -21,6 +21,7 @@ import logging
 import os
 import re
 import subprocess
+from typing import Optional
 
 import click
 import py
@@ -562,10 +563,24 @@ def test_populate_changelog(tmpdir, modules_dir: str, monkeypatch, top_level_hea
             """,
             "auto tag by module tool",
         ),
+        # The changelog file is empty -> fall back to the default tag message
+        (
+            "",
+            "auto tag by module tool",
+        ),
+        # No changelog file exists -> fall back to the default tag message
+        (
+            None,
+            "auto tag by module tool",
+        ),
     ],
 )
 def test_release_tag_message_contains_changelog_entries(
-    tmpdir: py.path.local, modules_dir: str, monkeypatch: MonkeyPatch, changelog_content: str, expected_tag_message: str
+    tmpdir: py.path.local,
+    modules_dir: str,
+    monkeypatch: MonkeyPatch,
+    changelog_content: Optional[str],
+    expected_tag_message: str,
 ) -> None:
     """
     Verify that the `inmanta module release` command uses the changelog entries of the released version
@@ -579,9 +594,10 @@ def test_release_tag_message_contains_changelog_entries(
         new_version=Version("1.0.1.dev0"),
         new_name=module_name,
     )
-    path_changelog_file = os.path.join(path_module, const.MODULE_CHANGELOG_FILE)
-    with open(path_changelog_file, "w", encoding="utf-8") as fh:
-        fh.write(changelog_content.strip())
+    if changelog_content is not None:
+        path_changelog_file = os.path.join(path_module, const.MODULE_CHANGELOG_FILE)
+        with open(path_changelog_file, "w", encoding="utf-8") as fh:
+            fh.write(changelog_content.strip())
     gitprovider.git_init(repo=path_module)
     gitprovider.commit(repo=path_module, message="Initial commit", add=["*"], commit_all=True)
 
