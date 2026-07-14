@@ -31,7 +31,7 @@ pipeline {
     post {
         always {
             junit(
-                testResults: 'junit-mypy.xml',
+                testResults: 'inmanta-core/junit-mypy.xml',
                 skipMarkingBuildUnstable: true,
                 allowEmptyResults: true,
                 skipMarkingStageUnstable: false
