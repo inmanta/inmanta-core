@@ -23,7 +23,9 @@ import re
 import subprocess
 
 import click
+import py
 import pytest
+from pytest import MonkeyPatch
 
 from inmanta import const
 from inmanta.module import Module, UntrackedFilesMode
@@ -563,7 +565,7 @@ def test_populate_changelog(tmpdir, modules_dir: str, monkeypatch, top_level_hea
     ],
 )
 def test_release_tag_message_contains_changelog_entries(
-    tmpdir, modules_dir: str, monkeypatch, changelog_content: str, expected_tag_message: str
+    tmpdir: py.path.local, modules_dir: str, monkeypatch: MonkeyPatch, changelog_content: str, expected_tag_message: str
 ) -> None:
     """
     Verify that the `inmanta module release` command uses the changelog entries of the released version
