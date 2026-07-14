@@ -19,6 +19,7 @@ pipeline {
             steps {
                 catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
                     sh '''
+                        . venv/bin/activate
                         cd inmanta-core
                         make ci-mypy
                     '''
