@@ -46,6 +46,16 @@ def get_commit_message_x_commits_ago(path: str, nb_previous_commit: int = 0) -> 
     return subprocess.check_output(["git", "log", "-1", f"--skip={nb_previous_commit}", "--pretty=%B"], cwd=path).decode()
 
 
+def get_tag_message(path: str, tag: str) -> str:
+    """
+    Return the message of the given annotated tag.
+
+    :param path: The path to the git repository.
+    :param tag: The name of the tag.
+    """
+    return subprocess.check_output(["git", "tag", "-l", "--format=%(contents)", tag], cwd=path).decode().strip()
+
+
 @pytest.mark.parametrize_any("v1_module", [True, False])
 @pytest.mark.parametrize_any("changelog_file_exists", [True, False])
 @pytest.mark.parametrize_any("previous_stable_version_exists", [True, False])
@@ -144,6 +154,12 @@ def test_release_stable_version(
     # Verify release tags
     expected_tags = [Version("1.2.3")] if not previous_stable_version_exists else [Version("1.2.2"), Version("1.2.3")]
     assert gitprovider.get_version_tags(repo=path_module) == expected_tags
+    # Verify that the tag message contains the changelog entries for the released version
+    release_tag = "1.2.3.0" if four_digits_before_release else "1.2.3"
+    if changelog_file_exists:
+        assert get_tag_message(path=path_module, tag=release_tag) == "- Release"
+    else:
+        assert get_tag_message(path=path_module, tag=release_tag) == "auto tag by module tool"
     # Verify version
     mod = Module.from_path(path_module)
     assert mod.version == Version("1.2.3.1.dev0") if four_digit_version and not v1_module else Version("1.2.4.dev0")
@@ -499,6 +515,43 @@ def test_populate_changelog(tmpdir, modules_dir: str, monkeypatch, top_level_hea
 
 
 """.lstrip()
+
+
+def test_release_tag_message_contains_changelog_entries(tmpdir, modules_dir: str, monkeypatch) -> None:
+    """
+    Verify that the `inmanta module release` command uses the changelog entries of the released version
+    as the message of the release tag (inmanta/inmanta-core#7893).
+    """
+    module_name = "mod"
+    path_module = os.path.join(tmpdir, module_name)
+    v1_module_from_template(
+        source_dir=os.path.join(modules_dir, "minimalv1module"),
+        dest_dir=path_module,
+        new_version=Version("1.0.1.dev0"),
+        new_name=module_name,
+    )
+    path_changelog_file = os.path.join(path_module, const.MODULE_CHANGELOG_FILE)
+    with open(path_changelog_file, "w", encoding="utf-8") as fh:
+        fh.write("""
+# Changelog
+
+## v1.0.1 - ?
+
+- Add support for feature X
+- Fix bug in feature Y
+
+## v1.0.0 - 2023-01-01
+
+- Initial release
+            """.strip())
+    gitprovider.git_init(repo=path_module)
+    gitprovider.commit(repo=path_module, message="Initial commit", add=["*"], commit_all=True)
+
+    monkeypatch.chdir(path_module)
+    module_tool = ModuleTool()
+    module_tool.release(dev=False, message="Commit changes")
+
+    assert get_tag_message(path=path_module, tag="1.0.1") == "- Add support for feature X\n- Fix bug in feature Y"
 
 
 def test_too_many_version_bump_arguments() -> None:
