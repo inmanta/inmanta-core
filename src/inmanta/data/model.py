@@ -1243,6 +1243,9 @@ class ModuleSource(BaseModel):
     def get_inmanta_module_name(self) -> str:
         return self.metadata.get_inmanta_module_name()
 
+    def get_fq_module_name(self) -> str:
+        return self.metadata.name
+
 
 class ExecutorModuleSource(ModuleSource):
     """
@@ -1265,7 +1268,7 @@ class ExecutorModuleSource(ModuleSource):
     install_on_disk: bool | None
     load_module: bool | None
 
-    def sort_key(self) -> tuple[tuple[str, str, bool], bool, bool]:
+    def sort_key(self) -> tuple[tuple[str, str, bool], bool | None, bool | None]:
         """Stable ordering key covering the full identity of this source."""
         return (self.metadata.sort_key(), self.install_on_disk, self.load_module)
 

@@ -429,7 +429,6 @@ class CodeLoader:
         :return: The python modules that could not be installed or imported, grouped by inmanta module.
         """
 
-
         def deploy_and_load_iso9(module_sources: Sequence[ExecutorModuleSource]) -> FailedInmantaModules:
             """
             Compatibility layer method that install and loads the given module_sources using the "old-style" (iso<10) of
@@ -448,27 +447,28 @@ class CodeLoader:
             in_place: list[ExecutorModuleSource] = []
             # First put all files on disk
             for module_source in module_sources:
+                fq_module_name = module_source.get_fq_module_name()
                 try:
                     self.install_source(module_source)
                     in_place.append(module_source)
                 except Exception as e:
-                    logger.info("Failed to load source on disk: %s", module_source.metadata.name, exc_info=True)
+                    logger.info("Failed to load source on disk: %s", fq_module_name, exc_info=True)
                     inmanta_module_name = module_source.get_inmanta_module_name()
-                    failed[inmanta_module_name][module_source.metadata.name] = e
+                    failed[inmanta_module_name][fq_module_name] = e
 
             # then try to import them
             for module_source in in_place:
+                fq_module_name = module_source.get_fq_module_name()
                 try:
-                    self.load_module(module_source.metadata.name, module_source.metadata.hash_value)
+                    self.load_module(fq_module_name, module_source.metadata.hash_value)
                 except Exception as e:
-                    logger.info("Failed to import source: %s", module_source.metadata.name, exc_info=True)
+                    logger.info("Failed to import source: %s", fq_module_name, exc_info=True)
                     inmanta_module_name = module_source.get_inmanta_module_name()
-                    failed[inmanta_module_name][module_source.metadata.name] = ModuleImportException(e,
-                                                                                                     module_source.metadata.name)
+                    failed[inmanta_module_name][fq_module_name] = ModuleImportException(e, fq_module_name)
 
             return failed
 
-        def deploy_and_load_iso10( module_sources: Sequence[ExecutorModuleSource]) -> FailedInmantaModules:
+        def deploy_and_load_iso10(module_sources: Sequence[ExecutorModuleSource]) -> FailedInmantaModules:
             """
             Compatibility layer method that install and loads the given module_sources using the "new-style" (iso10+) of
             code install on the agent:
@@ -499,23 +499,27 @@ class CodeLoader:
             for module_source in module_sources:
                 assert module_source.install_on_disk is not None
 
+                fq_module_name = module_source.get_fq_module_name()
+
                 if module_source.install_on_disk:
                     try:
                         self.install_source(module_source)
                     except Exception as e:
-                        logger.info("Failed to install source on disk: %s", module_source.metadata.name, exc_info=True)
-                        failed[module_source.get_inmanta_module_name()][module_source.metadata.name] = e
-                        failed_to_install.add(module_source.metadata.name)
+                        logger.info("Failed to install source on disk: %s", fq_module_name, exc_info=True)
+                        failed[module_source.get_inmanta_module_name()][fq_module_name] = e
+                        failed_to_install.add(fq_module_name)
 
             for module_source in module_sources:
                 assert module_source.load_module is not None
 
-                if module_source.load_module and module_source.metadata.name not in failed_to_install:
+                fq_module_name = module_source.get_fq_module_name()
+
+                if module_source.load_module and fq_module_name not in failed_to_install:
                     try:
-                        self.load_module(module_source.metadata.name, module_source.metadata.hash_value)
+                        self.load_module(fq_module_name, module_source.metadata.hash_value)
                     except Exception as e:
-                        logger.info("Failed to import source: %s", module_source.metadata.name, exc_info=True)
-                        failed[module_source.get_inmanta_module_name()][module_source.metadata.name] = ModuleImportException(
+                        logger.info("Failed to import source: %s", fq_module_name, exc_info=True)
+                        failed[module_source.get_inmanta_module_name()][fq_module_name] = ModuleImportException(
                             e, module_source.metadata.name
                         )
 
@@ -531,7 +535,6 @@ class CodeLoader:
             return deploy_and_load_iso9(module_sources)
         else:
             return deploy_and_load_iso10(module_sources)
-
 
 
 class PluginModuleLoader(FileLoader):
