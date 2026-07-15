@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict f89UaXawkvvsOagqlMQa45CfOeB4ElMVWJX4PPM1em5EsFfHSsG93lopzXehTar
+--\restrict f89UaXawkvvsOagqlMQa45CfOeB4ElMVWJX4PPM1em5EsFfHSsG93lopzXehTar
 
 -- Dumped from database version 18.3
 -- Dumped by pg_dump version 18.3
@@ -10,7 +10,7 @@
 SET statement_timeout = 0;
 SET lock_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
-SET transaction_timeout = 0;
+--SET transaction_timeout = 0;
 SET client_encoding = 'UTF8';
 SET standard_conforming_strings = on;
 --SELECT pg_catalog.set_config('search_path', '', false);
@@ -574,7 +574,6 @@ CREATE TABLE public.token (
     environment uuid,
     issued_at timestamp with time zone NOT NULL,
     expires_at timestamp with time zone,
-    revoked boolean DEFAULT false NOT NULL,
     last_used timestamp with time zone,
     revoked_at timestamp with time zone
 );
@@ -1176,7 +1175,7 @@ core	{1,202211230,202212010,202301100,202301110,202301120,202301160,202301170,20
 -- Data for Name: token; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.token (jti, created_by, client_types, environment, issued_at, expires_at, revoked, last_used, revoked_at) FROM stdin;
+COPY public.token (jti, created_by, client_types, environment, issued_at, expires_at, last_used, revoked_at) FROM stdin;
 \.
 
 
@@ -2081,5 +2080,5 @@ ALTER TABLE ONLY public.discoveredresource
 -- PostgreSQL database dump complete
 --
 
-\unrestrict f89UaXawkvvsOagqlMQa45CfOeB4ElMVWJX4PPM1em5EsFfHSsG93lopzXehTar
+--\unrestrict f89UaXawkvvsOagqlMQa45CfOeB4ElMVWJX4PPM1em5EsFfHSsG93lopzXehTar
 

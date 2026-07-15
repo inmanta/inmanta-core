@@ -356,12 +356,12 @@ server_cleanup_compiler_reports_interval = Option(
     is_time,
 )
 
-server_revoked_token_retention = Option(
+server_token_retention = Option(
     "server",
-    "revoked-token-retention",
+    "token-retention",
     2592000,
-    """The number of seconds a revoked token is kept in the token registry for auditing before it is
-    permanently deleted. The default is thirty days.""",
+    """The number of seconds an expired or revoked token is kept in the token registry for auditing before
+    it is permanently deleted. The default is thirty days.""",
     is_time,
 )
 

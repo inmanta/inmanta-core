@@ -21,12 +21,13 @@ from asyncpg import Connection
 
 async def update(connection: Connection) -> None:
     """
-    Add the revoked_at column to the token table: the moment a token was revoked, used for auditing and
-    to bound how long revoked tokens are kept. Already-revoked tokens are backfilled with the migration
-    time so the retention-based cleanup applies to them as well.
+    Replace the token table's revoked boolean with a revoked_at timestamp: the moment a token was revoked
+    (NULL means not revoked), used for auditing and to bound how long revoked tokens are kept. Already-revoked
+    tokens are backfilled with the migration time so the retention-based cleanup applies to them as well.
     """
     schema = """
         ALTER TABLE public.token ADD COLUMN revoked_at timestamp with time zone;
         UPDATE public.token SET revoked_at = now() WHERE revoked;
+        ALTER TABLE public.token DROP COLUMN revoked;
     """
     await connection.execute(schema)

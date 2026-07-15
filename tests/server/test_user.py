@@ -544,7 +544,6 @@ async def test_token_registry(server: protocol.Server, auth_client: endpoints.Cl
     assert len(response.result["data"]) == 1
     assert response.result["data"][0]["jti"] == jti
     assert response.result["data"][0]["created_by"] == "admin"
-    assert response.result["data"][0]["revoked"] is False
     assert response.result["data"][0]["revoked_at"] is None
 
     # The registered token works for authenticated calls.
@@ -563,7 +562,6 @@ async def test_token_registry(server: protocol.Server, auth_client: endpoints.Cl
     response = await admin_client.environment_token_list(tid=env_id)
     assert response.code == 200
     [revoked_entry] = [t for t in response.result["data"] if t["jti"] == jti]
-    assert revoked_entry["revoked"] is True
     assert revoked_entry["revoked_at"] is not None
 
     # Revoking again succeeds (idempotent) and keeps the original revocation time.
@@ -596,7 +594,7 @@ async def test_token_registry(server: protocol.Server, auth_client: endpoints.Cl
     assert response.code == 404
     # It is untouched (still present and unrevoked) in its own environment.
     response = await admin_client.environment_token_list(tid=env_id)
-    assert any(t["jti"] == other_jti and t["revoked"] is False for t in response.result["data"])
+    assert any(t["jti"] == other_jti and t["revoked_at"] is None for t in response.result["data"])
 
     # A token whose jti claim is not a valid UUID is rejected.
     bad_token = auth.encode_token(
@@ -610,28 +608,31 @@ async def test_token_registry(server: protocol.Server, auth_client: endpoints.Cl
 
 async def test_token_registry_cleanup(server: protocol.Server) -> None:
     """
-    delete_stale removes expired entries and entries revoked before the retention cutoff, while
-    keeping valid, non-expiring and recently-revoked ones.
+    delete_stale removes entries that expired or were revoked before the retention cutoff, while keeping
+    valid, non-expiring, recently-expired and recently-revoked ones (the latter two kept for auditing).
     """
     now = datetime.datetime.now(tz=datetime.timezone.utc)
-    expired_jti, valid_jti, eternal_jti = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    old_expired_jti, fresh_expired_jti = uuid.uuid4(), uuid.uuid4()
+    valid_jti, eternal_jti = uuid.uuid4(), uuid.uuid4()
     old_revoked_jti, fresh_revoked_jti = uuid.uuid4(), uuid.uuid4()
     async with data.get_session() as session:
         repo = TokenRepository(session)
-        await repo.add(Token(jti=expired_jti, issued_at=now, expires_at=now - datetime.timedelta(hours=1), revoked=False))
-        await repo.add(Token(jti=valid_jti, issued_at=now, expires_at=now + datetime.timedelta(hours=1), revoked=False))
-        await repo.add(Token(jti=eternal_jti, issued_at=now, expires_at=None, revoked=False))
-        await repo.add(Token(jti=old_revoked_jti, issued_at=now, revoked=True, revoked_at=now - datetime.timedelta(days=2)))
-        await repo.add(Token(jti=fresh_revoked_jti, issued_at=now, revoked=True, revoked_at=now - datetime.timedelta(hours=1)))
+        await repo.add(Token(jti=old_expired_jti, issued_at=now, expires_at=now - datetime.timedelta(days=2)))
+        await repo.add(Token(jti=fresh_expired_jti, issued_at=now, expires_at=now - datetime.timedelta(hours=1)))
+        await repo.add(Token(jti=valid_jti, issued_at=now, expires_at=now + datetime.timedelta(hours=1)))
+        await repo.add(Token(jti=eternal_jti, issued_at=now, expires_at=None))
+        await repo.add(Token(jti=old_revoked_jti, issued_at=now, revoked_at=now - datetime.timedelta(days=2)))
+        await repo.add(Token(jti=fresh_revoked_jti, issued_at=now, revoked_at=now - datetime.timedelta(hours=1)))
         await session.commit()
 
     async with data.get_session() as session:
-        await TokenRepository(session).delete_stale(revoked_before=now - datetime.timedelta(days=1))
+        await TokenRepository(session).delete_stale(cutoff=now - datetime.timedelta(days=1))
         await session.commit()
 
     async with data.get_session() as session:
         repo = TokenRepository(session)
-        assert await repo.get_by_jti(expired_jti) is None
+        assert await repo.get_by_jti(old_expired_jti) is None
+        assert await repo.get_by_jti(fresh_expired_jti) is not None
         assert await repo.get_by_jti(valid_jti) is not None
         assert await repo.get_by_jti(eternal_jti) is not None
         assert await repo.get_by_jti(old_revoked_jti) is None

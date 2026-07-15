@@ -94,14 +94,6 @@ class PGRestore:
             return
         if not cmd.strip():
             return
-        if cmd.startswith(("\\restrict", "\\unrestrict")):
-            # psql meta-commands emitted by pg_dump >= 16.10 / 17.6; they only have meaning inside psql
-            # and are not valid SQL.
-            return
-        if cmd.startswith("SET transaction_timeout"):
-            # Emitted by pg_dump 17+ clients but the parameter does not exist on older PostgreSQL
-            # servers. Dumps set it to 0 (the default), so skipping it changes nothing.
-            return
         self.commandbuffer += cmd
 
     async def execute_buffer(self) -> None:
