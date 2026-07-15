@@ -584,19 +584,13 @@ async def test_compile_runner_repo_url_changed(environment_factory: EnvironmentF
     assert remote_url == env_other.repo_url
 
 
-@pytest.mark.slowtest
-@pytest.mark.parametrize("no_agent", [True])
-async def test_compile_runner_clone_auth_failure(server, client, tmpdir) -> None:
+@pytest.fixture
+def unauthenticated_git_repo() -> abc.Iterator[str]:
     """
-    When cloning a repository that requires authentication and no credentials are available, git must
-    not block trying to prompt for a username. The compiler subprocess has no terminal, so an interactive
-    prompt fails with the confusing "could not read Username for '...': No such device or address".
-
-    The compiler service must run git non-interactively so that the real authentication error surfaces
-    instead. See GIT_NON_INTERACTIVE_ENV in the compiler service.
+    Serve a local HTTP endpoint that rejects every request with a 401, mimicking a git repository that
+    requires authentication. Yields a repository URL pointing at it.
     """
 
-    # Minimal HTTP server that rejects every request with a 401, mimicking a private repository.
     class _Unauthorized(http.server.BaseHTTPRequestHandler):
         def do_GET(self) -> None:
             self.send_response(401)
@@ -611,42 +605,54 @@ async def test_compile_runner_clone_auth_failure(server, client, tmpdir) -> None
     server_thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     server_thread.start()
     try:
-        repo_url = f"http://127.0.0.1:{httpd.server_address[1]}/repo.git"
-
-        project = data.Project(name="test_clone_auth")
-        await project.insert()
-        env = data.Environment(name="dev", project=project.id, repo_url=repo_url, repo_branch="")
-        await env.insert()
-
-        compile = data.Compile(
-            remote_id=uuid.uuid4(),
-            environment=env.id,
-            do_export=False,
-            requested_environment_variables={},
-            used_environment_variables={},
-        )
-        await compile.insert()
-
-        project_work_dir = os.path.join(tmpdir, "work")
-        ensure_directory_exist(project_work_dir)
-
-        cr = CompileRun(compile, project_work_dir)
-        await cr.run()
-
-        result = await client.get_report(compile.id)
-        assert result.code == 200
-        stages = {stage["name"]: stage for stage in result.result["report"]["reports"]}
-
-        clone_stage = stages["Cloning repository"]
-        assert clone_stage["returncode"] != 0
-        errstream = clone_stage["errstream"]
-        # The real authentication error is surfaced ...
-        assert "Authentication failed" in errstream
-        # ... instead of the confusing message caused by git trying to prompt without a terminal.
-        assert "could not read Username" not in errstream
+        yield f"http://127.0.0.1:{httpd.server_address[1]}/repo.git"
     finally:
         httpd.shutdown()
         server_thread.join()
+
+
+@pytest.mark.slowtest
+@pytest.mark.parametrize("no_agent", [True])
+async def test_compile_runner_clone_auth_failure(server, client, tmpdir, unauthenticated_git_repo: str) -> None:
+    """
+    When cloning a repository that requires authentication and no credentials are available, git must
+    not block trying to prompt for a username. The compiler subprocess has no terminal, so an interactive
+    prompt fails with the confusing "could not read Username for '...': No such device or address".
+
+    The compiler service must run git non-interactively so that the real authentication error surfaces
+    instead. See GIT_NON_INTERACTIVE_ENV in the compiler service.
+    """
+    project = data.Project(name="test_clone_auth")
+    await project.insert()
+    env = data.Environment(name="dev", project=project.id, repo_url=unauthenticated_git_repo, repo_branch="")
+    await env.insert()
+
+    compile = data.Compile(
+        remote_id=uuid.uuid4(),
+        environment=env.id,
+        do_export=False,
+        requested_environment_variables={},
+        used_environment_variables={},
+    )
+    await compile.insert()
+
+    project_work_dir = os.path.join(tmpdir, "work")
+    ensure_directory_exist(project_work_dir)
+
+    cr = CompileRun(compile, project_work_dir)
+    await cr.run()
+
+    result = await client.get_report(compile.id)
+    assert result.code == 200
+    stages = {stage["name"]: stage for stage in result.result["report"]["reports"]}
+
+    clone_stage = stages["Cloning repository"]
+    assert clone_stage["returncode"] != 0
+    errstream = clone_stage["errstream"]
+    # The real authentication error is surfaced ...
+    assert "Authentication failed" in errstream
+    # ... instead of the confusing message caused by git trying to prompt without a terminal.
+    assert "could not read Username" not in errstream
 
 
 @pytest.mark.slowtest

@@ -213,6 +213,25 @@ generated or the compile report doesn't show any errors, check the server logs a
    :align: center
 
 
+Debugging project authentication issues
+---------------------------------------
+
+When the ``Cloning repository`` or ``Pulling updates`` step fails with ``Authentication failed``, the orchestrator
+could not authenticate against the git repository of the project. Git looks for credentials in several places (the
+repository URL, a ``.netrc`` file, and configured git credential helpers), so it is not always obvious which source
+was used or why it was rejected.
+
+To find out which credential source git consulted, set the ``GIT_TRACE_CURL`` (or ``GIT_CURL_VERBOSE``) environment
+variable to ``1`` as an :ref:`orchestrator environment variable<env_vars>` and trigger a new compile. The extra
+output is added to the git step of the compile report and shows, among other things, whether a ``.netrc`` file was
+read and which username was sent. The actual secret is redacted (``Authorization: Basic <redacted>``).
+
+.. note::
+    This tracing is verbose, so only enable it while investigating and remove it afterwards. Prefer ``GIT_TRACE_CURL``
+    over ``GIT_TRACE``: the latter prints the full repository URL on every line, which leaks any credentials embedded
+    in the URL into the compile report.
+
+
 Logs show "empty model" after export
 ====================================
 
