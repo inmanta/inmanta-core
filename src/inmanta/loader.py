@@ -531,6 +531,7 @@ class CodeLoader:
         # This compatibility layer can be removed in iso11 once we no longer need to deploy / dry-run versions using module
         # sources for which the install_on_disk and load_module is None (because it cannot be determined unless a full
         # compile is ran)
+
         if module_sources[0].install_on_disk is None:
             return deploy_and_load_iso9(module_sources)
         else:
