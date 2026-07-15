@@ -614,6 +614,58 @@ async def test_token_registry(server: protocol.Server, auth_client: endpoints.Cl
     assert response.code == 403
 
 
+async def test_token_expire_param(server: protocol.Server, auth_client: endpoints.Client) -> None:
+    """
+    An explicit expire on environment_create_token drives both the JWT exp claim and the registry
+    expires_at; a non-positive expire and the idempotent+expire combination are rejected.
+    """
+    user = data.User(
+        username="admin",
+        password_hash=nacl.pwhash.str("Str0ng-Pass!".encode()).decode(),
+        auth_method=AuthMethod.database,
+    )
+    await user.insert()
+    response = await auth_client.login("admin", "Str0ng-Pass!")
+    assert response.code == 200
+    config.Config.set("client_rest_transport", "token", response.result["data"]["token"])
+    admin_client = protocol.Client("client")
+
+    response = await admin_client.project_create(name="test")
+    assert response.code == 200
+    response = await admin_client.environment_create(project_id=response.result["data"]["id"], name="test")
+    assert response.code == 200
+    env_id = response.result["data"]["id"]
+
+    # The expire argument drives the exp claim and the registry expires_at.
+    response = await admin_client.environment_create_token(tid=env_id, client_types=["api"], expire=3600)
+    assert response.code == 200
+    expiring_token = response.result["data"]
+    claims = jwt.decode(expiring_token, options={"verify_signature": False})
+    assert claims["exp"] == claims["iat"] + 3600
+    response = await admin_client.environment_token_list(tid=env_id)
+    assert response.code == 200
+    [entry] = response.result["data"]
+    issued_at = datetime.datetime.fromisoformat(entry["issued_at"])
+    expires_at = datetime.datetime.fromisoformat(entry["expires_at"])
+    assert expires_at - issued_at == datetime.timedelta(seconds=3600)
+
+    # The expiring token authenticates as long as it has not expired.
+    config.Config.set("client_rest_transport", "token", expiring_token)
+    token_client = protocol.Client("client")
+    response = await token_client.environment_token_list(tid=env_id)
+    assert response.code == 200
+
+    # A non-positive expire is rejected.
+    response = await admin_client.environment_create_token(tid=env_id, client_types=["api"], expire=0)
+    assert response.code == 400
+    response = await admin_client.environment_create_token(tid=env_id, client_types=["api"], expire=-5)
+    assert response.code == 400
+
+    # An idempotent token carries no time-based claims, so it cannot have an expiry.
+    response = await admin_client.environment_create_token(tid=env_id, client_types=["api"], idempotent=True, expire=3600)
+    assert response.code == 400
+
+
 async def test_token_registry_cleanup(server: protocol.Server) -> None:
     """
     delete_stale removes entries that expired or were revoked before the retention cutoff, while keeping
