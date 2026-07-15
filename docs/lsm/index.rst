@@ -141,8 +141,25 @@ untouched and the request is rejected with HTTP 409 (Conflict) and an error like
     The given current version (4) doesn't match the actual current version (5) of service instance
     8ee3a5e8-... in environment test(f2568cdb-...)
 
-This compare-and-set mechanism prevents lost updates and modifications based on stale data. Clients are expected to
-interact with the API as follows:
+This compare-and-set mechanism prevents lost updates and modifications based on stale data. Consider a connectivity
+service with a ``bandwidth`` attribute that is managed by a BSS system:
+
+1. The BSS reads the service instance to prepare a bandwidth upgrade: the instance is in state ``up`` at version 12.
+2. Before the BSS sends its update, a port failure in the network causes a deploy of the instance's resources to fail.
+   The lifecycle manager reacts with an automatic state transfer from ``up`` to ``failed``: the instance is now at
+   version 13.
+3. The BSS sends its update with ``current_version`` set to 12. The instance is no longer at version 12, so the request
+   is rejected with a 409 and the instance is not modified.
+4. The BSS reads the instance again, sees that it is in state ``failed``, and can make an informed decision: raise an
+   alarm, wait for the service to recover, or apply the upgrade anyway with ``current_version`` set to 13.
+
+Without the version check, the update in step 3 would have been accepted, and the BSS would believe it upgraded a healthy
+service while it actually modified a degraded one. The same mechanism protects two API clients that update the same
+instance concurrently: both may base their update on the same version, but only the first update will be accepted.
+Because the v1 update endpoint requires the full tree of attributes, the second update would otherwise silently undo the
+first one (a lost update).
+
+Clients are therefore expected to interact with the API as follows:
 
 1. ``GET`` the service instance and remember its ``version``.
 2. Decide on the modification, based on the attributes and state that were just read.
