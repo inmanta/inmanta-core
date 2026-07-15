@@ -141,6 +141,10 @@ untouched and the request is rejected with HTTP 409 (Conflict) and an error like
     The given current version (4) doesn't match the actual current version (5) of service instance
     8ee3a5e8-... in environment test(f2568cdb-...)
 
+On the endpoints listed above, ``current_version`` is mandatory. Endpoints on which it is optional (such as the expert
+variants of these operations) skip the version check when it is not provided: the operation is then applied to the
+instance as it is at the moment the request is processed, regardless of any changes made since the caller last read it.
+
 This compare-and-set mechanism prevents lost updates and modifications based on stale data. Consider a connectivity
 service with a ``bandwidth`` attribute that is managed by a BSS system:
 
