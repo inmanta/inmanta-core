@@ -40,7 +40,7 @@ from inmanta.agent import executor
 from inmanta.agent.executor import ExecutorBlueprint
 from inmanta.agent.forking_executor import MPExecutor, MPManager
 from inmanta.data import PipConfig
-from inmanta.data.model import ModuleSourceMetadata, ExecutorModuleSource
+from inmanta.data.model import ExecutorModuleSource, ModuleSourceMetadata
 from inmanta.protocol.ipc_light import ConnectionLost
 from utils import NOISY_LOGGERS, log_contains, retry_limited
 
