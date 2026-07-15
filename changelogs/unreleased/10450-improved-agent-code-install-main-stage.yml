@@ -5,6 +5,8 @@ description: >
   To install these modules on the agent:
     - For modules installed in editable mode, the existing code transport mechanism is mostly reused
     - For modules installed as a package, we now rely on pip
+  This PR adds a compatibility layer in the code install/loading mechanism to be able to deploy/dryrun model versions
+  that were exported using an iso<10 orchestrator. This compatibility layer can be dropped in iso11.
 change-type: major
 destination-branches: [master]
 sections:

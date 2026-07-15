@@ -725,7 +725,9 @@ class OrchestrationService(protocol.ServerSlice):
         """
 
         modules_to_register: dict[InmantaModuleName, InmantaModuleDTO] = {
-            k: v for k, v in module_version_info.items() if v.install_module_on_agents
+            inmanta_module_name: inmanta_module
+            for inmanta_module_name, inmanta_module in module_version_info.items()
+            if inmanta_module.install_module_on_agents
         }
 
         # Seed with the base version's module usage so that, for a partial compile, modules that are not part of
