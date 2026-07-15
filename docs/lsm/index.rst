@@ -116,6 +116,59 @@ The service inventory exposes CRUD operations on service instances in the invent
 The state machine attached to the lifecycle will determine whether the API call is successful or not.
 
 
+.. _lsm_concurrency_control:
+
+Concurrency control
+===================
+
+Every service instance carries an integer ``version`` field, which is returned by every read operation. This version is a
+change counter: it is incremented on every state transfer of the instance. It is **not** a version control mechanism like
+git: older versions are not kept as retrievable snapshots, so the version number cannot be used to check out, diff or
+restore a previous state of the instance. To inspect the history of an instance, use the log endpoint listed under
+`Status operations`_. To revert attribute changes, use a lifecycle transfer with the ``rollback`` operation (see
+:ref:`fsm`).
+
+Instead, the version is used for optimistic concurrency control. A service instance can be modified by multiple actors at
+the same time: operators using the web console, northbound clients such as OSS/BSS systems, and the lifecycle manager
+itself, which moves instances through their lifecycle with automatic state transfers. Any of these can change the instance
+between the moment a client reads it and the moment that client sends a modification.
+
+Every API call that modifies a service instance (attribute updates, state transfers and deletes) therefore takes a
+``current_version`` argument: the version of the instance the caller based its decision on. The call is only executed if
+this value still matches the version of the instance in the inventory. If it does not match, the instance is left
+untouched and the request is rejected with HTTP 409 (Conflict) and an error like::
+
+    The given current version (4) doesn't match the actual current version (5) of service instance
+    8ee3a5e8-... in environment test(f2568cdb-...)
+
+This compare-and-set mechanism prevents lost updates and modifications based on stale data. Clients are expected to
+interact with the API as follows:
+
+1. ``GET`` the service instance and remember its ``version``.
+2. Decide on the modification, based on the attributes and state that were just read.
+3. Send the modifying call with ``current_version`` set to the version from step 1.
+4. On a 409 response, the instance was changed by another actor in the meantime. Read the instance again, verify that the
+   modification still makes sense for the new attributes and state, and retry with the new version. Do not blindly resend
+   the request with the version reported in the error message.
+
+For example, updating the attributes of an instance that is currently at version 4:
+
+.. code-block:: sh
+
+    # 1. read the instance, the response contains "version": 4
+    curl -H "X-Inmanta-tid: $ENV_ID" \
+        "http://<host>:<port>/lsm/v1/service_inventory/vlan_assignment/$INSTANCE_ID"
+
+    # 2. update it, passing the version this update was based on
+    curl -X PATCH -H "X-Inmanta-tid: $ENV_ID" -H "Content-Type: application/json" \
+        "http://<host>:<port>/lsm/v1/service_inventory/vlan_assignment/$INSTANCE_ID" \
+        -d '{"current_version": 4, "attributes": {"description": "updated description"}}'
+
+A successful modification triggers a state transfer, so it increments the version of the instance (possibly multiple
+times, as automatic transfers follow). A read can also assert the version: ``GET`` on a single service instance accepts an
+optional ``current_version`` parameter, which turns a stale read into a 409 error.
+
+
 Configuration operations
 ========================
 
@@ -207,7 +260,8 @@ through the API are stored in candidate_attributes. For all other transitions th
 - ``promote``: Promote the values in candidate to active and active to rollback.
 - ``rollback``: Do a roll back of the attributes by setting the values from rollback to active and active to candidate.
 
-On every state transfer the version of the service instance is incremented.
+On every state transfer the version of the service instance is incremented. This version is used for concurrency control
+on the API (see :ref:`lsm_concurrency_control`).
 
 
 Patterns
