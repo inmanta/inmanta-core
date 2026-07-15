@@ -621,11 +621,11 @@ async def test_token_expire_param(server: protocol.Server, auth_client: endpoint
     """
     user = data.User(
         username="admin",
-        password_hash=nacl.pwhash.str("adminadmin".encode()).decode(),
+        password_hash=nacl.pwhash.str("Str0ng-Pass!".encode()).decode(),
         auth_method=AuthMethod.database,
     )
     await user.insert()
-    response = await auth_client.login("admin", "adminadmin")
+    response = await auth_client.login("admin", "Str0ng-Pass!")
     assert response.code == 200
     config.Config.set("client_rest_transport", "token", response.result["data"]["token"])
     admin_client = protocol.Client("client")
