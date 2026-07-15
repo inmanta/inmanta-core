@@ -64,12 +64,14 @@ from inmanta.util import TaskMethod, ensure_directory_exist
 RETURNCODE_INTERNAL_ERROR = -1
 BUFFER_SIZE: int = 8192
 
-# Environment variables that force git to be non-interactive. The compiler runs git in a subprocess
+# Default environment variables that make git non-interactive. The compiler runs git in a subprocess
 # whose stdin is not a terminal, so git can never read an answer to a credential prompt. Without these,
 # git blocks trying to prompt and then fails with the confusing
 # "could not read Username for '...': No such device or address" instead of the real error.
 # GIT_ASKPASS=true feeds empty credentials, so a private repo answers with its actual authentication
 # error. GIT_TERMINAL_PROMPT=0 disables any remaining interactive prompt as a safety net.
+# These are only defaults: they are applied below the process environment, so an operator can override
+# them (e.g. point GIT_ASKPASS at a real credential helper) through the orchestrator's environment.
 GIT_NON_INTERACTIVE_ENV: dict[str, str] = {"GIT_ASKPASS": "true", "GIT_TERMINAL_PROMPT": "0"}
 
 LOGGER: Logger = logging.getLogger(__name__)
@@ -200,7 +202,7 @@ class CompileRun:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 cwd=self._project_dir,
-                env={**os.environ, **GIT_NON_INTERACTIVE_ENV},
+                env={**GIT_NON_INTERACTIVE_ENV, **os.environ},
             )
             out, _ = await sub_process.communicate()
         finally:
@@ -240,8 +242,7 @@ class CompileRun:
 
         sub_process: Optional[Process] = None
         try:
-            env_all = os.environ.copy()
-            env_all.update(GIT_NON_INTERACTIVE_ENV)
+            env_all = {**GIT_NON_INTERACTIVE_ENV, **os.environ}
             if env is not None:
                 env_all.update(env)
 
