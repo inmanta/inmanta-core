@@ -528,8 +528,8 @@ class Token(SetValidatedMixin, Base):
     Registry entry for an issued, revocable authentication token, identified by its jti claim.
 
     Only non-idempotent tokens are registered here; idempotent tokens stay stateless and are not tracked. A
-    token is accepted only while a matching, non-revoked row exists; revoking a token flips revoked so it is
-    rejected on every subsequent request.
+    token is accepted only while a matching, non-revoked row exists; revoking a token stamps revoked_at so it
+    is rejected on every subsequent request.
 
     All values written to this table are server-generated, but the Enum column type and SetValidatedMixin
     still enforce them at the data layer as defense in depth. Persistence goes through TokenRepository; this
@@ -567,8 +567,8 @@ class Token(SetValidatedMixin, Base):
     expires_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(True), doc="The moment the token expires, or None when the token does not expire"
     )
-    revoked: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default=text("false"), doc="Whether the token has been revoked"
+    revoked_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(True), doc="The moment the token was revoked, or None when it has not been revoked"
     )
     last_used: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(True), doc="The last time the token was used to authenticate a request, or None if it has not been used"
@@ -583,7 +583,7 @@ class Token(SetValidatedMixin, Base):
             environment=self.environment,
             issued_at=self.issued_at,
             expires_at=self.expires_at,
-            revoked=self.revoked,
+            revoked_at=self.revoked_at,
             last_used=self.last_used,
         )
 
@@ -618,10 +618,14 @@ class TokenRepository:
     async def revoke(self, jti: uuid.UUID, environment: uuid.UUID) -> bool:
         """
         Revoke the token with the given jti within the given environment. Returns whether a matching token
-        existed (so the caller can distinguish a real revoke from an unknown jti). The caller commits.
+        existed (so the caller can distinguish a real revoke from an unknown jti). Revoking is idempotent:
+        revoking an already-revoked token keeps its original revocation time. The caller commits.
         """
         result = await self.session.execute(
-            update(Token).where(Token.jti == jti, Token.environment == environment).values(revoked=True).returning(Token.jti)
+            update(Token)
+            .where(Token.jti == jti, Token.environment == environment)
+            .values(revoked_at=func.coalesce(Token.revoked_at, func.now()))
+            .returning(Token.jti)
         )
         return result.first() is not None
 
@@ -629,9 +633,20 @@ class TokenRepository:
         """Record that the token with the given jti was just used to authenticate. The caller commits."""
         await self.session.execute(update(Token).where(Token.jti == jti).values(last_used=when))
 
-    async def delete_expired(self) -> None:
-        """Delete registry entries for tokens that have already expired. The caller commits."""
-        await self.session.execute(delete(Token).where(Token.expires_at.is_not(None), Token.expires_at < func.now()))
+    async def delete_stale(self, cutoff: datetime.datetime) -> None:
+        """
+        Delete registry entries that stopped being useful before the given cutoff: tokens that expired, and
+        tokens that were revoked, before that moment. Both are kept until then for auditing. The caller
+        commits.
+        """
+        await self.session.execute(
+            delete(Token).where(
+                or_(
+                    and_(Token.expires_at.is_not(None), Token.expires_at < cutoff),
+                    and_(Token.revoked_at.is_not(None), Token.revoked_at < cutoff),
+                )
+            )
+        )
 
 
 class Project(Base):

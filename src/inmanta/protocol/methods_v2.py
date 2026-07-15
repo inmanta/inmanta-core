@@ -313,7 +313,9 @@ def environment_clear(id: uuid.UUID) -> None:
     client_types=[ClientType.api, ClientType.compiler],
     api_version=2,
 )
-def environment_create_token(tid: uuid.UUID, client_types: Sequence[str], idempotent: bool = True) -> str:
+def environment_create_token(
+    tid: uuid.UUID, client_types: Sequence[str], idempotent: bool = False, expire: int | None = None
+) -> str:
     """
     Create or get a new token for the given client types. Tokens generated with this call are scoped to the current
     environment.
@@ -321,7 +323,10 @@ def environment_create_token(tid: uuid.UUID, client_types: Sequence[str], idempo
     :param tid: The environment id
     :param client_types: The client types for which this token is valid (api, agent, compiler)
     :param idempotent: The token should be idempotent, such tokens do not have an expire or issued at set so their
-                       value will not change.
+                       value will not change, but they cannot be individually revoked. By default a unique token is
+                       created that is tracked in the token registry and can be listed and revoked.
+    :param expire: The lifetime of the token in seconds. When not set, the expiry configured on the signing
+                   configuration applies, if any. Cannot be combined with an idempotent token, which never expires.
     """
 
 
@@ -336,7 +341,9 @@ def environment_create_token(tid: uuid.UUID, client_types: Sequence[str], idempo
 def environment_token_list(tid: uuid.UUID) -> list[model.Token]:
     """
     List the registered, revocable tokens for an environment. Only non-idempotent tokens are tracked in
-    the registry; idempotent (reproducible) tokens are not listed.
+    the registry; idempotent (reproducible) tokens are not listed. Expired and revoked tokens remain
+    listed for auditing until they are cleaned up, as configured by
+    :inmanta.config:option:`server.token-retention`.
 
     :param tid: The id of the environment.
     """

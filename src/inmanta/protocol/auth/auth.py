@@ -225,11 +225,11 @@ async def validate_jti(claims: Optional[claim_type]) -> None:
         repo = TokenRepository(session)
         entry = await repo.get_by_jti(jti_uuid)
         # A None entry means the jti is absent from the registry (unknown/forged, or already cleaned up). A
-        # revoked token keeps its registry row (revoke sets revoked=True, it is not deleted). Neither is cached,
+        # revoked token keeps its registry row (revoke stamps revoked_at, it is not deleted). Neither is cached,
         # so only valid tokens ever enter the cache, and a revoked token is always re-checked here.
         if entry is None:
             raise exceptions.Forbidden("The provided token is not recognized; it may have been revoked.")
-        if entry.revoked:
+        if entry.revoked_at is not None:
             raise exceptions.Forbidden("The provided token has been revoked.")
         # Best-effort last-used tracking, bounded to at most once per cache TTL per token.
         try:
