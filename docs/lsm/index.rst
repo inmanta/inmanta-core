@@ -125,8 +125,8 @@ Every service instance carries an integer ``version`` field, which is returned b
 change counter: it is incremented on every state transfer of the instance. It is **not** a version control mechanism like
 git: older versions are not kept as retrievable snapshots, so the version number cannot be used to check out, diff or
 restore a previous state of the instance. To inspect the history of an instance, use the log endpoint listed under
-`Status operations`_. To revert attribute changes, use a lifecycle transfer with the ``rollback`` operation (see
-:ref:`fsm`).
+`Status operations`_. To revert attribute changes, perform a new update with the old attribute values, or use a lifecycle
+transfer with the ``rollback`` operation (see :ref:`fsm`).
 
 Instead, the version is used for optimistic concurrency control. A service instance can be modified by multiple actors at
 the same time: operators using the web console, northbound clients such as OSS/BSS systems, and the lifecycle manager
