@@ -286,7 +286,7 @@ class EnvironmentService(protocol.ServerSlice):
         """
         Create a new auth token for this environment
         """
-        return 200, {"token": await self.environment_create_token(env, client_types, idempotent, context)}
+        return 200, {"token": await self.environment_create_token(env, client_types, idempotent, expire=None, context=context)}
 
     @handle(methods.list_settings, env="tid")
     async def list_settings(self, env: data.Environment) -> Apireturn:
@@ -542,13 +542,17 @@ class EnvironmentService(protocol.ServerSlice):
 
     @handle(methods_v2.environment_create_token, env="tid")
     async def environment_create_token(
-        self, env: data.Environment, client_types: list[str], idempotent: bool, context: CallContext
+        self, env: data.Environment, client_types: list[str], idempotent: bool, expire: int | None, context: CallContext
     ) -> str:
         """
         Create a new auth token for this environment
         """
         if not config.Config.getboolean("server", "auth", False):
             raise BadRequest("Authentication is disabled, generating a token is not allowed")
+        if expire is not None and expire <= 0:
+            raise BadRequest("expire must be a positive number of seconds")
+        if expire is not None and idempotent:
+            raise BadRequest("An idempotent token cannot have an expiry: such tokens carry no time-based claims")
         # Attribute the token to the user that created it so that actions performed with it are not
         # anonymous in the access log. When the token is minted using another attributed token rather
         # than an interactive session, carry over its creator so attribution survives token chains.
@@ -573,14 +577,23 @@ class EnvironmentService(protocol.ServerSlice):
         # individually revoked without rotating the signing key.
         jti = uuid.uuid4()
         custom_claims["jti"] = str(jti)
-        token = encode_token(client_types, str(env.id), idempotent, custom_claims=custom_claims)
-        now = datetime.datetime.now(tz=datetime.timezone.utc)
-        # Record when the token stops being valid, mirroring the exp that encode_token derived from the
-        # signing config (this call passes no explicit expire, so cfg.expire governs both). This field
-        # is informational (for listing and cleanup); token expiry itself is enforced by the JWT exp
+        # Resolve the effective lifetime once and feed it to both the token and the registry, so the JWT
+        # exp claim and the recorded expires_at cannot drift: an explicit expire wins, otherwise the
+        # signing config's expire governs, and if neither applies the token never expires. The expires_at
+        # field is informational (for listing and cleanup); token expiry itself is enforced by the exp
         # claim, not by the registry.
         sign_cfg = auth.AuthJWTConfig.get_sign_config()
-        expires_at = now + datetime.timedelta(seconds=sign_cfg.expire) if sign_cfg is not None and sign_cfg.expire > 0 else None
+        effective_expire: int | None
+        match expire, sign_cfg:
+            case int() as explicit_expire, _:
+                effective_expire = explicit_expire
+            case None, cfg if cfg is not None and cfg.expire > 0:
+                effective_expire = cfg.expire
+            case _:
+                effective_expire = None
+        token = encode_token(client_types, str(env.id), idempotent, expire=effective_expire, custom_claims=custom_claims)
+        now = datetime.datetime.now(tz=datetime.timezone.utc)
+        expires_at = now + datetime.timedelta(seconds=effective_expire) if effective_expire is not None else None
         async with data.get_session() as session:
             await TokenRepository(session).add(
                 Token(
