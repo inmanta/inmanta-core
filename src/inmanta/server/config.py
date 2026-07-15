@@ -344,6 +344,15 @@ server_cleanup_compiler_reports_interval = Option(
     is_time,
 )
 
+server_token_retention = Option(
+    "server",
+    "token-retention",
+    2592000,
+    """The number of seconds an expired or revoked token is kept in the token registry for auditing before
+    it is permanently deleted. The default is thirty days.""",
+    is_time,
+)
+
 server_address: Option[str] = Option(
     "server",
     "server_address",

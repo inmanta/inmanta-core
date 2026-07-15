@@ -336,7 +336,9 @@ def environment_create_token(tid: uuid.UUID, client_types: Sequence[str], idempo
 def environment_token_list(tid: uuid.UUID) -> list[model.Token]:
     """
     List the registered, revocable tokens for an environment. Only non-idempotent tokens are tracked in
-    the registry; idempotent (reproducible) tokens are not listed.
+    the registry; idempotent (reproducible) tokens are not listed. Expired and revoked tokens remain
+    listed for auditing until they are cleaned up, as configured by
+    :inmanta.config:option:`server.token-retention`.
 
     :param tid: The id of the environment.
     """
