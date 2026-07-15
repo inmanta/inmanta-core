@@ -28,17 +28,25 @@ For server-side compiles, the orchestrator obtains the project from a git reposi
 configured with a repository URL and a branch: the orchestrator clones this repository into the environment's
 project directory on the first compile and pulls updates from it on subsequent compiles.
 
-When the repository requires authentication, git takes credentials from its usual sources: a ``.netrc`` file,
-credentials embedded in the repository URL, or a configured git credential helper. The simplest option is a
-``.netrc`` file in the server's home directory (``/var/lib/inmanta/.netrc``). This is the same file that is used
-to authenticate against a :ref:`private Python package repository<setting_up_pip_index_authentication>`, so a
-single file can cover both the project checkout and module installation:
+The orchestrator invokes ``git`` for these operations, so it transparently supports any authentication
+mechanism that ``git`` itself supports. No extra configuration is needed on the orchestrator side; you set up
+credentials the same way you would for a local ``git clone``. The most common mechanisms are:
 
-.. code-block:: text
+* **SSH keys**: use an ``ssh://`` (or ``git@host:...``) repository URL and place the private key and a matching
+  ``known_hosts`` entry in the SSH configuration of the ``inmanta`` user (the user the orchestrator runs as),
+  under ``~/.ssh`` in its home directory (``/var/lib/inmanta/.ssh``).
+* **A ``.netrc`` file** for HTTP(S) repositories: create a ``.netrc`` file in the home directory of the
+  ``inmanta`` user (``/var/lib/inmanta/.netrc``). This is the same file used to authenticate against a
+  :ref:`private Python package repository<setting_up_pip_index_authentication>`, so a single file can cover both
+  the project checkout and module installation:
 
-    machine <hostname of the git repository>
-    login <username>
-    password <password>
+  .. code-block:: text
+
+      machine <hostname of the git repository>
+      login <username>
+      password <password>
+
+* **Credentials in the repository URL**, or a configured **git credential helper**.
 
 If a checkout fails to authenticate, the compile report shows the ``Cloning repository`` or ``Pulling updates``
 step failing with an ``Authentication failed`` error. See :ref:`debugging_project_authentication` for how to find
