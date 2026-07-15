@@ -613,7 +613,9 @@ def unauthenticated_git_repo() -> abc.Iterator[str]:
 
 @pytest.mark.slowtest
 @pytest.mark.parametrize("no_agent", [True])
-async def test_compile_runner_clone_auth_failure(server, client, tmpdir, unauthenticated_git_repo: str) -> None:
+async def test_compile_runner_clone_auth_failure(
+    server: Server, client: protocol.Client, tmpdir: py.path.local, unauthenticated_git_repo: str
+) -> None:
     """
     When cloning a repository that requires authentication and no credentials are available, git must
     not block trying to prompt for a username. The compiler subprocess has no terminal, so an interactive
