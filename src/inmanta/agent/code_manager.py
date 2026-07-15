@@ -122,6 +122,7 @@ class CodeManager:
                     assert set(row.requirements) == set(first_row.requirements)
                     assert row.project_constraints == first_row.project_constraints
                     assert row.load_module_on_agent == first_row.load_module_on_agent
+                    assert row.editable_install == first_row.editable_install
 
                 pip_config = LEGACY_PIP_DEFAULT if _pip_config is None else PipConfig(**_pip_config)
                 module_install_specs.append(

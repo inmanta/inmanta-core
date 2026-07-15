@@ -1070,7 +1070,7 @@ class Test(Resource):
     )
     await snippetcompiler.do_export_and_deploy(do_raise=False)
 
-    code_manager = loader.CodeManager()
+    code_manager = loader.CodeManager(resources={})
     for type_name, resource_definition in resources.resource.get_resources():
         code_manager.register_code(
             type_name,

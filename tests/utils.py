@@ -65,7 +65,7 @@ from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.config import AuthorizationProviderName, server_auth_method
 from inmanta.server.extensions import ProductMetadata
 from inmanta.server.services.compilerservice import CompilerService
-from inmanta.types import Apireturn, FailedModules, ResourceIdStr
+from inmanta.types import Apireturn, FailedPythonModules, ResourceIdStr
 from inmanta.util import hash_file
 from inmanta.vendor import libpip2pi
 
@@ -1076,7 +1076,7 @@ class DummyCodeManager(CodeManager):
 
     async def get_code(
         self, environment: uuid.UUID, model_version: int, agent_name: str
-    ) -> tuple[Collection[InmantaModuleInstallSpec], FailedModules]:
+    ) -> tuple[Collection[InmantaModuleInstallSpec], FailedPythonModules]:
         dummyblueprint: ExecutorBlueprint = _get_dummy_blueprint_for(environment)
         return (
             [InmantaModuleInstallSpec("dummy_module", "0.0.0", dummyblueprint)],

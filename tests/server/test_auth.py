@@ -856,7 +856,7 @@ async def test_roles_failure_scenarios(server: protocol.Server, client, environm
     """
     Test the failure scenario's when manipulating roles and role assignments.
     """
-    result = await client.add_user(username="user", password="useruser")
+    result = await client.add_user(username="user", password="Str0ng-Pass!")
     assert result.code == 200
 
     # Create role that already exists

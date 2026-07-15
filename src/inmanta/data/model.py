@@ -915,6 +915,19 @@ class UserWithRoles(User):
         return {str(k): v for k, v in roles.items()}
 
 
+class Token(BaseModel):
+    """A registered (revocable) authentication token, tracked in the token registry."""
+
+    jti: uuid.UUID
+    created_by: str | None = None
+    client_types: list[const.ClientType] = []
+    environment: uuid.UUID | None = None
+    issued_at: datetime.datetime
+    expires_at: datetime.datetime | None = None
+    revoked_at: datetime.datetime | None = None
+    last_used: datetime.datetime | None = None
+
+
 class CurrentUser(BaseModel):
     """Information about the current logged in user"""
 
@@ -927,10 +940,13 @@ class LoginReturn(BaseModel):
 
     :param token: A token representing the user's authentication session
     :param user: The user object for which the token was created
+    :param expires_in: Lifetime of the token in seconds, or None when the token does not expire. Clients can use
+                       this to renew the session before it expires.
     """
 
     token: str
     user: User
+    expires_in: Optional[int] = None
 
 
 def _check_resource_id_str(v: str) -> ResourceIdStr:
@@ -1227,26 +1243,32 @@ class ModuleSource(BaseModel):
     def get_inmanta_module_name(self) -> str:
         return self.metadata.get_inmanta_module_name()
 
+    def get_fq_module_name(self) -> str:
+        return self.metadata.name
+
 
 class ExecutorModuleSource(ModuleSource):
     """
     A ModuleSource destined for a specific executor, extended with the install/load semantics that describe
-    what the executor should do with the source during agent code install.
+    what the executor should do with the source during agent code install. Allowing None values for install_on_disk
+    and load_module is a temporary compatibility layer that can be removed in iso11.
 
     :param install_on_disk: whether the source of this python module should be written to disk during agent
         code install. This is true iff the encapsulating inmanta module was installed in editable mode.
+        A None value means the old style (i.e. iso<10) of agent code install should be used.
     :param load_module: whether the source of this python module should be loaded during agent
         code install. This is true iff the encapsulating inmanta module was registered for that agent.
+        A None value means the old style (i.e. iso<10) of agent code install should be used.
 
     install_on_disk and load_module are part of this model's (pydantic structural) identity: the same file content
     can be installed/loaded differently depending on the agent it is destined for, and an executor that ships these
     sources is identified by what it installs and loads, not only by the file contents.
     """
 
-    install_on_disk: bool
-    load_module: bool
+    install_on_disk: bool | None
+    load_module: bool | None
 
-    def sort_key(self) -> tuple[tuple[str, str, bool], bool, bool]:
+    def sort_key(self) -> tuple[tuple[str, str, bool], bool | None, bool | None]:
         """Stable ordering key covering the full identity of this source."""
         return (self.metadata.sort_key(), self.install_on_disk, self.load_module)
 
@@ -1255,8 +1277,8 @@ type InmantaModuleName = str
 type LoadModuleOnAgent = bool
 type InmantaModuleVersion = str
 type AgentName = str
-type InstallOnAgents = list[AgentName]
-type LoadOnAgents = list[AgentName]
+type InstallOnAgents = set[AgentName]
+type LoadOnAgents = set[AgentName]
 
 
 class InmantaModule(BaseModel):
@@ -1283,6 +1305,6 @@ class InmantaModule(BaseModel):
     version: InmantaModuleVersion
     files_in_module: list[ModuleSourceMetadata]
     requirements: list[str]
-    load_module_on_agents: LoadOnAgents
-    install_module_on_agents: InstallOnAgents
+    load_module_on_agents: list[AgentName]
+    install_module_on_agents: list[AgentName]
     editable_install: bool

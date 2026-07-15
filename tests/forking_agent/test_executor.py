@@ -19,6 +19,7 @@ Contact: code@inmanta.com
 import asyncio
 import base64
 import datetime
+import hashlib
 import logging
 import sys
 import uuid
@@ -39,7 +40,7 @@ from inmanta.agent import executor
 from inmanta.agent.executor import ExecutorBlueprint
 from inmanta.agent.forking_executor import MPExecutor, MPManager
 from inmanta.data import PipConfig
-from inmanta.data.model import ModuleSourceMetadata
+from inmanta.data.model import ExecutorModuleSource, ModuleSourceMetadata
 from inmanta.protocol.ipc_light import ConnectionLost
 from utils import NOISY_LOGGERS, log_contains, retry_limited
 
@@ -275,11 +276,26 @@ async def test_executor_server_dirty_shutdown(mpmanager: MPManager, caplog):
     caplog.clear()
     manager = mpmanager
 
+    # A single standalone module for the blueprint
+    code = b"# Empty source"
+    sha1sum = hashlib.new("sha1")
+    sha1sum.update(code)
+    module_source = ExecutorModuleSource(
+        metadata=ModuleSourceMetadata(
+            name="inmanta_plugins.bp1",
+            hash_value=sha1sum.hexdigest(),
+            is_byte_code=False,
+        ),
+        source=code,
+        install_on_disk=True,
+        load_module=True,
+    )
+
     blueprint = executor.ExecutorBlueprint(
         environment_id=uuid.uuid4(),
         pip_config=inmanta.data.PipConfig(use_system_config=True),
         requirements=[],
-        sources=[],
+        sources=[module_source],
         python_version=sys.version_info[:2],
     )
     child1 = await manager.get(executor.ExecutorId("test", "Test", blueprint))

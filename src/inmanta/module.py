@@ -355,7 +355,7 @@ class GitProvider:
     ) -> None:
         pass
 
-    def tag(self, repo: str, tag: str) -> None:
+    def tag(self, repo: str, tag: str, message: Optional[str] = None) -> None:
         pass
 
     @abstractmethod
@@ -471,9 +471,9 @@ class CLIGitProvider(GitProvider):
                 ["git", "commit", "-a", "-m", message], cwd=repo, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
             )
 
-    def tag(self, repo: str, tag: str) -> None:
+    def tag(self, repo: str, tag: str, message: Optional[str] = None) -> None:
         subprocess.check_call(
-            ["git", "tag", "-a", "-m", "auto tag by module tool", tag],
+            ["git", "tag", "-a", "-m", message if message else "auto tag by module tool", tag],
             cwd=repo,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -1880,9 +1880,9 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
     def get_editable_installed_inmanta_modules(self) -> dict[packaging.utils.NormalizedName, packaging.version.Version]:
         return {
-            k: v
-            for k, v in self.virtualenv.get_installed_packages(only_editable=True).items()
-            if k.startswith(ModuleV2.PKG_NAME_PREFIX)
+            name: version
+            for name, version in self.virtualenv.get_installed_packages(only_editable=True).items()
+            if name.startswith(ModuleV2.PKG_NAME_PREFIX)
         }
 
     @classmethod

@@ -40,7 +40,7 @@ import inmanta.data.model as model
 import inmanta.util
 import utils
 from inmanta import config, data
-from inmanta.const import INMANTA_REMOVED_SET_ID, ParameterSource
+from inmanta.const import INMANTA_LAST_COMPILE_MARKER, INMANTA_REMOVED_SET_ID, ParameterSource
 from inmanta.data import APILIMIT, Compile, Report
 from inmanta.data.model import PipConfig
 from inmanta.env import PythonEnvironment, VirtualEnv
@@ -521,6 +521,65 @@ async def test_compile_runner(environment_factory: EnvironmentFactory, server, c
     pip_binary_path = os.path.join(project_work_dir, ".env", "bin", "pip")
     output = subprocess.check_output([pip_binary_path, "list", "--format", "json"], encoding="utf-8")
     assert "inmanta-core" in output
+
+
+@pytest.mark.slowtest
+@pytest.mark.parametrize("no_agent", [True])
+async def test_compile_runner_repo_url_changed(environment_factory: EnvironmentFactory, server, client, tmpdir) -> None:
+    """
+    When the repo_url of an environment changes, the compiler service should detect that the origin
+    of the checkout present in the project directory no longer matches the configured repo_url and
+    perform a clean checkout (wipe the project directory and clone the new repository).
+
+    A recompile with an unchanged repo_url must NOT trigger this clean checkout.
+    """
+    marker_print = "_INM_MM:"
+    marker_print_other = "_INM_MM_OTHER:"
+
+    def make_main(marker: str) -> str:
+        return f"""
+    import std::testing
+    std::print("{marker} hello")
+
+    std::testing::NullResource(name="test")
+        """
+
+    other_factory = EnvironmentFactory(dir=str(tmpdir.join("environment_factory_other")), project_name="test_other")
+
+    # Two independent git repositories (different repo_url), each with its own marker.
+    env = await environment_factory.create_environment(make_main(marker_print))
+    env_other = await other_factory.create_environment(make_main(marker_print_other))
+
+    # Sanity check: the two environments really point at different repositories.
+    assert env.repo_url != env_other.repo_url
+
+    project_work_dir = os.path.join(tmpdir, "work")
+    ensure_directory_exist(project_work_dir)
+
+    def _compile_and_assert(env):
+        return compile_and_assert(env=env, client=client, project_work_dir=project_work_dir, export=False)
+
+    # First compile: clones the first repository into an empty project directory.
+    compile, stages = await _compile_and_assert(env)
+    assert stages["Cloning repository"]["returncode"] == 0
+    assert f"{marker_print} hello" in stages["Recompiling configuration model"]["outstream"]
+
+    # Recompile with the same repo_url: the checkout must be reused, no clean checkout is performed.
+    compile, stages = await _compile_and_assert(env)
+    assert "Cloning repository" not in stages
+    assert "because the repo url has changed" not in stages["Init"]["outstream"]
+    assert f"{marker_print} hello" in stages["Recompiling configuration model"]["outstream"]
+
+    # Compile with a different repo_url in the same project directory: the compiler service must
+    # detect the changed repo url, wipe the project directory and clone the new repository.
+    compile, stages = await _compile_and_assert(env_other)
+    assert "because the repo url has changed" in stages["Init"]["outstream"]
+    assert stages["Cloning repository"]["returncode"] == 0
+    assert f"{marker_print_other} hello" in stages["Recompiling configuration model"]["outstream"]
+
+    # The checkout in the project directory now points at the new repository.
+    remote_url = subprocess.check_output(["git", "remote", "get-url", "origin"], cwd=project_work_dir, encoding="utf-8").strip()
+    assert remote_url == env_other.repo_url
 
 
 @pytest.mark.slowtest
@@ -2388,3 +2447,139 @@ async def test_drain_multibyte_utf8_at_chunk_boundary(tmp_path, drain_method: st
 
     assert getattr(run.stage, stream_kwarg) == payload
     assert "\u2026" in getattr(run.stage, stream_kwarg)
+
+
+async def test_recompile_when_local_checkout_is_stale(mocked_compiler_service_block: queue.Queue, server, environment) -> None:
+    """
+    A server whose local project checkout was not produced by the environment's latest compile (e.g. after a failover
+    to another server or a wiped state directory) requests an update and recompile at startup to converge.
+    """
+    env = await data.Environment.get_by_id(uuid.UUID(environment))
+    await env.update_fields(repo_url="https://example.com/test/repo.git")
+    compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
+    project_dir = compilerslice._get_project_dir(env.id)
+    marker_path = os.path.join(project_dir, INMANTA_LAST_COMPILE_MARKER)
+    # the mocked compile runner does not set up the project directory itself
+    os.makedirs(project_dir)
+
+    # this environment never compiled: there is no local state to verify
+    await compilerslice._recompile_environments_with_stale_local_state()
+    assert await data.Compile.get_next_run(env.id) is None
+
+    # a compile records on disk that it ran against the local project directory, so nothing to converge
+    first_id, _ = await compilerslice.request_recompile(env=env, force_update=False, do_export=False, remote_id=uuid.uuid4())
+    await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id, fail=False)
+    with open(marker_path) as fh:
+        assert fh.read() == str(first_id)
+    await compilerslice._recompile_environments_with_stale_local_state()
+    assert await data.Compile.get_next_run(env.id) is None
+
+    # identical requests queued together are merged: only one compile runs and writes the marker. The disk state
+    # produced by that compile is up to date for the merged request as well. The two identical requests are queued
+    # behind a compile with a different merge key, so that they merge when the first of them starts.
+    await compilerslice.request_recompile(env=env, force_update=False, do_export=False, remote_id=uuid.uuid4())
+    merged_into_id, _ = await compilerslice.request_recompile(
+        env=env, force_update=False, do_export=True, remote_id=uuid.uuid4()
+    )
+    merged_id, _ = await compilerslice.request_recompile(env=env, force_update=False, do_export=True, remote_id=uuid.uuid4())
+    await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id, fail=False)
+    await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id, fail=False)
+    merged_compile = await data.Compile.get_by_id(merged_id)
+    assert merged_compile.substitute_compile_id == merged_into_id
+    with open(marker_path) as fh:
+        assert fh.read() == str(merged_into_id)
+    await compilerslice._recompile_environments_with_stale_local_state()
+    assert await data.Compile.get_next_run(env.id) is None
+
+    # simulate a failover to a standby that holds an older version of the project: its marker points to an
+    # older compile than the latest one in the database, which ran on the server that is now gone
+    with open(marker_path, "w") as fh:
+        fh.write(str(first_id))
+    await compilerslice._recompile_environments_with_stale_local_state()
+    requested = await data.Compile.get_next_run(env.id)
+    assert requested is not None
+    assert requested.force_update
+    assert requested.metadata["type"] == "recovery"
+    await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id, fail=False)
+    with open(marker_path) as fh:
+        assert fh.read() == str(requested.id)
+    await compilerslice._recompile_environments_with_stale_local_state()
+    assert await data.Compile.get_next_run(env.id) is None
+
+    # without a repository the server cannot restore the local checkout by itself: the environment is
+    # skipped even though its state directory is wiped (simulating a failover to a never-active standby)
+    await env.update_fields(repo_url="")
+    shutil.rmtree(project_dir)
+    os.makedirs(project_dir)
+    await compilerslice._recompile_environments_with_stale_local_state()
+    assert await data.Compile.get_next_run(env.id) is None
+
+    # with the repository restored, the stale checkout is detected and an update and recompile is requested
+    await env.update_fields(repo_url="https://example.com/test/repo.git")
+    await compilerslice._recompile_environments_with_stale_local_state()
+    requested = await data.Compile.get_next_run(env.id)
+    assert requested is not None
+    assert requested.force_update
+    assert requested.do_export
+    assert requested.metadata["type"] == "recovery"
+
+    # running the requested compile records it in the marker, after which the check converges to a no-op
+    await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id, fail=False)
+    with open(marker_path) as fh:
+        assert fh.read() == str(requested.id)
+    await compilerslice._recompile_environments_with_stale_local_state()
+    assert await data.Compile.get_next_run(env.id) is None
+
+    # the marker records the last compile attempt, whether it succeeded or not: the local state was produced by
+    # that attempt either way. Otherwise a compile that fails for reasons unrelated to the local state (a model
+    # error, missing git credentials, ...) would be retried at every server restart, forever.
+    failed_id, _ = await compilerslice.request_recompile(env=env, force_update=False, do_export=False, remote_id=uuid.uuid4())
+    await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id, fail=True)
+    failed_compile = await data.Compile.get_by_id(failed_id)
+    assert failed_compile.success is False
+    with open(marker_path) as fh:
+        assert fh.read() == str(failed_id)
+    await compilerslice._recompile_environments_with_stale_local_state()
+    assert await data.Compile.get_next_run(env.id) is None
+
+
+async def test_stale_local_state_halted_environment(mocked_compiler_service_block: queue.Queue, server, environment) -> None:
+    """
+    A halted environment is not verified at startup: the requested compile could not run anyway and would only
+    accumulate queued compiles across restarts. It is verified when the environment is resumed.
+    """
+    env = await data.Environment.get_by_id(uuid.UUID(environment))
+    await env.update_fields(repo_url="https://example.com/test/repo.git")
+    compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
+    project_dir = compilerslice._get_project_dir(env.id)
+    # the mocked compile runner does not set up the project directory itself
+    os.makedirs(project_dir)
+
+    # a compile ran normally, then the environment was halted
+    await compilerslice.request_recompile(env=env, force_update=False, do_export=False, remote_id=uuid.uuid4())
+    await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id, fail=False)
+    await env.update_fields(halted=True)
+
+    # simulate a failover: the latest compile in the database ran against the disk of another server, this state
+    # directory is empty
+    shutil.rmtree(project_dir)
+    os.makedirs(project_dir)
+
+    # halted: nothing is requested at startup
+    await compilerslice._recompile_environments_with_stale_local_state()
+    assert await data.Compile.get_next_run(env.id) is None
+
+    # resuming the environment verifies the local state and requests the recompile
+    await env.update_fields(halted=False)
+    await compilerslice.resume_environment(env.id)
+    requested = await data.Compile.get_next_run(env.id)
+    assert requested is not None
+    assert requested.force_update
+    assert requested.metadata["type"] == "recovery"
+
+    # running the requested compile records it in the marker and the check converges to a no-op
+    await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id, fail=False)
+    with open(os.path.join(project_dir, INMANTA_LAST_COMPILE_MARKER)) as fh:
+        assert fh.read() == str(requested.id)
+    await compilerslice._recompile_environments_with_stale_local_state()
+    assert await data.Compile.get_next_run(env.id) is None

@@ -20,14 +20,14 @@ from asyncpg import Connection
 
 
 async def update(connection: Connection) -> None:
+    """
+    Replace the token table's revoked boolean with a revoked_at timestamp: the moment a token was revoked
+    (NULL means not revoked), used for auditing and to bound how long revoked tokens are kept. Already-revoked
+    tokens are backfilled with the migration time so the retention-based cleanup applies to them as well.
+    """
     schema = """
-    -- Add the 'editable_install' column
-
-    ALTER TABLE public.inmanta_module
-    ADD COLUMN editable_install boolean DEFAULT true;
-
-    -- Add the 'load_module_on_agent' column
-    ALTER TABLE public.agent_modules
-    ADD COLUMN load_module_on_agent boolean DEFAULT true;
+        ALTER TABLE public.token ADD COLUMN revoked_at timestamp with time zone;
+        UPDATE public.token SET revoked_at = now() WHERE revoked;
+        ALTER TABLE public.token DROP COLUMN revoked;
     """
     await connection.execute(schema)

@@ -90,7 +90,7 @@ def test_code_manager(tmpdir: py.path.local, deactive_venv):
     import inmanta_plugins.non_imported_plugin_file as non_imported
     import inmanta_plugins.single_plugin_file as single
 
-    mgr = loader.CodeManager()
+    mgr = loader.CodeManager(resources={})
     mgr.register_code(
         "std::testing::NullResource",
         single.MyHandler,
