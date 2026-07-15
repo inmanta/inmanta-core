@@ -32,7 +32,7 @@ The orchestrator invokes ``git`` for these operations, so it transparently suppo
 mechanism that ``git`` itself supports. No extra configuration is needed on the orchestrator side; you set up
 credentials the same way you would for a local ``git clone``. The most common mechanisms are:
 
-* **SSH keys**: use an ``ssh://`` (or ``git@host:...``) repository URL and place the private key and a matching
+* **SSH keys**: use a ``git@host:...`` (or ``ssh://``) repository URL and place the private key and a matching
   ``known_hosts`` entry in the SSH configuration of the ``inmanta`` user (the user the orchestrator runs as),
   under ``~/.ssh`` in its home directory (``/var/lib/inmanta/.ssh``).
 * **A ``.netrc`` file** for HTTP(S) repositories: create a ``.netrc`` file in the home directory of the
