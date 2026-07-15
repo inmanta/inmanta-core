@@ -587,6 +587,7 @@ class EnvironmentService(protocol.ServerSlice):
         # field is informational (for listing and cleanup); token expiry itself is enforced by the exp
         # claim, not by the registry.
         sign_cfg = auth.AuthJWTConfig.get_sign_config()
+        effective_expire: int | None
         match expire, sign_cfg:
             case int() as explicit_expire, _:
                 effective_expire = explicit_expire
