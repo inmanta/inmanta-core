@@ -238,21 +238,30 @@ class ExecutorBlueprint(EnvBlueprint):
             python_versions.append(module_install_spec.blueprint.python_version)
 
             # All sources of a single module share the same install mode, so the first one is representative.
-            editable_install: bool = module_install_spec.blueprint.sources[0].install_on_disk
+            editable_install: bool | None = module_install_spec.blueprint.sources[0].install_on_disk
 
-            if editable_install:
-                # Editable install:
+            if editable_install is None:
+                # Compatibility layer for model versions that were exported using iso<10 that are now
+                # being deployed / dry-ran. We need to use the "old style" agent code install.
+                # This layer can be removed in iso11.
+
                 # install the requirements first, and then the source from the database
                 requirements.update(module_install_spec.blueprint.requirements)
+
             else:
-                # Package install:
-                # let pip handle the dependencies when installing the module as a package
-                requirements.add(
-                    (
-                        f"{module.ModuleV2Source.get_package_name_for(module_install_spec.module_name)}=="
-                        f"{module_install_spec.module_version}"
+                if editable_install:
+                    # Editable install:
+                    # install the requirements first, and then the source from the database
+                    requirements.update(module_install_spec.blueprint.requirements)
+                else:
+                    # Package install:
+                    # let pip handle the dependencies when installing the module as a package
+                    requirements.add(
+                        (
+                            f"{module.ModuleV2Source.get_package_name_for(module_install_spec.module_name)}=="
+                            f"{module_install_spec.module_version}"
+                        )
                     )
-                )
 
         # Check that constraints set at the project level are consistent across all modules
         assert len(all_constraints) == 1

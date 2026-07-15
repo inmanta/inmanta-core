@@ -9,5 +9,7 @@ change-type: major
 destination-branches: [master]
 sections:
   upgrade-note: >
-    The deprecated 'agent_install_dependency_modules' setting in the project.yml file has been removed.
+    - The mechanism to transport and install code on the agents has been reworked. Please make sure to run a full
+      compile after upgrading the orchestrator.
+    - The deprecated 'agent_install_dependency_modules' setting in the project.yml file has been removed.
 

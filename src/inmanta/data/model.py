@@ -1247,20 +1247,23 @@ class ModuleSource(BaseModel):
 class ExecutorModuleSource(ModuleSource):
     """
     A ModuleSource destined for a specific executor, extended with the install/load semantics that describe
-    what the executor should do with the source during agent code install.
+    what the executor should do with the source during agent code install. Allowing None values for install_on_disk
+    and load_module is a temporary compatibility layer that can be removed in iso11.
 
     :param install_on_disk: whether the source of this python module should be written to disk during agent
         code install. This is true iff the encapsulating inmanta module was installed in editable mode.
+        A None value means the old style (i.e. iso<10) of agent code install should be used.
     :param load_module: whether the source of this python module should be loaded during agent
         code install. This is true iff the encapsulating inmanta module was registered for that agent.
+        A None value means the old style (i.e. iso<10) of agent code install should be used.
 
     install_on_disk and load_module are part of this model's (pydantic structural) identity: the same file content
     can be installed/loaded differently depending on the agent it is destined for, and an executor that ships these
     sources is identified by what it installs and loads, not only by the file contents.
     """
 
-    install_on_disk: bool
-    load_module: bool
+    install_on_disk: bool | None
+    load_module: bool | None
 
     def sort_key(self) -> tuple[tuple[str, str, bool], bool, bool]:
         """Stable ordering key covering the full identity of this source."""
