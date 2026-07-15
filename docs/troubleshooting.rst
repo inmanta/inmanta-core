@@ -213,6 +213,8 @@ generated or the compile report doesn't show any errors, check the server logs a
    :align: center
 
 
+.. _debugging_project_authentication:
+
 Debugging project authentication issues
 ---------------------------------------
 
