@@ -585,6 +585,27 @@ def test():
         import inmanta_plugins.old_format  # NOQA
 
 
+def test_convert_module_to_editable_relative_path():
+    """
+    The reconstruction path helper materializes each python module as a package (a directory with an __init__ file),
+    honoring the byte-code flag, and never produces a path for the top-level inmanta_plugins namespace package itself.
+    """
+    assert (
+        loader.convert_module_to_editable_relative_path("inmanta_plugins.my_mod", is_byte_code=False)
+        == "inmanta_plugins/my_mod/__init__.py"
+    )
+    assert (
+        loader.convert_module_to_editable_relative_path("inmanta_plugins.my_mod.my_submod", is_byte_code=False)
+        == "inmanta_plugins/my_mod/my_submod/__init__.py"
+    )
+    assert (
+        loader.convert_module_to_editable_relative_path("inmanta_plugins.my_mod.my_submod", is_byte_code=True)
+        == "inmanta_plugins/my_mod/my_submod/__init__.pyc"
+    )
+    with pytest.raises(Exception, match="not part of the inmanta_plugins package"):
+        loader.convert_module_to_editable_relative_path("some.other.package", is_byte_code=False)
+
+
 def _executor_source(name: str, code: str, *, install_on_disk: bool, load_module: bool) -> ExecutorModuleSource:
     data = code.encode()
     sha1sum = hashlib.new("sha1")
@@ -599,13 +620,15 @@ def _executor_source(name: str, code: str, *, install_on_disk: bool, load_module
 
 def test_deploy_and_load(tmp_path, caplog):
     """
-    deploy_and_load installs every install_on_disk source on disk, imports only the load_module ones, and records
-    import failures per module without preventing the healthy modules from loading.
+    In the iso10+ code install flow, module code is already installed in the venv (as an editable or a package
+    install) by the time deploy_and_load runs. deploy_and_load therefore only imports the load_module sources,
+    never the load_module=False ones, and records import failures per module without preventing the healthy
+    modules from loading.
     """
     caplog.set_level(DEBUG)
     cl = loader.CodeLoader(tmp_path)
 
-    # install_on_disk but not load_module: its code raises on import, so it must be written to disk but never imported.
+    # load_module=False: its code raises on import, so it must never be imported even though it is available.
     install_only = _executor_source(
         "inmanta_plugins.dal_install_only",
         "raise RuntimeError('this module must not be imported')",
@@ -617,57 +640,21 @@ def test_deploy_and_load(tmp_path, caplog):
         "inmanta_plugins.dal_broken", "raise RuntimeError('boom')", install_on_disk=True, load_module=True
     )
 
+    # Simulate the venv install performed during venv creation: make all sources importable before loading them.
+    for source in (install_only, healthy, broken):
+        cl.install_source(source)
+
     failed = cl.deploy_and_load([install_only, healthy, broken], logging.getLogger(__name__).getChild("agent1"))
 
-    # The healthy module was installed and imported.
+    # The healthy module was imported.
     import inmanta_plugins.dal_ok  # NOQA
 
     assert inmanta_plugins.dal_ok.value == 42
 
-    # The install-only module is on disk but was never imported.
-    install_only_file = os.path.join(
-        tmp_path, loader.MODULE_DIR, loader.convert_module_to_relative_path("inmanta_plugins.dal_install_only"), "__init__.py"
-    )
-    assert os.path.exists(install_only_file)
+    # The install-only module (load_module=False) is available but was never imported.
     assert "inmanta_plugins.dal_install_only" not in sys.modules
 
     # Only the broken import is reported, keyed by inmanta module name -> python module name.
     assert set(failed) == {"dal_broken"}
     assert set(failed["dal_broken"]) == {"inmanta_plugins.dal_broken"}
     assert isinstance(failed["dal_broken"]["inmanta_plugins.dal_broken"], loader.ModuleImportException)
-
-
-def test_deploy_and_load_skips_load_when_install_fails(tmp_path, caplog, monkeypatch):
-    """
-    A module whose on-disk install fails is recorded as an install failure and is not imported afterwards, while the
-    other modules still install and load normally.
-    """
-    caplog.set_level(DEBUG)
-    cl = loader.CodeLoader(tmp_path)
-
-    real_install_source = cl.install_source
-
-    def flaky_install_source(module_source: ExecutorModuleSource) -> None:
-        if module_source.metadata.name == "inmanta_plugins.dal_fail_install":
-            raise OSError("disk full")
-        real_install_source(module_source)
-
-    monkeypatch.setattr(cl, "install_source", flaky_install_source)
-
-    fail_install = _executor_source("inmanta_plugins.dal_fail_install", "value = 1", install_on_disk=True, load_module=True)
-    healthy = _executor_source("inmanta_plugins.dal_ok2", "value = 7", install_on_disk=True, load_module=True)
-
-    failed = cl.deploy_and_load([fail_install, healthy], logging.getLogger(__name__).getChild("agent1"))
-
-    # The healthy module still loaded.
-    import inmanta_plugins.dal_ok2  # NOQA
-
-    assert inmanta_plugins.dal_ok2.value == 7
-
-    # The failing module is recorded with the raw install exception (not a ModuleImportException): because the recorded
-    # failure is the install error, the load phase must have been skipped for it.
-    assert set(failed) == {"dal_fail_install"}
-    recorded = failed["dal_fail_install"]["inmanta_plugins.dal_fail_install"]
-    assert isinstance(recorded, OSError)
-    assert not isinstance(recorded, loader.ModuleImportException)
-    assert "inmanta_plugins.dal_fail_install" not in sys.modules

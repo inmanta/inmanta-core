@@ -37,14 +37,14 @@ from typing import Any, Dict, Optional, Sequence, cast
 from uuid import UUID
 
 import packaging.requirements
-from inmanta import const, module
+from inmanta import const, loader, module
 from inmanta.agent import config as cfg
 from inmanta.agent import resourcepool
 from inmanta.agent.handler import HandlerContext
 from inmanta.const import Change
 from inmanta.data import LogLine
-from inmanta.data.model import AttributeStateChange, ExecutorModuleSource, PipConfig
-from inmanta.env import PythonEnvironment
+from inmanta.data.model import AttributeStateChange, ExecutorModuleSource, ModuleSource, PipConfig
+from inmanta.env import LocalPackagePath, PythonEnvironment
 from inmanta.resources import Id
 from inmanta.types import FailedInmantaModules, JsonType, ResourceIdStr, ResourceVersionIdStr
 
@@ -113,6 +113,32 @@ def get_libc_version() -> str:
 
 
 @dataclasses.dataclass
+class EditableModuleInstall:
+    """
+    An inmanta module that was installed in editable mode in the compiler venv and must therefore be reconstructed
+    as an installable python package and pip-installed in editable mode in the executor's venv.
+
+    :param name: the inmanta module name (e.g. "std").
+    :param version: the module's content-hash version. Together with the name, this constitutes the module's
+        contribution to the identity of the venv it is installed in: any change to the module's files or python
+        requirements yields a different version and hence a different venv.
+    :param python_module_sources: the python files composing this module's inmanta_plugins package.
+    :param setup_cfg: content of the module's setup.cfg file, or None if it has none.
+    :param pyproject_toml: content of the module's pyproject.toml file, or None if it has none.
+    """
+
+    name: str
+    version: str
+    python_module_sources: Sequence[ModuleSource]
+    setup_cfg: bytes | None
+    pyproject_toml: bytes | None
+
+    def identity(self) -> tuple[str, str]:
+        """The (name, version) pair that fully identifies this editable module for venv pooling purposes."""
+        return (self.name, self.version)
+
+
+@dataclasses.dataclass
 class EnvBlueprint:
     """Represents a blueprint for creating virtual environments
     with specific pip configurations, requirements and constraints."""
@@ -126,6 +152,11 @@ class EnvBlueprint:
     # The libc version determines which python packages are compatible with the machine they run on.
     # If this version is updated, pip might select different packages.
     libc_version: str = dataclasses.field(default_factory=get_libc_version, kw_only=True)
+    # Inmanta modules that were installed in editable mode in the compiler venv. They are reconstructed as
+    # installable python packages and pip-installed in editable mode when the venv is created. They are part
+    # of the venv identity (through their (name, version) pair): a change in an editable module yields a new
+    # venv rather than mutating an existing (potentially shared) one.
+    editable_modules: Sequence[EditableModuleInstall] = dataclasses.field(default=(), kw_only=True)
 
     def __post_init__(self) -> None:
         # remove duplicates and make uniform
@@ -146,6 +177,9 @@ class EnvBlueprint:
                 "python_version": self.python_version,
                 "project_constraints": self.project_constraints,
                 "libc_version": self.libc_version,
+                # Only the (name, version) identity of each editable module matters: the version is a content
+                # hash, so it already reflects any change in the module's files or requirements.
+                "editable_modules": sorted(editable_module.identity() for editable_module in self.editable_modules),
             }
 
             # Serialize the blueprint dictionary to a JSON string, ensuring consistent ordering
@@ -166,6 +200,7 @@ class EnvBlueprint:
             self.python_version,
             self.project_constraints,
             self.libc_version,
+            sorted(editable_module.identity() for editable_module in self.editable_modules),
         ) == (
             other.environment_id,
             other.pip_config,
@@ -173,6 +208,7 @@ class EnvBlueprint:
             other.python_version,
             other.project_constraints,
             other.libc_version,
+            sorted(editable_module.identity() for editable_module in other.editable_modules),
         )
 
     def __hash__(self) -> int:
@@ -181,10 +217,11 @@ class EnvBlueprint:
     def __str__(self) -> str:
         req = ",".join(str(req) for req in self.requirements)
         constraints = ",".join(self.project_constraints.split("\n")) if self.project_constraints else ""
+        editable = ",".join(f"{m.name}=={m.version}" for m in self.editable_modules)
         return (
             f"EnvBlueprint(environment_id={self.environment_id}, requirements=[{str(req)}], "
             f"constraints=[{constraints}], pip={self.pip_config}, python_version={self.python_version}, "
-            f"libc_version={self.libc_version})"
+            f"libc_version={self.libc_version}, editable_modules=[{editable}])"
         )
 
 
@@ -214,6 +251,7 @@ class ExecutorBlueprint(EnvBlueprint):
         assert len(env_ids) == 1
         sources: set[ExecutorModuleSource] = set()
         requirements: set[str] = set()
+        editable_modules: list[EditableModuleInstall] = []
         all_constraints: set[str | None] = set()
         pip_configs: list[PipConfig] = []
         python_versions: list[tuple[int, int]] = []
@@ -224,12 +262,14 @@ class ExecutorBlueprint(EnvBlueprint):
             if not module_install_spec.blueprint.sources:
                 raise ValueError(f"Install spec for module {module_install_spec.module_name} has no sources")
 
-            # Gather all sources (both for editable and package install). Later, during code
-            # installation on the agent:
-            #   - For editable installs, we will write these python module sources to disk and then load them
-            #      on agents that were registered to use them
-            #   - For package installs, we will rely on pip for the install and then load them
+            # Gather all sources (both for editable and package install). During code installation on the agent,
+            # we rely on these to know which python modules to load (import) for this executor.
             sources.update(module_install_spec.blueprint.sources)
+
+            # Gather all editable modules. These are reconstructed as installable python packages and pip-installed
+            # in editable mode when the venv is created (see ExecutorVirtualEnvironment). This is a no-op for a spec
+            # that describes a package install (its blueprint carries no editable modules).
+            editable_modules.extend(module_install_spec.blueprint.editable_modules)
 
             all_constraints.add(module_install_spec.blueprint.project_constraints)
 
@@ -251,7 +291,8 @@ class ExecutorBlueprint(EnvBlueprint):
             else:
                 if editable_install:
                     # Editable install:
-                    # install the requirements first, and then the source from the database
+                    # the module itself is reconstructed and pip-installed in editable mode (see editable_modules
+                    # gathered above); we additionally install its python requirements explicitly.
                     requirements.update(module_install_spec.blueprint.requirements)
                 else:
                     # Package install:
@@ -286,6 +327,7 @@ class ExecutorBlueprint(EnvBlueprint):
             requirements=list(requirements),
             python_version=base_python_version,
             project_constraints=constraints,
+            editable_modules=editable_modules,
         )
 
     def blueprint_hash(self) -> str:
@@ -317,6 +359,11 @@ class ExecutorBlueprint(EnvBlueprint):
                 "python_version": self.python_version,
                 "project_constraints": self.project_constraints,
                 "libc_version": self.libc_version,
+                # Fold in the editable modules' identity as well. It is already implied by the sources for a
+                # change in the python files, but not for a change limited to the packaging files (setup.cfg,
+                # pyproject.toml), which the version hash does capture. Keeping this consistent with the venv
+                # identity (EnvBlueprint) guarantees an executor process is never reused across differing venvs.
+                "editable_modules": sorted(editable_module.identity() for editable_module in self.editable_modules),
             }
 
             # Serialize the extended blueprint dictionary to a JSON string, ensuring consistent ordering
@@ -338,6 +385,7 @@ class ExecutorBlueprint(EnvBlueprint):
             python_version=self.python_version,
             project_constraints=self.project_constraints,
             libc_version=self.libc_version,
+            editable_modules=self.editable_modules,
         )
 
     def __eq__(self, other: object) -> bool:
@@ -351,6 +399,7 @@ class ExecutorBlueprint(EnvBlueprint):
             self.python_version,
             self.project_constraints,
             self.libc_version,
+            sorted(editable_module.identity() for editable_module in self.editable_modules),
         ) == (
             other.environment_id,
             other.pip_config,
@@ -359,6 +408,7 @@ class ExecutorBlueprint(EnvBlueprint):
             other.python_version,
             other.project_constraints,
             other.libc_version,
+            sorted(editable_module.identity() for editable_module in other.editable_modules),
         )
 
     def __hash__(self) -> int:
@@ -424,9 +474,15 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         #     of the ExecutorVirtualEnvironment and its age determines if this env can be cleaned up.
         #   - (Optionally) a requirements.txt file. It holds the python package constraints
         #     set at the project level enforced on the agent when installing code.
+        #   - (Optionally) an editable/ dir. It holds the reconstructed source trees of the editable
+        #     inmanta modules that are pip-installed in editable mode in this venv.
         self.inmanta_storage: pathlib.Path = pathlib.Path(self.env_path) / ".inmanta"
 
         self.inmanta_venv_status_file: pathlib.Path = self.inmanta_storage / const.INMANTA_VENV_STATUS_FILENAME
+
+        # Directory holding the reconstructed source trees of the editable modules installed in this venv. It lives
+        # inside the venv so its lifetime is tied to the venv: it is removed together with the venv (remove_venv).
+        self.inmanta_editable_dir: pathlib.Path = self.inmanta_storage / "editable"
 
         self.io_threadpool = io_threadpool
 
@@ -466,6 +522,32 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
 
         return None
 
+    def _reconstruct_editable_module(self, editable_module: EditableModuleInstall) -> str:
+        """
+        Reconstruct the given editable inmanta module as an installable python package on disk, in this venv's
+        storage directory, and return the path to its root (suitable for a pip editable install).
+
+        Each python module is materialized as a package (a directory with an __init__ file), following the layout
+        expected by the ``packages=find_namespace:`` build config of V2 modules. In particular, no __init__ file
+        is created for the top-level ``inmanta_plugins`` namespace package, so that editable installs of several
+        inmanta modules can all contribute to it.
+        """
+        module_root: pathlib.Path = self.inmanta_editable_dir / editable_module.name
+        for module_source in editable_module.python_module_sources:
+            relative_path: str = loader.convert_module_to_editable_relative_path(
+                module_source.metadata.name, is_byte_code=module_source.metadata.is_byte_code
+            )
+            target: pathlib.Path = module_root / relative_path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(module_source.source)
+
+        if editable_module.setup_cfg is not None:
+            (module_root / module.ModuleV2.MODULE_FILE).write_bytes(editable_module.setup_cfg)
+        if editable_module.pyproject_toml is not None:
+            (module_root / module.ModuleV2.PYPROJECT_FILE).write_bytes(editable_module.pyproject_toml)
+
+        return str(module_root)
+
     async def _create_and_install_environment(self, blueprint: EnvBlueprint) -> None:
         """
         Creates and configures the virtual environment according to the provided blueprint.
@@ -479,11 +561,19 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         os.makedirs(self.inmanta_storage, exist_ok=True)
 
         constraint_file: str | None = self._write_constraint_file(blueprint)
-        if len(req):  # install_for_config expects at least 1 requirement or a path to install
+
+        # Reconstruct the editable modules on disk and install them in editable mode alongside the requirements.
+        editable_paths: list[LocalPackagePath] = [
+            LocalPackagePath(path=self._reconstruct_editable_module(editable_module), editable=True)
+            for editable_module in blueprint.editable_modules
+        ]
+
+        if req or editable_paths:  # install_for_config expects at least 1 requirement or a path to install
             await self.async_install_for_config(
                 requirements=[packaging.requirements.Requirement(requirement_string=e) for e in req],
                 config=blueprint.pip_config,
                 constraint_files=[constraint_file] if constraint_file else None,
+                paths=editable_paths,
             )
 
     def is_correctly_initialized(self) -> bool:

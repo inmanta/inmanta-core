@@ -21,8 +21,10 @@ import base64
 import datetime
 import hashlib
 import logging
+import pathlib
 import sys
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 
 import psutil
 import pytest
@@ -37,12 +39,82 @@ import inmanta.util
 import utils
 from forking_agent.ipc_commands import Echo, GetConfig, GetName, TestLoader
 from inmanta.agent import executor
-from inmanta.agent.executor import ExecutorBlueprint
+from inmanta.agent.executor import EditableModuleInstall, ExecutorBlueprint, ExecutorVirtualEnvironment
 from inmanta.agent.forking_executor import MPExecutor, MPManager
 from inmanta.data import PipConfig
-from inmanta.data.model import ExecutorModuleSource, ModuleSourceMetadata
+from inmanta.data.model import ExecutorModuleSource, ModuleSource, ModuleSourceMetadata
 from inmanta.protocol.ipc_light import ConnectionLost
 from utils import NOISY_LOGGERS, log_contains, retry_limited
+
+
+def test_reconstruct_editable_module(tmp_path):
+    """
+    Reconstructing an editable module lays out its python sources as packages (dirs with an __init__ file) under a
+    top-level inmanta_plugins namespace package (which itself gets no __init__ file), and writes its packaging files
+    at the module root. The byte-code flag selects the __init__ file extension.
+    """
+
+    def source(name: str, content: bytes, *, is_byte_code: bool = False) -> ModuleSource:
+        return ModuleSource(
+            metadata=ModuleSourceMetadata(name=name, hash_value=hashlib.sha1(content).hexdigest(), is_byte_code=is_byte_code),
+            source=content,
+        )
+
+    editable_module = EditableModuleInstall(
+        name="my_mod",
+        version="deadbeef",
+        python_module_sources=[
+            source("inmanta_plugins.my_mod", b"# root"),
+            source("inmanta_plugins.my_mod.handlers", b"# handlers"),
+            source("inmanta_plugins.my_mod.compiled", b"byte-code", is_byte_code=True),
+        ],
+        setup_cfg=b"[metadata]\nname = inmanta-module-my_mod\n",
+        pyproject_toml=b"[build-system]\n",
+    )
+
+    with ThreadPoolExecutor() as thread_pool:
+        venv = ExecutorVirtualEnvironment(env_path=str(tmp_path / "venv"), io_threadpool=thread_pool)
+        module_root = venv._reconstruct_editable_module(editable_module)
+
+    root = pathlib.Path(module_root)
+    assert root == venv.inmanta_editable_dir / "my_mod"
+
+    # The top-level namespace package must not get an __init__ file.
+    assert not (root / "inmanta_plugins" / "__init__.py").exists()
+    assert not (root / "inmanta_plugins" / "__init__.pyc").exists()
+
+    # Every python module is materialized as a package, honoring the byte-code flag.
+    assert (root / "inmanta_plugins" / "my_mod" / "__init__.py").read_bytes() == b"# root"
+    assert (root / "inmanta_plugins" / "my_mod" / "handlers" / "__init__.py").read_bytes() == b"# handlers"
+    assert (root / "inmanta_plugins" / "my_mod" / "compiled" / "__init__.pyc").read_bytes() == b"byte-code"
+
+    # The packaging files land at the module root.
+    assert (root / "setup.cfg").read_bytes() == b"[metadata]\nname = inmanta-module-my_mod\n"
+    assert (root / "pyproject.toml").read_bytes() == b"[build-system]\n"
+
+
+def test_reconstruct_editable_module_without_packaging_files(tmp_path):
+    """A module with no packaging files reconstructs its sources without writing setup.cfg or pyproject.toml."""
+    editable_module = EditableModuleInstall(
+        name="my_mod",
+        version="cafe",
+        python_module_sources=[
+            ModuleSource(
+                metadata=ModuleSourceMetadata(name="inmanta_plugins.my_mod", hash_value="abc", is_byte_code=False),
+                source=b"# root",
+            )
+        ],
+        setup_cfg=None,
+        pyproject_toml=None,
+    )
+
+    with ThreadPoolExecutor() as thread_pool:
+        venv = ExecutorVirtualEnvironment(env_path=str(tmp_path / "venv"), io_threadpool=thread_pool)
+        module_root = pathlib.Path(venv._reconstruct_editable_module(editable_module))
+
+    assert (module_root / "inmanta_plugins" / "my_mod" / "__init__.py").read_bytes() == b"# root"
+    assert not (module_root / "setup.cfg").exists()
+    assert not (module_root / "pyproject.toml").exists()
 
 
 @pytest.fixture

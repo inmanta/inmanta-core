@@ -500,51 +500,29 @@ class CodeLoader:
 
         def deploy_and_load_iso10(module_sources: Sequence[ExecutorModuleSource]) -> FailedInmantaModules:
             """
-            Compatibility layer method that install and loads the given module_sources using the "new-style" (iso10+) of
+            Compatibility layer method that loads the given module_sources using the "new-style" (iso10+) of
             code install on the agent:
-              - Modules installed in editable mode in the compiler venv will be installed from
-                source on **all** agents.
-              - Modules installed in package mode in the compiler venv will already have been
-                installed on the agent via pip during the executor venv creation along with other regular python requirements.
-              - We will attempt to load all modules registered for a given agent that were successfully installed, regardless
-                of the install mode (package or source).
+              - Modules installed in editable mode in the compiler venv will have been reconstructed as installable
+                python packages and pip-installed in editable mode during the executor venv creation.
+              - Modules installed in package mode in the compiler venv will have been installed on the agent via pip
+                during the executor venv creation along with other regular python requirements.
+              - Either way, the code already lives in the venv, so this method only has to import the modules registered
+                for this agent (the sources flagged with load_module), regardless of the install mode.
 
             This compatibility layer method can be dropped in iso11 and its code moved to the parent deploy_and_load method.
 
-            The sources flagged with install_on_disk are all written to disk first, before any module is imported, so that
-            cross-module imports resolve regardless of the order in which the sources are processed. The sources flagged with
-            load_module are then imported, except those whose on-disk install failed (importing them would fail anyway).
             Failures are collected per module and returned rather than raised, so that a single broken module does not
-            prevent the others from being installed and loaded.
+            prevent the others from being loaded.
 
-
-            :return: The python modules that could not be installed or imported, grouped by inmanta module.
+            :return: The python modules that could not be imported, grouped by inmanta module.
             """
             failed: FailedInmantaModules = defaultdict(dict)
-
-            # Names of python modules that could not be put on disk. These are skipped during the load phase: their
-            # failure is already recorded and importing them would fail anyway.
-            failed_to_install: set[str] = set()
-
-            for module_source in module_sources:
-                assert module_source.install_on_disk is not None
-
-                fq_module_name = module_source.get_fq_module_name()
-
-                if module_source.install_on_disk:
-                    try:
-                        self.install_source(module_source)
-                    except Exception as e:
-                        logger.info("Failed to install source on disk: %s", fq_module_name, exc_info=True)
-                        failed[module_source.get_inmanta_module_name()][fq_module_name] = e
-                        failed_to_install.add(fq_module_name)
 
             for module_source in module_sources:
                 assert module_source.load_module is not None
 
-                fq_module_name = module_source.get_fq_module_name()
-
-                if module_source.load_module and fq_module_name not in failed_to_install:
+                if module_source.load_module:
+                    fq_module_name = module_source.get_fq_module_name()
                     try:
                         self.load_module(fq_module_name, module_source.metadata.hash_value)
                     except Exception as e:
@@ -665,6 +643,26 @@ def convert_relative_path_to_module(path: str) -> str:
 
     # my_mod/plugins/tail -> inmanta_plugins.my_mod.tail
     return ".".join(chain([const.PLUGINS_PACKAGE, top_level_inmanta_module], strip_py(inmanta_submodule)))
+
+
+def convert_module_to_editable_relative_path(full_mod_name: str, *, is_byte_code: bool) -> str:
+    """
+    Returns the path, relative to the reconstructed module root, at which the python module `full_mod_name` should be
+    written when reconstructing an editable inmanta module as an installable python package.
+
+    Each python module is materialized as a package (a directory with an __init__ file), following the layout expected by
+    the ``packages=find_namespace:`` build config of V2 modules. No __init__ file is created for the top-level
+    ``inmanta_plugins`` namespace package itself, so that editable installs of several inmanta modules can all contribute
+    to it. For example convert_module_to_editable_relative_path("inmanta_plugins.my_mod.my_submod", is_byte_code=False)
+    == "inmanta_plugins/my_mod/my_submod/__init__.py".
+    """
+    parts: list[str] = full_mod_name.split(".")
+    if parts[0] != const.PLUGINS_PACKAGE:
+        raise Exception(
+            f"Module {full_mod_name} is not part of the {const.PLUGINS_PACKAGE} package.",
+        )
+    init_file: str = "__init__.pyc" if is_byte_code else "__init__.py"
+    return os.path.join(*parts, init_file)
 
 
 def convert_module_to_relative_path(full_mod_name: str) -> str:

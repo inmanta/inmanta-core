@@ -1,7 +1,8 @@
 ---
 description: >
-  Install refinement of the improved code install on the agent. For modules installed in editable mode in the compiler
-  venv, the exporter now also persists their packaging files (setup.cfg and pyproject.toml) alongside their plugin
-  sources. This allows the agent to recreate these modules as proper, installable python packages.
+  Install refinement of the improved code install on the agent. Inmanta modules that were installed in editable mode
+  in the compiler venv are now reconstructed as proper, installable python packages on the agent and pip-installed in
+  editable mode in the executor venv. To make this possible, the exporter also persists their packaging files
+  (setup.cfg and pyproject.toml) alongside their plugin sources. Package install modules are unaffected.
 change-type: minor
 destination-branches: [master]
