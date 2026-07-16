@@ -34,7 +34,10 @@ credentials the same way you would for a local ``git clone``. The most common me
 
 * **SSH keys**: use a ``git@host:...`` (or ``ssh://``) repository URL and place the private key and a matching
   ``known_hosts`` entry in the SSH configuration of the ``inmanta`` user (the user the orchestrator runs as),
-  under ``~/.ssh`` in its home directory (``/var/lib/inmanta/.ssh``).
+  under ``~/.ssh`` in its home directory (``/var/lib/inmanta/.ssh``). Make sure the key files and the ``.ssh``
+  directory are owned by the ``inmanta`` user with sufficiently strict permissions (private key ``600``, ``.ssh``
+  directory ``700``); otherwise OpenSSH silently ignores the key and authentication fails. See the
+  `GitHub SSH documentation <https://docs.github.com/en/authentication/connecting-to-github-with-ssh>`_ for details.
 * **A ``.netrc`` file** for HTTP(S) repositories: create a ``.netrc`` file in the home directory of the
   ``inmanta`` user (``/var/lib/inmanta/.netrc``). This is the same file used to authenticate against a
   :ref:`private Python package repository<setting_up_pip_index_authentication>`, so a single file can cover both

@@ -233,6 +233,13 @@ read and which username was sent. The actual secret is redacted (``Authorization
     over ``GIT_TRACE``: the latter prints the full repository URL on every line, which leaks any credentials embedded
     in the URL into the compile report.
 
+``GIT_TRACE_CURL`` only traces the HTTP(S) transport, so it produces no useful output for SSH (``git@host:...`` or
+``ssh://``) repositories. To debug an SSH checkout, make git run ``ssh`` in verbose mode by setting the
+``GIT_SSH_COMMAND`` environment variable to ``ssh -vvv`` instead and trigger a new compile. The output shows which
+identity files ``ssh`` loaded, which keys it offered, and the outcome of host-key verification. A key that the
+``inmanta`` user cannot read is skipped silently (``no identity pubkey loaded``), which then surfaces as
+``Permission denied (publickey)``.
+
 
 Logs show "empty model" after export
 ====================================
