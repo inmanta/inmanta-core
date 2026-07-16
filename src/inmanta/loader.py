@@ -88,6 +88,10 @@ class CodeManager:
         # To which python module do these python files belong
         self.__file_info: dict[str, ModuleSource] = {}
 
+        # Content of non-python-module files that must be uploaded to the server as well, keyed by content hash.
+        # These are the packaging files (setup.cfg, pyproject.toml) of editable modules.
+        self.__extra_file_content: dict[str, bytes] = {}
+
         self._types_to_agent: dict[str, set[AgentName]] = defaultdict(set)
         self._all_agents: set[AgentName] = set()
 
@@ -175,13 +179,15 @@ class CodeManager:
             assert isinstance(mod, module.ModuleV2)
             requirements = self.get_inmanta_module_requirements(inmanta_module_name)
 
-            # Content hash per packaging file, keyed by file name. The content itself is registered in __file_info
-            # so that it gets uploaded to the server alongside the plugin sources.
+            # Content hash per packaging file, keyed by file name. The content itself is staged for upload in
+            # __extra_file_content so that it gets uploaded to the server alongside the plugin sources.
             packaging_file_hashes: dict[str, str] = {}
             for packaging_file_path, packaging_file_name in mod.get_metadata_files():
-                packaging_source = ModuleSource.from_path(absolute_path=packaging_file_path, name=packaging_file_name)
-                self.__file_info[packaging_file_path] = packaging_source
-                packaging_file_hashes[packaging_file_name] = packaging_source.metadata.hash_value
+                with open(packaging_file_path, "rb") as fd:
+                    content = fd.read()
+                content_hash = hashlib.new("sha1", content).hexdigest()
+                self.__extra_file_content[content_hash] = content
+                packaging_file_hashes[packaging_file_name] = content_hash
 
             module_version = self.get_module_version(requirements, plugin_files_metadata, list(packaging_file_hashes.values()))
 
@@ -251,8 +257,8 @@ class CodeManager:
             return None
 
     def get_file_hashes(self) -> Iterable[str]:
-        """Return the hashes of all source files"""
-        return (info.metadata.hash_value for info in self.__file_info.values())
+        """Return the hashes of all files that must be uploaded (python module sources and packaging files)"""
+        return chain((info.metadata.hash_value for info in self.__file_info.values()), self.__extra_file_content.keys())
 
     def get_module_version_info(self) -> dict[str, "InmantaModule"]:
         """Return all module version info"""
@@ -291,6 +297,9 @@ class CodeManager:
         for info in self.__file_info.values():
             if info.metadata.hash_value == hash:
                 return info.source
+
+        if hash in self.__extra_file_content:
+            return self.__extra_file_content[hash]
 
         raise KeyError("No file found with this hash")
 
