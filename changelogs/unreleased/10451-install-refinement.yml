@@ -1,0 +1,7 @@
+---
+description: >
+  Install refinement of the improved code install on the agent. For modules installed in editable mode in the compiler
+  venv, the exporter now also persists their packaging files (setup.cfg and pyproject.toml) alongside their plugin
+  sources. This allows the agent to recreate these modules as proper, installable python packages.
+change-type: minor
+destination-branches: [master]

@@ -150,7 +150,7 @@ class CodeManager:
     def _register_inmanta_module(
         self,
         inmanta_module_name: str,
-        module: "module.Module[module.ModuleMetadata]",
+        mod: "module.Module[module.ModuleMetadata]",
         editable_install: bool,
     ) -> None:
         if inmanta_module_name in self.module_version_info:
@@ -159,28 +159,39 @@ class CodeManager:
 
         module_sources: list[ModuleSource] = []
 
-        for absolute_path, fqn_module_name in module.get_plugin_files():
+        for absolute_path, fqn_module_name in mod.get_plugin_files():
             source_info = ModuleSource.from_path(absolute_path=absolute_path, name=fqn_module_name)
             self.__file_info[absolute_path] = source_info
             module_sources.append(source_info)
 
-        files_metadata = [module_source.metadata for module_source in module_sources]
+        plugin_files_metadata = [module_source.metadata for module_source in module_sources]
 
         if editable_install:
-            # [editable install mode]
-            # We need to store the relevant files in the db, i.e.:
-            #    - python code in the inmanta_plugins dir
-            #    - setup.cfg
-            #    - pyproject.toml
+            # [editable install mode] (editable installs are always V2 modules)
+            # We need to store the relevant files in the db to recreate this module as an installable python
+            # package on the agent side, i.e.:
+            #    - python code in the inmanta_plugins dir (plugin_files_metadata, gathered above)
+            #    - the packaging metadata files (setup.cfg, pyproject.toml)
+            assert isinstance(mod, module.ModuleV2)
             requirements = self.get_inmanta_module_requirements(inmanta_module_name)
-            module_version = self.get_module_version(requirements, files_metadata)
-            setup_cfg_path = module.get_metadata_file_path()
+
+            # Content hash per packaging file, keyed by file name. The content itself is registered in __file_info
+            # so that it gets uploaded to the server alongside the plugin sources.
+            packaging_file_hashes: dict[str, str] = {}
+            for packaging_file_path, packaging_file_name in mod.get_metadata_files():
+                packaging_source = ModuleSource.from_path(absolute_path=packaging_file_path, name=packaging_file_name)
+                self.__file_info[packaging_file_path] = packaging_source
+                packaging_file_hashes[packaging_file_name] = packaging_source.metadata.hash_value
+
+            module_version = self.get_module_version(requirements, plugin_files_metadata, list(packaging_file_hashes.values()))
 
             self.module_version_info[inmanta_module_name] = InmantaModule(
                 name=inmanta_module_name,
                 version=module_version,
-                files_in_module=files_metadata,
+                files_in_module=plugin_files_metadata,
                 requirements=list(requirements),
+                setup_cfg_hash=packaging_file_hashes.get(module.ModuleV2.MODULE_FILE),
+                pyproject_toml_hash=packaging_file_hashes.get(module.ModuleV2.PYPROJECT_FILE),
                 # The (install|load)_module_on_agents are populated when get_module_version_info() is called.
                 install_module_on_agents=[],
                 load_module_on_agents=[],
@@ -189,14 +200,14 @@ class CodeManager:
         else:
             # [package install mode]
             # Store the pep 440 version of the module in the db
-            # We register the module source (i.e. files_metadata) for package install mode as well, but the reason
+            # We register the module source (i.e. plugin_files_metadata) for package install mode as well, but the reason
             # is slightly different from the editable install mode. Here we don't need the actual source (it will be fetched
             # by pip on the agent), but we still need to know the file structure to be able to eagerly load all python files
             # living in the module.
             self.module_version_info[inmanta_module_name] = InmantaModule(
                 name=inmanta_module_name,
-                version=str(module.version),
-                files_in_module=files_metadata,
+                version=str(mod.version),
+                files_in_module=plugin_files_metadata,
                 requirements=[],
                 # The (install|load)_module_on_agents are populated when get_module_version_info() is called.
                 install_module_on_agents=[],
@@ -257,11 +268,18 @@ class CodeManager:
         return set(mod.get_all_python_requirements_as_list())
 
     @staticmethod
-    def get_module_version(requirements: set[str], module_sources: Sequence["ModuleSourceMetadata"]) -> str:
+    def get_module_version(
+        requirements: set[str],
+        module_sources: Sequence["ModuleSourceMetadata"],
+        metadata_file_hashes: Sequence[str],
+    ) -> str:
         module_version_hash = hashlib.new("sha1")
 
         for module_source in sorted(module_sources, key=lambda f: f.hash_value):
             module_version_hash.update(module_source.hash_value.encode())
+
+        for metadata_file_hash in sorted(metadata_file_hashes):
+            module_version_hash.update(metadata_file_hash.encode())
 
         for requirement in sorted(requirements):
             module_version_hash.update(str(requirement).encode())

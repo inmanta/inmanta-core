@@ -2996,6 +2996,7 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
 @stable_api
 class ModuleV2(Module[ModuleV2Metadata]):
     MODULE_FILE = "setup.cfg"
+    PYPROJECT_FILE = "pyproject.toml"
     GENERATION = ModuleGeneration.V2
     PKG_NAME_PREFIX = const.MODULE_PKG_NAME_PREFIX
 
@@ -3046,6 +3047,19 @@ class ModuleV2(Module[ModuleV2Metadata]):
 
     def get_metadata_file_path(self) -> str:
         return os.path.join(self.path, ModuleV2.MODULE_FILE)
+
+    def get_metadata_files(self) -> list[tuple[str, str]]:
+        """
+        Return the packaging metadata files (setup.cfg, pyproject.toml) that must be persisted to recreate this
+        module as an installable python package on the agent side, as (absolute_path, module-root-relative path)
+        pairs. Only files that exist on disk are returned.
+        """
+        result: list[tuple[str, str]] = []
+        for relative_path in (ModuleV2.MODULE_FILE, ModuleV2.PYPROJECT_FILE):
+            absolute_path = os.path.join(self.path, relative_path)
+            if os.path.exists(absolute_path):
+                result.append((absolute_path, relative_path))
+        return result
 
     @classmethod
     def get_name_from_metadata(cls, metadata: ModuleV2Metadata) -> str:
