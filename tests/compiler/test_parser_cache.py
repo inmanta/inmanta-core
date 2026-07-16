@@ -26,9 +26,9 @@ from typing import Callable
 
 import pytest
 
-import inmanta.parser.plyInmantaParser as parser
 from inmanta.ast import Namespace
 from inmanta.ast.statements import Statement
+from inmanta.parser import dispatch as parser
 from inmanta.parser.pickle import ASTPickler, ASTUnpickler
 
 
@@ -47,6 +47,7 @@ def pickled(ns: Namespace, source: str) -> bytes:
 
 
 def test_caching(snippetcompiler):
+    """Verify cache miss on first parse, cache hit on re-parse, and cache miss after source modification."""
     # reset counts
     parser.cache_manager.reset_stats()
     snippetcompiler.setup_for_snippet(
@@ -70,7 +71,7 @@ a=1
 
     main_file = os.path.join(snippetcompiler.project_dir, "main.cf")
     root_ns = snippetcompiler.project.root_ns
-    cached_main = parser.cache_manager._get_file_name(root_ns.get_child_or_create("main.cf"), main_file)
+    cached_main = parser.cache_manager._ensure_cache_path(root_ns.get_child_or_create("main.cf"), main_file)
     Path(main_file).touch()
     # make the cache a tiny bit newer
     sleep(0.001)
@@ -159,3 +160,34 @@ def test_pickle_namespace_released_after_load():
 
     with pytest.raises(UnpicklingError, match="outside ASTUnpickler"):
         pickle.Unpickler(io.BytesIO(blob)).load()
+
+
+def test_cache_corrupt_file(snippetcompiler):
+    """Verify graceful handling of corrupt cache files."""
+    parser.cache_manager.reset_stats()
+    snippetcompiler.setup_for_snippet(
+        """
+a=1
+""",
+        autostd=True,
+    )
+
+    # Find the cached main.cf by walking the cache directory
+    cache_dir = os.path.join(snippetcompiler.project_dir, ".cfcache")
+    assert os.path.isdir(cache_dir), f"Cache directory {cache_dir} does not exist"
+    cache_files = [os.path.join(root, f) for root, _, files in os.walk(cache_dir) for f in files if f.endswith(".cfc")]
+    assert len(cache_files) >= 1, f"Expected at least one .cfc file in {cache_dir}"
+
+    # Corrupt all cache files
+    for cached_file in cache_files:
+        with open(cached_file, "wb") as fh:
+            fh.write(b"this is not valid pickle data")
+        # Make sure corrupted cache is newer than source
+        sleep(0.001)
+        Path(cached_file).touch()
+
+    # Re-parse: should fall back to re-parsing, not crash
+    parser.cache_manager.reset_stats()
+    snippetcompiler._load_project(autostd=True, install_project=True)
+
+    assert parser.cache_manager.failures >= 1

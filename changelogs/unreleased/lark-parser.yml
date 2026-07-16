@@ -1,0 +1,7 @@
+description: >-
+  Add an optional Lark-based parser backend for the Inmanta DSL, selected with the `INMANTA_PARSER`
+  environment variable (`ply`, the default, or `lark`).
+change-type: minor
+destination-branches: [master]
+sections:
+  minor-improvement: "{{description}}"
