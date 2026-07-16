@@ -273,7 +273,9 @@ This results in a form control like this, that also provide search and autocompl
 
 The annotation that controls this is `web_suggested_values` which as a value also needs a dict with two fields:
 - `type` which has to be `literal`
-- `values` which is a list of string values that the web console should suggest to the user.
+- `values` which is a list of values that the web console should suggest to the user. Each entry is a
+  string, or a `{"label": ..., "value": ...}` object when the displayed label should differ from the
+  submitted value (see [Separate label and value](#separate-label-and-value)).
 
 Because they are defined as a default value in the model, you can only provide literal strings here. It is not possible to
 generate the list using a plugin. The second flavor offers dynamic suggested values based on a parameter in the orchestrator API.
@@ -343,3 +345,147 @@ the API returns the following structure:
 ```
 
 The `lsm::set_suggested_values` plugin takes care for wrapping the values and setting the value correctly.
+
+#### Separate label and value
+
+By default each suggested value is a single string that is both shown to the user and submitted as the
+attribute value. When the value the model needs is not what a human wants to read (a UUID, an id, a
+`source://` URI, an internal code), an entry can instead be an object with a `label` and a `value`: the web
+console shows and searches on `label`, and submits `value`.
+
+This works for both flavors, and a plain string entry is shorthand for an entry whose label equals its
+value, so existing suggestions keep working unchanged.
+
+For the `literal` flavor the objects are placed directly in `values`:
+
+```inmanta
+entity Service extends lsm::ServiceBase:
+    string bandwidth
+    lsm::attribute_modifier bandwidth__modifier = "rw+"
+    dict bandwidth__annotations = {
+        "web_suggested_values": {
+            "type": "literal",
+            "values": [
+                {"label": "1 Gbps", "value": "1000"},
+                {"label": "10 Gbps", "value": "10000"},
+            ],
+        },
+    }
+end
+```
+
+This results in a control that shows the labels while submitting the underlying values:
+
+![suggested values with separate label and value](suggested_label_value.png)
+
+For the `parameters` flavor the same object form is allowed in the parameter's `metadata.values` list.
+`lsm::set_suggested_values` accepts either plain strings or `{"label": ..., "value": ...}` dicts and stores
+them unchanged:
+
+```inmanta
+lsm::set_suggested_values(
+    "bandwidths",
+    [{"label": "1 Gbps", "value": "1000"}, {"label": "10 Gbps", "value": "10000"}],
+)
+```
+
+#### Variables in the parameter name
+
+For the `parameters` flavor, the `parameter_name` may contain placeholders that the web console substitutes
+from the context of the form it is rendering. This lets a single annotation point at a per-entity or
+per-instance parameter instead of one shared parameter for the whole environment.
+
+| Variable                   | Substituted with                                                             |
+| -------------------------- | ---------------------------------------------------------------------------- |
+| `${entity_type}`           | The name of the service entity, as used in the service catalog and API paths.|
+| `${identifying_attribute}` | The current value of the service's identifying attribute.                    |
+| `${instance_id}`           | The id of the instance being edited (empty while creating a new instance).   |
+
+```inmanta
+entity Service extends lsm::ServiceBase:
+    string topology_file
+    lsm::attribute_modifier topology_file__modifier = "rw+"
+    dict topology_file__annotations = {
+        "web_suggested_values": {
+            "type": "parameters",
+            "parameter_name": "topology_files_${entity_type}",
+        },
+    }
+end
+```
+
+The compiler (or any external system) then publishes the values under the resolved name. For a service
+registered as `my-service` the example above reads the parameter `topology_files_my-service`:
+
+```inmanta
+lsm::set_suggested_values(
+    "topology_files_my-service",
+    custom_module::all_matching_files("docker-compose.*.yml"),
+)
+```
+
+A few things to keep in mind:
+
+- A variable that has no value yet (for example `${instance_id}` on a creation form) results in no
+  suggestions until it has a value, rather than fetching an incomplete parameter name.
+- Because `${identifying_attribute}` reflects a value the user is still typing, the web console waits for
+  the input to settle and then re-queries.
+- A placeholder that is not one of the variables above is reported as an error on the field.
+
+### Form tabs
+
+Large service forms can be split into tabs so that the create and edit forms stay navigable. This is
+controlled by two annotations: a catalog of tabs on the entity, and a per-field assignment to a tab.
+
+The catalog is a `web_tabs` annotation on the service entity, listing the tabs. Each tab is a dict with the
+following fields:
+
+- `key`: the identifier that fields refer to.
+- `label`: the tab title shown in the web console.
+- `order`: an integer that fixes the display order of the tabs (ties fall back to `key`). The order does
+  not depend on the position in the list.
+- `default`: exactly one tab must set `default` to `true`. It is shown first and receives every field that
+  is not explicitly assigned to a tab.
+- `icon`: optional [font awesome icon](https://react-icons.github.io/react-icons/icons/fa/) name (the same
+  convention as the documentation tab).
+
+A field is assigned to a tab with a `web_tab` annotation whose value is a tab `key`. This works on a simple
+attribute and on a relation; assigning the relation to an embedded entity places that whole embedded
+sub-form on the tab.
+
+```inmanta
+entity Service extends lsm::ServiceEntity:
+    dict __annotations = {
+        "web_tabs": [
+            {"key": "general", "label": "General", "order": 1, "default": true},
+            {"key": "network", "label": "Network", "order": 2, "icon": "FaNetworkWired"},
+        ],
+    }
+
+    string name
+    lsm::attribute_modifier name__modifier = "rw"
+
+    string bandwidth
+    lsm::attribute_modifier bandwidth__modifier = "rw+"
+    dict bandwidth__annotations = {"web_tab": "network"}
+end
+```
+
+The web console renders the form with a tab per catalog entry:
+
+![a service form split into tabs](form_tabs.png)
+
+A relation is assigned to a tab through `lsm::RelationAnnotations`, the same mechanism used for
+[annotations on relational attributes](#annotations-on-relational-attributes):
+
+```inmanta
+__endpoints__ = lsm::RelationAnnotations(annotations={"web_tab": "network"})
+Service.endpoints [0:] __endpoints__ Endpoint._service [1]
+```
+
+A few things to keep in mind:
+
+- Tabs are top-level only. `web_tabs` is honored on the service entity, and `web_tab` on its top-level
+  attributes and relations. A `web_tab` or `web_tabs` deeper in an embedded tree has no effect.
+- The `name` field above carries no `web_tab`, so it lands on the `default` tab (`general`).
+- A service that defines no `web_tabs` is rendered as a single form, exactly as before.
