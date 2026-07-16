@@ -96,7 +96,7 @@ from inmanta.export import ResourceDict, cfg_env, unknown_parameters
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
 from inmanta.moduletool import DefaultIsolatedEnvCached, ModuleTool, V2ModuleBuilder
-from inmanta.parser.plyInmantaParser import cache_manager
+from inmanta.parser.dispatch import detach_from_project
 from inmanta.protocol import VersionMatch
 from inmanta.protocol.auth import auth
 from inmanta.references import mutator, reference
@@ -219,6 +219,26 @@ def pytest_configure(config: "pytest.Config") -> None:
     if PYTEST_PLUGIN_MODE:
         _pytest_configure_plugin_mode(config)
 
+    # Register Hypothesis profiles for --fast support.
+    # The active profile is loaded in pytest_sessionstart once --fast is known.
+    try:
+        from hypothesis import settings as hypothesis_settings
+
+        hypothesis_settings.register_profile("fast", max_examples=200)
+        hypothesis_settings.register_profile("full", max_examples=10000)
+    except ImportError:
+        pass
+
+
+def pytest_sessionstart(session: "pytest.Session") -> None:
+    try:
+        from hypothesis import settings as hypothesis_settings
+
+        profile = "fast" if session.config.getoption("fast") else "full"
+        hypothesis_settings.load_profile(profile)
+    except ImportError:
+        pass
+
 
 def pytest_addoption(parser):
     parser.addoption(
@@ -252,7 +272,12 @@ def pytest_generate_tests(metafunc: "pytest.Metafunc") -> None:
 def pytest_runtest_setup(item: "pytest.Item"):
     """
     When in fast mode, skip test marked as slow and db_migration tests that are older than 30 days.
+    Skip lark_only tests unless INMANTA_PARSER=lark.
     """
+    if any(True for _ in item.iter_markers(name="lark_only")):
+        if os.environ.get("INMANTA_PARSER", "ply") != "lark":
+            pytest.skip("Lark-specific test (set INMANTA_PARSER=lark)")
+
     is_fast = item.config.getoption("fast")
     if not is_fast:
         return
@@ -562,7 +587,7 @@ async def clean_reset(create_db, clean_db, deactive_venv):
     config.Config._reset()
     reset_all_objects()
     loader.unload_inmanta_plugins()
-    cache_manager.detach_from_project()
+    detach_from_project()
     data.Environment._settings = default_settings
 
 

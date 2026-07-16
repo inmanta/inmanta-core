@@ -1,5 +1,5 @@
 """
-Copyright 2021 Inmanta
+Copyright 2026 Inmanta
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,11 +14,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 Contact: code@inmanta.com
+
+Per-file AST cache manager for the Inmanta compiler.
+
+Caches parsed AST statements in .cfcache/ to avoid re-parsing unchanged .cf files.
 """
 
 import logging
 import os
-from typing import Optional
+import pickle
 
 from inmanta import __version__ as inmanta_version
 from inmanta.ast import Namespace
@@ -30,7 +34,9 @@ LOGGER = logging.getLogger(__name__)
 
 
 class CacheEnvelope:
-    """Every cached file gets the exact modification time of the file it is caching, to have cheap, accurate invalidation"""
+    """Wraps cached statements with the source file's modification time for cheap invalidation."""
+
+    __slots__ = ("timestamp", "statements")
 
     def __init__(self, timestamp: float, statements: list[Statement]) -> None:
         self.timestamp = timestamp
@@ -39,19 +45,19 @@ class CacheEnvelope:
 
 class CacheManager:
     def __init__(self) -> None:
-        self.hits = 0
-        self.misses = 0
-        self.failures = 0
+        self.hits: int = 0
+        self.misses: int = 0
+        self.failures: int = 0
 
-        # import loop, ....
+        # Import inside __init__ to avoid import cycle
         from inmanta.compiler.config import feature_compiler_cache
 
         self.cache_enabled = feature_compiler_cache
-        self.root_cache_dir: Optional[str] = None
+        self.root_cache_dir: str | None = None
 
-    def _get_file_name(self, namespace: Namespace, filename: str) -> str:
+    def _ensure_cache_path(self, namespace: Namespace, filename: str) -> str:
         """
-        Returns the name for the cached file, based on the name of the original source file
+        Returns the cache file path for a given source file.
 
         Also ensures the cache folder exists.
 
@@ -59,21 +65,13 @@ class CacheManager:
         :param filename: the filename of the source file
         :return: the filename of the cached file
         """
-        # Make mypy happy
         assert self.root_cache_dir is not None
-        # Obtains directory where the cache file will be stored
         cache_folder = os.path.join(self.root_cache_dir, *namespace.to_path())
-        # create cache folder
         os.makedirs(cache_folder, exist_ok=True)
 
-        # get file name without extension
         filepart = os.path.basename(filename).rsplit(".", maxsplit=1)[0]
-
-        # make filename with inmanta version specific extension
-        filename = f"{filepart}.{inmanta_version.replace('.', '_')}.cfc"
-
-        # construct final path
-        return os.path.join(cache_folder, filename)
+        cache_name = f"{filepart}.{inmanta_version.replace('.', '_')}.cfc"
+        return os.path.join(cache_folder, cache_name)
 
     def attach_to_project(self, project_dir: str) -> None:
         if not os.path.exists(project_dir):
@@ -86,55 +84,51 @@ class CacheManager:
     def detach_from_project(self) -> None:
         self.root_cache_dir = None
 
-    def un_cache(self, namespace: Namespace, filename: str) -> Optional[list[Statement]]:
+    def un_cache(self, namespace: Namespace, filename: str) -> list[Statement] | None:
         if not self.cache_enabled.get():
-            # cache not enabled
             return None
         if not self.is_attached_to_project():
             return None
         try:
-            cache_filename = self._get_file_name(namespace, filename)
+            cache_filename = self._ensure_cache_path(namespace, filename)
             if not os.path.exists(cache_filename):
                 self.misses += 1
                 return None
             mtime = os.path.getmtime(filename)
-            if os.path.getmtime(filename) > os.path.getmtime(cache_filename):
+            if mtime > os.path.getmtime(cache_filename):
                 self.misses += 1
                 return None
             with open(cache_filename, "rb") as fh:
                 result = ASTUnpickler(fh, namespace).load()
                 if not isinstance(result, CacheEnvelope):
-                    # old cache format
                     self.misses += 1
                     return None
                 if result.timestamp != mtime:
-                    # mtime is not exactly the same
                     self.misses += 1
                     return None
                 self.hits += 1
                 return result.statements
-        except Exception:
+        except (OSError, pickle.UnpicklingError, EOFError, AttributeError, ImportError, ValueError):
             self.failures += 1
-            LOGGER.warning(
+            LOGGER.debug(
                 "Compile cache loading failure, ignoring cache entry for %s",
                 filename,
-                exc_info=LOGGER.isEnabledFor(LogLevel.DEBUG.to_int),
+                exc_info=True,
             )
             return None
 
     def cache(self, namespace: Namespace, filename: str, statements: list[Statement]) -> None:
         if not self.cache_enabled.get():
-            # cache not enabled
             return
         if not self.is_attached_to_project():
             return
         try:
-            cache_filename = self._get_file_name(namespace, filename)
+            cache_filename = self._ensure_cache_path(namespace, filename)
             mtime = os.path.getmtime(filename)
             cache_entry = CacheEnvelope(mtime, statements)
             with open(cache_filename, "wb") as fh:
                 ASTPickler(fh, protocol=4).dump(cache_entry)
-        except Exception:
+        except (OSError, pickle.PicklingError, EOFError, AttributeError, TypeError, ValueError):
             LOGGER.warning(
                 "Compile cache failure, failed to cache statements for %s",
                 filename,
@@ -148,8 +142,12 @@ class CacheManager:
 
     def log_stats(self) -> None:
         if not self.cache_enabled.get():
-            # cache not enabled
             return
+        if self.failures > 0:
+            LOGGER.warning(
+                "Compiler cache: %d entries could not be loaded and were re-parsed (set log level to DEBUG for details)",
+                self.failures,
+            )
         if self.hits + self.misses != 0:
             LOGGER.debug(
                 "Compiler cache observed %d hits and %d misses (%d%%)",
