@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump colorlog from 6.10.1 to 6.11.0
+destination-branches:
+- iso9
+sections: {}
