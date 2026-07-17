@@ -1198,19 +1198,14 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
 
     # ---- Lists ----
 
-    def list_def(self, operands: list[ExpressionStatement]) -> Union[CreateList, Literal]:
-        # "[" and "]" are anonymous => filtered
+    def list_def(self, lbracket: Token, operands: list[ExpressionStatement], _rbracket: Token) -> Union[CreateList, Literal]:
         node: Union[CreateList, Literal] = CreateList(operands)
         try:
             node = Literal(node.as_constant())
         except RuntimeException:
             pass
-        if operands:
-            node.location = Location(self.file, operands[0].location.lnr)
-        else:
-            node.location = Location(self.file, 1)
-        node.namespace = self.namespace
-        node.lexpos = 0
+        # Anchor to the opening bracket (matches PLY); gives empty lists a correct line.
+        self._attach(node, self._loc(lbracket), lbracket.start_pos or 0)
         return node
 
     def list_comprehension(
@@ -1271,18 +1266,16 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
 
     # ---- Map def ----
 
-    def map_def(self, pairs: list[tuple[str, ExpressionStatement]]) -> Union[CreateDict, Literal]:
-        # "{" and "}" are anonymous => filtered
+    def map_def(
+        self, lbrace: Token, pairs: list[tuple[str, ExpressionStatement]], _rbrace: Token
+    ) -> Union[CreateDict, Literal]:
         node: Union[CreateDict, Literal] = CreateDict(pairs)  # type: ignore[arg-type]
         try:
             node = Literal({k: v.as_constant() for k, v in pairs})
         except RuntimeException:
             pass
-        if pairs:
-            node.location = Location(self.file, pairs[0][1].location.lnr)
-        else:
-            node.location = Location(self.file, 1)
-        node.namespace = self.namespace
+        # Anchor to the opening brace (matches PLY); gives empty maps a correct line.
+        self._attach(node, self._loc(lbrace), lbrace.start_pos or 0)
         return node
 
     def pair_list(self, *items: tuple[str, ExpressionStatement]) -> list[tuple[str, ExpressionStatement]]:
@@ -1501,14 +1494,10 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         self._attach(result, self._loc(_minus), _minus.start_pos or 0)
         return result
 
-    def constant_list(self, consts: list[ExpressionStatement]) -> CreateList:
-        # "[" and "]" are anonymous => filtered
+    def constant_list(self, lbracket: Token, consts: list[ExpressionStatement], _rbracket: Token) -> CreateList:
         result = CreateList(consts)
-        if consts:
-            result.location = Location(self.file, consts[0].location.lnr)
-        else:
-            result.location = Location(self.file, 1)
-        result.namespace = self.namespace
+        # Anchor to the opening bracket (matches PLY); gives empty lists a correct line.
+        self._attach(result, self._loc(lbracket), lbracket.start_pos or 0)
         return result
 
     def constants(self, *items: ExpressionStatement) -> list[ExpressionStatement]:
@@ -1645,6 +1634,8 @@ def _convert_to_references(
 def _convert_lark_error(e: UnexpectedInput, tfile: str) -> ParserException:
     """Convert a Lark parse error to a ParserException."""
     line = getattr(e, "line", 1) or 1
+    # Column points at the start of the offending token (1-based), matching Python/LSP.
+    # PLY reports one column further right; the divergence is intentional and left as-is.
     col = getattr(e, "column", 1) or 1
     r = Range(tfile, line, col, line, col + 1)
 
@@ -1657,6 +1648,12 @@ def _convert_lark_error(e: UnexpectedInput, tfile: str) -> ParserException:
 
     if isinstance(e, UnexpectedToken):
         token = getattr(e, "token", None)
+
+        # A parse that ran off the end of the input is an EOF error, even when the last
+        # shifted token happens to be a keyword. Report it as such (matches PLY) instead of
+        # misdiagnosing e.g. "x = 1 and" or "for x in" as a reserved-keyword misuse.
+        if token is not None and token.type == "$END":
+            return ParserException(r, None, "Unexpected end of file")
 
         # Inspect the parser value_stack to produce better error messages.
         # NOTE: state.value_stack is a Lark internal (verified with lark 1.3.1).

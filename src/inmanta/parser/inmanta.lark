@@ -231,7 +231,9 @@ index_lookup: class_ref "[" param_list "]"                                      
             | attr_ref "[" param_list "]"                                        -> index_lookup_attr
 
 // ===== LISTS =====
-list_def: "[" operand_list "]"
+// "!" keeps the bracket tokens so the transformer can anchor the location to the
+// opening "[" (matching PLY), which also gives empty lists a correct line number.
+!list_def: "[" operand_list "]"
 
 list_comprehension: "[" expression for_clause+ guard_clause* "]"
 
@@ -243,7 +245,8 @@ operand_list: operand ("," operand)* ","?
             |
 
 // ===== MAP DEF =====
-map_def: "{" pair_list "}"
+// "!" keeps the brace tokens so the transformer can anchor to the opening "{" (matches PLY).
+!map_def: "{" pair_list "}"
 
 pair_list: pair_item ("," pair_item)* ","?
          |
@@ -303,7 +306,8 @@ constant: INT                                                                   
         | MINUS_OP INT                                                           -> const_neg_int
         | MINUS_OP FLOAT                                                         -> const_neg_float
 
-constant_list: "[" constants "]"
+// "!" keeps the bracket tokens so the transformer can anchor to the opening "[" (matches PLY).
+!constant_list: "[" constants "]"
 
 constants: constant ("," constant)* ","?
          |
