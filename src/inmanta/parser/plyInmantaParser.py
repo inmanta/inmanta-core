@@ -1378,7 +1378,7 @@ def base_parse(ns: Namespace, tfile: str, content: Optional[str]) -> list[Statem
         return parser.parse(data, lexer=lexer, debug=False)
 
 
-cache_manager = CacheManager()
+cache_manager = CacheManager("ply")
 
 
 def parse(namespace: Namespace, filename: str, content: Optional[str] = None) -> list[Statement]:
