@@ -18,10 +18,7 @@ Contact: code@inmanta.com
 
 import functools
 import logging
-import re
-import string
 from collections import abc
-from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Optional, Union
 
@@ -32,15 +29,7 @@ from inmanta.ast import LocatableString, Location, Namespace, Range, RuntimeExce
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.constraint.expression import And, In, IsDefined, Not, NotEqual, Operator
 from inmanta.ast.statements import ExpressionStatement, Literal, Statement
-from inmanta.ast.statements.assign import (
-    CreateDict,
-    CreateList,
-    IndexLookup,
-    MapLookup,
-    ShortIndexLookup,
-    StringFormat,
-    StringFormatV2,
-)
+from inmanta.ast.statements.assign import CreateDict, CreateList, IndexLookup, MapLookup, ShortIndexLookup
 from inmanta.ast.statements.call import FunctionCall
 from inmanta.ast.statements.define import (
     DefineAttribute,
@@ -56,7 +45,7 @@ from inmanta.ast.statements.define import (
 from inmanta.ast.statements.generator import ConditionalExpression, Constructor, For, If, ListComprehension, WrappedKwargs
 from inmanta.ast.variables import AttributeReference, Reference
 from inmanta.execute.util import NoneValue
-from inmanta.parser import InvalidNamespaceAccess, ParserException, plyInmantaLex
+from inmanta.parser import InvalidNamespaceAccess, ParserException, plyInmantaLex, strings
 from inmanta.parser.cache import CacheManager
 from inmanta.parser.plyInmantaLex import reserved, tokens  # NOQA
 
@@ -104,15 +93,8 @@ def merge_lnr_to_string(p: YaccProduction, starttoken: int = 1, endtoken: int = 
     et = p[endtoken]
     st = p[starttoken]
 
-    expanded_range: Range = expand_range(st.location, et.location) if isinstance(st, LocatableString) else et.location
+    expanded_range: Range = strings.expand_range(st.location, et.location) if isinstance(st, LocatableString) else et.location
     p[0] = LocatableString(v, expanded_range, p.lexpos(endtoken), namespace)
-
-
-def expand_range(start: Range, end: Range) -> Range:
-    """
-    Returns a new range from the start of `start` to the end of `end`. Assumes both ranges are on the same file.
-    """
-    return Range(start.file, start.lnr, start.start_char, end.end_lnr, end.end_char)
 
 
 def attach_from_string(p: YaccProduction, token: int = 1) -> None:
@@ -822,7 +804,7 @@ def p_string_dict_key(p: YaccProduction) -> None:
     """dict_key : STRING"""
 
     key = str(p[1])
-    match_obj = format_regex_compiled.findall(key)
+    match_obj = strings.INTERPOLATION_REGEX.findall(key)
     if len(match_obj) != 0:
         raise ParserException(
             p[1].location,
@@ -921,70 +903,13 @@ def p_constant_false(p: YaccProduction) -> None:
 
 def p_constant_string(p: YaccProduction) -> None:
     "constant : STRING"
-    p[0] = get_string_ast_node(p[1], False)
+    p[0] = strings.get_string_ast_node(p[1], False)
     attach_lnr(p)
 
 
 def p_constant_fstring(p: YaccProduction) -> None:
     "constant : FSTRING"
-    formatter = string.Formatter()
-
-    # formatter.parse returns an iterable of tuple (literal_text, field_name, format_spec, conversion)
-    parsed: abc.Sequence[tuple[str, Optional[str], Optional[str], Optional[str]]]
-    try:
-        parsed = list(formatter.parse(str(p[1])))
-    except ValueError as e:
-        raise ParserException(p[1].location, str(p[1]), f"Invalid f-string: {e}")
-
-    start_lnr = p[1].location.lnr
-    start_char_pos = p[1].location.start_char + 2  # FSTRING tokens begin with `f"` or `f'` of length 2
-
-    locatable_matches: list[tuple[str, LocatableString]] = []
-
-    def locate_match(
-        match: tuple[str, Optional[str], Optional[str], Optional[str]], start_char_pos: int, end_char: int
-    ) -> None:
-        """
-        Associates a parsed field name with a locatable string
-        """
-        assert match[1]  # make mypy happy
-        range: Range = Range(p[1].location.file, start_lnr, start_char_pos, start_lnr, end_char)
-        locatable_string = LocatableString(match[1], range, p[1].lexpos, p[1].namespace)
-        locatable_matches.append((match[1], locatable_string))
-
-    for match in parsed:
-        if not match[1]:
-            # Happens when the format string ends with literal text (and not a replacement field): we're done parsing.
-            break
-        literal_text_len = len(match[0])
-        field_name_len = len(match[1])
-        brackets_length = 1 if field_name_len else 0
-        start_char_pos += literal_text_len + brackets_length
-        end_char = start_char_pos + field_name_len
-
-        locate_match(match, start_char_pos, end_char)
-        start_char_pos += field_name_len
-
-        if match[2]:
-            # A format specifier was provided
-            start_char_pos += 1  # Account for the ":" character
-            sub_parsed: Iterable[tuple[str, Optional[str], Optional[str], Optional[str]]] = formatter.parse(match[2])
-            for submatch in sub_parsed:
-                if not submatch[1]:
-                    # Happens when the format string ends with literal text (and not a replacement field): we're done parsing.
-                    break
-                literal_text_len = len(submatch[0])
-                inner_field_name_len = len(submatch[1])
-                inner_brackets_len = 1 if inner_field_name_len else 0
-                start_char_pos += literal_text_len + inner_brackets_len
-                end_char = start_char_pos + inner_field_name_len
-
-                locate_match(submatch, start_char_pos, end_char)
-                start_char_pos += inner_field_name_len + inner_brackets_len
-
-        start_char_pos += brackets_length
-
-    p[0] = StringFormatV2(str(p[1]), convert_to_references(locatable_matches))
+    p[0] = strings.process_fstring(p[1])
     attach_from_string(p)
 
 
@@ -996,114 +921,8 @@ def p_constant_rstring(p: YaccProduction) -> None:
 
 def p_constant_mls(p: YaccProduction) -> None:
     "constant : MLS"
-    p[0] = get_string_ast_node(p[1], True)
+    p[0] = strings.get_string_ast_node(p[1], True)
     attach_from_string(p)
-
-
-format_regex = r"""({{\s*([\.A-Za-z0-9_-]+)\s*}})"""
-format_regex_compiled = re.compile(format_regex, re.MULTILINE | re.DOTALL)
-
-
-def get_string_ast_node(string_ast: LocatableString, mls: bool) -> Union[Literal, StringFormat]:
-    matches: list[re.Match[str]] = list(format_regex_compiled.finditer(str(string_ast)))
-    if len(matches) == 0:
-        return Literal(str(string_ast))
-
-    start_lnr = string_ast.location.lnr
-    start_char_pos = string_ast.location.start_char
-    whole_string = str(string_ast)
-    mls_offset: int = 3 if mls else 1  # len(""")  or len(') or len(")
-
-    def char_count_to_lnr_char(position: int) -> tuple[int, int]:
-        # convert in-string position to lnr/charcount
-        before = whole_string[0:position]
-        lines = before.count("\n")
-        if lines == 0:
-            return start_lnr, start_char_pos + position + mls_offset
-        else:
-            return start_lnr + lines, position - before.rindex("\n")
-
-    locatable_matches: list[tuple[str, LocatableString]] = []
-    for match in matches:
-        start_line, start_char = char_count_to_lnr_char(match.start(2))
-        end_line, end_char = char_count_to_lnr_char(match.end(2))
-        range: Range = Range(string_ast.location.file, start_line, start_char, end_line, end_char)
-        locatable_string = LocatableString(match[2], range, string_ast.lexpos, string_ast.namespace)
-        locatable_matches.append((match[1], locatable_string))
-
-    return StringFormat(str(string_ast), convert_to_references(locatable_matches))
-
-
-def convert_to_references(variables: list[tuple[str, LocatableString]]) -> list[tuple["Reference", str]]:
-    """
-    This function is used in a context of string formatting. It expects variables that are part of a single line
-    format string and converts them to a format that can be processed by StringFormat (for regular
-    string interpolation) or by StringFormatV2 (for f-string formatting).
-
-    :param variables: A list of tuples where each tuple is a combination of a string and LocatableString.
-        For regular string interpolation:
-            - The string is the match containing the {{}} (ex: {{a.b}})
-            - The LocatableString is composed of just the variables and the range for those variables.
-            (ex. LocatableString("a.b", range(a.b), lexpos, namespace))
-
-        For f-strings:
-            - The string is the plain variable name without brackets (ex: 'a.b') and including any potential whitespaces.
-            - The LocatableString is the same as for regular string interpolation
-    :returns: A tuple where all LocatableString have been converted to Reference. These references are cleaned up of any
-        potential whitespace character. The matching str holding the variable name is left untouched i.e. will still contain
-        potential whitespace characters.
-    """
-
-    def normalize(variable: str, locatable: LocatableString, offset: int = 0) -> LocatableString:
-        """
-        Strip a variable of potential whitespaces and compute the locatable string.
-        :param variable: String representation for a plain variable or composite part of a variable
-            including potential whitespace.
-        :param locatable: LocatableString associated to this variable.
-        :param offset: Used when normalizing a subpart of a composite variable (e.g. 'a.b.c') to track where the current
-            subpart starts.
-        """
-        start_char = locatable.location.start_char + offset
-        end_char = start_char + len(variable)
-
-        variable_left_trim = variable.lstrip()
-        left_spaces: int = len(variable) - len(variable_left_trim)
-        variable_full_trim = variable_left_trim.rstrip()
-        right_spaces: int = len(variable_left_trim) - len(variable_full_trim)
-
-        range: Range = Range(
-            locatable.location.file,
-            locatable.location.lnr,
-            start_char + left_spaces,
-            locatable.location.lnr,
-            end_char - right_spaces,
-        )
-        return LocatableString(variable_full_trim, range, locatable.lexpos, locatable.namespace)
-
-    assert namespace
-    _vars: list[tuple[Reference, str]] = []
-    for match, var in variables:
-        var_name: str = str(var)
-        var_parts: list[str] = var_name.split(".")
-
-        ref_locatable_string: LocatableString = normalize(var_parts[0], var)
-
-        ref = Reference(ref_locatable_string)
-        ref.location = ref_locatable_string.location
-        ref.namespace = namespace
-        if len(var_parts) > 1:
-            offset = len(var_parts[0]) + 1
-            for attr in var_parts[1:]:
-                attr_locatable_string: LocatableString = normalize(attr, var, offset=offset)
-                ref = AttributeReference(ref, attr_locatable_string)
-                ref.location = attr_locatable_string.location
-                ref.namespace = namespace
-                offset += len(attr) + 1
-            # For a composite variable e.g. 'a.b.c', we only add the reference to the innermost attribute (e.g. 'c')
-            _vars.append((ref, match))
-        else:
-            _vars.append((ref, match))
-    return _vars
 
 
 def p_constant_list(p: YaccProduction) -> None:
@@ -1266,7 +1085,7 @@ def p_class_ref_err_dot(p: YaccProduction) -> None:
     assert namespace
     full_string: LocatableString = LocatableString(
         f"{var_str}.{cid}",
-        expand_range(var_str.location, cid.location),
+        strings.expand_range(var_str.location, cid.location),
         var_str.lexpos,
         namespace,
     )
