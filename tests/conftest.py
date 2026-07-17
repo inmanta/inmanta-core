@@ -96,7 +96,7 @@ from inmanta.export import ResourceDict, cfg_env, unknown_parameters
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
 from inmanta.moduletool import DefaultIsolatedEnvCached, ModuleTool, V2ModuleBuilder
-from inmanta.parser.dispatch import detach_from_project
+from inmanta.parser.dispatch import active_backend, detach_from_project
 from inmanta.protocol import VersionMatch
 from inmanta.protocol.auth import auth
 from inmanta.references import mutator, reference
@@ -275,7 +275,7 @@ def pytest_runtest_setup(item: "pytest.Item"):
     Skip lark_only tests unless INMANTA_PARSER=lark.
     """
     if any(True for _ in item.iter_markers(name="lark_only")):
-        if os.environ.get("INMANTA_PARSER", "ply") != "lark":
+        if active_backend() != "lark":
             pytest.skip("Lark-specific test (set INMANTA_PARSER=lark)")
 
     is_fast = item.config.getoption("fast")

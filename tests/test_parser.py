@@ -20,7 +20,10 @@ import io
 import logging
 import os
 import re
+import subprocess
+import sys
 import threading
+from typing import Optional
 
 import pytest
 
@@ -2399,3 +2402,44 @@ def test_convert_lark_error_lowercase_entity_extends():
     """
     with pytest.raises(ParserException, match="Entity names must start with a capital"):
         parse_code("entity Test extends bad:\nend")
+
+
+def _run_backend_probe(inmanta_parser: Optional[str], code: str) -> subprocess.CompletedProcess:
+    """Run *code* in a fresh interpreter with INMANTA_PARSER set (or removed if None)."""
+    env = dict(os.environ)
+    if inmanta_parser is None:
+        env.pop("INMANTA_PARSER", None)
+    else:
+        env["INMANTA_PARSER"] = inmanta_parser
+    return subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True)
+
+
+@pytest.mark.parametrize(
+    "env_value, expected",
+    [(None, "ply"), ("", "ply"), ("ply", "ply"), ("lark", "lark"), ("LARK", "lark")],
+)
+def test_dispatch_backend_resolution(env_value: Optional[str], expected: str) -> None:
+    """INMANTA_PARSER resolution: unset and empty default to ply; matching is case-insensitive."""
+    result = _run_backend_probe(
+        env_value,
+        "import inmanta.compiler; from inmanta.parser.dispatch import active_backend; print(active_backend())",
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == expected
+
+
+def test_dispatch_invalid_backend_is_lazy() -> None:
+    """An invalid INMANTA_PARSER must not crash at import time (only when the parser is used)."""
+    result = _run_backend_probe("larck", "import inmanta.module; print('import OK')")
+    assert result.returncode == 0, result.stderr
+    assert "import OK" in result.stdout
+
+
+def test_dispatch_invalid_backend_raises_on_use() -> None:
+    """An invalid INMANTA_PARSER raises a clear error when the parser is actually used."""
+    result = _run_backend_probe(
+        "larck",
+        "import inmanta.compiler; from inmanta.parser.dispatch import active_backend; active_backend()",
+    )
+    assert result.returncode != 0
+    assert "Unknown parser backend: 'larck'" in result.stderr
