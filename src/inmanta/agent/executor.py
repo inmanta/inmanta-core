@@ -217,7 +217,7 @@ class EnvBlueprint:
     def __str__(self) -> str:
         req = ",".join(str(req) for req in self.requirements)
         constraints = ",".join(self.project_constraints.split("\n")) if self.project_constraints else ""
-        editable = ",".join(f"{m.name}=={m.version}" for m in self.editable_modules)
+        editable = ",".join(m.name for m in self.editable_modules)
         return (
             f"EnvBlueprint(environment_id={self.environment_id}, requirements=[{str(req)}], "
             f"constraints=[{constraints}], pip={self.pip_config}, python_version={self.python_version}, "
@@ -531,6 +531,7 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         inmanta modules can all contribute to it.
         """
         module_root: pathlib.Path = self.inmanta_editable_dir / editable_module.name
+        module_root.mkdir(parents=True, exist_ok=True)
         for module_source in editable_module.python_module_sources:
             relative_path: str = loader.convert_module_to_editable_relative_path(
                 module_source.metadata.name, is_byte_code=module_source.metadata.is_byte_code

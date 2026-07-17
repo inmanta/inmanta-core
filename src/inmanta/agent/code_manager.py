@@ -140,6 +140,8 @@ class CodeManager:
                     assert row.project_constraints == first_row.project_constraints
                     assert row.load_module_on_agent == first_row.load_module_on_agent
                     assert row.editable_install == first_row.editable_install
+                    assert row.setup_cfg_content == first_row.setup_cfg_content
+                    assert row.pyproject_toml_content == first_row.pyproject_toml_content
 
                 pip_config = LEGACY_PIP_DEFAULT if _pip_config is None else PipConfig(**_pip_config)
 
@@ -175,6 +177,10 @@ class CodeManager:
                         blueprint=executor.ExecutorBlueprint(
                             pip_config=pip_config,
                             requirements=first_row.requirements,
+                            # TODO[#10592]: for iso10 the source bytes carried here are unused (the code lives in the
+                            # venv; deploy_and_load only imports by name). They are still needed for the iso9 compat
+                            # path (which writes them to disk). Once iso9 support is dropped, slim these sources down
+                            # to metadata + flags (no source bytes).
                             sources=[
                                 ExecutorModuleSource(
                                     metadata=ModuleSourceMetadata(

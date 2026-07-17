@@ -93,8 +93,12 @@ def test_reconstruct_editable_module(tmp_path):
     assert (root / "pyproject.toml").read_bytes() == b"[build-system]\n"
 
 
-def test_reconstruct_editable_module_without_packaging_files(tmp_path):
-    """A module with no packaging files reconstructs its sources without writing setup.cfg or pyproject.toml."""
+def test_reconstruct_editable_module_without_pyproject(tmp_path):
+    """
+    A module may ship a setup.cfg but no pyproject.toml (setup.cfg is mandatory for a V2 module, pyproject.toml is not,
+    and get_metadata_files only returns files that exist). Such a module reconstructs its sources and setup.cfg without
+    writing a pyproject.toml.
+    """
     editable_module = EditableModuleInstall(
         name="my_mod",
         version="cafe",
@@ -104,7 +108,7 @@ def test_reconstruct_editable_module_without_packaging_files(tmp_path):
                 source=b"# root",
             )
         ],
-        setup_cfg=None,
+        setup_cfg=b"[metadata]\nname = inmanta-module-my_mod\n",
         pyproject_toml=None,
     )
 
@@ -113,7 +117,7 @@ def test_reconstruct_editable_module_without_packaging_files(tmp_path):
         module_root = pathlib.Path(venv._reconstruct_editable_module(editable_module))
 
     assert (module_root / "inmanta_plugins" / "my_mod" / "__init__.py").read_bytes() == b"# root"
-    assert not (module_root / "setup.cfg").exists()
+    assert (module_root / "setup.cfg").read_bytes() == b"[metadata]\nname = inmanta-module-my_mod\n"
     assert not (module_root / "pyproject.toml").exists()
 
 
