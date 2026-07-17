@@ -30,7 +30,7 @@ import warnings
 from collections.abc import Sequence
 from dataclasses import dataclass
 from re import error as RegexError
-from typing import Callable, NamedTuple, NoReturn, Optional, Union
+from typing import Callable, ClassVar, NamedTuple, NoReturn, Optional, Union
 
 from lark import Lark, Token, Transformer, Tree, UnexpectedCharacters, UnexpectedEOF, UnexpectedInput
 from lark import __version__ as lark_version
@@ -310,6 +310,31 @@ def _safe_decode(raw: str, warning_msg: str, location: Location) -> str:
 # ---- Transformer ----
 
 
+def _build_rule_dispatch(cls: type) -> dict[str, Callable[..., object]]:
+    """Map each grammar rule-alias name to its unbound transformer function.
+
+    The class-level @v_args(inline=True) wraps every rule method in a _VArgsWrapper
+    descriptor (so methods receive typed positional children). We unwrap to the plain
+    function; dispatch then calls it as f(self, *children), skipping the descriptor's
+    per-call functools overhead.
+    """
+    dispatch: dict[str, Callable[..., object]] = {}
+    seen: set[str] = set()
+    for klass in cls.__mro__:
+        for name, desc in klass.__dict__.items():
+            if name.startswith("_") or name in seen:
+                continue
+            seen.add(name)
+            vw = getattr(desc, "visit_wrapper", None)
+            if vw is None:
+                continue
+            # Every rule method uses @v_args(inline=True) (the _vargs_inline wrapper), so
+            # the unbound base_func is safe to call as f(self, *children).
+            assert getattr(vw, "__name__", "") == "_vargs_inline", f"unexpected visit_wrapper for rule {name!r}"
+            dispatch[name] = getattr(desc, "base_func", desc)
+    return dispatch
+
+
 @v_args(inline=True)
 class InmantaTransformer(Transformer[Token, list[Statement]]):
     """
@@ -321,46 +346,21 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
     its children as individual positional arguments (instead of a single list[object]).
     """
 
+    # Rule dispatch table (rule-alias name -> unbound transformer function), built once
+    # per class and cached here rather than rebuilt per file. See _build_rule_dispatch.
+    _rule_dispatch: ClassVar[dict[str, Callable[..., object]]]
+
     def __init__(self, tfile: str, namespace: Namespace) -> None:
         super().__init__(visit_tokens=False)
         self.file = tfile
         self.namespace = namespace
-
-        # Pre-build dispatch dict: rule_name -> bound_callable
-        #
-        # We use @v_args(inline=True) on the class so that each rule method receives its children
-        # as individual typed positional args instead of a single list[object]. Without inline, every
-        # method would need casts for each argument (e.g. cast(LocatableString, items[0])), making
-        # the code harder to read and losing static type checking.
-        #
-        # However, Lark's inline mechanism wraps each method in a _VArgsWrapper descriptor whose
-        # __get__ calls functools.update_wrapper on every invocation — significant overhead when
-        # thousands of rule nodes are dispatched per file. To avoid this, we walk the MRO at init
-        # time, find _VArgsWrapper descriptors, and bind base_func directly to self once.
+        # The dispatch table depends only on the class, so build it once and cache it on
+        # the class instead of rebuilding a 127-entry dict per file. Storing unbound
+        # functions (invoked as f(self, *children)) also avoids the per-instance
+        # bound-method reference cycle that previously forced gc-only reclamation.
         cls = type(self)
-        dispatch: dict[str, Callable[..., object]] = {}
-        seen: set[str] = set()
-        for klass in cls.__mro__:
-            for name, desc in klass.__dict__.items():
-                if name.startswith("_") or name in seen:
-                    continue
-                seen.add(name)
-                vw = getattr(desc, "visit_wrapper", None)
-                if vw is None:
-                    continue
-                base_func: Callable[..., object] = getattr(desc, "base_func", desc)
-                try:
-                    bound: Callable[..., object] = base_func.__get__(self, cls)
-                except AttributeError:
-                    bound = base_func
-                # All methods use _vargs_inline (inline=True, no meta).
-                # visit_wrapper name check provides a safe fallback for any unexpected wrappers.
-                vw_name = getattr(vw, "__name__", "")
-                if vw_name == "_vargs_inline":
-                    dispatch[name] = bound
-                else:
-                    dispatch[name] = lambda children, meta, f=bound, w=vw, d=name: w(f, d, children, meta)
-        self._call_dispatch: dict[str, Callable[..., object]] = dispatch
+        if "_rule_dispatch" not in cls.__dict__:
+            cls._rule_dispatch = _build_rule_dispatch(cls)
 
     def _transform_tree(self, tree: Tree[Token]) -> object:
         """
@@ -404,11 +404,11 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
                 # We are already building a new list — append this Token.
                 new_children.append(c)
         effective_children: list[object] = new_children if new_children is not None else children  # type: ignore[assignment]
-        f = self._call_dispatch.get(tree.data)
+        f = self._rule_dispatch.get(tree.data)
         if f is None:
             return self.__default__(tree.data, effective_children, tree.meta)  # type: ignore[no-untyped-call]
         try:
-            return f(*effective_children)
+            return f(self, *effective_children)
         except Exception as e:
             raise VisitError(tree.data, tree, e) from e  # type: ignore[no-untyped-call]
 
@@ -602,12 +602,6 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         id_ls = self._locatable(id_token)
         raise ParserException(id_ls.location, str(id_ls), "Invalid identifier: Entity names must start with a capital")
 
-    def entity_def_extends_err(self, *args: object) -> NoReturn:
-        id_token = args[1]
-        assert isinstance(id_token, Token)
-        id_ls = self._locatable(id_token)
-        raise ParserException(id_ls.location, str(id_ls), "Invalid identifier: Entity names must start with a capital")
-
     def entity_body_outer_mls(
         self, mls_token: Token, entity_body: list[DefineAttribute]
     ) -> tuple[Optional[LocatableString], list[DefineAttribute]]:
@@ -679,14 +673,6 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         self._validate_id(id_token)
         id_ls = self._locatable(id_token)
         result = DefineAttribute(attr_type, id_ls, constant)
-        self._attach_from_string(result, id_ls)
-        return result
-
-    def attr_cte_list(self, attr_type: TypeDeclaration, id_token: Token, clist: ExpressionStatement) -> DefineAttribute:
-        # "=" is anonymous => filtered
-        self._validate_id(id_token)
-        id_ls = self._locatable(id_token)
-        result = DefineAttribute(attr_type, id_ls, clist)
         self._attach_from_string(result, id_ls)
         return result
 
