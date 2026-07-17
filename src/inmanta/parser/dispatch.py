@@ -37,11 +37,7 @@ if _PARSER_BACKEND == "lark":
         parse,
     )
 elif _PARSER_BACKEND == "ply":
-    from inmanta.parser.plyInmantaParser import (  # noqa: F401
-        base_parse,
-        cache_manager,
-        parse,
-    )
+    from inmanta.parser.plyInmantaParser import base_parse, cache_manager, parse  # noqa: F401
 
     def attach_to_project(project_dir: str) -> None:
         cache_manager.attach_to_project(project_dir)
