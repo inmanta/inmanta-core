@@ -16,13 +16,12 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import os
-
 import pytest
 
 import inmanta.compiler as compiler
 from inmanta.ast import DuplicateException, RuntimeException, TypingException
 from inmanta.execute.runtime import Instance
+from inmanta.parser.dispatch import active_backend
 
 
 def test_dict(snippetcompiler):
@@ -415,7 +414,7 @@ dict_6 = {r'{{value}}': "not interpolation"}
     ]
     # PLY's _safe_decode garbles non-ASCII in double-quoted strings with escape sequences;
     # Lark preserves them correctly. Single-quoted strings and \uNNNN escapes work in both.
-    if os.environ.get("INMANTA_PARSER", "ply") == "lark":
+    if active_backend() == "lark":
         dict_3_expected = {"§": 3}
         dict_4_expected = {"ə": 4}
     else:
