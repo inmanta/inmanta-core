@@ -2443,3 +2443,33 @@ def test_dispatch_invalid_backend_raises_on_use() -> None:
     )
     assert result.returncode != 0
     assert "Unknown parser backend: 'larck'" in result.stderr
+
+
+def test_trailing_comma_in_constant_list() -> None:
+    """R5: a trailing comma in a constant list (attribute default) is accepted, like PLY."""
+    statements = parse_code('entity A:\n string[] s = ["a", "b",]\nend\n')
+    assert statements  # parses without error
+
+
+def test_leading_dot_float() -> None:
+    """M1: a float written as '.5' (no leading digit) is accepted, like PLY/Python."""
+    statements = parse_code("x = .5\n")
+    assert statements[0].value.value == 0.5
+
+
+def test_octal_string_escape() -> None:
+    """R8: octal escapes decode like Python/PLY ('\\033' is ESC)."""
+    statements = parse_code('x = "\\033[0m"\n')
+    assert statements[0].value.value == "\x1b[0m"
+
+
+def test_backslash_newline_line_continuation() -> None:
+    """R8: a backslash before a newline in a multi-line string is a line continuation."""
+    statements = parse_code('x = """line1\\\nline2"""\n')
+    assert statements[0].value.value == "line1line2"
+
+
+def test_keyword_not_valid_in_is_defined() -> None:
+    """M5: a reserved keyword cannot be used as the identifier in 'is defined'."""
+    with pytest.raises(ParserException, match="reserved keyword"):
+        parse_code("x = end is defined\n")

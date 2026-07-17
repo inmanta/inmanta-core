@@ -261,22 +261,24 @@ _ESCAPE_MAP: dict[str, str] = {
     "b": "\b",
     "f": "\f",
     "v": "\v",
-    "0": "\0",
 }
 
-_ESCAPE_RE = re.compile(r"\\(u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}|x[0-9a-fA-F]{2}|.)")
+# Order matters: octal (\ooo) and line-continuation (\<newline>) are matched before the
+# single-character catch-all. Octal digits \0-\7 (1-3) decode like Python, so "\033" is ESC.
+_ESCAPE_RE = re.compile(r"\\(u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}|x[0-9a-fA-F]{2}|[0-7]{1,3}|\r?\n|.)")
 
 
 def _safe_decode(raw: str, warning_msg: str, location: Location) -> str:
     """
     Decode backslash escape sequences in a string, raising ParserWarning for invalid escapes.
 
-    Uses a lookup table + re.sub instead of ``bytes(s, "utf_8").decode("unicode_escape")``.
-    The ``unicode_escape`` codec is a known Python footgun: it expects Latin-1 input, not UTF-8.
-    Multi-byte UTF-8 characters (e.g. ``é`` = 0xC3 0xA9) are misinterpreted as two Latin-1
-    characters, producing garbled output. For example ``"café\\n"`` would decode to ``"cafÃ©\\n"``.
+    Uses a lookup table + re.sub instead of bytes(s, "utf_8").decode("unicode_escape").
+    The unicode_escape codec is a known Python footgun: it expects Latin-1 input, not UTF-8.
+    Multi-byte UTF-8 characters (e.g. 'é' = 0xC3 0xA9) are misinterpreted as two Latin-1
+    characters, producing garbled output. For example "café\\n" would decode to "cafÃ©\\n".
     The re.sub approach processes only recognised escape sequences and leaves all other characters
-    (including non-ASCII) untouched.
+    (including non-ASCII) untouched. Octal escapes and backslash-newline line continuation are
+    decoded like Python (and like the PLY lexer).
     """
     # Fast path: most strings have no backslash escape sequences.
     if "\\" not in raw:
@@ -291,6 +293,11 @@ def _safe_decode(raw: str, warning_msg: str, location: Location) -> str:
             return replacement
         if len(ch) > 1 and ch[0] in ("u", "U", "x"):
             return chr(int(ch[1:], 16))
+        if ch[0] in "01234567":
+            return chr(int(ch, 8))
+        if ch[-1] == "\n":
+            # backslash-newline is a line continuation: the pair is removed
+            return ""
         has_invalid = True
         return m.group(0)
 
@@ -1062,6 +1069,7 @@ class InmantaTransformer(Transformer[Token, list[Statement]]):
         return result
 
     def is_defined_id(self, id_token: Token, is_token: Token) -> IsDefined:
+        self._validate_id(id_token)
         id_ls = self._locatable(id_token)
         result = IsDefined(None, id_ls)
         self._attach(result, self._loc(is_token), is_token.start_pos or 0)
