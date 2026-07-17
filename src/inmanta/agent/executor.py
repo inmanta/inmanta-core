@@ -289,14 +289,12 @@ class ExecutorBlueprint(EnvBlueprint):
                 requirements.update(module_install_spec.blueprint.requirements)
 
             else:
-                if editable_install:
-                    # Editable install:
-                    # the module itself is reconstructed and pip-installed in editable mode (see editable_modules
-                    # gathered above); we additionally install its python requirements explicitly.
-                    requirements.update(module_install_spec.blueprint.requirements)
-                else:
-                    # Package install:
-                    # let pip handle the dependencies when installing the module as a package
+                # We're deploying a model version that was exported using iso>=10
+                # We will let pip handle the dependencies when installing the module:
+                #  - For editable installs, the module itself is reconstructed and pip-installed in
+                #    editable mode. Pip will fetch dependencies from setup.cfg (install_requires)
+                #  - For package installs, add the module itself as a requirement:
+                if not editable_install:
                     requirements.add(
                         (
                             f"{module.ModuleV2Source.get_package_name_for(module_install_spec.module_name)}=="
