@@ -143,3 +143,78 @@ a=1
     snippetcompiler._load_project(autostd=True, install_project=True)
 
     assert parser.cache_manager.failures >= 1
+
+
+def test_cache_load_wrong_shape_pickle(snippetcompiler):
+    """A valid-pickle-but-wrong-shape cache entry must degrade to a re-parse, not crash.
+
+    The payload below unpickles part-way then raises IndexError, an exception that the
+    previous narrow except tuple did not catch (R10).
+    """
+    parser.cache_manager.reset_stats()
+    snippetcompiler.setup_for_snippet("a=1\n", autostd=True)
+
+    cache_dir = os.path.join(snippetcompiler.project_dir, ".cfcache")
+    cache_files = [os.path.join(root, f) for root, _, files in os.walk(cache_dir) for f in files if f.endswith(".cfc")]
+    assert cache_files, f"Expected at least one .cfc file in {cache_dir}"
+
+    for cached_file in cache_files:
+        with open(cached_file, "wb") as fh:
+            fh.write(b"]K\x01K\x02s.")
+        sleep(0.001)
+        Path(cached_file).touch()
+
+    parser.cache_manager.reset_stats()
+    snippetcompiler._load_project(autostd=True, install_project=True)
+
+    assert parser.cache_manager.failures >= 1
+
+
+def test_cache_filename_includes_backend(tmp_path):
+    """The .cfc cache filename includes the backend name so switching INMANTA_PARSER
+    never replays the other backend's cached AST (R7)."""
+    from inmanta.parser.cache import CacheManager
+
+    root_ns = Namespace("__root__")
+    ns = Namespace("__config__")
+    ns.parent = root_ns
+
+    ply_mgr = CacheManager("ply")
+    lark_mgr = CacheManager("lark")
+    ply_mgr.attach_to_project(str(tmp_path))
+    lark_mgr.attach_to_project(str(tmp_path))
+
+    ply_path = ply_mgr._ensure_cache_path(ns, "main.cf")
+    lark_path = lark_mgr._ensure_cache_path(ns, "main.cf")
+
+    assert ply_path != lark_path
+    assert ".ply." in os.path.basename(ply_path)
+    assert ".lark." in os.path.basename(lark_path)
+
+
+def test_grammar_cache_wrong_shape_rebuilds(tmp_path):
+    """A valid-pickle-but-wrong-shape grammar cache file is ignored so the caller
+    rebuilds, instead of raising past the loader (R9)."""
+    import pickle
+
+    from inmanta.parser import lark_parser
+
+    cache_file = str(tmp_path / "grammar.cache")
+    with open(cache_file, "wb") as fh:
+        pickle.dump({"not": "a lark parser"}, fh)
+
+    assert lark_parser._load_parser_from_cache(cache_file) is None
+
+
+def test_grammar_cache_save_is_atomic(tmp_path):
+    """Grammar cache save writes atomically (temp file + os.replace), leaves no temp
+    files behind, and round-trips (R9)."""
+    from inmanta.parser import lark_parser
+
+    cache_file = str(tmp_path / "grammar.cache")
+    built = lark_parser._build_lark_parser()
+
+    assert lark_parser._save_parser_to_cache(built, cache_file)
+    assert os.path.exists(cache_file)
+    assert os.listdir(tmp_path) == ["grammar.cache"]
+    assert lark_parser._load_parser_from_cache(cache_file) is not None

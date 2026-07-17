@@ -22,16 +22,19 @@ import functools
 import hashlib
 import logging
 import os
-import pickle
 import re
 import string
+import sys
+import tempfile
 import warnings
 from collections.abc import Sequence
 from dataclasses import dataclass
 from re import error as RegexError
 from typing import Callable, NamedTuple, NoReturn, Optional, Union
 
-from lark import Lark, Token, Transformer, Tree, UnexpectedCharacters, UnexpectedEOF, UnexpectedInput, v_args
+from lark import Lark, Token, Transformer, Tree, UnexpectedCharacters, UnexpectedEOF, UnexpectedInput
+from lark import __version__ as lark_version
+from lark import v_args
 from lark.exceptions import UnexpectedToken, VisitError
 
 from inmanta.ast import LocatableString, Location, Namespace, Range, RuntimeException
@@ -76,9 +79,13 @@ _GRAMMAR_FILE = os.path.join(os.path.dirname(__file__), "inmanta.lark")
 with open(_GRAMMAR_FILE, encoding="utf-8") as _f:
     _GRAMMAR = _f.read()
 
-# Short hash of the grammar text — used in the on-disk cache filename so that
-# upgrading the grammar automatically invalidates any stale cached LALR tables.
-_GRAMMAR_HASH: str = hashlib.sha256(_GRAMMAR.encode()).hexdigest()[:16]
+# Salt the on-disk cache key with everything that affects the serialised LALR
+# tables: grammar text, Lark version, Python version, and the parser options used
+# in _build_lark_parser. Lark.save embeds no version of its own, so without this an
+# upgrade of Lark or Python could silently load incompatible cached tables.
+_GRAMMAR_HASH: str = hashlib.sha256(
+    "\0".join([_GRAMMAR, lark_version, sys.version, "lalr", "maybe_placeholders=False"]).encode()
+).hexdigest()[:16]
 
 # Singleton parser — built once per process, never reset.
 # The grammar cache is stored alongside this module for fast startup.
@@ -101,22 +108,35 @@ def _load_parser_from_cache(cache_file: str) -> Optional[Lark]:
     try:
         with open(cache_file, "rb") as f:
             return Lark.load(f)
-    except (OSError, pickle.UnpicklingError, EOFError, AttributeError, ImportError, ValueError):
+    except Exception:
+        # Cache loading is strictly best-effort; a wrong-shape file (e.g. after a Lark
+        # upgrade) can raise KeyError/TypeError/AssertionError, so catch broadly and rebuild.
         LOGGER.debug("Failed to load Lark grammar cache from %s, will rebuild", cache_file, exc_info=True)
         return None
 
 
 def _save_parser_to_cache(parser: Lark, cache_file: str) -> bool:
-    """Persist *parser* to *cache_file*. Returns True on success."""
+    """Persist *parser* to *cache_file* atomically. Returns True on success."""
     try:
-        with open(cache_file, "wb") as f:
+        fd, tmp_file = tempfile.mkstemp(dir=os.path.dirname(cache_file), suffix=".tmp")
+    except OSError:
+        return False
+    try:
+        with os.fdopen(fd, "wb") as f:
             parser.save(f)
+        os.replace(tmp_file, cache_file)
         return True
     except OSError:
         return False
+    finally:
+        if os.path.exists(tmp_file):
+            try:
+                os.unlink(tmp_file)
+            except OSError:
+                pass
 
 
-cache_manager = CacheManager()
+cache_manager = CacheManager("lark")
 
 # Set to True after a failed grammar cache write to avoid retrying on every
 # attach_to_project call (e.g. on read-only installs).
