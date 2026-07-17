@@ -2473,3 +2473,28 @@ def test_keyword_not_valid_in_is_defined() -> None:
     """M5: a reserved keyword cannot be used as the identifier in 'is defined'."""
     with pytest.raises(ParserException, match="reserved keyword"):
         parse_code("x = end is defined\n")
+
+
+def test_empty_list_location_is_bracket_line() -> None:
+    """R11: an empty list literal anchors to the '[' line, not line 1."""
+    statements = parse_code("\n\n\n\n\n\n\nx = []\n")
+    assert statements[0].value.location.lnr == 8
+
+
+def test_empty_map_location_is_brace_line() -> None:
+    """R11: an empty map literal anchors to the '{' line, not line 1."""
+    statements = parse_code("\n\ny = {}\n")
+    assert statements[0].value.location.lnr == 3
+
+
+@pytest.mark.parametrize("code", ["x = 1 and", "a = not", "import", "for x in", "if"])
+def test_incomplete_input_reports_eof(code: str) -> None:
+    """R14: premature end of input is reported as EOF, not as a reserved-keyword misuse."""
+    with pytest.raises(ParserException, match="Unexpected end of file"):
+        parse_code(code + "\n")
+
+
+def test_keyword_in_identifier_position_reports_reserved_keyword() -> None:
+    """R14: a reserved keyword used where an identifier is expected still reports clearly."""
+    with pytest.raises(ParserException, match="reserved keyword"):
+        parse_code("index = 3\n")
