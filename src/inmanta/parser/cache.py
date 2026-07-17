@@ -22,7 +22,6 @@ Caches parsed AST statements in .cfcache/ to avoid re-parsing unchanged .cf file
 
 import logging
 import os
-import pickle
 
 from inmanta import __version__ as inmanta_version
 from inmanta.ast import Namespace
@@ -44,10 +43,13 @@ class CacheEnvelope:
 
 
 class CacheManager:
-    def __init__(self) -> None:
+    def __init__(self, backend: str) -> None:
         self.hits: int = 0
         self.misses: int = 0
         self.failures: int = 0
+        # Parser backend name; discriminates cache files so switching INMANTA_PARSER
+        # never replays the other backend's cached AST.
+        self.backend = backend
 
         # Import inside __init__ to avoid import cycle
         from inmanta.compiler.config import feature_compiler_cache
@@ -70,7 +72,7 @@ class CacheManager:
         os.makedirs(cache_folder, exist_ok=True)
 
         filepart = os.path.basename(filename).rsplit(".", maxsplit=1)[0]
-        cache_name = f"{filepart}.{inmanta_version.replace('.', '_')}.cfc"
+        cache_name = f"{filepart}.{self.backend}.{inmanta_version.replace('.', '_')}.cfc"
         return os.path.join(cache_folder, cache_name)
 
     def attach_to_project(self, project_dir: str) -> None:
@@ -108,7 +110,7 @@ class CacheManager:
                     return None
                 self.hits += 1
                 return result.statements
-        except (OSError, pickle.UnpicklingError, EOFError, AttributeError, ImportError, ValueError):
+        except Exception:
             self.failures += 1
             LOGGER.debug(
                 "Compile cache loading failure, ignoring cache entry for %s",
@@ -128,7 +130,7 @@ class CacheManager:
             cache_entry = CacheEnvelope(mtime, statements)
             with open(cache_filename, "wb") as fh:
                 ASTPickler(fh, protocol=4).dump(cache_entry)
-        except (OSError, pickle.PicklingError, EOFError, AttributeError, TypeError, ValueError):
+        except Exception:
             LOGGER.warning(
                 "Compile cache failure, failed to cache statements for %s",
                 filename,
