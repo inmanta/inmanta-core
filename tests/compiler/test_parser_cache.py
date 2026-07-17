@@ -24,9 +24,9 @@ from time import sleep
 
 import pytest
 
-from inmanta.parser import dispatch as parser
 from inmanta.ast import Namespace
 from inmanta.ast.statements import Statement
+from inmanta.parser import dispatch as parser
 from inmanta.parser.pickle import ASTPickler, ASTUnpickler
 
 
