@@ -1,0 +1,9 @@
+change-type: patch
+description: >-
+  Improved compile command exit performance by using os._exit() to skip Python's interpreter shutdown.
+  The garbage collector would otherwise spend significant time tearing down the compiler's large cyclic
+  object graph (Namespace trees, Entity hierarchies, Instance/ResultVariable webs), which is unnecessary
+  since the process is terminating.
+destination-branches:
+- master
+sections: {}
