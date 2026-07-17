@@ -305,7 +305,7 @@ constant: INT                                                                   
 
 constant_list: "[" constants "]"
 
-constants: constant ("," constant)*
+constants: constant ("," constant)* ","?
          |
 
 // ===== TERMINALS =====
@@ -345,7 +345,7 @@ _ELIF.2: /elif(?![a-zA-Z0-9_-])/
 
 // REGEX terminal: matches "matching <whitespace> /regex/"
 // Priority 3 ensures it beats _MATCHING keyword (priority 2) via longer match
-REGEX.3: /matching[ \t\n]+\/(?:[^\/\\\n]|\\.)+\//
+REGEX.3: /matching[ \t\r\n]+\/(?:[^\/\\\n]|\\.)+\//
 
 // Multi-character operators (defined before single-char to ensure correct matching)
 CMP_OP: "!=" | "==" | ">=" | "<=" | "<" | ">"
@@ -370,8 +370,9 @@ CID.1: /[A-Z][a-zA-Z_0-9-]*/
 ID: /[a-z_][a-zA-Z_0-9-]*/
 
 // Literals
-// FLOAT before INT so "1.5" matches FLOAT not "1" INT
-FLOAT: /[0-9]+\.[0-9]+/
+// FLOAT before INT so "1.5" matches FLOAT not "1" INT.
+// Leading digits optional so ".5" is accepted (Python-like), matching the PLY lexer.
+FLOAT: /[0-9]*\.[0-9]+/
 INT: /[0-9]+/
 
 // Strings: various forms
