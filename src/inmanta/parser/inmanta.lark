@@ -65,7 +65,7 @@ if_next:                                 -> if_next_empty
 entity_def: ENTITY CID ":" entity_body_outer                                    -> entity_def
           | ENTITY CID _EXTENDS class_ref_list ":" entity_body_outer            -> entity_def_extends
           | ENTITY ID ":" entity_body_outer                                      -> entity_def_err
-          | ENTITY ID _EXTENDS class_ref_list ":" entity_body_outer             -> entity_def_extends_err
+          | ENTITY ID _EXTENDS class_ref_list ":" entity_body_outer             -> entity_def_err
 
 entity_body_outer: MLS entity_body _END                                         -> entity_body_outer_mls
                  | entity_body _END                                             -> entity_body_outer_plain
@@ -88,7 +88,7 @@ attr_type_opt: attr_type_multi "?"                                              
 
 attr: attr_type ID                                                               -> attr_simple
     | attr_type ID "=" constant                                                  -> attr_cte
-    | attr_type ID "=" constant_list                                             -> attr_cte_list
+    | attr_type ID "=" constant_list                                             -> attr_cte
     | attr_type ID "=" _UNDEF                                                    -> attr_undef
     | attr_type CID                                                              -> attr_err
     | attr_type CID "=" constant                                                 -> attr_err
