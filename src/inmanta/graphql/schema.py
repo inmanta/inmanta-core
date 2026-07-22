@@ -26,10 +26,13 @@ import docstring_parser
 
 import inmanta.data.sqlalchemy as models
 import strawberry
+from graphql import GraphQLInputObjectType
 from inmanta import data
 from inmanta.data import get_session, get_session_factory, model
 from inmanta.deploy import state
+from inmanta.graphql.rest_filter import ResolvedFilter, strip_input_field
 from inmanta.server.services.compilerservice import CompilerService
+from inmanta.types import ResourceIdStr
 from sqlakeyset import Marker, unserialize_bookmark
 from sqlakeyset.asyncio import select_page
 from sqlalchemy import Boolean, ColumnElement, Select, UnaryExpression, and_, asc, desc, func, not_, select
@@ -1333,6 +1336,77 @@ def decompose_and_validate_filter[F: StrawberryFilter](filter: object, component
     return instances
 
 
+def _strip_optional(annotation: object) -> object:
+    """Return the non-None member of an `X | None` annotation, or the annotation itself if it is not a union."""
+    args = typing.get_args(annotation)
+    if args:
+        non_none = [arg for arg in args if arg is not type(None)]
+        if non_none:
+            return non_none[0]
+    return annotation
+
+
+def build_resource_filter_from_coerced(coerced: Mapping[str, object], environment: uuid.UUID, composed_type: type) -> object:
+    """Rebuild a composed strawberry ResourceFilter instance from a coerced REST body (GraphQL field names, nested
+    sub-filters, enums already parsed). environment comes from the tid, not the body. Generic over extension-composed
+    fields as long as each is a nested operator object or a scalar."""
+    result = composed_type(environment=environment)
+    field_types = typing.get_type_hints(composed_type)
+    for graphql_name, value in coerced.items():
+        attribute = to_snake_case(graphql_name)
+        if attribute == "environment":
+            continue
+        if isinstance(value, Mapping):
+            sub_filter_type = cast(typing.Callable[..., object], _strip_optional(field_types[attribute]))
+            setattr(result, attribute, sub_filter_type(**{to_snake_case(key): val for key, val in value.items()}))
+        else:
+            setattr(result, attribute, value)
+    return result
+
+
+async def resolve_resource_ids(coerced_filter: Mapping[str, object], environment: uuid.UUID) -> set[ResourceIdStr]:
+    """Resolve a coerced REST filter into the matching resource ids, using the same composition, version selection and
+    per-component filtering as the resources query. Used to trigger resource actions on a filter."""
+    resolved: ResolvedFilter | None = getattr(CoreResourceFilter, "__resolved_filter__", None)
+    if resolved is None:
+        raise Exception("The GraphQL schema has not been built yet; cannot resolve a resource filter.")
+    composed = build_resource_filter_from_coerced(coerced_filter, environment, resolved.composed_type)
+    instances = cast(list[ResourceFilterABC], decompose_and_validate_filter(composed, resolved.components))
+
+    # Mirror the `resources` resolver: at most one component owns version selection (core by default), and every
+    # component's apply_filter is applied.
+    version_handler: ResourceFilterABC | None = None
+    for instance in instances:
+        if instance.handles_version():
+            if version_handler is not None:
+                raise ValueError("Multiple filter components tried to control version selection.")
+            version_handler = instance
+    if version_handler is None:
+        version_handler = next(instance for instance in instances if isinstance(instance, CoreResourceFilter))
+    model_version = version_handler.resolve_model_version()
+
+    stmt = select(models.Resource.resource_id).join(
+        models.ResourcePersistentState,
+        and_(
+            models.Resource.resource_id == models.ResourcePersistentState.resource_id,
+            models.Resource.environment == models.ResourcePersistentState.environment,
+        ),
+    )
+    resource_version = model_version.resource_version_column()
+    stmt = stmt.join(
+        models.t_resource_set_configuration_model,
+        and_(
+            models.t_resource_set_configuration_model.c.environment == models.Resource.environment,
+            models.t_resource_set_configuration_model.c.resource_set == models.Resource.resource_set,
+            models.t_resource_set_configuration_model.c.model == resource_version,
+        ),
+    )
+    stmt = add_filter_and_sort(stmt, ResourceOrder.default_order(), instances)
+    async with get_session() as session:
+        result = await session.execute(stmt)
+        return {ResourceIdStr(resource_id) for resource_id in result.scalars().all()}
+
+
 @dataclasses.dataclass(frozen=True)
 class ContributableGraphQLType:
     """
@@ -1559,4 +1633,19 @@ def get_schema(
                 is_deploying=cast(JSON, results.is_deploying),
             )
 
-    return strawberry.Schema(query=Query, config=StrawberryConfig(info_class=CustomInfo))
+    schema = strawberry.Schema(query=Query, config=StrawberryConfig(info_class=CustomInfo))
+    # Attach the composed resource filter to its core filter class so the REST layer can resolve it lazily (see
+    # rest_filter.graphql_input / resolve_resource_ids): the env-stripped graphql-core input type drives REST body
+    # validation + OpenAPI, and the strawberry composed type + components let a filter be reconstructed and applied.
+    resource_filter_input_type = schema._schema.type_map[f"{graphql_type_name(models.Resource)}Filter"]
+    assert isinstance(resource_filter_input_type, GraphQLInputObjectType)
+    setattr(
+        CoreResourceFilter,
+        "__resolved_filter__",
+        ResolvedFilter(
+            input_type=strip_input_field(resource_filter_input_type, "environment"),
+            composed_type=ResourceFilter,
+            components=resource_filter_components,
+        ),
+    )
+    return schema

@@ -30,6 +30,7 @@ from inmanta import const
 from inmanta.const import AgentAction, AllAgentAction, ApiDocsFormat, Change, ClientType, ParameterSource, ResourceState
 from inmanta.data import model
 from inmanta.data.model import DataBaseReport, PipConfig, ResourceComplianceDiff
+from inmanta.graphql.rest_filter import ResourceFilterArg
 from inmanta.graphql.result import GraphQLResult
 from inmanta.protocol import methods
 from inmanta.protocol.auth.decorators import auth
@@ -1391,6 +1392,31 @@ def set_fact(
     :param metadata: Optional. Metadata about the fact
     :param recompile: Optional. Whether to trigger a recompile if the value of the fact changed.
     :param expires: Optional. If the fact should expire or not. By default, facts expire.
+    """
+
+
+@auth(auth_label=const.CoreAuthorizationLabel.DEPLOY, read_only=False, environment_param="tid")
+@typedmethod(
+    path="/deploy_filtered", operation="POST", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
+)
+def deploy_filtered(
+    tid: uuid.UUID,
+    filter: Optional[ResourceFilterArg] = None,
+    agent_trigger_method: const.AgentTriggerMethod = const.AgentTriggerMethod.push_full_deploy,
+) -> ReturnValue[list[ResourceIdStr]]:
+    """
+    Trigger a deploy or repair on the resources matching the filter, on the current desired state (the scheduler's
+    last processed version). The filter is the GraphQL `resources` query's `ResourceFilter` (minus `environment`, taken
+    from the tid), so it selects exactly the resources the `resources` view returns. Target one resource with a
+    specific enough filter (e.g. resourceType + agent + resourceIdValue).
+
+    :param tid: The id of the environment.
+    :param filter: The resource filter, a JSON object matching the GraphQL `ResourceFilter` (camelCase fields, enum
+        values as their GraphQL names). Omitted selects all resources; a malformed filter is rejected with a 400.
+    :param agent_trigger_method: Incremental deploy (only non-compliant matches) or full deploy/repair (all matches).
+    :return: The resource ids that matched and were scheduled for deploy.
+    :raise BadRequest: The filter sets `modelVersion` or `isOrphan: true` (a deploy acts on the current desired state).
+    :raise NotFound: The scheduler for this environment could not be reached.
     """
 
 

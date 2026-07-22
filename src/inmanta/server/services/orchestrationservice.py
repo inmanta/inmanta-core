@@ -1283,6 +1283,38 @@ class OrchestrationService(protocol.ServerSlice):
 
         return attach_warnings(200, {"agents": sorted(allagents)}, warnings)
 
+    @handle(methods_v2.deploy_filtered, env="tid")
+    async def deploy_filtered(
+        self,
+        env: data.Environment,
+        filter: Optional[Mapping[str, object]] = None,
+        agent_trigger_method: const.AgentTriggerMethod = const.AgentTriggerMethod.push_full_deploy,
+    ) -> ReturnValue[list[ResourceIdStr]]:
+        # Imported here to avoid a module-level import cycle between the orchestration service and the graphql schema.
+        # `filter` is the value produced by graphql-core coercion of the request body (keyed by GraphQL field names).
+        from inmanta.graphql.schema import resolve_resource_ids
+
+        # A deploy always acts on the current desired state (the scheduler's last processed version), so a historical
+        # snapshot (`modelVersion`) or orphaned resources (`isOrphan: true`) may not be selected.
+        if filter is not None:
+            if filter.get("modelVersion") is not None:
+                raise BadRequest("Cannot deploy a specific model version: 'modelVersion' is not allowed for deploy.")
+            if filter.get("isOrphan") is True:
+                raise BadRequest("Cannot deploy orphaned resources: the 'isOrphan' filter must be omitted or set to false.")
+
+        resource_ids: list[ResourceIdStr] = sorted(await resolve_resource_ids(filter or {}, env.id))
+
+        await self.autostarted_agent_manager._ensure_scheduler(env.id)
+        client = self.agentmanager_service.get_agent_client(env.id)
+        if not client:
+            raise NotFound("The scheduler for this environment could not be reached")
+
+        if resource_ids:
+            incremental_deploy = agent_trigger_method is const.AgentTriggerMethod.push_incremental_deploy
+            self.add_background_task(client.trigger(env.id, None, incremental_deploy, resources=resource_ids))
+
+        return ReturnValue(response=resource_ids)
+
     @handle(methods_v2.list_desired_state_versions, env="tid")
     async def desired_state_version_list(
         self,
