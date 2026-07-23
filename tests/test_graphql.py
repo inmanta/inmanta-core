@@ -1441,6 +1441,79 @@ async def test_custom_extension_contributions(server, environment, client, caplo
         log_doesnt_contain(caplog, __name__, logging.INFO, "Populated joined_value column")
 
 
+async def test_resolved_model_version_available_to_contributions(server, environment, client, mixed_resource_generator):
+    """
+    The `resources` resolver joins `resource_set_configuration_model` and constrains its `model` column to the version
+    each resource is taken at, so a contribution can read that column in populate_sqlalchemy_columns to resolve
+    version-dependent data at the same version, without any Python-side recording of the selection. For a pinned
+    `modelVersion` every resource reports that version; for the default selection each resource reports the version it
+    was actually taken at (the latest scheduled version, or -- for orphans -- the last version they were present in).
+    """
+
+    class ResolvedVersionMixin:
+        # Output field echoing the model version the query resolved each resource to.
+        resolved_version: int | None = strawberry.field(description="The model version this resource was taken at.")
+
+    class ResolvedVersionContribution(GraphQLContribution):
+        @classmethod
+        def get_target_model(cls) -> type:
+            return models.Resource
+
+        @classmethod
+        def get_graphql_output_type_mixin(cls) -> type | None:
+            return ResolvedVersionMixin
+
+        @classmethod
+        def get_sqlalchemy_columns(cls) -> dict[str, object]:
+            return {"resolved_version": query_expression()}
+
+        @classmethod
+        def populate_sqlalchemy_columns[*Ts](
+            cls, stmt: Select[tuple[*Ts]], model: type, requested_fields: typing.AbstractSet[str]
+        ) -> Select[tuple[*Ts]]:
+            if "resolved_version" not in requested_fields:
+                return stmt
+            # The resolver already joined resource_set_configuration_model and constrained its `model` column to the
+            # version each resource resolves to, so we can read the resolved version straight off that table.
+            return stmt.options(
+                with_expression(getattr(model, "resolved_version"), models.t_resource_set_configuration_model.c.model)
+            )
+
+    graphql_slice = server.get_slice(SLICE_GRAPHQL)
+    assert isinstance(graphql_slice, GraphQLSlice)
+    # GraphQLSlice has already started, so we reset its schema to make registering possible again for this test.
+    graphql_slice.schema = None
+    graphql_slice.register_graphql_contribution_for_extension("example", ResolvedVersionContribution)
+    await graphql_slice.start()
+
+    await mixed_resource_generator(environment, 1, 6)
+
+    async def resolved_versions(extra_filter: str) -> set[int | None]:
+        result = await client.graphql(query="""
+            {
+                resources (filter: {environment: "%s" %s}) {
+                    edges {
+                        node {
+                            resolvedVersion
+                            }
+                        }
+                }
+            }
+            """ % (environment, extra_filter))
+        check_correct_graphql_response(result)
+        edges = result.result["data"]["data"]["resources"]["edges"]
+        assert len(edges) > 0
+        return {edge["node"]["resolvedVersion"] for edge in edges}
+
+    # A pinned modelVersion takes every resource exactly at that version.
+    assert await resolved_versions("modelVersion: 1") == {1}
+    assert await resolved_versions("modelVersion: 2") == {2}
+    assert await resolved_versions("isOrphan: false") == {2}
+    # The default selection takes non-orphaned resources at the latest scheduled version (2) and orphaned resources
+    # at the last version they were present in (1).
+    assert await resolved_versions("") == {1, 2}
+
+
 def test_build_composed_sqlalchemy_model_rejects_duplicate_columns() -> None:
     """Two contributions declaring the same SQLAlchemy column on the same model is rejected."""
 
