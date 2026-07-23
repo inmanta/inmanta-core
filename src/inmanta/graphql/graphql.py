@@ -22,6 +22,7 @@ from inmanta.graphql.schema import (
     GraphQLContext,
     GraphQLContribution,
     GraphQLTypeName,
+    build_request_context,
     get_schema,
     graphql_type_name,
 )
@@ -89,11 +90,9 @@ class GraphQLSlice(protocol.ServerSlice):
         await super().prestart(server)
 
     async def start(self) -> None:
-        assert self.context is not None
         # get_schema only needs the contributions grouped by target type; the extension names are bookkeeping for
         # registration, so we drop them here.
         self.schema = get_schema(
-            self.context,
             {type_name: list(by_extension.values()) for type_name, by_extension in self.extension_contributions.items()},
         )
         await super().start()
@@ -103,8 +102,18 @@ class GraphQLSlice(protocol.ServerSlice):
         self, query: str, variables: dict[str, Any] | None = None, operation_name: str | None = None
     ) -> ReturnValue[GraphQLResult]:
         assert self.schema is not None
+        assert self.context is not None
+        # Build a fresh execution context (and, crucially, a fresh DataLoader) for every request. The loader's
+        # cache then lives only for this request, so relationship data (e.g. Resource.state) is never served from a
+        # cache populated by an earlier request.
+        context_value = build_request_context(self.context)
         try:
-            execution_result = await self.schema.execute(query, variable_values=variables, operation_name=operation_name)
+            execution_result = await self.schema.execute(
+                query,
+                variable_values=variables,
+                operation_name=operation_name,
+                context_value=context_value,
+            )
         except CannotGetOperationTypeError as e:
             execution_result = ExecutionResult(
                 data=None, errors=[GraphQLError(message=e.as_http_error_reason(), original_error=e)], extensions=None
