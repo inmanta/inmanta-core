@@ -833,6 +833,15 @@ class ResourceFilterABC(StrawberryFilter):
         """
         return False
 
+    def apply_model_version(self, stmt: Select[tuple[*Ts]]) -> None:
+        # TODO
+        """
+        Will only be called if handles_version() returns True
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} returns handles_version()=True but does not implement resolve_model_version()."
+        )
+
     def resolve_model_version(self) -> ModelVersionSelection:
         """
         Return the model version this component selects resources at, as a `ModelVersionSelection`. Only called on the
@@ -898,6 +907,27 @@ class CoreResourceFilter(ResourceFilterABC):
         # is_orphan and model_version both control which version(s) of the model are selected, so providing either
         # means core owns version selection.
         return is_provided(self.is_orphan) or is_provided(self.model_version)
+
+    def apply_model_version(self, stmt: Select[tuple[*Ts]]) -> None:
+        if self.is_orphan is True:
+            # TODO: AND orphaned_after is not null
+            stmt.where(models.t_resource_set_configuration_model.c.model == models.ResourcePersistentState.orphaned_after)
+        else:
+            model_version: object
+            if is_provided(self.model_version):
+                model_version = self.model_version
+            else:
+                latest_scheduled = (
+                    select(models.Scheduler.last_processed_model_version)
+                    .where(models.Scheduler.environment == environment)
+                    .scalar_subquery()
+                )
+                model_version = (
+                    latest_scheduled
+                    if self.is_orphan is False
+                    else coalesce(models.ResourcePersistentState.orphaned_after, model_version)
+                )
+            stmt.where(models.t_resource_set_configuration_model.c.model == self.model_version)
 
     def resolve_model_version(self) -> ModelVersionSelection:
         if is_provided(self.model_version):
@@ -1519,13 +1549,11 @@ def get_schema(
 
             # Restrict every resource to the resolved model version, and record the selection on the query so
             # contributions resolve version-dependent data at the same version.
-            resource_version = model_version.resource_version_column()
             stmt = stmt.join(
                 models.t_resource_set_configuration_model,
                 and_(
                     models.t_resource_set_configuration_model.c.environment == models.Resource.environment,
                     models.t_resource_set_configuration_model.c.resource_set == models.Resource.resource_set,
-                    models.t_resource_set_configuration_model.c.model == resource_version,
                 ),
             )
             stmt = with_resolved_model_version(stmt, model_version)
