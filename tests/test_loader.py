@@ -375,11 +375,16 @@ def test_plugin_module_finder(
 
 def test_code_loader_prefer_finder(tmpdir: py.path.local, deactive_venv) -> None:
     """
-    Verify that the agent code loader prefers its loaded code over code in the Python venv.
+    Verify that the agent code loader prefers its loaded code over code in the Python venv. The finder is configured
+    lazily, when the first module source is installed on disk (the old-style / iso9 install path), not on construction.
     """
     loader.PluginModuleFinder.reset()
     assert not isinstance(sys.meta_path[0], loader.PluginModuleFinder)
-    loader.CodeLoader(code_dir=str(tmpdir))
+    cl = loader.CodeLoader(code_dir=str(tmpdir))
+    # Constructing the code loader does not configure the finder: the new-style (iso10) load path imports from the venv.
+    assert not isinstance(sys.meta_path[0], loader.PluginModuleFinder)
+    # Installing a module source on disk configures the finder.
+    cl.deploy_version([get_module_source("inmanta_plugins.my_module", "value = 1")])
     # it suffices to verify that the module finder is first in the meta path:
     # `test_plugin_module_finder` verifies the actual loader behavior
     assert isinstance(sys.meta_path[0], loader.PluginModuleFinder)
@@ -552,7 +557,6 @@ def test_plugin_loading_old_format(tmpdir, capsys):
     (See issue: #2162)
     """
     # Create directory structure code dir
-    code_dir = tmpdir
     modules_dir = tmpdir.join(loader.MODULE_DIR)
     modules_dir.mkdir()
 
@@ -560,8 +564,12 @@ def test_plugin_loading_old_format(tmpdir, capsys):
     old_format_source_file = modules_dir.join("inmanta_plugins.old_format.py")
     old_format_source_file.write("")
 
+    # Set up the plugin module finder to resolve modules from the on-disk code dir, as the old-style (iso9) install path
+    # does. CodeLoader no longer configures the finder on construction; it is configured when code is installed on disk.
+    loader.PluginModuleFinder.reset()
+    loader.PluginModuleFinder.configure_module_finder(modulepaths=[str(modules_dir)], prefer=True)
+
     # Assert code using the pre inmanta 2020.4 format is ignored
-    loader.CodeLoader(code_dir)
     with pytest.raises(ImportError):
         import inmanta_plugins.old_format  # NOQA
 
@@ -577,7 +585,6 @@ def test():
     """)
 
     # Assert newly formatted code is loaded and code using the pre inmanta 2020.4 format is ignored
-    loader.CodeLoader(code_dir)
     import inmanta_plugins.new_format as mod  # NOQA
 
     assert mod.test() == 10
@@ -658,3 +665,26 @@ def test_deploy_and_load(tmp_path, caplog):
     assert set(failed) == {"dal_broken"}
     assert set(failed["dal_broken"]) == {"inmanta_plugins.dal_broken"}
     assert isinstance(failed["dal_broken"]["inmanta_plugins.dal_broken"], loader.ModuleImportException)
+
+
+def test_deploy_and_load_iso10_does_not_use_finder(tmp_path):
+    """
+    The new-style (iso10) load path imports modules straight from the venv: it must not write anything to the on-disk
+    module dir nor configure the legacy PluginModuleFinder. That mechanism is reserved for the iso9 compat path.
+    """
+    loader.PluginModuleFinder.reset()
+    cl = loader.CodeLoader(tmp_path)
+    assert not any(isinstance(finder, loader.PluginModuleFinder) for finder in sys.meta_path)
+
+    # iso10 sources (install_on_disk is not None), covering both package and editable install modes. load_module=False
+    # so that no import from the (absent) venv is attempted.
+    sources = [
+        _executor_source("inmanta_plugins.iso10_package", "value = 1", install_on_disk=False, load_module=False),
+        _executor_source("inmanta_plugins.iso10_editable", "value = 2", install_on_disk=True, load_module=False),
+    ]
+    failed = cl.deploy_and_load(sources, logging.getLogger(__name__).getChild("agent1"))
+
+    assert not failed
+    # The finder was never configured and nothing was written to the on-disk module dir.
+    assert not any(isinstance(finder, loader.PluginModuleFinder) for finder in sys.meta_path)
+    assert os.listdir(cl.mod_dir) == []

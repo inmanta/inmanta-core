@@ -330,7 +330,6 @@ class CodeLoader:
         self.__check_dir(clean)
 
         self.mod_dir = os.path.join(self.__code_dir, MODULE_DIR)
-        PluginModuleFinder.configure_module_finder(modulepaths=[self.mod_dir], prefer=True)
 
     def __check_dir(self, clean: bool = False) -> None:
         """
@@ -373,6 +372,11 @@ class CodeLoader:
         """
         Ensure the given module source is available on disk.
         """
+        # Modules written to disk here are only importable through the PluginModuleFinder: mod_dir is never added to
+        # sys.path. Configure it lazily on this old-style (iso9 / in-process) install path so the new-style (iso10) load
+        # path, which imports modules straight from the venv, never installs the finder. The call is idempotent, so it is
+        # cheap to run per source. The finder can be dropped altogether once iso9 support is removed (iso11, #10592).
+        PluginModuleFinder.configure_module_finder(modulepaths=[self.mod_dir], prefer=True)
         # if the module is new, or update
         if (
             module_source.metadata.name not in self.__modules

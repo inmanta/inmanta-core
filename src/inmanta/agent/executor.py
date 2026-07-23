@@ -567,6 +567,15 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
             for editable_module in blueprint.editable_modules
         ]
 
+        if blueprint.editable_modules:
+            # Package-installed modules show up in the requirements logged above; log the editable ones explicitly since
+            # they are installed from a reconstructed source tree rather than from the package index.
+            LOGGER.info(
+                "Installing %d inmanta module(s) in editable mode: %s",
+                len(blueprint.editable_modules),
+                ", ".join(sorted(editable_module.name for editable_module in blueprint.editable_modules)),
+            )
+
         if req or editable_paths:  # install_for_config expects at least 1 requirement or a path to install
             await self.async_install_for_config(
                 requirements=[packaging.requirements.Requirement(requirement_string=e) for e in req],
