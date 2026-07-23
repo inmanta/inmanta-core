@@ -24,10 +24,11 @@ import uuid
 import inmanta.data.sqlalchemy as models
 from inmanta import data
 from inmanta.agent import executor
-from inmanta.agent.executor import InmantaModuleInstallSpec
-from inmanta.data.model import LEGACY_PIP_DEFAULT, ExecutorModuleSource, ModuleSourceMetadata, PipConfig
+from inmanta.agent.executor import EditableModuleInstall, InmantaModuleInstallSpec
+from inmanta.data.model import LEGACY_PIP_DEFAULT, ExecutorModuleSource, ModuleSource, ModuleSourceMetadata, PipConfig
 from inmanta.util.async_lru import async_lru_cache
 from sqlalchemy import and_, select
+from sqlalchemy.orm import aliased
 
 LOGGER = logging.getLogger(__name__)
 
@@ -57,6 +58,12 @@ class CodeManager:
         """
         module_install_specs = []
 
+        # The setup.cfg and pyproject.toml files of editable modules are stored as regular files, referenced by
+        # (nullable) content hashes on the inmanta_module row. Join them in via their own File aliases so we can fetch
+        # their content in one query. Outer joins because these hashes are only set for editable modules.
+        setup_cfg_file = aliased(models.File)
+        pyproject_toml_file = aliased(models.File)
+
         modules_for_agent = (
             select(
                 models.AgentModules.inmanta_module_name,
@@ -68,6 +75,8 @@ class CodeManager:
                 models.ModuleFiles.file_content_hash,
                 models.ModuleFiles.is_byte_code,
                 models.File.content.label("source_file_content"),
+                setup_cfg_file.content.label("setup_cfg_content"),
+                pyproject_toml_file.content.label("pyproject_toml_content"),
                 models.Configurationmodel.pip_config,
                 models.Configurationmodel.project_constraints,
             )
@@ -90,6 +99,14 @@ class CodeManager:
             .join(
                 models.File,
                 models.ModuleFiles.file_content_hash == models.File.content_hash,
+            )
+            .outerjoin(
+                setup_cfg_file,
+                models.InmantaModule.setup_cfg_hash == setup_cfg_file.content_hash,
+            )
+            .outerjoin(
+                pyproject_toml_file,
+                models.InmantaModule.pyproject_toml_hash == pyproject_toml_file.content_hash,
             )
             .join(
                 models.Configurationmodel,
@@ -123,8 +140,36 @@ class CodeManager:
                     assert row.project_constraints == first_row.project_constraints
                     assert row.load_module_on_agent == first_row.load_module_on_agent
                     assert row.editable_install == first_row.editable_install
+                    assert row.setup_cfg_content == first_row.setup_cfg_content
+                    assert row.pyproject_toml_content == first_row.pyproject_toml_content
 
                 pip_config = LEGACY_PIP_DEFAULT if _pip_config is None else PipConfig(**_pip_config)
+
+                # For editable modules, gather everything needed to reconstruct them as an installable python
+                # package on the agent (python sources + packaging files) so they can be pip-installed in editable
+                # mode. Package install modules carry no editable modules: pip fetches them from the index.
+                editable_modules: list[EditableModuleInstall] = []
+                if first_row.editable_install:
+                    editable_modules.append(
+                        EditableModuleInstall(
+                            name=module_name,
+                            version=first_row.inmanta_module_version,
+                            python_module_sources=[
+                                ModuleSource(
+                                    metadata=ModuleSourceMetadata(
+                                        name=row.python_module_name,
+                                        hash_value=row.file_content_hash,
+                                        is_byte_code=row.is_byte_code,
+                                    ),
+                                    source=row.source_file_content,
+                                )
+                                for row in rows_list
+                            ],
+                            setup_cfg=first_row.setup_cfg_content,
+                            pyproject_toml=first_row.pyproject_toml_content,
+                        )
+                    )
+
                 module_install_specs.append(
                     InmantaModuleInstallSpec(
                         module_name=module_name,
@@ -132,6 +177,10 @@ class CodeManager:
                         blueprint=executor.ExecutorBlueprint(
                             pip_config=pip_config,
                             requirements=first_row.requirements,
+                            # TODO[#10592]: for iso10 the source bytes carried here are unused (the code lives in the
+                            # venv; deploy_and_load only imports by name). They are still needed for the iso9 compat
+                            # path (which writes them to disk). Once iso9 support is dropped, slim these sources down
+                            # to metadata + flags (no source bytes).
                             sources=[
                                 ExecutorModuleSource(
                                     metadata=ModuleSourceMetadata(
@@ -148,6 +197,7 @@ class CodeManager:
                             python_version=sys.version_info[:2],
                             environment_id=environment,
                             project_constraints=first_row.project_constraints if first_row.project_constraints else None,
+                            editable_modules=editable_modules,
                         ),
                     )
                 )

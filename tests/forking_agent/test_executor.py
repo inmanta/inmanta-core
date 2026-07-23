@@ -21,8 +21,10 @@ import base64
 import datetime
 import hashlib
 import logging
+import pathlib
 import sys
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 
 import psutil
 import pytest
@@ -37,12 +39,109 @@ import inmanta.util
 import utils
 from forking_agent.ipc_commands import Echo, GetConfig, GetName, TestLoader
 from inmanta.agent import executor
-from inmanta.agent.executor import ExecutorBlueprint
+from inmanta.agent.executor import EditableModuleInstall, ExecutorBlueprint, ExecutorVirtualEnvironment
 from inmanta.agent.forking_executor import MPExecutor, MPManager
 from inmanta.data import PipConfig
-from inmanta.data.model import ExecutorModuleSource, ModuleSourceMetadata
+from inmanta.data.model import ExecutorModuleSource, ModuleSource, ModuleSourceMetadata
 from inmanta.protocol.ipc_light import ConnectionLost
 from utils import NOISY_LOGGERS, log_contains, retry_limited
+
+
+async def test_reconstruct_editable_module(tmp_path, caplog, monkeypatch):
+    """
+    Reconstructing an editable module lays out its python sources as packages (dirs with an __init__ file) under a
+    top-level inmanta_plugins namespace package (which itself gets no __init__ file), and writes its packaging files
+    at the module root. The byte-code flag selects the __init__ file extension. Creating the venv logs the editable
+    installs explicitly.
+    """
+
+    def source(name: str, content: bytes, *, is_byte_code: bool = False) -> ModuleSource:
+        return ModuleSource(
+            metadata=ModuleSourceMetadata(name=name, hash_value=hashlib.sha1(content).hexdigest(), is_byte_code=is_byte_code),
+            source=content,
+        )
+
+    editable_module = EditableModuleInstall(
+        name="my_mod",
+        version="deadbeef",
+        python_module_sources=[
+            source("inmanta_plugins.my_mod", b"# root"),
+            source("inmanta_plugins.my_mod.handlers", b"# handlers"),
+            source("inmanta_plugins.my_mod.compiled", b"byte-code", is_byte_code=True),
+        ],
+        setup_cfg=b"[metadata]\nname = inmanta-module-my_mod\n",
+        pyproject_toml=b"[build-system]\n",
+    )
+
+    with ThreadPoolExecutor() as thread_pool:
+        venv = ExecutorVirtualEnvironment(env_path=str(tmp_path / "venv"), io_threadpool=thread_pool)
+        module_root = venv._reconstruct_editable_module(editable_module)
+
+        # Creating the venv installs the editable modules and logs them explicitly (package installs are covered by the
+        # separately-logged requirements). Stub the actual venv creation and pip install.
+        monkeypatch.setattr(venv, "init_env", lambda: None)
+
+        async def _noop_install(**kwargs: object) -> None:
+            pass
+
+        monkeypatch.setattr(venv, "async_install_for_config", _noop_install)
+
+        blueprint = executor.EnvBlueprint(
+            environment_id=uuid.uuid4(),
+            pip_config=PipConfig(),
+            requirements=[],
+            python_version=sys.version_info[:2],
+            editable_modules=[editable_module],
+        )
+        with caplog.at_level(logging.INFO):
+            await venv._create_and_install_environment(blueprint)
+
+    root = pathlib.Path(module_root)
+    assert root == venv.inmanta_editable_dir / "my_mod"
+
+    # The top-level namespace package must not get an __init__ file.
+    assert not (root / "inmanta_plugins" / "__init__.py").exists()
+    assert not (root / "inmanta_plugins" / "__init__.pyc").exists()
+
+    # Every python module is materialized as a package, honoring the byte-code flag.
+    assert (root / "inmanta_plugins" / "my_mod" / "__init__.py").read_bytes() == b"# root"
+    assert (root / "inmanta_plugins" / "my_mod" / "handlers" / "__init__.py").read_bytes() == b"# handlers"
+    assert (root / "inmanta_plugins" / "my_mod" / "compiled" / "__init__.pyc").read_bytes() == b"byte-code"
+
+    # The packaging files land at the module root.
+    assert (root / "setup.cfg").read_bytes() == b"[metadata]\nname = inmanta-module-my_mod\n"
+    assert (root / "pyproject.toml").read_bytes() == b"[build-system]\n"
+
+    # The editable install is logged explicitly.
+    log_contains(caplog, "inmanta.agent.executor", logging.INFO, "Installing 1 inmanta module(s) in editable mode: my_mod")
+
+
+def test_reconstruct_editable_module_without_pyproject(tmp_path):
+    """
+    A module may ship a setup.cfg but no pyproject.toml (setup.cfg is mandatory for a V2 module, pyproject.toml is not,
+    and get_metadata_files only returns files that exist). Such a module reconstructs its sources and setup.cfg without
+    writing a pyproject.toml.
+    """
+    editable_module = EditableModuleInstall(
+        name="my_mod",
+        version="cafe",
+        python_module_sources=[
+            ModuleSource(
+                metadata=ModuleSourceMetadata(name="inmanta_plugins.my_mod", hash_value="abc", is_byte_code=False),
+                source=b"# root",
+            )
+        ],
+        setup_cfg=b"[metadata]\nname = inmanta-module-my_mod\n",
+        pyproject_toml=None,
+    )
+
+    with ThreadPoolExecutor() as thread_pool:
+        venv = ExecutorVirtualEnvironment(env_path=str(tmp_path / "venv"), io_threadpool=thread_pool)
+        module_root = pathlib.Path(venv._reconstruct_editable_module(editable_module))
+
+    assert (module_root / "inmanta_plugins" / "my_mod" / "__init__.py").read_bytes() == b"# root"
+    assert (module_root / "setup.cfg").read_bytes() == b"[metadata]\nname = inmanta-module-my_mod\n"
+    assert not (module_root / "pyproject.toml").exists()
 
 
 @pytest.fixture
@@ -65,9 +164,14 @@ def set_custom_executor_policy(server_config):
     inmanta.agent.config.agent_executor_retention_time.set(str(old_retention_value))
 
 
-async def test_executor_server(set_custom_executor_policy, mpmanager: MPManager, client, environment, caplog):
+async def test_executor_server_iso9_compatibility_layer(
+    set_custom_executor_policy, mpmanager: MPManager, client, environment, caplog
+):
     """
-    Test the MPManager, this includes
+    This test is testing the deploy_and_load_iso9 path of the CodeLoader deploy_and_load method. This specific path, and this
+    test can be removed in iso11.
+
+    Test the MPManager, this includes:
 
     1. copying of config
     2. building up an empty venv
@@ -97,8 +201,8 @@ async def test_executor_server(set_custom_executor_policy, mpmanager: MPManager,
             is_byte_code=False,
         ),
         source=empty_source_content,
-        install_on_disk=True,
-        load_module=True,
+        install_on_disk=None,
+        load_module=None,
     )
 
     # Simple empty venv
@@ -135,8 +239,8 @@ def test():
             is_byte_code=False,
         ),
         source=direct_content,
-        install_on_disk=True,
-        load_module=True,
+        install_on_disk=None,
+        load_module=None,
     )
     # Via server: source is sent via server
     server_content = """
@@ -151,8 +255,8 @@ def test():
             is_byte_code=False,
         ),
         source=server_content,
-        install_on_disk=True,
-        load_module=True,
+        install_on_disk=None,
+        load_module=None,
     )
     # Upload
     res = await client.upload_file(id=server_content_hash, content=base64.b64encode(server_content).decode("ascii"))
@@ -287,8 +391,8 @@ async def test_executor_server_dirty_shutdown(mpmanager: MPManager, caplog):
             is_byte_code=False,
         ),
         source=code,
-        install_on_disk=True,
-        load_module=True,
+        install_on_disk=None,
+        load_module=None,
     )
 
     blueprint = executor.ExecutorBlueprint(

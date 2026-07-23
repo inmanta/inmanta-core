@@ -201,7 +201,7 @@ async def update(connection: Connection) -> None:
             for cm_version, version_data in modules_per_version.model_versions.items():
                 for module_name, module_source_data in version_data.inmanta_modules.items():
                     module_version = CodeManager.get_module_version(
-                        module_source_data.requirements, list(module_source_data.sources)
+                        module_source_data.requirements, list(module_source_data.sources), []
                     )
                     files_in_module_data.extend(
                         compute_files_in_module(module_source_data.sources, module_name, environment, module_version)

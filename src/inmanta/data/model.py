@@ -1293,6 +1293,11 @@ class InmantaModule(BaseModel):
     :param requirements: The list of python requirements this inmanta module requires. This list is only set for
         editable installed modules. For package install modules, we rely on pip to fetch the correct requirements
         for the given pep 440 version.
+    :param setup_cfg_hash: Content hash of the module's setup.cfg file, or None if it has none. Only set for editable
+        installed modules, where it is persisted so the module can be recreated as an installable python package on
+        the agent side.
+    :param pyproject_toml_hash: Content hash of the module's pyproject.toml file, or None if it has none. Only set for
+        editable installed modules (see setup_cfg_hash).
     :param install_module_on_agents: List of agents on which we will attempt to install this inmanta module. We will not
         eagerly load the module on all these agents, but rather only on the subset of these agents defined by the
         load_module_on_agents parameter.
@@ -1305,6 +1310,8 @@ class InmantaModule(BaseModel):
     version: InmantaModuleVersion
     files_in_module: list[ModuleSourceMetadata]
     requirements: list[str]
+    setup_cfg_hash: str | None = None
+    pyproject_toml_hash: str | None = None
     load_module_on_agents: list[AgentName]
     install_module_on_agents: list[AgentName]
     editable_install: bool
