@@ -2126,3 +2126,62 @@ async def test_custom_extension_filter_validation(server, client, project_defaul
     # A valid value passes validation and is applied.
     result = await client.graphql(query="{ environments (filter: {minNameLength: 0}) { edges { node { name } } } }")
     check_correct_graphql_response(result)
+
+
+async def test_resource_state_not_stale_across_requests(server, client, environment, mixed_resource_generator):
+    """
+    Regression test for a stale-cache bug in the GraphQL layer.
+
+    A Resource's `state` field is a SQLAlchemy relationship resolved through a StrawberrySQLAlchemyLoader. That
+    loader (and therefore its DataLoader cache) used to be created once per schema and shared across every request,
+    so relationship reads were cached for the whole lifetime of the server process and never invalidated.
+
+    The loader must be built per request. This test reads a resource's `state`, mutates its row in the database, then
+    reads it again in a second request and asserts the second read reflects the mutation rather than a cached snapshot.
+    """
+    await mixed_resource_generator(environment, instances=1, resources_per_version=10)
+
+    # Stable filter: isOrphan does not change under the mutation below, so the target resource is returned by both
+    # requests regardless of its (mutated) deploy/handler state.
+    query = """
+    {
+        resources(filter: {environment: "%s" isOrphan: false}) {
+            edges {
+                node {
+                    resourceId
+                    state {
+                        isDeploying
+                        lastHandlerRun
+                    }
+                }
+            }
+        }
+    }
+    """ % environment
+
+    def nodes_by_id(result: Result[object]) -> dict[str, dict]:
+        return {edge["node"]["resourceId"]: edge["node"] for edge in result.result["data"]["data"]["resources"]["edges"]}
+
+    # First request: reads (and, with the buggy shared loader, caches) every resource's `state`.
+    result = await client.graphql(query=query)
+    check_correct_graphql_response(result)
+    first = nodes_by_id(result)
+    deploying = [rid for rid, node in first.items() if node["state"]["isDeploying"] is True]
+    assert deploying, "expected the generator to produce a resource that is currently deploying"
+    target_rid = deploying[0]
+    assert first[target_rid]["state"]["isDeploying"] is True
+
+    # Mutate the underlying row directly: it is no longer deploying and its last handler run succeeded.
+    rps = await data.ResourcePersistentState.get_one(environment=environment, resource_id=target_rid)
+    assert rps is not None
+    await rps.update_fields(is_deploying=False, last_handler_run=state.HandlerResult.SUCCESSFUL)
+
+    # Second request: must reflect the database mutation, not a cached snapshot from the first request.
+    result = await client.graphql(query=query)
+    check_correct_graphql_response(result)
+    target = nodes_by_id(result)[target_rid]
+    assert target["state"]["isDeploying"] is False, (
+        "Resource.state is stale: the GraphQL loader returned a cached snapshot from a previous request instead of the "
+        "current database state (is_deploying should be False after the mutation)."
+    )
+    assert target["state"]["lastHandlerRun"] == state.HandlerResult.SUCCESSFUL.name

@@ -38,10 +38,8 @@ from sqlalchemy.orm import Mapper
 from strawberry import relay, scalars
 from strawberry.relay import Node, NodeType
 from strawberry.scalars import JSON
-from strawberry.schema.config import StrawberryConfig
 from strawberry.types import Info
 from strawberry.types.field import field
-from strawberry.types.info import ContextType
 from strawberry.types.nodes import SelectedField, Selection
 from strawberry_sqlalchemy_mapper import StrawberrySQLAlchemyLoader, StrawberrySQLAlchemyMapper
 from strawberry_sqlalchemy_mapper.mapper import (
@@ -82,7 +80,7 @@ There are 4 important building blocks that we have to take into account:
             @strawberry.field
             async def environments(
                 self,
-                info: CustomInfo,
+                info: Info,
                 first: typing.Optional[int] = strawberry.UNSET,
                 after: typing.Optional[str] = strawberry.UNSET,
                 last: typing.Optional[int] = strawberry.UNSET,
@@ -422,13 +420,18 @@ def graphql_type_name(model: type[models.Base]) -> GraphQLTypeName:
     return model.__name__
 
 
-@dataclasses.dataclass
-class GraphQLContext:
+def build_request_context(compiler_service: CompilerService) -> dict[str, object]:
     """
-    Context passed down by the GraphQL slice, to be used by the Strawberry models.
-    """
+    Build the Strawberry execution context for a single GraphQL request.
 
-    compiler_service: CompilerService
+    A brand-new StrawberrySQLAlchemyLoader (and therefore a fresh DataLoader cache) is created for every request.
+    This matters because the cache for relationships (e.g. Resource.state)
+    is never invalidated and can produce outdated results.
+    """
+    return {
+        "sqlalchemy_loader": StrawberrySQLAlchemyLoader(async_bind_factory=get_session_factory()),
+        "compiler_service": compiler_service,
+    }
 
 
 class CustomFilter(ABC):
@@ -1359,7 +1362,6 @@ CONTRIBUTABLE_MODELS: "Mapping[type[models.Base], ContributableGraphQLType]" = {
 
 
 def get_schema(
-    context: GraphQLContext,
     extension_contributions: "Mapping[GraphQLTypeName, Sequence[type[GraphQLContribution]]]",
 ) -> strawberry.Schema:
     """
@@ -1367,13 +1369,10 @@ def get_schema(
     It is initiated in a function instead of being declared at the module level, because we have to do this
     after the SQLAlchemy engine is initialized.
 
-    :param context: the GraphQL context made available to resolvers (e.g. to reach the compiler service).
     :param extension_contributions: the registered extension contributions, grouped by the name of the GraphQL output
         type they target (see `graphql_type_name`). Extension names are not relevant here, so they are dropped by the
         caller (`GraphQLSlice`).
     """
-
-    loader = StrawberrySQLAlchemyLoader(async_bind_factory=get_session_factory())
 
     def build_output_type(base_model: type[models.Base], core_mixin: type) -> tuple[type[models.Base], type]:
         """
@@ -1430,17 +1429,12 @@ def get_schema(
     notification_filter_components, NotificationFilter = built_filters[graphql_type_name(models.Notification)]
     resource_filter_components, ResourceFilter = built_filters[graphql_type_name(models.Resource)]
 
-    class CustomInfo(Info):
-        @property
-        def context(self) -> ContextType:  # type: ignore[type-var]
-            return typing.cast(ContextType, {"sqlalchemy_loader": loader, "compiler_service": context.compiler_service})
-
     @strawberry.type
     class Query:
         @strawberry.field(description="Fetches a paginated list of environments")
         async def environments(
             self,
-            info: CustomInfo,
+            info: Info,
             first: typing.Optional[int] = strawberry.UNSET,
             after: typing.Optional[str] = strawberry.UNSET,
             last: typing.Optional[int] = strawberry.UNSET,
@@ -1461,7 +1455,7 @@ def get_schema(
         @strawberry.field(description="Fetches a paginated list of notifications")
         async def notifications(
             self,
-            info: CustomInfo,
+            info: Info,
             filter: typing.Annotated[CoreNotificationFilter, strawberry.argument(graphql_type=NotificationFilter)],
             first: typing.Optional[int] = strawberry.UNSET,
             after: typing.Optional[str] = strawberry.UNSET,
@@ -1480,7 +1474,7 @@ def get_schema(
         @strawberry.field(description="Fetches a paginated list of resources")
         async def resources(
             self,
-            info: CustomInfo,
+            info: Info,
             filter: typing.Annotated[CoreResourceFilter, strawberry.argument(graphql_type=ResourceFilter)],
             first: typing.Optional[int] = strawberry.UNSET,
             after: typing.Optional[str] = strawberry.UNSET,
@@ -1549,7 +1543,7 @@ def get_schema(
             )
 
         @strawberry.field(description="Fetches a summary of the state of all resources in a specific environment")
-        async def resource_summary(self, info: CustomInfo, environment: str) -> ComposedResourceSummary:
+        async def resource_summary(self, info: Info, environment: str) -> ComposedResourceSummary:
             results = await data.Resource.get_composed_resource_summary(environment)
             return ComposedResourceSummary(
                 total_count=results.total_count,
@@ -1559,4 +1553,4 @@ def get_schema(
                 is_deploying=cast(JSON, results.is_deploying),
             )
 
-    return strawberry.Schema(query=Query, config=StrawberryConfig(info_class=CustomInfo))
+    return strawberry.Schema(query=Query)
