@@ -41,7 +41,6 @@ from strawberry.scalars import JSON
 from strawberry.schema.config import StrawberryConfig
 from strawberry.types import Info
 from strawberry.types.field import field
-from strawberry.types.info import ContextType
 from strawberry.types.nodes import SelectedField, Selection
 from strawberry_sqlalchemy_mapper import StrawberrySQLAlchemyLoader, StrawberrySQLAlchemyMapper
 from strawberry_sqlalchemy_mapper.mapper import (
@@ -426,20 +425,17 @@ class GraphQLContext:
     compiler_service: CompilerService
 
 
-def build_request_context(context: GraphQLContext) -> ContextType:
+def build_request_context(context: GraphQLContext) -> dict[str, object]:
     """
     Build the Strawberry execution context for a single GraphQL request.
 
     A brand-new StrawberrySQLAlchemyLoader (and therefore a fresh DataLoader cache) is created for every request.
     This matters because the cache for relationships (e.g. resource.state) is never invalidated and can produce outdated results.
     """
-    return typing.cast(
-        ContextType,
-        {
-            "sqlalchemy_loader": StrawberrySQLAlchemyLoader(async_bind_factory=get_session_factory()),
-            "compiler_service": context.compiler_service,
-        },
-    )
+    return {
+        "sqlalchemy_loader": StrawberrySQLAlchemyLoader(async_bind_factory=get_session_factory()),
+        "compiler_service": context.compiler_service,
+    }
 
 
 class CustomFilter(ABC):
