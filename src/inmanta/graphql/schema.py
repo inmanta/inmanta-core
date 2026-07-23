@@ -435,7 +435,8 @@ def build_request_context(context: GraphQLContext) -> dict[str, object]:
     Build the Strawberry execution context for a single GraphQL request.
 
     A brand-new StrawberrySQLAlchemyLoader (and therefore a fresh DataLoader cache) is created for every request.
-    This matters because the cache for relationships (e.g. resource.state) is never invalidated and can produce outdated results.
+    This matters because the cache for relationships (e.g. Resource.state)
+    is never invalidated and can produce outdated results.
     """
     return {
         "sqlalchemy_loader": StrawberrySQLAlchemyLoader(async_bind_factory=get_session_factory()),
