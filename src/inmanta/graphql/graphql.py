@@ -19,7 +19,6 @@ from graphql.error import GraphQLError
 from inmanta.graphql.result import GraphQLResult
 from inmanta.graphql.schema import (
     CONTRIBUTABLE_MODELS,
-    GraphQLContext,
     GraphQLContribution,
     GraphQLTypeName,
     build_request_context,
@@ -41,7 +40,7 @@ type ExtensionName = str
 
 
 class GraphQLSlice(protocol.ServerSlice):
-    context: GraphQLContext | None
+    compiler_service: CompilerService | None
     schema: Schema | None
     # Registered contributions, grouped by the name of the object type they target (e.g. "Resource") and then by the
     # name of the extension that registered them: {type_name: {extension_name: contribution}}.
@@ -49,7 +48,7 @@ class GraphQLSlice(protocol.ServerSlice):
 
     def __init__(self) -> None:
         super().__init__(name=SLICE_GRAPHQL)
-        self.context = None
+        self.compiler_service = None
         self.schema = None
         self.extension_contributions = defaultdict(dict)
 
@@ -86,7 +85,7 @@ class GraphQLSlice(protocol.ServerSlice):
     async def prestart(self, server: Server) -> None:
         compiler_service = server.get_slice(SLICE_COMPILER)
         assert isinstance(compiler_service, CompilerService)
-        self.context = GraphQLContext(compiler_service=compiler_service)
+        self.compiler_service = compiler_service
         await super().prestart(server)
 
     async def start(self) -> None:
@@ -102,11 +101,11 @@ class GraphQLSlice(protocol.ServerSlice):
         self, query: str, variables: dict[str, Any] | None = None, operation_name: str | None = None
     ) -> ReturnValue[GraphQLResult]:
         assert self.schema is not None
-        assert self.context is not None
+        assert self.compiler_service is not None
         # Build a fresh execution context (and, crucially, a fresh DataLoader) for every request. The loader's
         # cache then lives only for this request, so relationship data (e.g. Resource.state) is never served from a
         # cache populated by an earlier request.
-        context_value = build_request_context(self.context)
+        context_value = build_request_context(self.compiler_service)
         try:
             execution_result = await self.schema.execute(
                 query,

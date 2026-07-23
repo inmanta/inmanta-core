@@ -421,16 +421,7 @@ def graphql_type_name(model: type[models.Base]) -> GraphQLTypeName:
     return model.__name__
 
 
-@dataclasses.dataclass
-class GraphQLContext:
-    """
-    Context passed down by the GraphQL slice, to be used by the Strawberry models.
-    """
-
-    compiler_service: CompilerService
-
-
-def build_request_context(context: GraphQLContext) -> dict[str, object]:
+def build_request_context(compiler_service: CompilerService) -> dict[str, object]:
     """
     Build the Strawberry execution context for a single GraphQL request.
 
@@ -440,7 +431,7 @@ def build_request_context(context: GraphQLContext) -> dict[str, object]:
     """
     return {
         "sqlalchemy_loader": StrawberrySQLAlchemyLoader(async_bind_factory=get_session_factory()),
-        "compiler_service": context.compiler_service,
+        "compiler_service": compiler_service,
     }
 
 
@@ -1563,4 +1554,4 @@ def get_schema(
                 is_deploying=cast(JSON, results.is_deploying),
             )
 
-    return strawberry.Schema(query=Query, config=StrawberryConfig())
+    return strawberry.Schema(query=Query)
