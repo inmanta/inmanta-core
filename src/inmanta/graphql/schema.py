@@ -38,7 +38,6 @@ from sqlalchemy.orm import Mapper
 from strawberry import relay, scalars
 from strawberry.relay import Node, NodeType
 from strawberry.scalars import JSON
-from strawberry.schema.config import StrawberryConfig
 from strawberry.types import Info
 from strawberry.types.field import field
 from strawberry.types.nodes import SelectedField, Selection
